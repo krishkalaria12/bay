@@ -1,6 +1,6 @@
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { create } from "zustand";
 import { hex, useTheme } from "../../lib/theme";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "../onboarding/personalize";
