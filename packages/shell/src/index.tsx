@@ -408,6 +408,29 @@ export type VisualEffectProps = ViewProps & {
 /** Native blur material (NSVisualEffectView). Ignores mouse events. */
 export const VisualEffect = requireNativeViewManager<VisualEffectProps>("BayVisualEffect");
 
+export type GlassEffectProps = ViewProps & {
+  cornerRadius?: number;
+  /** The glass's tint (hex, its alpha the strength); none = untinted. */
+  tint?: string;
+  /** "regular" (default) or "clear". */
+  glassStyle?: "regular" | "clear";
+  /** Dark or light glass; unset follows the window. */
+  dark?: boolean;
+};
+
+const GlassEffectModule = requireOptionalNativeModule<{ isLiquidGlass(): boolean }>("BayGlassEffect");
+
+/** Whether GlassEffect is real Liquid Glass (macOS 26+); before that it's the sidebar material. */
+export const isLiquidGlass = (): boolean => GlassEffectModule?.isLiquidGlass() ?? false;
+
+/**
+ * Liquid Glass (NSGlassEffectView) behind whatever is laid over it, or the sidebar material before
+ * macOS 26. Takes no children; ignores mouse events. Builds without it draw the sidebar material.
+ */
+export const GlassEffect: ComponentType<GlassEffectProps> = GlassEffectModule
+  ? requireNativeViewManager<GlassEffectProps>("BayGlassEffect")
+  : ({ cornerRadius, style }: GlassEffectProps) => <VisualEffect material="sidebar" blendingMode="behindWindow" cornerRadius={cornerRadius} style={style} />;
+
 /**
  * How Dia themes a selected pinned tile by its icon (TabUI `TabIconProcessor`): `blur` for a
  * colourful icon, `template` for a one-colour one (the tile filled with `fill`, the icon drawn
