@@ -1,5 +1,5 @@
 import { deleteProfileData } from "@bay/cef";
-import { confirm, focusWindow, hasWindowHost, prompt } from "@bay/shell";
+import { confirm, focusWindow, prompt } from "@bay/shell";
 import { pageToProfile } from "../components/layout/profilePager";
 import { profileNames, requestCreateProfile, type CreateProfilePreset } from "../components/profiles/CreateProfile";
 import { useBrowser, type CreateWindowOptions } from "../store/browser";
@@ -18,7 +18,7 @@ const store = () => useBrowser.getState();
 /** Brings a window to the front (its NSWindow opens on its own when created). */
 export function focus(windowId: string) {
   store().setFocusedWindow(windowId);
-  if (hasWindowHost) void focusWindow(windowId);
+  void focusWindow(windowId);
 }
 
 export function openWindow(options?: CreateWindowOptions): string {
