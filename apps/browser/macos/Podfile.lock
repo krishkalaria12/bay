@@ -87,6 +87,9 @@ PODS:
   - BayShell (0.0.0):
     - ExpoModulesCore
     - Sparkle (~> 2.9)
+  - BaySync (0.0.0):
+    - ExpoModulesCore
+    - BayImport
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -2328,6 +2331,7 @@ DEPENDENCIES:
   - BayImport (from `../../../packages/import/ios`)
   - BayShaders (from `../../../packages/shaders/ios`)
   - BayShell (from `../../../packages/shell/ios`)
+  - BaySync (from `../../../packages/sync/ios`)
   - RCT-Folly (from `../../../node_modules/react-native-macos/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../../../node_modules/react-native-macos/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../../../node_modules/react-native-macos/Libraries/Required`)
@@ -2438,6 +2442,8 @@ EXTERNAL SOURCES:
     :path: "../../../packages/shaders/ios"
   BayShell:
     :path: "../../../packages/shell/ios"
+  BaySync:
+    :path: "../../../packages/sync/ios"
   RCT-Folly:
     :podspec: "../../../node_modules/react-native-macos/third-party-podspecs/RCT-Folly.podspec"
   RCTDeprecation:
@@ -2586,6 +2592,7 @@ SPEC CHECKSUMS:
   BayImport: 7dd96a9eabaf73af2d5b1ac14375d2b043ef9034
   BayShaders: e8fed32c44e855c4cbaaf875fc06223788039c4e
   BayShell: 79ef5ec56886e548efdaa02ab1076d3b4800be56
+  BaySync: 85c72e48157deb21b6575217a2fa765dd1322eb7
   RCT-Folly: a3d9b23289a456c318f4814703664bdc33c771cc
   RCTDeprecation: ae9e1391708bf992a2a94fb724b0923015be995b
   RCTRequired: eb7a65dfaf816b64d40e1c96e4fc597bfa28bedc

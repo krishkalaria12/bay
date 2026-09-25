@@ -16,6 +16,7 @@
     "@bay/shell": "workspace:*",
     "@bay/cef": "workspace:*",
     "@bay/import": "workspace:*",
+    "@bay/sync": "workspace:*",
     "expo": "~54.0.37",
     "expo-modules-core": "~3.0.29",
     "react": "19.1.4",
