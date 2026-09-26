@@ -27,7 +27,6 @@ test("toEngineUrl: what the engine loads", () => {
   assert.equal(toEngineUrl("view-source:bay://version/"), "view-source:chrome://version/");
   assert.equal(toEngineUrl("https://bay.com/"), "https://bay.com/");
   assert.equal(toEngineUrl("chrome://version/"), "chrome://version/");
-  // Round trip.
   assert.equal(toAppUrl(toEngineUrl("bay://settings/languages")), "bay://settings/languages");
 });
 

@@ -1,5 +1,4 @@
-// bay:// URLs in the store (core appUrls.ts). Run from apps/browser:
-//   node --import ./src/store/test-loader.mjs --test src/store/appUrls.test.mjs
+// Run from apps/browser:  node --import ./src/store/test-loader.mjs --test src/store/appUrls.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
@@ -25,7 +24,6 @@ test("history and bookmarks keep the bay:// form, so they reopen", () => {
   reset();
   const w = S().createWindow({ url: "bay://version" });
   const tab = S().tabs[model.activeTabId(S(), w)];
-  // What the web view reports for chrome://version/ (packages/cef WebView maps it).
   S().updateTab(tab.id, { url: "bay://version/", title: "About Version" });
   S().recordVisit(tab.profileId, "bay://version/", "About Version", null, true);
   assert.equal(S().history[tab.profileId][0].url, "bay://version/");
@@ -57,7 +55,6 @@ test("app URLs that open elsewhere never make or change a tab", () => {
       ["bay://settings", w],
       ["bay://settings/passwords", w],
     ]);
-    // Everything else still loads in the tab.
     S().navigate(tab, "bay://extensions");
     assert.equal(S().tabs[tab].navigation.url, "bay://extensions");
   } finally {
