@@ -33,8 +33,6 @@ const System = requireOptionalNativeModule<{
   cancelRecording(): Promise<void>;
 }>("BaySystem");
 
-export const hasSystemModule = !!System;
-
 export const isDefaultBrowser = async () => (await System?.isDefaultBrowser()) ?? false;
 export const setAsDefaultBrowser = async () => (await System?.setAsDefaultBrowser()) ?? false;
 export const launchAtLoginStatus = async (): Promise<LaunchAtLoginStatus> => (await System?.launchAtLoginStatus()) ?? "notFound";

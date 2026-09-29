@@ -168,7 +168,6 @@ const missing: AppModule = {
 };
 
 const App = requireOptionalNativeModule<AppModule>("BayApp") ?? missing;
-export const hasAppModule = App !== missing;
 
 export const updaterState = () => App.updaterState();
 export const checkForUpdates = () => App.checkForUpdates();
