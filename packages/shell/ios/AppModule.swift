@@ -123,6 +123,7 @@ public class AppModule: Module {
         "isolatedInstance": env["BAY_BACKGROUND"] == "1" || env["BAY_DATA_DIR"] != nil,
         "forceReleaseNotes": env["BAY_RELEASE_NOTES"] == "1",
         "processStart": Self.processStart as Any,
+        "inApplicationsFolder": Self.inApplicationsFolder,
       ]
     }
 
@@ -317,6 +318,14 @@ public class AppModule: Module {
     #else
     "x86_64"
     #endif
+  }
+
+  // 1Password's browser helper is sandboxed to read apps in /Applications and ~/Applications; from Downloads,
+  // the disk image or Documents it can't check our signature and refuses us. Its Add Browser wants Applications too.
+  private static var inApplicationsFolder: Bool {
+    let path = Bundle.main.bundleURL.resolvingSymlinksInPath().path
+    let home = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath().path
+    return path.hasPrefix("/Applications/") || path.hasPrefix(home + "/Applications/")
   }
 }
 
