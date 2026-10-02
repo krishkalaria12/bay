@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "react-native start",
-    "macos": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Debug && open build/Build/Products/Debug/Bay.app",
+    "macos": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Debug && open -n --env BAY_DATA_DIR=\"${BAY_DATA_DIR:-$HOME/Library/Application Support/Bay Dev}\" build/Build/Products/Debug/Bay.app",
     "pods": "cd macos && pod install",
     "build": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Release",
     "typecheck": "tsc -p .",
