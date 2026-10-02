@@ -62,6 +62,7 @@
 #include "extensions/common/extension.h"
 #include "bay/core/nn_browser.h"
 #include "bay/core/nn_extension_view.h"
+#include "bay/core/nn_installed_bubble.h"
 #include "bay/core/nn_lifetime.h"
 #include "bay/core/nn_main_delegate.h"
 #include "bay/core/nn_page_channel.h"
@@ -635,6 +636,7 @@ extern "C" __attribute__((visibility("default"))) int NNCoreMain(
   g_engine = [[NNCoreEngine alloc] init];
   g_bay_browser_window_factory = &WindowForChromeBrowser;
   nncore::InstallRuleMatchedHook();
+  nncore::InstallExtensionInstalledHook();
   g_bay_history_eligible = [](content::WebContents* contents) {
     BrowserWindowInterface* browser =
         GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(contents);
