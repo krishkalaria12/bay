@@ -1,4 +1,4 @@
-import { SwipeArea, type SwipeAreaHandle, type SwipeEvent } from "@bay/cef";
+import { SwipeArea, type SwipeAreaHandle, type SwipeEvent } from "@bay/nncore";
 import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";

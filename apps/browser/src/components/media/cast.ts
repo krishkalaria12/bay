@@ -6,7 +6,7 @@ import {
   watchCastRoutes,
   type CastDialog,
   type CastRoute,
-} from "@bay/cef";
+} from "@bay/nncore";
 import { create } from "zustand";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId, engineProfile, incognitoProfileId } from "../../store/model";

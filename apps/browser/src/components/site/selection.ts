@@ -1,4 +1,4 @@
-import { setSearchEngineName } from "@bay/cef";
+import { setSearchEngineName } from "@bay/nncore";
 import { chooseTextFragment, cleanUrl, searchUrl, withTextFragment, type SelectionContext } from "@bay/core";
 import { copyText } from "@bay/shell";
 import { create } from "zustand";

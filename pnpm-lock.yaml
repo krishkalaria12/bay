@@ -21,15 +21,15 @@ importers:
 
   apps/browser:
     dependencies:
-      '@bay/cef':
-        specifier: workspace:*
-        version: link:../../packages/cef
       '@bay/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@bay/import':
         specifier: workspace:*
         version: link:../../packages/import
+      '@bay/nncore':
+        specifier: workspace:*
+        version: link:../../packages/nncore
       '@bay/shaders':
         specifier: workspace:*
         version: link:../../packages/shaders
@@ -86,12 +86,6 @@ importers:
         specifier: ~5.9.2
         version: 5.9.3
 
-  packages/cef:
-    dependencies:
-      '@bay/core':
-        specifier: workspace:*
-        version: link:../core
-
   packages/core:
     devDependencies:
       '@types/node':
@@ -100,7 +94,11 @@ importers:
 
   packages/import: {}
 
-  packages/nncore: {}
+  packages/nncore:
+    dependencies:
+      '@bay/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/shaders: {}
 

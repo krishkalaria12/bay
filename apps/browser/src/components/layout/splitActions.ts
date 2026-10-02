@@ -1,4 +1,4 @@
-import { forgetOpenedURL } from "@bay/cef";
+import { forgetOpenedURL } from "@bay/nncore";
 import { showMenu, type MenuItem } from "@bay/shell";
 import { create } from "zustand";
 import { closeTab } from "../../lib/actions";

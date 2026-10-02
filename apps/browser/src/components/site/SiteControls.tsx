@@ -8,7 +8,7 @@ import {
   type SiteSettingType,
   type SiteSettingValue,
   type SiteSettings,
-} from "@bay/cef";
+} from "@bay/nncore";
 import { cleanUrl, displayHost } from "@bay/core";
 import { confirm, copyText, showMenu, Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";

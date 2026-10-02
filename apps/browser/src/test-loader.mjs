@@ -3,7 +3,7 @@
 import { registerHooks } from "node:module";
 
 const stub = new URL("./test-native-stub.mjs", import.meta.url).href;
-const native = new Set(["@bay/shell", "@bay/cef", "expo-modules-core"]);
+const native = new Set(["@bay/shell", "@bay/nncore", "expo-modules-core"]);
 
 registerHooks({
   resolve(specifier, context, next) {

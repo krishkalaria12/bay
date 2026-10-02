@@ -1,4 +1,4 @@
-import { terminateCastRoute, type CastRoute, type InstalledExtension } from "@bay/cef";
+import { terminateCastRoute, type CastRoute, type InstalledExtension } from "@bay/nncore";
 import { ContextMenuArea, showMenu, Symbol } from "@bay/shell";
 import { useMemo, useRef } from "react";
 import { Image, Pressable, Text, View } from "react-native";

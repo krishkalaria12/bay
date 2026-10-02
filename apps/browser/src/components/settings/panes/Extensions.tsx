@@ -1,4 +1,4 @@
-import { reloadExtension, type InstalledExtension } from "@bay/cef";
+import { reloadExtension, type InstalledExtension } from "@bay/nncore";
 import { useEffect, useState } from "react";
 import { Image, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";

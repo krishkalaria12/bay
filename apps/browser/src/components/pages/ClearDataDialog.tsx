@@ -1,4 +1,4 @@
-import { clearBrowsingData, type BrowsingDataType } from "@bay/cef";
+import { clearBrowsingData, type BrowsingDataType } from "@bay/nncore";
 import { Surface } from "@bay/shell";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";

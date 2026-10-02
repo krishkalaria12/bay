@@ -11,7 +11,7 @@ import {
   setAutofillSettings,
   type SavedAddress,
   type SavedCard,
-} from "@bay/cef";
+} from "@bay/nncore";
 import { confirm, copyText, Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";

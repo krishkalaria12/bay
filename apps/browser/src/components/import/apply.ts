@@ -1,4 +1,4 @@
-import { savePassword } from "@bay/cef";
+import { savePassword } from "@bay/nncore";
 import type { BookmarkNode as ImportedNode, Credential, DiaTabsProfile, ImportedTab, ImportResult, SafariExport, SpaceSuggestion } from "@bay/import";
 import type { BookmarkDraft } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";

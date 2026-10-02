@@ -1,4 +1,4 @@
-import { changeCaptureSource, stopCapture } from "@bay/cef";
+import { changeCaptureSource, stopCapture } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Text, View } from "react-native";

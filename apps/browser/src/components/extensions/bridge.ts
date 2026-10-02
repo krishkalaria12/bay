@@ -7,7 +7,7 @@ import {
   resolveExtensionInstallPrompt,
   webStoreExtensionId,
   type TabsRequest,
-} from "@bay/cef";
+} from "@bay/nncore";
 import { AppState } from "react-native";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";

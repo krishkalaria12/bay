@@ -1,4 +1,4 @@
-import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@bay/cef";
+import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@bay/nncore";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";

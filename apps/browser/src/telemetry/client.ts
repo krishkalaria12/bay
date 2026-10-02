@@ -1,4 +1,4 @@
-import { engineInfo } from "@bay/cef";
+import { engineInfo } from "@bay/nncore";
 import { launchEnvironment, readDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
 import { create } from "zustand";
 import { DEV_SEND_ENV, LOGS_URL, MAX_BODY_BYTES } from "./config";

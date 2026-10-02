@@ -1,4 +1,4 @@
-import type { WebViewHandle } from "@bay/cef";
+import type { WebViewHandle } from "@bay/nncore";
 
 export const webviews = new Map<string, WebViewHandle>();
 

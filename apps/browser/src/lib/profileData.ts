@@ -1,4 +1,4 @@
-import { deleteProfileData } from "@bay/cef";
+import { deleteProfileData } from "@bay/nncore";
 import { useBrowser } from "../store/browser";
 
 // A deleted profile's engine data goes once its web views have closed. What can't be deleted stays queued

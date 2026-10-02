@@ -1,4 +1,4 @@
-import { listTasks, onExtensionsChanged } from "@bay/cef";
+import { listTasks, onExtensionsChanged } from "@bay/nncore";
 import { onAppEvent } from "@bay/shell";
 import { useTranslate } from "../components/site/translate";
 import { useBrowser } from "../store/browser";

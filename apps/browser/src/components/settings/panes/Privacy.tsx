@@ -20,7 +20,7 @@ import {
   type SiteSettings,
   type SiteSettingType,
   type SiteSettingValue,
-} from "@bay/cef";
+} from "@bay/nncore";
 import { confirm } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";

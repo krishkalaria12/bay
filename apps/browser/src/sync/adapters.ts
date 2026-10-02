@@ -1,4 +1,4 @@
-import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } from "@bay/cef";
+import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } from "@bay/nncore";
 import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
 import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/history";

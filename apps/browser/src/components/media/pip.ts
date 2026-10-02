@@ -1,4 +1,4 @@
-import { setDisplayMediaPicker } from "@bay/cef";
+import { setDisplayMediaPicker } from "@bay/nncore";
 import { onAppEvent, onWindowEvent } from "@bay/shell";
 import { useRef } from "react";
 import { webviews } from "../../lib/webviews";

@@ -1,4 +1,4 @@
-import * as cef from "@bay/cef";
+import * as cef from "@bay/nncore";
 import {
   confirm,
   copyText,

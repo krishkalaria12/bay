@@ -1,4 +1,4 @@
-import { searchEngineList } from "@bay/cef";
+import { searchEngineList } from "@bay/nncore";
 import { extensionEnginesFromChrome } from "@bay/core";
 import { useBrowser } from "../../store/browser";
 import { useExtensions } from "./state";

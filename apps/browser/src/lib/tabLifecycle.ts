@@ -1,4 +1,4 @@
-import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/cef";
+import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/nncore";
 import { onAppEvent, onWindowEvent } from "@bay/shell";
 import { create } from "zustand";
 import { pageOf, usePages } from "../components/layout/pageState";

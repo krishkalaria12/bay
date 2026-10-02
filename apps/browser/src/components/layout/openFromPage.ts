@@ -1,4 +1,4 @@
-import { forgetOpenedURL, type OpenWindowRequest } from "@bay/cef";
+import { forgetOpenedURL, type OpenWindowRequest } from "@bay/nncore";
 import { openWindow } from "../../lib/actions";
 import { useBrowser } from "../../store/browser";
 import { engineProfile } from "../../store/model";

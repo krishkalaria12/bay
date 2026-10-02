@@ -15,7 +15,7 @@ import {
   type ExtensionInstallPrompt,
   type ExtensionPackage,
   type InstalledExtension,
-} from "@bay/cef";
+} from "@bay/nncore";
 import { confirm, showMenu } from "@bay/shell";
 import { useMemo } from "react";
 import { create } from "zustand";

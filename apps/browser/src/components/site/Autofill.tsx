@@ -1,4 +1,4 @@
-import { showAutofillSuggestions, type CardNetwork } from "@bay/cef";
+import { showAutofillSuggestions, type CardNetwork } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
 import { Text, View } from "react-native";
 import { useBrowser } from "../../store/browser";

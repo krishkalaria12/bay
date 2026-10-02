@@ -1,4 +1,4 @@
-import { onDownload, releaseProfile } from "@bay/cef";
+import { onDownload, releaseProfile } from "@bay/nncore";
 import {
   closeWindow,
   isDarkAppearance,

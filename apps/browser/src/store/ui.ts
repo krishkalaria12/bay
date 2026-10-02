@@ -1,4 +1,4 @@
-import type { Download } from "@bay/cef";
+import type { Download } from "@bay/nncore";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { isIncognitoProfile } from "./model";

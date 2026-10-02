@@ -1,5 +1,5 @@
-import * as cef from "@bay/cef";
-import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/cef";
+import * as cef from "@bay/nncore";
+import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect, useMemo } from "react";
 import { Animated, unstable_batchedUpdates } from "react-native";
 import { create } from "zustand";

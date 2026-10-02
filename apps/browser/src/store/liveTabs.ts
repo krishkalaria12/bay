@@ -1,4 +1,4 @@
-import type { StripGroup, StripState, StripTab } from "@bay/cef";
+import type { StripGroup, StripState, StripTab } from "@bay/nncore";
 import type { BrowserState } from "./browser";
 import { engineProfile, pinnedFirst } from "./model";
 import { forgetOpeners, switchKeepsOpeners } from "./openers";

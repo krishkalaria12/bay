@@ -86,7 +86,7 @@ final class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
   override func bundleURL() -> URL? {
     #if DEBUG
     // A test run picks its Metro (BAY_JS_LOCATION=host:port) for this launch only: the argument domain is never
-    // written to disk, and a Debug build shares its defaults with the installed app (com.bay.browser).
+    // written to disk.
     if let location = ProcessInfo.processInfo.environment["BAY_JS_LOCATION"], !location.isEmpty {
       var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
       arguments["RCT_jsLocation"] = location

@@ -1,4 +1,4 @@
-import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/cef";
+import { faviconsFor, fetchFavicon, onHistoryChanged, removeLegacyFavicons } from "@bay/nncore";
 import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/shell";
 import { useEffect } from "react";
 import { create } from "zustand";

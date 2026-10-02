@@ -1,4 +1,4 @@
-import { cancelDownload, setZoom as setHostZoom, type Download } from "@bay/cef";
+import { cancelDownload, setZoom as setHostZoom, type Download } from "@bay/nncore";
 import { readDocument, writeDocument } from "@bay/shell";
 import { EMPTY_BOOKMARKS, ensureRoots, newBookmarkId } from "../store/bookmarks";
 import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";

@@ -1,4 +1,4 @@
-import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/cef";
+import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { fileExists, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
 import { useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";

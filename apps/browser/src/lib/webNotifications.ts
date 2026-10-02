@@ -1,4 +1,4 @@
-import type { WebNotification } from "@bay/cef";
+import type { WebNotification } from "@bay/nncore";
 import {
   confirm,
   notificationPermission,
