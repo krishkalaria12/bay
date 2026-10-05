@@ -107,12 +107,33 @@ Most are for tests and hidden instances rather than normal use.
   context menu, PiP and the autofill dropdowns are Chrome's own views, driven from
   `engine/nncore/src/bay/core`.
 
+## The icon
+
+The Golden Gate's twin towers and catenary over the bay at dusk. Two sources, both in
+`apps/browser/assets/`:
+
+| File | What it's for |
+|---|---|
+| `app-icon.svg` | The full mark: hangers, two braces per tower, stars and ripples. Used from 64px up and in the app's own UI |
+| `app-icon-small.svg` | The same mark cut heavier — no hangers, one brace, a deeper sag. The full mark turns to mush at 16-32px, which is the size the Finder uses |
+
+`app-icon.png` is the rasterised full mark, used by the onboarding, the check-in banner and the
+task manager. `macos/Bay-macOS/Assets.xcassets/AppIcon.appiconset/` is the macOS set: the small cut
+for the 16 and 32 slots, the full mark from 128 up.
+
+Rebuild every PNG from the sources:
+
+```bash
+scripts/make-icon.sh
+```
+
+It renders each SVG through headless Chrome at 1024 and downsamples with Lanczos, so it needs
+Chrome and ImageMagick. The geometry in the SVGs is computed, not drawn by hand: the squircle is
+`|x/a|⁵ + |y/a|⁵ = 1`, and the cable hangers sit on the same cubic béziers the cable is drawn from.
+
 ## Missing pieces
 
-The New Tab page has no mark above the search box, and no app icon ships in this repo. Five
-components still `require` an `assets/app-icon.png` that isn't here (`ntp/CheckInBanner`,
-`ntp/Postcard`, `onboarding/Intro`, `onboarding/steps`, `taskManager/TaskManagerWindow`); add the
-file before the Metro bundle will build.
+The New Tab page has no mark above the search box.
 
 ## License
 
