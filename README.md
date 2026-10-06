@@ -58,6 +58,9 @@ pnpm macos
 
 Other tasks: `pnpm typecheck`, `pnpm test`, `pnpm shaders:check` (compiles the embedded Metal
 offline), `pnpm build` (Release `.app` with a Hermes bytecode bundle in `apps/browser/build/`).
+Swift package tests need full Xcode for XCTest. The test runner uses `/Applications/Xcode.app`
+if the selected Command Line Tools lack XCTest. Set `DEVELOPER_DIR` to use another Xcode installation;
+the runner leaves the global `xcode-select` setting unchanged.
 Signed releases (DMG, Sparkle zip and appcast): `scripts/release.sh <version>`, which reads its
 notes from `release-notes/<version>.md`. That directory isn't in the repo yet, and the release script
 points at `bay.com` for the notes page and update feed — set both to your own domain before

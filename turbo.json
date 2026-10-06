@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalDependencies": ["scripts/swift-test.sh"],
   "globalEnv": ["DEVELOPER_DIR"],
   "tasks": {
     "build": {

@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
-    "test": "swift test --scratch-path \"${TMPDIR:-/tmp}/bay-import-swiftpm\"",
+    "test": "bash ../../scripts/swift-test.sh --scratch-path \"${TMPDIR:-/tmp}/bay-import-swiftpm\"",
     "fixtures": "python3 fixtures/generate.py"
   },
   "peerDependencies": {
