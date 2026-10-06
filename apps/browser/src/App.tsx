@@ -22,6 +22,7 @@ import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
 import { SmallYahuWindow } from "./components/smallYahu/SmallYahuWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
+import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
 import { hex, layout, ThemeScope, useTheme } from "./lib/theme";
 import { useBrowser } from "./store/browser";
@@ -103,6 +104,7 @@ function BrowserWindow() {
       <EditBookmarkDialog />
       <CreateProfileHost />
       <SidebarOverlays windowWidth={width} />
+      {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
       <CommandPanel windowWidth={width} windowHeight={size.height} />
       <OnboardingOverlay />
     </View>

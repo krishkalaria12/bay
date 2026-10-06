@@ -29,6 +29,15 @@ export const SIDEBAR_HEADER_WITH_FIELD = SIDEBAR_FIELD.top + SIDEBAR_FIELD.heigh
 
 export type UrlAnchor = { left: number; top: number; width: number; sidebar?: { height: number } };
 
+export function sidebarSiteControlsGeometry(anchor: UrlAnchor, windowWidth: number, windowHeight: number) {
+  const width = Math.min(306, Math.max(0, windowWidth - 16));
+  // The controls button is the last 28pt accessory, with a 3pt inset at the field's right edge.
+  const buttonCenter = anchor.left + anchor.width - 17;
+  const left = Math.max(8, Math.min(buttonCenter - width / 2, windowWidth - width - 8));
+  const top = anchor.top + (anchor.sidebar?.height ?? SIDEBAR_FIELD.height) + 9;
+  return { width, left, top, arrowLeft: buttonCenter - left, maxHeight: Math.max(0, windowHeight - top - 8) };
+}
+
 export const useUrlAnchors = create<Record<string, UrlAnchor>>()(() => ({}));
 
 export function setUrlAnchor(windowId: string, anchor: UrlAnchor) {
@@ -36,4 +45,3 @@ export function setUrlAnchor(windowId: string, anchor: UrlAnchor) {
   if (current && current.left === anchor.left && current.top === anchor.top && current.width === anchor.width && current.sidebar?.height === anchor.sidebar?.height) return;
   useUrlAnchors.setState({ [windowId]: anchor });
 }
-

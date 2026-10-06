@@ -246,6 +246,7 @@ const TabPane = memo(function TabPane({
   const isNewTab = useBrowser((s) => !s.tabs[tabId]?.url);
   const zoom = useBrowser((s) => s.tabs[tabId]?.zoom ?? 1);
   const popover = usePopover(tabId);
+  const addressInSidebar = useAddressBarInSidebar();
   const newTabShown = usePage(tabId, (p) => !!p.newTabShown);
   const inSomeSplit = useBrowser((s) => !!warm && !!splitOf(s, tabId));
   const inSplit = visible ? inActiveSplit : inSomeSplit;
@@ -312,7 +313,7 @@ const TabPane = memo(function TabPane({
                 <PasswordPrompt tabId={tabId} right={8} top={4} />
                 <AutofillPrompt tabId={tabId} right={8} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
-                {popover === "siteControls" && <SiteControls tabId={tabId} {...(toolbar ? { right: 8 } : { left: 8 })} top={2} />}
+                {popover === "siteControls" && !addressInSidebar && <SiteControls tabId={tabId} {...(toolbar ? { right: 8 } : { left: 8 })} top={2} />}
                 {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...(toolbar ? { right: 8 } : { left: 8 })} top={2} />}
                 {popover === "zoom" && <ZoomPopover tabId={tabId} {...(toolbar ? { right: 8 } : { left: 8 })} top={2} />}
                 <SharePicker tabId={tabId} paneWidth={frame.width} />

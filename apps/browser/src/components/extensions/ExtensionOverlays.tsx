@@ -9,6 +9,7 @@ import { useWindowId } from "../../store/hooks";
 import { openFromPage, pageProfileId } from "../layout/openFromPage";
 import { PromptButton } from "../layout/controls";
 import { Checkbox } from "../settings/controls";
+import { extensionPopupGeometry } from "./geometry";
 import {
   cancelInstall,
   closeExtensionPopup,
@@ -106,10 +107,7 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
     });
   };
 
-  const width = (size?.width ?? MIN.width) + 1;
-  const height = (size?.height ?? MIN.height) + 1;
-  const left = Math.max(8, Math.min(anchor.x + anchor.width - width, window.width - width - 8));
-  const top = anchor.y + anchor.height + 6;
+  const { width, height, left, top } = extensionPopupGeometry(anchor, size ?? MIN, window);
 
   return (
     <>

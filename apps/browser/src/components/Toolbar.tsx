@@ -1,6 +1,6 @@
 import { breadcrumb, urlForDisplay } from "@bay/core";
 import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/shell";
-import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { layout, useTheme } from "../lib/theme";
@@ -23,6 +23,7 @@ import { ToolbarExtensions, useToolbarExtensionsWidth } from "./extensions/Toolb
 import { GlassFill, liquidGlass } from "./glass";
 import { TranslateButton } from "./site/TranslateControls";
 import { ZoomIndicator } from "./site/ZoomControls";
+import { copyPageUrl } from "./site/selection";
 
 // What the toolbar shows of its tab: the page's favicon and the tab's bookkeeping (last active, …) don't re-render it.
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
@@ -233,7 +234,7 @@ export const UrlField = memo(function UrlField({
   inSplit: boolean;
   onFocus: () => void;
   style?: ViewStyle;
-  sidebar?: { height: number; progress: number | null; accessory?: ReactNode };
+  sidebar?: { height: number; progress: number | null };
 }) {
   const theme = useTheme();
   const showFullUrl = useSettings((s) => s.showFullUrl);
@@ -241,6 +242,7 @@ export const UrlField = memo(function UrlField({
   const insecure = usePage(tab.id, (p) => (p.security && (p.security.level === "insecure" || p.security.level === "certificateError") ? p.security.level : null));
   const popups = usePage(tab.id, (p) => p.popups.length);
   const capture = usePage(tab.id, (p) => p.mediaAccess);
+  const controlsOpen = usePages((s) => s.popover[tab.id] === "siteControls");
   const openPanel = (text: string) => {
     onFocus();
     useBrowser.getState().openPanel(windowId, text);
@@ -339,7 +341,7 @@ export const UrlField = memo(function UrlField({
             tooltip="Pop-ups blocked on this page"
           />
         )}
-        {hovered && (
+        {hovered && !sidebar && (
           <>
             <ToolbarButton palette={palette} icon={bookmarked ? "bookmark.fill" : "bookmark"} size={13} box={24} radius={6} onPress={toggleBookmark} tooltip={bookmarked ? "Remove Bookmark" : "Bookmark This Page (⌘D)"} />
             {!inSplit && !sidebar && (
@@ -356,7 +358,12 @@ export const UrlField = memo(function UrlField({
             <ToolbarButton palette={palette} icon="slider.horizontal.3" size={13} box={24} radius={6} onPress={toggleSiteControls} tooltip="Site Controls" />
           </>
         )}
-        {sidebar?.accessory}
+        {sidebar ? (
+          <>
+            <ToolbarButton palette={palette} icon="link" size={14} box={26} radius={6} onPress={() => void copyPageUrl(tab.id)} tooltip="Copy Link" />
+            <ToolbarButton palette={palette} icon="slider.horizontal.3" size={15} box={28} radius={7} style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : palette.pill }} onPress={toggleSiteControls} tooltip="Site Controls" />
+          </>
+        ) : null}
       </View>
       {sidebar && sidebar.progress !== null ? <ProgressBar progress={sidebar.progress} color={theme.accent} /> : null}
     </View>

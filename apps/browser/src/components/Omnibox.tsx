@@ -403,10 +403,10 @@ export function Omnibox({
             {field}
             {currentUrl ? (
               <IconButton
-                icon="info.circle"
+                icon="slider.horizontal.3"
                 size={15}
                 box={26}
-                radius={13}
+                radius={7}
                 color={theme.textSecondary}
                 tooltip="Site Controls"
                 onPress={() => {

@@ -6,7 +6,6 @@ import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId } from "../../store/hooks";
 import { splitOf } from "../../store/splits";
 import type { Tab } from "../../store/types";
-import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
 import { useHistoryAvailability } from "../layout/history";
 import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
@@ -85,7 +84,6 @@ function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
   const palette = toolbarPalette(useTheme(), null);
   const progress = useTabLive(tab.id, (l) => (l.isLoading ? l.progress : null));
   const inSplit = useBrowser((s) => !!splitOf(s, tab.id));
-  const extensionsWidth = useToolbarExtensionsWidth(windowId);
   return (
     <UrlField
       tab={tab}
@@ -96,11 +94,6 @@ function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
       sidebar={{
         height: SIDEBAR_FIELD.height,
         progress,
-        accessory: extensionsWidth ? (
-          <View style={{ width: extensionsWidth - 6, height: 28 }}>
-            <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={0} right={0} />
-          </View>
-        ) : null,
       }}
     />
   );

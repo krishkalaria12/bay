@@ -93,7 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bookmarksBar: "never",
   hideBookmarksBarImport: false,
   appearance: "auto",
-  addressBar: "toolbar",
+  addressBar: "sidebar",
   defaultProfileId: DEFAULT_PROFILE_ID,
   shortcuts: {},
   openLinksInSmallYahu: true,
