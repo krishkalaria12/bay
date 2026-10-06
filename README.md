@@ -1,7 +1,7 @@
 # Bay
 
 A macOS browser built on Chrome's own framework: a patched Chromium tree with our layer on top
-(NNCore), an Expo + React Native macOS shell, and Metal shaders for the New Tab effects.
+(NNCore), an Expo + React Native macOS shell, and Metal shaders for window backdrops and animations.
 
 ```
 apps/
@@ -13,7 +13,7 @@ engine/
 packages/
   nncore/             JS API over the engine (tab strips, autofill, extensions, content blocker)
   shell/              Native menu bar + shortcuts → JS, windows, SF Symbols, native primitives
-  shaders/            Metal: New Tab effects + grained OKLab window backdrop
+  shaders/            Metal animations + grained OKLab window backdrop
   import/             Import from other browsers (bookmarks, history, passwords, Arc spaces)
   sync/               Encrypted sync: sealed files in a folder, merged on a recovery phrase
   core/               Pure TS: omnibox input → URL, suggestions, breadcrumbs (tested)
@@ -130,10 +130,6 @@ scripts/make-icon.sh
 It renders each SVG through headless Chrome at 1024 and downsamples with Lanczos, so it needs
 Chrome and ImageMagick. The geometry in the SVGs is computed, not drawn by hand: the squircle is
 `|x/a|⁵ + |y/a|⁵ = 1`, and the cable hangers sit on the same cubic béziers the cable is drawn from.
-
-## Missing pieces
-
-The New Tab page has no mark above the search box.
 
 ## License
 

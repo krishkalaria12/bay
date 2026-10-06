@@ -362,8 +362,11 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const url = resolveInput(input, searchUrlPrefix(s.settings));
     const tab = s.tabs[id];
     if (!url || !tab) return;
+    const panel = s.windowUi[tab.windowId]?.panel;
     if (openOutsideTab(url, tab.windowId)) {
-      if (get().windowUi[tab.windowId]?.panel.open) get().closePanel(tab.windowId);
+      const current = get().windowUi[tab.windowId]?.panel;
+      // An app URL may open a new palette session instead of navigating the page.
+      if (current?.open && current.sessionId === panel?.sessionId) get().closePanel(tab.windowId);
       return;
     }
     // A new address supersedes a link the tab kept to load when shown (the engine drops it: lib/chromeTabs.ts).

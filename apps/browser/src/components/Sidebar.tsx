@@ -308,7 +308,7 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
                         {current ? <CleanUpUpsell windowId={windowId} /> : null}
                       </View>
                       <ContextMenuArea style={{ flexGrow: 1, minHeight: inlineNewTab ? 24 : 0 }} onContextMenu={() => void openSidebarMenu(windowId)}>
-                        <View style={{ flex: 1 }} onDoubleClick={() => useBrowser.getState().newTab(windowId)} />
+                        <View style={{ flex: 1 }} onDoubleClick={() => useBrowser.getState().openNewTabPanel(windowId)} />
                       </ContextMenuArea>
                     </Animated.ScrollView>
                   </Animated.View>
@@ -427,7 +427,7 @@ const NewTabRow = memo(function NewTabRow({ windowId }: { windowId: string }) {
         style={{ flex: 1 }}
         onPress={(e) => {
           if ((e.nativeEvent as unknown as { altKey?: boolean }).altKey) openNewTabInSplit(windowId);
-          else useBrowser.getState().newTab(windowId);
+          else useBrowser.getState().openNewTabPanel(windowId);
         }}
       >
         {({ pressed }) => (

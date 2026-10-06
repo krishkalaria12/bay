@@ -1,16 +1,14 @@
 import { displayUrl, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
-import { ContextMenuArea, Symbol, copyText, pickFiles, showMenu, startDictation } from "@bay/shell";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { TextInput, View } from "react-native";
 import { useTheme } from "../lib/theme";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowser } from "../store/browser";
 import { useWindowId, useWindowProfileId } from "../store/hooks";
-import { activeTabId, viewTabIds } from "../store/model";
 import { defaultSearchEngine } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
-import { registerHeroBar, savedNtpQuery, saveNtpQuery, type BarSnapshot } from "./omnibox/barState";
 import { dispositionFor, openFromBar, switchFromBar, type Disposition } from "./omnibox/open";
 import { clipboardPasteAction, pasteMenuItem, pasteTarget, readClipboard } from "./omnibox/paste";
 import { ScopeChip } from "./omnibox/ScopeChip";
@@ -19,18 +17,31 @@ import { useDropdownStart } from "./omnibox/dropdownStart";
 import { useInlineCompletion } from "./omnibox/useInlineCompletion";
 import { scopeFor, useSuggestions } from "./omnibox/useSuggestions";
 import { setPopover } from "./layout/pageState";
-import { IconButton, useHover } from "./primitives";
+import { IconButton } from "./primitives";
+import { closeTab } from "../lib/actions";
+import { startOnboarding } from "./onboarding";
+import { PaletteContent, type PaletteMenu } from "./omnibox/PaletteContent";
+import { usePaletteStart } from "./omnibox/usePaletteStart";
+import { appPaletteActions } from "./omnibox/paletteAppActions";
+import type { PaletteMenuAction } from "./omnibox/PaletteActionMenu";
 
-type Variant = "panel" | "hero" | "sidebar";
+type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
 
 const BASE_KEYS = [
   { key: "Escape" },
+  { key: "Enter" },
   { key: "ArrowUp" },
   { key: "ArrowDown" },
   { key: "Tab" },
+  { key: "Tab", shiftKey: true },
   { key: "n", ctrlKey: true },
   { key: "p", ctrlKey: true },
+  { key: "k", metaKey: true },
+  { key: "K", metaKey: true },
+  { key: "c", metaKey: true, shiftKey: true },
+  { key: "C", metaKey: true, shiftKey: true },
+  { key: "Enter", metaKey: true, shiftKey: true },
   { key: "Enter", metaKey: true },
   { key: "Enter", altKey: true },
   { key: "Enter", shiftKey: true },
@@ -44,32 +55,37 @@ export function Omnibox({
   tabId,
   initialText = "",
   onCancel,
+  maxHeight = 560,
+  width = 720,
 }: {
   variant: Variant;
   tabId: string;
   initialText?: string;
   onCancel?(): void;
+  maxHeight?: number;
+  width?: number;
 }) {
   const theme = useTheme();
   const windowId = useWindowId();
   const profileId = useWindowProfileId();
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
-  const hero = variant === "hero";
+  const palette = variant === "palette";
+  const newTab = useBrowser((s) => s.windowUi[windowId]?.panel.mode === "newTab");
+  const [menu, setMenu] = useState<PaletteMenu | null>(null);
   const dropdown = variant === "sidebar";
 
-  const [restored] = useState(() => (hero ? savedNtpQuery(tabId) : null));
   const initial = !initialText ? "" : dropdown ? initialText : initialText.replace(/^https?:\/\//, "");
-  const [typed, setTyped] = useState(restored?.typed ?? initial);
-  const [edited, setEdited] = useState(restored?.edited ?? false);
+  const [typed, setTyped] = useState(initial);
+  const [edited, setEdited] = useState(false);
   const [suppressCompletion, setSuppressCompletion] = useState(true);
-  const [selected, setSelected] = useState(restored?.selected ?? 0);
-  const [scope, setScope] = useState<SearchScope | null>(restored?.scope ?? null);
+  const [selected, setSelected] = useState(0);
+  const [scope, setScope] = useState<SearchScope | null>(null);
   const scopeFrom = useRef("");
   const [pendingSelection, setPendingSelection] = useState<Selection | null>(
-    restored?.selection ?? (initial ? { start: 0, end: initial.length } : null),
+    initial ? { start: 0, end: initial.length } : null,
   );
-  const selection = useRef<Selection>(restored?.selection ?? { start: 0, end: typed.length });
+  const selection = useRef<Selection>({ start: 0, end: typed.length });
   const input = useRef<TextInput>(null);
   const root = useRef<View>(null);
 
@@ -83,7 +99,17 @@ export function Omnibox({
     scope,
   });
   const start = useDropdownStart(dropdown && !edited && !scope, tabId, profileId);
-  const items = dropdown && !edited && !scope ? start : suggested;
+  const idleSections = usePaletteStart(windowId, profileId, tabId);
+  const idle = !scope && (!edited || !typed.trim());
+  const sections = useMemo(() => {
+    if (!idle) return [{ title: "", items: suggested }];
+    if (!newTab && initialText && !edited && currentUrl) {
+      const tab = useBrowser.getState().tabs[tabId];
+      return [{ title: "Current Page", items: [{ kind: "page" as const, url: currentUrl, title: tab?.customTitle || tab?.title || displayUrl(currentUrl), favicon: tab?.favicon ?? null }] }, ...idleSections];
+    }
+    return idleSections;
+  }, [idle, suggested, newTab, initialText, edited, currentUrl, tabId, idleSections]);
+  const items = palette ? sections.flatMap((s) => s.items) : dropdown && !edited && !scope ? start : suggested;
   const inline = useInlineCompletion(input, typed, suppressCompletion || scope ? "" : completion);
   const shownCompletion = inline.shown;
   const value = typed + shownCompletion;
@@ -91,21 +117,6 @@ export function Omnibox({
   const current = items[selectedIndex];
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
   const tabScope = useMemo(() => (canScope ? scopeFor(value, windowId) : null), [canScope, value, windowId]);
-
-  const snapshot = useRef<BarSnapshot | null>(null);
-  snapshot.current = { typed, edited, selection: selection.current, selected, scope };
-  useEffect(() => {
-    if (!hero) return;
-    const focus = () => {
-      input.current?.focus();
-      setPendingSelection({ start: 0, end: (snapshot.current?.typed ?? "").length });
-    };
-    const unregister = registerHeroBar(windowId, focus);
-    return () => {
-      unregister();
-      saveNtpQuery(tabId, snapshot.current);
-    };
-  }, [hero, windowId, tabId]);
 
   // Apply selection imperatively; RN macOS can restore a stale caret when its selection prop clears.
   useLayoutEffect(() => {
@@ -124,12 +135,16 @@ export function Omnibox({
     selection.current = { start: 0, end: 0 };
   };
 
-  const dismiss = () => (hero ? reset() : onCancel?.());
+  const dismiss = () => onCancel?.();
+  const closeMenu = () => {
+    setMenu(null);
+    requestAnimationFrame(() => input.current?.focus());
+  };
 
   const go = (url: string, disposition: Disposition = "current") => {
     if (!url) return;
-    openFromBar(url, tabId, disposition);
-    if (disposition !== "current") dismiss();
+    if (palette && newTab && disposition !== "newWindow") useBrowser.getState().submitNewTabPanel(windowId, url);
+    else openFromBar(url, tabId, disposition);
   };
 
   const choose = (s: Suggestion | undefined, disposition: Disposition = "current") => {
@@ -143,8 +158,8 @@ export function Omnibox({
     switch (s.kind) {
       case "page":
         if (s.tabId) {
+          if (palette && newTab && disposition !== "current") return go(s.url, disposition);
           switchFromBar(s.tabId, s.url, tabId, disposition);
-          if (hero && disposition === "current") reset();
           return;
         }
         return go(s.url, disposition);
@@ -160,7 +175,7 @@ export function Omnibox({
         return;
       case "action":
         dismiss();
-        return runBarAction(s.id, windowId);
+        return s.id === "palette:setup" ? startOnboarding(windowId) : runBarAction(s.id, windowId);
     }
   };
 
@@ -191,11 +206,12 @@ export function Omnibox({
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
     const { key, metaKey, altKey, shiftKey, ctrlKey } = e.nativeEvent;
     if (key === "Escape") {
+      if (menu) return closeMenu();
       if (scope) return leaveScope(false);
-      if (!hero) return onCancel?.();
-      if (shownCompletion) return setSuppressCompletion(true);
-      return reset();
+      return dismiss();
     }
+    if (palette && metaKey && key.toLowerCase() === "k") return openRowMenu();
+    if (palette && metaKey && shiftKey && key.toLowerCase() === "c" && current && "url" in current) return copyText(current.url);
     if (key === "ArrowDown" || (ctrlKey && key === "n")) return move(1);
     if (key === "ArrowUp" || (ctrlKey && key === "p")) return move(-1);
     if (key === "Tab") {
@@ -215,6 +231,7 @@ export function Omnibox({
       if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim())
         return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor({ metaKey, altKey, shiftKey }));
+      return choose(current);
     }
   };
 
@@ -283,7 +300,7 @@ export function Omnibox({
     current && (typed || scope) && current.kind !== "search" ? (
       <SuggestionIcon suggestion={current} color={theme.textPrimary} />
     ) : (
-      <Symbol name="magnifyingglass" size={15} weight="medium" color={hero ? theme.textSecondary : theme.textPrimary} style={{ width: 18, height: 18 }} />
+      <Symbol name="magnifyingglass" size={15} weight="medium" color={theme.textPrimary} style={{ width: 18, height: 18 }} />
     );
 
   // Focus once the field has its frame: autoFocus hands the window's shared field editor a
@@ -307,17 +324,18 @@ export function Omnibox({
         selection.current = e.nativeEvent.selection;
       }}
       onChangeText={onChangeText}
-      placeholder={scope ? `Search ${scope.name}` : hero ? "Ask anything…" : "Search or enter address"}
+      placeholder={scope ? `Search ${scope.name}` : palette ? "Enter a web address" : "Search or enter address"}
       placeholderTextColor={theme.placeholder}
       selectionColor={theme.selection}
       enableFocusRing={false}
       onSubmitEditing={() => choose(current)}
-      onBlur={onCancel}
+      submitBehavior={palette ? "submit" : "blurAndSubmit"}
+      onBlur={palette ? undefined : onCancel}
       keyDownEvents={scope && !typed ? SCOPE_KEYS : BASE_KEYS}
       onKeyDown={onKeyDown}
       style={{
         flex: 1,
-        fontSize: hero ? 17 : dropdown ? 14 : 15,
+        fontSize: palette ? 20 : 14,
         color: theme.textPrimary,
         paddingVertical: 0,
       }}
@@ -341,27 +359,39 @@ export function Omnibox({
     />
   );
 
-  const bottomRow = (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingLeft: hero ? 13 : 14,
-        paddingRight: hero ? 15 : 13,
-        height: hero ? 43 : 52,
-        marginBottom: hero ? 8 : 0,
-      }}
-    >
-      <AddChip tabId={tabId} onGo={(url) => go(url)} />
-      <View style={{ flex: 1 }} />
-      <IconButton icon="mic" size={14} color={theme.textTertiary} tooltip="Dictation" onPress={() => { input.current?.focus(); startDictation(); }} />
-      {hero ? (
-        <SendButton active={!!typed.trim()} onPress={() => choose(current)} />
-      ) : (
-        <GoButton label={destinationLabel(current)} onPress={() => choose(current)} />
-      )}
-    </View>
-  );
+  const openRowMenu = (target = current) => {
+    if (!target) return;
+    const title = target.kind === "page" ? target.title || displayUrl(target.url) : target.kind === "search" ? target.query : target.kind === "calc" ? target.value : target.title;
+    const actions: PaletteMenuAction[] = [{ id: "open", title: target.kind === "page" && target.tabId ? "Switch to Tab" : target.kind === "calc" ? "Copy Answer" : target.kind === "action" ? target.title : "Open", icon: "arrow.up.right", hint: "↩", run: () => choose(target) }];
+    if ("url" in target) actions.push({ id: "copy", title: "Copy Link", icon: "link", hint: "⇧⌘C", run: () => copyText(target.url) });
+    if (target.kind === "page" && target.tabId) {
+      const targetId = target.tabId;
+      actions.push({ id: "close", title: "Close Tab", icon: "xmark", separator: true, run: () => closeTab(targetId) });
+    }
+    setMenu({ side: "right", title, actions });
+  };
+
+  if (palette) {
+    return (
+      <View ref={root}>
+        <PaletteContent
+          field={<ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}><View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>{scope ? <ScopeChip scope={scope} large /> : null}{field}</View></ContextMenuArea>}
+          sections={sections}
+          selectedIndex={selectedIndex}
+          current={current}
+          maxHeight={maxHeight}
+          width={width}
+          menu={menu}
+          onCloseMenu={closeMenu}
+          onAppMenu={() => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) })}
+          onRowMenu={openRowMenu}
+          onHover={setSelected}
+          onChoose={choose}
+          onSubmit={() => choose(current)}
+        />
+      </View>
+    );
+  }
 
   if (dropdown) {
     return (
@@ -392,118 +422,5 @@ export function Omnibox({
     );
   }
 
-  return (
-    <View ref={root}>
-      <ContextMenuArea captureDescendants onContextMenu={() => void onContextMenu()}>
-        <View style={{ flexDirection: "row", alignItems: "center", height: hero ? 60 : 55, paddingLeft: hero ? 18 : 20, paddingRight: 18, gap: hero ? 8 : 10 }}>
-          <View style={{ width: 18, alignItems: "center" }}>{leadingIcon}</View>
-          {scope && <ScopeChip scope={scope} large={hero} />}
-          {field}
-        </View>
-      </ContextMenuArea>
-      {suggestionList}
-      {bottomRow}
-    </View>
-  );
-}
-
-function destinationLabel(s: Suggestion | undefined): string {
-  if (s?.kind === "search") return s.engine;
-  if (s?.kind === "calc") return "Copy";
-  return "Go";
-}
-
-function AddChip({ tabId, onGo }: { tabId: string; onGo(url: string): void }) {
-  const theme = useTheme();
-  const windowId = useWindowId();
-  const { hovered, hoverProps } = useHover();
-  const open = async () => {
-    const s = useBrowser.getState();
-    const active = activeTabId(s, windowId);
-    const others = viewTabIds(s, windowId)
-      .map((id) => s.tabs[id]!)
-      .filter((t) => t.id !== active && t.url)
-      .slice(0, 12);
-    const choice = await showMenu([
-      ...others.map((t) => ({ id: `tab:${t.id}`, title: t.title || displayUrl(t.url) })),
-      ...(others.length ? [{ separator: true as const }] : []),
-      { id: "files", title: "Open File…", symbol: "doc" },
-    ]);
-    if (choice?.startsWith("tab:")) switchFromBar(choice.slice(4), "", tabId, "current");
-    if (choice === "files") {
-      const [file] = await pickFiles();
-      if (file) onGo(file);
-    }
-  };
-  return (
-    <View {...hoverProps}>
-    <Pressable onPress={open}>
-      <View
-        style={{
-          height: 32,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: theme.chipBorder,
-          backgroundColor: hovered ? theme.rowHover : undefined,
-          flexDirection: "row",
-          alignItems: "center",
-          paddingLeft: 9,
-          paddingRight: 12,
-          gap: 5,
-        }}
-      >
-        <Symbol name="plus" size={11} weight="medium" color={theme.chipText} style={{ width: 14, height: 14 }} />
-        <Text style={{ fontSize: 13, color: theme.chipText }}>Add tabs or files</Text>
-      </View>
-    </Pressable>
-    </View>
-  );
-}
-
-function GoButton({ label, onPress }: { label: string; onPress(): void }) {
-  const theme = useTheme();
-  const { hovered, hoverProps } = useHover();
-  return (
-    <View {...hoverProps} style={{ marginLeft: 8 }}>
-    <Pressable onPress={onPress}>
-      <View
-        style={{
-          minWidth: 99,
-          height: 32,
-          paddingHorizontal: 16,
-          borderRadius: 16,
-          backgroundColor: theme.goButton,
-          opacity: hovered ? 0.9 : 1,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-        }}
-      >
-        <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "600", color: theme.goButtonText }}>{label}</Text>
-        <Symbol name="return" size={11} weight="medium" color={theme.goButtonText + "99"} style={{ width: 14, height: 14 }} />
-      </View>
-    </Pressable>
-    </View>
-  );
-}
-
-function SendButton({ active, onPress }: { active: boolean; onPress(): void }) {
-  const theme = useTheme();
-  return (
-    <Pressable onPress={onPress} disabled={!active} style={{ marginLeft: 11.5 }}>
-      <View
-        style={{
-          width: 30,
-          height: 30,
-          borderRadius: 15,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: active ? theme.goButton : theme.sendIdle,
-        }}
-      >
-        <Symbol name="arrow.up" size={13} weight="semibold" color={active ? theme.goButtonText : theme.textTertiary} style={{ width: 16, height: 16 }} />
-      </View>
-    </Pressable>
-  );
+  return null;
 }

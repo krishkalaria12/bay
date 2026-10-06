@@ -58,10 +58,11 @@ function BrowserWindow() {
   // sizes and swipe surface. Moved out of the window rather than made transparent, so nothing in them takes the pointer.
   const showSidebar = sidebarOpen && !topTabs;
   const showStrip = sidebarOpen && topTabs;
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const width = size.width;
 
   return (
-    <View style={{ flex: 1, flexDirection: "row" }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={{ flex: 1, flexDirection: "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
       <ProfileTint />
@@ -95,7 +96,6 @@ function BrowserWindow() {
         </View>
       )}
       {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} />)}
-      <CommandPanel windowWidth={width} />
       <DownloadsPopover />
       <ExtensionOverlays />
       <DownloadMagnet />
@@ -103,6 +103,7 @@ function BrowserWindow() {
       <EditBookmarkDialog />
       <CreateProfileHost />
       <SidebarOverlays windowWidth={width} />
+      <CommandPanel windowWidth={width} windowHeight={size.height} />
       <OnboardingOverlay />
     </View>
   );

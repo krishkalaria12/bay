@@ -26,7 +26,7 @@ import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/act
 import { useClearDataRequest } from "../components/pages/ClearDataDialog";
 import { openInternalPage } from "../components/pages/urls";
 import { isUtilityWindowId, openImport, openSettings } from "../components/settings/windows";
-import { focusHeroBar } from "../components/omnibox/barState";
+import { openNewTabPanel } from "./newTab";
 import { webviews } from "./webviews";
 import { goBack, goForward } from "../components/layout/history";
 import { openSplitPane } from "../components/layout/splitActions";
@@ -50,6 +50,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     requested = null;
   }
   if (isSmall(s, requested) && runSmallYahuCommand(command, requested!)) return;
+  if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
   switch (command) {
     case "newWindow":
@@ -102,7 +103,10 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
 
   const windowId = resolveWindowId(s, requested);
   if (!windowId) {
-    if (command === "newTab") openWindow();
+    if (command === "newTab") {
+      const created = openWindow();
+      useBrowser.getState().openPanel(created);
+    }
     if (command === "reopenClosedTab" || command === "restoreClosed") {
       if (arg) s.restoreClosed(arg);
       else s.reopenClosed();
@@ -119,14 +123,14 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
 
   switch (command) {
     case "newTab":
-      return void s.newTab(windowId);
+      return openNewTabPanel(windowId);
     case "reopenClosedTab":
       return s.reopenClosed(windowId);
     case "restoreClosed":
       return arg ? s.restoreClosed(arg, windowId) : undefined;
     case "focusCommandBar":
       if (page) return s.openPanel(windowId, page.url);
-      return focusHeroBar(windowId) ? undefined : tab ? s.openPanel(windowId, "") : undefined;
+      return s.openPanel(windowId, "");
     case "closeTab":
       if (ui?.panel.open) return s.closePanel(windowId);
       if (tabId && find?.open) return closeFind(tabId);

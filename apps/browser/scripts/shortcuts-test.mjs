@@ -77,7 +77,8 @@ async function cdp(urlPart, expression) {
 }
 
 const state = () => nn(`const s = nn.store.getState(), w = s.windows.w1;
-  return { profile: w.profileId, active: w.activeTabIds[w.profileId], tabs: w.tabIds.length, panel: !!s.windowUi.w1?.panel.open };`);
+  return { profile: w.profileId, active: w.activeTabIds[w.profileId], tabs: w.tabIds.length,
+    panel: !!s.windowUi.w1?.panel.open, panelMode: s.windowUi.w1?.panel.mode };`);
 const activeUrl = async () => (await nn(`const s = nn.store.getState(), w = s.windows.w1; return w ? s.tabs[w.activeTabIds[w.profileId]]?.url ?? "" : "no window w1";`));
 const press = (key, options) => nn(`return nn.shell.devKeyEquivalent("w1", ${JSON.stringify({ ...key, ...options })});`);
 
@@ -325,9 +326,15 @@ let s = await state();
 await press(cmd("t", 17), sidebar);
 await sleep(400);
 let after = await state();
-check("⌘T opens a tab and selects it", after.tabs === s.tabs + 1 && (await activeUrl()) === "", `${s.tabs} → ${after.tabs} tabs`);
-await nn(`const s = nn.store.getState(), w = s.windows.w1; s.navigate(w.activeTabIds[w.profileId], "${pages}/?closed");`);
+check("⌘T opens the new tab palette", after.panel && after.panelMode === "newTab" && after.tabs === s.tabs && after.active === s.active,
+  `${s.tabs} → ${after.tabs} tabs; active ${after.active}; panel ${after.panelMode}`);
+await nn(`const driver = nn.omnibox.get("w1:palette"); if (!driver) throw new Error("palette driver missing"); driver.type(${JSON.stringify(`${pages}/?closed`)});`);
+await sleep(100);
+await nn(`nn.omnibox.get("w1:palette").submit();`);
 await sleep(1500);
+after = await state();
+check("submitting the palette opens a tab and selects it", after.tabs === s.tabs + 1 && after.active !== s.active && !after.panel && (await activeUrl()).endsWith("?closed"),
+  `${s.tabs} → ${after.tabs} tabs; active ${after.active}; palette ${after.panel ? "open" : "closed"}`);
 await press(cmd("w", 13), sidebar);
 await sleep(400);
 check("⌘W closes it", (await state()).tabs === s.tabs, `${(await state()).tabs} tabs`);

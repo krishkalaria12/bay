@@ -11,7 +11,6 @@ import { useHistoryAvailability } from "../layout/history";
 import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
 import { addressBarInSidebar, setUrlAnchor, SIDEBAR_FIELD } from "../layout/windowLayout";
-import { focusHeroBar } from "../omnibox/barState";
 import { GlassFill, liquidGlass } from "../glass";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
@@ -111,7 +110,7 @@ function EmptyField({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const open = () => {
-    if (!focusHeroBar(windowId)) useBrowser.getState().openPanel(windowId, "");
+    useBrowser.getState().openPanel(windowId, "");
   };
   return (
     <View {...hoverProps}>

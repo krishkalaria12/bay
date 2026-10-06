@@ -237,8 +237,7 @@ export async function openGroupMenu(windowId: string, groupId: string) {
   else if (choice === "icon") void openIconPicker(windowId, target);
   else if (choice.startsWith("color:")) s.updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null });
   else if (choice === "newTab") {
-    const id = s.newTabInGroup(groupId);
-    if (id) store().activate(id);
+    store().openNewTabPanel(windowId, groupId);
   }
   else if (choice === "pin") s.moveGroup(groupId, { pinned: !g.pinned });
   else if (choice === "duplicate") s.duplicateGroup(groupId);
@@ -265,7 +264,7 @@ export async function openSidebarMenu(windowId: string) {
     newLiveFolderMenuItem(),
   ]);
   if (choice && runNewLiveFolder(windowId, choice)) return;
-  if (choice === "newTab") s.newTab(windowId);
+  if (choice === "newTab") store().openNewTabPanel(windowId);
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") s.cleanUpTabs(windowId);
   else if (choice === "mute") muteAll(windowId, !muted);

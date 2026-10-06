@@ -29,9 +29,9 @@ const BUTTON = 28;
 
 export function SmallYahuWindow() {
   const theme = useTheme();
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   return (
-    <View style={{ flex: 1 }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <View style={{ flex: 1, flexDirection: "row", paddingTop: SMALL_BAR_HEIGHT, paddingLeft: INSET, paddingRight: INSET, paddingBottom: INSET }}>
         <ContentCard />
@@ -39,7 +39,7 @@ export function SmallYahuWindow() {
       <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
         <SmallYahuBar />
       </View>
-      <CommandPanel windowWidth={width} />
+      <CommandPanel windowWidth={size.width} windowHeight={size.height} />
       <DownloadsPopover />
     </View>
   );

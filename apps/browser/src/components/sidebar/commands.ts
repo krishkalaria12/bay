@@ -13,8 +13,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
   switch (command) {
     case "newTabInGroup": {
       const group = groupOf(s, tabId);
-      const id = group ? s.newTabInGroup(group.id) : s.newTab(windowId);
-      if (id) useBrowser.getState().activate(id);
+      s.openNewTabPanel(windowId, group?.id);
       return true;
     }
     case "newGroupWithTabs":

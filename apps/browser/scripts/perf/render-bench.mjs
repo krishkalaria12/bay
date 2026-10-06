@@ -179,11 +179,11 @@ async function run() {
         }
         if (want("typeCommandBar")) {
           log("typeCommandBar");
-          result.typeCommandBar = (await call("typeIn", { bar: "panel" })).stats;
+          result.typeCommandBar = (await call("typeIn", { mode: "navigate" })).stats;
         }
         if (want("typeOmnibox")) {
           log("typeOmnibox");
-          result.typeOmnibox = (await call("typeIn", { bar: "hero" })).stats;
+          result.typeOmnibox = (await call("typeIn", { mode: "newTab" })).stats;
         }
         if (want("hover")) {
           log("hover");

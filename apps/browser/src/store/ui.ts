@@ -1,7 +1,7 @@
 import type { Download } from "@bay/nncore";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { isIncognitoProfile } from "./model";
+import { isIncognitoProfile, newId } from "./model";
 import type { FindState, WindowUi } from "./types";
 
 export type UiSlice = {
@@ -17,6 +17,8 @@ export type UiSlice = {
   setFocusedWindow(id: string): void;
   setAppDark(dark: boolean): void;
   openPanel(windowId: string, initialText?: string): void;
+  openNewTabPanel(windowId: string, groupId?: string): void;
+  submitNewTabPanel(windowId: string, url: string): string;
   closePanel(windowId: string): void;
   setDownloadsOpen(windowId: string, open: boolean): void;
   setFind(tabId: string, patch: Partial<FindState>): void;
@@ -61,7 +63,34 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
   },
 
   openPanel(windowId, initialText = "") {
-    set((s) => patchWindowUi(s, windowId, { panel: { open: true, initialText } }));
+    set((s) => patchWindowUi(s, windowId, { panel: { open: true, initialText, mode: "navigate", sessionId: newId("panel") } }));
+  },
+
+  openNewTabPanel(windowId, groupId) {
+    const s = get();
+    const window = s.windows[windowId];
+    const group = groupId ? s.groups[groupId] : undefined;
+    if (!window || window.kind === "small" || (groupId && (!group || group.windowId !== windowId || group.profileId !== window.profileId))) return;
+    set(patchWindowUi(s, windowId, {
+      panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : {}) },
+    }));
+  },
+
+  submitNewTabPanel(windowId, url) {
+    const s = get();
+    const window = s.windows[windowId];
+    const panel = s.windowUi[windowId]?.panel;
+    if (!window || window.kind === "small" || !url.trim() || !panel?.open || panel.mode !== "newTab") return "";
+    if (panel.groupId) {
+      const group = s.groups[panel.groupId];
+      if (!group || group.windowId !== windowId || group.profileId !== window.profileId) {
+        s.closePanel(windowId);
+        return "";
+      }
+    }
+    // Close first: internal URLs can open a fresh panel through the app-URL handler.
+    s.closePanel(windowId);
+    return panel.groupId ? get().newTabInGroup(panel.groupId, url) : get().newTab(windowId, { url });
   },
 
   closePanel(windowId) {

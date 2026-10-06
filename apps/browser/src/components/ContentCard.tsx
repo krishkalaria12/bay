@@ -28,7 +28,7 @@ import { SplitEmptyState } from "./layout/SplitEmptyState";
 import { pagerFor } from "./layout/profilePager";
 import { openFromPage } from "./layout/openFromPage";
 import { setUrlAnchor, useAddressBarInSidebar, useTabLayout } from "./layout/windowLayout";
-import { NewTabPage } from "./NewTabPage";
+import { BlankTabSurface } from "./BlankTabSurface";
 import { InternalPage } from "./pages";
 import { AutofillPrompt, BlockedPopupsPrompt, ExternalAppPrompt, PasswordPrompt, PermissionPrompt, answerExternalApp, shouldPromptForPopups, showAutofillPrompt, showPasswordPrompt } from "./site/Prompts";
 import { SiteControls } from "./site/SiteControls";
@@ -297,7 +297,7 @@ const TabPane = memo(function TabPane({
           {visible && !fullscreen && <ShareBar tabId={tabId} />}
           <View style={{ flex: 1 }}>
             {mounted && <TabWebView tabId={tabId} visible={visible && !newTabShown && !isNewTab} warm={!!warm && !newTabShown && !isNewTab} />}
-            {visible && isNewTab && !small && (inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : <NewTabPage key={tabId} tabId={tabId} toolbar={toolbar} />)}
+            {visible && isNewTab && !small && (inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : <BlankTabSurface key={tabId} tabId={tabId} focused={focused && !covered} />)}
             {visible && <InternalPage tabId={tabId} />}
             {visible && (
               <>

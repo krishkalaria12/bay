@@ -161,6 +161,12 @@ export type FindState = {
   replace?: boolean;
 };
 
-export type PanelState = { open: boolean; initialText: string };
+export type PanelState = {
+  open: boolean;
+  initialText: string;
+  mode?: "newTab" | "navigate";
+  sessionId?: string;
+  groupId?: string;
+};
 
 export type WindowUi = { panel: PanelState; downloadsOpen: boolean };

@@ -75,7 +75,7 @@ const scenarios = {
     S().closePanel(w);
     await sleep(200);
     S().openPanel(w);
-    const id = `${w}:panel`;
+    const id = `${w}:palette`;
     if (!(await until(() => nn.omnibox.get(id), 3000))) throw new Error("omnibox driver missing");
     await sleep(500);
     const driver = nn.omnibox.get(id);
@@ -402,27 +402,28 @@ function renderScenarios() {
       }
       return { open, close, openStats, closeStats: await settle(1000) };
     },
-    async typeIn({ bar = "panel", query = "github.com/facebook/react", gapMs = 60, origin } = {}) {
+    async typeIn({ mode = "navigate", query = "github.com/facebook/react", gapMs = 60 } = {}) {
       const w = windowId();
       await quiet(600);
-      let tab = null;
-      if (bar === "panel") S().openPanel(w);
-      else tab = S().newTab(w);
-      const id = `${w}:${bar}`;
-      if (!(await until(() => nn.omnibox.get(id), 4000))) throw new Error(`no omnibox driver ${id}`);
-      await sleep(800);
-      const driver = nn.omnibox.get(id);
-      P.reset();
-      const keys = [];
-      for (let i = 1; i <= query.length; i++) {
-        keys.push(timed(() => driver.type(query.slice(0, i))));
-        await sleep(gapMs);
+      if (mode === "navigate") S().openPanel(w);
+      else if (mode === "newTab") S().openNewTabPanel(w);
+      else throw new Error(`unknown palette mode ${mode}`);
+      try {
+        const id = `${w}:palette`;
+        if (!(await until(() => nn.omnibox.get(id), 4000))) throw new Error(`no omnibox driver ${id}`);
+        await sleep(800);
+        const driver = nn.omnibox.get(id);
+        P.reset();
+        const keys = [];
+        for (let i = 1; i <= query.length; i++) {
+          keys.push(timed(() => driver.type(query.slice(0, i))));
+          await sleep(gapMs);
+        }
+        return { keys, stats: await settle(600) };
+      } finally {
+        S().closePanel(w);
+        await sleep(400);
       }
-      const stats = await settle(600);
-      if (bar === "panel") S().closePanel(w);
-      else if (typeof tab === "string") S().closeTab(tab);
-      await sleep(400);
-      return { keys, stats };
     },
     // Opens a page in a background tab (title ticker, media) and returns its id.
     async openBackground({ path, origin, settleMs = 2500 } = {}) {

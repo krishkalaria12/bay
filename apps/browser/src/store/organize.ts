@@ -34,7 +34,7 @@ export type OrganizeSlice = {
   groupTabs(ids: string[], options?: { pinned?: boolean; name?: string }): string;
   moveGroup(groupId: string, placement: GroupPlacement): void;
   duplicateGroup(groupId: string): string;
-  newTabInGroup(groupId: string): string;
+  newTabInGroup(groupId: string, url?: string): string;
   moveGroupToBookmarksBar(groupId: string): void;
 
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number }): number;
@@ -518,11 +518,21 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     return groupId2;
   },
 
-  newTabInGroup(groupId) {
+  newTabInGroup(groupId, url) {
     const s = get();
     const g = s.groups[groupId];
     const w = g && s.windows[g.windowId];
     if (!g || !w) return "";
+    if (url) {
+      const id = get().newTab(w.id, { url, profileId: g.profileId, index: w.tabIds.indexOf(g.tabIds.at(-1)!) + 1 });
+      if (!id) return "";
+      const next = get();
+      const group = next.groups[groupId];
+      if (!group) return id;
+      const groups = { ...next.groups, [groupId]: { ...group, collapsed: false, tabIds: [...group.tabIds, id] } };
+      set({ groups: syncGroupOrder(groups, next.windows[w.id]!) });
+      return id;
+    }
     const [next, id] = withNewTab(s, w.id, { profileId: g.profileId, index: w.tabIds.indexOf(g.tabIds.at(-1)!) + 1 });
     const window = next.windows[w.id]!;
     const groups = { ...next.groups, [groupId]: { ...g, collapsed: false, tabIds: [...g.tabIds, id] } };

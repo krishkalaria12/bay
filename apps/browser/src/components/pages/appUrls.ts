@@ -1,5 +1,5 @@
 import { appUrlRoute } from "@bay/core";
-import { useBrowser } from "../../store/browser";
+import { openNewTabPanel } from "../../lib/newTab";
 import { setAppUrlOpener } from "../../store/tabs";
 import { openSettings, type SettingsPane } from "../settings/windows";
 
@@ -35,7 +35,7 @@ export function settingsPaneOf(url: string): SettingsPane | "root" | null {
 setAppUrlOpener((url, windowId) => {
   const route = appUrlRoute(url);
   if (route?.kind === "newTab") {
-    useBrowser.getState().newTab(windowId);
+    openNewTabPanel(windowId);
     return true;
   }
   const pane = settingsPaneOf(url);

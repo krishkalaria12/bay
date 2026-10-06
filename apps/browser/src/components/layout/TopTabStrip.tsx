@@ -1180,7 +1180,7 @@ function NewTabButton({ windowId }: { windowId: string }) {
       <Pressable
         onPress={(e) => {
           if (modifiersOf(e).altKey) openNewTabInSplit(windowId);
-          else useBrowser.getState().newTab(windowId);
+          else useBrowser.getState().openNewTabPanel(windowId);
         }}
       >
         {({ pressed }) => (

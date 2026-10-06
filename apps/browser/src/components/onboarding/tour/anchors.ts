@@ -10,11 +10,13 @@ import { measureRow } from "../../sidebar/state";
 export type TourAnchor = "commandBar" | "page" | "tabs" | "sidebarButton";
 
 const registered = new Map<string, View>();
+const fallbacks = new Map<string, View>();
 const key = (windowId: string, id: TourAnchor) => `${windowId}\n${id}`;
 
-export const tourAnchorRef = (windowId: string, id: TourAnchor) => (view: View | null) => {
-  if (view) registered.set(key(windowId, id), view);
-  else registered.delete(key(windowId, id));
+export const tourAnchorRef = (windowId: string, id: TourAnchor, fallback = false) => (view: View | null) => {
+  const anchors = fallback ? fallbacks : registered;
+  if (view) anchors.set(key(windowId, id), view);
+  else anchors.delete(key(windowId, id));
 };
 
 function measure(view: View | undefined): Promise<Rect | null> {
@@ -30,7 +32,7 @@ export async function locateAnchor(windowId: string, id: TourAnchor): Promise<Re
   switch (id) {
     case "commandBar":
     case "page":
-      return measure(registered.get(key(windowId, id)));
+      return measure(registered.get(key(windowId, id)) ?? fallbacks.get(key(windowId, id)));
     case "tabs": {
       const tabId = activeTabId(s, windowId);
       return w.sidebarOpen && tabLayout === "sidebar" && tabId ? measureRow(windowId, tabId) : null;
