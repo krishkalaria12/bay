@@ -17,13 +17,14 @@ import { useDropdownStart } from "./omnibox/dropdownStart";
 import { useInlineCompletion } from "./omnibox/useInlineCompletion";
 import { scopeFor, useSuggestions } from "./omnibox/useSuggestions";
 import { setPopover } from "./layout/pageState";
-import { IconButton } from "./primitives";
+import { Favicon, IconButton } from "./primitives";
 import { closeTab } from "../lib/actions";
 import { startOnboarding } from "./onboarding";
 import { PaletteContent, type PaletteMenu } from "./omnibox/PaletteContent";
 import { usePaletteStart } from "./omnibox/usePaletteStart";
 import { appPaletteActions } from "./omnibox/paletteAppActions";
 import type { PaletteMenuAction } from "./omnibox/PaletteActionMenu";
+import { currentPageActions } from "./omnibox/paletteStart";
 
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
@@ -41,6 +42,8 @@ const BASE_KEYS = [
   { key: "K", metaKey: true },
   { key: "c", metaKey: true, shiftKey: true },
   { key: "C", metaKey: true, shiftKey: true },
+  { key: "c", metaKey: true, shiftKey: true, altKey: true },
+  { key: "C", metaKey: true, shiftKey: true, altKey: true },
   { key: "Enter", metaKey: true, shiftKey: true },
   { key: "Enter", metaKey: true },
   { key: "Enter", altKey: true },
@@ -70,6 +73,8 @@ export function Omnibox({
   const profileId = useWindowProfileId();
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
+  const currentTitle = useBrowser((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
+  const currentFavicon = useBrowser((s) => s.tabs[tabId]?.favicon ?? null);
   const palette = variant === "palette";
   const newTab = useBrowser((s) => s.windowUi[windowId]?.panel.mode === "newTab");
   const [menu, setMenu] = useState<PaletteMenu | null>(null);
@@ -79,7 +84,7 @@ export function Omnibox({
   const [typed, setTyped] = useState(initial);
   const [edited, setEdited] = useState(false);
   const [suppressCompletion, setSuppressCompletion] = useState(true);
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState(palette && !newTab && !!currentUrl && initialText === currentUrl ? -1 : 0);
   const [scope, setScope] = useState<SearchScope | null>(null);
   const scopeFrom = useRef("");
   const [pendingSelection, setPendingSelection] = useState<Selection | null>(
@@ -101,14 +106,12 @@ export function Omnibox({
   const start = useDropdownStart(dropdown && !edited && !scope, tabId, profileId);
   const idleSections = usePaletteStart(windowId, profileId, tabId);
   const idle = !scope && (!edited || !typed.trim());
+  const pageContext = palette && !newTab && !!currentUrl && initialText === currentUrl && typed === initial && !edited && !scope;
   const sections = useMemo(() => {
     if (!idle) return [{ title: "", items: suggested }];
-    if (!newTab && initialText && !edited && currentUrl) {
-      const tab = useBrowser.getState().tabs[tabId];
-      return [{ title: "Current Page", items: [{ kind: "page" as const, url: currentUrl, title: tab?.customTitle || tab?.title || displayUrl(currentUrl), favicon: tab?.favicon ?? null }] }, ...idleSections];
-    }
+    if (pageContext) return currentPageActions({ url: currentUrl, title: currentTitle, customTitle: null });
     return idleSections;
-  }, [idle, suggested, newTab, initialText, edited, currentUrl, tabId, idleSections]);
+  }, [idle, suggested, pageContext, currentUrl, currentTitle, idleSections]);
   const items = palette ? sections.flatMap((s) => s.items) : dropdown && !edited && !scope ? start : suggested;
   const inline = useInlineCompletion(input, typed, suppressCompletion || scope ? "" : completion);
   const shownCompletion = inline.shown;
@@ -211,6 +214,10 @@ export function Omnibox({
       return dismiss();
     }
     if (palette && metaKey && key.toLowerCase() === "k") return openRowMenu();
+    if (pageContext && metaKey && shiftKey && key.toLowerCase() === "c") {
+      dismiss();
+      return runBarAction(altKey ? "copyUrlAsMarkdown" : "copyUrl", windowId);
+    }
     if (palette && metaKey && shiftKey && key.toLowerCase() === "c" && current && "url" in current) return copyText(current.url);
     if (key === "ArrowDown" || (ctrlKey && key === "n")) return move(1);
     if (key === "ArrowUp" || (ctrlKey && key === "p")) return move(-1);
@@ -375,6 +382,8 @@ export function Omnibox({
     return (
       <View ref={root}>
         <PaletteContent
+          pageContext={pageContext}
+          leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} profileId={profileId} /> : undefined}
           field={<ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}><View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>{scope ? <ScopeChip scope={scope} large /> : null}{field}</View></ContextMenuArea>}
           sections={sections}
           selectedIndex={selectedIndex}

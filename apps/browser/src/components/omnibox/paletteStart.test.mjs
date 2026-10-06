@@ -1,12 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { paletteStart } from "./paletteStart.ts";
+import { currentPageActions, paletteStart } from "./paletteStart.ts";
 
 const tab = (id, lastActiveAt, overrides = {}) => ({
   id, lastActiveAt, url: `https://${id}.example/`, title: id, customTitle: null, favicon: null, ...overrides,
 });
 const visit = (url, visits, lastVisit, overrides = {}) => ({ url, visits, lastVisit, title: "Page title", favicon: null, ...overrides });
 const section = (result, title) => result.find((entry) => entry.title === title)?.items;
+
+test("opening a current URL offers page actions with the URL and Markdown title", () => {
+  const [section] = currentPageActions({ url: "https://example.com/changelog/0.0.10", title: "Release 0.0.10", customTitle: null });
+  assert.equal(section.title, "This Page");
+  assert.deepEqual(section.items.map(({ id, title }) => ({ id, title })), [
+    { id: "copyUrl", title: "Copy Link" },
+    { id: "copyUrlAsMarkdown", title: "Copy Markdown Link" },
+    { id: "duplicateTab", title: "Duplicate Tab" },
+  ]);
+  assert.equal(section.items[0].detail, "example.com/changelog/0.0.10");
+  assert.equal(section.items[1].detail, "[Release 0.0.10]");
+});
+
+test("page actions use renamed tabs and fall back to the URL for untitled pages", () => {
+  const page = { url: "https://example.com/", title: "Original title", customTitle: "My page" };
+  assert.equal(currentPageActions(page)[0].items[1].detail, "[My page]");
+  assert.equal(currentPageActions({ ...page, title: "", customTitle: null })[0].items[1].detail, "[example.com]");
+});
 
 test("idle sections show recent other tabs before frequent sites and quick actions", () => {
   const tabs = [

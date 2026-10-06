@@ -1,7 +1,17 @@
-import { hostOf, parseUrl, QUICK_CREATE, type Suggestion } from "@bay/core";
+import { displayUrl, hostOf, parseUrl, QUICK_CREATE, type Suggestion } from "@bay/core";
 import type { HistoryEntry, Tab } from "../../store/types";
 
-export type PaletteSection = { title: string; items: Suggestion[] };
+export type PaletteSuggestion = Suggestion & { detail?: string };
+export type PaletteSection = { title: string; items: PaletteSuggestion[] };
+
+export function currentPageActions(tab: Pick<Tab, "url" | "title" | "customTitle">): PaletteSection[] {
+  const title = tab.customTitle || tab.title || displayUrl(tab.url);
+  return [{ title: "This Page", items: [
+    { kind: "action", id: "copyUrl", title: "Copy Link", icon: "link", hint: "⇧⌘C", detail: displayUrl(tab.url) },
+    { kind: "action", id: "copyUrlAsMarkdown", title: "Copy Markdown Link", icon: "doc.plaintext", hint: "⌥⇧⌘C", detail: `[${title}]` },
+    { kind: "action", id: "duplicateTab", title: "Duplicate Tab", icon: "square.on.square" },
+  ] }];
+}
 
 export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId: string): PaletteSection[] {
   const recent: Suggestion[] = tabs

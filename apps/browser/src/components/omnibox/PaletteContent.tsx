@@ -11,12 +11,14 @@ import { dispositionFor, type Disposition } from "./open";
 import { Keycaps } from "./Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./PaletteActionMenu";
 import { SuggestionIcon } from "./SuggestionRow";
-import type { PaletteSection } from "./paletteStart";
+import type { PaletteSection, PaletteSuggestion } from "./paletteStart";
 
 export type PaletteMenu = { side: "left" | "right"; title: string; actions: PaletteMenuAction[] };
 
-export function PaletteContent({ field, sections, selectedIndex, current, maxHeight, width, menu, onCloseMenu, onAppMenu, onRowMenu, onHover, onChoose, onSubmit }: {
+export function PaletteContent({ field, leadingIcon, pageContext = false, sections, selectedIndex, current, maxHeight, width, menu, onCloseMenu, onAppMenu, onRowMenu, onHover, onChoose, onSubmit }: {
   field: ReactNode;
+  leadingIcon?: ReactNode;
+  pageContext?: boolean;
   sections: PaletteSection[];
   selectedIndex: number;
   current: Suggestion | undefined;
@@ -52,14 +54,14 @@ export function PaletteContent({ field, sections, selectedIndex, current, maxHei
   const label = current?.kind === "page" && current.tabId ? "Switch to Tab" : current?.kind === "action" ? current.title : current?.kind === "calc" ? "Copy Answer" : "Open";
 
   return (
-    <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
+    <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={pageContext ? { height: Math.min(480, maxHeight) } : undefined}>
       <View ref={tourAnchorRef(windowId, "commandBar")} style={{ height: 72, flexDirection: "row", alignItems: "center", paddingHorizontal: 21, gap: 13 }}>
-        <Symbol name="magnifyingglass" size={19} color={theme.textSecondary} style={{ width: 23, height: 23 }} />
+        {leadingIcon ?? <Symbol name="magnifyingglass" size={19} color={theme.textSecondary} style={{ width: 23, height: 23 }} />}
         {field}
       </View>
       <ScrollView
         ref={scroll}
-        style={{ maxHeight: listHeight, flexGrow: 0 }}
+        style={{ maxHeight: listHeight, flexGrow: pageContext ? 1 : 0 }}
         contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 8 }}
         keyboardShouldPersistTaps="always"
         onLayout={(e) => { viewport.current.height = e.nativeEvent.layout.height; keepSelectedVisible(); }}
@@ -76,7 +78,7 @@ export function PaletteContent({ field, sections, selectedIndex, current, maxHei
             {section.title ? <Text style={{ fontSize: 12, color: theme.textSecondary, height: 30, paddingTop: 9, paddingHorizontal: 8 }}>{section.title}</Text> : null}
             {section.items.map((suggestion) => {
               const rowIndex = index++;
-              return <PaletteResultRow key={`${suggestion.kind}:${"id" in suggestion ? suggestion.id : suggestion.url}:${rowIndex}`} suggestion={suggestion} selected={rowIndex === selectedIndex} onHover={() => onHover(rowIndex)} onChoose={(disposition) => onChoose(suggestion, disposition)} onMenu={() => onRowMenu(suggestion)} />;
+              return <PaletteResultRow key={`${suggestion.kind}:${"id" in suggestion ? suggestion.id : suggestion.url}:${rowIndex}`} suggestion={suggestion} pageContext={pageContext} selected={rowIndex === selectedIndex} onHover={() => onHover(rowIndex)} onChoose={(disposition) => onChoose(suggestion, disposition)} onMenu={() => onRowMenu(suggestion)} />;
             })}
           </View>
         ))}
@@ -85,10 +87,10 @@ export function PaletteContent({ field, sections, selectedIndex, current, maxHei
       <View style={{ height: 52, paddingHorizontal: 8, paddingBottom: 8, flexDirection: "row", alignItems: "center" }}>
         <FooterButton label="Bay menu" icon="line.3.horizontal" onPress={onAppMenu} round />
         <View style={{ flex: 1 }} />
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 22, padding: 3, backgroundColor: theme.dark ? "#FFFFFF09" : "#00000006", borderWidth: 0.5, borderColor: theme.dark ? "#FFFFFF13" : "#0000000C" }}>
+        {!pageContext && <View style={{ flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 22, padding: 3, backgroundColor: theme.dark ? "#FFFFFF09" : "#00000006", borderWidth: 0.5, borderColor: theme.dark ? "#FFFFFF13" : "#0000000C" }}>
           <FooterButton label={label} hint="↩" onPress={onSubmit} />
           <FooterButton label="Actions" hint="⌘K" onPress={onRowMenu} />
-        </View>
+        </View>}
       </View>
       {menu ? (
         <>
@@ -100,8 +102,9 @@ export function PaletteContent({ field, sections, selectedIndex, current, maxHei
   );
 }
 
-function PaletteResultRow({ suggestion: s, selected, onHover, onChoose, onMenu }: {
-  suggestion: Suggestion;
+function PaletteResultRow({ suggestion: s, pageContext, selected, onHover, onChoose, onMenu }: {
+  suggestion: PaletteSuggestion;
+  pageContext: boolean;
   selected: boolean;
   onHover(): void;
   onChoose(disposition: Disposition): void;
@@ -110,16 +113,16 @@ function PaletteResultRow({ suggestion: s, selected, onHover, onChoose, onMenu }
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const title = s.kind === "page" ? s.title || displayUrl(s.url) : s.kind === "search" ? s.query : s.kind === "calc" ? s.value : s.title;
-  const detail = s.kind === "page" ? displayUrl(s.url) : s.kind === "create" ? displayUrl(s.url) : s.kind === "calc" ? s.expression : "";
+  const detail = s.detail ?? (s.kind === "page" ? displayUrl(s.url) : s.kind === "create" ? displayUrl(s.url) : s.kind === "calc" ? s.expression : "");
   return (
     <View onMouseEnter={() => { hoverProps.onMouseEnter(); onHover(); }} onMouseLeave={hoverProps.onMouseLeave}>
       <ContextMenuArea onContextMenu={onMenu}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}${s.kind === "page" && s.tabId ? ", switch to tab" : ""}`} accessibilityState={{ selected }} onPress={(e) => onChoose(dispositionFor(modifiersOf(e)))}>
         <View style={{ height: 40, flexDirection: "row", alignItems: "center", gap: 13, borderRadius: 11, paddingHorizontal: 11, backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : hovered ? theme.rowHover : undefined }}>
-          <SuggestionIcon suggestion={s} />
+          {pageContext ? <View style={{ width: 23, height: 23, borderRadius: 5, alignItems: "center", justifyContent: "center", backgroundColor: theme.toolbarHover, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.panelBorder }}><SuggestionIcon suggestion={s} /></View> : <SuggestionIcon suggestion={s} />}
           <Text numberOfLines={1} style={{ flexShrink: 1, maxWidth: detail ? "53%" : "85%", fontSize: 14, color: theme.textPrimary }}>{title}</Text>
           {detail ? <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, color: theme.textSecondary }}>{detail}</Text> : <View style={{ flex: 1 }} />}
-          {selected ? <Keycaps hint="↩" /> : s.kind === "action" && s.hint ? <Keycaps hint={s.hint} /> : null}
+          {s.kind === "action" && s.hint && pageContext ? <Keycaps hint={s.hint} /> : selected ? <Keycaps hint="↩" /> : s.kind === "action" && s.hint ? <Keycaps hint={s.hint} /> : null}
         </View>
       </Pressable>
       </ContextMenuArea>
