@@ -8,5 +8,5 @@ rm -rf "$CB/series-base"
 cd "$CB/automate"
 exec taskpolicy -c utility -d throttle nice -n 19 python3 automate-git.py \
   --download-dir="$CB/chromium_git" --depot-tools-dir="$CB/depot_tools" \
-  --branch=$CEF_BRANCH --no-chromium-history --arm64-build --no-debug-build \
+  --branch=$CEF_BRANCH --checkout="$CEF_CHECKOUT" --no-chromium-history --arm64-build --no-debug-build \
   --no-build --no-distrib

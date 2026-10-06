@@ -4,6 +4,7 @@ export NN_REPO="${NN_REPO:-$HOME/Documents/bay}"
 export DEPOT_TOOLS_UPDATE=0
 export PATH="$CB/depot_tools:$PATH"
 export CEF_BRANCH=8037
+export CEF_CHECKOUT=564dd6c4aafff558154bd3176eb5d13551db6734
 export CEF_USE_GN=1
 export CEF_ENABLE_ARM64=1
 export GN_OUT_CONFIGS=Release_GN_arm64

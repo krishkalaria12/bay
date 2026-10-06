@@ -1,0 +1,51 @@
+#!/bin/bash
+# Downloads Bay's pinned Chromium sources and tools without compiling the engine.
+set -euo pipefail
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+if [[ "${BAY_DOWNLOAD_LOCKED:-0}" != 1 ]]; then
+  BAY_DOWNLOAD_LOCKED=1 exec "$repo/scripts/agent/locked" chromium -- "$0"
+fi
+unset BAY_DOWNLOAD_LOCKED
+
+export NN_REPO="$repo"
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+source "$repo/engine/patches/build/env.sh"
+src="$CB/chromium_git/chromium/src"
+if [[ -f "$src/out/Release_GN_arm64/build.ninja" ]]; then
+  echo "error: an engine build already exists; use scripts/agent/engine-build instead" >&2
+  exit 1
+fi
+mkdir -p "$CB/scripts" "$CB/automate" "$CB/logs"
+cp "$repo/engine/patches/build/"* "$CB/scripts/"
+touch "$CB/.metadata_never_index"
+
+curl -fL --retry 3 --connect-timeout 30 --max-time 180 \
+  "https://raw.githubusercontent.com/chromiumembedded/cef/$CEF_CHECKOUT/tools/automate/automate-git.py" \
+  -o "$CB/automate/automate-git.py"
+if [[ ! -d "$CB/depot_tools/.git" ]]; then
+  git clone --depth=1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$CB/depot_tools"
+fi
+if [[ ! -d "$CB/ungoogled/.git" ]]; then
+  git clone --depth=1 --branch 154.0.8037.57-1 \
+    https://github.com/ungoogled-software/ungoogled-chromium.git "$CB/ungoogled"
+fi
+if [[ ! -d "$CB/ungoogled-macos/.git" ]]; then
+  git clone --depth=1 --branch 154.0.8037.57-1.1 \
+    https://github.com/ungoogled-software/ungoogled-chromium-macos.git "$CB/ungoogled-macos"
+fi
+
+# An interrupted first fetch has no HEAD or chrome/VERSION. CEF's automation
+# cannot resume that directory. Preserve it and let automation start a fresh fetch.
+if [[ -d "$src/.git" ]] && ! git -C "$src" rev-parse --verify HEAD >/dev/null 2>&1; then
+  if [[ -d "$src/out" ]]; then
+    echo "error: incomplete checkout has an out directory; inspect $src before retrying" >&2
+    exit 1
+  fi
+  saved="$CB/chromium_git/chromium/src.incomplete-$(date +%s)"
+  mv "$src" "$saved"
+  echo "Preserved interrupted checkout at $saved"
+fi
+
+PYTHONUNBUFFERED=1 bash "$CB/scripts/01-sync.sh"
+echo "Sources downloaded. Build instructions: $repo/BUILDING.md"

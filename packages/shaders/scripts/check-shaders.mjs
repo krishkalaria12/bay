@@ -2,8 +2,9 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const iosDir = new URL("../ios/", import.meta.url).pathname;
+const iosDir = fileURLToPath(new URL("../ios/", import.meta.url));
 const read = (f) => readFileSync(join(iosDir, f), "utf8");
 const block = (src, name) => src.match(new RegExp(`let ${name} = """\\n([\\s\\S]*?)\\n"""`))?.[1];
 

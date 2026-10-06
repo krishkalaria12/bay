@@ -22,3 +22,4 @@ lowprio python3 utils/domain_substitution.py apply \
   -r domain_regex.list -f "$CB/domain_substitution.filtered.list" -c "$cache" "$src"
 fi
 "$CB/scripts/apply-chromium-patches.sh"
+"$CB/scripts/regen-gn-args.sh"
