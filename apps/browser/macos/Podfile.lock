@@ -2582,7 +2582,7 @@ SPEC CHECKSUMS:
   BaySync: 84b8bfd48ed2dcd93c85bf4fb39bd006e34f5f3f
   boost: cea1d4f90a3a59537f3deb03ff5656489d7133dd
   DoubleConversion: d31b1eb37f6d6f456530c4fd9124b857d6889cab
-  EXConstants: 18ac927605517285307ea8f7ffe6fe7ca538eb5d
+  EXConstants: 6d68fcb2c895722c306268e6cff1c71ed4539ce7
   Expo: c117ac8b6cdcbd28dbb32809f3442a85a438abc8
   ExpoAsset: 9e5a7c9c0a9fb83ad5b2bb365141f2bd7f289b66
   ExpoFileSystem: 8e87545aef1d8d31f244edbfdd0780df4e5bac2e
