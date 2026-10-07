@@ -19,6 +19,7 @@ import { ProfileSwipeArea } from "./ProfileSwipe";
 import { openNewTabInSplit } from "./splitActions";
 import { setMeasuredWidth, useMeasuredWidths } from "./measuredWidths";
 import { usePeek } from "./usePeek";
+import Reanimated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import {
   dragGeometry,
   dragRange,
@@ -1196,23 +1197,29 @@ function NewTabButton({ windowId }: { windowId: string }) {
 export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
   const theme = useTheme();
   const { slide, live, show, hide } = usePeek(enabled);
+  const slideStyle = useAnimatedStyle(() => {
+    "worklet";
+    const p = slide.get();
+    return { opacity: p, transform: [{ translateY: interpolate(p, [0, 1], [-PEEK_HEIGHT - 8, 0]) }] };
+  });
   return (
     <>
       {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: layout.trafficLightsWidth, right: 0, top: 0, height: 6 }} /> : null}
-      <Animated.View
+      <Reanimated.View
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}
         onMouseLeave={live ? hide : undefined}
-        style={{
-          position: "absolute",
-          left: 6,
-          width: windowWidth - 12,
-          // Out of the window while hidden (a transform doesn't move hover tracking): its tabs mustn't hover under the page.
-          top: live ? 4 : -10_000,
-          height: PEEK_HEIGHT,
-          opacity: slide,
-          transform: [{ translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [-PEEK_HEIGHT - 8, 0] }) }],
-        }}
+        style={[
+          {
+            position: "absolute",
+            left: 6,
+            width: windowWidth - 12,
+            // Out of the window while hidden (a transform doesn't move hover tracking): its tabs mustn't hover under the page.
+            top: live ? 4 : -10_000,
+            height: PEEK_HEIGHT,
+          },
+          slideStyle,
+        ]}
       >
         <Surface
           fill={hex(theme.windowTint[0])}
@@ -1230,7 +1237,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
             <TopTabStrip floating swipe={live} width={windowWidth - 12 - PEEK_BORDER * 2} />
           </View>
         </Surface>
-      </Animated.View>
+      </Reanimated.View>
     </>
   );
 }

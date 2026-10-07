@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing } from "react-native";
+import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming, type WithTimingConfig } from "react-native-reanimated";
 
-const SLIDE_MS = 180;
+export const SLIDE_MS = 180;
+// The sidebar's and tab strip's slides: the peek's and the docked sidebar's. Instant under Reduce Motion.
+export const SLIDE: WithTimingConfig = { duration: SLIDE_MS, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System };
 const HIDE_DELAY_MS = 120;
 
 /**
@@ -10,19 +12,19 @@ const HIDE_DELAY_MS = 120;
  * from the moment it starts showing until it has slid all the way out (coming back mid-slide keeps it).
  */
 export function usePeek(enabled: boolean) {
-  const slide = useRef(new Animated.Value(0)).current;
+  const slide = useSharedValue(0);
   const [live, setLive] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const animate = (to: number, done?: () => void) =>
-    Animated.timing(slide, { toValue: to, duration: SLIDE_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(
-      ({ finished }) => finished && done?.(),
-    );
-  const slideOut = () => animate(0, () => setLive(false));
+  const slideOut = () => {
+    slide.set(withTiming(0, SLIDE, (finished) => {
+      if (finished) runOnJS(setLive)(false);
+    }));
+  };
   const show = () => {
     clearTimeout(hideTimer.current);
     if (!enabled) return;
     setLive(true);
-    animate(1);
+    slide.set(withTiming(1, SLIDE));
   };
   const hide = () => {
     clearTimeout(hideTimer.current);

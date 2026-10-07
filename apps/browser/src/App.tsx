@@ -1,7 +1,8 @@
 import { WindowBackdrop } from "@bay/shaders";
 import { Surface } from "@bay/shell";
 import { useState } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { CommandPanel } from "./components/CommandPanel";
 import { ContentCard } from "./components/ContentCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
@@ -17,6 +18,7 @@ import { useFullscreenTab } from "./components/layout/pageState";
 import { ProfileSwipe, ProfileTint } from "./components/layout/ProfileSwipe";
 import { TOP_CARD_INSET, TOP_STRIP_HEIGHT, TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
 import { usePeek } from "./components/layout/usePeek";
+import { useSidebarDock } from "./components/layout/useSidebarDock";
 import { useTabLayout } from "./components/layout/windowLayout";
 import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
@@ -61,18 +63,40 @@ function BrowserWindow() {
   const showStrip = sidebarOpen && topTabs;
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
+  const sidebarWidth = useSidebarWidth(useWindowId());
+  const dock = useSidebarDock(showSidebar);
+  // The sidebar's slot narrows to the card's inset as it closes; the sidebar slides left by as much, so its edge stays
+  // on the card's (no clipping: the resize handle reaches past it).
+  const hiddenBy = sidebarWidth - layout.cardInset;
+  const slotStyle = useAnimatedStyle(() => {
+    "worklet";
+    // In page full screen the slot sits outside the window at the sidebar's full width.
+    return { width: fullscreen ? sidebarWidth : interpolate(dock.progress.get(), [0, 1], [layout.cardInset, sidebarWidth]) };
+  });
+  const dockedStyle = useAnimatedStyle(() => {
+    "worklet";
+    const p = dock.progress.get();
+    return { opacity: interpolate(p, [0, 0.6, 1], [0, 1, 1]), transform: [{ translateX: interpolate(p, [0, 1], [-hiddenBy, 0]) }] };
+  });
 
   return (
     <View style={{ flex: 1, flexDirection: "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
       <ProfileTint />
-      {showSidebar && (
-        <View pointerEvents={fullscreen ? "none" : "auto"} style={fullscreen ? { position: "absolute", top: 0, bottom: 0, right: "100%" } : { height: "100%" }}>
-          <ProfileSwipe>
-            <Sidebar />
-          </ProfileSwipe>
-        </View>
+      {!topTabs && (
+        <Animated.View
+          pointerEvents={fullscreen || !showSidebar ? "none" : "auto"}
+          style={[fullscreen ? { position: "absolute", top: 0, bottom: 0, right: "100%" } : { height: "100%" }, slotStyle]}
+        >
+          {dock.mounted ? (
+            <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
+              <ProfileSwipe>
+                <Sidebar />
+              </ProfileSwipe>
+            </Animated.View>
+          ) : null}
+        </Animated.View>
       )}
       <View
         style={
@@ -84,7 +108,8 @@ function BrowserWindow() {
                 paddingTop: showStrip ? TOP_STRIP_HEIGHT : layout.cardTop,
                 paddingRight: showStrip ? TOP_CARD_INSET : layout.cardInset,
                 paddingBottom: showStrip ? TOP_CARD_INSET : layout.cardInset,
-                paddingLeft: showSidebar ? 0 : showStrip ? TOP_CARD_INSET : layout.cardInset,
+                // The sidebar's slot (topTabs aside) holds the left inset, even closed.
+                paddingLeft: !topTabs ? 0 : showStrip ? TOP_CARD_INSET : layout.cardInset,
               }
         }
       >
@@ -115,6 +140,11 @@ function SidebarPeek({ enabled }: { enabled: boolean }) {
   const theme = useTheme();
   const sidebarWidth = useSidebarWidth(useWindowId());
   const { slide, live, show, hide } = usePeek(enabled);
+  const slideStyle = useAnimatedStyle(() => {
+    "worklet";
+    const p = slide.get();
+    return { opacity: p, transform: [{ translateX: interpolate(p, [0, 1], [-sidebarWidth - 12, 0]) }] };
+  });
 
   return (
     <>
@@ -123,16 +153,17 @@ function SidebarPeek({ enabled }: { enabled: boolean }) {
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}
         onMouseLeave={live ? hide : undefined}
-        style={{
-          position: "absolute",
-          // Out of the window while hidden (a transform doesn't move hover tracking): its rows mustn't hover under the page.
-          left: live ? 6 : -10_000,
-          top: layout.cardTop,
-          bottom: layout.cardInset,
-          width: sidebarWidth,
-          opacity: slide,
-          transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [-sidebarWidth - 12, 0] }) }],
-        }}
+        style={[
+          {
+            position: "absolute",
+            // Out of the window while hidden (a transform doesn't move hover tracking): its rows mustn't hover under the page.
+            left: live ? 6 : -10_000,
+            top: layout.cardTop,
+            bottom: layout.cardInset,
+            width: sidebarWidth,
+          },
+          slideStyle,
+        ]}
       >
         <Surface
           fill={hex(theme.windowTint[0])}
