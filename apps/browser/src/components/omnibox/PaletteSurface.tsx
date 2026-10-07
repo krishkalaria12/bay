@@ -22,7 +22,7 @@ export function PaletteSurface({ children, style, radius = 22, raised = false }:
       style={style}
     >
       {liquidGlass ? (
-        <GlassEffect pointerEvents="none" dark={theme.dark} tint={theme.dark ? (raised ? "#353238A0" : "#24212B85") : "#F5F4F5B0"} cornerRadius={radius} style={StyleSheet.absoluteFill} />
+        <GlassEffect pointerEvents="none" dark={theme.dark} glassStyle="clear" tint={theme.dark ? (raised ? "#353238A0" : "#1E1C24B0") : "#F5F4F5B0"} cornerRadius={radius} style={StyleSheet.absoluteFill} />
       ) : (
         <>
           <VisualEffect material="popover" blendingMode="withinWindow" cornerRadius={radius} style={StyleSheet.absoluteFill} />

@@ -1,12 +1,13 @@
-import { displayUrl, hostOf, parseUrl, QUICK_CREATE, type Suggestion } from "@bay/core";
+import { displayUrl, hostOf, parseUrl, type Suggestion } from "@bay/core";
 import type { HistoryEntry, Tab } from "../../store/types";
 
-export type PaletteSuggestion = Suggestion & { detail?: string };
-export type PaletteSection = { title: string; items: PaletteSuggestion[] };
+// `host` marks a frequent site: a whole site, not one page.
+export type PaletteSuggestion = Suggestion & { detail?: string; host?: string };
+export type PaletteSection = { id: string; items: PaletteSuggestion[] };
 
 export function currentPageActions(tab: Pick<Tab, "url" | "title" | "customTitle">): PaletteSection[] {
   const title = tab.customTitle || tab.title || displayUrl(tab.url);
-  return [{ title: "This Page", items: [
+  return [{ id: "page", items: [
     { kind: "action", id: "copyUrl", title: "Copy Link", icon: "link", hint: "⇧⌘C", detail: displayUrl(tab.url) },
     { kind: "action", id: "copyUrlAsMarkdown", title: "Copy Markdown Link", icon: "doc.plaintext", hint: "⌥⇧⌘C", detail: `[${title}]` },
     { kind: "action", id: "duplicateTab", title: "Duplicate Tab", icon: "square.on.square" },
@@ -32,20 +33,15 @@ export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId:
       if (page.lastVisit > site.lastVisit) { site.lastVisit = page.lastVisit; site.page = page; }
     }
   }
-  const frequent: Suggestion[] = [...sites.entries()]
+  const frequent: PaletteSuggestion[] = [...sites.entries()]
     .sort((a, b) => b[1].visits - a[1].visits || b[1].lastVisit - a[1].lastVisit)
     .slice(0, 3)
     .map(([host, site]) => {
       const parts = parseUrl(site.page.url)!;
-      return { kind: "page", title: host, url: `${parts.scheme}://${parts.host}${parts.port ? `:${parts.port}` : ""}/`, favicon: site.page.favicon };
+      return { kind: "page", title: host, host, url: `${parts.scheme}://${parts.host}${parts.port ? `:${parts.port}` : ""}/`, favicon: site.page.favicon };
     });
-  const quick: Suggestion[] = ["doc", "meet"]
-    .map((id) => QUICK_CREATE.find((c) => c.id === id)!)
-    .map((c) => ({ kind: "create", id: c.id, title: c.id === "doc" ? "New document" : "New meeting", url: c.url, site: c.site }));
-  quick.push({ kind: "action", id: "palette:setup", title: "Set up Bay", icon: "list.bullet.rectangle" });
   return [
-    ...(recent.length ? [{ title: "Recent Tabs", items: recent }] : []),
-    ...(frequent.length ? [{ title: "Frequent", items: frequent }] : []),
-    { title: "Quick Actions", items: quick },
+    ...(recent.length ? [{ id: "recent", items: recent }] : []),
+    ...(frequent.length ? [{ id: "frequent", items: frequent }] : []),
   ];
 }

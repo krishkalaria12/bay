@@ -1,6 +1,7 @@
 import { Surface } from "@bay/shell";
-import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useWindowId, useWindowUi } from "../store/hooks";
@@ -85,16 +86,15 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
 }) {
   const theme = useTheme();
   const [height, setHeight] = useState(400);
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
   useEffect(() => {
-    let live = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
-      if (!live) return;
-      if (reduced) appear.setValue(1);
-      else Animated.timing(appear, { toValue: 1, duration: 150, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-    }, () => { if (live) appear.setValue(1); });
-    return () => { live = false; appear.stopAnimation(); };
+    appear.set(withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System }));
   }, [appear]);
+  const appearStyle = useAnimatedStyle(() => {
+    "worklet";
+    const p = appear.get();
+    return { opacity: p, transform: [{ translateY: (1 - p) * 6 }] };
+  });
   const dismiss = () => {
     useBrowser.getState().closePanel(windowId);
     const active = activeTabId(useBrowser.getState(), windowId);
@@ -102,11 +102,11 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
   };
   if (windowWidth < 1 || windowHeight < 1) return null;
   const width = Math.min(760, windowWidth - 32);
-  const maxHeight = Math.max(160, Math.min(600, windowHeight - 56));
+  const maxHeight = Math.max(160, Math.min(620, windowHeight - 56));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal>
       <Pressable accessibilityLabel="Dismiss search" onPress={dismiss} style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]} />
-      <Animated.View style={{ position: "absolute", width, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2), opacity: appear, transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
+      <Animated.View style={[{ position: "absolute", width, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2) }, appearStyle]}>
         <PaletteSurface>
           <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
             <Omnibox variant="palette" tabId={tabId} initialText={initialText} onCancel={dismiss} maxHeight={maxHeight} width={width} />

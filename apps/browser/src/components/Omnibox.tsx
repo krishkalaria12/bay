@@ -1,4 +1,4 @@
-import { displayUrl, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
+import { displayUrl, hostOf, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
@@ -6,10 +6,10 @@ import { useTheme } from "../lib/theme";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowser } from "../store/browser";
 import { useWindowId, useWindowProfileId } from "../store/hooks";
-import { defaultSearchEngine } from "../store/settings";
+import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
-import { dispositionFor, openFromBar, switchFromBar, type Disposition } from "./omnibox/open";
+import { dispositionFor, openFromBar, openInBackground, switchFromBar, type Disposition } from "./omnibox/open";
 import { clipboardPasteAction, pasteMenuItem, pasteTarget, readClipboard } from "./omnibox/paste";
 import { ScopeChip } from "./omnibox/ScopeChip";
 import { SuggestionIcon, SuggestionList, type RowActions } from "./omnibox/SuggestionRow";
@@ -19,12 +19,12 @@ import { scopeFor, useSuggestions } from "./omnibox/useSuggestions";
 import { setPopover } from "./layout/pageState";
 import { Favicon, IconButton } from "./primitives";
 import { closeTab } from "../lib/actions";
-import { startOnboarding } from "./onboarding";
 import { PaletteContent, type PaletteMenu } from "./omnibox/PaletteContent";
 import { usePaletteStart } from "./omnibox/usePaletteStart";
 import { appPaletteActions } from "./omnibox/paletteAppActions";
-import type { PaletteMenuAction } from "./omnibox/PaletteActionMenu";
-import { currentPageActions } from "./omnibox/paletteStart";
+import { forgettable, rowMenuActions } from "./omnibox/paletteRowActions";
+import { currentPageActions, type PaletteSuggestion } from "./omnibox/paletteStart";
+import { onEscapeKey } from "../lib/escapeKey";
 
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
@@ -50,8 +50,10 @@ const BASE_KEYS = [
   { key: "Enter", shiftKey: true },
   { key: "Enter", ctrlKey: true },
   { key: "Enter", ctrlKey: true, shiftKey: true },
+  { key: "/", metaKey: true },
 ];
 const SCOPE_KEYS = [...BASE_KEYS, { key: "Backspace" }];
+const FORGET_KEYS = [...BASE_KEYS, { key: "Backspace", shiftKey: true }];
 
 export function Omnibox({
   variant,
@@ -72,6 +74,8 @@ export function Omnibox({
   const windowId = useWindowId();
   const profileId = useWindowProfileId();
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
+  const engines = useBrowser((s) => searchEngines(s.settings));
+  const searchTemplates = useMemo(() => engines.map((e) => e.url), [engines]);
   const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
   const currentTitle = useBrowser((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
   const currentFavicon = useBrowser((s) => s.tabs[tabId]?.favicon ?? null);
@@ -102,13 +106,15 @@ export function Omnibox({
     currentTabId: tabId,
     currentUrl: currentUrl || undefined,
     scope,
+    // The palette has room for a longer list than the sidebar's dropdown.
+    ...(palette ? { limit: 12, remoteLimit: 8 } : {}),
   });
   const start = useDropdownStart(dropdown && !edited && !scope, tabId, profileId);
   const idleSections = usePaletteStart(windowId, profileId, tabId);
   const idle = !scope && (!edited || !typed.trim());
   const pageContext = palette && !newTab && !!currentUrl && initialText === currentUrl && typed === initial && !edited && !scope;
   const sections = useMemo(() => {
-    if (!idle) return [{ title: "", items: suggested }];
+    if (!idle) return [{ id: "results", items: suggested }];
     if (pageContext) return currentPageActions({ url: currentUrl, title: currentTitle, customTitle: null });
     return idleSections;
   }, [idle, suggested, pageContext, currentUrl, currentTitle, idleSections]);
@@ -117,7 +123,9 @@ export function Omnibox({
   const shownCompletion = inline.shown;
   const value = typed + shownCompletion;
   const selectedIndex = Math.min(selected, items.length - 1);
-  const current = items[selectedIndex];
+  const current: PaletteSuggestion | undefined = items[selectedIndex];
+  // ⇧⌫ forgets the selected history row once it was picked from the list, not while it's the typed match.
+  const canForget = palette && forgettable(current, searchTemplates) && (!edited || selectedIndex > 0);
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
   const tabScope = useMemo(() => (canScope ? scopeFor(value, windowId) : null), [canScope, value, windowId]);
 
@@ -178,7 +186,7 @@ export function Omnibox({
         return;
       case "action":
         dismiss();
-        return s.id === "palette:setup" ? startOnboarding(windowId) : runBarAction(s.id, windowId);
+        return runBarAction(s.id, windowId);
     }
   };
 
@@ -214,6 +222,8 @@ export function Omnibox({
       return dismiss();
     }
     if (palette && metaKey && key.toLowerCase() === "k") return openRowMenu();
+    if (palette && metaKey && key === "/") return openAppMenu();
+    if (canForget && shiftKey && key === "Backspace") return forget(current!);
     if (pageContext && metaKey && shiftKey && key.toLowerCase() === "c") {
       dismiss();
       return runBarAction(altKey ? "copyUrlAsMarkdown" : "copyUrl", windowId);
@@ -237,6 +247,8 @@ export function Omnibox({
       if (metaKey && shiftKey) return forceSearch();
       if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim())
         return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
+      // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
+      if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return openInBackground(current.url, tabId);
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor({ metaKey, altKey, shiftKey }));
       return choose(current);
     }
@@ -338,8 +350,9 @@ export function Omnibox({
       onSubmitEditing={() => choose(current)}
       submitBehavior={palette ? "submit" : "blurAndSubmit"}
       onBlur={palette ? undefined : onCancel}
-      keyDownEvents={scope && !typed ? SCOPE_KEYS : BASE_KEYS}
+      keyDownEvents={scope && !typed ? SCOPE_KEYS : canForget ? FORGET_KEYS : BASE_KEYS}
       onKeyDown={onKeyDown}
+      onKeyPress={onEscapeKey(() => onKeyDown({ nativeEvent: { key: "Escape" } }))}
       style={{
         flex: 1,
         fontSize: palette ? 20 : 14,
@@ -366,17 +379,25 @@ export function Omnibox({
     />
   );
 
+  const forget = (s: PaletteSuggestion) => {
+    const { history, removeHistory } = useBrowser.getState();
+    const urls = s.host ? (history[profileId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
+    removeHistory(profileId, urls);
+  };
+
   const openRowMenu = (target = current) => {
     if (!target) return;
     const title = target.kind === "page" ? target.title || displayUrl(target.url) : target.kind === "search" ? target.query : target.kind === "calc" ? target.value : target.title;
-    const actions: PaletteMenuAction[] = [{ id: "open", title: target.kind === "page" && target.tabId ? "Switch to Tab" : target.kind === "calc" ? "Copy Answer" : target.kind === "action" ? target.title : "Open", icon: "arrow.up.right", hint: "↩", run: () => choose(target) }];
-    if ("url" in target) actions.push({ id: "copy", title: "Copy Link", icon: "link", hint: "⇧⌘C", run: () => copyText(target.url) });
-    if (target.kind === "page" && target.tabId) {
-      const targetId = target.tabId;
-      actions.push({ id: "close", title: "Close Tab", icon: "xmark", separator: true, run: () => closeTab(targetId) });
-    }
+    const actions = rowMenuActions(target, newTab, searchTemplates, {
+      choose,
+      openInBackground: (url) => openInBackground(url, tabId),
+      copyLink: copyText,
+      closeTab,
+      forget,
+    });
     setMenu({ side: "right", title, actions });
   };
+  const openAppMenu = () => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) });
 
   if (palette) {
     return (
@@ -392,7 +413,7 @@ export function Omnibox({
           width={width}
           menu={menu}
           onCloseMenu={closeMenu}
-          onAppMenu={() => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) })}
+          onAppMenu={openAppMenu}
           onRowMenu={openRowMenu}
           onHover={setSelected}
           onChoose={choose}

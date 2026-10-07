@@ -20,6 +20,13 @@ export function openFromBar(url: string, tabId: string, disposition: Disposition
   openWindow(w?.incognito ? { incognito: true, url } : { profileId: tab.profileId, url });
 }
 
+export function openInBackground(url: string, barTabId: string) {
+  const s = useBrowser.getState();
+  const tab = s.tabs[barTabId];
+  if (!url || !tab) return;
+  s.newTab(tab.windowId, { url, profileId: tab.profileId, background: true });
+}
+
 export function switchFromBar(targetTabId: string, url: string, barTabId: string, disposition: Disposition) {
   if (disposition !== "current") return openFromBar(url, barTabId, disposition);
   const s = useBrowser.getState();
