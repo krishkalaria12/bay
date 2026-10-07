@@ -27,6 +27,8 @@ module.exports = function (api) {
         test: (file) => !!file && !file.includes("/node_modules/"),
         plugins: [["babel-plugin-react-compiler", { target: "19" }], compilerGlobalSymbol],
       },
+      // Reanimated turns worklets into UI-thread code, its own included: every file, and last (overrides apply in order).
+      { plugins: ["react-native-reanimated/plugin"] },
     ],
   };
 };
