@@ -1,6 +1,6 @@
 import { Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useWindowId } from "../store/hooks";
@@ -8,8 +8,6 @@ import { activeTabId } from "../store/model";
 import { NewTabExtras } from "./ntp";
 import { tourAnchorRef } from "./onboarding/tour/anchors";
 import { useHover } from "./primitives";
-
-const ICON = require("../../assets/app-icon.png");
 
 // Restored blank tabs and Back to New Tab retain their tab and history. Search lives in the window palette.
 export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: boolean }) {
@@ -29,7 +27,7 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 20 }}>
-        <Image source={ICON} style={{ width: 48, height: 48, opacity: 0.55 }} accessibilityIgnoresInvertColors />
+        <Symbol name="plus" size={34} weight="light" color={theme.textTertiary} style={{ width: 48, height: 48 }} />
         <View ref={tourAnchorRef(windowId, "commandBar", true)} {...hoverProps}>
           <Pressable
             onPress={open}
