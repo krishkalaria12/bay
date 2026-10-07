@@ -82,7 +82,6 @@ export function SidebarAddressRow() {
 
 function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
   const palette = toolbarPalette(useTheme(), null);
-  const progress = useTabLive(tab.id, (l) => (l.isLoading ? l.progress : null));
   const inSplit = useBrowser((s) => !!splitOf(s, tab.id));
   return (
     <UrlField
@@ -91,10 +90,7 @@ function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
       windowId={windowId}
       inSplit={inSplit}
       onFocus={alreadyFocused}
-      sidebar={{
-        height: SIDEBAR_FIELD.height,
-        progress,
-      }}
+      sidebar={{ height: SIDEBAR_FIELD.height }}
     />
   );
 }

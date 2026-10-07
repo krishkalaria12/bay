@@ -49,6 +49,7 @@ import "./layout/devExpose";
 import { closeWebNotification, showWebNotification } from "../lib/webNotifications";
 import { isSmallWindow } from "../store/small";
 import { closeSmallYahuOnEscape } from "./smallYahu/actions";
+import { PageLoadGlow } from "./layout/PageLoadGlow";
 
 export function ContentCard() {
   const windowId = useWindowId();
@@ -298,6 +299,8 @@ const TabPane = memo(function TabPane({
           {visible && !fullscreen && <ShareBar tabId={tabId} />}
           <View style={{ flex: 1 }}>
             {mounted && <TabWebView tabId={tabId} visible={visible && !newTabShown && !isNewTab} warm={!!warm && !newTabShown && !isNewTab} />}
+            {/* No toolbar to carry the load (the address in the sidebar, or full screen): the page's top shows it. */}
+            {visible && (!toolbar || fullscreen) && !small && !isNewTab && !newTabShown && <PageLoadGlow tabId={tabId} />}
             {visible && isNewTab && !small && (inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : <BlankTabSurface key={tabId} tabId={tabId} focused={focused && !covered} />)}
             {visible && <InternalPage tabId={tabId} />}
             {visible && (

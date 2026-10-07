@@ -234,7 +234,8 @@ export const UrlField = memo(function UrlField({
   inSplit: boolean;
   onFocus: () => void;
   style?: ViewStyle;
-  sidebar?: { height: number; progress: number | null };
+  // In the sidebar, the page shows its load (PageLoadGlow).
+  sidebar?: { height: number };
 }) {
   const theme = useTheme();
   const showFullUrl = useSettings((s) => s.showFullUrl);
@@ -365,7 +366,6 @@ export const UrlField = memo(function UrlField({
           </>
         ) : null}
       </View>
-      {sidebar && sidebar.progress !== null ? <ProgressBar progress={sidebar.progress} color={theme.accent} /> : null}
     </View>
   );
 });
