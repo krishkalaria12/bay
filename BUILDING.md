@@ -64,6 +64,17 @@ local ad hoc build with its JavaScript bundled, so Metro is not needed. The sign
 configuration omits restricted keychain entitlements, including Chrome-profile
 passkeys. Security-key and phone passkeys remain available.
 
+## Develop with hot reload
+
+```bash
+pnpm dev:app
+```
+
+This starts Metro, builds the Debug app (skipped when only JavaScript changed)
+and opens it on its own data, `~/Library/Application Support/Bay Dev`. Saved
+JavaScript changes reload in the open app. Ctrl-C stops Metro. Rerun it after
+native changes, quitting the Debug app first.
+
 ## Checks
 
 ```bash

@@ -1,0 +1,28 @@
+#!/bin/bash
+# Build the Debug app and open it on Metro, so JavaScript edits hot reload. Ctrl-C stops Metro.
+# Native changes rebuild on the next run; JavaScript-only runs skip the build.
+set -euo pipefail
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+export XCODE_XCCONFIG_FILE="${XCODE_XCCONFIG_FILE:-$repo/apps/browser/macos/AdHoc.xcconfig}"
+app="$repo/apps/browser/build-dev/Build/Products/Debug/Bay.app"
+
+metro=""
+if lsof -nP -iTCP:8081 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "dev-app: Metro is already running on :8081"
+else
+  (cd "$repo/apps/browser" && exec "$repo/node_modules/.bin/react-native" start) &
+  metro=$!
+  trap 'kill "$metro" 2>/dev/null || true' EXIT
+fi
+
+"$repo/scripts/agent/build-app" --as dev --config Debug
+
+if pgrep -qf "$app/Contents/MacOS/Bay"; then
+  echo "dev-app: the Debug app is already open; JavaScript changes reload in place (quit it to load native changes)"
+else
+  open -n --env BAY_DATA_DIR="${BAY_DATA_DIR:-$HOME/Library/Application Support/Bay Dev}" "$app"
+fi
+
+if [[ -n "$metro" ]]; then wait "$metro"; fi

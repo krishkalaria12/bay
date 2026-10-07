@@ -4,6 +4,7 @@
   "packageManager": "pnpm@11.1.3",
   "scripts": {
     "start": "bash scripts/run-app",
+    "dev:app": "bash scripts/dev-app",
     "dev": "turbo run dev --filter=@bay/browser",
     "macos": "pnpm --filter @bay/browser macos",
     "pods": "pnpm --filter @bay/browser pods",
