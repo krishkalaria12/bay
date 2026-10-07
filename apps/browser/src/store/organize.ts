@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { autoGroupName } from "./groupNames";
 import { leaveGroups, orderSections, placeBlock, syncGroupOrder } from "./groups";
-import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, newId, snapshotTab, viewTabIds, without } from "./model";
+import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, newId, sharesProfile, snapshotTab, viewTabIds, without } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
 
@@ -347,8 +347,10 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
   const w = first && s.windows[first.windowId];
   if (!first || !w) return s;
   const order = new Map(w.tabIds.map((id, i) => [id, i]));
+  // Favourites are shared by the spaces with one profile: a selection of them can come from several.
+  const moves = (t: Tab | undefined) => !!t && t.windowId === w.id && (t.profileId === first.profileId || (p.pinned && t.pinned && sharesProfile(s, t.profileId, first.profileId)));
   const moving = [...new Set(ids)]
-    .filter((id) => s.tabs[id]?.windowId === w.id && s.tabs[id]?.profileId === first.profileId)
+    .filter((id) => moves(s.tabs[id]))
     .sort((a, b) => order.get(a)! - order.get(b)!);
   if (!moving.length) return s;
   const target = !p.pinned && p.groupId ? s.groups[p.groupId] : undefined;

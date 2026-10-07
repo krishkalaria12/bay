@@ -95,6 +95,24 @@ export function viewTabIds(s: BrowserState, windowId: string, profileId?: string
   return w.tabIds.filter((id) => s.tabs[id]?.profileId === profile);
 }
 
+/** Two spaces with the same profile (its data): as Arc, they share their favourites (the pinned tiles). */
+export function sharesProfile(s: Pick<BrowserState, "profiles">, a: string, b: string): boolean {
+  const pa = s.profiles[a];
+  const pb = s.profiles[b];
+  return !!pa && !!pb && (pa.dataId ?? pa.id) === (pb.dataId ?? pb.id);
+}
+
+/** A space's favourites: the window's pinned tiles of every space that shares its profile, in the window's order. */
+export function favoriteTabIds(s: BrowserState, windowId: string, profileId?: string): string[] {
+  const w = s.windows[windowId];
+  if (!w) return [];
+  const profile = profileId ?? w.profileId;
+  return w.tabIds.filter((id) => {
+    const t = s.tabs[id];
+    return !!t?.pinned && (t.profileId === profile || sharesProfile(s, t.profileId, profile));
+  });
+}
+
 export function closesWindow(s: BrowserState, id: string): boolean {
   const tab = s.tabs[id];
   const w = tab && s.windows[tab.windowId];

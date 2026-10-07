@@ -11,6 +11,7 @@ import {
   newId,
   pinnedFirst,
   resolveWindowId,
+  sharesProfile,
   snapshotTab,
   viewTabIds,
   without,
@@ -216,6 +217,11 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     let target = remembered && s.tabs[remembered]?.windowId === windowId ? remembered : undefined;
     target ??= s.windows[windowId]!.tabIds.find((id) => s.tabs[id]?.profileId === profileId && !s.tabs[id]!.unloaded);
     if (!target) [s, target] = withNewTab(s, windowId, { profileId, background: true });
+    // A favourite remembered here but opened since in another space with this profile comes back to this one.
+    const t = s.tabs[target]!;
+    if (t.profileId !== profileId && t.pinned && sharesProfile(s, t.profileId, profileId)) s = { ...s, tabs: { ...s.tabs, [target]: { ...t, profileId } } };
+    // The window takes this space before the tab's activated: activated keeps a shared favourite in the space on screen.
+    if (s.tabs[target]!.profileId === profileId) s = { ...s, windows: { ...s.windows, [windowId]: { ...s.windows[windowId]!, profileId } } };
     set(apply(s, activated(s, target)));
   },
 

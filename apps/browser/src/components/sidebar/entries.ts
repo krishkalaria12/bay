@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTabId, viewTabIds } from "../../store/model";
+import { activeTabId, favoriteTabIds, viewTabIds } from "../../store/model";
 import { splitIndex, stableList } from "../../store/structure";
 
 export type SidebarEntries = { tiles: string[]; pinnedGroups: string[]; list: string[] };
@@ -29,7 +29,8 @@ export function sidebarEntries(s: BrowserState, windowId: string, profileId?: st
 }
 
 function computeEntries(s: BrowserState, windowId: string, profileId?: string): SidebarEntries {
-  const tiles: string[] = [];
+  // Favourites are shared by the spaces with this space's profile: theirs show here too.
+  const tiles = favoriteTabIds(s, windowId, profileId);
   const pinnedGroups: string[] = [];
   const list: string[] = [];
   const groupOf = new Map<string, string>();
@@ -39,10 +40,7 @@ function computeEntries(s: BrowserState, windowId: string, profileId?: string): 
   for (const id of viewTabIds(s, windowId, profileId)) {
     const tab = s.tabs[id]!;
     if (tab.liveItem && !tab.pinned) continue;
-    if (tab.pinned) {
-      tiles.push(id);
-      continue;
-    }
+    if (tab.pinned) continue;
     const groupId = groupOf.get(id);
     const entry = groupId ? `g:${groupId}` : splitEntry(s, id, splits);
     if (seen.has(entry)) continue;

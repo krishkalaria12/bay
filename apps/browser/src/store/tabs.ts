@@ -12,6 +12,7 @@ import {
   navigationTo,
   newId,
   pinnedFirst,
+  sharesProfile,
   snapshotTab,
   viewTabIds,
   wake,
@@ -80,11 +81,14 @@ export function activated(s: BrowserState, id: string): Partial<BrowserState> {
   if (!tab || !w) return {};
   const lazy = !!tab.url && !tab.navigation && !tab.adoptId;
   const { unloaded: _, ...rest } = tab;
-  const nextTab: Tab = { ...rest, lastActiveAt: Date.now(), ...(lazy ? wake(tab) : {}) };
+  // A favourite shared with the space on screen (the same profile) opens in it, and is that space's from now on: the
+  // window stays where it is. Its page is the same engine profile's, so nothing reloads.
+  const profileId = tab.pinned && !w.incognito && tab.profileId !== w.profileId && sharesProfile(s, tab.profileId, w.profileId) ? w.profileId : tab.profileId;
+  const nextTab: Tab = { ...rest, profileId, lastActiveAt: Date.now(), ...(lazy ? wake(tab) : {}) };
   const window: BrowserWindow = {
     ...w,
-    profileId: w.incognito ? w.profileId : tab.profileId,
-    activeTabIds: { ...w.activeTabIds, [tab.profileId]: id },
+    profileId: w.incognito ? w.profileId : profileId,
+    activeTabIds: { ...w.activeTabIds, [profileId]: id },
   };
   const ui = s.windowUi[w.id];
   return {

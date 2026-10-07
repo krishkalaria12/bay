@@ -1,6 +1,6 @@
 import type { BrowserState } from "./browser";
 import { orderSections, syncGroupOrder } from "./groups";
-import { IDLE_LIVE, makeTab, newId, pinnedFirst, snapshotTab, without } from "./model";
+import { favoriteTabIds, IDLE_LIVE, makeTab, newId, pinnedFirst, sharesProfile, snapshotTab, without } from "./model";
 import { samePage } from "./organize";
 import type { BrowserWindow, HistoryEntry, ParkedPins, Tab, TabGroup } from "./types";
 
@@ -52,6 +52,10 @@ export function parkWindowPins(parked: Record<string, ParkedPins>, w: BrowserWin
 }
 
 export function adoptParkedPins(s: BrowserState, windowId: string, profileId: string): BrowserState {
+  return adoptSharedFavorites(adoptOwnPins(s, windowId, profileId), windowId, profileId);
+}
+
+function adoptOwnPins(s: BrowserState, windowId: string, profileId: string): BrowserState {
   const park = s.parkedPins[profileId];
   const w = s.windows[windowId];
   if (!park || !w || w.incognito || !s.profiles[profileId]) return s;
@@ -84,4 +88,40 @@ export function adoptParkedPins(s: BrowserState, windowId: string, profileId: st
   const window = { ...w, tabIds: orderSections(pinnedFirst([...added, ...w.tabIds], tabs), tabs, groups) };
   groups = syncGroupOrder(groups, window);
   return { ...s, tabs, live, groups, windows: { ...s.windows, [windowId]: window }, parkedPins: without(s.parkedPins, [profileId]) };
+}
+
+// Favourites parked by another space with this profile come back with this one: they're its favourites too. Each stays
+// its own space's; a page the window's favourites already have isn't added twice. Pinned groups stay parked.
+function adoptSharedFavorites(s: BrowserState, windowId: string, profileId: string): BrowserState {
+  const w = s.windows[windowId];
+  if (!w || w.incognito || !s.profiles[profileId]) return s;
+  const tabs = { ...s.tabs };
+  const live = { ...s.live };
+  let parkedPins = s.parkedPins;
+  const homes = favoriteTabIds(s, windowId, profileId).map((id) => homeOf(tabs[id]!));
+  const added: string[] = [];
+  for (const [other, park] of Object.entries(s.parkedPins)) {
+    if (other === profileId || !sharesProfile(s, other, profileId)) continue;
+    const tiles = park.tabs.filter((p) => !p.groupId);
+    if (!tiles.length) continue;
+    for (const { id, groupId: _, ...snap } of tiles) {
+      const home = homeOf(snap);
+      if (homes.some((h) => samePage(h, home))) continue;
+      homes.push(home);
+      const tab: Tab = {
+        ...makeTab(windowId, other, snap.url, { ...snap, profileId: other, pinned: true, pinnedUrl: home || null }),
+        id: tabs[id] ? newId("tab") : id,
+        navigation: null,
+        unloaded: true,
+      };
+      tabs[tab.id] = tab;
+      live[tab.id] = IDLE_LIVE;
+      added.push(tab.id);
+    }
+    const members = park.tabs.filter((p) => p.groupId);
+    parkedPins = members.length ? { ...parkedPins, [other]: { tabs: members, groups: park.groups } } : without(parkedPins, [other]);
+  }
+  if (parkedPins === s.parkedPins) return s;
+  const window = { ...w, tabIds: orderSections(pinnedFirst([...added, ...w.tabIds], tabs), tabs, s.groups) };
+  return { ...s, tabs, live, parkedPins, windows: { ...s.windows, [windowId]: window } };
 }

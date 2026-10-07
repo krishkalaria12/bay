@@ -123,7 +123,9 @@ export function ContentCard() {
   const warm = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
-      const ids = !w || !pagerPages ? [] : pagerPages.map((p) => (p.id === w.profileId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id);
+      const shown = w?.activeTabIds[w.profileId];
+      // Two spaces with one profile can remember the same favourite: its page is on screen once, in the shown one.
+      const ids = !w || !pagerPages ? [] : [...new Set(pagerPages.map((p) => (p.id === w.profileId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id && id !== shown))];
       return successor && s.tabs[successor]?.windowId === windowId && !ids.includes(successor) ? [...ids, successor] : ids;
     }),
   );
