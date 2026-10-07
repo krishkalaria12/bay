@@ -1,6 +1,7 @@
 import { WebView, type OpenWindowRequest } from "@bay/nncore";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
+import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../lib/actions";
 import { noteFavicon } from "../lib/favicons";
@@ -106,7 +107,7 @@ export function ContentCard() {
     }
   }, [panes]);
 
-  const pagerPages = pagerFor(windowId).state((st) => st.pages);
+  const pagerPages = useStore(pagerFor(windowId).state, (st) => st.pages);
   // Tabs dragged where a drop takes them out of this window (outside it, or onto its page away from a split target).
   const leaving = useTabDrag((d) => (d.windowId === windowId && d.tabIds.length && (d.outside || !!(d.lifted ?? d.onPage)) ? d.tabIds : null));
   // The tab the window shows once they go, painting meanwhile. Hidden until the drop, its page had no frame to show:

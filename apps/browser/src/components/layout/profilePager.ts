@@ -2,7 +2,7 @@ import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect, useMemo } from "react";
 import { Animated, unstable_batchedUpdates } from "react-native";
-import { create } from "zustand";
+import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser } from "../../store/browser";
 
@@ -201,7 +201,8 @@ export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: b
 // Props for the SwipeArea's native pager; undefined without a profile to page.
 export function usePagerNativeConfig(windowId: string, width?: number): NativePagerConfig | undefined {
   const pager = pagerFor(windowId);
-  const ack = pager.state((s) => s.ack);
+  // Through useStore, not pager.state(…): the React Compiler only knows a call named use… for a hook, and would skip it.
+  const ack = useStore(pager.state, (s) => s.ack);
   const [selected, count, order] = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
