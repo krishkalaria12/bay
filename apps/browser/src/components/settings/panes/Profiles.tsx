@@ -36,13 +36,13 @@ export function ProfilesPane() {
   return (
     <View>
       <Text style={{ marginTop: 20, fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
-        Profiles keep your browsing organized — keep history, logins, cookies, and extensions separate per profile, or share them across selected
-        profiles with a toggle.
+        Spaces keep your browsing organized: each has its own tabs, pinned tabs, icon and theme. A space's profile holds its history, logins,
+        cookies and extensions; spaces can share a profile or keep their own.
       </Text>
 
       <SectionHeader title="New windows open with" />
       <Group>
-        <Row title="Default profile" description="Used for new windows and links opened from other apps.">
+        <Row title="Default space" description="Used for new windows and links opened from other apps.">
           <PopUp
             value={defaultId}
             options={profiles.map((p) => ({ value: p.id, title: p.name }))}
@@ -53,9 +53,9 @@ export function ProfilesPane() {
       </Group>
 
       <SectionHeader
-        title="Profiles"
+        title="Spaces"
         description="Drag to reorder. ⌃1–⌃9 switch to the first nine."
-        action={<Button title="Create Profile" icon="plus" onPress={() => void createProfile()} />}
+        action={<Button title="Create Space" icon="plus" onPress={() => void createProfile()} />}
       />
       <ProfileList />
     </View>
@@ -163,14 +163,14 @@ function ProfileRow({
   ).current;
   if (!profile) return null;
 
-  const description = [isDefault ? "Default" : null, names.length ? `Shares data with ${listOf(names)}` : null].filter(Boolean).join(" · ");
+  const description = [isDefault ? "Default" : null, names.length ? `Shares a profile with ${listOf(names)}` : null].filter(Boolean).join(" · ");
   const openMenu = async () => {
     const s = useBrowser.getState();
     const choice = await showMenu([
-      { id: "details", title: "Show Profile Details" },
-      { id: "default", title: "Make Default Profile", enabled: !isDefault },
+      { id: "details", title: "Show Space Details" },
+      { id: "default", title: "Make Default Space", enabled: !isDefault },
       { separator: true },
-      { id: "delete", title: "Delete Profile…", enabled: s.profileOrder.length > 1 },
+      { id: "delete", title: "Delete Space…", enabled: s.profileOrder.length > 1 },
     ]);
     if (choice === "details") go("profiles", profileId);
     else if (choice === "default") s.setDefaultProfile(profileId);
@@ -266,7 +266,7 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
         <Text style={{ fontSize: 12, color: theme.textSecondary }}>{stats}</Text>
       </View>
 
-      <SectionHeader title="Profile" />
+      <SectionHeader title="Space" />
       <Group>
         <Row title="Name">
           <TextField value={name} onChangeText={setName} onSubmit={commitName} onBlur={commitName} style={{ width: 220 }} />
@@ -274,7 +274,7 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
         <Row title="Icon" description={iconTitle(profile.icon)}>
           <Button title="Change…" onPress={() => void pickIcon()} />
         </Row>
-        <Row title="Theme colour" description="Tints this profile's windows and New Tab page.">
+        <Row title="Theme colour" description="Tints this space's windows and New Tab page.">
           <View style={{ flexDirection: "row", gap: 7 }}>
             {(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => (
               <Pressable key={c} onPress={() => update({ color: c })} tooltip={PROFILE_COLORS[c].name}>
@@ -296,27 +296,27 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
         </Row>
       </Group>
 
-      <SectionHeader title="Data" />
+      <SectionHeader title="Profile" />
       <Group>
         {sharing ? (
           <Row
             icon={<ColorStack colors={sharedColors} size={14} />}
-            title="Shared data"
+            title="Shared profile"
             description={`${listOf(sharedNames)} share Cookies, Passwords, Extensions, Bookmarks, and History. Each keeps its own tabs.`}
           />
         ) : null}
-        <Row title="Make Default Profile" description={isDefault ? "New windows already open with this profile." : "Open new windows with this profile."}>
+        <Row title="Make Default Space" description={isDefault ? "New windows already open with this space." : "Open new windows with this space."}>
           <Button title="Make Default" disabled={isDefault} onPress={() => useBrowser.getState().setDefaultProfile(profileId)} />
         </Row>
         <Row
           title="Clear Browsing Data"
-          description={sharing ? "History, cookies, site data and cached files, for every profile that shares them." : "History, cookies, site data and cached files for this profile."}
+          description={sharing ? "History, cookies, site data and cached files, for every space that shares this profile." : "History, cookies, site data and cached files for this space's profile."}
         >
           <Button title="Clear…" onPress={() => showSettingsSheet(<ClearDataDialog profileId={profileId} onClose={closeSettingsSheet} />)} />
         </Row>
         <Row
-          title="Delete Selected Profile"
-          description={only ? "You can't delete your only profile." : sharing ? "Removes its tabs. The data it shares stays." : "Removes its tabs, history, bookmarks and site data."}
+          title="Delete Selected Space"
+          description={only ? "You can't delete your only space." : sharing ? "Removes its tabs. The profile it shares stays." : "Removes its tabs and its profile's history, bookmarks and site data."}
         >
           <Button
             title="Delete…"

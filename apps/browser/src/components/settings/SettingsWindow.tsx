@@ -25,7 +25,7 @@ import { useSettingsNav, type SettingsPane } from "./windows";
 
 const PANES: { id: SettingsPane; title: string; icon: string }[] = [
   { id: "general", title: "General", icon: "gearshape" },
-  { id: "profiles", title: "Profiles", icon: "person.2" },
+  { id: "profiles", title: "Spaces", icon: "square.stack" },
   { id: "sync", title: "Sync", icon: "arrow.triangle.2.circlepath" },
   { id: "tabs", title: "Tabs", icon: "square.on.square" },
   { id: "appearance", title: "Appearance", icon: "circle.lefthalf.filled" },

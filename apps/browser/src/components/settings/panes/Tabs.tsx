@@ -42,7 +42,7 @@ export function TabsPane() {
         <Row title={top ? "Add new tabs to the left" : "Add new tabs to the top"}>
           <Toggle value={settings.newTabPosition === "top"} onChange={(v) => update({ newTabPosition: v ? "top" : "bottom" })} />
         </Row>
-        {toggle("warnBeforeClosingLastTab", "Warn before closing last tab in a Profile")}
+        {toggle("warnBeforeClosingLastTab", "Warn before closing last tab in a Space")}
         {toggle("tabReorderHaptics", "Haptic feedback when reordering tabs")}
         {toggle("extendWebsiteColor", "Extend website color into tab bar")}
         {toggle("autoPictureInPicture", "Automatic Picture in Picture", "A video or call you're watching pops out when you switch tabs or leave the window, and returns when you come back.")}

@@ -64,8 +64,8 @@ export async function deleteProfile(profileId: string, windowId?: string) {
     title: `Delete “${profile.name}”?`,
     message: sharing.length
       ? `Its tabs will be closed. Its cookies, passwords, extensions, bookmarks and history stay with ${profileNames(sharing)}, which share them.`
-      : `All data associated with this Profile will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
-    confirmTitle: "Delete Profile",
+      : `Its tabs will be closed, and its profile and all its data (cookies, passwords, extensions, bookmarks and history) will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
+    confirmTitle: "Delete Space",
     destructive: true,
     windowId,
   });
@@ -93,8 +93,8 @@ export async function moveTabToProfile(tabId: string, target: string) {
   const shared = engineProfile(profileId) === engineProfile(tab.profileId);
   if (store().settings.warnBeforeMovingTabsToProfile && !shared) {
     const { confirmed, suppressed } = await confirm({
-      title: "Move Tab to Profile?",
-      message: "Moving tabs between profiles could result in some data being lost.",
+      title: "Move Tab to Space?",
+      message: "This space uses a different profile, so some of the tab's site data could be lost.",
       confirmTitle: "Move Tab",
       suppression: "Don't warn me again",
       windowId: tab.windowId,

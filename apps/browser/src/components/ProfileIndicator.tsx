@@ -40,7 +40,7 @@ export function ProfileIndicator({ room }: { room: number }) {
   if (!shown) return null;
 
   return (
-    <View {...hoverProps} tooltip={incognito ? undefined : "Switch between profiles"} style={{ marginTop: 0.5 }}>
+    <View {...hoverProps} tooltip={incognito ? undefined : "Switch between spaces"} style={{ marginTop: 0.5 }}>
       <View pointerEvents="none" style={{ position: "absolute", width: 1000, height: 0, overflow: "hidden", opacity: 0 }}>
         <Text
           numberOfLines={1}
@@ -90,8 +90,8 @@ export async function openProfileMenu(windowId: string) {
       ...(i < 9 ? { key: String(i + 1), modifiers: ["control" as const] } : {}),
     })),
     { separator: true },
-    { id: "new", title: "New Profile", symbol: "plus" },
-    { id: "edit", title: "Edit Profiles…", symbol: "pencil" },
+    { id: "new", title: "New Space", symbol: "plus" },
+    { id: "edit", title: "Edit Spaces…", symbol: "pencil" },
   ];
   const choice = await showMenu(items);
   if (!choice) return;

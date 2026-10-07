@@ -54,7 +54,7 @@ export function GeneralPane() {
           description={
             settings.openLinksInSmallYahu
               ? `A link from Discord, Slack or Mail opens in Small Yahu, a small window of its own. ⌘O moves it into ${APP}; closing it throws it away.`
-              : `A link from Discord, Slack or Mail opens as a new tab in your ${APP} window, in the default profile.`
+              : `A link from Discord, Slack or Mail opens as a new tab in your ${APP} window, in the default space.`
           }
         >
           <PopUp

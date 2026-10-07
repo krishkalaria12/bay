@@ -61,7 +61,7 @@ export function ClearDataDialog({ profileId, onClose }: { profileId: string; onC
         style={{ width: 440, padding: 20 }}
       >
         <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Clear Browsing Data</Text>
-        {multipleProfiles && <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>{`From your ${profileName} profile`}</Text>}
+        {multipleProfiles && <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>{`From your ${profileName} space`}</Text>}
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 16, gap: 10 }}>
           <Text style={{ fontSize: 13, color: theme.textPrimary }}>Time range</Text>
           <PopUp value={range} options={RANGES.map(({ value, title }) => ({ value, title }))} onChange={setRange} minWidth={150} />

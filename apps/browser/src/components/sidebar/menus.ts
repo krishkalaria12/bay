@@ -81,7 +81,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const moveToProfile: MenuItem[] = [
     ...s.profileOrder.map((id) => ({ id: `profile:${id}`, title: s.profiles[id]!.name, checked: id === tab.profileId, enabled: id !== tab.profileId })),
     sep,
-    { id: "profile:new", title: "New Profile…" },
+    { id: "profile:new", title: "New Space…" },
   ];
   const groups = moveToGroupItems(windowId, group?.id);
 
@@ -118,7 +118,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
     sep,
-    { id: "moveToProfile", title: "Move to Profile", symbol: "person.crop.circle", enabled: !incognito, children: moveToProfile },
+    { id: "moveToProfile", title: "Move to Space", symbol: "square.stack", enabled: !incognito, children: moveToProfile },
     { id: "moveToWindow", title: "Move to Window", symbol: "macwindow", enabled: !incognito, children: moveToWindowItems(windowId) },
     sep,
     { id: "close", title: "Close Tab", symbol: "xmark", ...hint("w", "command") },

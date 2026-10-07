@@ -513,7 +513,7 @@ export function ImportWindow() {
     body = isArc ? (
       <>
         <Title title="Select spaces to import" subtitle={`We'll import your Arc spaces, tabs, and folders to ${APP}.`} />
-        <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}>{`Customize which spaces to bring over to ${APP}. Each space becomes a profile.`}</Text>
+        <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}>{`Customize which spaces to bring over to ${APP}. Each space becomes a space in ${APP}.`}</Text>
         <View style={{ gap: 6 }}>
           {allSpaces.map((s) => (
             <SelectRow

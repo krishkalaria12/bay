@@ -71,7 +71,7 @@ const DEFS: ActionDef[] = [
   { command: "importBrowserData", title: "Import Browser Data", icon: "square.and.arrow.down", keywords: ["import bookmarks", "import passwords"] },
   { command: "keyboardShortcuts", title: "Keyboard Shortcuts", icon: "keyboard", keywords: ["shortcuts", "hotkeys"] },
   { command: "mergeAllWindows", title: "Merge All Windows", icon: "rectangle.stack", needs: "profiles" },
-  { command: "newProfile", title: "New Profile", icon: "person.crop.circle.badge.plus", keywords: ["create profile"], needs: "profiles" },
+  { command: "newProfile", title: "New Space", icon: "plus.square.on.square", keywords: ["create space", "new profile", "create profile"], needs: "profiles" },
   { command: "setAppearance", arg: "dark", title: "Dark Appearance", icon: "moon", keywords: ["dark mode"] },
   { command: "setAppearance", arg: "light", title: "Light Appearance", icon: "sun.max", keywords: ["light mode"] },
   { command: "setAppearance", arg: "auto", title: "Use System Appearance", icon: "circle.lefthalf.filled", keywords: ["auto appearance", "system appearance"] },

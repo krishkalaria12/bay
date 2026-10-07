@@ -217,7 +217,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
         </View>
       ) : null}
 
-      <SectionHeader title="Profiles" description="Choose which profiles sync on this Mac. Each syncs on its own." />
+      <SectionHeader title="Spaces" description="Choose which spaces sync on this Mac. Each syncs on its own." />
       <Group>
         {profiles.map((p) => {
           const link = links[p.id];
