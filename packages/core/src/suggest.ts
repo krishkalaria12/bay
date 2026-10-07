@@ -35,6 +35,8 @@ export type SuggestionResult = {
 
 export type SuggestOptions = {
   limit?: number;
+  // Search suggestions from the engine, at most (default 4).
+  remoteLimit?: number;
   now?: number;
   engine?: Pick<SearchEngine, "name" | "url">;
   preference?: "website" | "search";
@@ -320,7 +322,7 @@ export function suggestionKey(s: Suggestion): string {
 }
 
 export function buildSuggestions(raw: string, source: SuggestionSource, options: SuggestOptions = {}): SuggestionResult {
-  const { limit = 8, now = Date.now(), engine = BUILT_IN_ENGINES[0]!, preference = "website", remote = [], actions = [], scope } = options;
+  const { limit = 8, remoteLimit = 4, now = Date.now(), engine = BUILT_IN_ENGINES[0]!, preference = "website", remote = [], actions = [], scope } = options;
   const query = raw.trim();
   if (!query) return { items: [], completion: "" };
   const q = query.toLowerCase();
@@ -331,7 +333,7 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
     if (!text) return { items: [], completion: "" };
     const out = new Output(limit);
     out.push({ kind: "search", query: text, url: searchUrl(engine, text), engine: engine.name });
-    out.push(...dedupeSuggestions(remote, text).slice(0, 4).map((t): Suggestion => ({ kind: "search", query: t, url: searchUrl(engine, t), engine: engine.name, suggested: true })));
+    out.push(...dedupeSuggestions(remote, text).slice(0, remoteLimit).map((t): Suggestion => ({ kind: "search", query: t, url: searchUrl(engine, t), engine: engine.name, suggested: true })));
     return { items: out.items, completion: "" };
   }
 
@@ -375,7 +377,7 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   const out = new Output(limit);
   const remoteRows = (url: (text: string) => string, name: string) =>
     dedupeSuggestions(remote, query)
-      .slice(0, 4)
+      .slice(0, remoteLimit)
       .map((text): Suggestion => ({ kind: "search", query: text, url: url(text), engine: name, suggested: true }));
 
   if (scope) {
