@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "@bay/core": "workspace:*",
+    "@bay/import": "workspace:*",
+    "@bay/nncore": "workspace:*",
     "@bay/shaders": "workspace:*",
     "@bay/shell": "workspace:*",
-    "@bay/nncore": "workspace:*",
-    "@bay/import": "workspace:*",
     "@bay/sync": "workspace:*",
     "expo": "~54.0.37",
     "expo-modules-core": "~3.0.29",
@@ -33,6 +33,7 @@
     "@react-native/babel-preset": "0.81.6",
     "@react-native/metro-config": "0.81.6",
     "@types/react": "~19.1.10",
+    "babel-plugin-react-compiler": "^1.0.0",
     "babel-preset-expo": "~54.0.0",
     "typescript": "~5.9.2"
   }
