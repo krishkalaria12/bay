@@ -34,6 +34,11 @@ const rgb = (hex: string) => [0, 1, 2].map((i) => parseInt(hex.slice(1 + 2 * i, 
 const hex = (c: number[]) =>
   `#${c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 
+/** A "#RRGGBB" colour's hue, saturation and lightness, each 0–1. */
+export const hslOf = (color: string) => hsl(rgb(color));
+/** A "#RRGGBB" colour from hue, saturation and lightness, each 0–1. */
+export const hexFromHsl = (h: number, s: number, l: number) => hex(fromHsl(h, s, l));
+
 function hsl([r, g, b]: number[]): [number, number, number] {
   const [R, G, B] = [r! / 255, g! / 255, b! / 255];
   const max = Math.max(R, G, B), min = Math.min(R, G, B), l = (max + min) / 2, d = max - min;

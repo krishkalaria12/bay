@@ -6,13 +6,14 @@ import { createProfile, deleteProfile } from "../../../lib/actions";
 import { hex, PROFILE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";
-import { plural } from "../../../store/model";
+import { plural, resolveWindowId } from "../../../store/model";
 import { sharingProfiles } from "../../../store/profiles";
 import type { Profile, ProfileColor } from "../../../store/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../primitives";
 import { ColorStack } from "../../profiles/CreateProfile";
 import { iconMenuItems, PROFILE_SYMBOLS, ProfileBadge, profileSymbol } from "../../profiles/icons";
+import { openThemeEditor } from "../../profiles/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { useSettingsNav } from "../windows";
@@ -248,7 +249,12 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
   });
   const [name, setName] = useState(profile?.name ?? "");
   if (!profile) return null;
-  const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon">>) => useBrowser.getState().updateProfile(profileId, patch);
+  const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme">>) => useBrowser.getState().updateProfile(profileId, patch);
+  // The editor shows in a browser window (settings is its own), on this space, so the window is its preview.
+  const customize = () => {
+    const windowId = resolveWindowId(useBrowser.getState());
+    if (windowId) openThemeEditor(windowId, profileId);
+  };
   const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
   const sharing = shared.length > 1;
 
@@ -277,7 +283,7 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
         <Row title="Theme colour" description="Tints this space's windows and New Tab page.">
           <View style={{ flexDirection: "row", gap: 7 }}>
             {(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => (
-              <Pressable key={c} onPress={() => update({ color: c })} tooltip={PROFILE_COLORS[c].name}>
+              <Pressable key={c} onPress={() => update({ color: c, theme: null })} tooltip={PROFILE_COLORS[c].name}>
                 <View
                   style={{
                     width: 20,
@@ -285,7 +291,7 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
                     borderRadius: 10,
                     padding: 2,
                     borderWidth: 2,
-                    borderColor: profile.color === c ? PROFILE_COLORS[c].swatch : "transparent",
+                    borderColor: !profile.theme && profile.color === c ? PROFILE_COLORS[c].swatch : "transparent",
                   }}
                 >
                   <View style={{ flex: 1, borderRadius: 8, backgroundColor: PROFILE_COLORS[c].swatch }} />
@@ -293,6 +299,19 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
               </Pressable>
             ))}
           </View>
+        </Row>
+        <Row
+          title="Custom theme"
+          description={profile.theme ? `${plural(profile.theme.colors.length, "colour")}, its own intensity and grain.` : "Your own colours, intensity and grain, as Arc's theme editor."}
+        >
+          {profile.theme ? (
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Button title="Remove" onPress={() => update({ theme: null })} />
+              <Button title="Edit…" onPress={customize} />
+            </View>
+          ) : (
+            <Button title="Customize…" onPress={customize} />
+          )}
         </Row>
       </Group>
 

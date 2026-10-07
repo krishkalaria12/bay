@@ -14,6 +14,7 @@ import { UtilityWindow } from "./components/settings/UtilityWindow";
 import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding";
 import { CreateProfileHost } from "./components/profiles/CreateProfile";
+import { ThemeEditorHost } from "./components/profiles/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
 import { ProfileSwipe, ProfileTint } from "./components/layout/ProfileSwipe";
 import { TOP_CARD_INSET, TOP_STRIP_HEIGHT, TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
@@ -131,6 +132,7 @@ function BrowserWindow() {
       <SidebarOverlays windowWidth={width} />
       {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
       <CommandPanel windowWidth={width} windowHeight={size.height} />
+      <ThemeEditorHost />
       <OnboardingOverlay />
     </View>
   );

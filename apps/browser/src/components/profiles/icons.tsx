@@ -46,8 +46,8 @@ export function iconMenuItems(current: string | null): MenuItem[] {
   ];
 }
 
-export function ProfileBadge({ profile, size = 26 }: { profile: Pick<Profile, "name" | "color" | "icon">; size?: number }) {
-  const swatch = PROFILE_COLORS[profile.color]?.swatch ?? PROFILE_COLORS.plum.swatch;
+export function ProfileBadge({ profile, size = 26 }: { profile: Pick<Profile, "name" | "color" | "icon"> & Partial<Pick<Profile, "theme">>; size?: number }) {
+  const swatch = profile.theme?.colors[0] ?? PROFILE_COLORS[profile.color]?.swatch ?? PROFILE_COLORS.plum.swatch;
   const symbol = profileSymbol(profile.icon);
   return (
     <View

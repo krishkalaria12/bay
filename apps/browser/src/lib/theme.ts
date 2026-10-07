@@ -2,7 +2,7 @@ import type { AreaLightPalette } from "@bay/shaders";
 import { createContext, createElement, useContext, type ReactNode } from "react";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { PageProfileContext, WindowContext } from "../store/hooks";
-import type { ProfileColor } from "../store/types";
+import type { Profile, ProfileColor } from "../store/types";
 import { backdropTint, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
 
 export type Theme = typeof dark & ProfileTheme & {
@@ -126,7 +126,8 @@ export function hex(color: string): string {
 }
 
 type ProfileTheme = {
-  lightPalette: AreaLightPalette | null;
+  // A preset's palette, or a custom theme's own colours.
+  lightPalette: AreaLightPalette | string[] | null;
   // Dia: 0.5 / 0.4.
   edgeLight: string;
 };
@@ -195,9 +196,49 @@ function profileTheme(color: ProfileColor, isDark: boolean): ProfileTheme {
 }
 
 const cache = new Map<string, Theme>();
+// Custom themes are keyed by their values, so dragging in the theme editor makes a key a frame: keep the latest few.
+const MAX_CUSTOM = 48;
+const CUSTOM = "custom|";
+
+/** A space's theme key: its preset colour's, or its own theme's (the theme editor). */
+export function spaceThemeKey(profile: Pick<Profile, "color" | "theme"> | undefined, dark: boolean): string {
+  const mode = dark ? "dark" : "light";
+  const t = profile?.theme;
+  if (!t?.colors.length) return `${profile?.color ?? "plum"}:${mode}`;
+  return `${CUSTOM}${t.colors.join(",")}|${t.intensity.toFixed(2)}|${t.grain.toFixed(2)}:${mode}`;
+}
+
+function customTheme(key: string): Theme {
+  const [body, mode] = key.split(":") as [string, string];
+  const [, list, intensity, grain] = body.split("|") as [string, string, string, string];
+  const colors = list.split(",");
+  const isDark = mode === "dark";
+  const base = isDark ? dark : light;
+  const first = colors[0]!;
+  const last = colors[colors.length - 1]!;
+  // Intensity takes the tint from a whisper (0.08) to well past a preset's (0.36).
+  const backdrop = { ...backdropTint(first, false), tintAlpha: 0.08 + 0.52 * Number(intensity) };
+  const top = opaqueTint(backdrop, isDark);
+  const windowTint: [string, string] = colors.length > 1 ? [top[0], opaqueTint({ ...backdrop, tintColor: last }, isDark)[0]] : top;
+  return {
+    ...base,
+    lightPalette: colors,
+    edgeLight: isDark ? `${mix(first, "#FFFFFF", 0.5)}80` : `${first}66`,
+    backdrop,
+    windowTint,
+    powerUpColor: first,
+    grain: Number(grain) * 0.12,
+  };
+}
 
 export function themeFor(key: string): Theme {
   let theme = cache.get(key);
+  if (!theme && key.startsWith(CUSTOM)) {
+    theme = customTheme(key);
+    cache.set(key, theme);
+    const custom = [...cache.keys()].filter((k) => k.startsWith(CUSTOM));
+    for (const old of custom.slice(0, Math.max(0, custom.length - MAX_CUSTOM))) cache.delete(old);
+  }
   if (!theme) {
     const [color, mode] = key.split(":") as [ProfileColor | "incognito", string];
     const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
@@ -219,8 +260,7 @@ export function themeFor(key: string): Theme {
 function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
   const w = s.windows[windowId ?? s.ui.focusedWindowId ?? ""];
   if (w?.incognito) return "incognito";
-  const color = s.profiles[page ?? w?.profileId ?? s.settings.defaultProfileId]?.color ?? "plum";
-  return `${color}:${s.ui.appDark ? "dark" : "light"}`;
+  return spaceThemeKey(s.profiles[page ?? w?.profileId ?? s.settings.defaultProfileId], s.ui.appDark);
 }
 
 const ThemeContext = createContext<Theme | null>(null);

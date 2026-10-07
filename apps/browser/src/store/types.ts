@@ -3,6 +3,10 @@ export type Frame = [number, number, number, number];
 
 export type ProfileColor = "plum" | "blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "neutral";
 
+// A space's own theme, from the theme editor: its colours (one to three, a gradient), how strongly they tint the
+// window (0–1) and its grain (0–1). Without one, a space takes its preset colour's.
+export type SpaceTheme = { colors: string[]; intensity: number; grain: number };
+
 export type Profile = {
   id: string;
   name: string;
@@ -10,6 +14,7 @@ export type Profile = {
   icon: string | null;
   createdAt: number;
   dataId?: string;
+  theme?: SpaceTheme | null;
 };
 
 export type BrowserWindow = {

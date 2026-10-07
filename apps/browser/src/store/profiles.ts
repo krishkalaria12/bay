@@ -13,7 +13,7 @@ export type ProfilesSlice = {
   orphanedProfileData: string[];
 
   createProfile(options: { name: string; color?: ProfileColor; icon?: string | null; shareWith?: string | null }): string;
-  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "color" | "icon">>): void;
+  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme">>): void;
   deleteProfile(id: string): void;
   reorderProfiles(ids: string[]): void;
   setDefaultProfile(id: string): void;

@@ -10,6 +10,7 @@ import { IconButton, useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { iconMenuItems, profileSymbol } from "./icons";
+import { openThemeEditor } from "./ThemeEditor";
 import { PROFILE_DOTS_HEIGHT, ProfileDots } from "./ProfileDots";
 
 // Arc's space switcher, at the foot of the sidebar: a space's icon each (Bay's profiles are Arc's spaces), the shown
@@ -91,7 +92,11 @@ export async function openSpaceMenu(windowId: string, id: string) {
       id: "themeMenu",
       title: "Theme",
       symbol: "paintpalette",
-      children: (Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => ({ id: `theme:${c}`, title: PROFILE_COLORS[c].name, swatch: PROFILE_COLORS[c].swatch, checked: c === space.color })),
+      children: [
+        ...(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => ({ id: `theme:${c}`, title: PROFILE_COLORS[c].name, swatch: PROFILE_COLORS[c].swatch, checked: !space.theme && c === space.color })),
+        { separator: true as const },
+        { id: "editTheme", title: "Edit Theme…", symbol: "slider.horizontal.3", checked: !!space.theme },
+      ],
     },
     { separator: true },
     { id: "settings", title: "Space Settings…", symbol: "gearshape" },
@@ -102,7 +107,8 @@ export async function openSpaceMenu(windowId: string, id: string) {
     const name = await prompt({ title: "Rename Space", value: space.name, placeholder: "Space name", confirmTitle: "Rename", windowId });
     if (name?.trim()) update(id, { name: name.trim() });
   } else if (choice?.startsWith("icon:")) update(id, { icon: choice.slice("icon:".length) || null });
-  else if (choice?.startsWith("theme:")) update(id, { color: choice.slice("theme:".length) as ProfileColor });
+  else if (choice?.startsWith("theme:")) update(id, { color: choice.slice("theme:".length) as ProfileColor, theme: null });
+  else if (choice === "editTheme") openThemeEditor(windowId, id);
   else if (choice === "settings") openSettings("profiles", id);
   else if (choice === "delete") void deleteProfile(id, windowId);
 }

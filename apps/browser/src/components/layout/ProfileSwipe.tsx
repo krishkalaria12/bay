@@ -3,7 +3,7 @@ import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useShallow } from "zustand/react/shallow";
-import { themeFor } from "../../lib/theme";
+import { spaceThemeKey, themeFor } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./profilePager";
@@ -74,7 +74,7 @@ export function ProfileSwipeArea({ surface, style, pageWidth }: { surface: "side
 export function ProfileTint() {
   const windowId = useWindowId();
   const { pages, paging, pager } = usePagerPages(windowId);
-  const keys = useBrowser(useShallow((s) => pages.map((p) => `${s.profiles[p.id]?.color ?? "plum"}:${s.ui.appDark ? "dark" : "light"}`)));
+  const keys = useBrowser(useShallow((s) => pages.map((p) => spaceThemeKey(s.profiles[p.id], s.ui.appDark))));
   if (!paging) return null;
   return (
     <>
