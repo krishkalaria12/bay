@@ -1,11 +1,13 @@
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { displayUrl } from "@bay/core";
+import { Image, Pressable, Text, View } from "react-native";
+import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useIsBookmarked } from "../../store/hooks";
-import { activeTabId, bookmarkProfileId } from "../../store/model";
+import { activeTabId, bookmarkProfileId, isIncognitoProfile } from "../../store/model";
+import { splitOf } from "../../store/splits";
+import { lastPicture } from "../../lib/tabPictures";
 import { awayFromPin, groupLabel } from "../../store/organize";
 import { openInSplit } from "../layout/splitActions";
 import { CalendarPreview, useIsCalendarTab } from "../live/CalendarPreview";
@@ -20,6 +22,8 @@ import { HoverPlayer, useShowsMiniPlayer } from "../media/HoverPlayer";
 import { useMedia, usePictureInPicture } from "../media/state";
 
 const WIDTH = 264;
+const PAD = 10;
+const PREVIEW_HEIGHT = 140;
 
 export function HoverCard({ windowId }: { windowId: string }) {
   const hover = useSidebarUi((u) => (u.hover?.windowId === windowId ? u.hover : null));
@@ -46,7 +50,7 @@ function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode 
       shadowOpacity={theme.panelShadowOpacity * 0.8}
       shadowRadius={16}
       shadowOffset={[0, 6]}
-      style={{ position: "absolute", left: anchor.x + anchor.width + 8, top: Math.max(8, anchor.y - 6), width: WIDTH, padding: 10 }}
+      style={{ position: "absolute", left: anchor.x + anchor.width + 8, top: Math.max(8, anchor.y - 6), width: WIDTH, padding: PAD }}
     >
       {children}
     </Surface>
@@ -62,11 +66,30 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
   const video = useMedia((m) => !!m.sessions[tabId]?.hasVideo || !!m.pipOpen[tabId]);
   const [pip, togglePip] = usePictureInPicture(tabId);
   const sleeping = useIsSleeping(tabId);
+  // The page on screen (the shown tab, or one in its split) needs no preview: just what it is and where.
+  const onScreen = useBrowser((s) => {
+    const active = activeTabId(s, windowId);
+    return active === tabId || !!(active && splitOf(s, active)?.tabIds.includes(tabId));
+  });
   if (!tab) return null;
+  if (onScreen) {
+    return (
+      <Card anchor={anchor}>
+        <FadeLabel text={tabTitle(tab)} fontSize={13} weight="medium" color={theme.textPrimary} style={{ height: 18 }} />
+        {tab.url ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 }}>
+            <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>{hostOf(tab.url) || displayUrl(tab.url)}</Text>
+          </View>
+        ) : null}
+      </Card>
+    );
+  }
   const s = () => useBrowser.getState();
   const away = awayFromPin(tab);
   return (
     <Card anchor={anchor}>
+      {tab.url ? <PagePreview tabId={tabId} /> : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} />
         <FadeLabel text={tabTitle(tab)} fontSize={13} weight="medium" color={theme.textPrimary} style={{ flex: 1, height: 18 }} />
@@ -119,6 +142,34 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
         ) : null}
       </View>
     </Card>
+  );
+}
+
+// What's on a background tab's page: its last picture (tabPictures.ts: a page out of view isn't painted, so it can't
+// be captured now). Never for a private window's tabs. Nothing until there's one.
+function PagePreview({ tabId }: { tabId: string }) {
+  const theme = useTheme();
+  const incognito = useBrowser((s) => isIncognitoProfile(s.tabs[tabId]?.profileId ?? ""));
+  const picture = incognito ? null : lastPicture(tabId);
+  if (!picture) return null;
+  const [, , width, height] = picture.frame;
+  // The page's top, at the card's width: the image keeps its shape and the frame crops the rest.
+  const shown = width > 0 ? (WIDTH * height) / width : PREVIEW_HEIGHT;
+  return (
+    <View
+      style={{
+        height: Math.min(PREVIEW_HEIGHT, shown),
+        margin: -PAD,
+        marginBottom: PAD,
+        overflow: "hidden",
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+        borderBottomWidth: 0.5,
+        borderBottomColor: theme.panelBorder,
+      }}
+    >
+      <Image source={{ uri: `data:image/jpeg;base64,${picture.data}` }} style={{ width: WIDTH, height: shown }} accessibilityIgnoresInvertColors />
+    </View>
   );
 }
 
