@@ -8,6 +8,7 @@ import { setIcon } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
 import { SYMBOL_PREFIX } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
+import { onEscapeKey } from "../../lib/escapeKey";
 
 const EMOJI: [string, string][] = [
   ["⭐️", "star favorite"], ["🔥", "fire hot"], ["❤️", "heart love"], ["✅", "check done"], ["📌", "pin"], ["🚀", "rocket launch ship"],
@@ -97,7 +98,7 @@ function PickerPanel({ picker, sidebarWidth }: { picker: Picker; sidebarWidth: n
               placeholderTextColor={theme.placeholder}
               enableFocusRing={false}
               keyDownEvents={[{ key: "Escape" }]}
-              onKeyDown={(e) => e.nativeEvent.key === "Escape" && close()}
+              onKeyPress={onEscapeKey(close)}
               onSubmitEditing={() => items[0] && choose(items[0])}
               style={{ flex: 1, fontSize: 12, marginLeft: 5, color: theme.textPrimary, paddingVertical: 0 }}
             />

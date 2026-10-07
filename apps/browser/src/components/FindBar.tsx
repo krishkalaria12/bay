@@ -8,6 +8,7 @@ import { useFind } from "../store/hooks";
 import type { FindState } from "../store/types";
 import { IconButton, useHover } from "./primitives";
 import { replaceInField } from "./site/selection";
+import { onEscapeKey } from "../lib/escapeKey";
 
 export function FindBar({ tabId }: { tabId: string }) {
   const hasPage = useBrowser((s) => !!s.tabs[tabId]?.url);
@@ -100,9 +101,9 @@ function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
             onSubmitEditing={() => run(false)}
             keyDownEvents={[{ key: "Escape" }, { key: "Enter", shiftKey: true }]}
             onKeyDown={(e) => {
-              if (e.nativeEvent.key === "Escape") close();
-              else if (e.nativeEvent.key === "Enter" && e.nativeEvent.shiftKey) run(true);
+              if (e.nativeEvent.key === "Enter" && e.nativeEvent.shiftKey) run(true);
             }}
+            onKeyPress={onEscapeKey(close)}
             style={{ flex: 1, fontSize: 14, color: theme.textPrimary, paddingVertical: 0 }}
           />
           {none ? (
@@ -132,7 +133,7 @@ function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
               enableFocusRing={false}
               onSubmitEditing={() => void replace(false)}
               keyDownEvents={[{ key: "Escape" }]}
-              onKeyDown={(e) => e.nativeEvent.key === "Escape" && close()}
+              onKeyPress={onEscapeKey(close)}
               style={{ flex: 1, fontSize: 14, color: theme.textPrimary, paddingVertical: 0 }}
             />
             {note && <Text style={{ fontSize: 12, color: note.error ? error : theme.textSecondary, marginRight: 2 }}>{note.text}</Text>}

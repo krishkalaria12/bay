@@ -9,6 +9,7 @@ import { tabLabel } from "../../store/model";
 import { tabTitle } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
+import { onEscapeKey } from "../../lib/escapeKey";
 
 type Row =
   | { kind: "tab"; id: string; title: string; url: string; favicon: string | null; icon: string | null; where: string | null; current: boolean }
@@ -134,10 +135,10 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
             enableFocusRing={false}
             onSubmitEditing={() => choose(rows[selected])}
             onBlur={close}
+            onKeyPress={onEscapeKey(close)}
             keyDownEvents={[{ key: "Escape" }, { key: "ArrowUp" }, { key: "ArrowDown" }]}
             onKeyDown={(e) => {
               const key = e.nativeEvent.key;
-              if (key === "Escape") close();
               if (key === "ArrowDown") move(1);
               if (key === "ArrowUp") move(-1);
             }}

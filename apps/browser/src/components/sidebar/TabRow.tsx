@@ -16,6 +16,7 @@ import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarTokens } from "./tokens";
+import { onEscapeKey } from "../../lib/escapeKey";
 
 export const clickMods = (e: GestureResponderEvent) => {
   const n = e.nativeEvent as unknown as { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
@@ -185,7 +186,7 @@ export function RenameField({
       onSubmitEditing={() => finish(text)}
       onBlur={() => finish(text)}
       keyDownEvents={[{ key: "Escape" }]}
-      onKeyDown={(e) => e.nativeEvent.key === "Escape" && finish(null)}
+      onKeyPress={onEscapeKey(() => finish(null))}
       style={{ flex: 1, height: 18, marginLeft: 5, fontSize, fontWeight: weight, color, paddingVertical: 0, paddingHorizontal: 0 }}
     />
   );

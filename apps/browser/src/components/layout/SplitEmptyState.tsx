@@ -6,6 +6,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
+import { onEscapeKey } from "../../lib/escapeKey";
 
 export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: boolean }) {
   const theme = useTheme();
@@ -58,12 +59,10 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
               enableFocusRing={false}
               onSubmitEditing={go}
               keyDownEvents={[{ key: "Escape" }]}
-              onKeyDown={(e) => {
-                if (e.nativeEvent.key === "Escape") {
-                  setText("");
-                  setTyping(false);
-                }
-              }}
+              onKeyPress={onEscapeKey(() => {
+                setText("");
+                setTyping(false);
+              })}
               style={{ flex: 1, fontSize: 14, color: theme.textPrimary, paddingVertical: 0 }}
             />
           </View>

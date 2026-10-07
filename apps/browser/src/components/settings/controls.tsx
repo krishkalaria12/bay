@@ -3,6 +3,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { hex, useTheme, type Theme } from "../../lib/theme";
 import { useHover } from "../primitives";
+import { onEscapeKey } from "../../lib/escapeKey";
 
 export function formColors(theme: Theme) {
   return theme.dark
@@ -279,7 +280,7 @@ export function SearchField({
         enableFocusRing={false}
         onSubmitEditing={onSubmit}
         keyDownEvents={[{ key: "Escape" }]}
-        onKeyDown={(e) => e.nativeEvent.key === "Escape" && onChangeText("")}
+        onKeyPress={onEscapeKey(() => onChangeText(""))}
         style={{ flex: 1, fontSize: 13, color: theme.textPrimary, paddingVertical: 0 }}
       />
       {value ? (
@@ -346,7 +347,7 @@ export function TextField({
         onSubmitEditing={onSubmit}
         onBlur={onBlur}
         keyDownEvents={onEscape ? [{ key: "Escape" }] : undefined}
-        onKeyDown={(e) => e.nativeEvent.key === "Escape" && onEscape?.()}
+        onKeyPress={onEscape ? onEscapeKey(onEscape) : undefined}
         style={{ fontSize: 13, color: theme.textPrimary, paddingVertical: 0 }}
       />
     </View>
