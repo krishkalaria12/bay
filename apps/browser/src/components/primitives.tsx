@@ -136,7 +136,8 @@ function hostInitial(url: string): string {
   return Array.from(shown)[0]?.toLocaleUpperCase() ?? "";
 }
 
-const NEW_TAB_MARK = require("../../assets/new-tab-yahu.png");
+// A tab with no page yet: Bay's bridge in one colour (assets/new-tab-bay.svg).
+const NEW_TAB_MARK = require("../../assets/new-tab-bay.png");
 
 export function NewTabIcon({ size = 16 }: { size?: number }) {
   const theme = useTheme();
@@ -144,7 +145,7 @@ export function NewTabIcon({ size = 16 }: { size?: number }) {
     <Image
       key={theme.dark ? "dark" : "light"}
       source={NEW_TAB_MARK}
-      style={{ width: size, height: size, tintColor: theme.dark ? "#FFFFFF" : "#000000", opacity: theme.dark ? 0.28 : 0.3 }}
+      style={{ width: size, height: size, tintColor: theme.dark ? "#FFFFFF" : "#000000", opacity: theme.dark ? 0.4 : 0.42 }}
     />
   );
 }

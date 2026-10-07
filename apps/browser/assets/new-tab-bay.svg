@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="62 19 900 900" role="img" aria-label="Bay">
+  <!-- The app icon's bridge (app-icon-small.svg) in one colour, simplified to hold at 16pt: the New Tab mark. -->
+  <path d="M 110 596 C 220 520 250 360 328 268 C 430 420 420 486 512 486 C 604 486 594 420 696 268 C 774 360 804 520 914 596" stroke="#000" stroke-width="44" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <g fill="#000">
+    <rect x="80" y="570" width="864" height="56" rx="28"/>
+    <rect x="288" y="232" width="80" height="472" rx="40"/>
+    <rect x="656" y="232" width="80" height="472" rx="40"/>
+  </g>
+</svg>
