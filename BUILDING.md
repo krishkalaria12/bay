@@ -1,8 +1,8 @@
 # Build Bay locally
 
 Run these commands from this repository. JavaScript dependencies, CocoaPods and
-Xcode's Metal toolchain are already installed on this Mac. The engine sources have
-been downloaded. Full engine compilation and app packaging remain unverified.
+Xcode's Metal toolchain are already installed on this Mac. The engine and Release
+app have both been built successfully.
 
 ## Download the engine sources
 
@@ -42,7 +42,16 @@ For subsequent engine builds:
 scripts/agent/engine-build -- -j 4 chrome_framework
 ```
 
-## Build the app
+## Build and open the app
+
+```bash
+pnpm start
+```
+
+This builds the Release app with local ad hoc signing and opens it after a
+successful build. You can also run `scripts/run-app` directly from any directory.
+
+To build without opening:
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
@@ -64,6 +73,6 @@ pnpm test
 pnpm shaders:check
 ```
 
-All these checks, native pod compilation and Release JavaScript bundling passed
-before cancellation. Full engine compilation and final app packaging remain
-unverified.
+All these checks, native pod compilation, Release JavaScript bundling, engine
+compilation and Release app packaging have passed. The app's code signature has
+also been verified.

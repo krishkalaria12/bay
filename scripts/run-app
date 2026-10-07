@@ -1,0 +1,10 @@
+#!/bin/bash
+# Build and open the local Release app, with JavaScript bundled.
+set -euo pipefail
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+export XCODE_XCCONFIG_FILE="${XCODE_XCCONFIG_FILE:-$repo/apps/browser/macos/AdHoc.xcconfig}"
+
+"$repo/scripts/agent/build-app" --as dev --config Release
+open "$repo/apps/browser/build-dev/Build/Products/Release/Bay.app"
