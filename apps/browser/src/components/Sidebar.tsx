@@ -3,7 +3,7 @@ import { memo, useEffect, useRef, useState, type ReactNode, type RefObject } fro
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { layout, ThemeScope, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
-import { PageProfileContext, useSettings, useWindowId, useWindowProfileId } from "../store/hooks";
+import { PageProfileContext, useIsIncognito, useSettings, useWindowId, useWindowProfileId } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { downloadsIn } from "../store/ui";
 import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
@@ -14,7 +14,8 @@ import { HoverSlot } from "./HoverSlot";
 import { IconButton, useHover } from "./primitives";
 import { PROFILE_INDICATOR_X, ProfileIndicator } from "./ProfileIndicator";
 import { usePageStyle, usePagerPages } from "./layout/profilePager";
-import { PROFILE_DOTS_HEIGHT, ProfileDots, useProfileDotsShown } from "./profiles/ProfileDots";
+import { PROFILE_DOTS_HEIGHT } from "./profiles/ProfileDots";
+import { SpaceSwitcher } from "./profiles/SpaceSwitcher";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
 import { DragProvider, DragScope, useDragController, useDragItem, type Ghost } from "./sidebar/dnd";
@@ -67,9 +68,10 @@ export function Sidebar() {
   const header = addressBar ? SIDEBAR_HEADER_WITH_FIELD : layout.sidebarHeader;
   const glowRoom = addressBar ? 0 : GLOW_ROOM;
   const hasDownloads = useBrowser((s) => downloadsIn(s, windowId).length > 0);
-  const dots = useProfileDotsShown();
+  // The space switcher, with its + for a new space: every window but a private one.
+  const spaces = !useIsIncognito();
   const footerDownloads = addressBar && hasDownloads;
-  const footer = dots || footerDownloads ? PROFILE_DOTS_HEIGHT : 0;
+  const footer = spaces || footerDownloads ? PROFILE_DOTS_HEIGHT : 0;
   const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
   useRevealTabs(windowId, scroll, scrollY, geometry, glowRoom);
@@ -137,7 +139,7 @@ export function Sidebar() {
 
           {footer ? (
             <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
-              {dots ? <ProfileDots windowId={windowId} /> : null}
+              {spaces ? <SpaceSwitcher windowId={windowId} /> : null}
               {footerDownloads ? (
                 <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
                   <DownloadsButton windowId={windowId} />

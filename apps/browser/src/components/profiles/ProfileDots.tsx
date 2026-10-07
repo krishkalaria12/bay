@@ -3,7 +3,6 @@ import { useShallow } from "zustand/react/shallow";
 import { switchProfile } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { useIsIncognito } from "../../store/hooks";
 import { usePagerPages, type PagerPage } from "../layout/profilePager";
 import { useHover } from "../primitives";
 
@@ -15,12 +14,6 @@ const BAND = 28;
 const SELECTED = 0.85;
 const HOVERED = 0.4;
 const IDLE = 0.2;
-
-export function useProfileDotsShown() {
-  const incognito = useIsIncognito();
-  const count = useBrowser((s) => s.profileOrder.length);
-  return !incognito && count > 1;
-}
 
 export function ProfileDots({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.profileOrder));
