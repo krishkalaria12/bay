@@ -1,8 +1,25 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// The Metal compiler comes with Xcode, not the Command Line Tools: use Xcode's without changing xcode-select (as
+// scripts/swift-test.sh does for XCTest).
+const XCODE = "/Applications/Xcode.app/Contents/Developer";
+const hasMetal = () => {
+  try {
+    execFileSync("xcrun", ["-sdk", "macosx", "--find", "metal"], { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+if (!process.env.DEVELOPER_DIR && !hasMetal() && existsSync(XCODE)) process.env.DEVELOPER_DIR = XCODE;
+if (!hasMetal()) {
+  console.error("Checking shaders needs Xcode's Metal compiler. Set DEVELOPER_DIR to its Contents/Developer directory.");
+  process.exit(1);
+}
 
 const iosDir = fileURLToPath(new URL("../ios/", import.meta.url));
 const read = (f) => readFileSync(join(iosDir, f), "utf8");

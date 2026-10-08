@@ -129,6 +129,20 @@ const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
 // How much a crop varies: a blank page doesn't.
 const sd = (c) => { const m = mean(c); return Math.sqrt(c.reduce((s, v) => s + (v - m) ** 2, 0) / c.length); };
 
+/** How far a crop is from the nearest mix of two others (t·a + (1 − t)·b): a crossfade's frame is near none. */
+function blendOff(c, a, b) {
+  let num = 0, den = 0;
+  for (let i = 0; i < c.length; i++) {
+    const d = a[i] - b[i];
+    num += (c[i] - b[i]) * d;
+    den += d * d;
+  }
+  const t = den ? Math.min(1, Math.max(0, num / den)) : 0;
+  let off = 0;
+  for (let i = 0; i < c.length; i++) off += Math.abs(c[i] - (t * a[i] + (1 - t) * b[i]));
+  return off / c.length;
+}
+
 /** Runs of identical frames in a region; a run held 3+ frames is a state the screen rested in. Returns the frames
  *  (as runs) that match no resting state: what the screen showed in passing. */
 function glitches(frames, r, tolerance = 4) {
@@ -138,8 +152,15 @@ function glitches(frames, r, tolerance = 4) {
     if (runs.length && diff(crops[i], crops[runs.at(-1).at]) < 1) runs.at(-1).n++;
     else runs.push({ at: i, n: 1 });
   }
-  const resting = runs.filter((run) => run.n >= 3).map((run) => crops[run.at]);
-  const found = runs.filter((run) => run.n < 3 && resting.every((s) => diff(crops[run.at], s) > tolerance));
+  const restingRuns = runs.filter((run) => run.n >= 3);
+  const resting = restingRuns.map((run) => crops[run.at]);
+  const found = runs.filter((run) => {
+    if (run.n >= 3 || resting.some((s) => diff(crops[run.at], s) <= tolerance)) return false;
+    // A tab switch crossfades its pages (switchMotion.ts): a frame mixing the states either side of it is no glitch.
+    const before = restingRuns.findLast((r) => r.at < run.at);
+    const after = restingRuns.find((r) => r.at > run.at);
+    return !before || !after || blendOff(crops[run.at], crops[before.at], crops[after.at]) > tolerance;
+  });
   return Object.assign(found.map((run) => ({ t: frames[run.at].t, frames: run.n })), { crops: [...resting, ...found.map((run) => crops[run.at])] });
 }
 
@@ -246,6 +267,8 @@ try {
   // perf-probe: a Release build runs the dev harness only for a data folder holding it.
   app = await launch(appPath, { data, port, session: fixture(), onboarded: true, probe: true });
   rep.log(`instance: pid ${app.pid}, DevTools port ${app.port}, data ${data}`);
+  // The pages come from a local server: no Developer Mode offer over them (the frames would show it).
+  await run(`nn.developer.setDeveloperMode(${JSON.stringify(base)}, false); return 1;`);
   await sleep(2500);
   let probe = null;
   if (!existsSync(recorder)) noScreen = "no frame recorder (swiftc failed)";
@@ -259,17 +282,27 @@ try {
     const frame = await run(`return st().windows.w1.frame;`);
     // Each page once first (a page loading for the first time is white until it paints, rightly).
     await run(`nn.actions.switchToTab("b1"); return settle(1500).then(() => { nn.actions.switchToTab("g1"); return settle(1000); });`);
-    // Web page to web page, and to and from a New Tab page, 20 switches 400 ms apart.
-    const order = ["b1", "g1", "n2", "b1", "n1", "g1", "b1", "n2", "g1", "b1", "g1", "n1", "b1", "g1", "n2", "b1", "n2", "g1", "b1", "g1"];
-    const frames = await record(9.5, () => run(`${JSON.stringify(order)}.forEach((id, i) => setTimeout(() => nn.actions.switchToTab(id), i * 400)); return 1;`));
-    assert.ok(frames, "no frames");
+    // Switches 400 ms apart, recorded.
+    const switches = (order) =>
+      record(order.length * 0.4 + 1.5, () => run(`${JSON.stringify(order)}.forEach((id, i) => setTimeout(() => nn.actions.switchToTab(id), i * 400)); return 1;`));
     // The page area, clear of the sidebar and the toolbar.
     const region = regionOf(frame, H, { left: 200, top: 56, right: 16, bottom: 16 });
+    // Web page to web page: every frame one page, the other, or a mix of the two (the switch's crossfade).
+    const frames = await switches(["b1", "g1", "b1", "g1", "g1", "b1", "g1", "b1", "b1", "g1", "b1", "g1"]);
+    assert.ok(frames, "no frames");
     const found = glitches(frames, region);
     if (found.length > 4) dump("tab-switches", found.crops, region);
     // 0.2.22 RC: 7–13 in 20 switches (the old page blank or half-drawn while the app still showed its tab). Left: the
     // incoming page a frame late now and then, or a tile.
     assert.ok(found.length <= 4, `${found.length} frames match neither tab: ${JSON.stringify(found)}`);
+    // To and from a New Tab page: its palette comes and goes over the crossfade on its own, so a frame mixes three
+    // pictures; none is blank (the New Tab page bare, its palette gone a frame or two before the page left).
+    const newTab = await switches(["n2", "b1", "n1", "g1", "n2", "g1", "n1", "b1", "n2", "b1", "n1", "g1", "n2", "g1", "n1", "b1"]);
+    assert.ok(newTab, "no frames");
+    const blank = newTab.map((f) => crop(f, region)).filter((c) => sd(c) < 3);
+    rep.log(`${blank.length} frames of the New Tab switches blank`);
+    if (blank.length) dump("new-tab-switches", blank, region);
+    assert.equal(blank.length, 0, `${blank.length} frames of a New Tab switch blank`);
   });
 
   await check("a new window shows up with its content", async () => {
@@ -301,9 +334,10 @@ try {
   await check("a tab torn off into a new window: its old window shows its next tab soon", async () => {
     if (noScreen) return noScreen;
     const w1 = await run(`return st().windows.w1.frame;`);
-    // g1's row in w1's tab list: the row a click there activates.
+    // g1's row in w1's tab list: the row a click there activates. Below the sidebar's address field (80 pt): a click
+    // on it opens the command bar over the window.
     let row = null;
-    for (let y = 60; y <= 200 && row === null; y += 12) {
+    for (let y = 90; y <= 230 && row === null; y += 12) {
       await run(`return act("w1", "click:60,${y}").then(() => settle(250));`);
       if ((await run(`return st().windows.w1.activeTabIds.default;`)) === "g1") row = y;
     }
@@ -343,9 +377,10 @@ try {
     assert.ok(browser, "m1 is live");
     const w2 = await run(`return st().windows.w2.frame;`);
     const w1 = await run(`return st().windows.w1.frame;`);
-    // From w2's tab row onto w1's tab list (the pointer in w2's coordinates).
+    // From w2's tab row onto w1's tab list (the pointer in w2's coordinates). The row is the list's first, below the
+    // sidebar's address field (its header is 80 pt, the list 6 pt under it, a row 31 pt).
     const target = [w1[0] + 110 - w2[0], (w2[1] + w2[3]) - (w1[1] + w1[3] - 160)];
-    const path = `70,70;70,100;-300,150;${target[0] + 30},${target[1]};${target.join(",")};${target[0] + 2},${target[1] + 2};${target.join(",")}`;
+    const path = `70,100;70,130;-300,150;${target[0] + 30},${target[1]};${target.join(",")};${target[0] + 2},${target[1] + 2};${target.join(",")}`;
     const go = () => run(`return act("w2", "drag:${path}").then(() => settle(${7 * 12 * 16 + 1200}));`);
     const frames = noScreen ? (await go(), null) : await record(4.5, go);
     drop = { frames, w1, w2 };

@@ -60,6 +60,11 @@ export function startDevHarness() {
     get toolbarAutoHide(): typeof import("../components/layout/toolbarAutoHide") {
       return require("../components/layout/toolbarAutoHide");
     },
+    // Developer Mode: a test serving its pages from a local server turns it off for that server, or its offer covers
+    // the pages (and takes the keyboard).
+    get developer(): typeof import("../components/developer/devMode") {
+      return require("../components/developer/devMode");
+    },
     // Hovering moves nothing but a HoverSlot's contents (scripts/hover-shift-test.mjs).
     get hoverShift(): typeof import("./hoverShift") {
       return require("./hoverShift");

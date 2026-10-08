@@ -1,4 +1,4 @@
-// Hovering moves or resizes nothing but a HoverSlot's contents, in the sidebar, the tab strip and the downloads popover.
+// Hovering moves or resizes nothing but a HoverSlot's contents, in the sidebar, the tab strip and the downloads panel.
 // Launches a hidden instance with a fixture (tabs, an open and a collapsed group, a live folder with an open item, a
 // finished download) and runs the dev harness's check (src/lib/hoverShift.ts) on each surface.
 //   node apps/browser/scripts/hover-shift-test.mjs <Debug Bay.app> [cdpPort]
@@ -62,7 +62,7 @@ try {
   const surfaces = [
     ["sidebar", `nn.store.getState().updateSettings({ tabLayout: "sidebar" });`, ["Sidebar"]],
     ["tab strip", `nn.store.getState().updateSettings({ tabLayout: "top" });`, ["TopTabStrip"]],
-    ["downloads", `nn.store.getState().updateSettings({ tabLayout: "sidebar" }); nn.store.getState().setDownloadsOpen("w1", true);`, ["DownloadsPopover"]],
+    ["downloads", `nn.store.getState().updateSettings({ tabLayout: "sidebar" }); nn.store.getState().setDownloadsOpen("w1", true);`, ["DownloadsPanel"]],
   ];
   for (const [name, setup, scopes] of surfaces) {
     await rep.check(name, async () => {

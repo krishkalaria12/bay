@@ -57,6 +57,8 @@ app = await launch(appPath, {
   ready: "return !!nn.shell.devKeyEquivalent",
 });
 rep.log(`instance: pid ${app.pid}, DevTools port ${app.port}, data ${data}`);
+// The pages come from a local server: no Developer Mode offer over them (it would take the keyboard).
+await app.eval(`nn.developer.setDeveloperMode(${JSON.stringify(pages)}, false); return 1;`);
 await sleep(3000);
 
 const nn = (body, timeout = 60000) => app.eval(body, { timeout }).catch((error) => {
@@ -109,8 +111,8 @@ const shortcuts = [
   ["⇧⌘Z", cmd("Z", 6, "shift"), { title: "Redo" }, "⇧⌘Z"],
   ["⌘X", cmd("x", 7), { title: "Cut" }, "⌘X", "clipboard"],
   ["⌘C", cmd("c", 8), { title: "Copy" }, "⌘C", "clipboard"],
-  ["⇧⌘C", cmd("C", 8, "shift"), { command: "copyUrl" }, "⇧⌘C"],
-  ["⌥⇧⌘C", cmd("C", 8, "shift", "option"), { command: "copyUrlAsMarkdown" }, "⌥⇧⌘C"],
+  ["⇧⌘C", cmd("C", 8, "shift"), { command: "copyUrl" }, "⇧⌘C", "palette-own"],
+  ["⌥⇧⌘C", cmd("C", 8, "shift", "option"), { command: "copyUrlAsMarkdown" }, "⌥⇧⌘C", "palette-own"],
   ["⌘V", cmd("v", 9), { title: "Paste" }, "⌘V", "clipboard"],
   ["⇧⌘V", cmd("V", 9, "shift"), { title: "Paste and Match Style" }, "⇧⌘V", "clipboard"],
   ["⌘A", cmd("a", 0), { title: "Select All" }, "⌘A"],
@@ -255,6 +257,8 @@ for (const [focusName, focus] of Object.entries(focuses)) {
   await focus.setup?.();
   for (const [name, key, expect, , only] of shortcuts) {
     if (focusName !== "sidebar" && (only === "window-only" || only === "clipboard")) continue;
+    // The command bar copies its selected row (or its page) itself (Omnibox.tsx), for real even in a dry run.
+    if (focusName === "commandBar" && only === "palette-own") continue;
     // Text fields consume ⌘↩, ⌘←/→, and ⇧⌘⌫.
     // DevTools' own ⇧⌘D (its dock side) wins while it has the focus, as in Chrome.
     const inField =

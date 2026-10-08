@@ -79,7 +79,7 @@ function recentSwitch(windowId: string, side: "from" | "to", tabIds: string[]): 
 
 // As yab switches pages: the page left stays on screen while the one switched to fades in over it (or it fades off
 // the new one), and the new page settles a few points the way the switch went. Over in about six frames.
-const PAGE_MS = 120;
+export const PAGE_MS = 120;
 const PAGE_OFFSET = 4;
 // A pane faded off stays transparent this long after: its page hides a frame or two after the switch ends (native
 // views apply their props apart from React's), and at full opacity meanwhile it flashed over the page switched to.
