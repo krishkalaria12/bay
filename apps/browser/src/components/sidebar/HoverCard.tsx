@@ -4,22 +4,18 @@ import { Image, Pressable, Text, View } from "react-native";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { useIsBookmarked } from "../../store/hooks";
-import { activeTabId, bookmarkProfileId, isIncognitoProfile } from "../../store/model";
+import { activeTabId, isIncognitoProfile } from "../../store/model";
 import { splitOf } from "../../store/splits";
 import { lastPicture } from "../../lib/tabPictures";
 import { awayFromPin, groupLabel } from "../../store/organize";
-import { openInSplit } from "../layout/splitActions";
 import { CalendarPreview, useIsCalendarTab } from "../live/CalendarPreview";
 import { LiveItemCard } from "../live/LiveItemCard";
 import { useIsSleeping } from "../../lib/tabLifecycle";
-import { useHover } from "../primitives";
 import { clickTab, tabTitle } from "./actions";
 import { dismissHover, hoverLeave, keepHover } from "./hover";
 import { useSidebarUi, type Anchor } from "./state";
 import { TabIcon } from "./TabIcon";
 import { HoverPlayer, useShowsMiniPlayer } from "../media/HoverPlayer";
-import { useMedia, usePictureInPicture } from "../media/state";
 
 const WIDTH = 264;
 const PAD = 10;
@@ -60,11 +56,6 @@ function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode 
 function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string; anchor: Anchor }) {
   const theme = useTheme();
   const tab = useBrowser((s) => s.tabs[tabId]);
-  const isActive = useBrowser((s) => activeTabId(s, windowId) === tabId);
-  const bookmarked = useIsBookmarked(tab?.url ?? "");
-  // Document PiP may have a window without a tab session.
-  const video = useMedia((m) => !!m.sessions[tabId]?.hasVideo || !!m.pipOpen[tabId]);
-  const [pip, togglePip] = usePictureInPicture(tabId);
   const sleeping = useIsSleeping(tabId);
   // The page on screen (the shown tab, or one in its split) needs no preview: just what it is and where.
   const onScreen = useBrowser((s) => {
@@ -72,34 +63,20 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
     return active === tabId || !!(active && splitOf(s, active)?.tabIds.includes(tabId));
   });
   if (!tab) return null;
-  if (onScreen) {
-    return (
-      <Card anchor={anchor}>
-        <FadeLabel text={tabTitle(tab)} fontSize={13} weight="medium" color={theme.textPrimary} style={{ height: 18 }} />
-        {tab.url ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 }}>
-            <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>{hostOf(tab.url) || displayUrl(tab.url)}</Text>
-          </View>
-        ) : null}
-      </Card>
-    );
-  }
-  const s = () => useBrowser.getState();
-  const away = awayFromPin(tab);
+  const away = !onScreen && awayFromPin(tab);
   return (
     <Card anchor={anchor}>
-      {tab.url ? <PagePreview tabId={tabId} /> : null}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} />
-        <FadeLabel text={tabTitle(tab)} fontSize={13} weight="medium" color={theme.textPrimary} style={{ flex: 1, height: 18 }} />
-      </View>
+      {!onScreen && tab.url ? <PagePreview tabId={tabId} /> : null}
+      <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 17, fontWeight: "500", color: theme.textPrimary }}>
+        {tabTitle(tab)}
+      </Text>
       {tab.url ? (
-        <Text numberOfLines={2} style={{ marginTop: 4, fontSize: 11.5, lineHeight: 15, color: theme.textSecondary }}>
-          {displayUrl(tab.url)}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 }}>
+          <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>{hostOf(tab.url) || displayUrl(tab.url)}</Text>
+        </View>
       ) : null}
-      {sleeping ? (
+      {!onScreen && sleeping ? (
         <View accessible accessibilityLabel="Web content has been discarded" style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
           <Symbol name="moon.zzz" size={10} color={theme.textTertiary} style={{ width: 14, height: 14 }} />
           <Text style={{ fontSize: 11.5, color: theme.textTertiary }}>This tab needs to reload</Text>
@@ -110,37 +87,6 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
           Pinned: {displayUrl(tab.pinnedUrl)}
         </Text>
       ) : null}
-      <View style={{ flexDirection: "row", gap: 4, marginTop: 8 }}>
-        <Action icon={tab.pinned ? "pin.slash" : "pin"} label={tab.pinned ? "Unpin" : "Pin"} onPress={() => s().togglePin(tabId)} />
-        {tab.url ? (
-          <Action
-            icon={bookmarked ? "bookmark.fill" : "bookmark"}
-            label={bookmarked ? "Bookmarked" : "Bookmark"}
-            onPress={() => s().toggleBookmark(bookmarkProfileId(s(), s().windows[windowId]), { url: tab.url, title: tabTitle(tab), favicon: tab.favicon })}
-          />
-        ) : null}
-        {!isActive && !tab.pinned ? (
-          <Action
-            icon="rectangle.split.2x1"
-            label="Split"
-            onPress={() => {
-              dismissHover();
-              openInSplit(tabId);
-            }}
-          />
-        ) : null}
-        {video ? <Action icon={pip ? "pip.exit" : "pip.enter"} label={pip ? "Exit PiP" : "PiP"} onPress={togglePip} /> : null}
-        {away ? (
-          <Action
-            icon="arrow.uturn.backward"
-            label="Reset"
-            onPress={() => {
-              dismissHover();
-              s().returnToPinnedUrl(tabId);
-            }}
-          />
-        ) : null}
-      </View>
     </Card>
   );
 }
@@ -169,32 +115,6 @@ function PagePreview({ tabId }: { tabId: string }) {
       }}
     >
       <Image source={{ uri: `data:image/jpeg;base64,${picture.data}` }} style={{ width: WIDTH, height: shown }} accessibilityIgnoresInvertColors />
-    </View>
-  );
-}
-
-function Action({ icon, label, onPress }: { icon: string; label: string; onPress(): void }) {
-  const theme = useTheme();
-  const { hovered, hoverProps } = useHover();
-  return (
-    <View {...hoverProps} style={{ flex: 1 }}>
-      <Pressable onPress={onPress}>
-        {({ pressed }) => (
-          <View
-            style={{
-              height: 44,
-              borderRadius: 8,
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 3,
-              backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.urlPill,
-            }}
-          >
-            <Symbol name={icon} size={13} color={theme.icon} style={{ width: 18, height: 16 }} />
-            <Text style={{ fontSize: 10.5, color: theme.textSecondary }}>{label}</Text>
-          </View>
-        )}
-      </Pressable>
     </View>
   );
 }
