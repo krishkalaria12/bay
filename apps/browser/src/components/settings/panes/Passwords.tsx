@@ -72,9 +72,7 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
     const path = await mod.chooseImportFile("passwordsCSV");
     if (!path) return;
     try {
-      const creds = await mod.importPasswordsCSV(path);
-      let saved = 0;
-      for (const c of creds) if (c.url && c.password && (await savePassword(profile, originOf(c.url), c.username, c.password))) saved++;
+      const saved = await saveImported(profile, await mod.importPasswordsCSV(path));
       setImportStatus(`Imported ${plural(saved, "password")}.`);
       load();
     } catch (e) {
@@ -158,6 +156,13 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
       )}
     </View>
   );
+}
+
+// The imported passwords saved: those with a site and a password.
+async function saveImported(profile: string, creds: { url: string; username: string; password: string }[]): Promise<number> {
+  let saved = 0;
+  for (const c of creds) if (c.url && c.password && (await savePassword(profile, originOf(c.url), c.username, c.password))) saved++;
+  return saved;
 }
 
 function originOf(url: string) {

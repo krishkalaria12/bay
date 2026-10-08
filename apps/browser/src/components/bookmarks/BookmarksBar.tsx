@@ -1,9 +1,10 @@
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/shell";
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View, type LayoutRectangle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
+import { useEffectEvent } from "../../lib/useEffectEvent";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
@@ -179,8 +180,8 @@ function BarItem({
   const dx = useSharedValue(0);
   const dxStyle = useAnimatedStyle(() => ({ transform: [{ translateX: dx.get() }] }));
   const [dragging, setDragging] = useState(false);
-  const handlers = useRef({ onDragMove, onDragEnd });
-  handlers.current = { onDragMove, onDragEnd };
+  const dragMove = useEffectEvent(onDragMove);
+  const dragEnd = useEffectEvent(onDragEnd);
   const responder = useMemo(
     () =>
       PanResponder.create({
@@ -188,21 +189,21 @@ function BarItem({
         onPanResponderGrant: () => setDragging(true),
         onPanResponderMove: (_, g) => {
           dx.set(g.dx);
-          handlers.current.onDragMove(g.dx);
+          dragMove(g.dx);
         },
         onPanResponderRelease: (_, g) => {
           dx.set(0);
           setDragging(false);
-          handlers.current.onDragEnd(g.dx);
+          dragEnd(g.dx);
         },
         onPanResponderTerminate: () => {
           dx.set(0);
           setDragging(false);
-          handlers.current.onDragMove(0);
-          handlers.current.onDragEnd(0);
+          dragMove(0);
+          dragEnd(0);
         },
       }),
-    [],
+    [dx, dragMove, dragEnd],
   );
   if (!node) return null;
   const open = (e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>

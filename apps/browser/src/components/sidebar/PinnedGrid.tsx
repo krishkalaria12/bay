@@ -34,7 +34,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs:
   const controller = useDragController();
   const columns = Math.max(1, Math.min(tabs.length || 1, Math.floor((innerWidth + GAP) / (MIN_TILE + GAP))));
   const width = Math.floor(((innerWidth - GAP * (columns - 1)) / columns) * 2) / 2;
-  const tail = useDragItem("tail:tiles", { kind: "tail", tabIds: [], section: "tiles" });
+  const { ref: tailRef } = useDragItem("tail:tiles", { kind: "tail", tabIds: [], section: "tiles" });
   const topGap = listTopGap(useSidebarFieldShown());
   // With no pinned tabs a drag's pin target is an overlay that takes no room (PinDropZone): nothing here.
   if (!tabs.length) return null;
@@ -48,7 +48,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs:
       {tabs.map((id) => (
         <PinnedTile key={id} tabId={id} width={width} />
       ))}
-      <Animated.View ref={tail.wrapper.ref} style={{ position: "absolute", right: 0, bottom: 0, width: 0, height: 0 }} />
+      <Animated.View ref={tailRef} style={{ position: "absolute", right: 0, bottom: 0, width: 0, height: 0 }} />
     </View>
   );
 });
@@ -100,7 +100,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const selected = useBrowser((s) => (s.selection[windowId] ?? []).includes(tabId));
   const playing = useTabLive(tabId, (l) => l.playingAudio);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
-  const { wrapper, handle } = useDragItem(`t:${tabId}`, { kind: "tile", tabIds: [tabId], section: "tiles" }, () => useBrowser.getState().selection[windowId] ?? []);
+  const { ref, style, handle } = useDragItem(`t:${tabId}`, { kind: "tile", tabIds: [tabId], section: "tiles" }, () => useBrowser.getState().selection[windowId] ?? []);
   const away = !!tab && awayFromPin(tab);
   const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.profileId ?? "");
   const badge = useSharedValue(away ? 1 : 0);
@@ -112,7 +112,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const radius = 10;
 
   return (
-    <Animated.View ref={wrapper.ref} style={wrapper.style} {...handle}>
+    <Animated.View ref={ref} style={style} {...handle}>
       <View
         ref={(v) => registerRow(windowId, tabId, v)}
         {...hoverProps}

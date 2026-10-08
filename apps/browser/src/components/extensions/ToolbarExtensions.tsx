@@ -1,6 +1,6 @@
 import { terminateCastRoute, type ActionState, type CastRoute, type InstalledExtension } from "@bay/nncore";
 import { ContextMenuArea, showMenu, Symbol } from "@bay/shell";
-import { memo, useMemo, useRef } from "react";
+import { memo, useRef, useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -25,7 +25,7 @@ const BUTTON = 28;
 
 function useToolbarExtensions(windowId: string) {
   const shown = useWindowExtensions(windowId);
-  return useMemo(() => ({ pinned: shown.filter((x) => x.pinned), overflow: shown.some((x) => !x.pinned) }), [shown]);
+  return { pinned: shown.filter((x) => x.pinned), overflow: shown.some((x) => !x.pinned) };
 }
 
 export function useToolbarExtensionsWidth(windowId: string): number {
@@ -86,9 +86,9 @@ function ExtensionButton({ ext, windowId, browserId, palette }: { ext: Installed
   // A tab's states come a moment after it is shown: until they do, the button keeps what it showed rather than flash
   // the manifest's icon without the badge. A click goes by the tab's own state (its popup), never the held one.
   const fetched = useExtensions((e) => (browserId ? e.actions[browserId] : undefined));
-  const held = useRef<ActionState | undefined>(undefined);
-  if (fetched) held.current = fetched[ext.id];
-  const state = held.current;
+  const [held, setHeld] = useState<ActionState | undefined>(undefined);
+  if (fetched && fetched[ext.id] !== held) setHeld(fetched[ext.id]);
+  const state = fetched ? fetched[ext.id] : held;
   const open = useExtensions((e) => e.popup?.windowId === windowId && e.popup.extensionId === ext.id);
   const { hovered, hoverProps } = useHover();
   const { ref, measure } = useAnchor(`${windowId}|${ext.id}`);

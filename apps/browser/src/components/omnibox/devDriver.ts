@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { useEffectEvent } from "../../lib/useEffectEvent";
 import { perfProbeEnabled } from "../../lib/perfProbe";
 
 export type OmniboxDriver = {
@@ -33,21 +34,20 @@ export const omniboxDrivers = {
 };
 
 export function useOmniboxDriver(id: string, driver: OmniboxDriver) {
-  const latest = useRef(driver);
-  latest.current = driver;
+  const current = useEffectEvent(() => driver);
   useEffect(() => {
     if (!__DEV__ && !perfProbeEnabled) return;
     const proxy: OmniboxDriver = {
-      type: (text) => latest.current.type(text),
-      clear: () => latest.current.clear(),
-      key: (key, mods) => latest.current.key(key, mods),
-      submit: () => latest.current.submit(),
-      state: () => latest.current.state(),
-      measure: () => latest.current.measure(),
+      type: (text) => current().type(text),
+      clear: () => current().clear(),
+      key: (key, mods) => current().key(key, mods),
+      submit: () => current().submit(),
+      state: () => current().state(),
+      measure: () => current().measure(),
     };
     drivers.set(id, proxy);
     return () => {
       if (drivers.get(id) === proxy) drivers.delete(id);
     };
-  }, [id]);
+  }, [id, current]);
 }

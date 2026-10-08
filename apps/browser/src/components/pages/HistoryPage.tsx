@@ -1,6 +1,6 @@
 import { cleanUrl } from "@bay/core";
 import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/shell";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -18,6 +18,33 @@ const NO_HISTORY: HistoryEntry[] = [];
 type Item =
   | { type: "day"; key: string; label: string; offset: number }
   | { type: "row"; key: string; entry: HistoryEntry; first: boolean; last: boolean; offset: number };
+
+// The list: each day's header, then its pages, each at its offset down the list.
+function listItems(history: HistoryEntry[], query: string): Item[] {
+  const out: Item[] = [];
+  let offset = 0;
+  let day = -1;
+  const matches = history.filter((h) => matchesQuery(query, h.title, h.url));
+  matches.forEach((entry, i) => {
+    const start = dayStart(entry.lastVisit);
+    if (start !== day) {
+      day = start;
+      out.push({ type: "day", key: `d${start}`, label: dayLabel(start), offset });
+      offset += HEADER;
+    }
+    const next = matches[i + 1];
+    out.push({
+      type: "row",
+      key: entry.url,
+      entry,
+      first: out.at(-1)?.type === "day",
+      last: !next || dayStart(next.lastVisit) !== start,
+      offset,
+    });
+    offset += ROW;
+  });
+  return out;
+}
 
 export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string; profileId: string; initialQuery: string }) {
   const theme = useTheme();
@@ -39,33 +66,9 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
 
   useEffect(() => setQuery(initialQuery), [initialQuery]);
 
-  const items = useMemo(() => {
-    const out: Item[] = [];
-    let offset = 0;
-    let day = -1;
-    const matches = history.filter((h) => matchesQuery(query, h.title, h.url));
-    matches.forEach((entry, i) => {
-      const start = dayStart(entry.lastVisit);
-      if (start !== day) {
-        day = start;
-        out.push({ type: "day", key: `d${start}`, label: dayLabel(start), offset });
-        offset += HEADER;
-      }
-      const next = matches[i + 1];
-      out.push({
-        type: "row",
-        key: entry.url,
-        entry,
-        first: out.at(-1)?.type === "day",
-        last: !next || dayStart(next.lastVisit) !== start,
-        offset,
-      });
-      offset += ROW;
-    });
-    return out;
-  }, [history, query]);
+  const items = listItems(history, query);
 
-  const rowUrls = useMemo(() => items.flatMap((i) => (i.type === "row" ? [i.entry.url] : [])), [items]);
+  const rowUrls = items.flatMap((i) => (i.type === "row" ? [i.entry.url] : []));
 
   const toggle = (url: string, shift: boolean) => {
     setSelected((prev) => {

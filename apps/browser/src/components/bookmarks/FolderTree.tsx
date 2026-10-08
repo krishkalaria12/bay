@@ -1,5 +1,5 @@
 import { Symbol } from "@bay/shell";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { bookmarkAncestors, folderChildren } from "../../store/bookmarks";
@@ -25,16 +25,11 @@ function useFolderRows(profileId: string, expanded: Set<string>): FolderRow[] {
     walk(roots.other, 0);
     return lines.join("\n");
   });
-  return useMemo(
-    () =>
-      key
-        ? key.split("\n").map((line) => {
-            const [id, title, depth, hasChildren] = JSON.parse(line) as [string, string, number, boolean];
-            return { id, title, depth, hasChildren };
-          })
-        : [],
-    [key],
-  );
+  if (!key) return [];
+  return key.split("\n").map((line) => {
+    const [id, title, depth, hasChildren] = JSON.parse(line) as [string, string, number, boolean];
+    return { id, title, depth, hasChildren };
+  });
 }
 
 export function FolderTree({

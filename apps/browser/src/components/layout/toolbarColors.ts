@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import type { Theme } from "../../lib/theme";
 
@@ -85,18 +85,16 @@ export type EasedColor = { progress: SharedValue<number>; colors: SharedValue<[s
 
 export function useEasedColor(color: string | null, duration = 180): EasedColor {
   const progress = useSharedValue(1);
-  const from = useRef<string>(color ?? "#00000000");
-  const to = useRef<string>(color ?? "#00000000");
-  const target = color ? color.slice(0, 7) : `${to.current.slice(0, 7)}00`;
-  if (target !== to.current) {
-    from.current = to.current;
-    to.current = target;
-  }
-  const colors = useSharedValue<[string, string]>([from.current, to.current]);
+  // The colour it eases from and the one it eases to: a new target starts from the last one.
+  const [fade, setFade] = useState<[string, string]>(() => [color ?? "#00000000", color ?? "#00000000"]);
+  const [from, to] = fade;
+  const target = color ? color.slice(0, 7) : `${to.slice(0, 7)}00`;
+  if (target !== to) setFade([to, target]);
+  const colors = useSharedValue<[string, string]>(fade);
   useEffect(() => {
     // A toolbar that appears (a tab shown, a pane opened) starts at its colour: nothing to fade.
-    if (from.current === to.current) return;
-    colors.set([from.current, to.current]);
+    if (from === to) return;
+    colors.set([from, to]);
     progress.set(0);
     progress.set(withTiming(1, { duration, easing: Easing.out(Easing.quad) }));
   }, [target]);

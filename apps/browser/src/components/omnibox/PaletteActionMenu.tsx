@@ -35,6 +35,16 @@ export function hintOf({ key, metaKey, shiftKey, altKey, ctrlKey }: KeyEvent): s
   return `${ctrlKey ? "⌃" : ""}${altKey ? "⌥" : ""}${shiftKey ? "⇧" : ""}${metaKey ? "⌘" : ""}${KEY_GLYPHS[key] ?? key.toUpperCase()}`;
 }
 
+// Runs the action: null once done, else what went wrong.
+async function runAction(action: PaletteMenuAction): Promise<string | null> {
+  try {
+    await action.run();
+    return null;
+  } catch (failure) {
+    return (failure instanceof Error ? failure.message : "Couldn't complete this action. Try again.").slice(0, 160);
+  }
+}
+
 export function PaletteActionMenu({
   title,
   actions,
@@ -96,15 +106,11 @@ export function PaletteActionMenu({
     if (!action || busy) return;
     setError(null);
     setBusy(true);
-    try {
-      await action.run();
-      onClose();
-    } catch (failure) {
-      setError((failure instanceof Error ? failure.message : "Couldn't complete this action. Try again.").slice(0, 160));
-      input.current?.focus();
-    } finally {
-      setBusy(false);
-    }
+    const failure = await runAction(action);
+    setBusy(false);
+    if (failure === null) return onClose();
+    setError(failure);
+    input.current?.focus();
   };
 
   return (

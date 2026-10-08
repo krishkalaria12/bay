@@ -9,7 +9,7 @@ import {
   setLaunchAtLogin,
   Symbol,
 } from "@bay/shell";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { PROFILE_COLORS, themeFor, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -63,6 +63,12 @@ export function StepLayout({ children, actions, preview }: { children: ReactNode
 
 type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean };
 
+async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
+  if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser()) && choice.trial) recordDefaultBrowserTrial();
+  if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
+  if (choice.dock && !system.inDock) await addToDock();
+}
+
 export function DefaultBrowserStep() {
   const next = useOnboarding((s) => s.next);
   const [system, setSystem] = useState<SystemState | null>(null);
@@ -82,14 +88,10 @@ export function DefaultBrowserStep() {
   const apply = async () => {
     if (!system) return;
     setBusy(true);
-    try {
-      if (setDefault && !system.isDefault && (await setAsDefaultBrowser()) && trial) recordDefaultBrowserTrial();
-      if (login !== system.loginEnabled) await setLaunchAtLogin(login).catch(() => {});
-      if (dock && !system.inDock) await addToDock();
-    } finally {
+    await applySystemChoices(system, { setDefault, trial, login, dock }).finally(() => {
       setBusy(false);
       next();
-    }
+    });
   };
 
   const defaultOn = system?.isDefault || setDefault;
@@ -320,8 +322,8 @@ export function PinnedTabsStep() {
   const next = useOnboarding((s) => s.next);
   const windowId = useOnboarding((s) => s.windowId);
   const history = useBrowser((s) => s.history[s.windows[windowId ?? ""]?.profileId ?? ""]);
-  const initial = useMemo(() => preselectedSites(history ?? []), []);
-  const [selected, setSelected] = useState<string[]>(initial);
+  // Preselected from the history as the step opens.
+  const [selected, setSelected] = useState<string[]>(() => preselectedSites(history ?? []));
 
   const toggle = (id: string) => setSelected((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
 

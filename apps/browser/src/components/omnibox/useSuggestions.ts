@@ -9,7 +9,7 @@ import {
   type SearchScope,
   type SuggestionResult,
 } from "@bay/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { bookmarksByUrl } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { bookmarkProfileId } from "../../store/model";
@@ -69,6 +69,14 @@ function suggestEngine(scope: SearchScope | null, engines: SearchEngine[], fallb
   return scope?.kind === "engine" ? engineById(engines, scope.engineId) : fallback;
 }
 
+// The engine's suggestions for `query`: those for an earlier prefix of it narrow down while the request is out.
+function remoteFor(remote: { text: string; list: string[] }, query: string): string[] {
+  if (remote.text === query) return remote.list;
+  const q = query.toLowerCase();
+  if (!remote.text || !q.startsWith(remote.text.toLowerCase())) return NO_REMOTE;
+  return remote.list.filter((s) => s.toLowerCase().startsWith(q));
+}
+
 export function useSuggestions({
   text,
   active,
@@ -101,9 +109,9 @@ export function useSuggestions({
   const preference = useBrowser((s) => s.settings.commandBarPreference);
   const suggestionsOn = useBrowser((s) => s.settings.searchSuggestions);
 
-  const tabs = useMemo(() => Object.values(allTabs).filter((t) => t.profileId === profileId), [allTabs, profileId]);
-  const bookmarkRows = useMemo(() => profileBookmarks(bookmarks, bookmarkProfile), [bookmarks, bookmarkProfile]);
-  const source = useMemo(() => ({ tabs, history, bookmarks: bookmarkRows }), [tabs, history, bookmarkRows]);
+  const tabs = Object.values(allTabs).filter((t) => t.profileId === profileId);
+  const bookmarkRows = profileBookmarks(bookmarks, bookmarkProfile);
+  const source = { tabs, history, bookmarks: bookmarkRows };
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -116,7 +124,7 @@ export function useSuggestions({
   }, [source]);
 
   const [remote, setRemote] = useState<{ text: string; list: string[] }>({ text: "", list: [] });
-  const fetcher = useRef(createSuggestFetcher({ fetch: (url, init) => fetch(url, init) })).current;
+  const [fetcher] = useState(() => createSuggestFetcher({ fetch: (url, init) => fetch(url, init) }));
   const query = text.trim();
   const fromEngine = suggestEngine(scope, engines, engine);
   useEffect(() => {
@@ -129,26 +137,17 @@ export function useSuggestions({
   }, [active, suggestionsOn, query, fromEngine, scope, fetcher]);
   useEffect(() => () => fetcher.cancel(), [fetcher]);
 
-  const remoteList = useMemo(() => {
-    if (remote.text === query) return remote.list;
-    const q = query.toLowerCase();
-    if (!remote.text || !q.startsWith(remote.text.toLowerCase())) return NO_REMOTE;
-    return remote.list.filter((s) => s.toLowerCase().startsWith(q));
-  }, [remote, query]);
-
-  return useMemo(() => {
-    if (!active || !query) return EMPTY;
-    return buildSuggestions(text, source, {
-      engine,
-      preference,
-      remote: remoteList,
-      actions: currentBarActions(windowId),
-      currentTabId,
-      currentUrl,
-      scope,
-      limit,
-      remoteLimit,
-      remoteFirst,
-    });
-  }, [active, text, query, source, engine, preference, remoteList, windowId, currentTabId, currentUrl, scope, limit, remoteLimit, remoteFirst]);
+  if (!active || !query) return EMPTY;
+  return buildSuggestions(text, source, {
+    engine,
+    preference,
+    remote: remoteFor(remote, query),
+    actions: currentBarActions(windowId),
+    currentTabId,
+    currentUrl,
+    scope,
+    limit,
+    remoteLimit,
+    remoteFirst,
+  });
 }

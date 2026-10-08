@@ -55,7 +55,7 @@ function LiveFolderBlock({ folderId, windowId }: { folderId: string; windowId: s
   const showAll = useLive((s) => s.showAll);
   const collapsed = !!folder?.collapsed;
   const rows = useMemo(() => (folder ? folderRows(folder, items, showAll) : []), [folder, items, showAll]);
-  const itemIds = useMemo(() => new Set(items.map((i) => i.id)), [items]);
+  const itemIds = new Set(items.map((i) => i.id));
   const profileId = usePageProfileId();
   const strays = useBrowser(
     useShallow((s) => viewTabIds(s, windowId, profileId).filter((id) => s.tabs[id]?.liveItem?.folderId === folderId && !itemIds.has(s.tabs[id]!.liveItem!.itemId))),
@@ -244,9 +244,10 @@ function Spinner() {
 function MoreRow({ folderId, section, count }: { folderId: string; section: string; count: number }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
+  const key = `${folderId}:${section}`;
   return (
     <View {...hoverProps}>
-      <Pressable onPress={() => setLive((s) => ({ showAll: { ...s.showAll, [`${folderId}:${section}`]: true } }))}>
+      <Pressable onPress={() => setLive((s) => ({ showAll: { ...s.showAll, [key]: true } }))}>
         <View style={{ height: 26, borderRadius: 8, flexDirection: "row", alignItems: "center", paddingLeft: 9, backgroundColor: hovered ? theme.rowHover : undefined }}>
           <Symbol name="ellipsis" size={11} color={theme.textSecondary} style={{ width: 16, height: 16 }} />
           <Text style={{ marginLeft: 5, fontSize: 12, color: theme.textSecondary }}>Show {count} More</Text>

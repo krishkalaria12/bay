@@ -7,19 +7,14 @@ import { openModeFor, openUrl } from "../bookmarks/actions";
 import { openInternalPage } from "../pages/urls";
 import { Favicon, NewTabIcon, useHover } from "../primitives";
 import { modifiersOf, Popover, PopoverSeparator } from "./controls";
-import { closeHistoryMenu, goToHistoryItem, useHistoryMenu, type HistoryItem } from "./history";
+import { closeHistoryMenu, goToHistoryItem, historyFavicons, useHistoryMenu, type HistoryItem } from "./history";
 
 const WIDTH = 300;
 
 export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; windowId: string; anchors: { back: number; forward: number } }) {
   const menu = useHistoryMenu((s) => (s.menu?.tabId === tabId ? s.menu : null));
   const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
-  const favicons = useMemo(() => {
-    if (!menu) return new Map<string, string | null>();
-    const history = useBrowser.getState().history[profileId] ?? [];
-    const urls = new Set(menu.items.map((i) => i.url));
-    return new Map(history.filter((h) => urls.has(h.url)).map((h) => [h.url, h.favicon]));
-  }, [menu, profileId]);
+  const favicons = useMemo(() => historyFavicons(profileId, menu?.items ?? []), [menu, profileId]);
   useEffect(() => () => void (useHistoryMenu.getState().menu?.tabId === tabId && closeHistoryMenu()), [tabId]);
   if (!menu) return null;
 

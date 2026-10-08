@@ -1,5 +1,5 @@
 import type { ActionState, ExtensionInstallPrompt, ExtensionPackage, InstalledExtension } from "@bay/nncore";
-import { useMemo } from "react";
+
 import { create } from "zustand";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId, engineProfile } from "../../store/model";
@@ -63,7 +63,7 @@ export function useWindowExtensions(windowId: string): InstalledExtension[] {
   const profile = useBrowser((s) => extensionProfile(s, windowId));
   const priv = useBrowser((s) => isPrivate(s, windowId));
   const list = useExtensionList(profile);
-  return useMemo(() => list.filter((x) => showsExtension(priv, x)), [list, priv]);
+  return list.filter((x) => showsExtension(priv, x));
 }
 
 export function windowExtensions(s: BrowserState, windowId: string | undefined): InstalledExtension[] {

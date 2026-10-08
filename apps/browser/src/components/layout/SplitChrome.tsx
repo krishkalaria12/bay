@@ -4,6 +4,7 @@ import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
+import { useEffectEvent } from "../../lib/useEffectEvent";
 import { withAlpha } from "../sidebar/tokens";
 import { useBrowser } from "../../store/browser";
 import type { SplitView } from "../../store/types";
@@ -28,33 +29,33 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // The sizes the drag started from.
   const start = useRef<{ sizes: number[]; stack?: [number, number] }>({ sizes: split.sizes });
-  const latest = useRef({ split, divider, width, height });
-  latest.current = { split, divider, width, height };
+  const grant = useEffectEvent(() => {
+    start.current = { sizes: split.sizes, stack: split.stack?.sizes };
+    setDragging(true);
+  });
+  const move = useEffectEvent((dx: number, dy: number) => {
+    const delta = divider.vertical ? dx : dy;
+    const room = divider.vertical ? width : height;
+    if (divider.kind === "root") {
+      useBrowser.getState().updateSplit(split.id, { sizes: resize(start.current.sizes, divider.index, delta, room) });
+    } else if (start.current.stack) {
+      const next = resize(start.current.stack, 0, delta, room) as [number, number];
+      useBrowser.getState().updateSplit(split.id, { stackSizes: next });
+    }
+  });
 
   const responder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          const { split: v } = latest.current;
-          start.current = { sizes: v.sizes, stack: v.stack?.sizes };
-          setDragging(true);
-        },
-        onPanResponderMove: (_, g) => {
-          const { split: v, divider: d, width: w, height: h } = latest.current;
-          const delta = d.vertical ? g.dx : g.dy;
-          if (d.kind === "root") {
-            useBrowser.getState().updateSplit(v.id, { sizes: resize(start.current.sizes, d.index, delta, d.vertical ? w : h) });
-          } else if (start.current.stack) {
-            const next = resize(start.current.stack, 0, delta, d.vertical ? w : h) as [number, number];
-            useBrowser.getState().updateSplit(v.id, { stackSizes: next });
-          }
-        },
+        onPanResponderGrant: () => grant(),
+        onPanResponderMove: (_, g) => move(g.dx, g.dy),
         onPanResponderRelease: () => setDragging(false),
         onPanResponderTerminate: () => setDragging(false),
       }),
-    [],
+    [grant, move],
   );
 
   const { rect, vertical } = divider;
@@ -107,6 +108,7 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
     const others = (s.windows[windowId]?.tabIds ?? []).map((id) => s.tabs[id]!).filter((t) => t && t.id !== dragging && t.profileId === tab?.profileId);
     return others.sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]?.id ?? null;
   });
+  // Memoized by hand: an effect keeps it (the zones mounted for their slide out), so a new one each render would loop.
   const candidates = useMemo((): [string, Rect][] => {
     if (fallback && dragging) return [[fallback, panes[dragging]!]];
     return Object.entries(panes).filter(([tabId]) => tabId !== dragging);
@@ -127,19 +129,18 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
 
   const hit = shown && grown && overPage ? zoneHit(candidates, px, py, target) : null;
   const preview = shown && overPage;
-  const resolver = useRef({ candidates, origin, panes, ready: false });
-  resolver.current = { candidates, origin, panes, ready: !!dragging && !!origin && !full && candidates.length > 0 && grown && lifted !== false };
+  const ready = !!dragging && !!origin && !full && candidates.length > 0 && grown && lifted !== false;
+  const resolve = useEffectEvent((x: number, y: number, current: Parameters<typeof zoneHit>[3], outside: boolean) => {
+    if (!ready || outside || !origin) return null;
+    const px = x - origin.x, py = y - origin.y;
+    if (!Object.values(panes).some((r) => px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height)) return null;
+    return zoneHit(candidates, px, py, current);
+  });
   useEffect(() => {
     if (!dragging) return;
-    setTargetResolver((x, y, current, outside) => {
-      const { candidates, origin, panes, ready } = resolver.current;
-      if (!ready || outside || !origin) return null;
-      const px = x - origin.x, py = y - origin.y;
-      if (!Object.values(panes).some((r) => px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height)) return null;
-      return zoneHit(candidates, px, py, current);
-    });
+    setTargetResolver(resolve);
     return () => setTargetResolver(null);
-  }, [dragging]);
+  }, [dragging, resolve]);
   useEffect(() => setDropTarget(hit), [hit?.tabId, hit?.side]);
   useEffect(() => setOnPage(preview), [preview]);
   useEffect(

@@ -78,6 +78,13 @@ export type HistoryItem = {
   offset: number | "newTab";
 };
 
+/** The favicons the profile's history has for `items`, as of the call (a menu's rows don't follow history). */
+export function historyFavicons(profileId: string, items: HistoryItem[]): Map<string, string | null> {
+  const urls = new Set(items.map((i) => i.url));
+  const history = store().history[profileId] ?? [];
+  return new Map(history.filter((h) => urls.has(h.url)).map((h) => [h.url, h.favicon]));
+}
+
 export async function historyItems(tabId: string, direction: -1 | 1, max = 15): Promise<HistoryItem[]> {
   const page = pageOf(tabId);
   const list = (await webviews.get(tabId)?.navigationEntries()) ?? [];

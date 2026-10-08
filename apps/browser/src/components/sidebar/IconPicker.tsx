@@ -1,5 +1,5 @@
 import { Surface, Symbol } from "@bay/shell";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { useSidebarOnRight } from "../layout/windowLayout";
@@ -53,6 +53,12 @@ export function IconPicker({ windowId, sidebarWidth, windowWidth }: { windowId: 
 
 type Picker = NonNullable<ReturnType<typeof useSidebarUi.getState>["iconPicker"]>;
 
+function pickerItems(tab: "emoji" | "symbols", q: string): string[] {
+  return tab === "emoji"
+    ? EMOJI.filter(([, words]) => !q || words.includes(q)).map(([e]) => e)
+    : SYMBOLS.filter((name) => !q || name.includes(q)).map((name) => SYMBOL_PREFIX + name);
+}
+
 function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; sidebarWidth: number; windowWidth: number }) {
   const theme = useTheme();
   const right = useSidebarOnRight();
@@ -61,12 +67,7 @@ function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; si
   const current = useBrowser((s) => (picker.kind === "tab" ? s.tabs[picker.id]?.customIcon : picker.kind === "live" ? liveIcon : s.groups[picker.id]?.icon) ?? null);
   const [tab, setTab] = useState<"emoji" | "symbols">(current?.startsWith(SYMBOL_PREFIX) ? "symbols" : "emoji");
   const [query, setQuery] = useState("");
-  const items = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return tab === "emoji"
-      ? EMOJI.filter(([, words]) => !q || words.includes(q)).map(([e]) => e)
-      : SYMBOLS.filter((name) => !q || name.includes(q)).map((name) => SYMBOL_PREFIX + name);
-  }, [tab, query]);
+  const items = pickerItems(tab, query.trim().toLowerCase());
   const close = () => setSidebarUi({ iconPicker: null });
   const choose = (icon: string | null) => {
     setIcon(picker, icon);

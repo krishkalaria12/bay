@@ -1,6 +1,6 @@
 import { breadcrumb, urlForDisplay } from "@bay/core";
 import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/shell";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -30,7 +30,15 @@ import { copyPageUrl } from "./site/selection";
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
 const toolbarTab = (t: Tab | undefined): ToolbarTab | undefined => t && { id: t.id, url: t.url, title: t.title, windowId: t.windowId, zoom: t.zoom };
 
+// Where the toolbar's buttons sit, each centred on its place along the bar.
+function buttonPlaces(geometry: ToolbarGeometry) {
+  const top = 21.2 - layout.toolbarButton / 2;
+  const place = (center: number | null) => ({ position: "absolute" as const, top, left: (center ?? 0) - layout.toolbarButton / 2 });
+  return { sidebarButton: place(geometry.sidebarButton), back: place(geometry.back), forward: place(geometry.forward), reload: place(geometry.reload) };
+}
+
 // bare: no band or divider of its own (AutoHideToolbar draws them, so the controls can fade over a band that doesn't).
+
 export function Toolbar({
   tabId,
   geometry,
@@ -66,20 +74,16 @@ export function Toolbar({
     dim.set(withTiming(focused ? 1 : 0.5, { duration: 160, easing: Easing.out(Easing.quad) }));
   }, [focused]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
-  // Stable callbacks and styles: the buttons are memoized, and a loading or history change re-renders only theirs.
-  const focus = useCallback(() => {
+  // Kept stable by the compiler: the buttons are memoized, and a loading or history change re-renders only theirs.
+  const focus = () => {
     if (!focused) useBrowser.getState().activate(tabId);
-  }, [focused, tabId]);
-  const at = useMemo(() => {
-    const top = 21.2 - layout.toolbarButton / 2;
-    const place = (center: number | null) => ({ position: "absolute" as const, top, left: (center ?? 0) - layout.toolbarButton / 2 });
-    return { sidebarButton: place(geometry.sidebarButton), back: place(geometry.back), forward: place(geometry.forward), reload: place(geometry.reload) };
-  }, [geometry]);
+  };
+  const at = useMemo(() => buttonPlaces(geometry), [geometry]);
   const sidebarSymbol = useSidebarSymbol();
   // A toggle at the end (the sidebar on the right) is outermost: the split buttons, extensions and field move in for it.
   const end = geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0;
   const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
-  const urlStyle = useMemo(() => ({ position: "absolute" as const, left: geometry.urlLeft, right, top: 21.2 - 15 }), [geometry.urlLeft, right]);
+  const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: 21.2 - 15 };
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
   const top = 21.2 - layout.toolbarButton / 2;
   const sidebarToggle = (style: ViewStyle) => (

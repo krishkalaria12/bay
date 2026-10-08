@@ -1,6 +1,6 @@
 import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { unstable_batchedUpdates } from "react-native";
 import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { create, useStore } from "zustand";
@@ -189,13 +189,7 @@ export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: b
   const order = useBrowser((s) => s.profileOrder);
   // Every profile stays mounted at its absolute index, so a drag needs no JS to start.
   const all = !incognito && !!current && order.includes(current);
-  const pages = useMemo(
-    () =>
-      all
-        ? order.map((id, slot) => ({ id, slot }))
-        : restPages(current, order).map((p) => (p.id === current ? p : { ...p, resting: true })),
-    [all, current, order],
-  );
+  const pages = all ? order.map((id, slot) => ({ id, slot })) : restPages(current, order).map((p) => (p.id === current ? p : { ...p, resting: true }));
   return { pages, paging: all, pager };
 }
 
@@ -211,10 +205,7 @@ export function usePagerNativeConfig(windowId: string, width?: number): NativePa
       return [i, s.profileOrder.length, s.profileOrder.join("\n")] as const;
     }),
   );
-  return useMemo(
-    () => (selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined),
-    [windowId, selected, count, width, ack, order],
-  );
+  return selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;
 }
 
 // A page's place in the pager: off to the side at rest, outside the surface's clip.

@@ -3,6 +3,7 @@ import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
 import { useTheme } from "../lib/theme";
+import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowser } from "../store/browser";
 import { useWindowId, useWindowProfileId } from "../store/hooks";
@@ -24,7 +25,7 @@ import { usePaletteStart } from "./omnibox/usePaletteStart";
 import { appPaletteActions } from "./omnibox/paletteAppActions";
 import { forgettable, rowMenuActions } from "./omnibox/paletteRowActions";
 import { currentPageActions, type PaletteSuggestion } from "./omnibox/paletteStart";
-import { onEscapeKey } from "../lib/escapeKey";
+import { isEscapeKey } from "../lib/escapeKey";
 
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
@@ -128,7 +129,7 @@ export function Omnibox({
   // ⇧⌫ forgets the selected history row once it was picked from the list, not while it's the typed match.
   const canForget = palette && forgettable(current, searchTemplates) && (!edited || selectedIndex > 0);
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
-  const tabScope = useMemo(() => (canScope ? scopeFor(value, windowId) : null), [canScope, value, windowId]);
+  const tabScope = canScope ? scopeFor(value, windowId) : null;
 
   // Apply selection imperatively; RN macOS can restore a stale caret when its selection prop clears.
   useLayoutEffect(() => {
@@ -214,6 +215,26 @@ export function Omnibox({
   };
 
   const move = (delta: 1 | -1) => setSelected((i) => Math.max(0, Math.min(Math.min(i, items.length - 1) + delta, items.length - 1)));
+
+  const forget = (s: PaletteSuggestion) => {
+    const { history, removeHistory } = useBrowser.getState();
+    const urls = s.host ? (history[profileId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
+    removeHistory(profileId, urls);
+  };
+
+  const openRowMenu = (target = current) => {
+    if (!target) return;
+    const title = target.kind === "page" ? target.title || displayUrl(target.url) : target.kind === "search" ? target.query : target.kind === "calc" ? target.value : target.title;
+    const actions = rowMenuActions(target, newTab, searchTemplates, {
+      choose,
+      openInBackground: (url) => openInBackground(url, tabId),
+      copyLink: copyText,
+      closeTab,
+      forget,
+    });
+    setMenu({ side: "right", title, actions });
+  };
+  const openAppMenu = () => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) });
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
     const { key, metaKey, altKey, shiftKey, ctrlKey } = e.nativeEvent;
@@ -353,7 +374,7 @@ export function Omnibox({
       onBlur={palette ? undefined : onCancel}
       keyDownEvents={scope && !typed ? SCOPE_KEYS : canForget ? FORGET_KEYS : BASE_KEYS}
       onKeyDown={onKeyDown}
-      onKeyPress={onEscapeKey(() => onKeyDown({ nativeEvent: { key: "Escape" } }))}
+      onKeyPress={(e) => isEscapeKey(e) && onKeyDown({ nativeEvent: { key: "Escape" } })}
       style={{
         flex: 1,
         fontSize: palette ? 20 : 14,
@@ -363,13 +384,10 @@ export function Omnibox({
     />
   );
 
-  const latest = useRef({ choose, profileId });
-  latest.current = { choose, profileId };
-  const [rowActions] = useState<RowActions>(() => ({
-    choose: (s) => latest.current.choose(s),
-    hover: setSelected,
-    remove: (url) => useBrowser.getState().removeHistory(latest.current.profileId, [url]),
-  }));
+  // Stable, so the rows (memoized) don't re-render as the bar does.
+  const chooseRow = useEffectEvent((s: Suggestion) => choose(s));
+  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(profileId, [url]));
+  const rowActions: RowActions = { choose: chooseRow, hover: setSelected, remove: removeRow };
   const suggestionList = (
     <SuggestionList
       items={items}
@@ -379,26 +397,6 @@ export function Omnibox({
       actions={rowActions}
     />
   );
-
-  const forget = (s: PaletteSuggestion) => {
-    const { history, removeHistory } = useBrowser.getState();
-    const urls = s.host ? (history[profileId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
-    removeHistory(profileId, urls);
-  };
-
-  const openRowMenu = (target = current) => {
-    if (!target) return;
-    const title = target.kind === "page" ? target.title || displayUrl(target.url) : target.kind === "search" ? target.query : target.kind === "calc" ? target.value : target.title;
-    const actions = rowMenuActions(target, newTab, searchTemplates, {
-      choose,
-      openInBackground: (url) => openInBackground(url, tabId),
-      copyLink: copyText,
-      closeTab,
-      forget,
-    });
-    setMenu({ side: "right", title, actions });
-  };
-  const openAppMenu = () => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) });
 
   if (palette) {
     return (

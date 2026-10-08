@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, View, type TextStyle } from "react-native";
 import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
 
@@ -25,13 +25,10 @@ export function useMarqueeGroup(resetKey: string): MarqueeGroup {
     progress.set(withRepeat(withSequence(leg(1), leg(0)), -1, false));
     return () => cancelAnimation(progress);
   }, [max, resetKey]);
-  return useMemo(
-    () => ({
-      progress,
-      report: (key, overflow) => setOverflows((o) => (Math.abs((o[key] ?? 0) - overflow) < 0.5 ? o : { ...o, [key]: overflow })),
-    }),
-    [progress],
-  );
+  return {
+    progress,
+    report: (key, overflow) => setOverflows((o) => (Math.abs((o[key] ?? 0) - overflow) < 0.5 ? o : { ...o, [key]: overflow })),
+  };
 }
 
 export function Marquee({

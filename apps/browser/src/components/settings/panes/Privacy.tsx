@@ -79,11 +79,7 @@ export function PrivacyPane() {
       if (!confirmed) return;
     }
     // A change that fails changed nothing (or only the lists before it): show what the blocker has.
-    try {
-      await setCategory(blocker, c, on);
-    } finally {
-      refresh();
-    }
+    await setCategory(blocker, c, on).finally(refresh);
   };
 
   return (
@@ -129,17 +125,16 @@ export function PrivacyPane() {
   );
 }
 
+// Turning a list on turns the blocker on too.
+async function enableFilterList(l: FilterList, on: boolean, blocker: ContentBlockerState | null) {
+  await setFilterListEnabled(l.id, on);
+  if (on && blocker && !blocker.enabled) await setContentBlockerEnabled(true);
+}
+
 function FilterListsSheet() {
   const theme = useTheme();
   const [blocker, refresh] = useContentBlocker();
-  const toggle = async (l: FilterList, on: boolean) => {
-    try {
-      await setFilterListEnabled(l.id, on);
-      if (on && blocker && !blocker.enabled) await setContentBlockerEnabled(true);
-    } finally {
-      refresh();
-    }
-  };
+  const toggle = (l: FilterList, on: boolean) => enableFilterList(l, on, blocker).finally(refresh);
   return (
     <Sheet width={500} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Advanced Ad Block Settings</Text>

@@ -285,12 +285,14 @@ export function ThemeScope({ children }: { children: ReactNode }) {
   return createElement(ThemeContext.Provider, { value: themeFor(key) }, children);
 }
 
+// Outside a ThemeScope (nothing renders there today) the theme is read once, not followed.
+const unscopedTheme = () => themeFor(themeKey(useBrowser.getState(), null, null));
+
 export function useTheme(): Theme {
   const scoped = useContext(ThemeContext);
   if (scoped) return scoped;
-  // Outside a ThemeScope (nothing renders there today) the theme is read once, not followed.
   if (__DEV__) console.warn("useTheme outside a ThemeScope");
-  return themeFor(themeKey(useBrowser.getState(), null, null));
+  return unscopedTheme();
 }
 
 export const layout = {

@@ -1,11 +1,12 @@
 import { hapticTick } from "@bay/shell";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { PanResponder, type ScrollView, type View } from "react-native";
 import Animated, { cancelAnimation, Easing, makeMutable, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { create, useStore } from "zustand";
 import { layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
+import { useEffectEvent } from "../../lib/useEffectEvent";
 import type { TabPlacement } from "../../store/organize";
 import { SLIDE } from "../layout/stripReorder";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../layout/tabDrag";
@@ -64,7 +65,6 @@ class DragController {
   root: View | null = null;
   scroll: ScrollView | null = null;
   scrollY = 0;
-  setGhost: (ghost: Ghost | null) => void = () => {};
   // What the items show while a drag goes on, each item reading only its own part: a drag's start or end
   // re-renders the items it hides or shows, not the whole list.
   marks = create<Marks>()(() => NO_MARKS);
@@ -91,8 +91,15 @@ class DragController {
   private token: object | null = null;
   landed: { key: string; x: number; y: number } | null = null;
 
+  constructor(private setGhost: (ghost: Ghost | null) => void) {}
+
   create(key: string): Item {
     return { key, kind: "row", tabIds: [], section: "list", view: null, header: null, gap: makeMutable(0), size: makeMutable(0), frame: null, headerFrame: null };
+  }
+
+  /** The views an item's frames are measured from. */
+  attach(item: Item, part: "view" | "header", view: View | null) {
+    item[part] = view;
   }
 
   get active() {
@@ -389,12 +396,13 @@ class DragController {
 const DragContext = createContext<DragController | null>(null);
 
 export function DragProvider({ children }: { children: (ghost: Ghost | null, controller: DragController) => ReactNode }) {
-  const controller = useMemo(() => new DragController(), []);
-  if (__DEV__) (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
   const [ghost, setGhost] = useState<Ghost | null>(null);
-  controller.setGhost = setGhost;
-  // The sidebar going away mid-drag (its window closing, the layout switching) ends the drag and its picture.
-  useEffect(() => () => void (controller.active && controller.end(false)), [controller]);
+  const [controller] = useState(() => new DragController(setGhost));
+  useEffect(() => {
+    if (__DEV__) (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
+    // The sidebar going away mid-drag (its window closing, the layout switching) ends the drag and its picture.
+    return () => void (controller.active && controller.end(false));
+  }, [controller]);
   return (
     <DragContext.Provider value={controller}>
       {children(ghost, controller)}
@@ -446,7 +454,10 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
   const controller = useContext(DragContext) ?? undefined;
   const marks = controller?.marks ?? noMarks;
   const item = useMemo(() => controller?.create(key), [controller, key]);
-  if (item) Object.assign(item, spec);
+  // What the controller reads of the item when a drag starts, as of the last commit.
+  useLayoutEffect(() => {
+    if (item) Object.assign(item, spec);
+  });
   useEffect(() => {
     if (!controller || !item) return;
     controller.items.set(key, item);
@@ -455,30 +466,23 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
     };
   }, [controller, item, key]);
 
+  // One responder for the item's life: a new one mid-gesture would drop the gesture.
+  const begin = useEffectEvent((x: number, y: number) => void controller?.begin(key, x, y, selection()));
+  const movable = useEffectEvent(() => spec.kind !== "tail");
   const responder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => spec.kind !== "tail" && Math.hypot(g.dx, g.dy) > 4,
-        onPanResponderGrant: (_, g) => void controller?.begin(key, g.x0, g.y0, selection()),
+        onMoveShouldSetPanResponder: (_, g) => movable() && Math.hypot(g.dx, g.dy) > 4,
+        onPanResponderGrant: (_, g) => begin(g.x0, g.y0),
         onPanResponderMove: (_, g) => controller?.move(g.moveX, g.moveY),
         onPanResponderRelease: () => controller?.end(true),
         onPanResponderTerminate: () => controller?.end(false),
         onPanResponderTerminationRequest: () => false,
       }),
-    [controller, key],
+    [controller, begin, movable],
   );
-  const ref = useCallback(
-    (view: View | null) => {
-      if (item) item.view = view;
-    },
-    [item],
-  );
-  const headerRef = useCallback(
-    (view: View | null) => {
-      if (item) item.header = view;
-    },
-    [item],
-  );
+  const ref = (view: View | null) => item && controller?.attach(item, "view", view);
+  const headerRef = (view: View | null) => item && controller?.attach(item, "header", view);
 
   const source = useStore(marks, (m) => m.sources.has(key));
   // Let go: laid out in its place, hidden until the ghost has settled there.
@@ -506,5 +510,6 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
             : null,
       ]
     : null;
-  return { wrapper: { ref, style }, handle: responder.panHandlers, headerRef, dragging: source };
+  // Flat, for callers to destructure: the compiler treats `x.ref` (and the rest of `x`) as a ref read.
+  return { ref, style, handle: responder.panHandlers, headerRef, dragging: source };
 }

@@ -79,7 +79,8 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
     }
   };
   useEffect(keepSelectedVisible, [selectedIndex, sections]);
-  let index = 0;
+  // Each section's first row's index among all the rows.
+  const firsts = sections.map((_, i) => sections.slice(0, i).reduce((count, s) => count + s.items.length, 0));
   const label = current?.kind === "page" && current.tabId ? "Switch to Tab" : current?.kind === "action" ? current.title : current?.kind === "calc" ? "Copy Answer" : "Open";
 
   return (
@@ -102,15 +103,15 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
           return (
           <View key={section.id} onLayout={(e) => {
             const top = e.nativeEvent.layout.y + (titled ? TITLE_HEIGHT : 0);
-            const first = sections.slice(0, sectionIndex).reduce((count, s) => count + s.items.length, 0);
+            const first = firsts[sectionIndex]!;
             section.items.forEach((_, offset) => rows.current.set(first + offset, { y: top + offset * ROW_HEIGHT, height: ROW_HEIGHT }));
             keepSelectedVisible();
           }}>
             {titled ? (
               <Text style={{ height: TITLE_HEIGHT, paddingHorizontal: 10, paddingTop: sectionIndex > 0 ? 9 : 4, fontSize: 11, fontWeight: "500", color: theme.textTertiary }}>{section.title}</Text>
             ) : null}
-            {section.items.map((suggestion) => {
-              const rowIndex = index++;
+            {section.items.map((suggestion, offset) => {
+              const rowIndex = firsts[sectionIndex]! + offset;
               return <PaletteResultRow key={`${suggestion.kind}:${"id" in suggestion ? suggestion.id : suggestion.url}:${rowIndex}`} suggestion={suggestion} pageContext={pageContext} selected={rowIndex === selectedIndex} onHover={(e) => hover(e, () => onHover(rowIndex))} onChoose={(disposition) => onChoose(suggestion, disposition)} onMenu={() => onRowMenu(suggestion)} />;
             })}
           </View>

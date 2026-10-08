@@ -1,5 +1,5 @@
 import { setAutoPictureInPicture, setDisplayMediaPicker } from "@bay/nncore";
-import { useRef } from "react";
+import { useState } from "react";
 import { useBrowser } from "../../store/browser";
 import { useSettings } from "../../store/hooks";
 import { usePage } from "../layout/pageState";
@@ -14,9 +14,11 @@ export function useAutoPictureInPicture(tabId: string, visible: boolean): boolea
   const enabled = useSettings((s) => s.autoPictureInPicture ?? true);
   const audible = useBrowser((s) => !!s.live[tabId]?.playingAudio);
   const capturing = usePage(tabId, (p) => !!p.mediaAccess);
-  const decided = useRef(false);
-  if (visible) decided.current = enabled && (audible || capturing);
-  return decided.current;
+  // Decided while the tab is shown, and kept once it isn't (the native view acts on it then).
+  const wants = enabled && (audible || capturing);
+  const [decided, setDecided] = useState(() => visible && wants);
+  if (visible && decided !== wants) setDecided(wants);
+  return visible ? wants : decided;
 }
 
 let started = false;

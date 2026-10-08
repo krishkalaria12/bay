@@ -38,8 +38,8 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
   const profileId = usePageProfileId();
   // The window's active tab, when it's a member: it stays out while the group is collapsed, as in Arc and Dia.
   const activeEntry = useBrowser((s) => keptEntry(s, windowId, profileId, entries));
-  const { wrapper, handle, headerRef } = useDragItem(`g:${groupId}`, { kind: "group", tabIds: tabIds.split(",").filter(Boolean), section, groupId, collapsed });
-  const tail = useDragItem(`tail:group:${groupId}`, { kind: "tail", tabIds: [], section, parentGroup: groupId });
+  const { ref, style, handle, headerRef } = useDragItem(`g:${groupId}`, { kind: "group", tabIds: tabIds.split(",").filter(Boolean), section, groupId, collapsed });
+  const { ref: tailRef, style: tailStyle } = useDragItem(`tail:group:${groupId}`, { kind: "tail", tabIds: [], section, parentGroup: groupId });
 
   const fold = useFold(collapsed);
 
@@ -48,7 +48,7 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
   const stroke = spec ? withAlpha(spec.hex, 0.3) : tokens.groupStroke;
 
   return (
-    <Animated.View ref={wrapper.ref} style={wrapper.style}>
+    <Animated.View ref={ref} style={style}>
       <View style={{ borderRadius: 12, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, paddingHorizontal: PAD }}>
         <View ref={headerRef} {...handle}>
           <GroupHeader groupId={groupId} windowId={windowId} collapsed={collapsed} open={fold.open} />
@@ -65,7 +65,7 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
           rowHeight={layout.rowHeight}
           padBottom={PAD}
           mountClosed={selectedInside}
-          footer={<Animated.View ref={tail.wrapper.ref} style={tail.wrapper.style} />}
+          footer={<Animated.View ref={tailRef} style={tailStyle} />}
         />
       </View>
     </Animated.View>

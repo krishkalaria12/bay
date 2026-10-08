@@ -1,5 +1,5 @@
 import { cancelShortcutRecording, menuShortcuts, recordShortcut, Symbol, type MenuShortcut } from "@bay/shell";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
@@ -59,14 +59,11 @@ export function ShortcutsPane() {
     return o ? { key: o[0] ?? "", modifiers: o.slice(1) } : { key: item.defaultKey, modifiers: item.defaultModifiers };
   };
 
-  const conflicts = useMemo(() => {
-    const byCombo = new Map<string, MenuShortcut[]>();
-    for (const item of items ?? []) {
-      const id = comboId(effective(item));
-      if (id) byCombo.set(id, [...(byCombo.get(id) ?? []), item]);
-    }
-    return byCombo;
-  }, [items, overrides]);
+  const conflicts = new Map<string, MenuShortcut[]>();
+  for (const item of items ?? []) {
+    const id = comboId(effective(item));
+    if (id) conflicts.set(id, [...(conflicts.get(id) ?? []), item]);
+  }
   const conflictsOf = (item: MenuShortcut) => (conflicts.get(comboId(effective(item))) ?? []).filter((x) => x.id !== item.id);
 
   const setShortcut = (id: string, combo: Combo | null) => {

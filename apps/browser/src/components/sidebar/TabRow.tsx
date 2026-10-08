@@ -18,7 +18,7 @@ import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarTokens } from "./tokens";
-import { onEscapeKey } from "../../lib/escapeKey";
+import { isEscapeKey } from "../../lib/escapeKey";
 import { DEVELOPER_YELLOW, isDeveloperTab } from "../developer/sites";
 
 export const clickMods = (e: GestureResponderEvent) => {
@@ -26,7 +26,7 @@ export const clickMods = (e: GestureResponderEvent) => {
   return { metaKey: !!n.metaKey, shiftKey: !!n.shiftKey, altKey: !!n.altKey };
 };
 
-const useSelection = (windowId: string) => () => useBrowser.getState().selection[windowId] ?? [];
+const selectionOf = (windowId: string) => () => useBrowser.getState().selection[windowId] ?? [];
 
 export const TabRowItem = memo(function TabRowItem({
   tabId,
@@ -38,10 +38,9 @@ export const TabRowItem = memo(function TabRowItem({
   parentGroup?: string;
 }) {
   const windowId = useWindowId();
-  const selection = useSelection(windowId);
-  const { wrapper, handle } = useDragItem(`t:${tabId}`, { kind: "row", tabIds: [tabId], section, parentGroup }, selection);
+  const { ref, style, handle } = useDragItem(`t:${tabId}`, { kind: "row", tabIds: [tabId], section, parentGroup }, selectionOf(windowId));
   return (
-    <Animated.View ref={wrapper.ref} style={wrapper.style} {...handle}>
+    <Animated.View ref={ref} style={style} {...handle}>
       <TabRow tabId={tabId} />
     </Animated.View>
   );
@@ -196,7 +195,7 @@ export function RenameField({
       onSubmitEditing={() => finish(text)}
       onBlur={() => finish(text)}
       keyDownEvents={[{ key: "Escape" }]}
-      onKeyPress={onEscapeKey(() => finish(null))}
+      onKeyPress={(e) => isEscapeKey(e) && finish(null)}
       style={{ flex: 1, height: 18, marginLeft: 5, fontSize, fontWeight: weight, color, paddingVertical: 0, paddingHorizontal: 0 }}
     />
   );
@@ -213,14 +212,14 @@ export const SplitRowItem = memo(function SplitRowItem({
 }) {
   const windowId = useWindowId();
   const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !s.tabs[id]!.pinned).join(",") ?? "").split(",").filter(Boolean);
-  const { wrapper, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });
+  const { ref, style, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });
   const theme = useTheme();
   const profileId = usePageProfileId();
   const active = useBrowser((s) => tabIds.includes(s.windows[windowId]?.activeTabIds[profileId] ?? ""));
   const { hovered, hoverProps } = useRowHover(windowId, null);
   if (tabIds.length < 2) return null;
   return (
-    <Animated.View ref={wrapper.ref} style={wrapper.style} {...handle}>
+    <Animated.View ref={ref} style={style} {...handle}>
       <View ref={(v) => registerRow(windowId, `s:${splitId}`, v)} {...hoverProps}>
         <ActiveHighlight active={active} tabIds={tabIds} borderWidth={1} />
         <Surface

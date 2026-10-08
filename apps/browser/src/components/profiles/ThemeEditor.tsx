@@ -4,6 +4,7 @@ import { Image, PanResponder, Pressable, Text, View, type GestureResponderEvent 
 import { create } from "zustand";
 import { editableTheme, MAX_THEME_COLORS, spectrumColor, spectrumPosition, THEME_PRESETS } from "../../lib/spaceTheme";
 import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser } from "../../store/browser";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import type { ProfileColor, SpaceTheme } from "../../store/types";
@@ -51,24 +52,28 @@ function ThemeEditor({ request }: { request: Request }) {
   // Over the page's corner beside the sidebar, on whichever side it is.
   const side = useSidebarOnRight() ? "right" : "left";
   const [selected, setSelected] = useState(0);
-  const latest = useRef<SpaceTheme | null>(null);
+  // The edit in progress: shown at once, and taken by the store (and the window's theme) once a frame.
+  const [draft, setDraft] = useState<SpaceTheme | null>(null);
+  const pending = useRef<SpaceTheme | null>(null);
   const frame = useRef<number | null>(null);
   if (!space) return null;
 
-  const current = latest.current && space.theme ? latest.current : editableTheme(space.theme, PROFILE_COLORS[space.color].swatch);
+  const current = draft && space.theme ? draft : editableTheme(space.theme, PROFILE_COLORS[space.color].swatch);
   const chosen = Math.min(selected, current.colors.length - 1);
   // Many changes a second while dragging: the store (and the window's theme) takes the latest once a frame.
   const set = (patch: Partial<SpaceTheme>) => {
-    latest.current = { ...(latest.current ?? current), ...patch };
+    const next = { ...(pending.current ?? current), ...patch };
+    pending.current = next;
+    setDraft(next);
     if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
-      if (latest.current) useBrowser.getState().updateProfile(request.profileId, { theme: latest.current });
+      if (pending.current) useBrowser.getState().updateProfile(request.profileId, { theme: pending.current });
     });
   };
-  const setColor = (i: number, color: string) => set({ colors: (latest.current ?? current).colors.map((c, k) => (k === i ? color : c)) });
+  const setColor = (i: number, color: string) => set({ colors: (pending.current ?? current).colors.map((c, k) => (k === i ? color : c)) });
   const addColor = () => {
-    const colors = (latest.current ?? current).colors;
+    const colors = (pending.current ?? current).colors;
     if (colors.length >= MAX_THEME_COLORS) return;
     // Across the field from the last colour, at its depth.
     const { x, y } = spectrumPosition(colors[colors.length - 1]!);
@@ -76,13 +81,14 @@ function ThemeEditor({ request }: { request: Request }) {
     setSelected(colors.length);
   };
   const removeColor = () => {
-    const colors = (latest.current ?? current).colors;
+    const colors = (pending.current ?? current).colors;
     if (colors.length <= 1) return;
     set({ colors: colors.filter((_, k) => k !== chosen) });
     setSelected(Math.max(0, chosen - 1));
   };
   const usePreset = (patch: { color?: ProfileColor; colors?: string[] }) => {
-    latest.current = null;
+    pending.current = null;
+    setDraft(null);
     setSelected(0);
     if (patch.color) useBrowser.getState().updateProfile(request.profileId, { color: patch.color, theme: null });
     else useBrowser.getState().updateProfile(request.profileId, { theme: { ...current, colors: patch.colors! } });
@@ -153,32 +159,31 @@ function ColorField({ colors, selected, onSelect, onMove }: { colors: string[]; 
   const field = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
   const dragging = useRef(0);
-  const latest = useRef({ colors, selected, onSelect, onMove });
-  latest.current = { colors, selected, onSelect, onMove };
   const point = (e: GestureResponderEvent) => ({
     x: Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current.x) / FIELD_W)),
     y: Math.min(1, Math.max(0, (e.nativeEvent.pageY - origin.current.y) / FIELD_H)),
+  });
+  const grant = useEffectEvent((e: GestureResponderEvent) => {
+    const p = point(e);
+    // The dot under the pointer, or else the selected one comes to it.
+    const near = colors.findIndex((c) => {
+      const at = spectrumPosition(c);
+      return Math.hypot((at.x - p.x) * FIELD_W, (at.y - p.y) * FIELD_H) <= DOT;
+    });
+    dragging.current = near >= 0 ? near : selected;
+    onSelect(dragging.current);
+    onMove(dragging.current, spectrumColor(p.x, p.y));
+  });
+  const move = useEffectEvent((e: GestureResponderEvent) => {
+    const p = point(e);
+    onMove(dragging.current, spectrumColor(p.x, p.y));
   });
   const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        const { colors, selected, onSelect, onMove } = latest.current;
-        const p = point(e);
-        // The dot under the pointer, or else the selected one comes to it.
-        const near = colors.findIndex((c) => {
-          const at = spectrumPosition(c);
-          return Math.hypot((at.x - p.x) * FIELD_W, (at.y - p.y) * FIELD_H) <= DOT;
-        });
-        dragging.current = near >= 0 ? near : selected;
-        onSelect(dragging.current);
-        onMove(dragging.current, spectrumColor(p.x, p.y));
-      },
-      onPanResponderMove: (e) => {
-        const p = point(e);
-        latest.current.onMove(dragging.current, spectrumColor(p.x, p.y));
-      },
+      onPanResponderGrant: (e) => grant(e),
+      onPanResponderMove: (e) => move(e),
       onPanResponderTerminationRequest: () => false,
     }),
   );
@@ -224,15 +229,13 @@ function Slider({ label, value, onChange }: { label: string; value: number; onCh
   const theme = useTheme();
   const track = useRef<View>(null);
   const origin = useRef(0);
-  const latest = useRef(onChange);
-  latest.current = onChange;
-  const at = (e: GestureResponderEvent) => Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current) / FIELD_W));
+  const change = useEffectEvent((e: GestureResponderEvent) => onChange(Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current) / FIELD_W))));
   const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => latest.current(at(e)),
-      onPanResponderMove: (e) => latest.current(at(e)),
+      onPanResponderGrant: (e) => change(e),
+      onPanResponderMove: (e) => change(e),
       onPanResponderTerminationRequest: () => false,
     }),
   );

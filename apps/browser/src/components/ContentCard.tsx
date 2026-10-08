@@ -58,6 +58,34 @@ import { DeveloperOffer } from "./developer/DeveloperOffer";
 import { onDeveloperMessage, startDeveloperMode } from "./developer/devMode";
 import { useIsDeveloperTab } from "./developer/sites";
 
+// Where the card's panes are: the active tab's (or its split's), or the full-screen tab's over everything.
+function cardPanes(split: SplitView | undefined, activeId: string | undefined, fullscreenTab: string | null | undefined, width: number, height: number) {
+  const full: Rect = { x: 0, y: 0, width, height };
+  if (fullscreenTab) {
+    // A split stays laid out under its pane in full screen: the other pane is still shown (painting, and seen by the
+    // user as far as Picture in Picture and Chrome go), only covered.
+    const under = split?.tabIds.includes(fullscreenTab) ? splitGeometry(split, width, height).panes : {};
+    return { panes: { ...under, [fullscreenTab]: full }, dividers: [] };
+  }
+  if (split) return splitGeometry(split, width, height);
+  return { panes: activeId ? { [activeId]: full } : {}, dividers: [] };
+}
+
+// Where the warm tabs' pages paint, off screen: each the card's size, or its place in its split.
+function warmPaneRects(warm: string[], splits: SplitView[], width: number, height: number): Record<string, Rect> {
+  const out: Record<string, Rect> = {};
+  for (const id of warm) out[id] = { x: 0, y: 0, width, height };
+  for (const v of splits) Object.assign(out, splitGeometry(v, width, height).panes);
+  return out;
+}
+
+// The tab a window shows once `leaving` goes, if another than it shows now: worked out as the drag starts, not followed.
+function successorOf(windowId: string, leaving: string[]): string | undefined {
+  const s = useBrowser.getState();
+  const next = activeTabId(removeTabs(s, leaving, false), windowId);
+  return next && next !== activeTabId(s, windowId) ? next : undefined;
+}
+
 export function ContentCard() {
   const windowId = useWindowId();
   const activeId = useActiveTabId();
@@ -96,21 +124,11 @@ export function ContentCard() {
     }),
   );
 
-  const { panes, dividers } = useMemo(() => {
-    const full: Rect = { x: 0, y: 0, width: size.width, height: size.height };
-    if (fullscreenTab) {
-      // A split stays laid out under its pane in full screen: the other pane is still shown (painting, and seen by the
-      // user as far as Picture in Picture and Chrome go), only covered.
-      const under = split?.tabIds.includes(fullscreenTab) ? splitGeometry(split, size.width, size.height).panes : {};
-      return { panes: { ...under, [fullscreenTab]: full }, dividers: [] };
-    }
-    if (split) return splitGeometry(split, size.width, size.height);
-    return { panes: activeId ? { [activeId]: full } : {}, dividers: [] };
-  }, [split, activeId, fullscreenTab, size.width, size.height]);
+  const { panes, dividers } = cardPanes(split, activeId, fullscreenTab, size.width, size.height);
 
   // A tab switch keeps the panes it leaves on screen while the switch plays (layout/switchMotion.ts).
   const paneSwitch = usePaneSwitch(windowId, panes, !fullscreenTab);
-  const framed = useMemo(() => (paneSwitch ? { ...paneSwitch.leaving, ...panes } : panes), [paneSwitch, panes]);
+  const framed = paneSwitch ? { ...paneSwitch.leaving, ...panes } : panes;
 
   useEffect(() => {
     const s = useBrowser.getState();
@@ -125,12 +143,7 @@ export function ContentCard() {
   const leaving = useTabDrag((d) => (d.windowId === windowId && d.tabIds.length && (d.outside || !!(d.lifted ?? d.onPage)) ? d.tabIds : null));
   // The tab the window shows once they go, painting meanwhile. Hidden until the drop, its page had no frame to show:
   // the window showed an empty card while Chrome drew one (~90 ms, with the new window being built meanwhile).
-  const successor = useMemo(() => {
-    if (!leaving) return undefined;
-    const s = useBrowser.getState();
-    const next = activeTabId(removeTabs(s, leaving, false), windowId);
-    return next && next !== activeTabId(s, windowId) ? next : undefined;
-  }, [leaving, windowId]);
+  const successor = leaving ? successorOf(windowId, leaving) : undefined;
   // Keep adjacent profile pages painting so a swipe doesn't reveal an unpainted page, and the successor of tabs being
   // dragged out so the drop shows it at once.
   const warm = useBrowser(
@@ -143,12 +156,7 @@ export function ContentCard() {
     }),
   );
   const warmSplits = useBrowser(useShallow((s) => warm.map((id) => splitOf(s, id)).filter((v): v is SplitView => !!v)));
-  const warmPanes = useMemo(() => {
-    const out: Record<string, Rect> = {};
-    for (const id of warm) out[id] = { x: 0, y: 0, width: size.width, height: size.height };
-    for (const v of warmSplits) Object.assign(out, splitGeometry(v, size.width, size.height).panes);
-    return out;
-  }, [warm, warmSplits, size.width, size.height]);
+  const warmPanes = warmPaneRects(warm, warmSplits, size.width, size.height);
 
   const shownMemo = useRef<{ mounted?: string[]; panes?: object; tabs?: object; keys: string[] }>({ keys: [] });
   const shown = useBrowser(

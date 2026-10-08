@@ -1,11 +1,11 @@
 import { ContextMenuArea, hapticTick, showMenu, Symbol } from "@bay/shell";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { createProfile, deleteProfile } from "../../../lib/actions";
 import { hex, PROFILE_COLORS, useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowser, type BrowserState } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";
 import { plural, resolveWindowId } from "../../../store/model";
 import { sharingProfiles } from "../../../store/profiles";
@@ -24,10 +24,8 @@ const listOf = (names: string[]) => (names.length <= 2 ? names.join(" and ") : `
 function useSharedWith(profileId: string): string[] {
   const order = useBrowser((s) => s.profileOrder);
   const profiles = useBrowser((s) => s.profiles);
-  return useMemo(() => {
-    const others = sharingProfiles({ profiles, profileOrder: order }, profileId);
-    return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
-  }, [order, profiles, profileId]);
+  const others = sharingProfiles({ profiles, profileOrder: order }, profileId);
+  return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
 }
 
 export function ProfilesPane() {
@@ -70,36 +68,50 @@ const settle = (value: SharedValue<number>, toValue: number) => value.set(withTi
 function ProfileList() {
   const colors = useFormColors();
   const order = useBrowser((s) => s.profileOrder);
-  const offsets = useRef(new Map<string, SharedValue<number>>()).current;
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [controller] = useState(() => profileReorder(setDragging));
+  useLayoutEffect(() => controller.reordered(), [order, controller]);
+
+  return (
+    <View style={{ borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder }}>
+      {order.map((id, i) => (
+        <ProfileRow key={id} profileId={id} first={i === 0} offset={controller.offsetOf(id)} lifted={dragging === id} controller={controller} />
+      ))}
+    </View>
+  );
+}
+
+// Dragging a row up and down the list: the rows it passes make room, and let go, the store reorders them.
+function profileReorder(setDragging: (id: string | null) => void) {
+  const offsets = new Map<string, SharedValue<number>>();
+  let drag = { id: "", from: 0, to: 0, reorderPending: false };
   const offsetOf = (id: string) => {
     let v = offsets.get(id);
     if (!v) offsets.set(id, (v = makeMutable(0)));
     return v;
   };
-  const [dragging, setDragging] = useState<string | null>(null);
-  const drag = useRef({ id: "", from: 0, to: 0, reorderPending: false });
-
-  useLayoutEffect(() => {
-    if (!drag.current.reorderPending) return;
-    drag.current.reorderPending = false;
-    offsets.forEach((v) => v.set(0));
-  }, [order]);
-
-  const controller = useRef({
+  return {
+    offsetOf,
+    // The store has the new order: the rows are laid out where they were dragged to.
+    reordered() {
+      if (!drag.reorderPending) return;
+      drag.reorderPending = false;
+      offsets.forEach((v) => v.set(0));
+    },
     start(id: string) {
       const ids = useBrowser.getState().profileOrder;
       const from = ids.indexOf(id);
-      drag.current = { id, from, to: from, reorderPending: false };
+      drag = { id, from, to: from, reorderPending: false };
       setDragging(id);
     },
     move(dy: number) {
-      const { id, from } = drag.current;
+      const { id, from } = drag;
       const ids = useBrowser.getState().profileOrder;
       const max = ids.length - 1;
       offsetOf(id).set(Math.max(-from * ROW_HEIGHT - 6, Math.min((max - from) * ROW_HEIGHT + 6, dy)));
       const to = Math.max(0, Math.min(max, Math.round(from + dy / ROW_HEIGHT)));
-      if (to === drag.current.to) return;
-      drag.current.to = to;
+      if (to === drag.to) return;
+      drag.to = to;
       hapticTick();
       ids.forEach((other, j) => {
         if (other === id) return;
@@ -107,7 +119,7 @@ function ProfileList() {
       });
     },
     end(commit: boolean) {
-      const { id, from, to } = drag.current;
+      const { id, from, to } = drag;
       setDragging(null);
       if (!commit || from === to) {
         offsets.forEach((v) => settle(v, 0));
@@ -115,18 +127,10 @@ function ProfileList() {
       }
       const ids = useBrowser.getState().profileOrder.filter((x) => x !== id);
       ids.splice(to, 0, id);
-      drag.current.reorderPending = true;
+      drag.reorderPending = true;
       useBrowser.getState().reorderProfiles(ids);
     },
-  }).current;
-
-  return (
-    <View style={{ borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder }}>
-      {order.map((id, i) => (
-        <ProfileRow key={id} profileId={id} first={i === 0} offset={offsetOf(id)} lifted={dragging === id} controller={controller} />
-      ))}
-    </View>
-  );
+  };
 }
 
 type DragController = { start(id: string): void; move(dy: number): void; end(commit: boolean): void };
@@ -152,7 +156,7 @@ function ProfileRow({
   const names = useBrowser(useShallow((s) => shared.filter((id) => id !== profileId).map((id) => s.profiles[id]?.name ?? "")));
   const { hovered, hoverProps } = useHover();
   const go = useSettingsNav((n) => n.go);
-  const pan = useRef(
+  const [pan] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
       onPanResponderGrant: () => controller.start(profileId),
@@ -161,7 +165,7 @@ function ProfileRow({
       onPanResponderTerminate: () => controller.end(false),
       onPanResponderTerminationRequest: () => false,
     }),
-  ).current;
+  );
   const offsetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }), [offset]);
   if (!profile) return null;
 
@@ -228,6 +232,18 @@ function iconTitle(icon: string | null): string {
   return icon ?? "Initial";
 }
 
+function bookmarkCount(s: BrowserState, profileId: string): number {
+  const roots = s.bookmarks.roots[profileId];
+  let count = 0;
+  const walk = (id: string) => {
+    const n = s.bookmarks.nodes[id];
+    if (n?.kind === "url") count++;
+    if (n?.kind === "folder") n.children.forEach(walk);
+  };
+  if (roots) [roots.bar, roots.other].forEach(walk);
+  return count;
+}
+
 export function ProfileDetailsPane({ profileId }: { profileId: string }) {
   const theme = useTheme();
   const profile = useBrowser((s) => s.profiles[profileId]);
@@ -236,17 +252,7 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
   const shared = useSharedWith(profileId);
   const sharedNames = useBrowser(useShallow((s) => shared.map((id) => s.profiles[id]?.name ?? "")));
   const sharedColors = useBrowser(useShallow((s) => shared.map((id) => PROFILE_COLORS[s.profiles[id]?.color ?? "plum"]?.swatch ?? "#888888")));
-  const stats = useBrowser((s) => {
-    const roots = s.bookmarks.roots[profileId];
-    let bookmarks = 0;
-    const walk = (id: string) => {
-      const n = s.bookmarks.nodes[id];
-      if (n?.kind === "url") bookmarks++;
-      if (n?.kind === "folder") n.children.forEach(walk);
-    };
-    if (roots) [roots.bar, roots.other].forEach(walk);
-    return `${plural((s.history[profileId] ?? []).length, "page")} in history · ${plural(bookmarks, "bookmark")}`;
-  });
+  const stats = useBrowser((s) => `${plural((s.history[profileId] ?? []).length, "page")} in history · ${plural(bookmarkCount(s, profileId), "bookmark")}`);
   const [name, setName] = useState(profile?.name ?? "");
   if (!profile) return null;
   const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme">>) => useBrowser.getState().updateProfile(profileId, patch);

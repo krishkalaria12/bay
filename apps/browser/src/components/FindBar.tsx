@@ -38,9 +38,10 @@ function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
   }, [find.focusRequest]);
 
   const setFind = (patch: Partial<FindState>) => useBrowser.getState().setFind(tabId, patch);
-  const run = (backwards: boolean, query = find.query, findNext = true) => {
-    if (!query) setFind({ count: null, active: 0 });
-    void webviews.get(tabId)?.find(query, !backwards, findNext);
+  const run = (backwards: boolean, query?: string, findNext = true) => {
+    const text = query ?? find.query;
+    if (!text) setFind({ count: null, active: 0 });
+    void webviews.get(tabId)?.find(text, !backwards, findNext);
   };
   const close = () => {
     setFind({ open: false, count: null, active: 0 });

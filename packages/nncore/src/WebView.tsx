@@ -1,6 +1,6 @@
 import { toAppUrl, toEngineUrl } from "@bay/core";
 import { requireNativeViewManager } from "expo-modules-core";
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
@@ -338,24 +338,26 @@ const isViewMissing = (error: unknown) =>
   (error as { code?: unknown } | null)?.code === "ERR_ARGUMENT_CAST" &&
   /Unable to find the '\w+' view with tag/.test(String((error as { message?: unknown }).message));
 
+// Expo can't find the view just after mount (legacy architecture registers it later) or once the tab is gone; retry the
+// first briefly and settle the second with the fallback instead of rejecting.
+async function callView<T>(native: RefObject<NativeHandle | null>, fallback: T, fn: (view: NativeHandle) => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    const view = native.current;
+    if (!view) return fallback;
+    try {
+      return await fn(view);
+    } catch (error) {
+      if (!isViewMissing(error)) throw error;
+      if (attempt >= VIEW_RETRIES || native.current !== view) return fallback;
+      await new Promise((resolve) => setTimeout(resolve, 16 * (attempt + 1)));
+    }
+  }
+}
+
 export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(props, ref) {
   const native = useRef<NativeHandle>(null);
   useImperativeHandle(ref, () => {
-    // Expo can't find the view just after mount (legacy architecture registers it later) or once the tab
-    // is gone; retry the first briefly and settle the second with the fallback instead of rejecting.
-    const call = async <T,>(fallback: T, fn: (view: NativeHandle) => Promise<T>): Promise<T> => {
-      for (let attempt = 0; ; attempt++) {
-        const view = native.current;
-        if (!view) return fallback;
-        try {
-          return await fn(view);
-        } catch (error) {
-          if (!isViewMissing(error)) throw error;
-          if (attempt >= VIEW_RETRIES || native.current !== view) return fallback;
-          await new Promise((resolve) => setTimeout(resolve, 16 * (attempt + 1)));
-        }
-      }
-    };
+    const call = <T,>(fallback: T, fn: (view: NativeHandle) => Promise<T>) => callView(native, fallback, fn);
     return {
       loadUrl: (url, options) =>
         call(undefined, (n) => n.loadUrl(toEngineUrl(url), options?.userInitiated ?? false)),

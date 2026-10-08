@@ -7,7 +7,7 @@ import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon, NewTabIcon } from "../primitives";
 import { HistoryPopover } from "./HistoryPopover";
-import { goBack, goForward, goToHistoryItem, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu, type HistoryItem } from "./history";
+import { goBack, goForward, goToHistoryItem, historyFavicons, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu, type HistoryItem } from "./history";
 import type { ToolbarGeometry } from "./geometry";
 import {
   CAPSULE_INSET,
@@ -51,7 +51,8 @@ type Shown = { direction: "back" | "forward"; confirmed: boolean; list: HistoryI
 export function SwipeOverlay({ tabId }: { tabId: string }) {
   const theme = useTheme();
   const history = useHistoryAvailability(tabId);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  // Read by the gesture only: no render needs it.
+  const areaHeight = useRef(0);
   const [shown, setShown] = useState<Shown | null>(null);
   const area = useRef<SwipeAreaHandle>(null);
 
@@ -80,14 +81,12 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     fade: useSharedValue(1),
     scale: useSharedValue(1),
   };
-  const sizeRef = useRef(size);
-  sizeRef.current = size;
 
   // A new gesture stops everything the last one left running: its springs, its delayed dismiss and its list timer.
   const resetValues = (direction: "back" | "forward") => {
     for (const value of Object.values(v)) cancelAnimation(value);
     clearTimeout(g.idle);
-    const { height } = sizeRef.current;
+    const height = areaHeight.current;
     v.x.set(-SIZE);
     v.w.set(SIZE);
     v.h.set(SIZE);
@@ -115,7 +114,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     if (g.confirmed === confirmed) return;
     g.confirmed = confirmed;
     if (confirmed) swipeHaptic("levelChange");
-    const { height } = sizeRef.current;
+    const height = areaHeight.current;
     if (!g.list) {
       const s = confirmed ? SIZE_CONFIRMED : SIZE;
       layoutTo(s, s, height / 2 - s / 2, s / 2, 0.18, 0.7);
@@ -129,7 +128,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     const gesture = g.items;
     const items = (await gesture) ?? [];
     if (g.items !== gesture || !g.active || g.list || !g.confirmed || items.length < 2) return;
-    const { height } = sizeRef.current;
+    const height = areaHeight.current;
     const fit = Math.max(2, Math.floor((height / 2 + ROW / 2 - LIST_PAD - 8) / ROW));
     const list = items.slice(0, fit);
     g.list = list;
@@ -227,7 +226,9 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
         canSwipeForward={history.forward}
         allowsVerticalMotion={!!shown?.list}
         onSwipe={onSwipe}
-        onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+        onLayout={(e) => {
+          areaHeight.current = e.nativeEvent.layout.height;
+        }}
       />
       {shown && (
         <Animated.View pointerEvents="none" style={[{ position: "absolute" }, frame]}>
@@ -262,10 +263,7 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
 function DestinationList({ tabId, items, selected, appear, pill }: { tabId: string; items: HistoryItem[]; selected: number; appear: SharedValue<number>; pill: SharedValue<number> }) {
   const theme = useTheme();
   const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
-  const favicons = useMemo(() => {
-    const urls = new Set(items.map((i) => i.url));
-    return new Map((useBrowser.getState().history[profileId] ?? []).filter((h) => urls.has(h.url)).map((h) => [h.url, h.favicon]));
-  }, [items, profileId]);
+  const favicons = useMemo(() => historyFavicons(profileId, items), [items, profileId]);
   const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ scale: interpolate(appear.get(), [0, 1], [0.9, 1]) }] }));
   const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pill.get() }] }));
   return (

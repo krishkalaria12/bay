@@ -20,14 +20,16 @@ export function EditBookmarkDialog() {
 function Sheet({ state }: { state: EditorState }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const node = useBrowser.getState().bookmarks.nodes[state.bookmarkId ?? ""];
+  // The bookmark as the sheet opened on it (each one opens its own sheet).
+  const [node] = useState(() => useBrowser.getState().bookmarks.nodes[state.bookmarkId ?? ""]);
   const [title, setTitle] = useState(node?.title ?? "");
   const [url, setUrl] = useState(node?.kind === "url" ? node.url : "");
   const [parentId, setParentId] = useState<string | null>(
-    node?.parentId ?? state.parentId ?? useBrowser.getState().bookmarks.roots[state.profileId]?.bar ?? null,
+    () => node?.parentId ?? state.parentId ?? useBrowser.getState().bookmarks.roots[state.profileId]?.bar ?? null,
   );
+  const searchPrefix = useBrowser((s) => searchUrlPrefix(s.settings));
   const close = () => useBookmarkEditor.getState().set(null);
-  const resolvedUrl = url.trim() ? resolveInput(url, searchUrlPrefix(useBrowser.getState().settings)) : "";
+  const resolvedUrl = url.trim() ? resolveInput(url, searchPrefix) : "";
   const valid = state.folder ? !!title.trim() : !!resolvedUrl;
 
   const save = () => {

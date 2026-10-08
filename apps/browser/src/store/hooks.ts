@@ -9,8 +9,11 @@ import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
 
 export const WindowContext = createContext<string | null>(null);
 
+// Outside any window's tree: the focused window, read, not followed.
+const focusedWindowId = () => useBrowser.getState().ui.focusedWindowId ?? "";
+
 export function useWindowId(): string {
-  return useContext(WindowContext) ?? useBrowser.getState().ui.focusedWindowId ?? "";
+  return useContext(WindowContext) ?? focusedWindowId();
 }
 
 export function useWindowField<T>(select: (w: BrowserWindow) => T, fallback: T): T {

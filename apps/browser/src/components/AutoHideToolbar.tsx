@@ -169,8 +169,6 @@ export function AutoHideToolbar({
   const palette = toolbarPalette(theme, extendColor && url ? themeColor : null);
   const band = useEasedColorStyle(useEasedColor(palette.background), "backgroundColor");
   const collapsed = mode === "collapsed";
-  const modeNow = useRef(mode);
-  modeNow.current = mode;
 
   const peekTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(peekTimer.current), []);
@@ -208,8 +206,8 @@ export function AutoHideToolbar({
       ) : null}
       <Animated.View
         pointerEvents={collapsed ? "none" : "box-none"}
-        onMouseEnter={() => modeNow.current === "peek" && clearTimeout(peekTimer.current)}
-        onMouseLeave={() => modeNow.current === "peek" && peekLater(false, UNPEEK_DELAY)}
+        onMouseEnter={() => mode === "peek" && clearTimeout(peekTimer.current)}
+        onMouseLeave={() => mode === "peek" && peekLater(false, UNPEEK_DELAY)}
         style={[{ position: "absolute", left: 0, right: 0, top: 0, height: H }, controlsStyle]}
       >
         <Toolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused} bare />
@@ -220,8 +218,8 @@ export function AutoHideToolbar({
             clearTimeout(peekTimer.current);
             revealToolbar(tabId);
           }}
-          onMouseEnter={() => modeNow.current === "collapsed" && peekLater(true, PEEK_DELAY)}
-          onMouseLeave={() => modeNow.current === "collapsed" && clearTimeout(peekTimer.current)}
+          onMouseEnter={() => mode === "collapsed" && peekLater(true, PEEK_DELAY)}
+          onMouseLeave={() => mode === "collapsed" && clearTimeout(peekTimer.current)}
           tooltip="Show Toolbar"
           style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 }}
         >

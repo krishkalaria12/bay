@@ -1,5 +1,5 @@
 import { ContextMenuArea, Symbol, WindowDragRegion } from "@bay/shell";
-import { memo, useCallback, useState } from "react";
+import { memo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { layout, useTheme } from "../../lib/theme";
@@ -55,9 +55,9 @@ export function DevBar({
   const controlsOpen = usePages((s) => s.popover[tabId] === "siteControls");
   const [width, setWidth] = useState(0);
   const sidebarSymbol = useSidebarSymbol();
-  const focus = useCallback(() => {
+  const focus = () => {
     if (!focused) useBrowser.getState().activate(tabId);
-  }, [focused, tabId]);
+  };
   const height = navigation ? layout.toolbarHeight : DEV_BAR_HEIGHT;
   if (!tab) return <View style={{ height }} />;
   const center = navigation ? 21.2 : DEV_BAR_HEIGHT / 2;

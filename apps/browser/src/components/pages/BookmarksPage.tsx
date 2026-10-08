@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
+import { useEffectEvent } from "../../lib/useEffectEvent";
 import { bookmarkAncestors, folderChildren, folderLinks, type RemovedBookmarks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
 import { plural } from "../../store/model";
@@ -33,7 +34,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
   const [undo, setUndo] = useState<{ removed: RemovedBookmarks; count: number } | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
   const anchor = useRef<string | null>(null);
-  const targets = useMemo(() => new DropTargets<Target>(), []);
+  const [targets] = useState(() => new DropTargets<Target>());
 
   const folderExists = useBrowser((s) => !!folderId && s.bookmarks.nodes[folderId]?.kind === "folder");
   useEffect(() => {
@@ -106,12 +107,12 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
     const s = useBrowser.getState();
     const moving = dragging.current;
     if ("into" in target) return moving.forEach((id) => s.moveBookmark(id, target.into));
-    let index = target.index;
-    for (const id of moving) {
+    // The rows moving from above the drop take their room with them.
+    const above = moving.filter((id) => {
       const from = ids.indexOf(id);
-      if (from >= 0 && from < target.index) index--;
-    }
-    moving.forEach((id, i) => useBrowser.getState().moveBookmark(id, target.parentId, index + i));
+      return from >= 0 && from < target.index;
+    }).length;
+    moving.forEach((id, i) => useBrowser.getState().moveBookmark(id, target.parentId, target.index - above + i));
   };
 
   const addMenu = async () => {
@@ -287,32 +288,33 @@ function BookmarkRow({
   const dy = useSharedValue(0);
   const dyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dy.get() }] }));
   const [dragging, setDragging] = useState(false);
-  const handlers = useRef({ onDragStart, onDragMove, onDragEnd });
-  handlers.current = { onDragStart, onDragMove, onDragEnd };
+  const dragStart = useEffectEvent(onDragStart);
+  const dragMove = useEffectEvent(onDragMove);
+  const dragEnd = useEffectEvent(onDragEnd);
   const responder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4 || Math.abs(g.dx) > 8,
         onPanResponderGrant: () => {
           setDragging(true);
-          handlers.current.onDragStart();
+          dragStart();
         },
         onPanResponderMove: (_, g) => {
           dy.set(g.dy);
-          handlers.current.onDragMove(g.moveX, g.moveY);
+          dragMove(g.moveX, g.moveY);
         },
         onPanResponderRelease: (_, g) => {
           dy.set(0);
           setDragging(false);
-          handlers.current.onDragEnd(g.moveX, g.moveY);
+          dragEnd(g.moveX, g.moveY);
         },
         onPanResponderTerminate: () => {
           dy.set(0);
           setDragging(false);
-          handlers.current.onDragEnd(-1, -1);
+          dragEnd(-1, -1);
         },
       }),
-    [],
+    [dy, dragStart, dragMove, dragEnd],
   );
   if (!node) return null;
 

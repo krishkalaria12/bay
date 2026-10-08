@@ -4,7 +4,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { onEscapeKey } from "../lib/escapeKey";
+import { isEscapeKey } from "../lib/escapeKey";
 import { useTheme } from "../lib/theme";
 import { webviews } from "../lib/webviews";
 import { useBrowser, type BrowserState } from "../store/browser";
@@ -260,7 +260,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
               onSubmitEditing={submit}
               keyDownEvents={query ? FIELD_KEYS : EMPTY_FIELD_KEYS}
               onKeyDown={onKeyDown}
-              onKeyPress={onEscapeKey(() => onKeyDown({ nativeEvent: { key: "Escape" } }))}
+              onKeyPress={(e) => isEscapeKey(e) && onKeyDown({ nativeEvent: { key: "Escape" } })}
               style={{ flex: 1, fontSize: 20, color: theme.textPrimary, paddingVertical: 0 }}
             />
             <FilterButton icon={filterInfo.icon} title={filterInfo.title} onPress={openFilterMenu} />

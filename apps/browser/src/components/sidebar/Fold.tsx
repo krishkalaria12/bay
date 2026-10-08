@@ -72,8 +72,6 @@ export function Fold({
   const [measured, setMeasured] = useState<Record<string, number>>({});
   const kept = keep && entries.some((e) => e.key === keep) ? keep : null;
   const folding = !!kept && (collapsed || moving);
-  const state = useRef({ moving, folding, kept });
-  state.current = { moving, folding, kept };
   const heightOf = (key: string) => rowHeight ?? measured[key] ?? 0;
   const total = entries.reduce((sum, e) => sum + heightOf(e.key), 0) + gap * Math.max(0, entries.length - 1) + padTop + padBottom;
   // The block: its own height while folding around a kept entry (the entries fold instead) or open, else from
@@ -96,7 +94,7 @@ export function Fold({
                 <View
                   onLayout={(e) => {
                     // A folded entry's wrapper squeezes it: only a free one tells its height.
-                    if (state.current.moving || (state.current.folding && key !== state.current.kept)) return;
+                    if (moving || (folding && key !== kept)) return;
                     const height = e.nativeEvent.layout.height;
                     setMeasured((all) => (all[key] === height ? all : { ...all, [key]: height }));
                   }}

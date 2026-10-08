@@ -14,8 +14,10 @@ export function ResizeHandle({ windowId }: { windowId: string }) {
     direction: right ? -1 : 1,
     saved: () => useBrowser.getState().settings.sidebarWidth ?? 190,
     onLive: (w) => {
-      const { [windowId]: _, ...rest } = sidebarUi().dragWidth;
-      setSidebarUi({ dragWidth: w === null ? rest : { ...rest, [windowId]: Math.round(w * 2) / 2 } });
+      const dragWidth = { ...sidebarUi().dragWidth };
+      if (w === null) delete dragWidth[windowId];
+      else dragWidth[windowId] = Math.round(w * 2) / 2;
+      setSidebarUi({ dragWidth });
     },
     onCommit: (w) => useBrowser.getState().updateSettings({ sidebarWidth: w }),
   });
@@ -23,7 +25,7 @@ export function ResizeHandle({ windowId }: { windowId: string }) {
     <View
       {...handlers}
       onDoubleClick={() => useBrowser.getState().updateSettings({ sidebarWidth: 190 })}
-      style={{ position: "absolute", top: 46, bottom: 0, [right ? "left" : "right"]: -3, width: 7, cursor: "col-resize" }}
+      style={[{ position: "absolute", top: 46, bottom: 0, width: 7, cursor: "col-resize" }, right ? { left: -3 } : { right: -3 }]}
     />
   );
 }

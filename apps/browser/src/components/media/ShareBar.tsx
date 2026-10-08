@@ -1,6 +1,6 @@
 import { changeCaptureSource, stopCapture } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
@@ -8,7 +8,7 @@ import { useBrowser } from "../../store/browser";
 import { engineProfile } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
 import { PromptButton } from "../layout/controls";
-import { pageOf, usePages } from "../layout/pageState";
+import { usePages } from "../layout/pageState";
 import { useMedia, type TabShare } from "./state";
 import { CAPTURE_RED } from "./tokens";
 
@@ -24,17 +24,24 @@ const hostOf = (origin: string) => {
 
 function useShareFor(tabId: string): [string, TabShare] | null {
   const shares = useMedia((m) => m.tabShares);
-  const profile = useBrowser((s) => {
-    const tab = s.tabs[tabId];
-    return tab && /^https?:|^file:/.test(tab.url) ? engineProfile(tab.profileId) : null;
-  });
   const capturing = usePages((p) => Object.keys(shares).filter((id) => p.pages[id]?.mediaAccess?.screen).join(","));
-  if (profile === null) return null;
-  for (const capturer of capturing ? capturing.split(",") : []) {
+  // The capturing tabs in this tab's engine profile, in order; null for a tab no page can share to.
+  const capturers = useBrowser((s) => {
+    const tab = s.tabs[tabId];
+    if (!tab || !/^https?:|^file:/.test(tab.url)) return null;
+    const profile = engineProfile(tab.profileId);
+    return capturing
+      .split(",")
+      .filter((id) => {
+        const owner = s.tabs[id];
+        return !!owner && engineProfile(owner.profileId) === profile;
+      })
+      .join(",");
+  });
+  if (capturers === null) return null;
+  for (const capturer of capturers ? capturers.split(",") : []) {
     const share = shares[capturer];
-    if (!share || share.dismissed[tabId]) continue;
-    const owner = useBrowser.getState().tabs[capturer];
-    if (owner && engineProfile(owner.profileId) === profile) return [capturer, share];
+    if (share && !share.dismissed[tabId]) return [capturer, share];
   }
   return null;
 }
@@ -96,13 +103,17 @@ export function ShareBar({ tabId }: { tabId: string }) {
     height.set(withTiming(visible ? SHARE_BAR_HEIGHT : 0, { duration: 180, easing: Easing.out(Easing.cubic) }));
   }, [visible]);
   const heightStyle = useAnimatedStyle(() => ({ height: height.get() }));
-  const last = useRef(found);
-  if (found) last.current = found;
-  const shown = found ?? last.current;
+  // The last share shown stays while the bar closes.
+  const [last, setLast] = useState(found);
+  if (found && (found[0] !== last?.[0] || found[1] !== last[1])) setLast(found);
+  const shown = found ?? last;
+  const shownCapturer = shown?.[0];
+  const pageOrigin = usePages((p) => (shownCapturer && p.pages[shownCapturer]?.security?.origin) || "");
+  const capturerUrl = useBrowser((s) => (shownCapturer && s.tabs[shownCapturer]?.url) || "");
   if (!shown) return null;
   const [capturer, share] = shown;
   const isShared = share.capturedTabId === tabId;
-  const host = hostOf(share.origin || pageOf(capturer).security?.origin || useBrowser.getState().tabs[capturer]?.url || "");
+  const host = hostOf(share.origin || pageOrigin || capturerUrl);
   return (
     <Animated.View style={[{ overflow: "hidden" }, heightStyle]}>
       <View

@@ -1,11 +1,12 @@
 import { WebView } from "@bay/nncore";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, PanResponder, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useEffect, useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { openFromPage, pageProfileId } from "../layout/openFromPage";
+import { useResizeDrag } from "../layout/useResizeDrag";
 import { IconButton } from "../primitives";
 import { closeSidePanel, findExtension, showExtensionMenu, useExtensions, type SidePanel } from "./state";
 
@@ -13,13 +14,6 @@ const MIN_WIDTH = 320;
 const MAX_WIDTH = 600;
 const HEADER = 40;
 
-function rubberBand(width: number): number {
-  const band = (over: number) => 36 * (1 - Math.exp(-over / 90));
-  if (width > MAX_WIDTH) return MAX_WIDTH + band(width - MAX_WIDTH);
-  if (width < MIN_WIDTH) return MIN_WIDTH - band(MIN_WIDTH - width);
-  return width;
-}
-const clamp = (w: number) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, w));
 
 export function ExtensionSidePanel() {
   const windowId = useWindowId();
@@ -39,52 +33,19 @@ export function ExtensionSidePanel() {
       }),
     );
   }, [!!panel]);
-  // Let go past its range, the edge springs back on the UI thread, each frame setting the width.
-  const springWidth = useSharedValue(0);
-  const springing = useSharedValue(false);
-  useAnimatedReaction(
-    () => (springing.get() ? springWidth.get() : null),
-    (w) => {
-      if (w !== null) runOnJS(setDragWidth)(w);
-    },
-  );
   useEffect(() => {
     if (panel) setShown(panel);
   }, [panel?.url, panel?.extensionId]);
 
   const width = dragWidth ?? savedWidth;
-  const start = useRef(width);
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          start.current = useBrowser.getState().settings.extensionSidePanelWidth ?? 360;
-          setDragWidth(start.current);
-        },
-        onPanResponderMove: (_, g) => setDragWidth(rubberBand(start.current - g.dx)),
-        onPanResponderRelease: (_, g) => {
-          const raw = rubberBand(start.current - g.dx);
-          const target = clamp(raw);
-          const finish = () => {
-            useBrowser.getState().updateSettings({ extensionSidePanelWidth: target });
-            setDragWidth(null);
-          };
-          if (raw === target) return finish();
-          springWidth.set(raw);
-          springing.set(true);
-          springWidth.set(
-            withTiming(target, { duration: 260, easing: Easing.out(Easing.back(1.2)) }, () => {
-              springing.set(false);
-              runOnJS(finish)();
-            }),
-          );
-        },
-        onPanResponderTerminate: () => setDragWidth(null),
-        onPanResponderTerminationRequest: () => false,
-      }),
-    [],
-  );
+  const resize = useResizeDrag({
+    min: MIN_WIDTH,
+    max: MAX_WIDTH,
+    direction: -1,
+    saved: () => useBrowser.getState().settings.extensionSidePanelWidth ?? 360,
+    onLive: setDragWidth,
+    onCommit: (w) => useBrowser.getState().updateSettings({ extensionSidePanelWidth: w }),
+  });
 
   const room = width + layout.cardInset - 1;
   const roomStyle = useAnimatedStyle(() => ({ width: appear.get() * room }), [room]);
@@ -95,7 +56,7 @@ export function ExtensionSidePanel() {
       <Animated.View style={[{ position: "absolute", top: 0, bottom: 0, right: 0, width: width }, fade]}>
         <PanelCard key={`${shown.extensionId}|${shown.pageProfile}|${shown.url}`} windowId={windowId} panel={shown} />
         <View
-          {...responder.panHandlers}
+          {...resize}
           onDoubleClick={() => useBrowser.getState().updateSettings({ extensionSidePanelWidth: 360 })}
           style={{ position: "absolute", top: 0, bottom: 0, left: -3, width: 7, cursor: "col-resize" }}
         />

@@ -97,6 +97,16 @@ function openInBrowser(url: string) {
   void focusWindow(windowId);
 }
 
+// Runs the task: null once done, else what went wrong.
+async function attempt(task: () => Promise<void>): Promise<string | null> {
+  try {
+    await task();
+    return null;
+  } catch (e) {
+    return String((e as Error)?.message ?? e);
+  }
+}
+
 function ConnectSheet({ id }: { id: LiveSourceId }) {
   const theme = useTheme();
   const source = SOURCES[id];
@@ -105,14 +115,10 @@ function ConnectSheet({ id }: { id: LiveSourceId }) {
   const run = async (task: () => Promise<void>) => {
     setBusy(true);
     setError(null);
-    try {
-      await task();
-      closeSettingsSheet();
-    } catch (e) {
-      setError(String((e as Error)?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
+    const failure = await attempt(task);
+    setBusy(false);
+    if (failure === null) closeSettingsSheet();
+    else setError(failure);
   };
   let body: ReactNode;
   switch (id) {

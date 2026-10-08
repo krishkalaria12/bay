@@ -19,7 +19,9 @@ const WIDTH = 560;
 const ROW = 36;
 const MAX_ROWS = 10;
 
-function candidates(s: BrowserState, windowId: string): { open: Row[]; closed: Row[] } {
+type Sources = Pick<BrowserState, "tabs" | "windows" | "windowOrder" | "closedTabs" | "closedGroups">;
+
+function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] } {
   const w = s.windows[windowId];
   if (!w) return { open: [], closed: [] };
   const profileId = w.profileId;
@@ -65,6 +67,17 @@ const host = (url: string) => {
   }
 };
 
+function rankedSections({ open, closed }: { open: Row[]; closed: Row[] }, q: string): { title: string; rows: Row[] }[] {
+  if (!q) return [{ title: "Open Tabs", rows: open }, { title: "Recently Closed", rows: closed.slice(0, 8) }];
+  const rank = (rows: Row[]) =>
+    rows
+      .map((r) => ({ r, score: Math.max(fuzzyScore(q, r.title), fuzzyScore(q, host(r.url)) * 0.9, fuzzyScore(q, r.url) * 0.6) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.r);
+  return [{ title: "Open Tabs", rows: rank(open) }, { title: "Recently Closed", rows: rank(closed).slice(0, 8) }];
+}
+
 export function SearchTabs({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
   const open = useSidebarUi((u) => u.searchTabs === windowId);
   return open ? <Panel windowId={windowId} windowWidth={windowWidth} /> : null;
@@ -76,21 +89,17 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
   const [selected, setSelected] = useState(0);
   const scroll = useRef<ScrollView>(null);
   const tabs = useBrowser((s) => s.tabs);
+  const windows = useBrowser((s) => s.windows);
+  const windowOrder = useBrowser((s) => s.windowOrder);
   const closedTabs = useBrowser((s) => s.closedTabs);
   const closedGroups = useBrowser((s) => s.closedGroups);
-  const sections = useMemo(() => {
-    const { open, closed } = candidates(useBrowser.getState(), windowId);
-    const q = query.trim();
-    if (!q) return [{ title: "Open Tabs", rows: open }, { title: "Recently Closed", rows: closed.slice(0, 8) }];
-    const rank = (rows: Row[]) =>
-      rows
-        .map((r) => ({ r, score: Math.max(fuzzyScore(q, r.title), fuzzyScore(q, host(r.url)) * 0.9, fuzzyScore(q, r.url) * 0.6) }))
-        .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .map((x) => x.r);
-    return [{ title: "Open Tabs", rows: rank(open) }, { title: "Recently Closed", rows: rank(closed).slice(0, 8) }];
-  }, [query, tabs, closedTabs, closedGroups, windowId]);
-  const rows = sections.flatMap((s) => s.rows);
+  const sections = useMemo(
+    () => rankedSections(candidates({ tabs, windows, windowOrder, closedTabs, closedGroups }, windowId), query.trim()),
+    [tabs, windows, windowOrder, closedTabs, closedGroups, windowId, query],
+  );
+  const rows = useMemo(() => sections.flatMap((s) => s.rows), [sections]);
+  // Each section's first row's place in `rows`, for the keyboard selection.
+  const starts = useMemo(() => sections.map((_, i) => sections.slice(0, i).reduce((n, s) => n + s.rows.length, 0)), [sections]);
   const close = () => setSidebarUi({ searchTabs: null });
   const choose = (row: Row | undefined) => {
     if (!row) return;
@@ -103,7 +112,6 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
     setSelected(next);
     scroll.current?.scrollTo({ y: Math.max(0, (next - MAX_ROWS + 2) * ROW), animated: false });
   };
-  let index = -1;
 
   return (
     <>
@@ -150,13 +158,12 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
           {rows.length === 0 ? (
             <Text style={{ paddingHorizontal: 16, paddingVertical: 14, fontSize: 13, color: theme.textTertiary }}>No tabs match “{query.trim()}”</Text>
           ) : null}
-          {sections.map((section) =>
+          {sections.map((section, k) =>
             section.rows.length ? (
               <View key={section.title} style={{ paddingHorizontal: 6, paddingTop: 6 }}>
                 <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 10, paddingVertical: 4 }}>{section.title}</Text>
-                {section.rows.map((row) => {
-                  index++;
-                  const i = index;
+                {section.rows.map((row, j) => {
+                  const i = starts[k]! + j;
                   return <ResultRow key={`${row.kind}:${row.id}`} row={row} selected={i === selected} onHover={() => setSelected(i)} onPress={() => choose(row)} />;
                 })}
               </View>
