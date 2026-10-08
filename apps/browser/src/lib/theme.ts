@@ -7,7 +7,10 @@ import { backdropTint, opaqueTint, tintForHue, type BackdropTint } from "./windo
 
 export type Theme = typeof dark & ProfileTheme & {
   backdrop: BackdropTint;
+  // The window's colours: what a solid window shows, or a glass one when inactive.
   windowTint: [string, string];
+  // Glass (Appearance › Window): the desktop shows through the window.
+  glass: boolean;
   powerUpColor: string | null;
 };
 
@@ -200,32 +203,36 @@ const cache = new Map<string, Theme>();
 const MAX_CUSTOM = 48;
 const CUSTOM = "custom|";
 
-/** A space's theme key: its preset colour's, or its own theme's (the theme editor). */
-export function spaceThemeKey(profile: Pick<Profile, "color" | "theme"> | undefined, dark: boolean): string {
-  const mode = dark ? "dark" : "light";
+const GLASS = ":glass";
+
+/** A space's theme key: its preset colour's, or its own theme's (the theme editor); glass windows' end in ":glass". */
+export function spaceThemeKey(profile: Pick<Profile, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
+  const mode = `${dark ? "dark" : "light"}${glass ? GLASS : ""}`;
   const t = profile?.theme;
   if (!t?.colors.length) return `${profile?.color ?? "plum"}:${mode}`;
   return `${CUSTOM}${t.colors.join(",")}|${t.intensity.toFixed(2)}|${t.grain.toFixed(2)}:${mode}`;
 }
 
 function customTheme(key: string): Theme {
-  const [body, mode] = key.split(":") as [string, string];
+  const [body, mode, material] = key.split(":") as [string, string, string | undefined];
   const [, list, intensity, grain] = body.split("|") as [string, string, string, string];
   const colors = list.split(",");
   const isDark = mode === "dark";
+  const solid = material !== "glass";
   const base = isDark ? dark : light;
   const first = colors[0]!;
   const last = colors[colors.length - 1]!;
   // Intensity takes the tint from a whisper (0.08) to well past a preset's (0.36).
   const backdrop = { ...backdropTint(first, false), tintAlpha: 0.08 + 0.52 * Number(intensity) };
-  const top = opaqueTint(backdrop, isDark);
-  const windowTint: [string, string] = colors.length > 1 ? [top[0], opaqueTint({ ...backdrop, tintColor: last }, isDark)[0]] : top;
+  const top = opaqueTint(backdrop, isDark, solid);
+  const windowTint: [string, string] = colors.length > 1 ? [top[0], opaqueTint({ ...backdrop, tintColor: last }, isDark, solid)[0]] : top;
   return {
     ...base,
     lightPalette: colors,
     edgeLight: isDark ? `${mix(first, "#FFFFFF", 0.5)}80` : `${first}66`,
     backdrop,
     windowTint,
+    glass: !solid,
     powerUpColor: first,
     grain: Number(grain) * 0.12,
   };
@@ -240,7 +247,8 @@ export function themeFor(key: string): Theme {
     for (const old of custom.slice(0, Math.max(0, custom.length - MAX_CUSTOM))) cache.delete(old);
   }
   if (!theme) {
-    const [color, mode] = key.split(":") as [ProfileColor | "incognito", string];
+    const [color, mode, material] = key.split(":") as [ProfileColor | "incognito", string, string | undefined];
+    const solid = material !== "glass";
     const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
     const spec = color === "incognito" ? null : (PROFILE_COLORS[color] ?? PROFILE_COLORS.plum);
     // Dia: neutral band 0.502 at 0.65.
@@ -249,7 +257,8 @@ export function themeFor(key: string): Theme {
     theme = {
       ...base,
       backdrop,
-      windowTint: opaqueTint(backdrop, base.dark),
+      windowTint: opaqueTint(backdrop, base.dark, solid),
+      glass: !solid,
       powerUpColor,
     };
     cache.set(key, theme);
@@ -259,8 +268,9 @@ export function themeFor(key: string): Theme {
 
 function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
   const w = s.windows[windowId ?? s.ui.focusedWindowId ?? ""];
-  if (w?.incognito) return "incognito";
-  return spaceThemeKey(s.profiles[page ?? w?.profileId ?? s.settings.defaultProfileId], s.ui.appDark);
+  const glass = s.settings.windowMaterial === "glass";
+  if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
+  return spaceThemeKey(s.profiles[page ?? w?.profileId ?? s.settings.defaultProfileId], s.ui.appDark, glass);
 }
 
 const ThemeContext = createContext<Theme | null>(null);

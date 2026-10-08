@@ -14,10 +14,20 @@ export function backdropTint(color: string, neutral: boolean): BackdropTint {
 }
 
 const INACTIVE_FILL = { dark: [40.7, 33.1, 31.8], light: [235, 231, 230] };
+// A solid window's grey before its space's colour: yab's sidebar (#1E1E21) in dark, a light one to match.
+const SOLID_FILL = { dark: [30, 30, 33], light: [235, 235, 237] };
 
-export function opaqueTint(tint: BackdropTint, dark: boolean): [string, string] {
+// What the tint is laid over.
+function baseFill(dark: boolean, solid: boolean): number[] {
+  if (solid) return SOLID_FILL[dark ? "dark" : "light"];
+  if (dark) return INACTIVE_FILL.dark.map((f) => 0.6 * f);
+  return INACTIVE_FILL.light.map((f) => 0.8 * 255 + 0.2 * f);
+}
+
+/** The window's colours with nothing showing through: glass's when the window is inactive, or a solid window's. */
+export function opaqueTint(tint: BackdropTint, dark: boolean, solid = false): [string, string] {
   const a = tint.tintAlpha * (dark ? 0.5 : 0.75);
-  const under = dark ? INACTIVE_FILL.dark.map((f) => 0.6 * f) : INACTIVE_FILL.light.map((f) => 0.8 * 255 + 0.2 * f);
+  const under = baseFill(dark, solid);
   const top = rgb(tint.tintColor);
   const bottom = lighten(top, tint.tintLightness);
   const over = (c: number[]) => hex(c.map((v, i) => a * v + (1 - a) * under[i]!));

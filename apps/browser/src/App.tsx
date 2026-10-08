@@ -83,7 +83,7 @@ function BrowserWindow() {
 
   return (
     <View style={{ flex: 1, flexDirection: "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
       <ProfileTint />
       {!topTabs && (

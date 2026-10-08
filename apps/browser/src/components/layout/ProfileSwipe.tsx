@@ -74,7 +74,7 @@ export function ProfileSwipeArea({ surface, style, pageWidth }: { surface: "side
 export function ProfileTint() {
   const windowId = useWindowId();
   const { pages, paging, pager } = usePagerPages(windowId);
-  const keys = useBrowser(useShallow((s) => pages.map((p) => spaceThemeKey(s.profiles[p.id], s.ui.appDark))));
+  const keys = useBrowser(useShallow((s) => pages.map((p) => spaceThemeKey(s.profiles[p.id], s.ui.appDark, s.settings.windowMaterial === "glass"))));
   if (!paging) return null;
   return (
     <>
@@ -83,7 +83,7 @@ export function ProfileTint() {
         const opacity = k === 0 ? 1 : pager.pos.interpolate({ inputRange: [pages[k - 1]!.slot, page.slot], outputRange: [0, 1], extrapolate: "clamp" });
         return (
           <Animated.View key={page.id} pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity }]}>
-            <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+            <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
           </Animated.View>
         );
       })}

@@ -27,9 +27,68 @@ export function AppearancePane() {
           <ModeChoice key={m.value} mode={m.value} title={m.title} description={m.description} selected={appearance === m.value} onPress={() => choose(m.value)} />
         ))}
       </View>
+      <MaterialPicker />
       <AddressBarPicker />
       <AppIconPicker />
     </View>
+  );
+}
+
+function MaterialPicker() {
+  const material = useBrowser((s) => s.settings.windowMaterial);
+  const choose = (value: Settings["windowMaterial"]) => useBrowser.getState().updateSettings({ windowMaterial: value });
+  return (
+    <>
+      <SectionHeader title="Window" description="Solid fills the sidebar with your space’s colour. Glass lets the desktop show through it." />
+      <View style={{ flexDirection: "row", gap: 14 }}>
+        <MaterialChoice value="solid" title="Solid" selected={material === "solid"} onPress={() => choose("solid")} />
+        <MaterialChoice value="glass" title="Glass" selected={material === "glass"} onPress={() => choose("glass")} />
+      </View>
+    </>
+  );
+}
+
+function MaterialChoice({ value, title, selected, onPress }: { value: Settings["windowMaterial"]; title: string; selected: boolean; onPress: () => void }) {
+  const theme = useTheme();
+  const colors = useFormColors();
+  const glass = value === "glass";
+  const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
+  const page = theme.dark ? "#2C2C2F" : "#FFFFFF";
+  return (
+    <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
+      <View
+        style={{
+          width: "100%",
+          height: 84,
+          borderRadius: 9,
+          overflow: "hidden",
+          borderWidth: selected ? 2.5 : 1,
+          borderColor: selected ? colors.accent : colors.groupBorder,
+          backgroundColor: glass ? (theme.dark ? "#3A2F45" : "#D9D2EC") : theme.dark ? "#1E1E21" : "#EBEBED",
+        }}
+      >
+        {/* Glass: the desktop's colours, softened through the window. */}
+        {glass && (
+          <>
+            <View style={{ position: "absolute", left: -18, top: -20, width: 90, height: 90, borderRadius: 45, backgroundColor: "#E58BB0", opacity: 0.45 }} />
+            <View style={{ position: "absolute", left: 30, bottom: -36, width: 90, height: 90, borderRadius: 45, backgroundColor: "#6FA8F2", opacity: 0.4 }} />
+            <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: theme.dark ? "rgba(30,30,33,0.45)" : "rgba(235,235,237,0.45)" }} />
+          </>
+        )}
+        <View style={{ flex: 1, padding: 6, flexDirection: "row", gap: 5 }}>
+          <View style={{ width: "28%", gap: 3, paddingTop: 8 }}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: bar }} />
+            ))}
+          </View>
+          <View style={{ flex: 1, borderRadius: 4, backgroundColor: page }} />
+        </View>
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+        {selected && <Symbol name="checkmark.circle.fill" size={12} color={colors.accent} style={{ width: 14, height: 14 }} />}
+        <Text style={{ fontSize: 12, color: selected ? theme.textPrimary : theme.textSecondary }}>{title}</Text>
+      </View>
+    </Pressable>
   );
 }
 

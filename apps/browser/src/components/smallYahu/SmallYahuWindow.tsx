@@ -32,7 +32,7 @@ export function SmallYahuWindow() {
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
-      <WindowBackdrop vibrancy {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <View style={{ flex: 1, flexDirection: "row", paddingTop: SMALL_BAR_HEIGHT, paddingLeft: INSET, paddingRight: INSET, paddingBottom: INSET }}>
         <ContentCard />
       </View>

@@ -50,6 +50,9 @@ export type Settings = {
   hideBookmarksBarImport: boolean;
 
   appearance: "auto" | "light" | "dark";
+  // The window behind the sidebar and the card: a solid colour (as yab and Arc have it), or glass that shows the
+  // desktop through.
+  windowMaterial: "solid" | "glass";
   addressBar: "toolbar" | "sidebar";
 
   defaultProfileId: string;
@@ -93,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bookmarksBar: "never",
   hideBookmarksBarImport: false,
   appearance: "auto",
+  windowMaterial: "solid",
   addressBar: "sidebar",
   defaultProfileId: DEFAULT_PROFILE_ID,
   shortcuts: {},
