@@ -28,6 +28,7 @@ import { ResizeHandle } from "./sidebar/ResizeHandle";
 import { entriesHeight, rowSpan, type Section } from "./sidebar/geometry";
 import { measureRow } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
+import { ClosingTabRow, OpeningRow, useRowMotion } from "./sidebar/RowMotion";
 import { useSidebarTokens, useSidebarWidth } from "./sidebar/tokens";
 
 const GLOW_ROOM = 24;
@@ -212,6 +213,10 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
   }, [growing, mountedRows, all.length]);
   const limit = cap ?? (growing ? mountedRows : undefined);
   const list = limit === undefined ? all : all.slice(0, limit);
+  // Rows of tabs just opened grow in, and those of tabs just closed stay while they go (sidebar/RowMotion.tsx), once
+  // every row is mounted.
+  const motion = useRowMotion(all, current && limit === undefined);
+  const listed = limit === undefined ? motion.rows : list;
   // Rows still to mount hold their room (rows are fixed-height): the list is as tall as it will be, so a tab revealed
   // early scrolls to its place, and the New Tab row docks once.
   const pending = useBrowser((s) => (growing ? entriesHeight(s, windowId, profileId, all.slice(mountedRows)) : 0));
@@ -293,9 +298,15 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
                           style={{ marginTop: pinnedGroups.length ? 7 : 0, gap: layout.rowGap }}
                         >
                           {newTabsAtTop && inlineNewTab ? <NewTabRow windowId={windowId} /> : null}
-                          {list.map((entry) => (
-                            <ListEntry key={entry} entry={entry} />
-                          ))}
+                          {listed.map((row) =>
+                            typeof row === "string" ? (
+                              <OpeningRow key={row} entry={row} opening={motion.opening.has(row)} onOpened={motion.opened}>
+                                <ListEntry entry={row} />
+                              </OpeningRow>
+                            ) : (
+                              <ClosingTabRow key={`closing:${row.tab.id}`} row={row} onGone={motion.gone} />
+                            ),
+                          )}
                           {pending ? <View style={{ height: pending }} /> : null}
                           <Tail id="tail:list" section="list" />
                           {!newTabsAtTop && inlineNewTab ? <NewTabRow windowId={windowId} /> : null}
