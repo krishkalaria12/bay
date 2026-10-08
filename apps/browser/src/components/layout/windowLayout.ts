@@ -18,7 +18,8 @@ export function useAddressBarInSidebar(): boolean {
   return useBrowser((s) => addressBarInSidebar(s, windowId));
 }
 
-export const SIDEBAR_FIELD = { top: 48, height: layout.rowHeight, radius: 10 } as const;
+// yab: a 32pt field.
+export const SIDEBAR_FIELD = { top: 48, height: 32, radius: 10 } as const;
 // The space switcher's + mirrored: a 28pt button centred on the 41pt footer's band (3pt short of its bottom).
 export const SIDEBAR_FOOTER_DOWNLOADS = { bottom: 3 + (41 - 3 - 28) / 2, size: 28 } as const;
 export function listTopGap(addressBar: boolean): number {

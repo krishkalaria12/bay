@@ -298,11 +298,11 @@ export const layout = {
   sidebarHeader: 46,
   // Dia: 6pt inset.
   sidebarInset: 6,
-  // Dia: 41pt tiles, 6pt gap, 54pt top; 37pt rows.
+  // Dia: 41pt tiles, 6pt gap, 54pt top. Rows a little roomier than yab's 28pt, 2pt apart as there.
   pinnedTop: 54,
   pinnedHeight: 41,
-  rowHeight: 34,
-  rowGap: 3,
+  rowHeight: 31,
+  rowGap: 2,
   cardTop: 6,
   cardInset: 7,
   cardRadius: 10,
