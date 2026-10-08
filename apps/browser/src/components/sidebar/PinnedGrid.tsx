@@ -7,7 +7,7 @@ import { closeTab } from "../../lib/actions";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
 import { GlassFill, liquidGlass } from "../glass";
-import { listTopGap, useAddressBarInSidebar } from "../layout/windowLayout";
+import { listTopGap, useSidebarFieldShown } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
 import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
 import { awayFromPin } from "../../store/organize";
@@ -35,7 +35,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs:
   const columns = Math.max(1, Math.min(tabs.length || 1, Math.floor((innerWidth + GAP) / (MIN_TILE + GAP))));
   const width = Math.floor(((innerWidth - GAP * (columns - 1)) / columns) * 2) / 2;
   const tail = useDragItem("tail:tiles", { kind: "tail", tabIds: [], section: "tiles" });
-  const topGap = listTopGap(useAddressBarInSidebar());
+  const topGap = listTopGap(useSidebarFieldShown());
   // With no pinned tabs a drag's pin target is an overlay that takes no room (PinDropZone): nothing here.
   if (!tabs.length) return null;
   return (

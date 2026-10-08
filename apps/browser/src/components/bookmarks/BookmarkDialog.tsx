@@ -7,7 +7,7 @@ import { useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
 import { FolderTree } from "./FolderTree";
-import { SIDEBAR_HEADER_WITH_FIELD, useAddressBarInSidebar } from "../layout/windowLayout";
+import { SIDEBAR_HEADER_WITH_FIELD, useSidebarFieldShown } from "../layout/windowLayout";
 
 export function BookmarkDialog() {
   const windowId = useWindowId();
@@ -19,7 +19,7 @@ export function BookmarkDialog() {
 function DialogPanel({ state }: { state: BookmarkDialogState }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const addressBar = useAddressBarInSidebar();
+  const field = useSidebarFieldShown();
   const bookmark = useBrowser((s) => (state.kind === "page" ? s.bookmarks.nodes[state.bookmarkId] : undefined));
   const profileId = state.kind === "page" ? profileOfNode(state.bookmarkId) : state.profileId;
   const [name, setName] = useState(() => (state.kind === "page" ? (bookmark?.title ?? "") : ""));
@@ -73,7 +73,7 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
         shadowOffset={[0, 10]}
         style={{
           position: "absolute",
-          ...(addressBar ? { top: SIDEBAR_HEADER_WITH_FIELD + 4, left: layout.sidebarInset } : { top: layout.cardTop + layout.toolbarHeight - 2, right: layout.cardInset + 10 }),
+          ...(field ? { top: SIDEBAR_HEADER_WITH_FIELD + 4, left: layout.sidebarInset } : { top: layout.cardTop + layout.toolbarHeight - 2, right: layout.cardInset + 10 }),
           width: 320,
           padding: 14,
         }}

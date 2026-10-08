@@ -40,6 +40,8 @@ export type Settings = {
   cleanUpInactiveTabsAfterHours: number | null;
   mutedSites: string[];
   neverTranslateSites: Record<string, string[]>;
+  // Sites in Developer Mode, by host and port ("localhost:3000"): components/developer/devMode.ts.
+  developerSites: string[];
   autoPictureInPicture: boolean;
   sidebarWidth: number;
   batterySaver: boolean;
@@ -88,6 +90,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cleanUpInactiveTabsAfterHours: null,
   mutedSites: [],
   neverTranslateSites: {},
+  developerSites: [],
   autoPictureInPicture: true,
   sidebarWidth: 190,
   batterySaver: true,

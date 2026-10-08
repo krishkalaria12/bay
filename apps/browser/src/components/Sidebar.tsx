@@ -8,7 +8,7 @@ import { PageProfileContext, useIsIncognito, useSettings, useWindowId, useWindow
 import { activeTabId } from "../store/model";
 import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
-import { listTopGap, SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD, useAddressBarInSidebar } from "./layout/windowLayout";
+import { listTopGap, SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD, useAddressBarInSidebar, useSidebarFieldShown } from "./layout/windowLayout";
 import { SIDEBAR_PLAYER_HEIGHT, SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
 import { HoverSlot } from "./HoverSlot";
 import { IconButton, useHover } from "./primitives";
@@ -66,8 +66,10 @@ export function Sidebar() {
   const playerTab = useSidebarPlayerTab(windowId);
   const playerHeight = playerTab ? SIDEBAR_PLAYER_HEIGHT : 0;
   const addressBar = useAddressBarInSidebar();
-  const header = addressBar ? SIDEBAR_HEADER_WITH_FIELD : layout.sidebarHeader;
-  const glowRoom = addressBar ? 0 : GLOW_ROOM;
+  // A tab in Developer Mode has its address over its page: the sidebar keeps its buttons, not its field.
+  const field = useSidebarFieldShown();
+  const header = field ? SIDEBAR_HEADER_WITH_FIELD : layout.sidebarHeader;
+  const glowRoom = field ? 0 : GLOW_ROOM;
   // The footer: downloads at its left, then the space switcher with its + for a new space (every window but a
   // private one).
   const spaces = !useIsIncognito();
@@ -149,7 +151,7 @@ export function Sidebar() {
             {addressBar ? (
               <>
                 <SidebarHeaderTools width={width} />
-                <SidebarAddressRow />
+                {field ? <SidebarAddressRow /> : null}
               </>
             ) : (
               // Box-none: the header's empty space is the drag region's (it moves the window), not the row's.
@@ -163,7 +165,7 @@ export function Sidebar() {
           <ResizeHandle windowId={windowId} />
           {/* Nothing pinned: the drag's pin target, over room the sidebar already has, so no row moves. */}
           {ghost && !ghost.landing && nothingPinned ? (
-            addressBar ? (
+            field ? (
               <PinDropZone top={SIDEBAR_FIELD.top} height={SIDEBAR_FIELD.height} cover />
             ) : (
               <PinDropZone top={layout.pinnedTop - PIN_BAND - 3} height={PIN_BAND} cover={false} />
@@ -221,7 +223,7 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
   // Rows still to mount hold their room (rows are fixed-height): the list is as tall as it will be, so a tab revealed
   // early scrolls to its place, and the New Tab row docks once.
   const pending = useBrowser((s) => (growing ? entriesHeight(s, windowId, profileId, all.slice(mountedRows)) : 0));
-  const topGap = listTopGap(useAddressBarInSidebar());
+  const topGap = listTopGap(useSidebarFieldShown());
   const newTabsAtTop = useSettings((s) => s.newTabPosition === "top");
   const innerWidth = width - layout.sidebarInset * 2;
   const pageStyle = usePageStyle(windowId, slot, width);

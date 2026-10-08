@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { layout } from "../../lib/theme";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
+import { developerTabShown } from "../developer/sites";
 
 export function useTabLayout(): "sidebar" | "top" {
   const windowId = useWindowId();
@@ -16,6 +17,16 @@ export function addressBarInSidebar(s: BrowserState, windowId: string): boolean 
 export function useAddressBarInSidebar(): boolean {
   const windowId = useWindowId();
   return useBrowser((s) => addressBarInSidebar(s, windowId));
+}
+
+// The sidebar's address field, shown unless the window's tab is in Developer Mode: its address is over its page then.
+export function sidebarFieldShown(s: BrowserState, windowId: string): boolean {
+  return addressBarInSidebar(s, windowId) && !developerTabShown(s, windowId);
+}
+
+export function useSidebarFieldShown(): boolean {
+  const windowId = useWindowId();
+  return useBrowser((s) => sidebarFieldShown(s, windowId));
 }
 
 // yab: a 32pt field.

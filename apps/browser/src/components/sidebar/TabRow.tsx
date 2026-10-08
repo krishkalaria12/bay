@@ -19,6 +19,7 @@ import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarTokens } from "./tokens";
 import { onEscapeKey } from "../../lib/escapeKey";
+import { DEVELOPER_YELLOW, isDeveloperTab } from "../developer/sites";
 
 export const clickMods = (e: GestureResponderEvent) => {
   const n = e.nativeEvent as unknown as { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
@@ -73,6 +74,8 @@ export function TabRow({ tabId }: { tabId: string }) {
   const selected = !!(flags & SELECTED);
   const playingAudio = !!(flags & PLAYING);
   const loading = !!(flags & LOADING);
+  // The shown tab of a site in Developer Mode: outlined, as its bar is hatched.
+  const developer = useBrowser((s) => active && isDeveloperTab(s, tabId));
   const renaming = useSidebarUi((u) => u.renaming?.kind === "tab" && u.renaming.id === tabId);
   const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
   if (!tab) return null;
@@ -137,6 +140,12 @@ export function TabRow({ tabId }: { tabId: string }) {
                     {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
                   </HoverSlot>
                 </Surface>
+                {developer ? (
+                  <View
+                    pointerEvents="none"
+                    style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 10, borderWidth: 1.5, borderStyle: "dashed", borderColor: DEVELOPER_YELLOW }}
+                  />
+                ) : null}
               </View>
             )}
           </Pressable>
