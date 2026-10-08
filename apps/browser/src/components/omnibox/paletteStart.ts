@@ -3,7 +3,7 @@ import type { HistoryEntry, Tab } from "../../store/types";
 
 // `host` marks a frequent site: a whole site, not one page.
 export type PaletteSuggestion = Suggestion & { detail?: string; host?: string };
-export type PaletteSection = { id: string; items: PaletteSuggestion[] };
+export type PaletteSection = { id: string; title?: string; items: PaletteSuggestion[] };
 
 export function currentPageActions(tab: Pick<Tab, "url" | "title" | "customTitle">): PaletteSection[] {
   const title = tab.customTitle || tab.title || displayUrl(tab.url);
@@ -41,7 +41,7 @@ export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId:
       return { kind: "page", title: host, host, url: `${parts.scheme}://${parts.host}${parts.port ? `:${parts.port}` : ""}/`, favicon: site.page.favicon };
     });
   return [
-    ...(recent.length ? [{ id: "recent", items: recent }] : []),
-    ...(frequent.length ? [{ id: "frequent", items: frequent }] : []),
+    ...(recent.length ? [{ id: "recent", title: "Recent Tabs", items: recent }] : []),
+    ...(frequent.length ? [{ id: "frequent", title: "Frequent", items: frequent }] : []),
   ];
 }

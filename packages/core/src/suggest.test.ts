@@ -117,6 +117,18 @@ test("a newer request aborts the one in flight, which never answers", async () =
 });
 
 
+test("remoteFirst lists the engine's suggestions before matching pages, the best one aside", () => {
+  const remote = Array.from({ length: 10 }, (_, i) => `what is the best ${i}`);
+  const hist = [
+    { url: "https://blog.example/what-is-the-best-editor", title: "What is the best editor", favicon: null, visits: 2, lastVisit: now - 1000 },
+    { url: "https://news.example/what-is-the-best-phone", title: "What is the best phone", favicon: null, visits: 1, lastVisit: now - 5000 },
+  ];
+  const list = rows(buildSuggestions("what is the best", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, remoteFirst: true }).items);
+  assert.equal(list.filter((r) => r.startsWith("suggest:")).length, 10);
+  assert.equal(list[0], "https://blog.example/what-is-the-best-editor");
+  assert.ok(list.indexOf("suggest:what is the best 9") < list.indexOf("https://news.example/what-is-the-best-phone"));
+});
+
 test("remoteLimit raises how many engine suggestions show, history pages still come first", () => {
   const remote = Array.from({ length: 10 }, (_, i) => `what is the best ${i}`);
   const hist = [{ url: "https://blog.example/what-is-the-best-editor", title: "What is the best editor", favicon: null, visits: 2, lastVisit: now - 1000 }];

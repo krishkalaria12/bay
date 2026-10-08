@@ -106,8 +106,9 @@ export function Omnibox({
     currentTabId: tabId,
     currentUrl: currentUrl || undefined,
     scope,
-    // The palette has room for a longer list than the sidebar's dropdown.
-    ...(palette ? { limit: 12, remoteLimit: 8 } : {}),
+    // The palette scrolls a longer list than the sidebar's dropdown: as yab's, every engine suggestion (Google gives
+    // ten at most) right after the search row, then matching pages.
+    ...(palette ? { limit: 20, remoteLimit: 10, remoteFirst: true } : {}),
   });
   const start = useDropdownStart(dropdown && !edited && !scope, tabId, profileId);
   const idleSections = usePaletteStart(windowId, profileId, tabId);

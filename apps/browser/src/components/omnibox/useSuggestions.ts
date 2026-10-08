@@ -79,6 +79,7 @@ export function useSuggestions({
   scope,
   limit,
   remoteLimit,
+  remoteFirst,
 }: {
   text: string;
   active: boolean;
@@ -89,6 +90,7 @@ export function useSuggestions({
   scope: SearchScope | null;
   limit?: number;
   remoteLimit?: number;
+  remoteFirst?: boolean;
 }): SuggestionResult {
   const allTabs = useBrowser((s) => s.tabs);
   const history = useBrowser((s) => s.history[profileId] ?? NO_HISTORY);
@@ -146,6 +148,7 @@ export function useSuggestions({
       scope,
       limit,
       remoteLimit,
+      remoteFirst,
     });
-  }, [active, text, query, source, engine, preference, remoteList, windowId, currentTabId, currentUrl, scope, limit, remoteLimit]);
+  }, [active, text, query, source, engine, preference, remoteList, windowId, currentTabId, currentUrl, scope, limit, remoteLimit, remoteFirst]);
 }

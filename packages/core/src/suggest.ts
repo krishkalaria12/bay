@@ -37,6 +37,9 @@ export type SuggestOptions = {
   limit?: number;
   // Search suggestions from the engine, at most (default 4).
   remoteLimit?: number;
+  // The engine's suggestions straight after the search row, matching pages after them (the palette, as yab lists
+  // them); by default the best three pages come first.
+  remoteFirst?: boolean;
   now?: number;
   engine?: Pick<SearchEngine, "name" | "url">;
   preference?: "website" | "search";
@@ -412,9 +415,10 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   out.push(...actionMatches.slice(0, 2).map((m) => actionRow(m.action)));
   out.push(...creates.map(createRow));
   const pageRows = ranked.map((x) => pageSuggestion(x.c, x.tabId));
-  out.push(...pageRows.slice(0, 3));
+  const ahead = options.remoteFirst ? 0 : 3;
+  out.push(...pageRows.slice(0, ahead));
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));
-  out.push(...pageRows.slice(3));
+  out.push(...pageRows.slice(ahead));
   return { items: out.items, completion };
 }
 

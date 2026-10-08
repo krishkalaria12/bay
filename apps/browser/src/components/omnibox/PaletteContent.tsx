@@ -20,11 +20,12 @@ export type PaletteMenu = { side: "left" | "right"; title: string; actions: Pale
 const FIELD_HEIGHT = 58;
 const FOOTER_HEIGHT = 44;
 const ROW_HEIGHT = 38;
-// Room for about nine rows, so a short list doesn't collapse the palette.
-const MIN_HEIGHT = 470;
+// As yab's: one height whatever it lists (room for about nine rows), the list scrolling inside, so the palette
+// neither grows nor moves as you type.
+const PALETTE_HEIGHT = 470;
 const LIST_TOP = 6;
-// A 1pt line with 5pt above and below separates recent tabs from frequent sites.
-const DIVIDER_SPACE = 11;
+// A section's title over its rows (Recent Tabs, Frequent), as yab labels them.
+const TITLE_HEIGHT = 26;
 
 // Keeps a closed menu on screen while it animates out; `closing` is set until it's gone.
 export function useMenuPresence<T>(menu: T | null) {
@@ -65,7 +66,6 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
   const viewport = useRef({ height: 0, y: 0 });
   const rows = useRef(new Map<number, { y: number; height: number }>());
   const [height, setHeight] = useState(maxHeight);
-  const listHeight = Math.max(ROW_HEIGHT * 2, maxHeight - FIELD_HEIGHT - FOOTER_HEIGHT);
   const presence = useMenuPresence(menu);
   const hover = usePointerHover(sections);
   const keepSelectedVisible = () => {
@@ -83,14 +83,14 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
   const label = current?.kind === "page" && current.tabId ? "Switch to Tab" : current?.kind === "action" ? current.title : current?.kind === "calc" ? "Copy Answer" : "Open";
 
   return (
-    <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={pageContext ? { height: Math.min(MIN_HEIGHT, maxHeight) } : { minHeight: Math.min(MIN_HEIGHT, maxHeight) }}>
+    <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={{ height: Math.min(PALETTE_HEIGHT, maxHeight) }}>
       <View ref={tourAnchorRef(windowId, "commandBar")} style={{ height: FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 18, gap: 12 }}>
         {leadingIcon ?? <Symbol name="magnifyingglass" size={16} color={theme.textSecondary} style={{ width: 20, height: 20 }} />}
         {field}
       </View>
       <ScrollView
         ref={scroll}
-        style={{ maxHeight: listHeight, flexGrow: 1 }}
+        style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 7, paddingTop: LIST_TOP, paddingBottom: 6 }}
         keyboardShouldPersistTaps="always"
         onLayout={(e) => { viewport.current.height = e.nativeEvent.layout.height; keepSelectedVisible(); }}
@@ -98,15 +98,17 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
         scrollEventThrottle={16}
       >
         {sections.map((section, sectionIndex) => {
-          const divided = sectionIndex > 0 && section.items.length > 0;
+          const titled = !!section.title && section.items.length > 0;
           return (
           <View key={section.id} onLayout={(e) => {
-            const top = e.nativeEvent.layout.y + (divided ? DIVIDER_SPACE : 0);
+            const top = e.nativeEvent.layout.y + (titled ? TITLE_HEIGHT : 0);
             const first = sections.slice(0, sectionIndex).reduce((count, s) => count + s.items.length, 0);
             section.items.forEach((_, offset) => rows.current.set(first + offset, { y: top + offset * ROW_HEIGHT, height: ROW_HEIGHT }));
             keepSelectedVisible();
           }}>
-            {divided ? <View style={{ height: 1, marginHorizontal: 10, marginVertical: 5, backgroundColor: theme.divider }} /> : null}
+            {titled ? (
+              <Text style={{ height: TITLE_HEIGHT, paddingHorizontal: 10, paddingTop: sectionIndex > 0 ? 9 : 4, fontSize: 11, fontWeight: "500", color: theme.textTertiary }}>{section.title}</Text>
+            ) : null}
             {section.items.map((suggestion) => {
               const rowIndex = index++;
               return <PaletteResultRow key={`${suggestion.kind}:${"id" in suggestion ? suggestion.id : suggestion.url}:${rowIndex}`} suggestion={suggestion} pageContext={pageContext} selected={rowIndex === selectedIndex} onHover={(e) => hover(e, () => onHover(rowIndex))} onChoose={(disposition) => onChoose(suggestion, disposition)} onMenu={() => onRowMenu(suggestion)} />;
@@ -145,7 +147,9 @@ function PaletteResultRow({ suggestion: s, pageContext, selected, onHover, onCho
   const theme = useTheme();
   const title = s.kind === "page" ? s.title || displayUrl(s.url) : s.kind === "search" ? s.query : s.kind === "calc" ? s.value : s.title;
   const shownUrl = s.kind === "page" || s.kind === "create" ? displayUrl(s.url) : "";
-  const detail = s.detail ?? (s.kind === "calc" ? s.expression : shownUrl !== title ? shownUrl : "");
+  // The typed search names its engine, as yab's does ("how to  Google"); the engine's own suggestions don't.
+  const engine = s.kind === "search" && !s.suggested ? s.engine : "";
+  const detail = s.detail ?? (s.kind === "calc" ? s.expression : engine || (shownUrl !== title ? shownUrl : ""));
   return (
     <View onMouseEnter={onHover}>
       <ContextMenuArea onContextMenu={onMenu}>
