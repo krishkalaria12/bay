@@ -437,6 +437,8 @@ export function DragScope({ enabled, children }: { enabled: boolean; children: R
 
 export const useDragController = () => useContext(DragContext) ?? undefined;
 export const useDropInto = () => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.dropInto);
+/** The item with `key` is being dragged (hidden, its room closing). */
+export const useDragSource = (key: string) => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.sources.has(key));
 /** The drop would pin the dragged tabs. */
 export const useDropPins = () => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.pins);
 

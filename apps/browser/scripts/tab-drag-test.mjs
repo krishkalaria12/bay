@@ -29,12 +29,15 @@ const scratch = mkdtempSync(join(tmpdir(), "nn-tab-drag-"));
 const data = join(scratch, "data");
 const rep = reporter(join(scratch, "tab-drag-test.log"), { name: "tab-drag-test" });
 
-const tab = (id, windowId, pinned = false) => ({ id, windowId, pinned, lastActiveAt: id === "t1" ? 2 : 1 });
+// Each tab on a page of its own: a blank tab shown opens the window's palette, whose dismiss layer covers the strip.
+const tab = (id, windowId, pinned = false) => ({ id, windowId, pinned, url: `data:text/html,<title>${id}</title>`, title: id, lastActiveAt: id === "t1" ? 2 : 1 });
 const fixture = () => session({
   profiles: [{ id: "default", name: "Personal", color: "plum" }],
   settings: { tabLayout: "top" },
   windows: [
-    { id: "w1", tabIds: ["p1", "p2", "t1", "t2", "t3", "t4"], activeTabIds: { default: "t1" }, frame: [80, 80, 1280, 800], createdAt: 1 },
+    // Low enough to leave room above it on a laptop's screen for the card of a tab dragged out over its top (a card
+    // can't go past the menu bar, so above an 880 pt top it never got clear of the window).
+    { id: "w1", tabIds: ["p1", "p2", "t1", "t2", "t3", "t4"], activeTabIds: { default: "t1" }, frame: [80, 20, 1280, 800], createdAt: 1 },
     { id: "w2", tabIds: ["l1"], activeTabIds: { default: "l1" }, frame: [200, 120, 1100, 700], createdAt: 2 },
     { id: "w3", tabIds: ["g1", "g2", "x1"], activeTabIds: { default: "x1" }, frame: [140, 100, 1200, 760], createdAt: 3 },
     // Side by side, the same height: a tab dragged from one onto the other's strip.
@@ -371,7 +374,7 @@ try {
   });
 
   await check("a split moves along the strip as one, and a pane pulled out of the window leaves it", async () => {
-    await run(`st().newTab("w1"); return settle(800);`);
+    await run(`st().newTab("w1", { url: "data:text/html,<title>new</title>" }); return settle(800);`);
     const ids = await order("w1");
     const fresh = ids.at(-1);
     // p2, p1, the split (t1 | t3), a new tab.
@@ -449,7 +452,7 @@ try {
   });
 
   await check("sidebar: a row let go between two others settles into its place, where the row then is", async () => {
-    await run(`st().newTab("w1"); st().newTab("w1"); st().newTab("w1"); return settle(1200);`);
+    await run(`for (const n of [1, 2, 3]) st().newTab("w1", { url: "data:text/html,<title>new " + n + "</title>" }); return settle(1200);`);
     const rows = await run(`return Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => i.kind === "row" && !i.parentGroup && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r({ id: i.tabIds[0], x, y, w, h })))));`);
     rows.sort((a, b) => a.y - b.y);
     assert.ok(rows.length >= 3, JSON.stringify(rows));

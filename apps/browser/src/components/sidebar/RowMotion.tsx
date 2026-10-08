@@ -9,6 +9,7 @@ import { activeTabId } from "../../store/model";
 import type { Tab } from "../../store/types";
 import { tabTitle } from "./actions";
 import { SelectedFill } from "./ActiveHighlight";
+import { useDragSource } from "./dnd";
 import { TabIcon } from "./TabIcon";
 
 // As yab opens and closes tabs: a new tab's row fades in where it goes as the rows under it make room, and a closed
@@ -129,7 +130,10 @@ export function OpeningRow({ entry, opening, onOpened, children }: { entry: stri
       overflow: growing ? "hidden" : "visible",
     };
   }, [growing]);
-  return <Animated.View style={style}>{children}</Animated.View>;
+  // Dragged, its entry closes up inside this wrapper: the wrapper takes back the list's gap after it, or the rows
+  // below moved down by it as a drag began.
+  const dragged = useDragSource(entry);
+  return <Animated.View style={[style, dragged ? { marginBottom: -layout.rowGap } : null]}>{children}</Animated.View>;
 }
 
 /** A closed tab's row on its way out: it fades, and its room (its gap included) closes. */
