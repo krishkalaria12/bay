@@ -354,7 +354,7 @@ export const UrlField = memo(function UrlField({
         {sidebar ? (
           <>
             <ToolbarButton palette={palette} icon="link" size={14} box={26} radius={6} onPress={() => void copyPageUrl(tab.id)} tooltip="Copy Link" />
-            <ToolbarButton palette={palette} icon="slider.horizontal.3" size={15} box={28} radius={7} style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : palette.pill }} onPress={toggleSiteControls} tooltip="Site Controls" />
+            <ToolbarButton palette={palette} icon="slider.horizontal.3" size={15} box={28} radius={7} style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : undefined }} onPress={toggleSiteControls} tooltip="Site Controls" />
           </>
         ) : null}
       </View>
