@@ -16,9 +16,9 @@ export function SidebarOverlays({ windowWidth }: { windowWidth: number }) {
   useEffect(startSidebarEffects, []);
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
-      <HoverCard windowId={windowId} />
+      <HoverCard windowId={windowId} windowWidth={windowWidth} />
       <MeetingAlert windowId={windowId} windowWidth={windowWidth} />
-      <IconPicker windowId={windowId} sidebarWidth={sidebarWidth} />
+      <IconPicker windowId={windowId} sidebarWidth={sidebarWidth} windowWidth={windowWidth} />
       <SearchTabs windowId={windowId} windowWidth={windowWidth} />
       <TabSwitcher windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
     </View>

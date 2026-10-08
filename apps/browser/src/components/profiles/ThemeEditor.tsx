@@ -9,6 +9,7 @@ import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import type { ProfileColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarOnRight } from "../layout/windowLayout";
 
 // Arc's space theme editor: a floating panel by the sidebar that changes the space's theme as you go, so the window
 // is the preview. Up to three colours on a colour field (a gradient), how strongly they tint, grain, and presets.
@@ -47,6 +48,8 @@ function ThemeEditor({ request }: { request: Request }) {
   const space = useBrowser((s) => s.profiles[request.profileId]);
   const sidebarOpen = useSidebarOpen();
   const sidebarWidth = useSidebarWidth(request.windowId);
+  // Over the page's corner beside the sidebar, on whichever side it is.
+  const side = useSidebarOnRight() ? "right" : "left";
   const [selected, setSelected] = useState(0);
   const latest = useRef<SpaceTheme | null>(null);
   const frame = useRef<number | null>(null);
@@ -99,7 +102,7 @@ function ThemeEditor({ request }: { request: Request }) {
       shadowOpacity={theme.panelShadowOpacity}
       shadowRadius={22}
       shadowOffset={[0, 8]}
-      style={{ position: "absolute", left: (sidebarOpen ? sidebarWidth : 0) + 10, bottom: 12, width: FIELD_W + 2 * PAD, padding: PAD }}
+      style={{ position: "absolute", [side]: (sidebarOpen ? sidebarWidth : 0) + 10, bottom: 12, width: FIELD_W + 2 * PAD, padding: PAD }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
         <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }} numberOfLines={1}>

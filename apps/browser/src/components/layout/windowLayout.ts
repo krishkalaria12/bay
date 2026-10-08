@@ -29,6 +29,26 @@ export function useSidebarFieldShown(): boolean {
   return useBrowser((s) => sidebarFieldShown(s, windowId));
 }
 
+// The sidebar docked on the window's right (Appearance › Sidebar): the page on the left, under the window buttons.
+export function sidebarOnRight(s: BrowserState, windowId: string): boolean {
+  const w = s.windows[windowId];
+  return !!w && s.settings.sidebarPosition === "right" && (w.tabLayout ?? s.settings.tabLayout) === "sidebar";
+}
+
+export function useSidebarOnRight(): boolean {
+  const windowId = useWindowId();
+  return useBrowser((s) => sidebarOnRight(s, windowId));
+}
+
+// The sidebar toggle's symbol: the sidebar drawn on the side it's on.
+export const useSidebarSymbol = () => (useSidebarOnRight() ? "sidebar.right" : "sidebar.left");
+
+// A card beside a sidebar row, in the window: past the row's edge toward the page. On the right it stays inside the
+// window's left edge, over the sidebar if a narrow window leaves it no room.
+export function besideRow(anchor: { x: number; width: number }, width: number, right: boolean, gap = 8): number {
+  return right ? Math.max(8, anchor.x - gap - width) : anchor.x + anchor.width + gap;
+}
+
 // yab: a 32pt field.
 export const SIDEBAR_FIELD = { top: 48, height: 32, radius: 10 } as const;
 // The space switcher's + mirrored: a 28pt button centred on the 41pt footer's band (3pt short of its bottom).

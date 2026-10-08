@@ -11,13 +11,13 @@ import { useIsBookmarked, useSettings, useTabLive } from "../store/hooks";
 import { bookmarkProfileId } from "../store/model";
 import type { Tab } from "../store/types";
 import { ToolbarButton, type ClickModifiers } from "./layout/controls";
-import { type ToolbarGeometry } from "./layout/geometry";
+import { SIDEBAR_BUTTON_END_ROOM, type ToolbarGeometry } from "./layout/geometry";
 import { setPopover, usePage, usePages } from "./layout/pageState";
 import { closeHistoryMenu, goBack, goForward, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu } from "./layout/history";
 import { openModeFor, openUrl } from "./bookmarks/actions";
 import { closePane, openSplitPane, showSplitMenu } from "./layout/splitActions";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type ToolbarPalette } from "./layout/toolbarColors";
-import { SIDEBAR_FIELD } from "./layout/windowLayout";
+import { SIDEBAR_FIELD, useSidebarSymbol } from "./layout/windowLayout";
 import { showUrlBarMenu } from "./omnibox/paste";
 import { useHover } from "./primitives";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "./extensions/ToolbarExtensions";
@@ -75,34 +75,33 @@ export function Toolbar({
     const place = (center: number | null) => ({ position: "absolute" as const, top, left: (center ?? 0) - layout.toolbarButton / 2 });
     return { sidebarButton: place(geometry.sidebarButton), back: place(geometry.back), forward: place(geometry.forward), reload: place(geometry.reload) };
   }, [geometry]);
-  const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth;
+  const sidebarSymbol = useSidebarSymbol();
+  // A toggle at the end (the sidebar on the right) is outermost: the split buttons, extensions and field move in for it.
+  const end = geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0;
+  const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
   const urlStyle = useMemo(() => ({ position: "absolute" as const, left: geometry.urlLeft, right, top: 21.2 - 15 }), [geometry.urlLeft, right]);
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
   const top = 21.2 - layout.toolbarButton / 2;
+  const sidebarToggle = (style: ViewStyle) => (
+    <ToolbarButton style={style} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
+  );
 
   return (
     <View style={{ height: layout.toolbarHeight }}>
       {!bare && <Animated.View style={[StyleSheet.absoluteFill, band]} />}
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       <Animated.View style={[StyleSheet.absoluteFill, dimStyle]} pointerEvents="box-none">
-        {geometry.sidebarButton !== null && (
-          <ToolbarButton
-            style={at.sidebarButton}
-            palette={palette}
-            icon="sidebar.left"
-            onPress={() => useBrowser.getState().toggleSidebar(windowId)}
-            tooltip="Auto-Hide Tabs (⌘S)"
-          />
-        )}
+        {geometry.sidebarButton !== null && sidebarToggle(at.sidebarButton)}
+        {geometry.sidebarButtonEnd && sidebarToggle({ position: "absolute", top, right: 8 })}
         <HistoryButton style={at.back} tab={tab} direction={-1} disabled={!history.back} palette={palette} onFocus={focus} />
         <HistoryButton style={at.forward} tab={tab} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
         <ReloadButton style={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} />
-        <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={21.2 - 14} right={inSplit ? 8 + 60 : 8} />
+        <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={21.2 - 14} right={(inSplit ? 8 + 60 : 8) + end} />
         {tab.url ? (
           <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} />
         ) : null}
         {inSplit && (
-          <View style={{ position: "absolute", top, right: 8, flexDirection: "row", gap: -2 }}>
+          <View style={{ position: "absolute", top, right: 8 + end, flexDirection: "row", gap: -2 }}>
             <ToolbarButton palette={palette} icon="rectangle.split.2x1" size={14} box={30} onPress={() => showSplitMenu(tab.id)} tooltip="Split View" />
             <ToolbarButton palette={palette} icon="xmark" size={12} weight="medium" box={30} onPress={() => closePane(tab.id)} tooltip="Close Pane" />
           </View>

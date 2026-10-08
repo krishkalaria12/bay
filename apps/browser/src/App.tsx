@@ -1,6 +1,6 @@
 import { WindowBackdrop } from "@bay/shaders";
-import { Surface } from "@bay/shell";
-import { useState } from "react";
+import { setTrafficLightsOnHover, Surface } from "@bay/shell";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { CommandPanel } from "./components/CommandPanel";
@@ -21,7 +21,7 @@ import { ProfileSwipe, ProfileTint } from "./components/layout/ProfileSwipe";
 import { TOP_CARD_INSET, TOP_STRIP_HEIGHT, TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
 import { usePeek } from "./components/layout/usePeek";
 import { useSidebarDock } from "./components/layout/useSidebarDock";
-import { useTabLayout } from "./components/layout/windowLayout";
+import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/layout/windowLayout";
 import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
 import { SmallYahuWindow } from "./components/smallYahu/SmallYahuWindow";
@@ -58,18 +58,29 @@ function BrowserWindow() {
   const theme = useTheme();
   const sidebarOpen = useSidebarOpen();
   const topTabs = useTabLayout() === "top";
-  const fullscreen = !!useFullscreenTab(useWindowId());
+  const windowId = useWindowId();
+  const fullscreen = !!useFullscreenTab(windowId);
   // Page full screen hides the sidebar and the strip without unmounting them: they keep their scroll, rows, measured
   // sizes and swipe surface. Moved out of the window rather than made transparent, so nothing in them takes the pointer.
   const showSidebar = sidebarOpen && !topTabs;
   const showStrip = sidebarOpen && topTabs;
+  // The sidebar on the window's right (Appearance › Sidebar): the page on its left, the window buttons where they are.
+  const right = useSidebarOnRight();
+  // The page has no toolbar to hold the window buttons then: it runs up under them, and they show only while the
+  // pointer is over the window's top, as Zen has it.
+  const addressInSidebar = useAddressBarInSidebar();
+  const buttonsOnHover = right && addressInSidebar && !fullscreen;
+  useEffect(() => {
+    void setTrafficLightsOnHover(windowId, buttonsOnHover);
+  }, [windowId, buttonsOnHover]);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
-  const sidebarWidth = useSidebarWidth(useWindowId());
+  const sidebarWidth = useSidebarWidth(windowId);
   const dock = useSidebarDock(showSidebar);
-  // The sidebar's slot narrows to the card's inset as it closes; the sidebar slides left by as much, so its edge stays
-  // on the card's (no clipping: the resize handle reaches past it).
-  const hiddenBy = sidebarWidth - layout.cardInset;
+  // The sidebar's slot narrows to the card's inset as it closes; the sidebar slides out by as much, so its edge stays
+  // on the card's (no clipping: the resize handle reaches past it). On the right it's already held at the slot's
+  // start, so it goes out past the window's edge as the slot narrows.
+  const hiddenBy = right ? 0 : sidebarWidth - layout.cardInset;
   const slotStyle = useAnimatedStyle(() => {
     "worklet";
     // In page full screen the slot sits outside the window at the sidebar's full width.
@@ -82,14 +93,14 @@ function BrowserWindow() {
   });
 
   return (
-    <View style={{ flex: 1, flexDirection: "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
+    <View style={{ flex: 1, flexDirection: right ? "row-reverse" : "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
       <ProfileTint />
       {!topTabs && (
         <Animated.View
           pointerEvents={fullscreen || !showSidebar ? "none" : "auto"}
-          style={[fullscreen ? { position: "absolute", top: 0, bottom: 0, right: "100%" } : { height: "100%" }, slotStyle]}
+          style={[fullscreen ? { position: "absolute", top: 0, bottom: 0, ...(right ? { left: "100%" } : { right: "100%" }) } : { height: "100%" }, slotStyle]}
         >
           {dock.mounted ? (
             <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
@@ -108,10 +119,10 @@ function BrowserWindow() {
                 flex: 1,
                 flexDirection: "row",
                 paddingTop: showStrip ? TOP_STRIP_HEIGHT : layout.cardTop,
-                paddingRight: showStrip ? TOP_CARD_INSET : layout.cardInset,
                 paddingBottom: showStrip ? TOP_CARD_INSET : layout.cardInset,
-                // The sidebar's slot (topTabs aside) holds the left inset, even closed.
-                paddingLeft: !topTabs ? 0 : showStrip ? TOP_CARD_INSET : layout.cardInset,
+                // The sidebar's slot (topTabs aside) holds the inset on its side, even closed.
+                paddingLeft: showStrip ? TOP_CARD_INSET : !topTabs && !right ? 0 : layout.cardInset,
+                paddingRight: showStrip ? TOP_CARD_INSET : right ? 0 : layout.cardInset,
               }
         }
       >
@@ -123,7 +134,7 @@ function BrowserWindow() {
           <TopTabStrip width={width} hidden={fullscreen} />
         </View>
       )}
-      {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} />)}
+      {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} />)}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />
@@ -139,19 +150,20 @@ function BrowserWindow() {
   );
 }
 
-function SidebarPeek({ enabled }: { enabled: boolean }) {
+function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
   const theme = useTheme();
   const sidebarWidth = useSidebarWidth(useWindowId());
   const { slide, live, show, hide } = usePeek(enabled);
   const slideStyle = useAnimatedStyle(() => {
     "worklet";
     const p = slide.get();
-    return { opacity: p, transform: [{ translateX: interpolate(p, [0, 1], [-sidebarWidth - 12, 0]) }] };
+    return { opacity: p, transform: [{ translateX: interpolate(p, [0, 1], [(right ? 1 : -1) * (sidebarWidth + 12), 0]) }] };
   });
+  const side = right ? "right" : "left";
 
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} /> : null}
+      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} /> : null}
       <Animated.View
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}
@@ -160,7 +172,7 @@ function SidebarPeek({ enabled }: { enabled: boolean }) {
           {
             position: "absolute",
             // Out of the window while hidden (a transform doesn't move hover tracking): its rows mustn't hover under the page.
-            left: live ? 6 : -10_000,
+            [side]: live ? 6 : -10_000,
             top: layout.cardTop,
             bottom: layout.cardInset,
             width: sidebarWidth,

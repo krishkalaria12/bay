@@ -72,6 +72,8 @@ export function resize(sizes: number[], a: number, delta: number, total: number,
 
 export type ToolbarGeometry = {
   sidebarButton: number | null;
+  // The sidebar toggle at the toolbar's right end instead, beside a sidebar docked on the right.
+  sidebarButtonEnd: boolean;
   back: number;
   forward: number;
   reload: number;
@@ -83,19 +85,28 @@ export const TRAFFIC_LIGHTS_OFFSET = 70;
 const geometries = new Map<string, ToolbarGeometry>();
 
 // One object per layout, so panes that get it as a prop can skip re-rendering.
-export function toolbarGeometry(o: { sidebarButton: boolean; clearTrafficLights: boolean }): ToolbarGeometry {
-  const key = `${o.sidebarButton}|${o.clearTrafficLights}`;
+type ToolbarLayout = { sidebarButton: boolean; clearTrafficLights: boolean; sidebarButtonEnd?: boolean };
+
+export function toolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
+  const key = `${o.sidebarButton}|${o.clearTrafficLights}|${!!o.sidebarButtonEnd}`;
   let g = geometries.get(key);
   if (!g) geometries.set(key, (g = computeToolbarGeometry(o)));
   return g;
 }
 
-function computeToolbarGeometry(o: { sidebarButton: boolean; clearTrafficLights: boolean }): ToolbarGeometry {
+function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
   const offset = o.clearTrafficLights ? TRAFFIC_LIGHTS_OFFSET : 0;
+  const end = !!o.sidebarButtonEnd;
   const [c0, c1, c2, c3] = layout.toolbarIconCenters;
-  if (o.sidebarButton) return { sidebarButton: offset + c0, back: offset + c1, forward: offset + c2, reload: offset + c3, urlLeft: offset + layout.breadcrumbX - 8 };
+  if (o.sidebarButton) return { sidebarButton: offset + c0, sidebarButtonEnd: end, back: offset + c1, forward: offset + c2, reload: offset + c3, urlLeft: offset + layout.breadcrumbX - 8 };
   const shift = c1 - c0;
-  return { sidebarButton: null, back: offset + c1 - shift, forward: offset + c2 - shift, reload: offset + c3 - shift, urlLeft: offset + layout.breadcrumbX - 8 - shift };
+  return { sidebarButton: null, sidebarButtonEnd: end, back: offset + c1 - shift, forward: offset + c2 - shift, reload: offset + c3 - shift, urlLeft: offset + layout.breadcrumbX - 8 - shift };
 }
 
-export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, back: 21, forward: 21, reload: 21, urlLeft: 8 };
+// The end toggle's room at the toolbar's right: its button and a 2pt gap.
+export const SIDEBAR_BUTTON_END_ROOM = layout.toolbarButton + 2;
+
+export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, sidebarButtonEnd: false, back: 21, forward: 21, reload: 21, urlLeft: 8 };
+// No toolbar on the window's top-left pane with the sidebar on the right: the window buttons show over its corner on
+// hover, so what starts there (Developer Mode's bar, prompts) starts past them.
+export const NO_TOOLBAR_PAST_LIGHTS: ToolbarGeometry = { ...NO_TOOLBAR, urlLeft: TRAFFIC_LIGHTS_OFFSET };

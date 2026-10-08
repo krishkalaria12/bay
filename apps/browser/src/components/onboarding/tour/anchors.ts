@@ -4,7 +4,7 @@ import { useBrowser } from "../../../store/browser";
 import { activeTabId } from "../../../store/model";
 import { splitOf } from "../../../store/splits";
 import { toolbarGeometry, type Rect } from "../../layout/geometry";
-import { useUrlAnchors } from "../../layout/windowLayout";
+import { sidebarOnRight, useUrlAnchors } from "../../layout/windowLayout";
 import { measureRow } from "../../sidebar/state";
 
 export type TourAnchor = "commandBar" | "page" | "tabs" | "sidebarButton";
@@ -40,9 +40,11 @@ export async function locateAnchor(windowId: string, id: TourAnchor): Promise<Re
     case "sidebarButton": {
       const url = useUrlAnchors.getState()[windowId];
       if (!url || url.sidebar || tabLayout !== "sidebar" || splitOf(s, activeTabId(s, windowId))) return null;
+      const size = layout.toolbarButton;
+      // With the sidebar on the right the toggle is at the toolbar's end: 8pt in from the pane's edge, 12pt past the field.
+      if (sidebarOnRight(s, windowId)) return { x: url.left + url.width + 12 - 8 - size, y: url.top + 21.2 - size / 2, width: size, height: size };
       const g = toolbarGeometry({ sidebarButton: true, clearTrafficLights: !w.sidebarOpen });
       if (g.sidebarButton === null) return null;
-      const size = layout.toolbarButton;
       return { x: url.left - g.urlLeft + g.sidebarButton - size / 2, y: url.top + 21.2 - size / 2, width: size, height: size };
     }
   }

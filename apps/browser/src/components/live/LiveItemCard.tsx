@@ -9,6 +9,7 @@ import { ago } from "../../live/meetings";
 import { useLive } from "../../live/store";
 import type { LiveItem, PullRequestCheck } from "../../live/types";
 import { useBrowser } from "../../store/browser";
+import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { useHover } from "../primitives";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
@@ -17,13 +18,16 @@ import { useLiveColors, type LiveColors } from "./colors";
 
 export function HoverSurface({ anchor, width, children }: { anchor: Anchor; width: number; children: ReactNode }) {
   const theme = useTheme();
+  const right = useSidebarOnRight();
   const appear = useSharedValue(0);
   useEffect(() => {
     appear.set(withTiming(1, { duration: 140, easing: Easing.out(Easing.cubic) }));
   }, []);
-  const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateX: interpolate(appear.get(), [0, 1], [-4, 0]) }] }));
+  // It comes out of the sidebar, toward the page.
+  const from = right ? 4 : -4;
+  const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateX: interpolate(appear.get(), [0, 1], [from, 0]) }] }));
   return (
-    <Animated.View style={[{ position: "absolute", left: anchor.x + anchor.width + 8, top: Math.max(8, anchor.y - 6), width }, appearStyle]}>
+    <Animated.View style={[{ position: "absolute", left: besideRow(anchor, width, right), top: Math.max(8, anchor.y - 6), width }, appearStyle]}>
       <Surface
         onMouseEnter={keepHover}
         onMouseLeave={hoverLeave}

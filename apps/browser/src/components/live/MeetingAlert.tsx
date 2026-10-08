@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
+import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { dismiss, joinEvent, useMeetingAlert } from "../../live/alerts";
 import { useCalendar, useNow } from "../../live/calendar";
 import { attendeesLabel, guestsLabel, isCalendarUrl, joinLink, joinTitle, relatedLinks, relativeTime, timeRange, type CalendarEvent } from "../../live/meetings";
@@ -11,6 +12,7 @@ import { useBrowser } from "../../store/browser";
 import { viewTabIds } from "../../store/model";
 import { IconButton } from "../primitives";
 import { measureRow, type Anchor } from "../sidebar/state";
+import { useSidebarWidth } from "../sidebar/tokens";
 import { OverlappingAvatars } from "./CalendarPreview";
 import { useLiveColors } from "./colors";
 import { SmallButton } from "./LiveItemCard";
@@ -35,6 +37,8 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
   const sidebarShown = useBrowser((s) => !!s.windows[windowId]?.sidebarOpen);
   const calendarName = useCalendar((s) => s.calendars.find((c) => c.id === event.calendarId)?.title);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const right = useSidebarOnRight();
+  const sidebarWidth = useSidebarWidth(windowId);
   const appear = useSharedValue(0);
   const appearStyle = useAnimatedStyle(() => ({
     opacity: appear.get(),
@@ -58,7 +62,9 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
   const running = event.start <= now;
   const people = event.attendees.filter((a) => !a.me);
   const who = attendeesLabel(event);
-  const position = anchor ? { left: anchor.x + anchor.width + 8, top: Math.max(8, anchor.y - 4) } : { left: Math.max(8, windowWidth - WIDTH - 14), top: 52 };
+  // No calendar row to come out of: the page's top right corner, left of a sidebar docked on the right.
+  const pageRight = windowWidth - (right && sidebarShown ? sidebarWidth : 0);
+  const position = anchor ? { left: besideRow(anchor, WIDTH, right), top: Math.max(8, anchor.y - 4) } : { left: Math.max(8, pageRight - WIDTH - 14), top: 52 };
 
   return (
     <Animated.View style={[{ position: "absolute", ...position, width: WIDTH }, appearStyle]}>

@@ -20,7 +20,7 @@ import { splitOf } from "../store/splits";
 import type { SplitView } from "../store/types";
 import { BOOKMARKS_BAR_HEIGHT, BookmarksBar, useBookmarksBarShown } from "./bookmarks/BookmarksBar";
 import { FindBar } from "./FindBar";
-import { NO_TOOLBAR, splitGeometry, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
+import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, SIDEBAR_BUTTON_END_ROOM, splitGeometry, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
 import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
 import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
@@ -29,7 +29,7 @@ import { DropTargets, SplitDividers, SplitToast } from "./layout/SplitChrome";
 import { SplitEmptyState } from "./layout/SplitEmptyState";
 import { pagerFor } from "./layout/profilePager";
 import { openFromPage } from "./layout/openFromPage";
-import { setUrlAnchor, useAddressBarInSidebar, useTabLayout } from "./layout/windowLayout";
+import { setUrlAnchor, useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
 import { BlankTabSurface } from "./BlankTabSurface";
 import { InternalPage } from "./pages";
 import { AutofillPrompt, BlockedPopupsPrompt, ExternalAppPrompt, PasswordPrompt, PermissionPrompt, answerExternalApp, shouldPromptForPopups, showAutofillPrompt, showPasswordPrompt } from "./site/Prompts";
@@ -66,6 +66,8 @@ export function ContentCard() {
   const sidebarOpen = useSidebarOpen();
   const tabLayout = useTabLayout();
   const addressInSidebar = useAddressBarInSidebar();
+  // The sidebar on the right leaves the window buttons over the page's top-left corner, open or not.
+  const sidebarRight = useSidebarOnRight();
   // Small Yahu draws its own bar above the card (components/smallYahu).
   const small = useBrowser((s) => isSmallWindow(s.windows[windowId]));
   const hideWhileScrolling = useBrowser((s) => s.settings.hideToolbarWhileScrolling);
@@ -165,9 +167,16 @@ export function ContentCard() {
   );
 
   const geometryFor = (rect: Rect | undefined): ToolbarGeometry => {
-    if (addressInSidebar || small) return NO_TOOLBAR;
+    if (small) return NO_TOOLBAR;
     const leading = !!rect && rect.x === 0 && rect.y === 0;
-    return toolbarGeometry({ sidebarButton: leading && tabLayout === "sidebar", clearTrafficLights: leading && tabLayout === "sidebar" && !sidebarOpen });
+    if (addressInSidebar) return sidebarRight && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
+    // The pane at the top right, beside a sidebar docked on the right: its toolbar's end holds the toggle.
+    const trailing = !!rect && rect.y === 0 && rect.x + rect.width >= size.width - 1;
+    return toolbarGeometry({
+      sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,
+      sidebarButtonEnd: trailing && sidebarRight,
+      clearTrafficLights: leading && tabLayout === "sidebar" && (!sidebarOpen || sidebarRight),
+    });
   };
 
   const focusedRect = activeId ? panes[activeId] : undefined;
@@ -175,7 +184,7 @@ export function ContentCard() {
     if (!origin || !focusedRect || addressInSidebar || small) return;
     const g = geometryFor(focusedRect);
     setUrlAnchor(windowId, { left: origin.x + focusedRect.x + g.urlLeft, top: origin.y + focusedRect.y, width: focusedRect.width - g.urlLeft - 12 });
-  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, sidebarOpen, addressInSidebar]);
+  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, sidebarOpen, sidebarRight, addressInSidebar]);
 
   return (
     <View
@@ -288,8 +297,12 @@ const TabPane = memo(function TabPane({
   const doc = useBrowser((s) => pageKey(s.tabs[tabId]?.url ?? ""));
   // The page placed by the toolbar's motion, shown or not, so switching tabs keeps its size.
   const autoLayout = autoHide && toolbar && !fullscreen && !devBar;
-  // The page's own popovers open under the bar's end, or under the sidebar's field at the page's start.
-  const popoverSide = toolbar || devBar ? { right: 8 } : { left: 8 };
+  // The page's own popovers open under the bar's end (inside a sidebar toggle there), or under the sidebar's field at
+  // the page's start.
+  const barEnd = 8 + (geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0);
+  // Without a toolbar, past the window buttons when they show over this pane's corner.
+  const pageStart = geometry === NO_TOOLBAR_PAST_LIGHTS ? geometry.urlLeft : 8;
+  const popoverSide = toolbar || devBar ? { right: barEnd } : { left: pageStart };
   const motion = useToolbarMotion({ enabled: autoLayout, mode, height: frame.height, extra: bookmarksBar ? BOOKMARKS_BAR_HEIGHT : 0, doc });
   // A tab switched to shows its bar.
   useEffect(() => {
@@ -350,10 +363,10 @@ const TabPane = memo(function TabPane({
                 </Animated.View>
                 <SadTab tabId={tabId} />
                 {/* A page's own prompts go with its page: not over the New Tab page shown in its place (Back to it). */}
-                {!newTabShown && <DeveloperOffer tabId={tabId} left={8} top={4} paneWidth={frame.width} />}
+                {!newTabShown && <DeveloperOffer tabId={tabId} left={pageStart} top={4} paneWidth={frame.width} />}
                 {!newTabShown && <PermissionPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 308))} top={4} />}
-                <PasswordPrompt tabId={tabId} right={8} top={4} />
-                <AutofillPrompt tabId={tabId} right={8} top={4} />
+                <PasswordPrompt tabId={tabId} right={barEnd} top={4} />
+                <AutofillPrompt tabId={tabId} right={barEnd} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
                 {popover === "siteControls" && (!addressInSidebar || devBar) && <SiteControls tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...popoverSide} top={2} />}

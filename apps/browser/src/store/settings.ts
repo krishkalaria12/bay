@@ -44,6 +44,8 @@ export type Settings = {
   developerSites: string[];
   autoPictureInPicture: boolean;
   sidebarWidth: number;
+  // Which side of the window the sidebar docks on; the page takes the other. The window buttons stay at the top left.
+  sidebarPosition: "left" | "right";
   batterySaver: boolean;
   extensionSidePanelWidth: number;
 
@@ -93,6 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
   developerSites: [],
   autoPictureInPicture: true,
   sidebarWidth: 190,
+  sidebarPosition: "left",
   batterySaver: true,
   extensionSidePanelWidth: 360,
   showFullUrl: false,

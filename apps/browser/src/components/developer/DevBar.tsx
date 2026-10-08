@@ -12,6 +12,7 @@ import { useHistoryAvailability } from "../layout/history";
 import { setPopover, usePages } from "../layout/pageState";
 import { closePane, showSplitMenu } from "../layout/splitActions";
 import { toolbarPalette } from "../layout/toolbarColors";
+import { useSidebarSymbol } from "../layout/windowLayout";
 import { showUrlBarMenu } from "../omnibox/paste";
 import { useHover } from "../primitives";
 import { copyPageUrl } from "../site/selection";
@@ -53,6 +54,7 @@ export function DevBar({
   const inspecting = useIsInspecting(tabId);
   const controlsOpen = usePages((s) => s.popover[tabId] === "siteControls");
   const [width, setWidth] = useState(0);
+  const sidebarSymbol = useSidebarSymbol();
   const focus = useCallback(() => {
     if (!focused) useBrowser.getState().activate(tabId);
   }, [focused, tabId]);
@@ -81,7 +83,7 @@ export function DevBar({
       <Hatch width={width} height={height} color={theme.dark ? "rgba(255,255,255,0.055)" : "rgba(0,0,0,0.05)"} />
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       {navigation && geometry.sidebarButton !== null ? (
-        <ToolbarButton style={at(geometry.sidebarButton)} palette={palette} icon="sidebar.left" onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
+        <ToolbarButton style={at(geometry.sidebarButton)} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
       ) : null}
       {navigation ? (
         <>
@@ -90,7 +92,7 @@ export function DevBar({
           <ReloadButton style={at(geometry.reload)} tab={tab} loading={loading} palette={palette} onFocus={focus} />
         </>
       ) : null}
-      <View pointerEvents="box-none" style={{ position: "absolute", left: navigation ? geometry.urlLeft : 6, right: 6, top: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 2 }}>
+      <View pointerEvents="box-none" style={{ position: "absolute", left: navigation ? geometry.urlLeft : geometry.urlLeft - 2, right: 6, top: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 2 }}>
         <Address url={tab.url} tabId={tabId} windowId={windowId} onFocus={focus} />
         {button("ruler", inspecting ? "Stop Inspecting (esc)" : "Inspect Elements", () => toggleInspecting(tabId), inspecting)}
         {button("chevron.left.forwardslash.chevron.right", "Developer Tools (⌥⌘I)", () => void webviews.get(tabId)?.showDevTools("toggle"))}
@@ -103,6 +105,7 @@ export function DevBar({
             {button("xmark", "Close Pane", () => closePane(tabId))}
           </>
         ) : null}
+        {navigation && geometry.sidebarButtonEnd ? button(sidebarSymbol, "Auto-Hide Tabs (⌘S)", () => useBrowser.getState().toggleSidebar(windowId)) : null}
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} />
       {loading && <TabProgressBar tabId={tabId} color={theme.accent} />}

@@ -1,5 +1,6 @@
 import { Surface } from "@bay/shell";
 import { hex, layout, useTheme } from "../../lib/theme";
+import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
 import { clickTab } from "../sidebar/actions";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
@@ -18,10 +19,15 @@ export function useShowsMiniPlayer(tabId: string | undefined): boolean {
   return pinned && hasSession;
 }
 
-export function HoverPlayer({ tabId, windowId, anchor }: { tabId: string; windowId: string; anchor: Anchor }) {
+export function HoverPlayer({ tabId, windowId, anchor, windowWidth }: { tabId: string; windowId: string; anchor: Anchor; windowWidth: number }) {
   const theme = useTheme();
   const tokens = useMediaTokens();
-  const edge = Math.max(anchor.x + anchor.width, useSidebarWidth(windowId) - layout.sidebarInset);
+  const right = useSidebarOnRight();
+  const sidebarWidth = useSidebarWidth(windowId);
+  // Clear of the sidebar's inner edge, as a pinned tile's anchor can stop short of it.
+  const left = right
+    ? besideRow({ x: Math.min(anchor.x, windowWidth - sidebarWidth + layout.sidebarInset), width: 0 }, MINI_PLAYER_WIDTH, true)
+    : Math.max(anchor.x + anchor.width, sidebarWidth - layout.sidebarInset) + 8;
   return (
     <Surface
       onMouseEnter={keepHover}
@@ -34,7 +40,7 @@ export function HoverPlayer({ tabId, windowId, anchor }: { tabId: string; window
       shadowOpacity={theme.panelShadowOpacity * 0.8}
       shadowRadius={16}
       shadowOffset={[0, 6]}
-      style={{ position: "absolute", left: edge + 8, top: Math.max(8, anchor.y - 6), width: MINI_PLAYER_WIDTH, height: MINI_PLAYER_HEIGHT }}
+      style={{ position: "absolute", left, top: Math.max(8, anchor.y - 6), width: MINI_PLAYER_WIDTH, height: MINI_PLAYER_HEIGHT }}
     >
       <MiniPlayer
         tabId={tabId}

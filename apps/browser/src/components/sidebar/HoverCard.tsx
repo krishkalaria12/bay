@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
+import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
 import { activeTabId, isIncognitoProfile } from "../../store/model";
 import { splitOf } from "../../store/splits";
@@ -21,19 +22,20 @@ const WIDTH = 264;
 const PAD = 10;
 const PREVIEW_HEIGHT = 140;
 
-export function HoverCard({ windowId }: { windowId: string }) {
+export function HoverCard({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
   const hover = useSidebarUi((u) => (u.hover?.windowId === windowId ? u.hover : null));
   const player = useShowsMiniPlayer(hover?.kind === "tab" ? hover.id : undefined);
   const calendar = useIsCalendarTab(hover?.kind === "tab" ? hover.id : null);
   if (!hover) return null;
   if (hover.kind === "live") return <LiveItemCard id={hover.id} windowId={windowId} anchor={hover.anchor} />;
-  if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+  if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} windowWidth={windowWidth} />;
   if (hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
   return hover.kind === "tab" ? <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} /> : <GroupPeek groupId={hover.id} windowId={windowId} anchor={hover.anchor} />;
 }
 
 function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode }) {
   const theme = useTheme();
+  const right = useSidebarOnRight();
   return (
     <Surface
       onMouseEnter={keepHover}
@@ -46,7 +48,7 @@ function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode 
       shadowOpacity={theme.panelShadowOpacity * 0.8}
       shadowRadius={16}
       shadowOffset={[0, 6]}
-      style={{ position: "absolute", left: anchor.x + anchor.width + 8, top: Math.max(8, anchor.y - 6), width: WIDTH, padding: PAD }}
+      style={{ position: "absolute", left: besideRow(anchor, WIDTH, right), top: Math.max(8, anchor.y - 6), width: WIDTH, padding: PAD }}
     >
       {children}
     </Surface>

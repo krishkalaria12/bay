@@ -39,6 +39,7 @@ export const SYNCED_SETTINGS = [
   "bookmarksBar",
   "appearance",
   "addressBar",
+  "sidebarPosition",
   "shortcuts",
 ] as const satisfies readonly (keyof Settings)[];
 

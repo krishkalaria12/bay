@@ -9,7 +9,7 @@ import type { Tab } from "../../store/types";
 import { useHistoryAvailability } from "../layout/history";
 import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
-import { addressBarInSidebar, setUrlAnchor, SIDEBAR_FIELD } from "../layout/windowLayout";
+import { addressBarInSidebar, setUrlAnchor, SIDEBAR_FIELD, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
 import { GlassFill, liquidGlass } from "../glass";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
@@ -21,20 +21,25 @@ const NAV_WIDTH = 3 * BUTTON + 2 * GAP;
 const LIGHTS_Y = 26.75;
 const TOGGLE_X = 70.75 + 27;
 const EDGE = 7;
-const TOGGLE_MIN_WIDTH = TOGGLE_X + BUTTON / 2 + GAP + NAV_WIDTH + EDGE;
+// On the window's right there are no window buttons to clear: the toggle starts at the edge.
+const TOGGLE_X_RIGHT = EDGE + BUTTON / 2;
+const toggleMinWidth = (x: number) => x + BUTTON / 2 + GAP + NAV_WIDTH + EDGE;
 
 export function SidebarHeaderTools({ width }: { width: number }) {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const palette = toolbarPalette(useTheme(), null);
   const top = LIGHTS_Y - BUTTON / 2;
+  const right = useSidebarOnRight();
+  const toggleX = right ? TOGGLE_X_RIGHT : TOGGLE_X;
+  const sidebarSymbol = useSidebarSymbol();
   return (
     <>
-      {width >= TOGGLE_MIN_WIDTH ? (
+      {width >= toggleMinWidth(toggleX) ? (
         <ToolbarButton
-          style={{ position: "absolute", top, left: TOGGLE_X - BUTTON / 2 }}
+          style={{ position: "absolute", top, left: toggleX - BUTTON / 2 }}
           palette={palette}
-          icon="sidebar.left"
+          icon={sidebarSymbol}
           onPress={() => useBrowser.getState().toggleSidebar(windowId)}
           tooltip="Auto-Hide Tabs (⌘S)"
         />

@@ -28,6 +28,7 @@ export function AppearancePane() {
         ))}
       </View>
       <MaterialPicker />
+      <SidebarPositionPicker />
       <AddressBarPicker />
       <AppIconPicker />
     </View>
@@ -83,6 +84,70 @@ function MaterialChoice({ value, title, selected, onPress }: { value: Settings["
           </View>
           <View style={{ flex: 1, borderRadius: 4, backgroundColor: page }} />
         </View>
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+        {selected && <Symbol name="checkmark.circle.fill" size={12} color={colors.accent} style={{ width: 14, height: 14 }} />}
+        <Text style={{ fontSize: 12, color: selected ? theme.textPrimary : theme.textSecondary }}>{title}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function SidebarPositionPicker() {
+  const position = useBrowser((s) => s.settings.sidebarPosition);
+  const topTabs = useBrowser((s) => s.settings.tabLayout === "top");
+  const choose = (value: Settings["sidebarPosition"]) => useBrowser.getState().updateSettings({ sidebarPosition: value });
+  return (
+    <>
+      <SectionHeader
+        title="Sidebar"
+        description={
+          topTabs
+            ? "Tabs are across the top of the window. With tabs in the sidebar, it docks on the side you choose."
+            : "Choose which side of the window the sidebar docks on. On the right, the page runs up to the window’s top, and the window buttons show when you point there."
+        }
+      />
+      <View style={{ flexDirection: "row", gap: 14 }}>
+        <SidebarPositionChoice value="left" title="On the left" selected={position !== "right"} onPress={() => choose("left")} />
+        <SidebarPositionChoice value="right" title="On the right" selected={position === "right"} onPress={() => choose("right")} />
+      </View>
+    </>
+  );
+}
+
+function SidebarPositionChoice({ value, title, selected, onPress }: { value: Settings["sidebarPosition"]; title: string; selected: boolean; onPress: () => void }) {
+  const theme = useTheme();
+  const colors = useFormColors();
+  const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
+  const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
+  const right = value === "right";
+  return (
+    <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }}>
+      <View
+        style={{
+          width: "100%",
+          height: 84,
+          borderRadius: 9,
+          padding: 6,
+          flexDirection: right ? "row-reverse" : "row",
+          gap: 5,
+          borderWidth: selected ? 2.5 : 1,
+          borderColor: selected ? colors.accent : colors.groupBorder,
+          backgroundColor: theme.dark ? "#2A2A2C" : "#E9E9EB",
+        }}
+      >
+        {/* The window buttons, top left either way: over the page, and faint (they show on hover), on the right. */}
+        <View style={{ position: "absolute", zIndex: 1, left: right ? 9 : 6, top: right ? 8 : 5, flexDirection: "row", gap: 2.5, opacity: right ? 0.45 : 1 }}>
+          {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
+            <View key={c} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: c }} />
+          ))}
+        </View>
+        <View style={{ width: "28%", gap: 3, paddingTop: 8 }}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: i === 0 ? colors.accent : bar }} />
+          ))}
+        </View>
+        <View style={{ flex: 1, borderRadius: 4, backgroundColor: page }} />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
         {selected && <Symbol name="checkmark.circle.fill" size={12} color={colors.accent} style={{ width: 14, height: 14 }} />}

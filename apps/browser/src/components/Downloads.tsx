@@ -7,7 +7,7 @@ import { layout, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useSidebarOpen, useWindowId } from "../store/hooks";
 import { downloadVisibleIn } from "../store/ui";
-import { SIDEBAR_FOOTER_DOWNLOADS, useTabLayout } from "./layout/windowLayout";
+import { SIDEBAR_FOOTER_DOWNLOADS, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
 import { openInternalPage } from "./pages/urls";
 import { useSidebarWidth } from "./sidebar/tokens";
 
@@ -129,6 +129,7 @@ export function DownloadMagnet() {
   const sidebarOpen = useSidebarOpen();
   const sidebarWidth = useSidebarWidth(windowId);
   const topStrip = useTabLayout() === "top";
+  const right = useSidebarOnRight();
   const [flight, setFlight] = useState<{ id: string; path: string } | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const t = useSharedValue(0);
@@ -154,9 +155,11 @@ export function DownloadMagnet() {
   }, [windowId]);
 
   const sidebar = !topStrip && sidebarOpen ? sidebarWidth : 0;
-  const footer = { x: layout.sidebarInset + SIDEBAR_FOOTER_DOWNLOADS.size / 2, y: size.height - SIDEBAR_FOOTER_DOWNLOADS.bottom - SIDEBAR_FOOTER_DOWNLOADS.size / 2 };
+  // The sidebar's left edge: the window's, or the page's right one with the sidebar on the right.
+  const sidebarLeft = right ? size.width - sidebar : 0;
+  const footer = { x: sidebarLeft + layout.sidebarInset + SIDEBAR_FOOTER_DOWNLOADS.size / 2, y: size.height - SIDEBAR_FOOTER_DOWNLOADS.bottom - SIDEBAR_FOOTER_DOWNLOADS.size / 2 };
   const target = topStrip ? { x: size.width - 25, y: 21 } : sidebarOpen ? footer : { x: 24, y: 24 };
-  const start = { x: sidebar + (size.width - sidebar) / 2, y: size.height * 0.45 };
+  const start = { x: (right ? 0 : sidebar) + (size.width - sidebar) / 2, y: size.height * 0.45 };
   const icon = 44;
   const steps = [0, 0.25, 0.5, 0.75, 1];
   const xs = steps.map((p) => start.x + (target.x - start.x) * p - icon / 2);

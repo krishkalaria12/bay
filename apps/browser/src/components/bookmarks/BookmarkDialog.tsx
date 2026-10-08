@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { useWindowId } from "../../store/hooks";
+import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
 import { FolderTree } from "./FolderTree";
-import { SIDEBAR_HEADER_WITH_FIELD, useSidebarFieldShown } from "../layout/windowLayout";
+import { SIDEBAR_HEADER_WITH_FIELD, useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
+import { useSidebarWidth } from "../sidebar/tokens";
 
 export function BookmarkDialog() {
   const windowId = useWindowId();
@@ -20,6 +21,12 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
   const theme = useTheme();
   const colors = useFormColors();
   const field = useSidebarFieldShown();
+  // Under the star it was opened from: the sidebar's field, or the toolbar's end (the sidebar's edge, on the right).
+  const right = useSidebarOnRight();
+  const sidebarOpen = useSidebarOpen();
+  const sidebarWidth = useSidebarWidth(useWindowId());
+  const fieldSide = right ? { right: layout.sidebarInset } : { left: layout.sidebarInset };
+  const toolbarEnd = (right && sidebarOpen ? sidebarWidth : layout.cardInset) + 10;
   const bookmark = useBrowser((s) => (state.kind === "page" ? s.bookmarks.nodes[state.bookmarkId] : undefined));
   const profileId = state.kind === "page" ? profileOfNode(state.bookmarkId) : state.profileId;
   const [name, setName] = useState(() => (state.kind === "page" ? (bookmark?.title ?? "") : ""));
@@ -73,7 +80,7 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
         shadowOffset={[0, 10]}
         style={{
           position: "absolute",
-          ...(field ? { top: SIDEBAR_HEADER_WITH_FIELD + 4, left: layout.sidebarInset } : { top: layout.cardTop + layout.toolbarHeight - 2, right: layout.cardInset + 10 }),
+          ...(field ? { top: SIDEBAR_HEADER_WITH_FIELD + 4, ...fieldSide } : { top: layout.cardTop + layout.toolbarHeight - 2, right: toolbarEnd }),
           width: 320,
           padding: 14,
         }}

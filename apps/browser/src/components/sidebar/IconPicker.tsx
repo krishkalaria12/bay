@@ -2,6 +2,7 @@ import { Surface, Symbol } from "@bay/shell";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
+import { useSidebarOnRight } from "../layout/windowLayout";
 import { useLive } from "../../live/store";
 import { useBrowser } from "../../store/browser";
 import { setIcon } from "./actions";
@@ -45,15 +46,16 @@ const COLUMNS = 8;
 const CELL = 30;
 const WIDTH = COLUMNS * CELL + 16;
 
-export function IconPicker({ windowId, sidebarWidth }: { windowId: string; sidebarWidth: number }) {
+export function IconPicker({ windowId, sidebarWidth, windowWidth }: { windowId: string; sidebarWidth: number; windowWidth: number }) {
   const picker = useSidebarUi((u) => (u.iconPicker?.windowId === windowId ? u.iconPicker : null));
-  return picker ? <PickerPanel key={picker.id} picker={picker} sidebarWidth={sidebarWidth} /> : null;
+  return picker ? <PickerPanel key={picker.id} picker={picker} sidebarWidth={sidebarWidth} windowWidth={windowWidth} /> : null;
 }
 
 type Picker = NonNullable<ReturnType<typeof useSidebarUi.getState>["iconPicker"]>;
 
-function PickerPanel({ picker, sidebarWidth }: { picker: Picker; sidebarWidth: number }) {
+function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; sidebarWidth: number; windowWidth: number }) {
   const theme = useTheme();
+  const right = useSidebarOnRight();
   const tokens = useSidebarTokens();
   const liveIcon = useLive((s) => (picker.kind === "live" ? s.folders[picker.id.split("|")[1] ?? ""]?.icon : null));
   const current = useBrowser((s) => (picker.kind === "tab" ? s.tabs[picker.id]?.customIcon : picker.kind === "live" ? liveIcon : s.groups[picker.id]?.icon) ?? null);
@@ -71,7 +73,14 @@ function PickerPanel({ picker, sidebarWidth }: { picker: Picker; sidebarWidth: n
     close();
   };
   const top = Math.max(8, (picker.anchor?.y ?? 60) - 8);
-  const left = picker.anchor ? Math.max(8, Math.min(sidebarWidth + 6, picker.anchor.x + picker.anchor.width + 6)) : sidebarWidth + 6;
+  // Beside the row it's for, toward the page, and no further into the page than the sidebar's edge.
+  let left: number;
+  if (right) {
+    const edge = windowWidth - sidebarWidth - 6 - WIDTH;
+    left = picker.anchor ? Math.min(windowWidth - WIDTH - 8, Math.max(edge, picker.anchor.x - 6 - WIDTH)) : edge;
+  } else {
+    left = picker.anchor ? Math.max(8, Math.min(sidebarWidth + 6, picker.anchor.x + picker.anchor.width + 6)) : sidebarWidth + 6;
+  }
 
   return (
     <>

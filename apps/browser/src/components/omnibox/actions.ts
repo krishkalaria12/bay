@@ -68,6 +68,12 @@ const DEFS: ActionDef[] = [
     keywords: ["developer mode", "dev mode", "inspect", "localhost", "ruler"],
     needs: "site",
   },
+  {
+    command: "toggleSidebarPosition",
+    title: ({ s }) => (s.settings.sidebarPosition === "right" ? "Move Sidebar to the Left" : "Move Sidebar to the Right"),
+    icon: "sidebar.right",
+    keywords: ["sidebar position", "sidebar side", "right sidebar", "left sidebar", "flip sidebar"],
+  },
   { command: "toggleFullUrl", title: ({ s }) => (s.settings.showFullUrl ? "Hide Full URL" : "Show Full URL"), icon: "text.alignleft" },
   { command: "toggleSidebar", title: "Auto-Hide Tabs", icon: "sidebar.left", hint: "⌘S", keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"] },
   { command: "toggleBookmarksBar", title: "Toggle Bookmarks Bar", icon: "menubar.rectangle", hint: "⇧⌘B", keywords: ["bookmarks bar"] },
