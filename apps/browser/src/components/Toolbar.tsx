@@ -147,7 +147,7 @@ export const ReloadButton = memo(function ReloadButton({
   );
 });
 
-const TabProgressBar = memo(function TabProgressBar({ tabId, color }: { tabId: string; color: string }) {
+export const TabProgressBar = memo(function TabProgressBar({ tabId, color }: { tabId: string; color: string }) {
   return <ProgressBar progress={useTabLive(tabId, (l) => l.progress)} color={color} />;
 });
 

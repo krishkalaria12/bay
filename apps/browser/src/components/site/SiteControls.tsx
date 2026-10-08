@@ -22,6 +22,8 @@ import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
 import { bookmarkProfileId, engineProfile, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../layout/controls";
+import { toggleDeveloperMode } from "../developer/devMode";
+import { useIsDeveloperTab } from "../developer/sites";
 import { patchPage, setPopover, usePage, usePages } from "../layout/pageState";
 import { showToast } from "../layout/splitActions";
 import { toggleCastPicker } from "../media/cast";
@@ -66,6 +68,7 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
   const security = usePage(tabId, (p) => p.security);
   const blocked = usePage(tabId, (p) => p.blocked);
   const showFullUrl = useSettings((s) => s.showFullUrl);
+  const developer = useIsDeveloperTab(tabId);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [blocker, setBlocker] = useState<{ enabled: boolean; allowed: boolean } | null>(null);
   const [certOpen, setCertOpen] = useState(false);
@@ -260,6 +263,12 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
                   title="Block ads and trackers"
                   detail={!blocker ? "Loading…" : !blocker.enabled ? "Off in Settings" : blocker.allowed ? "Off" : blocked > 0 ? `On · ${blocked} blocked` : "On"}
                   accessory={blocker?.enabled ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
+                />
+                <PopoverRow
+                  icon="chevron.left.forwardslash.chevron.right"
+                  title="Developer Mode"
+                  detail={developer ? "Address, inspector and DevTools over the page" : undefined}
+                  accessory={<Toggle value={developer} onChange={() => toggleDeveloperMode(tabId)} />}
                 />
               </>
             ) : null}

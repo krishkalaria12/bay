@@ -4,6 +4,7 @@ import { runCommand } from "../../lib/commands";
 import { isBookmarked } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTab, bookmarkProfileId } from "../../store/model";
+import { isDeveloperUrl, siteKey } from "../developer/sites";
 import type { Tab } from "../../store/types";
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
@@ -15,7 +16,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "tab" | "profiles";
+  needs?: "page" | "site" | "tab" | "profiles";
 };
 
 const page = "page" as const;
@@ -60,6 +61,13 @@ const DEFS: ActionDef[] = [
   { command: "zoomOut", title: "Zoom Out", icon: "minus.magnifyingglass", hint: "⌘-", needs: page },
   { command: "zoomReset", title: "Actual Size", icon: "1.magnifyingglass", hint: "⌘0", keywords: ["reset zoom"], needs: page },
   { command: "devTools", title: "Developer Tools", icon: "hammer", hint: "⌥⌘I", keywords: ["inspect", "devtools", "console"], needs: page },
+  {
+    command: "toggleDeveloperMode",
+    title: ({ s, tab }) => (tab && isDeveloperUrl(s, tab.url) ? "Turn Off Developer Mode for This Site" : "Turn On Developer Mode for This Site"),
+    icon: "chevron.left.forwardslash.chevron.right",
+    keywords: ["developer mode", "dev mode", "inspect", "localhost", "ruler"],
+    needs: "site",
+  },
   { command: "toggleFullUrl", title: ({ s }) => (s.settings.showFullUrl ? "Hide Full URL" : "Show Full URL"), icon: "text.alignleft" },
   { command: "toggleSidebar", title: "Auto-Hide Tabs", icon: "sidebar.left", hint: "⌘S", keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"] },
   { command: "toggleBookmarksBar", title: "Toggle Bookmarks Bar", icon: "menubar.rectangle", hint: "⇧⌘B", keywords: ["bookmarks bar"] },
@@ -87,6 +95,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
   for (const d of DEFS) {
     if (d.needs === "page" && !tab?.url) continue;
     if (d.needs === "tab" && !tab) continue;
+    if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
     if (d.needs === "profiles" && w?.incognito) continue;
     out.push({
       id: actionId(d),

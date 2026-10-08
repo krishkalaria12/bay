@@ -53,6 +53,10 @@ import { isSmallWindow } from "../store/small";
 import { closeSmallYahuOnEscape } from "./smallYahu/actions";
 import { PageLoadGlow } from "./layout/PageLoadGlow";
 import { usePaneSwitch, type SwitchStyle } from "./layout/switchMotion";
+import { DEV_BAR_HEIGHT, DevBar } from "./developer/DevBar";
+import { DeveloperOffer } from "./developer/DeveloperOffer";
+import { onDeveloperMessage, startDeveloperMode } from "./developer/devMode";
+import { useIsDeveloperTab } from "./developer/sites";
 
 export function ContentCard() {
   const windowId = useWindowId();
@@ -72,6 +76,7 @@ export function ContentCard() {
   useEffect(startChromeTabs, []);
   useEffect(startMedia, []);
   useEffect(startSelectionTools, []);
+  useEffect(startDeveloperMode, []);
 
   // Recomputed only when the window's tabs change, not on every store update (page progress, say).
   const mountedMemo = useRef<{ tabIds?: string[]; tabs?: object; ids: string[] }>({ ids: [] });
@@ -275,12 +280,16 @@ const TabPane = memo(function TabPane({
   useEffect(() => {
     if (visible && isNewTab && !mounted) patchPage(tabId, { wasNewTab: true });
   }, [visible, isNewTab, mounted]);
-  const hideBar = autoHide && visible && !fullscreen;
+  // A site in Developer Mode has its own bar over the page, in place of the toolbar (developer/DevBar.tsx).
+  const devBar = useIsDeveloperTab(tabId) && !small && !fullscreen;
+  const hideBar = autoHide && visible && !fullscreen && !devBar;
   const mode = useToolbarMode(tabId, windowId, hideBar);
   const bookmarksBar = useBookmarksBarShown(tabId) && !fullscreen && !inSplit && !small;
   const doc = useBrowser((s) => pageKey(s.tabs[tabId]?.url ?? ""));
   // The page placed by the toolbar's motion, shown or not, so switching tabs keeps its size.
-  const autoLayout = autoHide && toolbar && !fullscreen;
+  const autoLayout = autoHide && toolbar && !fullscreen && !devBar;
+  // The page's own popovers open under the bar's end, or under the sidebar's field at the page's start.
+  const popoverSide = toolbar || devBar ? { right: 8 } : { left: 8 };
   const motion = useToolbarMotion({ enabled: autoLayout, mode, height: frame.height, extra: bookmarksBar ? BOOKMARKS_BAR_HEIGHT : 0, doc });
   // A tab switched to shows its bar.
   useEffect(() => {
@@ -308,7 +317,13 @@ const TabPane = memo(function TabPane({
         fade,
       ]}
     >
-      {!toolbar || fullscreen || autoLayout ? null : visible ? (
+      {devBar ? (
+        visible ? (
+          <DevBar tabId={tabId} windowId={windowId} geometry={geometry} navigation={toolbar} inSplit={inSplit} focused={focused || !inSplit} />
+        ) : (
+          <View style={{ height: toolbar ? layout.toolbarHeight : DEV_BAR_HEIGHT }} />
+        )
+      ) : !toolbar || fullscreen || autoLayout ? null : visible ? (
         <Toolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused || !inSplit} />
       ) : (
         <View style={{ height: layout.toolbarHeight }} />
@@ -323,7 +338,7 @@ const TabPane = memo(function TabPane({
           <Animated.View style={[{ flex: 1 }, slide]}>
             {mounted && <TabWebView tabId={tabId} visible={visible && !newTabShown && !isNewTab} warm={!!warm && !newTabShown && !isNewTab} />}
             {/* No toolbar to carry the load (the address in the sidebar, or full screen): the page's top shows it. */}
-            {visible && (!toolbar || fullscreen) && !small && !isNewTab && !newTabShown && <PageLoadGlow tabId={tabId} />}
+            {visible && (!toolbar || fullscreen) && !devBar && !small && !isNewTab && !newTabShown && <PageLoadGlow tabId={tabId} />}
             {visible && isNewTab && !small && (inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : <BlankTabSurface key={tabId} tabId={tabId} focused={focused && !covered} />)}
             {visible && <InternalPage tabId={tabId} />}
             {visible && (
@@ -335,13 +350,14 @@ const TabPane = memo(function TabPane({
                 </Animated.View>
                 <SadTab tabId={tabId} />
                 {/* A page's own prompts go with its page: not over the New Tab page shown in its place (Back to it). */}
+                {!newTabShown && <DeveloperOffer tabId={tabId} left={8} top={4} paneWidth={frame.width} />}
                 {!newTabShown && <PermissionPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 308))} top={4} />}
                 <PasswordPrompt tabId={tabId} right={8} top={4} />
                 <AutofillPrompt tabId={tabId} right={8} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
-                {popover === "siteControls" && !addressInSidebar && <SiteControls tabId={tabId} {...(toolbar ? { right: 8 } : { left: 8 })} top={2} />}
-                {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...(toolbar ? { right: 8 } : { left: 8 })} top={2} />}
-                {popover === "zoom" && <ZoomPopover tabId={tabId} {...(toolbar ? { right: 8 } : { left: 8 })} top={2} />}
+                {popover === "siteControls" && (!addressInSidebar || devBar) && <SiteControls tabId={tabId} {...popoverSide} top={2} />}
+                {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...popoverSide} top={2} />}
+                {popover === "zoom" && <ZoomPopover tabId={tabId} {...popoverSide} top={2} />}
                 <SharePicker tabId={tabId} paneWidth={frame.width} />
                 {!newTabShown && <DeviceChooser tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
                 <CastPicker tabId={tabId} paneWidth={frame.width} />
@@ -519,6 +535,7 @@ const TabWebView = memo(function TabWebView({ tabId, visible, warm }: { tabId: s
       onPageMessage={(kind, data) => {
         if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);
         else if (kind === "scroll") noteScroll(tabId, data);
+        else if (kind === "devMode") onDeveloperMessage(tabId, data);
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {

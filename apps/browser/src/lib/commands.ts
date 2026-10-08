@@ -37,6 +37,7 @@ import { toggleCastPicker } from "../components/media/cast";
 import { openManageExtensions, openPinDialog, openWebStore } from "../components/extensions/state";
 import { requestAutofill } from "../components/site/Autofill";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
+import { toggleDeveloperMode } from "../components/developer/devMode";
 import { openProfileMenu } from "../components/ProfileIndicator";
 import { groupOf } from "../store/organize";
 import { isSmall, mainWindowFor } from "../store/small";
@@ -194,6 +195,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return page ? void web?.zoomStep(0) : undefined;
     case "devTools":
       return void web?.showDevTools();
+    case "toggleDeveloperMode":
+      return page ? toggleDeveloperMode(page.id) : undefined;
     case "toggleDevTools":
       return void web?.showDevTools("toggle");
     case "inspectElements":
