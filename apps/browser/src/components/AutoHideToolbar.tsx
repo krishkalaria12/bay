@@ -1,6 +1,7 @@
 import { breadcrumb } from "@bay/core";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { reduceMotion } from "../lib/reduceMotion";
 import { layout, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useSettings, useTabLive } from "../store/hooks";
@@ -34,13 +35,6 @@ const UNPEEK_DELAY = 250;
 const SHRINK = 0.94;
 // What the page gets back from the bar itself.
 const BAR_ROOM = layout.toolbarHeight - STRIP_HEIGHT;
-
-let reduceMotion = false;
-AccessibilityInfo.isReduceMotionEnabled().then(
-  (on) => (reduceMotion = on),
-  () => {},
-);
-AccessibilityInfo.addEventListener("reduceMotionChanged", (on) => (reduceMotion = on));
 
 export function useToolbarMode(tabId: string, windowId: string, enabled: boolean): ToolbarMode {
   const scrolledDown = useToolbarAutoHide((s) => !!s.scrolledDown[tabId]);
@@ -136,7 +130,7 @@ export function useToolbarMotion({
       const to = collapsed ? 1 : 0;
       const barTo = hidden ? 1 : 0;
       v.laid.setValue(to);
-      if (reduceMotion) {
+      if (reduceMotion()) {
         // The page and the band move at once, the controls fade.
         v.page.setValue(to);
         v.bar.setValue(barTo);
@@ -146,7 +140,7 @@ export function useToolbarMotion({
       // Peeking: the bar over the page, at once.
       v.bar.setValue(0);
       v.fade.setValue(0);
-    } else if (reduceMotion) {
+    } else if (reduceMotion()) {
       v.bar.setValue(1);
       glide(v.fade, 1, false).start();
     } else Animated.parallel([glide(v.bar, 1, false), glide(v.fade, 1, false)]).start();

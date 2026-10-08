@@ -1,6 +1,6 @@
 import { WebView, type OpenWindowRequest } from "@bay/nncore";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { Animated, StyleSheet, View, type ViewStyle } from "react-native";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../lib/actions";
@@ -51,6 +51,7 @@ import { closeWebNotification, showWebNotification } from "../lib/webNotificatio
 import { isSmallWindow } from "../store/small";
 import { closeSmallYahuOnEscape } from "./smallYahu/actions";
 import { PageLoadGlow } from "./layout/PageLoadGlow";
+import { usePaneSwitch } from "./layout/switchMotion";
 
 export function ContentCard() {
   const windowId = useWindowId();
@@ -99,6 +100,10 @@ export function ContentCard() {
     return { panes: activeId ? { [activeId]: full } : {}, dividers: [] };
   }, [split, activeId, fullscreenTab, size.width, size.height]);
 
+  // A tab switch keeps the panes it leaves on screen while the switch plays (layout/switchMotion.ts).
+  const paneSwitch = usePaneSwitch(windowId, panes, !fullscreenTab);
+  const framed = useMemo(() => (paneSwitch ? { ...paneSwitch.leaving, ...panes } : panes), [paneSwitch, panes]);
+
   useEffect(() => {
     const s = useBrowser.getState();
     for (const id of Object.keys(panes)) {
@@ -141,14 +146,14 @@ export function ContentCard() {
   const shown = useBrowser(
     useShallow((s) => {
       const memo = shownMemo.current;
-      if (memo.mounted === mounted && memo.panes === panes && memo.tabs === s.tabs) return memo.keys;
-      const keys = [...new Set([...mounted, ...Object.keys(panes)])]
+      if (memo.mounted === mounted && memo.panes === framed && memo.tabs === s.tabs) return memo.keys;
+      const keys = [...new Set([...mounted, ...Object.keys(framed)])]
         .map((id) => s.tabs[id])
         .filter((t) => !!t)
         // Keep mount order stable; reordering native subviews while tabs move can shuffle them.
         .sort((a, b) => a!.createdAt - b!.createdAt)
         .map((t) => `${t!.id}|${t!.profileId}`);
-      shownMemo.current = { mounted, panes, tabs: s.tabs, keys };
+      shownMemo.current = { mounted, panes: framed, tabs: s.tabs, keys };
       return keys;
     }),
   );
@@ -179,7 +184,7 @@ export function ContentCard() {
       {size.width > 0 &&
         shown.map((key) => {
           const tabId = key.slice(0, key.indexOf("|"));
-          const rect = panes[tabId];
+          const rect = framed[tabId];
           return (
             <TabPane
               key={key}
@@ -198,6 +203,9 @@ export function ContentCard() {
               small={small}
               mounted={mounted.includes(tabId)}
               warm={warmPanes[tabId]}
+              leaving={!!paneSwitch?.leaving[tabId]}
+              fade={paneSwitch?.fade[tabId]}
+              slide={paneSwitch?.entering.includes(tabId) ? paneSwitch.slide : undefined}
             />
           );
         })}
@@ -225,6 +233,9 @@ const TabPane = memo(function TabPane({
   small,
   mounted,
   warm,
+  leaving,
+  fade,
+  slide,
 }: {
   tabId: string;
   windowId: string;
@@ -244,6 +255,11 @@ const TabPane = memo(function TabPane({
   small: boolean;
   mounted: boolean;
   warm: Rect | undefined;
+  // Switched away from, shown until the switch is over (layout/switchMotion.ts): drawn, not hit.
+  leaving: boolean;
+  // The pane's fade and its page's settling while a switch plays.
+  fade: Animated.WithAnimatedObject<ViewStyle> | undefined;
+  slide: Animated.WithAnimatedObject<ViewStyle> | undefined;
 }) {
   const theme = useTheme();
   const visible = !!rect;
@@ -271,22 +287,25 @@ const TabPane = memo(function TabPane({
   }, [visible]);
 
   return (
-    <View
-      pointerEvents={visible && !covered ? "auto" : "none"}
+    <Animated.View
+      pointerEvents={visible && !covered && !leaving ? "auto" : "none"}
       onTouchStart={() => {
         if (visible && !focused) useBrowser.getState().activate(tabId);
       }}
-      style={{
-        position: "absolute",
-        left: frame.x,
-        top: frame.y,
-        width: frame.width,
-        height: frame.height,
-        borderRadius: fullscreen ? 0 : layout.cardRadius,
-        overflow: "hidden",
-        opacity: covered ? 0 : 1,
-        backgroundColor: visible && !fullscreen ? theme.card : undefined,
-      }}
+      style={[
+        {
+          position: "absolute",
+          left: frame.x,
+          top: frame.y,
+          width: frame.width,
+          height: frame.height,
+          borderRadius: fullscreen ? 0 : layout.cardRadius,
+          overflow: "hidden",
+          opacity: covered ? 0 : 1,
+          backgroundColor: visible && !fullscreen ? theme.card : undefined,
+        },
+        fade,
+      ]}
     >
       {!toolbar || fullscreen || autoLayout ? null : visible ? (
         <Toolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused || !inSplit} />
@@ -300,7 +319,7 @@ const TabPane = memo(function TabPane({
         {autoLayout && bookmarksBar && <BookmarksBar tabId={tabId} placeholder={!visible} />}
         <View style={autoLayout ? { height: motion.pageHeight } : { flex: 1 }}>
           {visible && !fullscreen && <ShareBar tabId={tabId} />}
-          <View style={{ flex: 1 }}>
+          <Animated.View style={[{ flex: 1 }, slide]}>
             {mounted && <TabWebView tabId={tabId} visible={visible && !newTabShown && !isNewTab} warm={!!warm && !newTabShown && !isNewTab} />}
             {/* No toolbar to carry the load (the address in the sidebar, or full screen): the page's top shows it. */}
             {visible && (!toolbar || fullscreen) && !small && !isNewTab && !newTabShown && <PageLoadGlow tabId={tabId} />}
@@ -329,11 +348,11 @@ const TabPane = memo(function TabPane({
                 <SelectionPopover tabId={tabId} zoom={zoom} />
               </>
             )}
-          </View>
+          </Animated.View>
         </View>
       </Animated.View>
       {hideBar && <AutoHideToolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused || !inSplit} mode={mode} motion={motion} />}
-    </View>
+    </Animated.View>
   );
 });
 

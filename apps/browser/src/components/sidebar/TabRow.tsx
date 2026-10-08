@@ -7,6 +7,7 @@ import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { useIsActiveTab, usePageProfileId, useTab, useWindowId } from "../../store/hooks";
 import { HoverSlot } from "../HoverSlot";
+import { ActiveHighlight } from "./ActiveHighlight";
 import { IconButton } from "../primitives";
 import { clickTab, commitRename, endRename, startRename, tabTitle } from "./actions";
 import { useDragItem } from "./dnd";
@@ -75,8 +76,9 @@ export function TabRow({ tabId }: { tabId: string }) {
   const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
   if (!tab) return null;
   const title = tabTitle(tab);
-  const fill = active ? theme.tabSelected : selected ? tokens.multiSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
-  const border = active || selected ? 0.5 : 0;
+  // The active row's fill is its ActiveHighlight's, under it.
+  const fill = active ? "rgba(0,0,0,0)" : selected ? tokens.multiSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
+  const border = selected && !active ? 0.5 : 0;
 
   return (
     <View
@@ -98,45 +100,43 @@ export function TabRow({ tabId }: { tabId: string }) {
             }}
           >
             {({ pressed }) => (
-              <Surface
-                fill={hex(!active && pressed ? theme.tabPressed : fill)}
-                cornerRadius={10}
-                borderWidth={border}
-                borderColor={selected && !active ? hex(tokens.multiSelectedStroke) : undefined}
-                borderColors={active ? theme.tabSelectedBorder.map(hex) : undefined}
-                shadowColor={active ? hex(theme.tabSelectedShadow) : undefined}
-                shadowOpacity={active ? 1 : 0}
-                shadowRadius={theme.tabSelectedShadowRadius}
-                shadowOffset={[0, 0.5]}
-                style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
-              >
-                <View>
-                  <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
-                  <TabBadges tabId={tab.id} />
-                </View>
-                {(playingAudio || tab.muted) && (
-                  <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 6 }} tooltip={tab.muted ? "Unmute Site" : "Mute Site"}>
-                    <Symbol name={tab.muted ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
-                  </Pressable>
-                )}
-                {renaming ? (
-                  <RenameField
-                    initial={tab.customTitle ?? tab.title}
-                    placeholder={tab.title || "Tab name"}
-                    color={active ? theme.tabSelectedText : theme.textPrimary}
-                    onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
-                  />
-                ) : (
-                  <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
-                )}
-                <HoverSlot
-                  hovered={hovered && !renaming}
-                  width={22}
-                  hover={<IconButton icon="xmark" size={10} weight="semibold" box={22} radius={6} onPress={() => void closeTab(tab.id)} tooltip="Close Tab (⌘W)" />}
+              <View>
+                <ActiveHighlight active={active} tabIds={[tabId]} borderWidth={0.5} />
+                <Surface
+                  fill={hex(!active && pressed ? theme.tabPressed : fill)}
+                  cornerRadius={10}
+                  borderWidth={border}
+                  borderColor={border ? hex(tokens.multiSelectedStroke) : undefined}
+                  style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
                 >
-                  {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
-                </HoverSlot>
-              </Surface>
+                  <View>
+                    <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
+                    <TabBadges tabId={tab.id} />
+                  </View>
+                  {(playingAudio || tab.muted) && (
+                    <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 6 }} tooltip={tab.muted ? "Unmute Site" : "Mute Site"}>
+                      <Symbol name={tab.muted ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
+                    </Pressable>
+                  )}
+                  {renaming ? (
+                    <RenameField
+                      initial={tab.customTitle ?? tab.title}
+                      placeholder={tab.title || "Tab name"}
+                      color={active ? theme.tabSelectedText : theme.textPrimary}
+                      onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
+                    />
+                  ) : (
+                    <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
+                  )}
+                  <HoverSlot
+                    hovered={hovered && !renaming}
+                    width={22}
+                    hover={<IconButton icon="xmark" size={10} weight="semibold" box={22} radius={6} onPress={() => void closeTab(tab.id)} tooltip="Close Tab (⌘W)" />}
+                  >
+                    {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
+                  </HoverSlot>
+                </Surface>
+              </View>
             )}
           </Pressable>
         </ContextMenuArea>
@@ -212,16 +212,11 @@ export const SplitRowItem = memo(function SplitRowItem({
   return (
     <Animated.View ref={wrapper.ref} style={wrapper.style} {...handle}>
       <View ref={(v) => registerRow(windowId, `s:${splitId}`, v)} {...hoverProps}>
+        <ActiveHighlight active={active} tabIds={tabIds} borderWidth={1} />
         <Surface
-          fill={hex(active ? theme.tabSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)")}
+          fill={hex(!active && hovered ? theme.tabHover : "rgba(0,0,0,0)")}
           cornerRadius={10}
-          borderWidth={active ? 1 : 0}
-          borderColors={active ? theme.tabSelectedBorder.map(hex) : undefined}
-          shadowColor={active ? hex(theme.tabSelectedShadow) : undefined}
-          shadowOpacity={active ? 1 : 0}
-          shadowRadius={theme.tabSelectedShadowRadius}
-          shadowOffset={[0, 0.5]}
-          style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingHorizontal: active ? 2 : 3 }}
+          style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingHorizontal: 3 }}
         >
           {tabIds.map((id, i) => (
             <View key={id} style={{ flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 }}>

@@ -66,6 +66,17 @@ export function numberedTabs(s: BrowserState, windowId: string): string[] {
   return [...tiles, ...pinnedGroups.flatMap((id) => rowTab(`g:${id}`)), ...list.flatMap(rowTab)];
 }
 
+/** Every tab the sidebar lists, top to bottom: the favourites, then each row's (a group's members, a split's panes). */
+export function sidebarTabOrder(s: BrowserState, windowId: string): string[] {
+  const { tiles, pinnedGroups, list } = sidebarEntries(s, windowId);
+  const rowTabs = (entry: string): string[] => {
+    const id = entry.slice(2);
+    if (entry.startsWith("g:")) return groupEntries(s, id).flatMap(rowTabs);
+    return entry.startsWith("s:") ? (s.splits[id]?.tabIds ?? []) : [id];
+  };
+  return [...tiles, ...pinnedGroups.flatMap((id) => rowTabs(`g:${id}`)), ...list.flatMap(rowTabs)];
+}
+
 const groupMemo = new WeakMap<object, { tabs: BrowserState["tabs"]; splits: BrowserState["splits"]; result: string[] }>();
 
 export function groupEntries(s: BrowserState, groupId: string): string[] {
