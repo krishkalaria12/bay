@@ -398,6 +398,16 @@ public class ShellModule: Module {
       }
     }
 
+    // An image (base64 PNG or JPEG) on the clipboard, as a copied picture is.
+    Function("copyImage") { (base64: String) -> Bool in
+      guard let data = Data(base64Encoded: base64), let image = NSImage(data: data) else { return false }
+      DispatchQueue.main.async {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([image])
+      }
+      return true
+    }
+
     AsyncFunction("showMenu") { (items: [[String: Any]], promise: Promise) in
       let target = MenuChoice()
       let menu = ShellModule.contextMenu(items, target: target)

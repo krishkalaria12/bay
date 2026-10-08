@@ -41,6 +41,7 @@ export type BrowserCommand =
   | "zoomIn"
   | "zoomOut"
   | "devTools"
+  | "toggleDeveloperMode"
   | "toggleDevTools"
   | "javaScriptConsole"
   | "inspectElements"
@@ -212,6 +213,7 @@ const Shell = requireNativeModule<{
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
   showMenu(items: MenuItem[]): Promise<string | null>;
   copyText(text: string): void;
+  copyImage(base64: string): boolean;
   setSwitcherCapture(active: boolean): Promise<void>;
   startDictation(): void;
   pickFiles(): Promise<string[]>;
@@ -254,6 +256,11 @@ export const pickFiles = () => Shell.pickFiles();
 
 export function copyText(text: string) {
   Shell.copyText(text);
+}
+
+/** An image (base64 PNG or JPEG) on the clipboard; false if it isn't one. */
+export function copyImage(base64: string): boolean {
+  return Shell.copyImage(base64);
 }
 
 export function showMenu(items: MenuItem[]): Promise<string | null> {

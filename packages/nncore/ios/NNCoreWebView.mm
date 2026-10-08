@@ -1252,6 +1252,9 @@ const char kPageReportsKey = 0;
       answer(NO);
   } else if ([kind isEqualToString:@"selection"] && main) {
     [self emit:@"pageMessage" payload:@{@"kind" : @"selection", @"data" : SelectionState(dict) ?: NSNull.null}];
+  } else if ([kind isEqualToString:@"devMode"] && main && dict) {
+    // Developer Mode's inspector, which the app put in the page (apps/browser developer/inspectorScript.ts).
+    [self emit:@"pageMessage" payload:@{@"kind" : @"devMode", @"data" : dict}];
   } else if ([kind isEqualToString:@"scroll"] && main) {
     // The page's scroll direction, for the toolbar that hides while scrolling (page_script.js › Scroll direction).
     NSString *state = Text(dict, @"state", 8);
@@ -1587,6 +1590,17 @@ const char kPageReportsKey = 0;
   else
     [_tab devToolsCall:@"Page.captureScreenshot" params:params completion:done];
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ answer(nil); });
+}
+
+// The page's viewport as a lossless PNG at its device scale, for Developer Mode's screenshot (base64); nil after 3 s.
+- (void)captureScreenshot:(void (^)(NSString *))completion {
+  SEL timed = NSSelectorFromString(@"devToolsCall:params:timeout:completion:");
+  if (!_tab || !self.window || self.hidden || ![_tab respondsToSelector:timed]) return completion(nil);
+  void (^done)(NSDictionary *, NSString *) = ^(NSDictionary *shot, NSString *error) {
+    NSString *data = shot[@"data"];
+    completion([data isKindOfClass:NSString.class] ? data : nil);
+  };
+  ((void (*)(id, SEL, NSString *, NSDictionary *, NSTimeInterval, id))objc_msgSend)(_tab, timed, @"Page.captureScreenshot", @{@"format" : @"png"}, 3.0, done);
 }
 
 - (void)navigationEntries:(void (^)(NSArray<NSDictionary<NSString *, id> *> *))completion {
