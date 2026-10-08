@@ -51,6 +51,10 @@ public class SystemModule: Module {
 
     Function("fileExists") { (path: String) -> Bool in FileManager.default.fileExists(atPath: path) }
 
+    Function("downloadsFolder") { () -> String? in
+      FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path
+    }
+
     AsyncFunction("openFile") { (path: String) -> Bool in
       guard FileManager.default.fileExists(atPath: path) else { return false }
       return NSWorkspace.shared.open(URL(fileURLWithPath: path))

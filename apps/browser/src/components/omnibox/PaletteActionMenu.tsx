@@ -14,6 +14,7 @@ export type PaletteMenuAction = {
   icon: string;
   hint?: string;
   separator?: boolean;
+  checked?: boolean;
   run(): void | Promise<unknown>;
 };
 
@@ -43,6 +44,8 @@ export function PaletteActionMenu({
   width = 340,
   progress,
   closing = false,
+  top,
+  placeholder = "Search for actions…",
 }: {
   title: string;
   actions: PaletteMenuAction[];
@@ -53,6 +56,9 @@ export function PaletteActionMenu({
   // 0 → 1 as the menu opens; it grows out of the footer button that opened it.
   progress: SharedValue<number>;
   closing?: boolean;
+  // Drops down from this far below the top instead (a header button's menu); otherwise it rises from the footer.
+  top?: number;
+  placeholder?: string;
 }) {
   const theme = useTheme();
   const [query, setQuery] = useState("");
@@ -71,7 +77,7 @@ export function PaletteActionMenu({
   const growStyle = useAnimatedStyle(() => {
     "worklet";
     const p = progress.get();
-    return { opacity: p, transform: [{ scale: interpolate(p, [0, 1], [0.94, 1]) }, { translateY: interpolate(p, [0, 1], [4, 0]) }] };
+    return { opacity: p, transform: [{ scale: interpolate(p, [0, 1], [0.94, 1]) }, { translateY: interpolate(p, [0, 1], [top === undefined ? 4 : -4, 0]) }] };
   });
 
   const keepSelectedVisible = () => {
@@ -104,7 +110,10 @@ export function PaletteActionMenu({
   return (
     <Animated.View
       pointerEvents={closing ? "none" : "auto"}
-      style={[{ position: "absolute", bottom: 8, [side]: 8, width, zIndex: 2, transformOrigin: `${side === "left" ? "0%" : "100%"} 100%` }, growStyle]}
+      style={[
+        { position: "absolute", ...(top === undefined ? { bottom: 8 } : { top }), [side]: 8, width, zIndex: 2, transformOrigin: `${side === "left" ? "0%" : "100%"} ${top === undefined ? "100%" : "0%"}` },
+        growStyle,
+      ]}
     >
       <PaletteSurface raised radius={18}>
         <Text numberOfLines={1} style={{ fontSize: 12, color: theme.textSecondary, paddingHorizontal: 15, paddingTop: 11, paddingBottom: 4 }}>{title}</Text>
@@ -133,7 +142,7 @@ export function PaletteActionMenu({
               <Pressable
                 accessibilityRole="menuitem"
                 accessibilityLabel={action.title}
-                accessibilityState={{ selected: index === selectedIndex, disabled: busy }}
+                accessibilityState={{ selected: index === selectedIndex, disabled: busy, checked: action.checked }}
                 disabled={busy}
                 onPress={() => void run(action)}
                 style={{ minHeight: 34, borderRadius: 9, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: index === selectedIndex ? theme.rowSelected : undefined, opacity: busy ? 0.65 : 1 }}
@@ -141,6 +150,7 @@ export function PaletteActionMenu({
                 <Symbol name={action.icon} size={14} color={theme.textPrimary} style={{ width: 17, height: 17 }} />
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary, paddingVertical: 8 }}>{action.title}</Text>
                 {action.hint ? <Keycaps hint={action.hint} /> : null}
+                {action.checked ? <Symbol name="checkmark" size={12} weight="semibold" color={theme.textPrimary} style={{ width: 16, height: 16 }} /> : null}
               </Pressable>
             </View>
           ))}
@@ -150,7 +160,7 @@ export function PaletteActionMenu({
         <View style={{ borderTopWidth: 1, borderTopColor: theme.divider, minHeight: 42, justifyContent: "center", paddingHorizontal: 15 }}>
           <TextInput
             ref={input}
-            accessibilityLabel="Search for actions"
+            accessibilityLabel={placeholder.replace(/…$/, "")}
             onLayout={() => {
               if (focused.current) return;
               focused.current = true;
@@ -163,7 +173,7 @@ export function PaletteActionMenu({
               setError(null);
             }}
             editable={!busy}
-            placeholder="Search for actions…"
+            placeholder={placeholder}
             placeholderTextColor={theme.placeholder}
             selectionColor={theme.selection}
             enableFocusRing={false}

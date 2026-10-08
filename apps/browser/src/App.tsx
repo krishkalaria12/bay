@@ -9,7 +9,8 @@ import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
 import { EditBookmarkDialog } from "./components/bookmarks/EditBookmarkDialog";
 import { ExtensionOverlays } from "./components/extensions/ExtensionOverlays";
 import { ExtensionSidePanel } from "./components/extensions/SidePanel";
-import { DownloadMagnet, DownloadsPopover } from "./components/Downloads";
+import { DownloadMagnet } from "./components/Downloads";
+import { DownloadsPanel } from "./components/DownloadsPanel";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
 import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding";
@@ -123,7 +124,6 @@ function BrowserWindow() {
         </View>
       )}
       {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} />)}
-      <DownloadsPopover />
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />
@@ -131,6 +131,7 @@ function BrowserWindow() {
       <CreateProfileHost />
       <SidebarOverlays windowWidth={width} />
       {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
+      <DownloadsPanel windowWidth={width} windowHeight={size.height} />
       <CommandPanel windowWidth={width} windowHeight={size.height} />
       <ThemeEditorHost />
       <OnboardingOverlay />

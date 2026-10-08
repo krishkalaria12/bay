@@ -27,7 +27,7 @@ const LIST_TOP = 6;
 const DIVIDER_SPACE = 11;
 
 // Keeps a closed menu on screen while it animates out; `closing` is set until it's gone.
-function useMenuPresence(menu: PaletteMenu | null) {
+export function useMenuPresence<T>(menu: T | null) {
   const progress = useSharedValue(0);
   const [shown, setShown] = useState(menu);
   useEffect(() => {
@@ -162,7 +162,7 @@ function PaletteResultRow({ suggestion: s, pageContext, selected, onHover, onCho
   );
 }
 
-function FooterButton({ label, icon, hint, onPress, round }: { label: string; icon?: string; hint?: string; onPress(): void; round?: boolean }) {
+export function FooterButton({ label, icon, hint, onPress, round }: { label: string; icon?: string; hint?: string; onPress(): void; round?: boolean }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   return (

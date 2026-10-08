@@ -9,7 +9,7 @@ import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/
 import type { Tab } from "../../store/types";
 import { CommandPanel } from "../CommandPanel";
 import { ContentCard } from "../ContentCard";
-import { DownloadsPopover } from "../Downloads";
+import { DownloadsPanel } from "../DownloadsPanel";
 import { usePage } from "../layout/pageState";
 import { setUrlAnchor } from "../layout/windowLayout";
 import { showUrlBarMenu } from "../omnibox/paste";
@@ -40,7 +40,7 @@ export function SmallYahuWindow() {
         <SmallYahuBar />
       </View>
       <CommandPanel windowWidth={size.width} windowHeight={size.height} />
-      <DownloadsPopover />
+      <DownloadsPanel windowWidth={size.width} windowHeight={size.height} />
     </View>
   );
 }

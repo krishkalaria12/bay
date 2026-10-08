@@ -112,10 +112,8 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
       if (!exists && d.profile && isIncognitoProfile(d.profile) && !Object.values(s.windows).some((w) => w.profileId === d.profile)) {
         return {};
       }
-      const downloads = exists ? s.downloads.map((x) => (x.id === d.id ? d : x)) : [d, ...s.downloads].slice(0, MAX_DOWNLOADS);
-      const focused = s.ui.focusedWindowId;
-      const open = !exists && focused && downloadVisibleIn(d, s.windows[focused]);
-      return { downloads, ...(open ? patchWindowUi(s, focused, { downloadsOpen: true }) : {}) };
+      // A new download doesn't open the panel: the magnet flies its icon to the downloads button instead.
+      return { downloads: exists ? s.downloads.map((x) => (x.id === d.id ? d : x)) : [d, ...s.downloads].slice(0, MAX_DOWNLOADS) };
     });
   },
 

@@ -5,7 +5,6 @@ import { layout, ThemeScope, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { PageProfileContext, useIsIncognito, useSettings, useWindowId, useWindowProfileId } from "../store/hooks";
 import { activeTabId } from "../store/model";
-import { downloadsIn } from "../store/ui";
 import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
 import { listTopGap, SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD, useAddressBarInSidebar } from "./layout/windowLayout";
@@ -67,11 +66,10 @@ export function Sidebar() {
   const addressBar = useAddressBarInSidebar();
   const header = addressBar ? SIDEBAR_HEADER_WITH_FIELD : layout.sidebarHeader;
   const glowRoom = addressBar ? 0 : GLOW_ROOM;
-  const hasDownloads = useBrowser((s) => downloadsIn(s, windowId).length > 0);
-  // The space switcher, with its + for a new space: every window but a private one.
+  // The footer: downloads at its left, then the space switcher with its + for a new space (every window but a
+  // private one).
   const spaces = !useIsIncognito();
-  const footerDownloads = addressBar && hasDownloads;
-  const footer = spaces || footerDownloads ? PROFILE_DOTS_HEIGHT : 0;
+  const footer = PROFILE_DOTS_HEIGHT;
   const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
   useRevealTabs(windowId, scroll, scrollY, geometry, glowRoom);
@@ -137,16 +135,12 @@ export function Sidebar() {
             </View>
           ) : null}
 
-          {footer ? (
-            <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
-              {spaces ? <SpaceSwitcher windowId={windowId} /> : null}
-              {footerDownloads ? (
-                <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
-                  <DownloadsButton windowId={windowId} />
-                </View>
-              ) : null}
+          <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
+            {spaces ? <SpaceSwitcher windowId={windowId} /> : null}
+            <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
+              <DownloadsButton windowId={windowId} />
             </View>
-          ) : null}
+          </View>
 
           <View style={{ height: header }}>
             <WindowDragRegion style={StyleSheet.absoluteFill} />
@@ -158,9 +152,8 @@ export function Sidebar() {
             ) : (
               // Box-none: the header's empty space is the drag region's (it moves the window), not the row's.
               <View pointerEvents="box-none" style={{ height: layout.sidebarHeader, flexDirection: "row", alignItems: "flex-start", paddingLeft: PROFILE_INDICATOR_X, paddingRight: 7, paddingTop: 27 - 17 }}>
-                <ProfileIndicator room={width - PROFILE_INDICATOR_X - 7 - (hasDownloads ? 34 + 2 : 0)} />
+                <ProfileIndicator room={width - PROFILE_INDICATOR_X - 7} />
                 <View pointerEvents="none" style={{ flex: 1 }} />
-                {hasDownloads ? <DownloadsButton windowId={windowId} /> : null}
               </View>
             )}
           </View>
@@ -406,9 +399,9 @@ function DownloadsButton({ windowId }: { windowId: string }) {
   return (
     <IconButton
       icon="arrow.down.circle"
-      size={16}
-      box={34}
-      radius={10}
+      size={14}
+      box={SIDEBAR_FOOTER_DOWNLOADS.size}
+      radius={8}
       tooltip="Downloads (⇧⌘J)"
       onPress={() => {
         const s = useBrowser.getState();

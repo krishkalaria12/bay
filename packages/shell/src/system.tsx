@@ -22,6 +22,8 @@ const System = requireNativeModule<{
   launchAtLoginStatus(): Promise<LaunchAtLoginStatus>;
   setLaunchAtLogin(enabled: boolean): Promise<void>;
   fileExists(path: string): boolean;
+  // Optional: a build from before it has none.
+  downloadsFolder?(): string | null;
   openFile(path: string): Promise<boolean>;
   revealFile(path: string): Promise<boolean>;
   moveToTrash(path: string): Promise<boolean>;
@@ -39,6 +41,8 @@ export const launchAtLoginStatus = () => System.launchAtLoginStatus();
 export const setLaunchAtLogin = (enabled: boolean) => System.setLaunchAtLogin(enabled);
 
 export const fileExists = (path: string) => System.fileExists(path);
+/** ~/Downloads, as macOS names it. */
+export const downloadsFolder = (): string | null => System.downloadsFolder?.() ?? null;
 export const openFile = (path: string) => System.openFile(path);
 export const revealFile = (path: string) => System.revealFile(path);
 export const moveToTrash = (path: string) => System.moveToTrash(path);
