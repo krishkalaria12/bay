@@ -1,6 +1,7 @@
 import { WebView, type OpenWindowRequest } from "@bay/nncore";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Animated, StyleSheet, View, type ViewStyle } from "react-native";
+import { StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../lib/actions";
@@ -51,7 +52,7 @@ import { closeWebNotification, showWebNotification } from "../lib/webNotificatio
 import { isSmallWindow } from "../store/small";
 import { closeSmallYahuOnEscape } from "./smallYahu/actions";
 import { PageLoadGlow } from "./layout/PageLoadGlow";
-import { usePaneSwitch } from "./layout/switchMotion";
+import { usePaneSwitch, type SwitchStyle } from "./layout/switchMotion";
 
 export function ContentCard() {
   const windowId = useWindowId();
@@ -258,8 +259,8 @@ const TabPane = memo(function TabPane({
   // Switched away from, shown until the switch is over (layout/switchMotion.ts): drawn, not hit.
   leaving: boolean;
   // The pane's fade and its page's settling while a switch plays.
-  fade: Animated.WithAnimatedObject<ViewStyle> | undefined;
-  slide: Animated.WithAnimatedObject<ViewStyle> | undefined;
+  fade: SwitchStyle | undefined;
+  slide: SwitchStyle | undefined;
 }) {
   const theme = useTheme();
   const visible = !!rect;

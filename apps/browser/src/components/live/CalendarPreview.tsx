@@ -1,6 +1,7 @@
 import { FadeLabel } from "@bay/shell";
 import { useEffect, useRef } from "react";
-import { Animated, Easing, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { joinEvent } from "../../live/alerts";
 import { connectCalendar, refreshCalendar, useCalendar, useNow } from "../../live/calendar";
@@ -69,16 +70,16 @@ export function CalendarPreview({ tabId, windowId, anchor }: { tabId: string; wi
 }
 
 function Refresh({ spinning }: { spinning: boolean }) {
-  const turn = useRef(new Animated.Value(0)).current;
+  const turn = useSharedValue(0);
   useEffect(() => {
     if (!spinning) return;
-    turn.setValue(0);
-    const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
+    turn.set(0);
+    turn.set(withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false));
+    return () => cancelAnimation(turn);
   }, [spinning]);
+  const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 360}deg` }] }));
   return (
-    <Animated.View style={{ marginRight: -6, marginVertical: -4, transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}>
+    <Animated.View style={[{ marginRight: -6, marginVertical: -4 }, spin]}>
       <IconButton icon="arrow.clockwise" size={10} weight="semibold" box={22} radius={6} onPress={() => void refreshCalendar()} tooltip="Refresh" />
     </Animated.View>
   );

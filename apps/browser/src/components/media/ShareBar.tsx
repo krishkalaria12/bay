@@ -1,7 +1,8 @@
 import { changeCaptureSource, stopCapture } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
-import { Animated, Easing, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { engineProfile } from "../../store/model";
@@ -88,12 +89,13 @@ function dismiss(capturer: string, tabId: string) {
 export function ShareBar({ tabId }: { tabId: string }) {
   const theme = useTheme();
   const found = useShareFor(tabId);
-  const height = useRef(new Animated.Value(0)).current;
+  const height = useSharedValue(0);
   const visible = !!found;
   useEffect(() => {
-    // JS driver: the height pushes the page down.
-    Animated.timing(height, { toValue: visible ? SHARE_BAR_HEIGHT : 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    // A height: it pushes the page down.
+    height.set(withTiming(visible ? SHARE_BAR_HEIGHT : 0, { duration: 180, easing: Easing.out(Easing.cubic) }));
   }, [visible]);
+  const heightStyle = useAnimatedStyle(() => ({ height: height.get() }));
   const last = useRef(found);
   if (found) last.current = found;
   const shown = found ?? last.current;
@@ -102,7 +104,7 @@ export function ShareBar({ tabId }: { tabId: string }) {
   const isShared = share.capturedTabId === tabId;
   const host = hostOf(share.origin || pageOf(capturer).security?.origin || useBrowser.getState().tabs[capturer]?.url || "");
   return (
-    <Animated.View style={{ height, overflow: "hidden" }}>
+    <Animated.View style={[{ overflow: "hidden" }, heightStyle]}>
       <View
         style={{
           height: SHARE_BAR_HEIGHT,

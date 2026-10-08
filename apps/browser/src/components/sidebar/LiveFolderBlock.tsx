@@ -1,6 +1,8 @@
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from "react-native-reanimated";
+import { bouncySpring } from "../../lib/springs";
 import { useShallow } from "zustand/react/shallow";
 import { closeTab } from "../../lib/actions";
 import { hex, layout, useTheme } from "../../lib/theme";
@@ -174,20 +176,25 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
   );
 }
 
+// A turn every 0.9 s while `on`.
+function useSpin(on: boolean) {
+  const turn = useSharedValue(0);
+  useEffect(() => {
+    if (!on) return;
+    turn.set(0);
+    turn.set(withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false));
+    return () => cancelAnimation(turn);
+  }, [on]);
+  return useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 360}deg` }] }));
+}
+
 function RefreshButton({ spinning, tooltip, onPress }: { spinning: boolean; tooltip: string; onPress(): void }) {
   const theme = useTheme();
-  const turn = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!spinning) return;
-    turn.setValue(0);
-    const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [spinning]);
+  const spin = useSpin(spinning);
   if (!spinning) return <IconButton icon="arrow.clockwise" size={10} weight="semibold" box={22} radius={6} onPress={onPress} tooltip={tooltip} />;
   return (
     <View tooltip={tooltip} style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center" }}>
-      <Animated.View style={{ transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}>
+      <Animated.View style={spin}>
         <Symbol name="arrow.clockwise" size={10} weight="semibold" color={theme.textSecondary} style={{ width: 14, height: 14 }} />
       </Animated.View>
     </View>
@@ -226,14 +233,9 @@ function NoteRow({ text, icon, spinner, onPress }: { text: string; icon?: string
 
 function Spinner() {
   const theme = useTheme();
-  const turn = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, []);
+  const spin = useSpin(true);
   return (
-    <Animated.View style={{ width: 16, height: 16, alignItems: "center", justifyContent: "center", transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}>
+    <Animated.View style={[{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }, spin]}>
       <Symbol name="arrow.triangle.2.circlepath" size={10} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
     </Animated.View>
   );
@@ -302,20 +304,23 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
   const unread = useLive((s) => !!s.unread[folderId]?.includes(item.id));
   const completion = useLive((s) => (s.completing[folderId]?.includes(item.id) ? (s.completed[folderId]?.find((c) => c.item.id === item.id)?.state ?? "merged") : null));
   const { hovered, hoverProps } = useRowHover(windowId, completion ? null : { kind: "live", id: key });
-  const fold = useRef(new Animated.Value(1)).current;
+  const fold = useSharedValue(1);
   useEffect(() => {
     if (!completion) return;
-    fold.setValue(1);
-    // JS driver: the height reflows the rows below.
-    Animated.sequence([
-      Animated.delay(COMPLETION_MS - 420),
-      Animated.timing(fold, { toValue: 0, duration: 360, easing: Easing.bezier(0.2, 0.9, 0.3, 1), useNativeDriver: false }),
-    ]).start();
+    fold.set(1);
+    // A height: it reflows the rows below.
+    fold.set(withDelay(COMPLETION_MS - 420, withTiming(0, { duration: 360, easing: Easing.bezier(0.2, 0.9, 0.3, 1) })));
   }, [completion]);
+  const completing = !!completion;
+  // Every value, "auto" at rest: a value the style stops giving keeps the last one it gave.
+  const foldStyle = useAnimatedStyle(() => {
+    const f = completing ? fold.get() : 1;
+    return { height: completing ? f * layout.rowHeight : "auto", opacity: f, overflow: completing ? "hidden" : "visible" };
+  }, [completing]);
   const fill = active ? theme.tabSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
 
   return (
-    <Animated.View style={completion ? { height: fold.interpolate({ inputRange: [0, 1], outputRange: [0, layout.rowHeight] }), opacity: fold, overflow: "hidden" } : null}>
+    <Animated.View style={foldStyle}>
       <View ref={(v) => registerRow(windowId, key, v)} {...hoverProps}>
         <ContextMenuArea
           onContextMenu={() => {
@@ -377,6 +382,9 @@ function PositionChip({ position }: { position: number }) {
   );
 }
 
+// The completion glyph pops in on Animated's old spring (speed 14, bounciness 14).
+const POP_SPRING = bouncySpring(14, 14);
+
 const COMPLETION_GLYPH: Record<CompletedItem["state"], { symbol: string; color: keyof LiveColors }> = {
   merged: { symbol: "checkmark.circle.fill", color: "merged" },
   reviewed: { symbol: "checkmark.circle.fill", color: "success" },
@@ -384,16 +392,17 @@ const COMPLETION_GLYPH: Record<CompletedItem["state"], { symbol: string; color: 
 };
 
 function ItemIcon({ item, completion, colors }: { item: LiveItem; completion: CompletedItem["state"] | null; colors: LiveColors }) {
-  const pop = useRef(new Animated.Value(completion ? 0 : 1)).current;
+  const pop = useSharedValue(completion ? 0 : 1);
   useEffect(() => {
     if (!completion) return;
-    pop.setValue(0);
-    Animated.spring(pop, { toValue: 1, speed: 14, bounciness: 14, useNativeDriver: true }).start();
+    pop.set(0);
+    pop.set(withSpring(1, POP_SPRING));
   }, [completion]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: interpolate(pop.get(), [0, 1], [0.3, 1]) }] }));
   if (completion) {
     const glyph = COMPLETION_GLYPH[completion];
     return (
-      <Animated.View style={{ width: 16, height: 16, alignItems: "center", justifyContent: "center", transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }] }}>
+      <Animated.View style={[{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }, popStyle]}>
         <Symbol name={glyph.symbol} size={14} weight="semibold" color={colors[glyph.color]} style={{ width: 16, height: 16 }} />
       </Animated.View>
     );

@@ -2,7 +2,8 @@ import { breadcrumb, urlForDisplay } from "@bay/core";
 import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { layout, useTheme } from "../lib/theme";
 import { webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
@@ -15,7 +16,7 @@ import { setPopover, usePage, usePages } from "./layout/pageState";
 import { closeHistoryMenu, goBack, goForward, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu } from "./layout/history";
 import { openModeFor, openUrl } from "./bookmarks/actions";
 import { closePane, openSplitPane, showSplitMenu } from "./layout/splitActions";
-import { toolbarPalette, useEasedColor, type ToolbarPalette } from "./layout/toolbarColors";
+import { toolbarPalette, useEasedColor, useEasedColorStyle, type ToolbarPalette } from "./layout/toolbarColors";
 import { SIDEBAR_FIELD } from "./layout/windowLayout";
 import { showUrlBarMenu } from "./omnibox/paste";
 import { useHover } from "./primitives";
@@ -53,17 +54,18 @@ export function Toolbar({
   const extendColor = useSettings((s) => s.extendWebsiteColor);
   const website = extendColor && tab?.url ? themeColor : null;
   const palette = toolbarPalette(theme, website);
-  const band = useEasedColor(palette.background);
+  const band = useEasedColorStyle(useEasedColor(palette.background), "backgroundColor");
   const history = useHistoryAvailability(tabId);
   const extensionsWidth = useToolbarExtensionsWidth(windowId);
-  const dim = useRef(new Animated.Value(focused ? 1 : 0.5)).current;
+  const dim = useSharedValue(focused ? 1 : 0.5);
   const dimmedFor = useRef(focused);
   useEffect(() => {
     // Mounting starts at the right value; only a change of focus animates.
     if (dimmedFor.current === focused) return;
     dimmedFor.current = focused;
-    Animated.timing(dim, { toValue: focused ? 1 : 0.5, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    dim.set(withTiming(focused ? 1 : 0.5, { duration: 160, easing: Easing.out(Easing.quad) }));
   }, [focused]);
+  const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
   // Stable callbacks and styles: the buttons are memoized, and a loading or history change re-renders only theirs.
   const focus = useCallback(() => {
     if (!focused) useBrowser.getState().activate(tabId);
@@ -80,9 +82,9 @@ export function Toolbar({
 
   return (
     <View style={{ height: layout.toolbarHeight }}>
-      {!bare && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: band }]} />}
+      {!bare && <Animated.View style={[StyleSheet.absoluteFill, band]} />}
       <WindowDragRegion style={StyleSheet.absoluteFill} />
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: dim }]} pointerEvents="box-none">
+      <Animated.View style={[StyleSheet.absoluteFill, dimStyle]} pointerEvents="box-none">
         {geometry.sidebarButton !== null && (
           <ToolbarButton
             style={at.sidebarButton}
@@ -150,28 +152,18 @@ const TabProgressBar = memo(function TabProgressBar({ tabId, color }: { tabId: s
 });
 
 function ProgressBar({ progress, color }: { progress: number; color: string }) {
-  const width = useRef(new Animated.Value(Math.max(progress, 0.08))).current;
+  const width = useSharedValue(Math.max(progress, 0.08));
   const shownFor = useRef(Math.max(progress, 0.08));
   useEffect(() => {
     const to = Math.max(progress, 0.08);
     if (shownFor.current === to) return;
     shownFor.current = to;
-    // JS driver: a scaleX version loses its transform when it mounts on macOS (it draws full width until it animates).
-    Animated.timing(width, { toValue: to, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    // Its width, not a scaleX: a scaleX version loses its transform when it mounts on macOS (it draws full width until
+    // it animates).
+    width.set(withTiming(to, { duration: 200, easing: Easing.out(Easing.quad) }));
   }, [progress]);
-  return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        left: 0,
-        bottom: 0,
-        height: 1.5,
-        width: width.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
-        backgroundColor: color,
-        opacity: 0.85,
-      }}
-    />
-  );
+  const widthStyle = useAnimatedStyle(() => ({ width: `${width.get() * 100}%` }));
+  return <Animated.View style={[{ position: "absolute", left: 0, bottom: 0, height: 1.5, backgroundColor: color, opacity: 0.85 }, widthStyle]} />;
 }
 
 export const HistoryButton = memo(function HistoryButton({

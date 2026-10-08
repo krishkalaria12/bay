@@ -1,7 +1,8 @@
 import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect, useMemo } from "react";
-import { Animated, unstable_batchedUpdates } from "react-native";
+import { unstable_batchedUpdates } from "react-native";
+import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser } from "../../store/browser";
@@ -24,7 +25,7 @@ const WHEEL_COOLDOWN_MS = 250;
 // The native controller (NNPager) tracks, settles and selects; JS only commits its selections.
 class ProfilePager {
   // The absolute profile index, written only by the native controller's frames.
-  readonly pos: Animated.Value;
+  readonly pos: SharedValue<number>;
   // pages: the current profile's neighbours to keep warm; ack: the newest native sequence JS has handled.
   readonly state = create<{ pages: PagerPage[] | null; ack: number }>(() => ({ pages: null, ack: 0 }));
   private surfaces = 0;
@@ -37,7 +38,7 @@ class ProfilePager {
   private externalGeneration = 0;
 
   constructor(readonly windowId: string) {
-    this.pos = new Animated.Value(Math.max(0, this.index()), { useNativeDriver: true });
+    this.pos = makeMutable(Math.max(0, this.index()));
     this.state.setState({ pages: this.warmPages() });
     this.unsubscribe = useBrowser.subscribe((s, prev) => {
       const w = s.windows[windowId];
@@ -219,7 +220,16 @@ export function usePagerNativeConfig(windowId: string, width?: number): NativePa
 // A page's place in the pager: off to the side at rest, outside the surface's clip.
 export function usePageStyle(windowId: string, slot: number, width: number) {
   const { pos } = pagerFor(windowId);
-  return useMemo(() => ({ transform: [{ translateX: Animated.multiply(Animated.add(pos, -slot), -width) }] }), [pos, slot, width]);
+  return useAnimatedStyle(() => ({ transform: [{ translateX: (pos.get() - slot) * -width }] }), [slot, width]);
+}
+
+/** Opacity along the pager: `selected` with `slot` shown, easing to `rest` a page either side. */
+export function usePagerOpacity(windowId: string, slot: number | undefined, rest: number, selected: number) {
+  const { pos } = pagerFor(windowId);
+  return useAnimatedStyle(
+    () => ({ opacity: slot === undefined ? rest : interpolate(pos.get(), [slot - 1, slot, slot + 1], [rest, selected, rest], Extrapolation.CLAMP) }),
+    [slot, rest, selected],
+  );
 }
 
 if (__DEV__) {

@@ -1,6 +1,7 @@
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
 import { memo } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -80,7 +81,7 @@ function Entry({ entry, section, groupId }: { entry: string; section: "list" | "
 }
 
 // `open` is the members' collapse animation: the chevron turns on its frames, so the two never drift apart.
-function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; windowId: string; collapsed: boolean; open: Animated.Value }) {
+function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; windowId: string; collapsed: boolean; open: SharedValue<number> }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const group = useBrowser((s) => s.groups[groupId]);
@@ -96,6 +97,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const dropInto = useDropInto() === groupId;
   const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming ? { kind: "group", id: groupId } : null);
   const countdown = useMeetingCountdown(groupId);
+  const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${(open.get() - 1) * 90}deg` }] }));
   if (!group) return null;
   const target = { kind: "group" as const, id: groupId };
 
@@ -134,7 +136,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                 />
               ) : (
                 // Dia: the name, then a chevron right after it (∨ open, › closed), no count.
-                <Animated.View style={{ flex: 1, height: 18, marginLeft: 5, flexDirection: "row", alignItems: "center", transform: [{ rotate: countdown.rotate }] }}>
+                <Animated.View style={[{ flex: 1, height: 18, marginLeft: 5, flexDirection: "row", alignItems: "center" }, countdown.wiggleStyle]}>
                   {/* The name is as wide as its (transparent) text, laid out in the same pass: the chevron follows it
                       from the first frame. The label draws over it with 8 pt more for its fade. */}
                   <View style={{ flexShrink: 1, height: 18, paddingRight: 8, justifyContent: "center" }}>
@@ -143,16 +145,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                     </Text>
                     <FadeLabel text={label} fontSize={13} weight="medium" color={tokens.groupTitle} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 18 }} />
                   </View>
-                  <Animated.View
-                    style={{
-                      width: 10,
-                      height: 10,
-                      marginLeft: 0,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transform: [{ rotate: open.interpolate({ inputRange: [0, 1], outputRange: ["-90deg", "0deg"] }) }],
-                    }}
-                  >
+                  <Animated.View style={[{ width: 10, height: 10, marginLeft: 0, alignItems: "center", justifyContent: "center" }, chevron]}>
                     <Symbol name="chevron.down" size={9} weight="semibold" color={withAlpha(tokens.groupTitle, 0.5)} style={{ width: 10, height: 10 }} />
                   </Animated.View>
                 </Animated.View>

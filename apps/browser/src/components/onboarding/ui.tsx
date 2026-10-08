@@ -1,6 +1,7 @@
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef, type ReactNode } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
 import { STEPS, useOnboarding, type OnboardingStep } from "./state";
@@ -78,12 +79,13 @@ export function onboardingColors(dark: boolean) {
 export const useOnboardingColors = () => onboardingColors(useTheme().dark);
 
 export function Reveal({ delay = 0, children, style }: { delay?: number; children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  const t = useRef(new Animated.Value(0)).current;
+  const t = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(t, { toValue: 1, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    t.set(withDelay(delay, withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) })));
   }, []);
+  const reveal = useAnimatedStyle(() => ({ opacity: t.get(), transform: [{ translateY: interpolate(t.get(), [0, 1], [8, 0]) }] }));
   return (
-    <Animated.View style={[style, { opacity: t, transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
+    <Animated.View style={[style, reveal]}>
       {children}
     </Animated.View>
   );
@@ -177,10 +179,11 @@ export function SecondaryButton({ title, onPress, filled }: { title: string; onP
 
 export function CheckMark({ on, size = 18 }: { on: boolean; size?: number }) {
   const colors = useOnboardingColors();
-  const t = useRef(new Animated.Value(on ? 1 : 0)).current;
+  const t = useSharedValue(on ? 1 : 0);
   useEffect(() => {
-    Animated.timing(t, { toValue: on ? 1 : 0, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    t.set(withTiming(on ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) }));
   }, [on]);
+  const mark = useAnimatedStyle(() => ({ opacity: t.get(), transform: [{ scale: interpolate(t.get(), [0, 1], [0.6, 1]) }] }));
   return (
     <View
       style={{
@@ -196,7 +199,7 @@ export function CheckMark({ on, size = 18 }: { on: boolean; size?: number }) {
       }}
     >
       <Animated.View
-        style={{
+        style={[{
           position: "absolute",
           left: -1.5,
           top: -1.5,
@@ -206,9 +209,7 @@ export function CheckMark({ on, size = 18 }: { on: boolean; size?: number }) {
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: colors.checkboxOn,
-          opacity: t,
-          transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
-        }}
+        }, mark]}
       >
         <Symbol name="checkmark" size={size * 0.5} weight="bold" color={colors.checkmark} style={{ width: size, height: size }} />
       </Animated.View>

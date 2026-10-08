@@ -1,6 +1,8 @@
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
 import { withAlpha } from "../sidebar/tokens";
 import { useBrowser } from "../../store/browser";
@@ -175,52 +177,68 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
 
 const ZONE_SLIDE_MS = 110;
 // Dia's targets settle in about 0.12 s with no overshoot: a 0.2 s response, 0.9 damping.
-const ZONE_SPRING = { stiffness: 987, damping: 56.5, mass: 1, useNativeDriver: false } as const;
+const ZONE_SPRING = { stiffness: 987, damping: 56.5, mass: 1 } as const;
+// The toast pops up on Animated's old spring (speed 18, bounciness 6).
+const TOAST_SPRING = bouncySpring(18, 6);
 
 function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect; side: "left" | "right"; shown: boolean; stage: ZoneStage; pointerX: number; onHidden(): void }) {
   const theme = useTheme();
   const rect = zoneRect(pane, side, stage, pointerX);
-  const anim = useRef({ x: new Animated.Value(rect.x), y: new Animated.Value(rect.y), w: new Animated.Value(rect.width), h: new Animated.Value(rect.height) }).current;
-  const glow = useRef(new Animated.Value(0)).current;
-  const slide = useRef(new Animated.Value(0)).current;
+  const x = useSharedValue(rect.x);
+  const y = useSharedValue(rect.y);
+  const w = useSharedValue(rect.width);
+  const h = useSharedValue(rect.height);
+  const glow = useSharedValue(0);
+  const slide = useSharedValue(0);
   const active = stage === "active";
   useEffect(() => {
-    // JS driver: frames are layout.
-    Animated.parallel([
-      Animated.spring(anim.x, { toValue: rect.x, ...ZONE_SPRING }),
-      Animated.spring(anim.y, { toValue: rect.y, ...ZONE_SPRING }),
-      Animated.spring(anim.w, { toValue: rect.width, ...ZONE_SPRING }),
-      Animated.spring(anim.h, { toValue: rect.height, ...ZONE_SPRING }),
-    ]).start();
+    // Its frame: layout.
+    x.set(withSpring(rect.x, ZONE_SPRING));
+    y.set(withSpring(rect.y, ZONE_SPRING));
+    w.set(withSpring(rect.width, ZONE_SPRING));
+    h.set(withSpring(rect.height, ZONE_SPRING));
   }, [rect.x, rect.y, rect.width, rect.height]);
   useEffect(() => {
-    Animated.timing(glow, { toValue: active ? 1 : 0, duration: 120, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    glow.set(withTiming(active ? 1 : 0, { duration: 120, easing: Easing.out(Easing.quad) }));
   }, [active]);
   useEffect(() => {
-    Animated.timing(slide, { toValue: shown ? 1 : 0, duration: ZONE_SLIDE_MS, easing: shown ? Easing.out(Easing.cubic) : Easing.in(Easing.quad), useNativeDriver: false }).start(
-      ({ finished }) => finished && !shown && onHidden(),
+    const hidden = () => onHidden();
+    slide.set(
+      withTiming(shown ? 1 : 0, { duration: ZONE_SLIDE_MS, easing: shown ? Easing.out(Easing.cubic) : Easing.in(Easing.quad) }, (finished) => {
+        if (finished && !shown) runOnJS(hidden)();
+      }),
     );
   }, [shown]);
   // In from (and back out past) the card's edge.
   const away = side === "left" ? -(rect.x - pane.x + rect.width) : pane.x + pane.width - rect.x;
   const dark = theme.dark;
   const rest = dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)";
+  const calm = dark ? "rgba(255,236,214,0.04)" : "rgba(255,255,255,0.45)";
+  const lit = withAlpha(theme.accent, dark ? 0.16 : 0.12);
+  const zoneStyle = useAnimatedStyle(
+    () => ({
+      left: x.get(),
+      top: y.get(),
+      width: w.get(),
+      height: h.get(),
+      backgroundColor: interpolateColor(glow.get(), [0, 1], [calm, lit]),
+      transform: [{ translateX: interpolate(slide.get(), [0, 1], [away, 0]) }],
+    }),
+    [away, calm, lit],
+  );
   return (
     <Animated.View
-      style={{
-        position: "absolute",
-        left: anim.x,
-        top: anim.y,
-        width: anim.w,
-        height: anim.h,
-        borderRadius: 20,
-        borderWidth: 0.5,
-        borderColor: dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
-        backgroundColor: glow.interpolate({ inputRange: [0, 1], outputRange: [dark ? "rgba(255,236,214,0.04)" : "rgba(255,255,255,0.45)", withAlpha(theme.accent, dark ? 0.16 : 0.12)] }),
-        alignItems: "center",
-        justifyContent: "center",
-        transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [away, 0] }) }],
-      }}
+      style={[
+        {
+          position: "absolute",
+          borderRadius: 20,
+          borderWidth: 0.5,
+          borderColor: dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        zoneStyle,
+      ]}
     >
       <View
         style={{
@@ -246,34 +264,41 @@ function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect
 export const SplitToast = memo(function SplitToast({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const toast = useToasts((s) => s.toasts[windowId] ?? null);
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
   const [shown, setShown] = useState(toast);
+  const fadeOut = (done: () => void) =>
+    withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }, (finished) => {
+      if (finished) runOnJS(done)();
+    });
   useEffect(() => {
     if (toast) return setShown(toast);
     if (!shown?.sticky) return;
-    Animated.timing(appear, { toValue: 0, duration: 220, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(({ finished }) => {
-      if (finished) setShown(null);
-    });
+    appear.set(fadeOut(() => setShown(null)));
   }, [toast]);
   useEffect(() => {
     if (!toast) return;
     setShown(toast);
-    appear.setValue(0);
-    Animated.spring(appear, { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 6 }).start();
+    appear.set(0);
+    appear.set(withSpring(1, TOAST_SPRING));
     if (toast.sticky) return;
     const timer = setTimeout(() => {
-      Animated.timing(appear, { toValue: 0, duration: 220, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(({ finished }) => {
-        if (!finished) return;
-        setShown(null);
-        hideToast(windowId, toast.id);
-      });
+      appear.set(
+        fadeOut(() => {
+          setShown(null);
+          hideToast(windowId, toast.id);
+        }),
+      );
     }, toast.action ? 4000 : 2600);
     return () => clearTimeout(timer);
   }, [toast?.id]);
+  const appearStyle = useAnimatedStyle(() => ({
+    opacity: appear.get(),
+    transform: [{ translateY: interpolate(appear.get(), [0, 1], [10, 0]) }, { scale: interpolate(appear.get(), [0, 1], [0.96, 1]) }],
+  }));
   if (!shown) return null;
   return (
     <View pointerEvents={shown.action ? "box-none" : "none"} style={{ position: "absolute", left: 0, right: 0, bottom: 22, alignItems: "center" }}>
-      <Animated.View style={{ opacity: appear, transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }, { scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }}>
+      <Animated.View style={appearStyle}>
         <Surface
           fill={hex(theme.dark ? "rgba(44,42,43,0.9)" : "rgba(255,255,255,0.92)")}
           cornerRadius={14}

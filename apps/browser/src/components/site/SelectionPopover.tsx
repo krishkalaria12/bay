@@ -1,6 +1,7 @@
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { defaultSearchEngine } from "../../store/settings";
@@ -33,15 +34,23 @@ export function SelectionPopover({ tabId, zoom }: { tabId: string; zoom: number 
 function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageSelection; zoom: number; area: { width: number; height: number } }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 150, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    appear.set(withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic) }));
   }, []);
   const r = selection.rect;
   const top = r.y * zoom;
   const bottom = (r.y + r.height) * zoom;
-  if (bottom < 0 || top > area.height) return null;
   const above = top - GAP - HEIGHT >= 4;
+  const measured = width > 0;
+  const appearStyle = useAnimatedStyle(() => {
+    const a = appear.get();
+    return {
+      opacity: measured ? a : 0,
+      transform: [{ scale: interpolate(a, [0, 1], [0.94, 1]) }, { translateY: interpolate(a, [0, 1], [above ? 3 : -3, 0]) }],
+    };
+  }, [measured, above]);
+  if (bottom < 0 || top > area.height) return null;
   const y = above ? top - GAP - HEIGHT : Math.min(bottom + GAP, area.height - HEIGHT - 4);
   const center = (r.x + r.width / 2) * zoom;
   const x = Math.max(8, Math.min(center - width / 2, area.width - width - 8));
@@ -49,17 +58,7 @@ function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageS
   return (
     <Animated.View
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      style={{
-        position: "absolute",
-        left: x,
-        top: y,
-        opacity: width ? appear : 0,
-        transformOrigin: above ? "center bottom" : "center top",
-        transform: [
-          { scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) },
-          { translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [above ? 3 : -3, 0] }) },
-        ],
-      }}
+      style={[{ position: "absolute", left: x, top: y, transformOrigin: above ? "center bottom" : "center top" }, appearStyle]}
     >
       <Surface
         fill={hex(theme.dark ? "rgba(38,36,37,0.94)" : "rgba(252,251,252,0.96)")}

@@ -1,6 +1,7 @@
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../lib/theme";
 import { webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
@@ -22,10 +23,11 @@ const handledFocus = new Map<string, number>();
 function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
   const theme = useTheme();
   const input = useRef<TextInput>(null);
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 160, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    appear.set(withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) }));
   }, []);
+  const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateY: interpolate(appear.get(), [0, 1], [-6, 0]) }] }));
   useEffect(() => {
     const request = find.focusRequest;
     if (!request || handledFocus.get(tabId) === request) return;
@@ -64,15 +66,7 @@ function FindBarPanel({ tabId, find }: { tabId: string; find: FindState }) {
   const error = theme.dark ? "#FF6B63" : "#C93333";
 
   return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        top: 10,
-        right: 12,
-        opacity: appear,
-        transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }) }],
-      }}
-    >
+    <Animated.View style={[{ position: "absolute", top: 10, right: 12 }, appearStyle]}>
       <Surface
         fill={hex(theme.panel)}
         cornerRadius={12}

@@ -1,5 +1,6 @@
-import { useMemo, useRef } from "react";
-import { Animated, Easing, PanResponder, type GestureResponderHandlers } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { PanResponder, type GestureResponderHandlers } from "react-native";
+import { cancelAnimation, Easing, runOnJS, useAnimatedReaction, useSharedValue, withTiming } from "react-native-reanimated";
 
 // Past its range the edge follows the pointer less and less, never more than BAND pt.
 const BAND = 36;
@@ -22,14 +23,25 @@ export function useResizeDrag(o: {
 }): GestureResponderHandlers {
   const latest = useRef(o);
   latest.current = o;
+  // The spring back into range runs on the UI thread; each of its frames sets the panel's width in JS.
+  const springWidth = useSharedValue(0);
+  const springing = useSharedValue(false);
+  const frame = useRef<(width: number) => void>(() => {});
+  const [onFrame] = useState(() => (width: number) => frame.current(width));
+  useAnimatedReaction(
+    () => (springing.get() ? springWidth.get() : null),
+    (width) => {
+      if (width !== null) runOnJS(onFrame)(width);
+    },
+  );
   return useMemo(() => {
     let live: number | null = null;
     let start = 0;
-    let spring: Animated.CompositeAnimation | null = null;
     const show = (width: number) => {
       live = width;
       latest.current.onLive(width);
     };
+    frame.current = show;
     const commit = (width: number) => {
       live = null;
       latest.current.onCommit(width);
@@ -56,8 +68,8 @@ export function useResizeDrag(o: {
       onStartShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
         // Stopped, a spring's callback sees `finished: false` and commits nothing.
-        spring?.stop();
-        spring = null;
+        springing.set(false);
+        cancelAnimation(springWidth);
         start = unstretch(live ?? latest.current.saved());
         show(rubberBand(start));
       },
@@ -66,17 +78,16 @@ export function useResizeDrag(o: {
         const raw = at(g.dx);
         const target = clamp(raw);
         if (raw === target) return commit(target);
-        // JS driver: each frame sets the panel's width.
-        const value = new Animated.Value(raw);
-        value.addListener(({ value: v }) => show(v));
-        const mine = Animated.timing(value, { toValue: target, duration: 260, easing: Easing.out(Easing.back(1.2)), useNativeDriver: false });
-        spring = mine;
-        mine.start(({ finished }) => {
-          value.removeAllListeners();
-          if (!finished) return;
-          spring = null;
-          commit(target);
-        });
+        const settle = () => commit(target);
+        springWidth.set(raw);
+        springing.set(true);
+        springWidth.set(
+          withTiming(target, { duration: 260, easing: Easing.out(Easing.back(1.2)) }, (finished) => {
+            if (!finished) return;
+            springing.set(false);
+            runOnJS(settle)();
+          }),
+        );
       },
       onPanResponderTerminate: () => commit(clamp(live ?? latest.current.saved())),
       onPanResponderTerminationRequest: () => false,

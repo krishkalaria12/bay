@@ -1,6 +1,8 @@
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { tensionSpring } from "../../lib/springs";
 import { create } from "zustand";
 import { hex, useTheme } from "../../lib/theme";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "../onboarding/personalize";
@@ -46,24 +48,29 @@ export function PersonalizeButton({ windowId }: { windowId: string }) {
   );
 }
 
+// Animated's old spring: tension 90, friction 9.
+const PANEL_SPRING = tensionSpring(90, 9);
+
 function PersonalizePanel({ windowId, onClose }: { windowId: string; onClose: () => void }) {
   const theme = useTheme();
-  const t = useRef(new Animated.Value(0)).current;
+  const t = useSharedValue(0);
   useEffect(() => {
-    Animated.spring(t, { toValue: 1, friction: 9, tension: 90, useNativeDriver: true }).start();
+    t.set(withSpring(1, PANEL_SPRING));
   }, []);
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(t.get(), [0, 1], [0, 1], Extrapolation.CLAMP),
+    transform: [{ translateY: interpolate(t.get(), [0, 1], [8, 0]) }, { scale: interpolate(t.get(), [0, 1], [0.97, 1]) }],
+  }));
   return (
     <>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close Personalize" />
       <Animated.View
-        style={{
+        style={[{
           position: "absolute",
           right: INSET,
           bottom: INSET + BUTTON + 8,
           width: 352,
-          opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: "clamp" }),
-          transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }, { scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }],
-        }}
+        }, panelStyle]}
       >
         <Surface
           fill={hex(theme.panel)}

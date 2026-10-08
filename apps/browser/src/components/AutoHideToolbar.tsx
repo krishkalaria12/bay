@@ -1,12 +1,13 @@
 import { breadcrumb } from "@bay/core";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { reduceMotion } from "../lib/reduceMotion";
 import { layout, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useSettings, useTabLive } from "../store/hooks";
 import type { ToolbarGeometry } from "./layout/geometry";
-import { toolbarPalette, useEasedColor } from "./layout/toolbarColors";
+import { toolbarPalette, useEasedColor, useEasedColorStyle } from "./layout/toolbarColors";
 import { useHistoryMenu } from "./layout/history";
 import { usePages } from "./layout/pageState";
 import { needsBar, revealToolbar, setToolbarPeek, STRIP_HEIGHT, toolbarMode, useToolbarAutoHide, type ToolbarMode } from "./layout/toolbarAutoHide";
@@ -19,8 +20,8 @@ import { Toolbar } from "./Toolbar";
 // on resize) would redraw, and a WebGL canvas cleared by its resize shows blank for a frame (bay.com's Big Yahu
 // blinked on every hide and show in 0.2.23). So once a pane's bar has first hidden, its page keeps the strip's size
 // until the next document: the bar shown slides it down and its bottom goes under the card's edge (the link status
-// bubble stays above it). Each motion is one transform on the native driver, from where the layout moved the page (in the
-// same commit, so they land in the same frame) to its place; a reversal carries on from where the page is.
+// bubble stays above it). Each motion is one transform on the UI thread, from where the layout moved the page (set in
+// the commit's layout effect, so they land in the same frame) to its place; a reversal carries on from where the page is.
 
 // Dia (owner's clip, 60 fps): the page's top glides up over ~150 ms, eased out (17, 32, 49, 68, 76, 88, 93, 95,
 // 100 % per frame); the controls are gone in ~5 frames (45, 25, 11, 3 % left). Showing mirrors it, a little longer and
@@ -49,16 +50,16 @@ export function useToolbarMode(tabId: string, windowId: string, enabled: boolean
 
 export type ToolbarMotion = {
   // 0: the full bar's band and controls, 1: the strip.
-  bar: Animated.Value;
+  bar: SharedValue<number>;
   // The controls' fade (0 shown), apart from the band so Reduce Motion can fade without moving anything.
-  fade: Animated.Value;
+  fade: SharedValue<number>;
   // The page group (a bookmarks bar under the toolbar, then the page): where its layout puts it, and the transform to
   // where it shows.
-  groupStyle: Animated.WithAnimatedValue<ViewStyle>;
+  groupStyle: StyleProp<ViewStyle>;
   pageHeight: number;
   // For what sits at the bottom of the page (the link status bubble): kept above the card's edge while part of the
   // page is under it.
-  bottomStyle: Animated.WithAnimatedValue<ViewStyle>;
+  bottomStyle: StyleProp<ViewStyle>;
 };
 
 // The pane's layout and motion with a toolbar that hides (`enabled`: the pane places its page with it, shown or not).
@@ -90,74 +91,57 @@ export function useToolbarMotion({
   if (enabled && collapsed && !tall.on) tall = { on: true, doc };
   if (tall !== tallState) setTall(tall);
 
-  const values = useRef<{ page: Animated.Value; laid: Animated.Value; bar: Animated.Value; fade: Animated.Value }>(null as never);
-  const initial = useRef({ page: collapsed ? 1 : 0, bar: hidden ? 1 : 0 }).current;
-  if (!values.current) {
-    values.current = {
-      // Where the page shows (0: under the full bar, 1: under the strip) and where its layout puts it (same scale).
-      page: new Animated.Value(initial.page),
-      laid: new Animated.Value(initial.page),
-      bar: new Animated.Value(initial.bar),
-      fade: new Animated.Value(initial.bar),
-    };
-    // Animated writes its JS-side values into the view's props when the pane re-renders: listening has the native
-    // driver report each frame's value back, so a re-render mid-motion puts things where they are, not where the
-    // motion started.
-    const { page, bar, fade } = values.current;
-    for (const a of [page, bar, fade]) a.addListener(() => {});
-  }
-  const v = values.current;
-  const translateY = useMemo(() => Animated.multiply(Animated.subtract(v.laid, v.page), room), [room]);
+  // Where the page shows (0: under the full bar, 1: under the strip) and where its layout puts it (same scale).
+  const page = useSharedValue(collapsed ? 1 : 0);
+  const laid = useSharedValue(collapsed ? 1 : 0);
+  const bar = useSharedValue(hidden ? 1 : 0);
+  const fade = useSharedValue(hidden ? 1 : 0);
+  const tallOn = tall.on;
+  const shift = useAnimatedStyle(() => ({ transform: [{ translateY: (laid.get() - page.get()) * room }] }), [room]);
   // The page's bottom is room × (1 − page) under the card's edge while it keeps the strip's size.
-  const bottomShift = useMemo(() => (tall.on ? Animated.multiply(Animated.subtract(v.page, 1), room) : 0), [tall.on, room]);
-  // Driven natively from the first commit's effects on, so the setValue calls below reach the native side with the
-  // commit's mount rather than through a JS frame.
-  useEffect(() => {
-    const keep = (a: Animated.Value, value: number) => Animated.timing(a, { toValue: value, duration: 0, useNativeDriver: true });
-    Animated.parallel([keep(v.page, initial.page), keep(v.laid, initial.page), keep(v.bar, initial.bar), keep(v.fade, initial.bar)]).start();
-  }, []);
+  const bottomStyle = useAnimatedStyle(() => ({ transform: [{ translateY: tallOn ? (page.get() - 1) * room : 0 }] }), [tallOn, room]);
   const was = useRef({ collapsed, hidden });
-  // A layout effect: its native ops go with this commit's mount, so the layout's move and the transform holding the
-  // page where it was land in the same frame. Starting a value's animation stops the one running and carries on from
-  // where it got to, so a reversal mid-motion never jumps.
+  // A layout effect: its writes go out with this commit, so the layout's move and the transform holding the page
+  // where it was land in the same frame. A new timing starts from where the value is, so a reversal mid-motion never
+  // jumps.
   useLayoutEffect(() => {
     const before = was.current;
     was.current = { collapsed, hidden };
     if (before.collapsed === collapsed && before.hidden === hidden) return;
-    const glide = (a: Animated.Value, value: number, show: boolean) =>
-      Animated.timing(a, { toValue: value, duration: show ? SHOW_MS : HIDE_MS, easing: show ? SHOW_EASING : HIDE_EASING, useNativeDriver: true });
+    const glide = (value: number, show: boolean) => withTiming(value, { duration: show ? SHOW_MS : HIDE_MS, easing: show ? SHOW_EASING : HIDE_EASING });
     if (before.collapsed !== collapsed) {
       const to = collapsed ? 1 : 0;
       const barTo = hidden ? 1 : 0;
-      v.laid.setValue(to);
+      laid.set(to);
       if (reduceMotion()) {
         // The page and the band move at once, the controls fade.
-        v.page.setValue(to);
-        v.bar.setValue(barTo);
-        glide(v.fade, barTo, !collapsed).start();
-      } else Animated.parallel([glide(v.page, to, !collapsed), glide(v.bar, barTo, !collapsed), glide(v.fade, barTo, !collapsed)]).start();
+        page.set(to);
+        bar.set(barTo);
+        fade.set(glide(barTo, !collapsed));
+      } else {
+        page.set(glide(to, !collapsed));
+        bar.set(glide(barTo, !collapsed));
+        fade.set(glide(barTo, !collapsed));
+      }
     } else if (!hidden) {
       // Peeking: the bar over the page, at once.
-      v.bar.setValue(0);
-      v.fade.setValue(0);
+      bar.set(0);
+      fade.set(0);
     } else if (reduceMotion()) {
-      v.bar.setValue(1);
-      glide(v.fade, 1, false).start();
-    } else Animated.parallel([glide(v.bar, 1, false), glide(v.fade, 1, false)]).start();
+      bar.set(1);
+      fade.set(glide(1, false));
+    } else {
+      bar.set(glide(1, false));
+      fade.set(glide(1, false));
+    }
   }, [collapsed, hidden]);
 
   return {
-    bar: v.bar,
-    fade: v.fade,
-    groupStyle: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      top: (collapsed ? STRIP_HEIGHT : shownTop) - extra,
-      transform: [{ translateY }],
-    },
+    bar,
+    fade,
+    groupStyle: [{ position: "absolute", left: 0, right: 0, top: (collapsed ? STRIP_HEIGHT : shownTop) - extra }, shift],
     pageHeight: height - (tall.on ? STRIP_HEIGHT : shownTop),
-    bottomStyle: { transform: [{ translateY: bottomShift }] },
+    bottomStyle,
   };
 }
 
@@ -183,7 +167,7 @@ export function AutoHideToolbar({
   const themeColor = useTabLive(tabId, (l) => l.themeColor);
   const extendColor = useSettings((s) => s.extendWebsiteColor);
   const palette = toolbarPalette(theme, extendColor && url ? themeColor : null);
-  const band = useEasedColor(palette.background);
+  const band = useEasedColorStyle(useEasedColor(palette.background), "backgroundColor");
   const collapsed = mode === "collapsed";
   const modeNow = useRef(mode);
   modeNow.current = mode;
@@ -198,42 +182,39 @@ export function AutoHideToolbar({
   const { bar, fade } = motion;
   const H = layout.toolbarHeight;
   // The band: the bar's height down to the strip's, its top edge fixed (scaled about its middle, then lifted).
-  const bandScale = bar.interpolate({ inputRange: [0, 1], outputRange: [1, STRIP_HEIGHT / H] });
-  const bandLift = bar.interpolate({ inputRange: [0, 1], outputRange: [0, -BAR_ROOM / 2] });
-  const dividerTop = bar.interpolate({ inputRange: [0, 1], outputRange: [0, -BAR_ROOM] });
-  const controls = fade.interpolate({ inputRange: [0, 0.2, 0.4, 0.6, 1], outputRange: [1, 0.45, 0.15, 0, 0] });
-  const label = fade.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
-  const shrink = [
+  const bandStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -BAR_ROOM / 2]) }, { scaleY: interpolate(bar.get(), [0, 1], [1, STRIP_HEIGHT / H]) }],
+  }));
+  const dividerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -BAR_ROOM]) }] }));
+  const controlsStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(fade.get(), [0, 0.2, 0.4, 0.6, 1], [1, 0.45, 0.15, 0, 0]),
     // Toward the top centre: scaled about its middle, then lifted so its top edge stays put, and a little more.
-    { translateY: bar.interpolate({ inputRange: [0, 1], outputRange: [0, -((1 - SHRINK) * H) / 2 - 3] }) },
-    { scale: bar.interpolate({ inputRange: [0, 1], outputRange: [1, SHRINK] }) },
-  ];
+    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -((1 - SHRINK) * H) / 2 - 3]) }, { scale: interpolate(bar.get(), [0, 1], [1, SHRINK]) }],
+  }));
+  const labelStyle = useAnimatedStyle(() => ({ opacity: interpolate(fade.get(), [0, 0.5, 1], [0, 0, 1]) }));
   const host = url.startsWith("file:") ? "File" : breadcrumb(url).host;
 
   return (
     <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, top: 0, height: H }}>
       {/* The band, the card under it first: a peeking bar covers the page, and a website colour never fades out. */}
-      <Animated.View
-        pointerEvents="none"
-        style={{ position: "absolute", left: 0, right: 0, top: 0, height: H, backgroundColor: theme.card, transform: [{ translateY: bandLift }, { scaleY: bandScale }] }}
-      >
-        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: band }]} />
+      <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, height: H, backgroundColor: theme.card }, bandStyle]}>
+        <Animated.View style={[StyleSheet.absoluteFill, band]} />
       </Animated.View>
       {url ? (
         <Animated.View
           pointerEvents="none"
-          style={{ position: "absolute", left: 0, right: 0, top: H - StyleSheet.hairlineWidth, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider, transform: [{ translateY: dividerTop }] }}
+          style={[{ position: "absolute", left: 0, right: 0, top: H - StyleSheet.hairlineWidth, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }, dividerStyle]}
         />
       ) : null}
       <Animated.View
         pointerEvents={collapsed ? "none" : "box-none"}
         onMouseEnter={() => modeNow.current === "peek" && clearTimeout(peekTimer.current)}
         onMouseLeave={() => modeNow.current === "peek" && peekLater(false, UNPEEK_DELAY)}
-        style={{ position: "absolute", left: 0, right: 0, top: 0, height: H, opacity: controls, transform: shrink }}
+        style={[{ position: "absolute", left: 0, right: 0, top: 0, height: H }, controlsStyle]}
       >
         <Toolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused} bare />
       </Animated.View>
-      <Animated.View pointerEvents={collapsed ? "auto" : "none"} style={{ position: "absolute", left: 0, right: 0, top: 0, height: STRIP_HEIGHT, opacity: label }}>
+      <Animated.View pointerEvents={collapsed ? "auto" : "none"} style={[{ position: "absolute", left: 0, right: 0, top: 0, height: STRIP_HEIGHT }, labelStyle]}>
         <Pressable
           onPress={() => {
             clearTimeout(peekTimer.current);

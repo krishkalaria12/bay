@@ -1,6 +1,8 @@
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
 import { dismiss, joinEvent, useMeetingAlert } from "../../live/alerts";
 import { useCalendar, useNow } from "../../live/calendar";
@@ -14,6 +16,9 @@ import { useLiveColors } from "./colors";
 import { SmallButton } from "./LiveItemCard";
 
 const WIDTH = 300;
+
+// Animated's old spring: speed 14, bounciness 6.
+const ALERT_SPRING = bouncySpring(14, 6);
 
 export function MeetingAlert({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
   const event = useMeetingAlert((s) => s.event);
@@ -30,7 +35,11 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
   const sidebarShown = useBrowser((s) => !!s.windows[windowId]?.sidebarOpen);
   const calendarName = useCalendar((s) => s.calendars.find((c) => c.id === event.calendarId)?.title);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
+  const appearStyle = useAnimatedStyle(() => ({
+    opacity: appear.get(),
+    transform: [{ translateY: interpolate(appear.get(), [0, 1], [-10, 0]) }, { scale: interpolate(appear.get(), [0, 1], [0.97, 1]) }],
+  }));
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +50,7 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
     };
   }, [calendarTab, sidebarShown, windowWidth]);
   useEffect(() => {
-    Animated.spring(appear, { toValue: 1, speed: 14, bounciness: 6, useNativeDriver: true }).start();
+    appear.set(withSpring(1, ALERT_SPRING));
   }, []);
 
   const link = joinLink(event);
@@ -52,15 +61,7 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
   const position = anchor ? { left: anchor.x + anchor.width + 8, top: Math.max(8, anchor.y - 4) } : { left: Math.max(8, windowWidth - WIDTH - 14), top: 52 };
 
   return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        ...position,
-        width: WIDTH,
-        opacity: appear,
-        transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) }, { scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }],
-      }}
-    >
+    <Animated.View style={[{ position: "absolute", ...position, width: WIDTH }, appearStyle]}>
       <Surface
         fill={hex(theme.panel)}
         cornerRadius={14}

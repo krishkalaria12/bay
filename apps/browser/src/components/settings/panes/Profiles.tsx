@@ -1,6 +1,7 @@
 import { ContextMenuArea, hapticTick, showMenu, Symbol } from "@bay/shell";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { createProfile, deleteProfile } from "../../../lib/actions";
 import { hex, PROFILE_COLORS, useTheme } from "../../../lib/theme";
@@ -64,16 +65,15 @@ export function ProfilesPane() {
 }
 
 const ROW_HEIGHT = 46;
-const settle = (value: Animated.Value, toValue: number) =>
-  Animated.timing(value, { toValue, duration: 160, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+const settle = (value: SharedValue<number>, toValue: number) => value.set(withTiming(toValue, { duration: 160, easing: Easing.out(Easing.cubic) }));
 
 function ProfileList() {
   const colors = useFormColors();
   const order = useBrowser((s) => s.profileOrder);
-  const offsets = useRef(new Map<string, Animated.Value>()).current;
+  const offsets = useRef(new Map<string, SharedValue<number>>()).current;
   const offsetOf = (id: string) => {
     let v = offsets.get(id);
-    if (!v) offsets.set(id, (v = new Animated.Value(0)));
+    if (!v) offsets.set(id, (v = makeMutable(0)));
     return v;
   };
   const [dragging, setDragging] = useState<string | null>(null);
@@ -82,7 +82,7 @@ function ProfileList() {
   useLayoutEffect(() => {
     if (!drag.current.reorderPending) return;
     drag.current.reorderPending = false;
-    offsets.forEach((v) => v.setValue(0));
+    offsets.forEach((v) => v.set(0));
   }, [order]);
 
   const controller = useRef({
@@ -96,21 +96,21 @@ function ProfileList() {
       const { id, from } = drag.current;
       const ids = useBrowser.getState().profileOrder;
       const max = ids.length - 1;
-      offsetOf(id).setValue(Math.max(-from * ROW_HEIGHT - 6, Math.min((max - from) * ROW_HEIGHT + 6, dy)));
+      offsetOf(id).set(Math.max(-from * ROW_HEIGHT - 6, Math.min((max - from) * ROW_HEIGHT + 6, dy)));
       const to = Math.max(0, Math.min(max, Math.round(from + dy / ROW_HEIGHT)));
       if (to === drag.current.to) return;
       drag.current.to = to;
       hapticTick();
       ids.forEach((other, j) => {
         if (other === id) return;
-        settle(offsetOf(other), from < j && j <= to ? -ROW_HEIGHT : to <= j && j < from ? ROW_HEIGHT : 0).start();
+        settle(offsetOf(other), from < j && j <= to ? -ROW_HEIGHT : to <= j && j < from ? ROW_HEIGHT : 0);
       });
     },
     end(commit: boolean) {
       const { id, from, to } = drag.current;
       setDragging(null);
       if (!commit || from === to) {
-        offsets.forEach((v) => settle(v, 0).start());
+        offsets.forEach((v) => settle(v, 0));
         return;
       }
       const ids = useBrowser.getState().profileOrder.filter((x) => x !== id);
@@ -140,7 +140,7 @@ function ProfileRow({
 }: {
   profileId: string;
   first: boolean;
-  offset: Animated.Value;
+  offset: SharedValue<number>;
   lifted: boolean;
   controller: DragController;
 }) {
@@ -162,6 +162,7 @@ function ProfileRow({
       onPanResponderTerminationRequest: () => false,
     }),
   ).current;
+  const offsetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }), [offset]);
   if (!profile) return null;
 
   const description = [isDefault ? "Default" : null, names.length ? `Shares a profile with ${listOf(names)}` : null].filter(Boolean).join(" · ");
@@ -181,14 +182,13 @@ function ProfileRow({
   return (
     <Animated.View
       {...pan.panHandlers}
-      style={{
+      style={[{
         zIndex: lifted ? 1 : 0,
-        transform: [{ translateY: offset }],
         borderRadius: lifted ? 8 : 0,
         backgroundColor: lifted ? hex(theme.panel) : undefined,
         borderWidth: lifted ? StyleSheet.hairlineWidth * 2 : 0,
         borderColor: colors.groupBorder,
-      }}
+      }, offsetStyle]}
     >
       {!first && !lifted && <View style={{ height: StyleSheet.hairlineWidth * 2, marginHorizontal: 12, backgroundColor: colors.separator }} />}
       <ContextMenuArea onContextMenu={() => void openMenu()}>

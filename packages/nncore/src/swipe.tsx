@@ -1,6 +1,7 @@
 import { requireNativeModule, requireNativeViewManager } from "expo-modules-core";
 import { forwardRef, useImperativeHandle, useRef } from "react";
-import { Animated, type NativeSyntheticEvent, type ViewProps } from "react-native";
+import { type NativeSyntheticEvent, type ViewProps } from "react-native";
+import Animated from "react-native-reanimated";
 
 export type SwipeEvent = {
   phase: "began" | "changed" | "ended" | "cancelled" | "swipe" | "wheel";
@@ -53,8 +54,8 @@ export type SwipeAreaProps = ViewProps & {
   isPager?: boolean;
   onSwipe: (event: SwipeEvent) => void;
   nativePager?: NativePagerConfig;
-  // A native-driver Animated.event on { nativeEvent: { position } }, passed through as is.
-  onPagerPosition?: (...args: never[]) => void;
+  // A Reanimated event handler (useEvent) on { position }, run on the UI thread with each frame.
+  onPagerPosition?: unknown;
   onPagerState?: (event: PagerStateEvent) => void;
 };
 
@@ -81,7 +82,7 @@ type NativeComponent = React.ComponentType<NativeProps & { ref?: React.Ref<Nativ
 
 const Module = requireNativeModule<SwipeModule>("BaySwipe");
 const Native = requireNativeViewManager<NativeProps>("BaySwipe") as unknown as NativeComponent;
-// Native Animated attaches onPagerPosition to this view, so frames update the value without JS.
+// Reanimated attaches onPagerPosition to this view, so frames update the value without JS.
 let AnimatedNative: NativeComponent | undefined;
 const animatedNative = () => (AnimatedNative ??= Animated.createAnimatedComponent(Native) as unknown as NativeComponent);
 

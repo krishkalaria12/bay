@@ -1,7 +1,8 @@
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { layout, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useSidebarOpen, useWindowId } from "../store/hooks";
@@ -130,7 +131,7 @@ export function DownloadMagnet() {
   const topStrip = useTabLayout() === "top";
   const [flight, setFlight] = useState<{ id: string; path: string } | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const t = useRef(new Animated.Value(0)).current;
+  const t = useSharedValue(0);
   const seen = useRef<Set<string> | null>(null);
 
   useEffect(() => {
@@ -140,10 +141,15 @@ export function DownloadMagnet() {
       const fresh = s.downloads.find((d) => !seen.current!.has(d.id));
       s.downloads.forEach((d) => seen.current!.add(d.id));
       if (!fresh || s.ui.focusedWindowId !== windowId || !downloadVisibleIn(fresh, s.windows[windowId])) return;
-      t.setValue(0);
+      t.set(0);
       setFlight({ id: fresh.id, path: fresh.path || fresh.filename });
       // A second download within the flight restarts it: only the flight that finished lands.
-      Animated.timing(t, { toValue: 1, duration: 700, easing: Easing.bezier(0.45, 0, 0.2, 1), useNativeDriver: true }).start(({ finished }) => finished && setFlight(null));
+      const land = () => setFlight(null);
+      t.set(
+        withTiming(1, { duration: 700, easing: Easing.bezier(0.45, 0, 0.2, 1) }, (finished) => {
+          if (finished) runOnJS(land)();
+        }),
+      );
     });
   }, [windowId]);
 
@@ -153,23 +159,20 @@ export function DownloadMagnet() {
   const start = { x: sidebar + (size.width - sidebar) / 2, y: size.height * 0.45 };
   const icon = 44;
   const steps = [0, 0.25, 0.5, 0.75, 1];
-  const x = t.interpolate({ inputRange: steps, outputRange: steps.map((p) => start.x + (target.x - start.x) * p - icon / 2) });
-  const y = t.interpolate({ inputRange: steps, outputRange: steps.map((p) => start.y + (target.y - start.y) * p - Math.sin(Math.PI * p) * 90 - icon / 2) });
+  const xs = steps.map((p) => start.x + (target.x - start.x) * p - icon / 2);
+  const ys = steps.map((p) => start.y + (target.y - start.y) * p - Math.sin(Math.PI * p) * 90 - icon / 2);
+  const flightStyle = useAnimatedStyle(() => {
+    const p = t.get();
+    return {
+      opacity: interpolate(p, [0, 0.1, 0.8, 1], [0, 1, 1, 0]),
+      transform: [{ translateX: interpolate(p, steps, xs) }, { translateY: interpolate(p, steps, ys) }, { scale: interpolate(p, [0, 0.15, 1], [0.6, 1.1, 0.3]) }],
+    };
+  }, [xs.join(), ys.join()]);
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       {flight && (
-        <Animated.View
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            width: icon,
-            height: icon,
-            opacity: t.interpolate({ inputRange: [0, 0.1, 0.8, 1], outputRange: [0, 1, 1, 0] }),
-            transform: [{ translateX: x }, { translateY: y }, { scale: t.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0.6, 1.1, 0.3] }) }],
-          }}
-        >
+        <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: icon, height: icon }, flightStyle]}>
           <FileIcon path={flight.path} size={icon} />
         </Animated.View>
       )}

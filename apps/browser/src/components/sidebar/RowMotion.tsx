@@ -1,6 +1,7 @@
 import { FadeLabel } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { Animated, Easing, View } from "react-native";
+import { View } from "react-native";
+import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { reduceMotion } from "../../lib/reduceMotion";
 import { layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -104,59 +105,47 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
   return { rows, opening, gone, opened };
 }
 
-const rowProgress = (progress: Animated.Value, inputRange: number[], outputRange: number[]) =>
-  progress.interpolate({ inputRange, outputRange, extrapolate: "clamp" });
+// The heights move the rows under them with the layout, from the UI thread.
+const play = (onDone: () => void) =>
+  withTiming(1, { duration: ROW_MS, easing: ROW_EASING }, () => {
+    runOnJS(onDone)();
+  });
 
 /** Wraps a list entry: while its tab has just opened, it grows from nothing (its gap included) and fades in. */
 export function OpeningRow({ entry, opening, onOpened, children }: { entry: string; opening: boolean; onOpened: (entry: string) => void; children: ReactNode }) {
-  const [progress] = useState(() => (opening ? new Animated.Value(0) : null));
+  const [grows] = useState(opening);
+  const progress = useSharedValue(grows ? 0 : 1);
   useEffect(() => {
-    if (!progress) return;
-    // Height can't be driven natively: the rows under it move with the layout.
-    const run = Animated.timing(progress, { toValue: 1, duration: ROW_MS, easing: ROW_EASING, useNativeDriver: false });
-    run.start(() => onOpened(entry));
-    return () => run.stop();
+    if (grows) progress.set(play(() => onOpened(entry)));
   }, []);
-  const growing = progress && opening;
-  return (
-    <Animated.View
-      style={
-        growing
-          ? {
-              height: rowProgress(progress, [0, 1], [0, layout.rowHeight]),
-              marginBottom: rowProgress(progress, [0, 1], [-layout.rowGap, 0]),
-              opacity: rowProgress(progress, [0.25, 1], [0, 1]),
-              overflow: "hidden",
-            }
-          : undefined
-      }
-    >
-      {children}
-    </Animated.View>
-  );
+  const growing = grows && opening;
+  // Every value, "auto" at rest: a value the style stops giving keeps the last one it gave.
+  const style = useAnimatedStyle(() => {
+    const p = growing ? progress.get() : 1;
+    return {
+      height: growing ? p * layout.rowHeight : "auto",
+      marginBottom: (p - 1) * layout.rowGap,
+      opacity: interpolate(p, [0.25, 1], [0, 1], Extrapolation.CLAMP),
+      overflow: growing ? "hidden" : "visible",
+    };
+  }, [growing]);
+  return <Animated.View style={style}>{children}</Animated.View>;
 }
 
 /** A closed tab's row on its way out: it fades, and its room (its gap included) closes. */
 export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId: string) => void }) {
   const theme = useTheme();
-  const [progress] = useState(() => new Animated.Value(0));
+  const progress = useSharedValue(0);
   useEffect(() => {
-    // Height can't be driven natively: the rows under it move with the layout.
-    const run = Animated.timing(progress, { toValue: 1, duration: ROW_MS, easing: ROW_EASING, useNativeDriver: false });
-    run.start(() => onGone(row.tab.id));
-    return () => run.stop();
+    progress.set(play(() => onGone(row.tab.id)));
   }, []);
+  const style = useAnimatedStyle(() => {
+    const p = progress.get();
+    return { height: (1 - p) * layout.rowHeight, marginBottom: -p * layout.rowGap, opacity: interpolate(p, [0, 0.75], [1, 0], Extrapolation.CLAMP) };
+  });
   const { tab, active } = row;
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        height: rowProgress(progress, [0, 1], [layout.rowHeight, 0]),
-        marginBottom: rowProgress(progress, [0, 1], [0, -layout.rowGap]),
-        opacity: rowProgress(progress, [0, 0.75], [1, 0]),
-        overflow: "hidden",
-      }}
-    >
+    <Animated.View pointerEvents="none" style={[{ overflow: "hidden" }, style]}>
       <View style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}>
         {active && <SelectedFill borderWidth={0.5} />}
         <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />

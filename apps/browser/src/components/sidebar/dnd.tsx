@@ -1,6 +1,7 @@
 import { hapticTick } from "@bay/shell";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Animated, Easing, PanResponder, type ScrollView, type View } from "react-native";
+import { PanResponder, type ScrollView, type View } from "react-native";
+import Animated, { cancelAnimation, Easing, makeMutable, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { create, useStore } from "zustand";
 import { layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -26,8 +27,8 @@ type Item = ItemSpec & {
   key: string;
   view: View | null;
   header: View | null;
-  gap: Animated.Value;
-  size: Animated.Value;
+  gap: SharedValue<number>;
+  size: SharedValue<number>;
   frame: Frame | null;
   headerFrame: Frame | null;
 };
@@ -38,15 +39,14 @@ type Drop =
   | { type: "none" };
 
 // `landing`: let go, it settles into the item's place while the item stays hidden.
-export type Ghost = { item: Item; count: number; width: number; height: number; position: Animated.ValueXY; landing?: boolean };
+export type Ghost = { item: Item; count: number; width: number; height: number; position: { x: SharedValue<number>; y: SharedValue<number> }; landing?: boolean };
 
 // The list stacks rows with `gap`; a zero-height tail cancels its gap with this negative margin.
 const ROW_GAP = layout.rowGap;
 const TILE_GAP = 6;
 const EDGE = 28;
-// Rows make room and close up with Dia's slide (stripReorder.ts). JS driver: gaps and sizes are margins, widths and
-// heights.
-const spring = (value: Animated.Value, toValue: number) => Animated.spring(value, { toValue, ...SLIDE });
+// Rows make room and close up with Dia's slide (stripReorder.ts): gaps and sizes are margins, widths and heights.
+const spring = (value: SharedValue<number>, toValue: number) => value.set(withSpring(toValue, SLIDE));
 
 const inside = (f: Frame, x: number, y: number, slop = 0) => x >= f.x - slop && x <= f.x + f.w + slop && y >= f.y - slop && y <= f.y + f.h + slop;
 const measure = (view: View | null): Promise<Frame | null> =>
@@ -92,7 +92,7 @@ class DragController {
   landed: { key: string; x: number; y: number } | null = null;
 
   create(key: string): Item {
-    return { key, kind: "row", tabIds: [], section: "list", view: null, header: null, gap: new Animated.Value(0), size: new Animated.Value(0), frame: null, headerFrame: null };
+    return { key, kind: "row", tabIds: [], section: "list", view: null, header: null, gap: makeMutable(0), size: makeMutable(0), frame: null, headerFrame: null };
   }
 
   get active() {
@@ -130,13 +130,13 @@ class DragController {
       count,
       width: frame.w,
       height,
-      position: new Animated.ValueXY({ x: frame.x - this.rootFrame.x, y: frame.y - this.rootFrame.y }),
+      position: { x: makeMutable(frame.x - this.rootFrame.x), y: makeMutable(frame.y - this.rootFrame.y) },
     };
-    for (const s of this.sources) s.size.setValue(s.kind === "tile" ? (s.frame?.w ?? 0) : (s.frame?.h ?? 0));
+    for (const s of this.sources) s.size.set(s.kind === "tile" ? (s.frame?.w ?? 0) : (s.frame?.h ?? 0));
     this.setLanding(null);
     this.setSources(new Set(this.sources.map((s) => s.key)));
     this.setGhost(this.ghost);
-    Animated.parallel(this.sources.map((s) => spring(s.size, 0))).start();
+    for (const s of this.sources) spring(s.size, 0);
     this.measured = true;
     this.move(this.pointer.x, this.pointer.y);
   }
@@ -167,7 +167,8 @@ class DragController {
     this.pointer = { x, y };
     updateTabDrag(x, y);
     if (!this.measured || !this.ghost) return;
-    this.ghost.position.setValue({ x: x - this.grab.x - this.rootFrame.x, y: y - this.grab.y - this.rootFrame.y });
+    this.ghost.position.x.set(x - this.grab.x - this.rootFrame.x);
+    this.ghost.position.y.set(y - this.grab.y - this.rootFrame.y);
     this.autoScroll(y);
     this.retarget();
   }
@@ -195,10 +196,10 @@ class DragController {
     }
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
     for (const i of this.items.values()) {
-      i.gap.stopAnimation();
-      i.gap.setValue(0);
+      cancelAnimation(i.gap);
+      i.gap.set(0);
     }
-    for (const i of sources) i.size.stopAnimation();
+    for (const i of sources) cancelAnimation(i.size);
     this.sources = [];
     this.gapKey = null;
     this.dropKey = "";
@@ -231,7 +232,12 @@ class DragController {
       // DEV: where it landed, for the drag test to compare with the item's place.
       if (__DEV__) this.landed = at && { key: ghost.item.key, x: at.x, y: at.y };
       if (!at) return done();
-      Animated.spring(ghost.position, { toValue: { x: at.x - this.rootFrame.x, y: at.y - this.rootFrame.y }, ...SLIDE }).start(done);
+      ghost.position.x.set(withSpring(at.x - this.rootFrame.x, SLIDE));
+      ghost.position.y.set(
+        withSpring(at.y - this.rootFrame.y, SLIDE, () => {
+          runOnJS(done)();
+        }),
+      );
     });
   }
 
@@ -246,10 +252,9 @@ class DragController {
     const ref = target ?? source;
     const top = ref.frame?.y;
     if (top === undefined) return null;
-    const now = (v: Animated.Value) => {
-      let value = 0;
-      v.stopAnimation((x) => (value = x));
-      return value;
+    const now = (v: SharedValue<number>) => {
+      cancelAnimation(v);
+      return v.get();
     };
     let closing = 0;
     for (const i of this.items.values()) if (i.frame && (i === ref || i.frame.y < top)) closing += now(i.gap);
@@ -372,9 +377,9 @@ class DragController {
     this.marks.setState({ pins: drop.type === "tabs" && drop.placement.pinned });
     if (gapKey !== this.gapKey) {
       const prev = this.gapKey && this.items.get(this.gapKey);
-      if (prev) spring(prev.gap, 0).start();
+      if (prev) spring(prev.gap, 0);
       const next = gapKey && this.items.get(gapKey);
-      if (next) spring(next.gap, pitch).start();
+      if (next) spring(next.gap, pitch);
       this.gapKey = gapKey;
       this.pitch = pitch;
     }
@@ -402,14 +407,15 @@ function WindowDropHighlight() {
   const windowId = useWindowId();
   const theme = useTheme();
   const over = useTabDrag((d) => d.overWindow === windowId);
-  const glow = useMemo(() => new Animated.Value(0), []);
+  const glow = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(glow, { toValue: over ? 1 : 0, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    glow.set(withTiming(over ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) }));
   }, [over]);
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.get() }));
   return (
     <Animated.View
       pointerEvents="none"
-      style={{
+      style={[{
         position: "absolute",
         left: 5,
         right: 5,
@@ -419,8 +425,7 @@ function WindowDropHighlight() {
         borderWidth: 1.5,
         borderColor: theme.accent,
         backgroundColor: theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-        opacity: glow,
-      }}
+      }, glowStyle]}
     />
   );
 }
@@ -477,18 +482,27 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
   // Let go: laid out in its place, hidden until the ghost has settled there.
   const landing = useStore(marks, (m) => m.landing === key);
   const horizontal = spec.kind === "tile";
-  const tailOffset = useMemo(() => item && Animated.add(item.gap, -ROW_GAP), [item]);
+  const tail = spec.kind === "tail";
+  const gap = item?.gap;
+  const size = item?.size;
+  // Every value it moves, every time, at rest too: a value the style stops giving keeps the last one it gave.
+  const motion = useAnimatedStyle(() => {
+    const room = gap ? gap.get() : 0;
+    const lead = horizontal ? { marginLeft: room } : { marginTop: tail ? room - ROW_GAP : room };
+    if (horizontal) return { ...lead, width: source && size ? size.get() : "auto" };
+    return { ...lead, height: source && size ? size.get() : "auto" };
+  }, [gap, size, horizontal, tail, source]);
   const style = item
-    ? {
-        ...(horizontal ? { marginLeft: item.gap } : { marginTop: spec.kind === "tail" ? tailOffset! : item.gap }),
-        ...(source
+    ? [
+        motion,
+        source
           ? horizontal
-            ? { width: item.size, marginRight: -TILE_GAP, opacity: 0, overflow: "hidden" as const }
-            : { height: item.size, marginBottom: -ROW_GAP, opacity: 0, overflow: "hidden" as const }
+            ? { marginRight: -TILE_GAP, opacity: 0, overflow: "hidden" as const }
+            : { marginBottom: -ROW_GAP, opacity: 0, overflow: "hidden" as const }
           : landing
             ? { opacity: 0 }
-            : {}),
-      }
-    : {};
+            : null,
+      ]
+    : null;
   return { wrapper: { ref, style }, handle: responder.panHandlers, headerRef, dragging: source };
 }

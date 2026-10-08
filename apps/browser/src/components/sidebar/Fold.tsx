@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, View } from "react-native";
+import { View } from "react-native";
+import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 
 // Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in about 150 ms, fast at first.
 const FOLD_MS = 150;
 const FOLD_EASING = Easing.bezier(0.2, 0.9, 0.3, 1);
 
-export type FoldState = { open: Animated.Value; moving: boolean };
+export type FoldState = { open: SharedValue<number>; moving: boolean };
 
 /** `open` runs to 0 (collapsed) or 1; `moving` until the latest change has finished (an interrupted one never settles). */
 export function useFold(collapsed: boolean): FoldState {
-  const open = useRef(new Animated.Value(collapsed ? 0 : 1)).current;
+  const open = useSharedValue(collapsed ? 0 : 1);
   const [settled, setSettled] = useState(collapsed);
   const [running, setRunning] = useState(false);
   const mounted = useRef(false);
@@ -19,14 +20,17 @@ export function useFold(collapsed: boolean): FoldState {
       return;
     }
     setRunning(true);
-    // JS driver: the height reflows the rows below.
-    const animation = Animated.timing(open, { toValue: collapsed ? 0 : 1, duration: FOLD_MS, easing: FOLD_EASING, useNativeDriver: false });
-    animation.start(({ finished }) => {
-      if (!finished) return;
+    // A height: it reflows the rows below.
+    const settle = () => {
       setSettled(collapsed);
       setRunning(false);
-    });
-    return () => animation.stop();
+    };
+    open.set(
+      withTiming(collapsed ? 0 : 1, { duration: FOLD_MS, easing: FOLD_EASING }, (finished) => {
+        if (finished) runOnJS(settle)();
+      }),
+    );
+    return () => cancelAnimation(open);
   }, [collapsed]);
   return { open, moving: running || settled !== collapsed };
 }
@@ -66,47 +70,28 @@ export function Fold({
   const { open, moving } = fold;
   const measuring = rowHeight === undefined;
   const [measured, setMeasured] = useState<Record<string, number>>({});
-  const styles = useRef(new Map<number, object>()).current;
   const kept = keep && entries.some((e) => e.key === keep) ? keep : null;
   const folding = !!kept && (collapsed || moving);
   const state = useRef({ moving, folding, kept });
   state.current = { moving, folding, kept };
   const heightOf = (key: string) => rowHeight ?? measured[key] ?? 0;
   const total = entries.reduce((sum, e) => sum + heightOf(e.key), 0) + gap * Math.max(0, entries.length - 1) + padTop + padBottom;
-  // A folding entry shrinks to nothing and cancels the gap after it.
-  const foldingStyle = (height: number) => {
-    let style = styles.get(height);
-    if (!style) {
-      style = {
-        height: open.interpolate({ inputRange: [0, 1], outputRange: [0, height] }),
-        marginBottom: open.interpolate({ inputRange: [0, 1], outputRange: [-gap, 0] }),
-        opacity: open,
-        overflow: "hidden",
-      };
-      styles.set(height, style);
-    }
-    return style;
-  };
-  const closed = { height: 0, marginBottom: -gap, opacity: 0, overflow: "hidden" as const };
-  const outer = folding
-    ? null
-    : moving
-      ? { height: open.interpolate({ inputRange: [0, 1], outputRange: [0, total] }), opacity: open, overflow: "hidden" as const }
-      : collapsed
-        ? { height: 0, opacity: 0, overflow: "hidden" as const }
-        : null;
+  // The block: its own height while folding around a kept entry (the entries fold instead) or open, else from
+  // nothing to all of it.
+  const outerMode: FoldMode = folding || (!moving && !collapsed) ? "free" : moving ? "moving" : "closed";
+  const outer = useFoldStyle(open, outerMode, total, 0);
   const mountAll = !collapsed || moving || mountClosed || measuring;
 
   return (
     <Animated.View style={outer} pointerEvents={collapsed ? "box-none" : "auto"}>
       {/* Measured entries lay out at their own height while the block is closed: a view in a clipped, zero-height
           parent reports a height of 0. */}
-      <View style={[{ gap, paddingTop: padTop, paddingBottom: padBottom }, measuring && outer && !moving ? { position: "absolute", left: 0, right: 0, top: 0 } : null]}>
+      <View style={[{ gap, paddingTop: padTop, paddingBottom: padBottom }, measuring && outerMode === "closed" ? { position: "absolute", left: 0, right: 0, top: 0 } : null]}>
         {entries.map(({ key, node }) => {
           const stays = key === kept;
           if (!stays && !mountAll) return null;
           return (
-            <Animated.View key={key} style={folding && !stays ? (moving ? foldingStyle(heightOf(key)) : closed) : null} pointerEvents={collapsed && !stays ? "none" : "auto"}>
+            <FoldItem key={key} open={open} mode={folding && !stays ? (moving ? "moving" : "closed") : "free"} height={heightOf(key)} gap={gap} pointerEvents={collapsed && !stays ? "none" : "auto"}>
               {measuring ? (
                 <View
                   onLayout={(e) => {
@@ -121,11 +106,39 @@ export function Fold({
               ) : (
                 node
               )}
-            </Animated.View>
+            </FoldItem>
           );
         })}
         {footer}
       </View>
+    </Animated.View>
+  );
+}
+
+// free: its own height; moving: `open` of `height` (and the gap after it closing with it); closed: nothing.
+type FoldMode = "free" | "moving" | "closed";
+
+// Every value in every mode, "auto" when free: a value the style stops giving keeps the last one it gave.
+function useFoldStyle(open: SharedValue<number>, mode: FoldMode, height: number, gap: number) {
+  return useAnimatedStyle(() => {
+    let o = open.get();
+    if (mode === "free") o = 1;
+    else if (mode === "closed") o = 0;
+    return {
+      height: mode === "free" ? "auto" : o * height,
+      marginBottom: (o - 1) * gap,
+      opacity: o,
+      overflow: mode === "free" ? "visible" : "hidden",
+    };
+  }, [mode, height, gap]);
+}
+
+// An entry, folding with the block: shrinking to nothing, the gap after it cancelled.
+function FoldItem({ open, mode, height, gap, pointerEvents, children }: { open: SharedValue<number>; mode: FoldMode; height: number; gap: number; pointerEvents: "none" | "auto"; children: ReactNode }) {
+  const style = useFoldStyle(open, mode, height, gap);
+  return (
+    <Animated.View style={style} pointerEvents={pointerEvents}>
+      {children}
     </Animated.View>
   );
 }

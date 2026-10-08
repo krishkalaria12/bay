@@ -1,6 +1,8 @@
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import { tensionSpring } from "../../../lib/springs";
 import { hex, useTheme } from "../../../lib/theme";
 import { useWindowId } from "../../../store/hooks";
 import type { Rect } from "../../layout/geometry";
@@ -19,28 +21,35 @@ export function ToolTour() {
   const active = useTour((s) => s.windowId === windowId && s.stops.length > 0);
   const session = useTour((s) => s.session);
   const [shown, setShown] = useState<number | null>(null);
-  const presence = useRef(new Animated.Value(0)).current;
+  const presence = useSharedValue(0);
 
   useEffect(() => {
     if (active) {
       setShown(session);
-      Animated.timing(presence, { toValue: 1, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      presence.set(withTiming(1, { duration: 240, easing: Easing.out(Easing.quad) }));
     } else if (shown !== null) {
-      Animated.timing(presence, { toValue: 0, duration: 200, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(({ finished }) => {
-        if (finished) setShown(null);
-      });
+      const gone = () => setShown(null);
+      presence.set(
+        withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) }, (finished) => {
+          if (finished) runOnJS(gone)();
+        }),
+      );
     }
   }, [active, session]);
+  const presenceStyle = useAnimatedStyle(() => ({ opacity: presence.get() }));
 
   if (shown === null) return null;
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { opacity: presence }]} pointerEvents={active ? "box-none" : "none"}>
+    <Animated.View style={[StyleSheet.absoluteFill, presenceStyle]} pointerEvents={active ? "box-none" : "none"}>
       <Tour key={shown} windowId={windowId} />
     </Animated.View>
   );
 }
 
 type Hole = Rect & { radius: number };
+type HoleValues = { x: SharedValue<number>; y: SharedValue<number>; w: SharedValue<number>; h: SharedValue<number>; r: SharedValue<number> };
+// Animated's old spring: tension 70, friction 10.
+const SPOT_SPRING = tensionSpring(70, 10);
 
 function Tour({ windowId }: { windowId: string }) {
   const theme = useTheme();
@@ -50,8 +59,8 @@ function Tour({ windowId }: { windowId: string }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [target, setTarget] = useState<Rect | null>(null);
   const [cardHeight, setCardHeight] = useState(150);
-  const hole = useRef({ x: new Animated.Value(0), y: new Animated.Value(0), w: new Animated.Value(0), h: new Animated.Value(0), r: new Animated.Value(0) }).current;
-  const card = useRef({ x: new Animated.Value(0), y: new Animated.Value(0) }).current;
+  const hole: HoleValues = { x: useSharedValue(0), y: useSharedValue(0), w: useSharedValue(0), h: useSharedValue(0), r: useSharedValue(0) };
+  const card = { x: useSharedValue(0), y: useSharedValue(0) };
   const placed = useRef(false);
 
   useEffect(() => {
@@ -78,48 +87,44 @@ function Tour({ windowId }: { windowId: string }) {
     const cardTo = { x: cardAt.x, y: cardAt.y };
     if (!placed.current) {
       placed.current = true;
-      (Object.keys(to) as (keyof typeof to)[]).forEach((k) => hole[k].setValue(to[k]));
-      card.x.setValue(cardTo.x);
-      card.y.setValue(cardTo.y);
+      (Object.keys(to) as (keyof typeof to)[]).forEach((k) => hole[k].set(to[k]));
+      card.x.set(cardTo.x);
+      card.y.set(cardTo.y);
       return;
     }
-    // JS driver: these drive layout (left/top/width/height) and Ring's radius listener.
-    const spring = (v: Animated.Value, toValue: number) => Animated.spring(v, { toValue, friction: 10, tension: 70, useNativeDriver: false });
-    Animated.parallel([
-      ...(Object.keys(to) as (keyof typeof to)[]).map((k) => spring(hole[k], to[k])),
-      spring(card.x, cardTo.x),
-      spring(card.y, cardTo.y),
-    ]).start();
+    // Layout (left/top/width/height), and the radius Ring follows.
+    const spring = (v: SharedValue<number>, toValue: number) => v.set(withSpring(toValue, SPOT_SPRING));
+    (Object.keys(to) as (keyof typeof to)[]).forEach((k) => spring(hole[k], to[k]));
+    spring(card.x, cardTo.x);
+    spring(card.y, cardTo.y);
   }, [spot.x, spot.y, spot.width, spot.height, spot.radius, cardAt.x, cardAt.y, size.width, !!stop]);
 
+  // The scrim: a frame whose border reaches past the window, around the hole, and four panes that take the clicks.
+  const frame = useAnimatedStyle(() => ({
+    left: hole.x.get() - SCRIM_REACH,
+    top: hole.y.get() - SCRIM_REACH,
+    width: hole.w.get() + SCRIM_REACH * 2,
+    height: hole.h.get() + SCRIM_REACH * 2,
+    borderRadius: hole.r.get() + SCRIM_REACH,
+  }));
+  const above = useAnimatedStyle(() => ({ height: hole.y.get() }));
+  const below = useAnimatedStyle(() => ({ top: hole.y.get() + hole.h.get() }));
+  const leftOf = useAnimatedStyle(() => ({ width: hole.x.get(), top: hole.y.get(), height: hole.h.get() }));
+  const rightOf = useAnimatedStyle(() => ({ left: hole.x.get() + hole.w.get(), top: hole.y.get(), height: hole.h.get() }));
+  const cardStyle = useAnimatedStyle(() => ({ left: card.x.get(), top: card.y.get() }));
   if (!stop) return null;
   const scrim = theme.dark ? "#00000080" : "#0000004D";
-  const holeRight = Animated.add(hole.x, hole.w);
-  const holeBottom = Animated.add(hole.y, hole.h);
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
-      <Animated.View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          left: Animated.subtract(hole.x, SCRIM_REACH),
-          top: Animated.subtract(hole.y, SCRIM_REACH),
-          width: Animated.add(hole.w, SCRIM_REACH * 2),
-          height: Animated.add(hole.h, SCRIM_REACH * 2),
-          borderWidth: SCRIM_REACH,
-          borderRadius: Animated.add(hole.r, SCRIM_REACH),
-          borderColor: scrim,
-          overflow: "hidden",
-        }}
-      />
-      <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, height: hole.y }} />
-      <Animated.View style={{ position: "absolute", left: 0, right: 0, top: holeBottom, bottom: 0 }} />
-      <Animated.View style={{ position: "absolute", left: 0, width: hole.x, top: hole.y, height: hole.h }} />
-      <Animated.View style={{ position: "absolute", left: holeRight, right: 0, top: hole.y, height: hole.h }} />
+      <Animated.View pointerEvents="none" style={[{ position: "absolute", borderWidth: SCRIM_REACH, borderColor: scrim, overflow: "hidden" }, frame]} />
+      <Animated.View style={[{ position: "absolute", left: 0, right: 0, top: 0 }, above]} />
+      <Animated.View style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, below]} />
+      <Animated.View style={[{ position: "absolute", left: 0 }, leftOf]} />
+      <Animated.View style={[{ position: "absolute", right: 0 }, rightOf]} />
       {stop.anchor ? <Ring hole={hole} /> : null}
       <Animated.View
-        style={{ position: "absolute", left: card.x, top: card.y, width: CARD_WIDTH }}
+        style={[{ position: "absolute", width: CARD_WIDTH }, cardStyle]}
         onLayout={(e) => setCardHeight(Math.round(e.nativeEvent.layout.height))}
       >
         <CoachMark stop={stop} index={index} count={stops.length} windowId={windowId} />
@@ -128,39 +133,27 @@ function Tour({ windowId }: { windowId: string }) {
   );
 }
 
-const valueOf = (v: Animated.Value) => (v as unknown as { __getValue(): number }).__getValue();
-
-function Ring({ hole }: { hole: { x: Animated.Value; y: Animated.Value; w: Animated.Value; h: Animated.Value; r: Animated.Value } }) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const [r, setR] = useState(() => valueOf(hole.r));
+function Ring({ hole }: { hole: HoleValues }) {
+  const pulse = useSharedValue(0);
+  const [r, setR] = useState(() => hole.r.get());
+  // The rim's corner is a native view's prop: each frame of the radius comes back to JS.
+  useAnimatedReaction(
+    () => hole.r.get(),
+    (value) => {
+      runOnJS(setR)(Math.max(0, value));
+    },
+  );
   useEffect(() => {
-    const id = hole.r.addListener(({ value }) => setR(Math.max(0, value)));
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-      hole.r.removeListener(id);
-    };
+    const leg = (to: number) => withTiming(to, { duration: 1100, easing: Easing.inOut(Easing.sin) });
+    pulse.set(withRepeat(withSequence(leg(1), leg(0)), -1, false));
+    return () => cancelAnimation(pulse);
   }, []);
   const out = 3;
+  const frame = useAnimatedStyle(() => ({ left: hole.x.get() - out, top: hole.y.get() - out, width: hole.w.get() + out * 2, height: hole.h.get() + out * 2 }));
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: interpolate(pulse.get(), [0, 1], [0.45, 1]) }));
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: Animated.subtract(hole.x, out),
-        top: Animated.subtract(hole.y, out),
-        width: Animated.add(hole.w, out * 2),
-        height: Animated.add(hole.h, out * 2),
-      }}
-    >
-      {/* Its own view: a native-driven value can't share a style with the JS-driven frame above. */}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }) }]}>
+    <Animated.View pointerEvents="none" style={[{ position: "absolute" }, frame]}>
+      <Animated.View style={[StyleSheet.absoluteFill, pulseStyle]}>
         <Surface style={StyleSheet.absoluteFill} cornerRadius={r + out} borderWidth={1.5} borderColor="#FFFFFFB3" />
       </Animated.View>
     </Animated.View>

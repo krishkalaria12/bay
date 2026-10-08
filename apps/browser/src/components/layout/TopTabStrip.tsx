@@ -1,6 +1,6 @@
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, layout, ThemeScope, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -19,7 +19,7 @@ import { ProfileSwipeArea } from "./ProfileSwipe";
 import { openNewTabInSplit } from "./splitActions";
 import { setMeasuredWidth, useMeasuredWidths } from "./measuredWidths";
 import { usePeek } from "./usePeek";
-import Reanimated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import {
   dragGeometry,
   dragRange,
@@ -41,7 +41,7 @@ import {
 } from "./stripGroups";
 import { makeRoom, registerSlot, reorderOffsets, settleRoom, SLIDE } from "./stripReorder";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabDrag";
-import { toolbarPalette, useEasedColor, type ToolbarPalette } from "./toolbarColors";
+import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "./toolbarColors";
 
 // Dia's top strip, from a 2x capture of 1.50.1: the card starts 42 below the window top, and everything in the
 // strip (window buttons, icons, titles) centres on y 21.
@@ -143,14 +143,15 @@ function StripDropHighlight({ left, right }: { left: number; right: number }) {
   const windowId = useWindowId();
   const theme = useTheme();
   const over = useTabDrag((d) => d.overWindow === windowId);
-  const glow = useRef(new Animated.Value(0)).current;
+  const glow = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(glow, { toValue: over ? 1 : 0, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    glow.set(withTiming(over ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) }));
   }, [over]);
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.get() }));
   return (
     <Animated.View
       pointerEvents="none"
-      style={{
+      style={[{
         position: "absolute",
         left: left - 4,
         right: right - 4,
@@ -160,8 +161,7 @@ function StripDropHighlight({ left, right }: { left: number; right: number }) {
         borderWidth: 1.5,
         borderColor: theme.accent,
         backgroundColor: theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-        opacity: glow,
-      }}
+      }, glowStyle]}
     />
   );
 }
@@ -212,22 +212,13 @@ function incomingIndex(top: DragGeometry, point: [number, number] | null, start:
 
 // The room an incoming tab gets: none (and no row gap) until the pointer is there, then a tab's width.
 function IncomingGap({ open, width, origin }: { open: boolean; width: number; origin?: React.RefObject<View | null> }) {
-  const room = useRef(new Animated.Value(open ? 1 : 0)).current;
+  const room = useSharedValue(open ? 1 : 0);
   useEffect(() => {
-    // JS driver: width and margin are layout. Dia: ~0.05 s.
-    Animated.timing(room, { toValue: open ? 1 : 0, duration: 120, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    // Width and margin: layout. Dia: ~0.05 s.
+    room.set(withTiming(open ? 1 : 0, { duration: 120, easing: Easing.out(Easing.cubic) }));
   }, [open]);
-  return (
-    <Animated.View
-      ref={origin}
-      pointerEvents="none"
-      style={{
-        height: TOP_STRIP_HEIGHT,
-        width: room.interpolate({ inputRange: [0, 1], outputRange: [0, width] }),
-        marginRight: room.interpolate({ inputRange: [0, 1], outputRange: [-GAP, 0] }),
-      }}
-    />
-  );
+  const roomStyle = useAnimatedStyle(() => ({ width: room.get() * width, marginRight: interpolate(room.get(), [0, 1], [-GAP, 0]) }), [width]);
+  return <Animated.View ref={origin} pointerEvents="none" style={[{ height: TOP_STRIP_HEIGHT }, roomStyle]} />;
 }
 
 function StripPage({ profileId, slot, pageWidth, current, resting }: { profileId: string; slot: number; pageWidth: number; current: boolean; resting: boolean }) {
@@ -282,7 +273,7 @@ function StripPage({ profileId, slot, pageWidth, current, resting }: { profileId
   return (
     <Animated.View
       pointerEvents={current ? "auto" : "none"}
-      style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pageWidth + flare * 2, display: resting ? "none" : "flex", ...pageStyle }}
+      style={[{ position: "absolute", left: 0, top: 0, bottom: 0, width: pageWidth + flare * 2, display: resting ? "none" : "flex" }, pageStyle]}
     >
       <PageProfileContext.Provider value={profileId}>
         <ThemeScope>
@@ -389,11 +380,10 @@ const DockContext = createContext<{ dock: Dock | null; top: DragGeometry } | nul
 // `mouseDownCanMoveWindow={false}`: no view consumes the press, so it climbed the responder chain to the strip's
 // WindowDragRegion, which moved the window under the pointer instead of the tab (it leaves such presses alone).
 function useStripDrag(item: StripDrag) {
-  const dx = useRef(new Animated.Value(0)).current;
+  const dx = useSharedValue(0);
   // How far it slides aside while another item of its row is dragged over its place (stripReorder.ts).
-  const shift = useRef(new Animated.Value(0)).current;
-  const translateX = useRef(Animated.add(dx, shift)).current;
-  const lift = useRef(new Animated.Value(0)).current;
+  const shift = useSharedValue(0);
+  const lift = useSharedValue(0);
   const [dragging, setDragging] = useState(false);
   const view = useRef<View>(null);
   const latest = useRef(item);
@@ -403,8 +393,8 @@ function useStripDrag(item: StripDrag) {
   const setLifted = (lifted: boolean) => {
     if (drag.current.lifted === lifted) return;
     drag.current.lifted = lifted;
-    // JS driver: the strip closes the gap the tab leaves.
-    Animated.timing(lift, { toValue: lifted ? 1 : 0, duration: LIFT_MS, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    // Its margin: the strip closes the gap the tab leaves.
+    lift.set(withTiming(lifted ? 1 : 0, { duration: LIFT_MS, easing: Easing.out(Easing.cubic) }));
   };
   // The place its row makes for it (`to`), as its leading edge passes a neighbour's centre; none once it's lifted
   // off the strip, whose gap closes instead.
@@ -425,7 +415,7 @@ function useStripDrag(item: StripDrag) {
   const reset = () => {
     owns.current = false;
     makeRoomAt(-1);
-    dx.setValue(0);
+    dx.set(0);
     setLifted(false);
     setDragging(false);
     raise(false);
@@ -446,13 +436,18 @@ function useStripDrag(item: StripDrag) {
           settleRoom(geometry);
           commit();
         }
-        dx.setValue(0);
+        dx.set(0);
         setDragging(false);
         raise(false);
       },
     };
     settle.current = landing;
-    Animated.spring(dx, { toValue: to === null ? 0 : (reorderOffsets(geometry, from, to)[from] ?? 0), ...SLIDE }).start(() => landing.land());
+    const land = () => landing.land();
+    dx.set(
+      withSpring(to === null ? 0 : (reorderOffsets(geometry, from, to)[from] ?? 0), SLIDE, () => {
+        runOnJS(land)();
+      }),
+    );
   };
   // Closed mid-drag (⌘W): RN drops the responder without telling it, so the drag would stay open and block the next;
   // the row it was passing stands where it is laid out.
@@ -482,8 +477,8 @@ function useStripDrag(item: StripDrag) {
           const grab: [number, number] = [e.nativeEvent.pageX, e.nativeEvent.pageY];
           // Pressed again while settling from the last drop: it lands first.
           settle.current?.land();
-          dx.stopAnimation();
-          dx.setValue(0);
+          cancelAnimation(dx);
+          dx.set(0);
           const mine = { stripBottom: TOP_STRIP_HEIGHT, lifted: false, ids, dx: 0, to: -1 };
           drag.current = mine;
           owns.current = true;
@@ -507,7 +502,7 @@ function useStripDrag(item: StripDrag) {
           const [min, max] = range ?? (from < 0 ? [0, 0] : dragRange(geometry, from));
           if (!lifted) {
             drag.current.dx = Math.max(min, Math.min(max, g.dx));
-            dx.setValue(drag.current.dx);
+            dx.set(drag.current.dx);
           }
           makeRoomAt(lifted || from < 0 ? -1 : dropIndex(geometry, from, g.dx));
           if (!local) updateTabDrag(g.moveX, g.moveY, lifted);
@@ -546,14 +541,11 @@ function useStripDrag(item: StripDrag) {
       }),
     [],
   );
-  const style = {
-    zIndex: dragging ? 10 : 0,
-    // Opaque while dragged, as Dia's: the tab it passes doesn't show through.
-    opacity: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-    marginRight: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -(item.width + item.gap)] }),
-    transform: [{ translateX }],
-  };
-  return { ref: view, panHandlers: responder.panHandlers, style, dragging };
+  const room = item.width + item.gap;
+  // Lifted off the strip it fades, and its row closes the gap it leaves.
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: 1 - lift.get() }));
+  const moveStyle = useAnimatedStyle(() => ({ opacity: 1 - lift.get(), marginRight: -room * lift.get(), transform: [{ translateX: dx.get() + shift.get() }] }), [room]);
+  return { ref: view, panHandlers: responder.panHandlers, style: [moveStyle, { zIndex: dragging ? 10 : 0 }], fadeStyle, dragging };
 }
 
 // True when the store moved it.
@@ -620,7 +612,7 @@ function DraggableChip({ tabId, width, geometry, from, group, tuck }: { tabId: s
     },
   });
   return (
-    <Animated.View ref={drag.ref} {...drag.panHandlers} mouseDownCanMoveWindow={false} style={{ ...drag.style, zIndex: drag.dragging ? 10 : active ? 1 : 0 }}>
+    <Animated.View ref={drag.ref} {...drag.panHandlers} mouseDownCanMoveWindow={false} style={[drag.style, { zIndex: drag.dragging ? 10 : active ? 1 : 0 }]}>
       <TabChip tabId={tabId} width={width} tuck={tuck} dragged={drag.dragging} />
     </Animated.View>
   );
@@ -721,7 +713,7 @@ function ItemRow({ hovered, pressed, children }: { hovered: boolean; pressed: bo
   );
 }
 
-type Fill = string | ReturnType<typeof useEasedColor>;
+type Fill = string | EasedColor;
 
 // The selected tab: the card's own fill (and the toolbar's website colour over it) rising out of the card. `opaque`:
 // dragged or settling, as Dia's: the card (half clear in dark) goes over the window's own opaque tint, so it looks as it
@@ -759,18 +751,7 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
     <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width, height: TOP_STRIP_HEIGHT }}>
       {fills.map((fill, i) => (
         <Fragment key={i}>
-          <Animated.View
-            style={{
-              position: "absolute",
-              left: 0.5,
-              top: TAB_TOP,
-              width: body,
-              height: TOP_STRIP_HEIGHT - TAB_TOP,
-              borderTopLeftRadius: TAB_RADIUS,
-              borderTopRightRadius: TAB_RADIUS,
-              backgroundColor: fill,
-            }}
-          />
+          <TabBody width={body} fill={fill} />
           <Flare x={0.5 - FLARE} side="left" color={fill} />
           <Flare x={0.5 + body} side="right" color={fill} />
         </Fragment>
@@ -785,22 +766,30 @@ function SelectedTab({ width, band, opaque = false }: { width: number; band: Fil
   );
 }
 
+// The tab's body over the strip, in one of its fills.
+function TabBody({ width, fill }: { width: number; fill: Fill }) {
+  const color = useEasedColorStyle(fill, "backgroundColor");
+  return (
+    <Animated.View
+      style={[
+        { position: "absolute", left: 0.5, top: TAB_TOP, width, height: TOP_STRIP_HEIGHT - TAB_TOP, borderTopLeftRadius: TAB_RADIUS, borderTopRightRadius: TAB_RADIUS },
+        color,
+      ]}
+    />
+  );
+}
+
 // The tab's concave foot: an r×r square filled outside a circle of radius r centred on its outer top corner.
-function Flare({ x, side, color }: { x: number; side: "left" | "right"; color: Fill }) {
+function Flare({ x, side, color: fill }: { x: number; side: "left" | "right"; color: Fill }) {
   const outer = FLARE * 2;
+  const color = useEasedColorStyle(fill, "borderColor");
   return (
     <View style={{ position: "absolute", left: x, top: TOP_STRIP_HEIGHT - FLARE, width: FLARE, height: FLARE, overflow: "hidden" }}>
       <Animated.View
-        style={{
-          position: "absolute",
-          left: side === "left" ? -outer : FLARE - outer,
-          top: -outer,
-          width: outer * 2,
-          height: outer * 2,
-          borderRadius: outer,
-          borderWidth: FLARE,
-          borderColor: color,
-        }}
+        style={[
+          { position: "absolute", left: side === "left" ? -outer : FLARE - outer, top: -outer, width: outer * 2, height: outer * 2, borderRadius: outer, borderWidth: FLARE },
+          color,
+        ]}
       />
     </View>
   );
@@ -938,31 +927,44 @@ function StripGroup({
   // Inside an open group, a member trades places with the other members only.
   const members = useMemo(() => dragGeometry(entry.members.map((m, i) => ({ tabIds: tabsOf(m), width: widths[i]! })), GAP), [entry.members, chip]);
   const tuckable = useBrowser((s) => !expanded && shown >= 0 && !!tuckTarget(s, windowId, profileId, entry.id));
-  const open = useRef(new Animated.Value(expanded ? 1 : 0)).current;
-  const size = useRef(new Animated.Value(width)).current;
+  const open = useSharedValue(expanded ? 1 : 0);
+  const size = useSharedValue(width);
   const state = `${expanded}:${shown >= 0 ? entry.members[shown]!.id : ""}`;
   const settled = useRef(state);
   // While the group springs, members that are still sliding (and fading) in take no clicks.
   const [moving, setMoving] = useState(false);
   const springs = useRef(0);
   useEffect(() => {
-    // JS driver: `open` moves each member's `left` and `size` is the group's width, which reflows the strip.
-    const spring = (value: Animated.Value, toValue: number) => Animated.spring(value, { toValue, ...GROUP_SPRING, useNativeDriver: false });
-    const run = (animation: Animated.CompositeAnimation) => {
+    // Layout: `open` moves each member's `left` and `size` is the group's width, which reflows the strip.
+    const run = (values: [SharedValue<number>, number][]) => {
       const id = ++springs.current;
+      let running = values.length;
+      const done = () => {
+        if (--running === 0 && id === springs.current) setMoving(false);
+      };
       setMoving(true);
-      animation.start(() => id === springs.current && setMoving(false));
+      for (const [value, to] of values)
+        value.set(
+          withSpring(to, GROUP_SPRING, () => {
+            runOnJS(done)();
+          }),
+        );
     };
     if (settled.current !== state) {
       // Expanding, collapsing and a member coming out or going back spring.
       settled.current = state;
-      run(Animated.parallel([spring(open, expanded ? 1 : 0), spring(size, width)]));
+      run([
+        [open, expanded ? 1 : 0],
+        [size, width],
+      ]);
     } else if (moving) {
       // The width changed mid-spring (the chip measured, a member came or went): the spring takes the new target.
-      run(spring(size, width));
-    } else size.setValue(width);
+      run([[size, width]]);
+    } else size.set(width);
   }, [state, width]);
-  const fade = useMemo(() => open.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: "clamp" }), []);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, open.get())) }));
+  const sizeStyle = useAnimatedStyle(() => ({ width: size.get() }));
+  const tailStyle = useAnimatedStyle(() => ({ left: size.get() - (TAIL_EXPANDED - 2.25), opacity: Math.min(1, Math.max(0, open.get())) }));
   // Dragged by its chip, the group moves along the strip as one.
   const drag = useStripDrag({
     tabId: null,
@@ -984,7 +986,6 @@ function StripGroup({
       return true;
     },
   });
-  const tail = useMemo(() => Animated.add(size, -(TAIL_EXPANDED - 2.25)), []);
   if (!group) return null;
   const tint = group.color ? GROUP_COLORS[group.color].hex : null;
   const divider = theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)";
@@ -996,24 +997,23 @@ function StripGroup({
   return (
     <Animated.View
       ref={drag.ref}
-      style={{ width: size, height: TOP_STRIP_HEIGHT, marginLeft: GROUP_MARGIN_LEFT, marginRight: GROUP_MARGIN_RIGHT, zIndex: drag.style.zIndex, transform: drag.style.transform, opacity: chipWidth === undefined ? 0 : 1 }}
+      style={[drag.style, sizeStyle, { height: TOP_STRIP_HEIGHT, marginLeft: GROUP_MARGIN_LEFT, marginRight: GROUP_MARGIN_RIGHT, opacity: chipWidth === undefined ? 0 : 1 }]}
     >
       <Animated.View
         pointerEvents="none"
-        style={{
+        style={[sizeStyle, {
           position: "absolute",
           left: 0,
           top: ITEM_TOP,
-          width: size,
           height: ITEM_HEIGHT,
           borderRadius: TAB_RADIUS,
           borderWidth: 0.5,
           borderColor: theme.pinnedRestingStroke,
           // Dia lightens the whole container while the pointer is on the chip.
           backgroundColor: tint ? withAlpha(tint, hovered ? 0.24 : 0.18) : hovered ? tokens.groupHeaderHover : tokens.groupFill,
-        }}
+        }]}
       />
-      <Animated.View pointerEvents="none" style={{ position: "absolute", left: chipSize + 0.75, top: MID - 7.5, width: 0.5, height: 15, backgroundColor: divider, opacity: fade }} />
+      <Animated.View pointerEvents="none" style={[{ position: "absolute", left: chipSize + 0.75, top: MID - 7.5, width: 0.5, height: 15, backgroundColor: divider }, fadeStyle]} />
       {entry.members.map((m, i) => (
         <GroupMember
           key={m.id}
@@ -1030,7 +1030,7 @@ function StripGroup({
           tuck={tuckable && i === shown ? tuck : undefined}
         />
       ))}
-      <Animated.View pointerEvents={expanded ? "box-none" : "none"} mouseDownCanMoveWindow={false} style={{ position: "absolute", top: ITEM_TOP, height: ITEM_HEIGHT, left: tail, flexDirection: "row", alignItems: "center", opacity: fade }}>
+      <Animated.View pointerEvents={expanded ? "box-none" : "none"} mouseDownCanMoveWindow={false} style={[{ position: "absolute", top: ITEM_TOP, height: ITEM_HEIGHT, flexDirection: "row", alignItems: "center" }, tailStyle]}>
         <View style={{ width: 0.5, height: 15, backgroundColor: divider }} />
         <IconButton icon="xmark" size={9} weight="semibold" box={24} radius={6} style={{ marginLeft: 1 }} onPress={() => useBrowser.getState().closeGroup(entry.id)} tooltip="Close Group" />
       </Animated.View>
@@ -1074,7 +1074,7 @@ function GroupMember({
   width: number;
   start: number;
   offset: number;
-  open: Animated.Value;
+  open: SharedValue<number>;
   interactive: boolean;
   shown: boolean;
   geometry: DragGeometry;
@@ -1083,23 +1083,18 @@ function GroupMember({
 }) {
   // The shown member (the window's active tab while collapsed) fades in and out on its own: Dia's "–" fades the
   // tab back into the group while the tabs after it close the gap.
-  const shownValue = useRef(new Animated.Value(shown ? 1 : 0)).current;
+  const shownValue = useSharedValue(shown ? 1 : 0);
   useEffect(() => {
-    // JS driver: it adds into `open`, which is layout.
-    Animated.timing(shownValue, { toValue: shown ? 1 : 0, duration: TUCK_FADE_MS, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    shownValue.set(withTiming(shown ? 1 : 0, { duration: TUCK_FADE_MS, easing: Easing.out(Easing.quad) }));
   }, [shown]);
-  const left = useMemo(() => open.interpolate({ inputRange: [0, 1], outputRange: [start, start + offset] }), [start, offset]);
-  const opacity = useMemo(
-    () =>
-      Animated.add(shownValue, open.interpolate({ inputRange: [0, 0.5], outputRange: [0, 1], extrapolate: "clamp" })).interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 1],
-        extrapolate: "clamp",
-      }),
-    [],
-  );
+  const placeStyle = useAnimatedStyle(() => {
+    const o = open.get();
+    // Out with the group's opening (fully in by halfway), or as the shown member.
+    const opacity = Math.min(1, Math.max(0, shownValue.get() + Math.min(1, Math.max(0, o * 2))));
+    return { left: interpolate(o, [0, 1], [start, start + offset]), opacity };
+  }, [start, offset]);
   return (
-    <Animated.View pointerEvents={interactive ? "box-none" : "none"} style={{ position: "absolute", top: 0, left, width, height: TOP_STRIP_HEIGHT, opacity, zIndex: shown ? 2 : 1 }}>
+    <Animated.View pointerEvents={interactive ? "box-none" : "none"} style={[{ position: "absolute", top: 0, width, height: TOP_STRIP_HEIGHT, zIndex: shown ? 2 : 1 }, placeStyle]}>
       {member.kind === "split" ? (
         <SplitChip tabIds={member.tabIds} width={width} geometry={geometry} from={from} group={member.group} />
       ) : (
@@ -1135,7 +1130,7 @@ function SplitChip({ tabIds, width, geometry, from, group }: { tabIds: string[];
   const { hovered, hoverProps } = useHover();
   const drag = useStripDrag({ tabId: null, ids: () => tabIds, pinned: false, groupId: group, geometry, from, width, gap: GAP, axis: "x" });
   return (
-    <Animated.View ref={drag.ref} {...drag.panHandlers} mouseDownCanMoveWindow={false} style={{ ...drag.style, zIndex: drag.dragging ? 10 : active ? 1 : 0 }}>
+    <Animated.View ref={drag.ref} {...drag.panHandlers} mouseDownCanMoveWindow={false} style={[drag.style, { zIndex: drag.dragging ? 10 : active ? 1 : 0 }]}>
       <View {...hoverProps} style={{ width, height: TOP_STRIP_HEIGHT }}>
         {active && <SelectedTab width={width} band={band} opaque={drag.dragging} />}
         <ItemRow hovered={hovered && !active} pressed={false}>
@@ -1159,7 +1154,7 @@ function SplitPart({ tabId, first, ink }: { tabId: string; first: boolean; ink: 
   const drag = useStripDrag({ tabId, ids: () => [tabId], pinned: false, groupId: null, geometry: NO_SLOTS, from: -1, width: 0, gap: 0, axis: "y" });
   if (!tab) return null;
   return (
-    <Animated.View ref={drag.ref} {...drag.panHandlers} style={{ flex: 1, flexDirection: "row", alignItems: "center", opacity: drag.style.opacity }}>
+    <Animated.View ref={drag.ref} {...drag.panHandlers} style={[{ flex: 1, flexDirection: "row", alignItems: "center" }, drag.fadeStyle]}>
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
         {!first && <View style={{ width: StyleSheet.hairlineWidth, height: 16, marginHorizontal: 6, backgroundColor: ink?.divider ?? theme.textTertiary }} />}
         <Pressable onPress={() => useBrowser.getState().activate(tab.id)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }} tooltip={tab.title || tab.url}>
@@ -1205,7 +1200,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   return (
     <>
       {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: layout.trafficLightsWidth, right: 0, top: 0, height: 6 }} /> : null}
-      <Reanimated.View
+      <Animated.View
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}
         onMouseLeave={live ? hide : undefined}
@@ -1237,7 +1232,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
             <TopTabStrip floating swipe={live} width={windowWidth - 12 - PEEK_BORDER * 2} />
           </View>
         </Surface>
-      </Reanimated.View>
+      </Animated.View>
     </>
   );
 }

@@ -1,7 +1,8 @@
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { bookmarkAncestors, folderChildren, folderLinks, type RemovedBookmarks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
@@ -283,7 +284,8 @@ function BookmarkRow({
   const node = useBrowser((s) => s.bookmarks.nodes[id]);
   const path = useBrowser((s) => (showPath ? bookmarkAncestors(s.bookmarks, id).map((a) => a.title).reverse().join(" › ") : ""));
   const { hovered, hoverProps } = useHover();
-  const dy = useRef(new Animated.Value(0)).current;
+  const dy = useSharedValue(0);
+  const dyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dy.get() }] }));
   const [dragging, setDragging] = useState(false);
   const handlers = useRef({ onDragStart, onDragMove, onDragEnd });
   handlers.current = { onDragStart, onDragMove, onDragEnd };
@@ -296,16 +298,16 @@ function BookmarkRow({
           handlers.current.onDragStart();
         },
         onPanResponderMove: (_, g) => {
-          dy.setValue(g.dy);
+          dy.set(g.dy);
           handlers.current.onDragMove(g.moveX, g.moveY);
         },
         onPanResponderRelease: (_, g) => {
-          dy.setValue(0);
+          dy.set(0);
           setDragging(false);
           handlers.current.onDragEnd(g.moveX, g.moveY);
         },
         onPanResponderTerminate: () => {
-          dy.setValue(0);
+          dy.set(0);
           setDragging(false);
           handlers.current.onDragEnd(-1, -1);
         },
@@ -354,7 +356,7 @@ function BookmarkRow({
       ref={targetRef as never}
       {...responder.panHandlers}
       {...hoverProps}
-      style={{ zIndex: dragging ? 10 : 0, opacity: dragging ? 0.85 : 1, transform: [{ translateY: dy }] }}
+      style={[{ zIndex: dragging ? 10 : 0, opacity: dragging ? 0.85 : 1 }, dyStyle]}
     >
       <ContextMenuArea onContextMenu={() => void menu()}>
         <MouseArea onMiddleClick={() => open("background")}>

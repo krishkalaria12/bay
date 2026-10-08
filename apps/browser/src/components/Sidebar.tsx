@@ -1,6 +1,7 @@
 import { ContextMenuArea, FadeLabel, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { layout, ThemeScope, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { PageProfileContext, useIsIncognito, useSettings, useWindowId, useWindowProfileId } from "../store/hooks";
@@ -233,27 +234,33 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
   // The viewport starts glowRoom above the header's foot so the first row's glow isn't cut, but scrolled rows
   // must never show there, under the traffic lights and the profile name. The viewport's top edge follows the
   // first row down to the header's foot as the list scrolls (outer view moves the clip, inner one cancels it).
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const [onScroll] = useState(() =>
-    Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-      useNativeDriver: true,
-      listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => onScrollY(e.nativeEvent.contentOffset.y),
-    }),
-  );
-  const edge = scrollY.interpolate({ inputRange: [0, Math.max(1, topGap)], outputRange: [0, glowRoom], extrapolate: "clamp" });
+  const scrollY = useSharedValue(0);
+  const scrolled = useRef(onScrollY);
+  scrolled.current = onScrollY;
+  const [tellScroll] = useState(() => (y: number) => scrolled.current(y));
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y);
+    runOnJS(tellScroll)(e.contentOffset.y);
+  });
+  const edgeAt = (y: number) => {
+    "worklet";
+    return interpolate(y, [0, Math.max(1, topGap)], [0, glowRoom], Extrapolation.CLAMP);
+  };
+  const clip = useAnimatedStyle(() => ({ transform: [{ translateY: edgeAt(scrollY.get()) }] }), [topGap, glowRoom]);
+  const unclip = useAnimatedStyle(() => ({ transform: [{ translateY: -edgeAt(scrollY.get()) }] }), [topGap, glowRoom]);
 
   return (
     <Animated.View
       pointerEvents={current ? "auto" : "none"}
-      style={{ position: "absolute", top: 0, bottom: 0, left: 0, width, display: resting ? "none" : "flex", ...pageStyle }}
+      style={[{ position: "absolute", top: 0, bottom: 0, left: 0, width, display: resting ? "none" : "flex" }, pageStyle]}
     >
       <PageProfileContext.Provider value={profileId}>
         <ThemeScope>
           <DragScope enabled={current}>
             <PageContent>
               {(controller) => (
-                <Animated.View style={{ flex: 1, overflow: "hidden", transform: [{ translateY: edge }] }}>
-                  <Animated.View style={{ flex: 1, transform: [{ translateY: Animated.multiply(edge, -1) }] }}>
+                <Animated.View style={[{ flex: 1, overflow: "hidden" }, clip]}>
+                  <Animated.View style={[{ flex: 1 }, unclip]}>
                     <Animated.ScrollView
                       ref={current ? onScrollView : undefined}
                       onLayout={

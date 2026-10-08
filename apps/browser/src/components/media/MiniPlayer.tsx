@@ -1,6 +1,7 @@
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
+import { Image, Pressable, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { toggleMute } from "../../lib/actions";
 import { hex } from "../../lib/theme";
 import { useTab } from "../../store/hooks";
@@ -156,21 +157,22 @@ function AlbumArt({
 }) {
   const { hovered, hoverProps } = useHover();
   const [failed, setFailed] = useState<string | null>(null);
-  const fade = useRef(new Animated.Value(0)).current;
+  const fade = useSharedValue(0);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.get() }));
   const downloaded = useArtwork(tabId, session.artwork);
   const art = downloaded && downloaded !== failed ? downloaded : null;
-  useEffect(() => fade.setValue(0), [art]);
+  useEffect(() => fade.set(0), [art]);
   return (
     <View {...hoverProps} style={{ position: "absolute", left: INSET, top: INSET, width: ART, height: ART }}>
       <Pressable onPress={onPress} tooltip="Back to Tab">
         <View style={{ width: ART, height: ART, borderRadius: 6, overflow: "hidden", backgroundColor: tokens.artPlaceholder, alignItems: "center", justifyContent: "center" }}>
           {art ? (
-            <Animated.View style={{ position: "absolute", left: 0, top: 0, width: ART, height: ART, opacity: fade }}>
+            <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: ART, height: ART }, fadeStyle]}>
               <Image
                 key={art}
                 source={{ uri: art }}
                 resizeMode="cover"
-                onLoad={() => Animated.timing(fade, { toValue: 1, duration: 200, useNativeDriver: true }).start()}
+                onLoad={() => fade.set(withTiming(1, { duration: 200 }))}
                 onError={() => setFailed(art)}
                 style={{ width: ART, height: ART }}
               />

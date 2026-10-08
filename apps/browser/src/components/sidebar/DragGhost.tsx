@@ -1,5 +1,6 @@
 import { FadeLabel, Surface } from "@bay/shell";
-import { Animated, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { groupLabel } from "../../store/organize";
@@ -18,8 +19,9 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
   const tile = item.kind === "tile";
   // Over the page the tab shows as the page's own card (SplitChrome.tsx).
   const onPage = useTabDrag((d) => d.onPage);
+  const at = useAnimatedStyle(() => ({ transform: [{ translateX: position.x.get() }, { translateY: position.y.get() }] }), [position]);
   return (
-    <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width, height, opacity: onPage ? 0 : 1, transform: position.getTranslateTransform() }}>
+    <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top: 0, width, height, opacity: onPage ? 0 : 1 }, at]}>
       <Surface
         fill={hex(tokens.dragSilhouette)}
         cornerRadius={10}

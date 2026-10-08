@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Animated, Easing, type ViewStyle } from "react-native";
+import { useLayoutEffect, useState } from "react";
+import type { ViewStyle } from "react-native";
+import { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { reduceMotion } from "../../lib/reduceMotion";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
@@ -76,15 +77,6 @@ function recentSwitch(windowId: string, side: "from" | "to", tabIds: string[]): 
   return sw && sw[side].some((id) => tabIds.includes(id)) ? sw : null;
 }
 
-type AnimatedStyle = Animated.WithAnimatedObject<ViewStyle>;
-
-const fadeOut = (progress: Animated.Value) => progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-
-const slideStyle = (progress: Animated.Value, from: number, to: number, axis: Axis): AnimatedStyle => {
-  const shift = progress.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
-  return { transform: [axis === "x" ? { translateX: shift } : { translateY: shift }] };
-};
-
 // As yab switches pages: the page left stays on screen while the one switched to fades in over it (or it fades off
 // the new one), and the new page settles a few points the way the switch went. Over in about six frames.
 const PAGE_MS = 120;
@@ -92,18 +84,36 @@ const PAGE_OFFSET = 4;
 // A pane faded off stays transparent this long after: its page hides a frame or two after the switch ends (native
 // views apply their props apart from React's), and at full opacity meanwhile it flashed over the page switched to.
 const SETTLE_MS = 250;
-const GONE: AnimatedStyle = { opacity: 0 };
+const GONE: ViewStyle = { opacity: 0 };
+
+export type SwitchStyle = ViewStyle | ReturnType<typeof useAnimatedStyle> | (ViewStyle | ReturnType<typeof useAnimatedStyle>)[];
+
+// An animated style that starts a switch, with its first frame's values after it: a Reanimated style attached in the
+// middle of things gives React the values it had when it was made (the last switch's end), and the pane drew them for
+// a frame before its UI-thread frames took over. React puts these in the switch's own commit, and doesn't send them
+// again while they stay the same.
+const starting = (animated: ReturnType<typeof useAnimatedStyle>, first: ViewStyle): SwitchStyle => [animated, first];
+const shiftAt = (shift: number, horizontal: boolean): ViewStyle => ({ transform: horizontal ? [{ translateX: shift }] : [{ translateY: shift }] });
 
 export type PaneSwitch = {
   // The panes switched away from, kept on screen where they were until the switch is over.
   leaving: Record<string, Rect>;
   entering: string[];
   // Each pane's part: whichever side is drawn on top fades, so the other shows through it.
-  fade: Record<string, AnimatedStyle>;
-  slide: AnimatedStyle;
-  progress: Animated.Value;
+  fade: Record<string, SwitchStyle>;
+  slide: SwitchStyle;
   // Played: only the panes faded off are left, kept transparent while their pages hide.
   settled?: boolean;
+  // Where the page switched to starts, along the switch's axis.
+  shift: number;
+  horizontal: boolean;
+};
+
+// A slide's shift: `from` points at the start to `to` at the end, along x or y.
+const shiftStyle = (progress: number, from: number, to: number, horizontal: boolean) => {
+  "worklet";
+  const shift = interpolate(progress, [0, 1], [from, to]);
+  return { transform: horizontal ? [{ translateX: shift }] : [{ translateY: shift }] };
 };
 
 /**
@@ -114,10 +124,16 @@ export type PaneSwitch = {
 export function usePaneSwitch(windowId: string, panes: Record<string, Rect>, enabled: boolean): PaneSwitch | null {
   // Not memoized by the compiler: which switch this is depends on when the render runs, not only on its arguments.
   "use no memo";
+  const progress = useSharedValue(1);
+  const distance = useSharedValue(0);
+  const horizontal = useSharedValue(false);
+  const fadeIn = useAnimatedStyle(() => ({ opacity: progress.get() }));
+  const fadeOff = useAnimatedStyle(() => ({ opacity: 1 - progress.get() }));
+  const slide = useAnimatedStyle(() => shiftStyle(progress.get(), distance.get(), 0, horizontal.get()));
   const [before, setBefore] = useState(panes);
   const [played, setPlayed] = useState<Switch | null>(null);
   const [pane, setPane] = useState<PaneSwitch | null>(null);
-  // Decided in the render that switches, so the first frame drawn is already the switch's.
+  // Decided in the render that switches, so the commit that shows the panes carries the switch's first frame.
   if (panes !== before) {
     setBefore(panes);
     const sw = latestSwitch(windowId);
@@ -130,39 +146,44 @@ export function usePaneSwitch(windowId: string, panes: Record<string, Rect>, ena
     const leavingAt = createdAt(leaving);
     if (enabled && sw && sw !== played && entering.length && leaving.length && !leavingAt.includes(-1) && sw.to.some((id) => entering.includes(id))) {
       setPlayed(sw);
-      const progress = new Animated.Value(0);
       const fadingIn = Math.max(...enteringAt) > Math.max(...leavingAt);
-      const fadeStyle: AnimatedStyle = { opacity: fadingIn ? progress : fadeOut(progress) };
-      const distance = reduceMotion() ? 0 : PAGE_OFFSET * sw.direction;
+      const shift = reduceMotion() ? 0 : PAGE_OFFSET * sw.direction;
+      const fade = fadingIn ? starting(fadeIn, { opacity: 0 }) : starting(fadeOff, { opacity: 1 });
       setPane({
         leaving: Object.fromEntries(leaving.map((id) => [id, before[id]!])),
         entering,
-        fade: Object.fromEntries((fadingIn ? entering : leaving).map((id) => [id, fadeStyle])),
-        slide: slideStyle(progress, distance, 0, sw.axis),
-        progress,
+        fade: Object.fromEntries((fadingIn ? entering : leaving).map((id) => [id, fade])),
+        slide: starting(slide, shiftAt(shift, sw.axis === "x")),
+        shift,
+        horizontal: sw.axis === "x",
       });
     } else if (pane) {
       setPane(null);
     }
   }
-  useEffect(() => {
+  // Right after the commit: the values start where its first-frame styles put the panes, and play from there.
+  useLayoutEffect(() => {
     if (!pane) return;
     if (pane.settled) {
       const timer = setTimeout(() => setPane(null), SETTLE_MS);
       return () => clearTimeout(timer);
     }
-    const run = Animated.timing(pane.progress, { toValue: 1, duration: PAGE_MS, easing: SWITCH_EASING, useNativeDriver: true });
-    run.start(({ finished }) => {
-      if (!finished) return;
+    const settle = () => {
       const fadedOff = Object.keys(pane.fade).filter((id) => pane.leaving[id]);
       setPane(fadedOff.length ? { ...pane, leaving: {}, entering: [], fade: Object.fromEntries(fadedOff.map((id) => [id, GONE])), settled: true } : null);
-    });
-    return () => run.stop();
+    };
+    progress.set(0);
+    distance.set(pane.shift);
+    horizontal.set(pane.horizontal);
+    progress.set(
+      withTiming(1, { duration: PAGE_MS, easing: SWITCH_EASING }, (finished) => {
+        if (finished) runOnJS(settle)();
+      }),
+    );
+    return () => cancelAnimation(progress);
   }, [pane]);
   return pane;
 }
-
-export type SwitchSlide = { progress: Animated.Value; style: AnimatedStyle };
 
 export type SlideOptions = {
   // Where a thing coming on starts, in points along the switch's direction; one going off ends as far the other way.
@@ -172,35 +193,53 @@ export type SlideOptions = {
   axis?: Axis;
 };
 
-function makeSlide(sw: Switch, on: boolean, { offset, axis = sw.axis }: SlideOptions): SwitchSlide {
-  const progress = new Animated.Value(0);
-  const distance = reduceMotion() ? 0 : offset * sw.direction;
-  const opacity = on ? progress : fadeOut(progress);
-  return { progress, style: { opacity, ...slideStyle(progress, on ? distance : 0, on ? 0 : -distance, axis) } };
-}
-
 /**
- * The slide of something shown for `tabIds` as `on` turns, when a tab switch turned it; null at rest. Mounting on for
- * the tab just switched to counts as turning on.
+ * The style of something shown for `tabIds` while `on` turns, when a tab switch turned it; null at rest. Mounting on
+ * for the tab just switched to counts as turning on.
  */
-export function useSwitchSlide(windowId: string, tabIds: string[], on: boolean, options: SlideOptions): SwitchSlide | null {
+export function useSwitchSlide(windowId: string, tabIds: string[], on: boolean, options: SlideOptions): SwitchStyle | null {
   // Not memoized by the compiler: which switch this is depends on when the render runs, not only on its arguments.
   "use no memo";
+  const progress = useSharedValue(1);
+  const coming = useSharedValue(true);
+  const distance = useSharedValue(0);
+  const horizontal = useSharedValue(false);
+  const style = useAnimatedStyle(() => {
+    const p = progress.get();
+    const d = distance.get();
+    return coming.get()
+      ? { opacity: p, ...shiftStyle(p, d, 0, horizontal.get()) }
+      : { opacity: 1 - p, ...shiftStyle(p, 0, -d, horizontal.get()) };
+  });
   const [was, setWas] = useState(() => on && !recentSwitch(windowId, "to", tabIds));
-  const [slide, setSlide] = useState<SwitchSlide | null>(null);
+  // The slide playing: its first frame (in the commit that turns it) and where it goes from there.
+  const [play, setPlay] = useState<{ first: ViewStyle; on: boolean; distance: number; horizontal: boolean } | null>(null);
   // Decided in the render that turns it, so the first frame drawn is already the slide's.
   if (on !== was) {
     setWas(on);
     const sw = recentSwitch(windowId, on ? "to" : "from", tabIds);
     // After a close the closed row fades out with its fill: the next one shows its own at once, or for a few frames
     // the list had none.
-    setSlide(sw && !sw.closed ? makeSlide(sw, on, options) : null);
+    if (sw && !sw.closed) {
+      const distance = reduceMotion() ? 0 : options.offset * sw.direction;
+      const horizontal = (options.axis ?? sw.axis) === "x";
+      const first = on ? { opacity: 0, ...shiftAt(distance, horizontal) } : { opacity: 1, ...shiftAt(0, horizontal) };
+      setPlay({ first, on, distance, horizontal });
+    } else if (play) setPlay(null);
   }
-  useEffect(() => {
-    if (!slide) return;
-    const run = Animated.timing(slide.progress, { toValue: 1, duration: options.duration, easing: SWITCH_EASING, useNativeDriver: true });
-    run.start(({ finished }) => finished && setSlide(null));
-    return () => run.stop();
-  }, [slide]);
-  return slide;
+  useLayoutEffect(() => {
+    if (!play) return;
+    const stop = () => setPlay(null);
+    progress.set(0);
+    coming.set(play.on);
+    distance.set(play.distance);
+    horizontal.set(play.horizontal);
+    progress.set(
+      withTiming(1, { duration: options.duration, easing: SWITCH_EASING }, (finished) => {
+        if (finished) runOnJS(stop)();
+      }),
+    );
+    return () => cancelAnimation(progress);
+  }, [play]);
+  return play ? starting(style, play.first) : null;
 }

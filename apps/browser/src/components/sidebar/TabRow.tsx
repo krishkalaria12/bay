@@ -1,6 +1,7 @@
 import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
+import { Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
+import Animated from "react-native-reanimated";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useBrowser, type BrowserState } from "../../store/browser";

@@ -2,7 +2,8 @@ import { breadcrumb } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
 import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
@@ -137,23 +138,11 @@ function PageField({ tab, windowId, hidden }: { tab: Tab; windowId: string; hidd
 }
 
 function Progress({ progress, color }: { progress: number; color: string }) {
-  const width = useRef(new Animated.Value(Math.max(progress, 0.08))).current;
+  const width = useSharedValue(Math.max(progress, 0.08));
   useEffect(() => {
-    // JS driver: a scaleX would squash the rounded ends.
-    Animated.timing(width, { toValue: Math.max(progress, 0.08), duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    // Its width, not a scaleX: that would squash the rounded ends.
+    width.set(withTiming(Math.max(progress, 0.08), { duration: 200, easing: Easing.out(Easing.quad) }));
   }, [progress]);
-  return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        left: 8,
-        bottom: 0,
-        height: 1.5,
-        borderRadius: 1,
-        width: width.interpolate({ inputRange: [0, 1], outputRange: ["0%", "96%"] }),
-        backgroundColor: color,
-        opacity: 0.85,
-      }}
-    />
-  );
+  const widthStyle = useAnimatedStyle(() => ({ width: `${width.get() * 96}%` }));
+  return <Animated.View style={[{ position: "absolute", left: 8, bottom: 0, height: 1.5, borderRadius: 1, backgroundColor: color, opacity: 0.85 }, widthStyle]} />;
 }

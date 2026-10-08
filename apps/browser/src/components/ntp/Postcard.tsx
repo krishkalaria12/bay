@@ -1,7 +1,9 @@
 import { WindowBackdrop } from "@bay/shaders";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { tensionSpring } from "../../lib/springs";
 import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
@@ -37,22 +39,20 @@ function mix(a: string, b: string, t: number) {
 
 export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes: ReleaseNotes; size: { width: number; height: number }; onOpen: () => void; onDismiss: () => void }) {
   const { hovered, hoverProps } = useHover();
-  const drop = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(1)).current;
-  const tooltip = useRef(new Animated.Value(0)).current;
+  const drop = useSharedValue(1);
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const tooltip = useSharedValue(0);
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (cancelled) return;
-      if (reduce) return drop.setValue(0), opacity.setValue(1);
+      if (reduce) return drop.set(0), opacity.set(1);
       const stiffness = (2 * Math.PI / 0.65) ** 2;
-      Animated.parallel([
-        Animated.spring(drop, { toValue: 0, stiffness, damping: 2 * Math.sqrt(stiffness), mass: 1, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      ]).start();
+      drop.set(withSpring(0, { stiffness, damping: 2 * Math.sqrt(stiffness), mass: 1 }));
+      opacity.set(withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) }));
     });
     return () => {
       cancelled = true;
@@ -60,43 +60,42 @@ export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes
   }, []);
 
   useEffect(() => {
-    Animated.timing(scale, { toValue: hovered ? 1.05 : 1, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
-    Animated.timing(tooltip, { toValue: hovered ? 1 : 0, duration: hovered ? 50 : 100, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    scale.set(withTiming(hovered ? 1.05 : 1, { duration: 160, easing: Easing.out(Easing.quad) }));
+    tooltip.set(withTiming(hovered ? 1 : 0, { duration: hovered ? 50 : 100, easing: Easing.out(Easing.quad) }));
   }, [hovered]);
 
   const dismiss = () => {
     setLeaving(true);
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 0, duration: 200, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 0.96, duration: 200, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-    ]).start(onDismiss);
+    scale.set(withTiming(0.96, { duration: 200, easing: Easing.in(Easing.quad) }));
+    opacity.set(
+      withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) }, () => {
+        runOnJS(onDismiss)();
+      }),
+    );
   };
+  const dropStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: drop.get() * -280 }] }));
+  const cardStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${CARD.tilt}deg` }, { scale: scale.get() }] }));
+  const tooltipStyle = useAnimatedStyle(() => ({ opacity: tooltip.get() }));
   if (size.height < 420 || size.width < 560) return null;
 
   const card = cardFrame(size);
   return (
     <Animated.View
       pointerEvents={leaving ? "none" : "box-none"}
-      style={{
-        position: "absolute",
-        left: card.x - HOVER_SLOP,
-        top: card.y - HOVER_SLOP,
-        width: card.width + HOVER_SLOP * 2,
-        height: card.height + HOVER_SLOP + TOOLTIP.gap + TOOLTIP.height,
-        opacity,
-        transform: [{ translateY: drop.interpolate({ inputRange: [0, 1], outputRange: [0, -280] }) }],
-      }}
+      style={[
+        {
+          position: "absolute",
+          left: card.x - HOVER_SLOP,
+          top: card.y - HOVER_SLOP,
+          width: card.width + HOVER_SLOP * 2,
+          height: card.height + HOVER_SLOP + TOOLTIP.gap + TOOLTIP.height,
+        },
+        dropStyle,
+      ]}
     >
       <View {...hoverProps} style={StyleSheet.absoluteFill}>
         <Animated.View
-          style={{
-            position: "absolute",
-            left: HOVER_SLOP,
-            top: HOVER_SLOP,
-            width: card.width,
-            height: card.height,
-            transform: [{ rotate: `${CARD.tilt}deg` }, { scale }],
-          }}
+          style={[{ position: "absolute", left: HOVER_SLOP, top: HOVER_SLOP, width: card.width, height: card.height }, cardStyle]}
         >
           <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel="What's new in Bay" style={{ flex: 1 }}>
             <Surface
@@ -113,7 +112,7 @@ export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes
         </Animated.View>
         <Animated.View
           pointerEvents={hovered ? "box-none" : "none"}
-          style={{ position: "absolute", left: 0, right: 0, top: HOVER_SLOP + card.height + TOOLTIP.gap, alignItems: "center", opacity: tooltip }}
+          style={[{ position: "absolute", left: 0, right: 0, top: HOVER_SLOP + card.height + TOOLTIP.gap, alignItems: "center" }, tooltipStyle]}
         >
           <Tooltip text="Latest Release Notes" onOpen={onOpen} onClose={dismiss} />
         </Animated.View>
@@ -177,17 +176,24 @@ function Artwork({ notes, radius, titleSize, hidden }: { notes: ReleaseNotes; ra
   );
 }
 
+// Animated's old spring: tension 55, friction 9.
+const PAGE_SPRING = tensionSpring(55, 9);
+
 export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes; size: { width: number; height: number }; onClose: () => void }) {
   const theme = useTheme();
-  const t = useRef(new Animated.Value(0)).current;
+  const t = useSharedValue(0);
   const [closing, setClosing] = useState(false);
   useEffect(() => {
-    Animated.spring(t, { toValue: 1, friction: 9, tension: 55, useNativeDriver: true }).start();
+    t.set(withSpring(1, PAGE_SPRING));
     return onClose;
   }, []);
   const close = () => {
     setClosing(true);
-    Animated.timing(t, { toValue: 0, duration: 240, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(onClose);
+    t.set(
+      withTiming(0, { duration: 240, easing: Easing.in(Easing.cubic) }, () => {
+        runOnJS(onClose)();
+      }),
+    );
   };
 
   const width = Math.min(860, size.width - 64);
@@ -195,28 +201,30 @@ export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes
   const split = width >= 640;
   const card = cardFrame(size);
   const from = { x: card.x + card.width / 2 - size.width / 2, y: card.y + card.height / 2 - size.height / 2 };
+  const backdrop = useAnimatedStyle(() => ({ opacity: interpolate(t.get(), [0, 1], [0, 1], Extrapolation.CLAMP) }));
+  // From the postcard's place, size and tilt to the page's.
+  const page = useAnimatedStyle(() => {
+    const p = t.get();
+    return {
+      opacity: interpolate(p, [0, 0.3, 1], [0, 1, 1], Extrapolation.CLAMP),
+      transform: [
+        { translateX: interpolate(p, [0, 1], [from.x, 0]) },
+        { translateY: interpolate(p, [0, 1], [from.y, 0]) },
+        { scale: interpolate(p, [0, 1], [CARD.width / width, 1]) },
+        { rotate: `${interpolate(p, [0, 1], [CARD.tilt, -1])}deg` },
+      ],
+    };
+  }, [from.x, from.y, width]);
 
   return (
     <Animated.View style={StyleSheet.absoluteFill} pointerEvents={closing ? "none" : "auto"}>
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: "clamp" }) }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, backdrop]}>
         <VisualEffect material="hudWindow" blendingMode="withinWindow" style={StyleSheet.absoluteFill} />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "rgba(10,10,10,0.35)" : "rgba(255,255,255,0.35)" }]} />
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close release notes" />
       </Animated.View>
       <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]} pointerEvents="box-none">
-        <Animated.View
-          style={{
-            width,
-            height,
-            opacity: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 1, 1], extrapolate: "clamp" }),
-            transform: [
-              { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [from.x, 0] }) },
-              { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [from.y, 0] }) },
-              { scale: t.interpolate({ inputRange: [0, 1], outputRange: [CARD.width / width, 1] }) },
-              { rotate: t.interpolate({ inputRange: [0, 1], outputRange: [`${CARD.tilt}deg`, "-1deg"] }) },
-            ],
-          }}
-        >
+        <Animated.View style={[{ width, height }, page]}>
           <Surface
             style={StyleSheet.absoluteFill}
             fill={PAPER}

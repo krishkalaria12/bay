@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Animated, Easing } from "react-native";
+import { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import type { Theme } from "../../lib/theme";
 
 export type ToolbarPalette = {
@@ -80,8 +80,11 @@ export function toolbarPalette(theme: Theme, websiteColor: string | null): Toolb
   return palette;
 }
 
-export function useEasedColor(color: string | null, duration = 180) {
-  const progress = useRef(new Animated.Value(1)).current;
+/** A colour that eases to each new one; useEasedColorStyle draws it. */
+export type EasedColor = { progress: SharedValue<number>; colors: SharedValue<[string, string]> };
+
+export function useEasedColor(color: string | null, duration = 180): EasedColor {
+  const progress = useSharedValue(1);
   const from = useRef<string>(color ?? "#00000000");
   const to = useRef<string>(color ?? "#00000000");
   const target = color ? color.slice(0, 7) : `${to.current.slice(0, 7)}00`;
@@ -89,12 +92,21 @@ export function useEasedColor(color: string | null, duration = 180) {
     from.current = to.current;
     to.current = target;
   }
+  const colors = useSharedValue<[string, string]>([from.current, to.current]);
   useEffect(() => {
     // A toolbar that appears (a tab shown, a pane opened) starts at its colour: nothing to fade.
     if (from.current === to.current) return;
-    progress.setValue(0);
-    // JS driver: it animates a colour.
-    Animated.timing(progress, { toValue: 1, duration, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    colors.set([from.current, to.current]);
+    progress.set(0);
+    progress.set(withTiming(1, { duration, easing: Easing.out(Easing.quad) }));
   }, [target]);
-  return progress.interpolate({ inputRange: [0, 1], outputRange: [from.current, to.current] });
+  return { progress, colors };
+}
+
+/** A style with `color` (eased or plain) as its `prop`. */
+export function useEasedColorStyle(color: EasedColor | string, prop: "backgroundColor" | "borderColor") {
+  return useAnimatedStyle(() => {
+    const value = typeof color === "string" ? color : interpolateColor(color.progress.get(), [0, 1], color.colors.get());
+    return prop === "backgroundColor" ? { backgroundColor: value } : { borderColor: value };
+  }, [color, prop]);
 }

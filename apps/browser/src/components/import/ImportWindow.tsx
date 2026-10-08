@@ -1,7 +1,9 @@
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportedExtension, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm, Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Animated, AppState, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
+import { tensionSpring } from "../../lib/springs";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useProfiles } from "../../store/hooks";
@@ -999,23 +1001,27 @@ function SpaceIcon({ space }: { space: SpaceSummary }) {
   );
 }
 
+// Animated's old springs: tension 160 and 120, friction 5.
+const CHECK_SPRING = tensionSpring(160, 5);
+const SUCCESS_SPRING = tensionSpring(120, 5);
+
 function CategoryRow({ title, icon, status, index }: { title: string; icon: string; status: Status; index: number }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const appear = useRef(new Animated.Value(0)).current;
-  const check = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
+  const check = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 260, delay: index * 70, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    appear.set(withDelay(index * 70, withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) })));
   }, []);
   useEffect(() => {
-    if (status === "done" || status === "failed") Animated.spring(check, { toValue: 1, friction: 5, tension: 160, useNativeDriver: true }).start();
+    if (status === "done" || status === "failed") check.set(withSpring(1, CHECK_SPRING));
   }, [status]);
+  const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateY: interpolate(appear.get(), [0, 1], [8, 0]) }] }));
+  const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: check.get() }] }));
   const active = status === "active";
   return (
     <Animated.View
-      style={{
-        opacity: appear,
-        transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+      style={[appearStyle, {
         height: 44,
         borderRadius: 10,
         paddingHorizontal: 12,
@@ -1025,14 +1031,14 @@ function CategoryRow({ title, icon, status, index }: { title: string; icon: stri
         backgroundColor: active ? `${colors.accent}1F` : colors.group,
         borderWidth: StyleSheet.hairlineWidth * 2,
         borderColor: active ? `${colors.accent}66` : colors.groupBorder,
-      }}
+      }]}
     >
       <Symbol name={icon} size={13} color={status === "pending" ? theme.textTertiary : theme.icon} style={{ width: 20, height: 20 }} />
       <Text style={{ flex: 1, fontSize: 13, color: status === "pending" ? theme.textSecondary : theme.textPrimary }}>{title}</Text>
       {active ? (
         <ActivityIndicator size="small" />
       ) : status === "pending" ? null : (
-        <Animated.View style={{ transform: [{ scale: check }] }}>
+        <Animated.View style={checkStyle}>
           <Symbol
             name={status === "done" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"}
             size={15}
@@ -1046,12 +1052,13 @@ function CategoryRow({ title, icon, status, index }: { title: string; icon: stri
 }
 
 function SuccessMark() {
-  const scale = useRef(new Animated.Value(0.4)).current;
+  const scale = useSharedValue(0.4);
   useEffect(() => {
-    Animated.spring(scale, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }).start();
+    scale.set(withSpring(1, SUCCESS_SPRING));
   }, []);
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={scaleStyle}>
       <Symbol name="checkmark.circle.fill" size={46} color="#30D158" style={{ width: 60, height: 60 }} />
     </Animated.View>
   );

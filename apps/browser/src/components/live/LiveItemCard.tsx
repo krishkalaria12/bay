@@ -1,6 +1,7 @@
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, Image, Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { openLiveItem } from "../../live/engine";
 import { summarizeChecks } from "../../live/github";
@@ -16,21 +17,13 @@ import { useLiveColors, type LiveColors } from "./colors";
 
 export function HoverSurface({ anchor, width, children }: { anchor: Anchor; width: number; children: ReactNode }) {
   const theme = useTheme();
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 140, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    appear.set(withTiming(1, { duration: 140, easing: Easing.out(Easing.cubic) }));
   }, []);
+  const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateX: interpolate(appear.get(), [0, 1], [-4, 0]) }] }));
   return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        left: anchor.x + anchor.width + 8,
-        top: Math.max(8, anchor.y - 6),
-        width,
-        opacity: appear,
-        transform: [{ translateX: appear.interpolate({ inputRange: [0, 1], outputRange: [-4, 0] }) }],
-      }}
-    >
+    <Animated.View style={[{ position: "absolute", left: anchor.x + anchor.width + 8, top: Math.max(8, anchor.y - 6), width }, appearStyle]}>
       <Surface
         onMouseEnter={keepHover}
         onMouseLeave={hoverLeave}
@@ -166,22 +159,18 @@ function CIProgressBar({ checks, colors }: { checks: PullRequestCheck[]; colors:
   const success = checks.filter((c) => c.state === "success" || c.state === "neutral").length;
   const pending = checks.filter((c) => c.state === "pending" || c.state === "queued").length;
   const failure = checks.filter((c) => c.state === "failure").length;
-  const pulse = useRef(new Animated.Value(1)).current;
+  const pulse = useSharedValue(1);
   useEffect(() => {
     if (!pending) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.45, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
+    const leg = (to: number) => withTiming(to, { duration: 700, easing: Easing.inOut(Easing.quad) });
+    pulse.set(withRepeat(withSequence(leg(0.45), leg(1)), -1, false));
+    return () => cancelAnimation(pulse);
   }, [pending]);
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
   return (
     <View style={{ height: 6, borderRadius: 3, overflow: "hidden", flexDirection: "row", backgroundColor: colors.ciTrack, gap: 2 }}>
       {success ? <View style={{ flex: success, backgroundColor: colors.success }} /> : null}
-      {pending ? <Animated.View style={{ flex: pending, backgroundColor: colors.pending, opacity: pulse }} /> : null}
+      {pending ? <Animated.View style={[{ flex: pending, backgroundColor: colors.pending }, pulseStyle]} /> : null}
       {failure ? <View style={{ flex: failure, backgroundColor: colors.failure }} /> : null}
     </View>
   );

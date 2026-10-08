@@ -1,7 +1,8 @@
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { memo, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View, type LayoutRectangle } from "react-native";
+import { PanResponder, Pressable, StyleSheet, Text, View, type LayoutRectangle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
@@ -175,7 +176,8 @@ function BarItem({
   onDragEnd: (dx: number) => void;
 }) {
   const node = useBrowser((s) => s.bookmarks.nodes[id]);
-  const dx = useRef(new Animated.Value(0)).current;
+  const dx = useSharedValue(0);
+  const dxStyle = useAnimatedStyle(() => ({ transform: [{ translateX: dx.get() }] }));
   const [dragging, setDragging] = useState(false);
   const handlers = useRef({ onDragMove, onDragEnd });
   handlers.current = { onDragMove, onDragEnd };
@@ -185,16 +187,16 @@ function BarItem({
         onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4,
         onPanResponderGrant: () => setDragging(true),
         onPanResponderMove: (_, g) => {
-          dx.setValue(g.dx);
+          dx.set(g.dx);
           handlers.current.onDragMove(g.dx);
         },
         onPanResponderRelease: (_, g) => {
-          dx.setValue(0);
+          dx.set(0);
           setDragging(false);
           handlers.current.onDragEnd(g.dx);
         },
         onPanResponderTerminate: () => {
-          dx.setValue(0);
+          dx.set(0);
           setDragging(false);
           handlers.current.onDragMove(0);
           handlers.current.onDragEnd(0);
@@ -211,7 +213,7 @@ function BarItem({
       {...responder.panHandlers}
       onLayout={(e) => onLayout(e.nativeEvent.layout)}
       pointerEvents={hidden ? "none" : "auto"}
-      style={{ opacity: hidden ? 0 : dragging ? 0.85 : 1, zIndex: dragging ? 10 : 0, transform: [{ translateX: dx }] }}
+      style={[{ opacity: hidden ? 0 : dragging ? 0.85 : 1, zIndex: dragging ? 10 : 0 }, dxStyle]}
     >
       <ContextMenuArea onContextMenu={() => void openBarMenu(windowId, profileId, node)}>
         <MouseArea onMiddleClick={(e) => open({ ...e, middle: true })}>

@@ -1,6 +1,8 @@
 import { ContextMenuArea, DockSelection, MouseArea, Surface, Symbol } from "@bay/shell";
-import { memo, useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { memo, useEffect } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { bouncySpring } from "../../lib/springs";
 import { closeTab } from "../../lib/actions";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
@@ -25,6 +27,8 @@ const MIN_TILE = 50;
 // Dia: 3pt stroke.
 const SELECTION_STROKE = 3;
 const GLASS_RIM = 1;
+// The back-to-pinned badge pops in and out on Animated's old spring (speed 18, bounciness 8).
+const BADGE_SPRING = bouncySpring(18, 8);
 
 export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: number }) {
   const controller = useDragController();
@@ -99,10 +103,11 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const { wrapper, handle } = useDragItem(`t:${tabId}`, { kind: "tile", tabIds: [tabId], section: "tiles" }, () => useBrowser.getState().selection[windowId] ?? []);
   const away = !!tab && awayFromPin(tab);
   const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.profileId ?? "");
-  const badge = useRef(new Animated.Value(away ? 1 : 0)).current;
+  const badge = useSharedValue(away ? 1 : 0);
   useEffect(() => {
-    Animated.spring(badge, { toValue: away ? 1 : 0, speed: 18, bounciness: 8, useNativeDriver: true }).start();
+    badge.set(withSpring(away ? 1 : 0, BADGE_SPRING));
   }, [away]);
+  const badgeStyle = useAnimatedStyle(() => ({ opacity: badge.get(), transform: [{ scale: interpolate(badge.get(), [0, 1], [0.4, 1]) }] }));
   if (!tab) return null;
   const radius = 10;
 
@@ -202,7 +207,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
         </MouseArea>
         <Animated.View
           pointerEvents={away ? "auto" : "none"}
-          style={{ position: "absolute", top: 3, right: 3, opacity: badge, transform: [{ scale: badge.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }}
+          style={[{ position: "absolute", top: 3, right: 3 }, badgeStyle]}
         >
           <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tabId)} tooltip="Back to Pinned URL (⌘↩)">
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: tokens.badge, alignItems: "center", justifyContent: "center" }}>

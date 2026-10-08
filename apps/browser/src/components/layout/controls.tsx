@@ -1,6 +1,7 @@
 import { ContextMenuArea, Surface, Symbol, VisualEffect, type SymbolProps } from "@bay/shell";
 import { useEffect, useRef, type ReactNode } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
 import type { ToolbarPalette } from "./toolbarColors";
@@ -89,29 +90,19 @@ export function Popover({
   modal?: boolean;
 }) {
   const theme = useTheme();
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 170, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    appear.set(withTiming(1, { duration: 170, easing: Easing.out(Easing.cubic) }));
   }, []);
+  const appearStyle = useAnimatedStyle(() => ({
+    opacity: appear.get(),
+    transform: [{ scale: interpolate(appear.get(), [0, 1], [0.94, 1]) }, { translateY: interpolate(appear.get(), [0, 1], [-4, 0]) }],
+  }));
   const origin = right !== undefined ? "top right" : "top left";
   return (
     <>
       {modal && onDismiss && <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />}
-      <Animated.View
-        style={{
-          position: "absolute",
-          top,
-          right,
-          left,
-          width,
-          opacity: appear,
-          transformOrigin: origin,
-          transform: [
-            { scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) },
-            { translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [-4, 0] }) },
-          ],
-        }}
-      >
+      <Animated.View style={[{ position: "absolute", top, right, left, width, transformOrigin: origin }, appearStyle]}>
         <Surface
           fill={hex(theme.dark ? "rgba(38,36,37,0.94)" : "rgba(252,251,252,0.96)")}
           cornerRadius={12}
@@ -231,31 +222,17 @@ export function PromptButton({ title, onPress, primary, flex }: { title: string;
 
 export function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
   const theme = useTheme();
-  const x = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const x = useSharedValue(value ? 1 : 0);
   useEffect(() => {
-    // JS driver: the track's colour rides the same value.
-    Animated.timing(x, { toValue: value ? 1 : 0, duration: 150, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    x.set(withTiming(value ? 1 : 0, { duration: 150, easing: Easing.out(Easing.quad) }));
   }, [value]);
+  const off = theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)";
+  const track = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(x.get(), [0, 1], [off, "#3478F6"]) }), [off]);
+  const knob = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() * 13 }] }));
   return (
     <Pressable onPress={() => onChange(!value)} hitSlop={6}>
-      <Animated.View
-        style={{
-          width: 30,
-          height: 17,
-          borderRadius: 9,
-          padding: 1.5,
-          backgroundColor: x.interpolate({ inputRange: [0, 1], outputRange: [theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)", "#3478F6"] }),
-        }}
-      >
-        <Animated.View
-          style={{
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            backgroundColor: "#FFFFFF",
-            transform: [{ translateX: x.interpolate({ inputRange: [0, 1], outputRange: [0, 13] }) }],
-          }}
-        />
+      <Animated.View style={[{ width: 30, height: 17, borderRadius: 9, padding: 1.5 }, track]}>
+        <Animated.View style={[{ width: 14, height: 14, borderRadius: 7, backgroundColor: "#FFFFFF" }, knob]} />
       </Animated.View>
     </Pressable>
   );

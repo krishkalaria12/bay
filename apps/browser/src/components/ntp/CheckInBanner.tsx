@@ -1,6 +1,7 @@
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
 import { CHECK_IN_COPY, useDefaultBrowserCheckIn } from "../../lib/defaultBrowserCheckIn";
 import { hex, useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
@@ -29,27 +30,31 @@ function Card({ leaving, onFeedback, onClose }: { leaving: null | (() => void); 
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const [pressed, setPressed] = useState(false);
-  const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0);
 
   useEffect(() => {
-    Animated.timing(opacity, { toValue: 1, duration: 300, delay: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    opacity.set(withDelay(300, withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) })));
   }, []);
   useEffect(() => {
     if (leaving) return;
     const stiffness = (2 * Math.PI / 0.2) ** 2;
-    Animated.spring(scale, { toValue: pressed ? 0.98 : hovered ? 1.02 : 1, stiffness, damping: 2 * 0.5 * Math.sqrt(stiffness), mass: 1, useNativeDriver: true }).start();
+    scale.set(withSpring(pressed ? 0.98 : hovered ? 1.02 : 1, { stiffness, damping: 2 * 0.5 * Math.sqrt(stiffness), mass: 1 }));
   }, [hovered, pressed, !!leaving]);
   useEffect(() => {
     if (!leaving) return;
-    Animated.parallel([
-      Animated.timing(scale, { toValue: 0.98, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-    ]).start(() => leaving());
+    const leave = () => leaving();
+    scale.set(withTiming(0.98, { duration: 220, easing: Easing.out(Easing.quad) }));
+    opacity.set(
+      withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }, () => {
+        runOnJS(leave)();
+      }),
+    );
   }, [leaving]);
 
+  const cardStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ scale: scale.get() }] }));
   return (
-    <Animated.View {...hoverProps} style={{ flex: 1, opacity, transform: [{ scale }] }} pointerEvents={leaving ? "none" : "auto"}>
+    <Animated.View {...hoverProps} style={[{ flex: 1 }, cardStyle]} pointerEvents={leaving ? "none" : "auto"}>
       <Pressable
         onPress={onFeedback}
         onPressIn={() => setPressed(true)}

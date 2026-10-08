@@ -1,7 +1,8 @@
 import { toAppUrl, urlForDisplay } from "@bay/core";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "./controls";
@@ -11,23 +12,27 @@ export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: num
   const theme = useTheme();
   const status = usePage(tabId, (p) => p.status);
   const [shown, setShown] = useState(status);
-  const opacity = useRef(new Animated.Value(status ? 1 : 0)).current;
+  const opacity = useSharedValue(status ? 1 : 0);
   useEffect(() => {
     if (status) {
       setShown(status);
-      Animated.timing(opacity, { toValue: 1, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      opacity.set(withTiming(1, { duration: 90, easing: Easing.out(Easing.quad) }));
       return;
     }
+    const hide = () => setShown("");
     const timer = setTimeout(() => {
-      Animated.timing(opacity, { toValue: 0, duration: 220, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(({ finished }) => {
-        if (finished) setShown("");
-      });
+      opacity.set(
+        withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }, (finished) => {
+          if (finished) runOnJS(hide)();
+        }),
+      );
     }, 180);
     return () => clearTimeout(timer);
   }, [status]);
+  const fade = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   if (!shown) return null;
   return (
-    <Animated.View pointerEvents="none" style={{ position: "absolute", left: 6, bottom: 6, maxWidth, opacity }}>
+    <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 6, bottom: 6, maxWidth }, fade]}>
       <Surface
         fill={hex(theme.dark ? "rgba(40,38,39,0.96)" : "rgba(250,249,250,0.97)")}
         cornerRadius={7}

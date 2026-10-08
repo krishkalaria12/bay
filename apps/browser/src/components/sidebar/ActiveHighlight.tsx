@@ -1,5 +1,6 @@
 import { Surface } from "@bay/shell";
-import { Animated, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import Animated from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { useSwitchSlide, type SlideOptions } from "../layout/switchMotion";
@@ -14,7 +15,7 @@ export function ActiveHighlight({ active, tabIds, borderWidth }: { active: boole
   const slide = useSwitchSlide(useWindowId(), tabIds, active, ROW_SLIDE);
   if (!active && !slide) return null;
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, slide?.style]}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, slide]}>
       <SelectedFill borderWidth={borderWidth} />
     </Animated.View>
   );

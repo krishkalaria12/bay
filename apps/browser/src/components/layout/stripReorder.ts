@@ -1,4 +1,4 @@
-import { Animated } from "react-native";
+import { cancelAnimation, withSpring, type SharedValue } from "react-native-reanimated";
 import { dragGeometry, type DragGeometry } from "./stripGroups";
 
 // Dragging along the top strip, as Dia does it: once the dragged item's leading edge passes a neighbour's centre,
@@ -6,17 +6,16 @@ import { dragGeometry, type DragGeometry } from "./stripGroups";
 // Measured from the owner's recording of Dia (2026-10-02, 60 fps): a neighbour covers 91 % of its way in 43 ms,
 // 97 % in 60 and all of it by 76: a critically damped spring of ~0.07 s (ω ≈ 90 rad/s). The dragged tab, opaque,
 // keeps its place under the pointer.
-// JS driver: the drop moves the slots in the store and zeroes their offsets in the same bridge batch as the React
-// commit that lays them out there, so no frame shows both.
+// The drop moves the slots in the store and zeroes their offsets as React commits them there.
 // It comes to rest within a quarter point, so a settle that has nowhere to go ends at once.
-export const SLIDE = { stiffness: 8100, damping: 180, mass: 1, restDisplacementThreshold: 0.25, restSpeedThreshold: 2, useNativeDriver: false } as const;
+export const SLIDE = { stiffness: 8100, damping: 180, mass: 1, restDisplacementThreshold: 0.25, restSpeedThreshold: 2 } as const;
 
 // Every item of every strip that can trade places: its row (`geometry`, the object its strip rendered it with), its
 // index there, and the offset it slides by.
-type Slot = { geometry: () => DragGeometry; index: () => number; shift: Animated.Value; to: number };
+type Slot = { geometry: () => DragGeometry; index: () => number; shift: SharedValue<number>; to: number };
 const slots = new Set<Slot>();
 
-export function registerSlot(geometry: () => DragGeometry, index: () => number, shift: Animated.Value): () => void {
+export function registerSlot(geometry: () => DragGeometry, index: () => number, shift: SharedValue<number>): () => void {
   const slot: Slot = { geometry, index, shift, to: 0 };
   slots.add(slot);
   return () => void slots.delete(slot);
@@ -43,7 +42,7 @@ export function makeRoom(geometry: DragGeometry, from: number, to: number) {
     const target = offsets[i] ?? 0;
     if (slot.to === target) continue;
     slot.to = target;
-    Animated.spring(slot.shift, { toValue: target, ...SLIDE }).start();
+    slot.shift.set(withSpring(target, SLIDE));
   }
 }
 
@@ -51,8 +50,8 @@ export function makeRoom(geometry: DragGeometry, from: number, to: number) {
 export function settleRoom(geometry: DragGeometry) {
   for (const slot of slots) {
     if (slot.geometry() !== geometry) continue;
-    slot.shift.stopAnimation();
-    slot.shift.setValue(0);
+    cancelAnimation(slot.shift);
+    slot.shift.set(0);
     slot.to = 0;
   }
 }

@@ -1,11 +1,12 @@
 import { ContextMenuArea, prompt, showMenu, Symbol } from "@bay/shell";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { createProfile, deleteProfile, switchProfile } from "../../lib/actions";
 import { layout, PROFILE_COLORS, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import type { ProfileColor } from "../../store/types";
-import { usePagerPages, type PagerPage } from "../layout/profilePager";
+import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/profilePager";
 import { IconButton, useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
 import { useSidebarWidth } from "../sidebar/tokens";
@@ -27,14 +28,14 @@ const IDLE = 0.38;
 export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.profileOrder));
   const width = useSidebarWidth(windowId);
-  const { pages, pager } = usePagerPages(windowId);
+  const { pages } = usePagerPages(windowId);
   const fits = ids.length * CELL <= width - 2 * (layout.sidebarInset + SIDE);
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT }}>
       {fits ? (
         <View style={{ height: PROFILE_DOTS_HEIGHT - 3, flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
           {ids.map((id) => (
-            <SpaceIcon key={id} id={id} windowId={windowId} page={pages.find((p) => p.id === id)} pos={pager.pos} />
+            <SpaceIcon key={id} id={id} windowId={windowId} page={pages.find((p) => p.id === id)} />
           ))}
         </View>
       ) : (
@@ -47,22 +48,19 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
   );
 }
 
-function SpaceIcon({ id, windowId, page, pos }: { id: string; windowId: string; page: PagerPage | undefined; pos: Animated.Value }) {
+function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page: PagerPage | undefined }) {
   const theme = useTheme();
   const profile = useBrowser((s) => s.profiles[id]);
   const { hovered, hoverProps } = useHover();
+  const opacity = usePagerOpacity(windowId, page?.slot, hovered ? HOVERED : IDLE, SELECTED);
   if (!profile) return null;
-  const rest = hovered ? HOVERED : IDLE;
-  const opacity = page
-    ? pos.interpolate({ inputRange: [page.slot - 1, page.slot, page.slot + 1], outputRange: [rest, SELECTED, rest], extrapolate: "clamp" })
-    : rest;
   const ink = theme.dark ? "#FFFFFF" : "#000000";
   const symbol = profileSymbol(profile.icon);
   return (
     <View {...hoverProps} tooltip={profile.name}>
       <ContextMenuArea onContextMenu={() => void openSpaceMenu(windowId, id)}>
         <Pressable accessibilityRole="button" accessibilityLabel={profile.name} onPress={() => switchProfile(windowId, id, true)}>
-          <Animated.View style={{ width: CELL, height: CELL, borderRadius: 7, alignItems: "center", justifyContent: "center", opacity }}>
+          <Animated.View style={[{ width: CELL, height: CELL, borderRadius: 7, alignItems: "center", justifyContent: "center" }, opacity]}>
             {symbol ? (
               <Symbol name={symbol} size={GLYPH - 2} weight="semibold" color={ink} style={{ width: GLYPH + 2, height: GLYPH + 2 }} />
             ) : (

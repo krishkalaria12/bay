@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { PROFILE_COLORS } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import type { ProfileColor } from "../../store/types";
@@ -31,35 +32,37 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
 function ColorButton({ color, size, selected, onPress }: { color: ProfileColor; size: number; selected: boolean; onPress: () => void }) {
   const { swatch, name } = PROFILE_COLORS[color];
   const { hovered, hoverProps } = useHover();
-  const t = useRef(new Animated.Value(selected ? 1 : 0)).current;
+  const t = useSharedValue(selected ? 1 : 0);
   useEffect(() => {
-    // JS driver: t also sizes the swatch (width/height).
-    Animated.timing(t, { toValue: selected ? 1 : 0, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: false }).start();
+    t.set(withTiming(selected ? 1 : 0, { duration: 160, easing: Easing.out(Easing.quad) }));
   }, [selected]);
+  const ring = useAnimatedStyle(() => ({ opacity: t.get() }));
+  const rest = size - (hovered ? 6 : 8);
+  const dot = useAnimatedStyle(() => {
+    const d = interpolate(t.get(), [0, 1], [rest, size - 12]);
+    return { width: d, height: d };
+  }, [rest, size]);
   return (
     <View {...hoverProps} tooltip={name}>
       <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={name}>
         {({ pressed }) => (
           <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", transform: [{ scale: pressed ? 0.94 : 1 }] }}>
             <Animated.View
-              style={{
+              style={[{
                 position: "absolute",
                 width: size,
                 height: size,
                 borderRadius: size / 2,
                 borderWidth: 2,
                 borderColor: swatch,
-                opacity: t,
-              }}
+              }, ring]}
             />
             <Animated.View
-              style={{
-                width: t.interpolate({ inputRange: [0, 1], outputRange: [size - (hovered ? 6 : 8), size - 12] }),
-                height: t.interpolate({ inputRange: [0, 1], outputRange: [size - (hovered ? 6 : 8), size - 12] }),
+              style={[{
                 borderRadius: size / 2,
                 backgroundColor: swatch,
                 opacity: hovered || selected ? 1 : 0.85,
-              }}
+              }, dot]}
             />
           </View>
         )}

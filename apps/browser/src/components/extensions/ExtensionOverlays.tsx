@@ -1,7 +1,8 @@
 import { permissionWarnings, WebView, type InstalledExtension, type WebViewHandle } from "@bay/nncore";
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
@@ -75,7 +76,8 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
   const web = useRef<WebViewHandle>(null);
   const window = useWindowDimensions();
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
+  const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ translateY: interpolate(appear.get(), [0, 1], [-4, 0]) }] }));
   const alive = useRef(true);
 
   useEffect(() => {
@@ -100,7 +102,7 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
         height: Math.min(MAX.height, Math.max(MIN.height, m.h)),
       };
       setSize((prev) => {
-        if (!prev) Animated.timing(appear, { toValue: 1, duration: 150, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+        if (!prev) appear.set(withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic) }));
         return prev && prev.width === next.width && prev.height === next.height ? prev : next;
       });
       watchSize();
@@ -112,15 +114,7 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
   return (
     <>
       <Pressable style={StyleSheet.absoluteFill} onPress={closeExtensionPopup} />
-      <Animated.View
-        style={{
-          position: "absolute",
-          left,
-          top,
-          opacity: appear,
-          transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [-4, 0] }) }],
-        }}
-      >
+      <Animated.View style={[{ position: "absolute", left, top }, appearStyle]}>
         <Surface
           fill={hex(theme.panel)}
           cornerRadius={10}
@@ -271,16 +265,18 @@ function PinRow({ ext, onChange }: { ext: InstalledExtension; onChange: (pinned:
 
 function Dialog({ onDismiss, children }: { onDismiss?: () => void; children: ReactNode }) {
   const theme = useTheme();
-  const appear = useRef(new Animated.Value(0)).current;
+  const appear = useSharedValue(0);
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 170, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    appear.set(withTiming(1, { duration: 170, easing: Easing.out(Easing.cubic) }));
   }, []);
+  const dim = useAnimatedStyle(() => ({ opacity: appear.get() }));
+  const card = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ scale: interpolate(appear.get(), [0, 1], [0.96, 1]) }] }));
   return (
     <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: appear, backgroundColor: theme.dark ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.15)" }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.15)" }, dim]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
       </Animated.View>
-      <Animated.View style={{ opacity: appear, transform: [{ scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }}>
+      <Animated.View style={card}>
         <Surface
           fill={hex(theme.panel)}
           cornerRadius={14}

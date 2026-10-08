@@ -1,7 +1,8 @@
 import { SwipeArea, type SwipeAreaHandle, type SwipeEvent } from "@bay/nncore";
 import { WindowBackdrop } from "@bay/shaders";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useRef, type ReactNode } from "react";
+import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useEvent } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { spaceThemeKey, themeFor } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -31,8 +32,15 @@ export function ProfileSwipeArea({ surface, style, pageWidth }: { surface: "side
   const area = useRef<SwipeAreaHandle>(null);
   const pager = pagerFor(windowId);
   const nativePager = usePagerNativeConfig(windowId, pageWidth);
-  // One event per area: Animated attaches an event object to a single view.
-  const onPagerPosition = useMemo(() => Animated.event([{ nativeEvent: { position: pager.pos } }], { useNativeDriver: true }), [pager]);
+  // On the UI thread, each frame the native pager moves: no JS on the way.
+  const pos = pager.pos;
+  const onPagerPosition = useEvent<{ position: number }>(
+    (event) => {
+      "worklet";
+      pos.set(event.position);
+    },
+    ["onPagerPosition"],
+  );
 
   const onSwipe = (event: SwipeEvent) => {
     if (__DEV__) {
@@ -79,15 +87,23 @@ export function ProfileTint() {
   return (
     <>
       {pages.map((page, k) => {
-        const theme = themeFor(keys[k]!);
-        const opacity = k === 0 ? 1 : pager.pos.interpolate({ inputRange: [pages[k - 1]!.slot, page.slot], outputRange: [0, 1], extrapolate: "clamp" });
-        return (
-          <Animated.View key={page.id} pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity }]}>
-            <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
-          </Animated.View>
-        );
+        return <TintPage key={page.id} themeKey={keys[k]!} from={k === 0 ? null : pages[k - 1]!.slot} slot={page.slot} />;
       })}
     </>
+  );
+}
+
+// A page's backdrop, coming in over the one before it as the pager reaches its slot (`from`: that one's, none for the
+// first, always shown).
+function TintPage({ themeKey, from, slot }: { themeKey: string; from: number | null; slot: number }) {
+  const theme = themeFor(themeKey);
+  const { pager } = usePagerPages(useWindowId());
+  const pos = pager.pos;
+  const style = useAnimatedStyle(() => ({ opacity: from === null ? 1 : interpolate(pos.get(), [from, slot], [0, 1], Extrapolation.CLAMP) }), [from, slot]);
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+      <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
+    </Animated.View>
   );
 }
 

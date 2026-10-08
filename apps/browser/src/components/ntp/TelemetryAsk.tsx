@@ -1,6 +1,7 @@
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { useDefaultBrowserCheckIn } from "../../lib/defaultBrowserCheckIn";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -42,24 +43,28 @@ export function TelemetryAsk({ windowId }: { windowId: string }) {
 function Card({ leaving, onShare, onNotNow, onClose }: { leaving: null | (() => void); onShare: () => void; onNotNow: () => void; onClose: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(1);
 
   useEffect(() => {
-    Animated.timing(opacity, { toValue: 1, duration: 300, delay: 600, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    opacity.set(withDelay(600, withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) })));
   }, []);
   useEffect(() => {
     if (!leaving) return;
-    Animated.parallel([
-      Animated.timing(scale, { toValue: 0.98, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-    ]).start(() => leaving());
+    const leave = () => leaving();
+    scale.set(withTiming(0.98, { duration: 220, easing: Easing.out(Easing.quad) }));
+    opacity.set(
+      withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }, () => {
+        runOnJS(leave)();
+      }),
+    );
   }, [leaving]);
 
   const primary = theme.dark ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)";
   const secondary = theme.dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.53)";
+  const cardStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ scale: scale.get() }] }));
   return (
-    <Animated.View {...hoverProps} style={{ opacity, transform: [{ scale }] }} pointerEvents={leaving ? "none" : "auto"}>
+    <Animated.View {...hoverProps} style={cardStyle} pointerEvents={leaving ? "none" : "auto"}>
       <Surface
         style={StyleSheet.absoluteFill}
         fill={theme.dark ? "#FFFFFF17" : "#FFFFFF80"}
