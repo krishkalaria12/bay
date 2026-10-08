@@ -15,8 +15,8 @@ export const SWITCH_EASING = Easing.bezier(0.2, 0.8, 0.2, 1);
 
 type Axis = "x" | "y";
 // +1: the tab switched to is after the one left (below it, or right of it); -1 before it; 0 not known (a live
-// folder's row, say): a dissolve.
-type Switch = { from: string[]; to: string[]; direction: -1 | 0 | 1; axis: Axis; at: number };
+// folder's row, say): a dissolve. `closed`: the tab left was closed (its row fades out on its own, RowMotion).
+type Switch = { from: string[]; to: string[]; direction: -1 | 0 | 1; axis: Axis; at: number; closed: boolean };
 
 // Panes and rows see a switch within a render or two; one showing a tab long after (full screen ending) isn't one.
 const FRESH_MS = 500;
@@ -60,7 +60,7 @@ useBrowser.subscribe((s, prev) => {
     }
     const strip = (w.tabLayout ?? s.settings.tabLayout) === "top";
     const direction = directionOf(s, prev, windowId, from, to, strip);
-    switches.set(windowId, { from: shownWith(prev, from), to: shownWith(s, to), direction, axis: strip ? "x" : "y", at: Date.now() });
+    switches.set(windowId, { from: shownWith(prev, from), to: shownWith(s, to), direction, axis: strip ? "x" : "y", at: Date.now(), closed: !s.tabs[from] });
   }
 });
 
@@ -192,7 +192,9 @@ export function useSwitchSlide(windowId: string, tabIds: string[], on: boolean, 
   if (on !== was) {
     setWas(on);
     const sw = recentSwitch(windowId, on ? "to" : "from", tabIds);
-    setSlide(sw ? makeSlide(sw, on, options) : null);
+    // After a close the closed row fades out with its fill: the next one shows its own at once, or for a few frames
+    // the list had none.
+    setSlide(sw && !sw.closed ? makeSlide(sw, on, options) : null);
   }
   useEffect(() => {
     if (!slide) return;

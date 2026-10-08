@@ -1,19 +1,20 @@
 import { FadeLabel } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { Animated, View } from "react-native";
+import { Animated, Easing, View } from "react-native";
 import { reduceMotion } from "../../lib/reduceMotion";
 import { layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import type { Tab } from "../../store/types";
-import { SWITCH_EASING } from "../layout/switchMotion";
 import { tabTitle } from "./actions";
 import { SelectedFill } from "./ActiveHighlight";
 import { TabIcon } from "./TabIcon";
 
 // As yab opens and closes tabs: a new tab's row fades in where it goes as the rows under it make room, and a closed
-// one's fades where it was as they close the gap. Quick, like the switch.
-const ROW_MS = 140;
+// one's fades where it was as they close the gap. Eased in and out: the switch's curve, half done in its first frame,
+// shut a closing row at once.
+const ROW_MS = 180;
+const ROW_EASING = Easing.inOut(Easing.cubic);
 // Opening or closing more at once (restoring a window, cleaning up) just shows the list as it is.
 const MAX_MOVING = 3;
 const FRESH_MS = 500;
@@ -112,7 +113,7 @@ export function OpeningRow({ entry, opening, onOpened, children }: { entry: stri
   useEffect(() => {
     if (!progress) return;
     // Height can't be driven natively: the rows under it move with the layout.
-    const run = Animated.timing(progress, { toValue: 1, duration: ROW_MS, easing: SWITCH_EASING, useNativeDriver: false });
+    const run = Animated.timing(progress, { toValue: 1, duration: ROW_MS, easing: ROW_EASING, useNativeDriver: false });
     run.start(() => onOpened(entry));
     return () => run.stop();
   }, []);
@@ -124,7 +125,7 @@ export function OpeningRow({ entry, opening, onOpened, children }: { entry: stri
           ? {
               height: rowProgress(progress, [0, 1], [0, layout.rowHeight]),
               marginBottom: rowProgress(progress, [0, 1], [-layout.rowGap, 0]),
-              opacity: rowProgress(progress, [0.2, 1], [0, 1]),
+              opacity: rowProgress(progress, [0.25, 1], [0, 1]),
               overflow: "hidden",
             }
           : undefined
@@ -141,7 +142,7 @@ export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId
   const [progress] = useState(() => new Animated.Value(0));
   useEffect(() => {
     // Height can't be driven natively: the rows under it move with the layout.
-    const run = Animated.timing(progress, { toValue: 1, duration: ROW_MS, easing: SWITCH_EASING, useNativeDriver: false });
+    const run = Animated.timing(progress, { toValue: 1, duration: ROW_MS, easing: ROW_EASING, useNativeDriver: false });
     run.start(() => onGone(row.tab.id));
     return () => run.stop();
   }, []);
@@ -152,7 +153,7 @@ export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId
       style={{
         height: rowProgress(progress, [0, 1], [layout.rowHeight, 0]),
         marginBottom: rowProgress(progress, [0, 1], [0, -layout.rowGap]),
-        opacity: rowProgress(progress, [0, 0.7], [1, 0]),
+        opacity: rowProgress(progress, [0, 0.75], [1, 0]),
         overflow: "hidden",
       }}
     >
