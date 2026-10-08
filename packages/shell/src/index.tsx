@@ -81,6 +81,8 @@ export type BrowserCommand =
   | "changeTabIcon"
   | "returnToPinnedUrl"
   | "tabSwitcher"
+  | "keepTab"
+  | "closeOtherTabs"
   | "share"
   | "sendFeedback"
   | "keyboardShortcuts"

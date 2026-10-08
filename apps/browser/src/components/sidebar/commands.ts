@@ -3,7 +3,7 @@ import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId, plural } from "../../store/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../../store/organize";
 import { newGroupWithSelection, openIconPicker, startRename } from "./actions";
-import { closeAllTabs } from "./menus";
+import { closeAllTabs, tabsAround } from "./menus";
 import { setSidebarUi } from "./state";
 import { switcherStep } from "./switcher";
 
@@ -37,6 +37,16 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
     case "returnToPinnedUrl":
       if (tabId) s.returnToPinnedUrl(tabId);
       return true;
+    case "keepTab": {
+      const tab = tabId ? s.tabs[tabId] : undefined;
+      if (tab && !tab.pinned) s.updateTab(tab.id, { kept: !tab.kept });
+      return true;
+    }
+    case "closeOtherTabs": {
+      const tab = tabId ? s.tabs[tabId] : undefined;
+      if (tab) s.closeTabs(tabsAround(windowId, tab).others);
+      return true;
+    }
     case "tabSwitcher":
       switcherStep(windowId, arg === "backward");
       return true;
@@ -46,6 +56,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
 
 export const SIDEBAR_WINDOW_COMMANDS = [
   "newTabInGroup", "newGroupWithTabs", "cleanUpTabs", "searchTabs", "renameTab", "changeTabIcon", "returnToPinnedUrl", "tabSwitcher",
+  "keepTab", "closeOtherTabs",
 ];
 
 export function sidebarMenuState(s: BrowserState, windowId: string | undefined) {
@@ -55,6 +66,9 @@ export function sidebarMenuState(s: BrowserState, windowId: string | undefined) 
   if (!windowId) disabled.push(...SIDEBAR_WINDOW_COMMANDS);
   else {
     if (!tab || !awayFromPin(tab)) disabled.push("returnToPinnedUrl");
+    if (!tab || tab.pinned) disabled.push("keepTab");
+    if (tab?.kept) titles.keepTab = "Don’t Keep Tab";
+    if (!tab || !tabsAround(windowId, tab).others.length) disabled.push("closeOtherTabs");
     const selected = selectedTabIds(s, windowId).filter((id) => !s.tabs[id]?.pinned);
     if (!selected.length) disabled.push("newGroupWithTabs");
     if (selected.length > 1) titles.newGroupWithTabs = `New Group with ${plural(selected.length, "Tab")}`;

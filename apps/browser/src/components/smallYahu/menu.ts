@@ -4,5 +4,5 @@ export const SMALL_YAHU_DISABLED_COMMANDS = [
   "toggleSidebar", "toggleTabLayout", "toggleAddressBar", "openSplitPane", "focusNextPane", "focusPreviousPane",
   "closeTabGroup", "closeAllTabs", "cleanUpTabs", "newTabInGroup", "newGroupWithTabs", "searchTabs", "renameTab",
   "changeTabIcon", "returnToPinnedUrl", "tabSwitcher", "moveTabToProfile", "moveTabToWindow", "mergeAllWindows",
-  "switchProfile", "nextProfile", "previousProfile", "openProfileMenu", "bookmarkAllTabs",
+  "switchProfile", "nextProfile", "previousProfile", "openProfileMenu", "bookmarkAllTabs", "keepTab", "closeOtherTabs",
 ];

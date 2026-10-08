@@ -185,7 +185,8 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     const unused = unusedProfiles(s, now, policy.profileIdleMs);
     const candidates = [...webviews.keys()].filter((id) => {
       const tab = s.tabs[id];
-      if (!tab || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
+      // A kept tab sleeps only when asked (the tab menu's Put Tab to Sleep).
+      if (!tab || tab.kept || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
       const idle = now - (hiddenAt.get(id) ?? now);
       if (!unused.has(tab.profileId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
       return !keepAliveReason(s, id);

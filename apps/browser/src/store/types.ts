@@ -39,6 +39,8 @@ export type Tab = {
   title: string;
   favicon: string | null;
   pinned: boolean;
+  // Kept (the tab menu's Keep Tab): as a pin does, it stays when tabs are cleaned up and awake when idle ones sleep.
+  kept?: boolean;
   muted: boolean;
   zoom: number;
   customTitle: string | null;
