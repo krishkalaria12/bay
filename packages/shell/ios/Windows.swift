@@ -92,6 +92,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     relayoutRoot(window)
     windows[id] = window
     if let center = lightsCenters[id] { ChromeWindows.setTrafficLightsCenter(center, in: window) }
+    if lightsOnHover.contains(id) { applyLightsOnHover(id: id, window: window, animated: false) }
     if smallSize == nil { lastPlaced = window }
     if focus, unrevealed[id] != nil {
       // Key once it shows, its content first: made key while its content mounted, the key change's work (the old
@@ -260,6 +261,8 @@ final class WindowManager: NSObject, NSWindowDelegate {
     for (name, selector) in [
       (NSWindow.didBecomeKeyNotification, #selector(windowDidBecomeKey(_:))),
       (NSWindow.willCloseNotification, #selector(windowWillClose(_:))),
+      (NSWindow.willEnterFullScreenNotification, #selector(windowFullScreenChanged(_:))),
+      (NSWindow.didExitFullScreenNotification, #selector(windowFullScreenChanged(_:))),
     ] {
       NotificationCenter.default.addObserver(self, selector: selector, name: name, object: window)
     }
@@ -280,10 +283,53 @@ final class WindowManager: NSObject, NSWindowDelegate {
     ChromeWindows.setTrafficLightsCenter(center, in: window)
   }
 
+  // Shown only while the pointer is over the window's top: the page runs under them with the sidebar on the right, as
+  // Zen has it. Kept per id, as the centres are.
+  private var lightsOnHover: Set<String> = []
+  private var lightsStrips: [String: TrafficLightsHoverStrip] = [:]
+
+  func setTrafficLightsOnHover(id: String, on: Bool) {
+    if on { lightsOnHover.insert(id) } else { lightsOnHover.remove(id) }
+    guard let window = windows[id] else { return }
+    applyLightsOnHover(id: id, window: window, animated: true)
+  }
+
+  private func applyLightsOnHover(id: String, window: NSWindow, animated: Bool) {
+    lightsStrips.removeValue(forKey: id)?.removeFromSuperview()
+    guard lightsOnHover.contains(id), let content = window.contentView else {
+      return Self.fadeTrafficLights(of: window, hidden: false, animated: animated)
+    }
+    let strip = TrafficLightsHoverStrip(in: content)
+    strip.onHover = { [weak window] inside in
+      if let window { Self.fadeTrafficLights(of: window, hidden: !inside, animated: true) }
+    }
+    lightsStrips[id] = strip
+    // A window shown (or the setting changed) with the pointer already there shows them.
+    Self.fadeTrafficLights(of: window, hidden: !strip.pointerInside, animated: animated)
+  }
+
+  // Full screen keeps them in the menu bar's reveal: never faded there.
+  private static func fadeTrafficLights(of window: NSWindow, hidden: Bool, animated: Bool) {
+    let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { window.standardWindowButton($0) }
+    let alpha: CGFloat = hidden && !window.styleMask.contains(.fullScreen) ? 0 : 1
+    guard animated else { return buttons.forEach { $0.alphaValue = alpha } }
+    NSAnimationContext.runAnimationGroup { context in
+      context.duration = 0.15
+      buttons.forEach { $0.animator().alphaValue = alpha }
+    }
+  }
+
+  @objc private func windowFullScreenChanged(_ note: Notification) {
+    guard let window = note.object as? NSWindow, let id = id(of: window), let strip = lightsStrips[id] else { return }
+    let entering = note.name == NSWindow.willEnterFullScreenNotification
+    Self.fadeTrafficLights(of: window, hidden: !entering && !strip.pointerInside, animated: false)
+  }
+
   private func adopt(from: NSWindow, to: NSWindow) {
     guard let id = id(of: from) else { return }
     NotificationCenter.default.removeObserver(self, name: nil, object: from)
     windows[id] = to
+    if lightsOnHover.contains(id) { applyLightsOnHover(id: id, window: to, animated: false) }
     if lastPlaced === from { lastPlaced = to }
     observeDelegateNotifications(to)
     observeFrame(to)
@@ -372,6 +418,8 @@ final class WindowManager: NSObject, NSWindowDelegate {
       if let waiting = unrevealed.removeValue(forKey: id) { waiting.forEach { $0() } }
       stopKeepingContentSized(id)
       lightsCenters[id] = nil
+      lightsOnHover.remove(id)
+      lightsStrips[id] = nil
       auxKinds[id] = nil
       smallIds.remove(id)
       ChromeWindows.close(window)
@@ -412,6 +460,8 @@ final class WindowManager: NSObject, NSWindowDelegate {
     windows[id] = nil
     stopKeepingContentSized(id)
     lightsCenters[id] = nil
+    lightsOnHover.remove(id)
+    lightsStrips[id] = nil
     auxKinds[id] = nil
     smallIds.remove(id)
     if closingFromJS.remove(id) == nil {
@@ -1004,4 +1054,37 @@ final class DragPreview {
     layer.render(in: ctx)
     return ctx.makeImage()
   }
+}
+
+// The window's top band for the window buttons shown on hover. It takes no clicks (hitTest), so the page under it keeps
+// them, and it still sees the pointer: tracking areas don't hit-test, so the views over it don't hide it.
+final class TrafficLightsHoverStrip: NSView {
+  static let height: CGFloat = 40
+  var onHover: ((Bool) -> Void)?
+
+  init(in content: NSView) {
+    let bounds = content.bounds
+    let flipped = content.isFlipped
+    super.init(frame: NSRect(x: 0, y: flipped ? 0 : bounds.height - Self.height, width: bounds.width, height: Self.height))
+    autoresizingMask = flipped ? [.width, .maxYMargin] : [.width, .minYMargin]
+    content.addSubview(self)
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    trackingAreas.forEach(removeTrackingArea)
+    addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+  }
+
+  var pointerInside: Bool {
+    guard let window else { return false }
+    return bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+  }
+
+  override func mouseEntered(with event: NSEvent) { onHover?(true) }
+  override func mouseExited(with event: NSEvent) { onHover?(false) }
 }

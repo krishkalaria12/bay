@@ -217,6 +217,10 @@ public class ShellModule: Module {
     AsyncFunction("setTrafficLightsCenter") { (id: String, center: [Double]?) in
       WindowManager.shared.setTrafficLightsCenter(id: id, center: center.flatMap { $0.count == 2 ? NSPoint(x: $0[0], y: $0[1]) : nil })
     }.runOnQueue(.main)
+    // Shown only while the pointer is over the window's top (true); always shown in full screen.
+    AsyncFunction("setTrafficLightsOnHover") { (id: String, on: Bool) in
+      WindowManager.shared.setTrafficLightsOnHover(id: id, on: on)
+    }.runOnQueue(.main)
     AsyncFunction("focusWindow") { (id: String) in WindowManager.shared.focus(id: id) }.runOnQueue(.main)
     // The dragged tab's picture under the pointer (DragPreview). Rects and points are in the source window from its
     // top-left ([x, y, w, h], [x, y]), but for the new window's frame: on screen in AppKit's coordinates.

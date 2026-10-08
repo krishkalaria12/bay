@@ -370,6 +370,7 @@ enum MainMenu {
       .separator(),
       cmd("Show Full URL", "toggleFullUrl"),
       cmd("Show Address Bar in Sidebar", "toggleAddressBar"),
+      cmd("Show Sidebar on Right", "toggleSidebarPosition"),
       cmd("Cast…", "cast"),
       .separator(),
       cmd("Zoom to Actual Size", "zoomReset", "0"),
