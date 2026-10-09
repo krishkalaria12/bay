@@ -338,6 +338,8 @@ export type SymbolProps = ViewProps & {
   size?: number;
   weight?: "light" | "regular" | "medium" | "semibold" | "bold";
   color?: string;
+  /** "hierarchical": `color`, the symbol's secondary layers lighter. "multicolor": its own colours where it has them. */
+  rendering?: "monochrome" | "hierarchical" | "multicolor";
 };
 
 export const Symbol = requireNativeViewManager<SymbolProps>("BaySymbol");

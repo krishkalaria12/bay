@@ -680,6 +680,7 @@ public class SymbolModule: Module {
       Prop("size") { (view: SymbolView, size: Double) in view.pointSize = size }
       Prop("weight") { (view: SymbolView, weight: String) in view.weight = weight }
       Prop("color") { (view: SymbolView, hex: String) in view.tint = NSColor(hex: hex) }
+      Prop("rendering") { (view: SymbolView, rendering: String) in view.rendering = rendering }
     }
   }
 }
@@ -799,7 +800,10 @@ final class SymbolView: ExpoView {
   var name = "questionmark" { didSet { update() } }
   var pointSize: Double = 14 { didSet { update() } }
   var weight = "regular" { didSet { update() } }
-  var tint: NSColor? { didSet { imageView.contentTintColor = tint } }
+  var tint: NSColor? { didSet { update() } }
+  // "monochrome" (the tint, flat), "hierarchical" (the tint, its secondary layers lighter) or "multicolor" (the
+  // symbol's own colours where it has them, the tint elsewhere).
+  var rendering = "monochrome" { didSet { update() } }
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -820,7 +824,13 @@ final class SymbolView: ExpoView {
     let weights: [String: NSFont.Weight] = [
       "light": .light, "regular": .regular, "medium": .medium, "semibold": .semibold, "bold": .bold,
     ]
-    let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weights[weight] ?? .regular)
+    var config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weights[weight] ?? .regular)
+    if rendering == "hierarchical", let tint {
+      config = config.applying(NSImage.SymbolConfiguration(hierarchicalColor: tint))
+    } else if rendering == "multicolor" {
+      config = config.applying(NSImage.SymbolConfiguration.preferringMulticolor())
+    }
+    imageView.contentTintColor = tint
     imageView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
   }
 }
