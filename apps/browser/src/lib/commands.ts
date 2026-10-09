@@ -13,13 +13,13 @@ import { useBrowser } from "../store/browser";
 import { activeTabId, bookmarkProfileId, resolveWindowId } from "../store/model";
 import {
   closeTab,
-  createProfile,
-  cycleProfile,
+  createSpace,
+  cycleSpace,
   focus,
-  moveTabToProfile,
+  moveTabToSpace,
   moveTabToWindow,
   openWindow,
-  switchProfile,
+  switchSpace,
   toggleMute,
 } from "./actions";
 import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/actions";
@@ -38,7 +38,7 @@ import { openManageExtensions, openPinDialog, openWebStore } from "../components
 import { requestAutofill } from "../components/site/Autofill";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
-import { openProfileMenu } from "../components/ProfileIndicator";
+import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
 import { isSmall, mainWindowFor } from "../store/small";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
@@ -239,12 +239,12 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       const group = groupOf(s, tabId);
       return group ? s.closeGroup(group.id) : undefined;
     }
-    case "openProfileMenu":
-      return s.windows[windowId]?.incognito ? undefined : void openProfileMenu(windowId);
+    case "openSpaceMenu":
+      return s.windows[windowId]?.incognito ? undefined : void openSpaceMenu(windowId);
     case "duplicateTab":
       return tab ? void s.duplicateTab(tab.id) : undefined;
-    case "moveTabToProfile":
-      return tab && arg ? void moveTabToProfile(tab.id, arg) : undefined;
+    case "moveTabToSpace":
+      return tab && arg ? void moveTabToSpace(tab.id, arg) : undefined;
     case "moveTabToWindow":
       return tab && arg ? moveTabToWindow(tab.id, arg) : undefined;
     case "bookmarkPage":
@@ -272,12 +272,12 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return bookmarkAllTabs(windowId);
     case "mergeAllWindows":
       return s.mergeAllWindows(windowId);
-    case "switchProfile":
-      return arg ? switchProfile(windowId, arg, true) : undefined;
-    case "nextProfile":
-      return cycleProfile(windowId, 1);
-    case "previousProfile":
-      return cycleProfile(windowId, -1);
+    case "switchSpace":
+      return arg ? switchSpace(windowId, arg, true) : undefined;
+    case "nextSpace":
+      return cycleSpace(windowId, 1);
+    case "previousSpace":
+      return cycleSpace(windowId, -1);
     case "openExtension":
       return arg ? openExtensionFromMenu(windowId, arg) : undefined;
     case "addExtension":
@@ -286,8 +286,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return openPinDialog(windowId);
     case "autofill":
       return void requestAutofill(windowId, arg);
-    case "newProfile":
-      return void createProfile(windowId).then((id) => id && switchProfile(windowId, id));
+    case "newSpace":
+      return void createSpace(windowId).then((id) => id && switchSpace(windowId, id));
   }
 }
 

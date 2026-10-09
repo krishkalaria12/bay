@@ -1,14 +1,14 @@
 import { Pressable, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { switchProfile } from "../../lib/actions";
+import { switchSpace } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/profilePager";
+import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
 import { useHover } from "../primitives";
 import { DOT_HOVERED_OPACITY, DOT_IDLE_OPACITY, DOT_SELECTED_OPACITY, DOTS_BAND, DOTS_CELL, DOTS_DOT, PROFILE_DOTS_HEIGHT } from "./constants";
 
-export function ProfileDots({ windowId }: { windowId: string }) {
+export function SpaceDots({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.profileOrder));
   const { pages } = usePagerPages(windowId);
   return (
@@ -30,7 +30,7 @@ function Dot({ id, windowId, page }: { id: string; windowId: string; page: Pager
   const opacity = usePagerOpacity(windowId, page?.slot, rest, DOT_SELECTED_OPACITY);
   return (
     <View {...hoverProps} tooltip={name}>
-      <Pressable accessibilityRole="button" accessibilityLabel={name} onPress={() => switchProfile(windowId, id, true)}>
+      <Pressable accessibilityRole="button" accessibilityLabel={name} onPress={() => switchSpace(windowId, id, true)}>
         <View style={{ width: DOTS_CELL, height: DOTS_BAND, alignItems: "center", justifyContent: "center" }}>
           <Animated.View style={[{ width: DOTS_DOT, height: DOTS_DOT, borderRadius: DOTS_DOT / 2, backgroundColor: theme.dark ? "#FFFFFF" : "#000000" }, opacity]} />
         </View>

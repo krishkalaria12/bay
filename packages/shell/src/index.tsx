@@ -57,7 +57,7 @@ export type BrowserCommand =
   | "selectLastTab"
   | "togglePin"
   | "duplicateTab"
-  | "moveTabToProfile"
+  | "moveTabToSpace"
   | "moveTabToWindow"
   | "bookmarkPage"
   | "addBookmarkToFolder"
@@ -65,10 +65,10 @@ export type BrowserCommand =
   | "toggleMute"
   | "downloads"
   | "mergeAllWindows"
-  | "switchProfile"
-  | "nextProfile"
-  | "previousProfile"
-  | "newProfile"
+  | "switchSpace"
+  | "nextSpace"
+  | "previousSpace"
+  | "newSpace"
   | "openSettings"
   | "importBrowserData"
   | "showHistory"
@@ -111,7 +111,7 @@ export type BrowserCommand =
   | "moveTabDown"
   | "moveTabUp"
   | "closeTabGroup"
-  | "openProfileMenu";
+  | "openSpaceMenu";
 
 export type CommandEvent = {
   command: BrowserCommand;
@@ -176,7 +176,7 @@ export type MenuState = {
   checked: string[];
   disabled: string[];
   titles: Record<string, string>;
-  profiles: MenuEntry[];
+  spaces: MenuEntry[];
   windows: MenuEntry[];
   bookmarkFolders: MenuEntry[];
   recentBookmarks: MenuBookmark[];

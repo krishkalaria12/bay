@@ -3,6 +3,6 @@ export const LITTLE_BAY_DISABLED_COMMANDS = [
   "nextTab", "previousTab", "selectTab", "selectLastTab", "togglePin", "togglePinRow", "moveTabDown", "moveTabUp", "duplicateTab",
   "toggleSidebar", "toggleTabLayout", "toggleAddressBar", "openSplitPane", "focusNextPane", "focusPreviousPane", "removeFromSplit",
   "closeTabGroup", "closeAllTabs", "cleanUpTabs", "newTabInGroup", "newGroupWithTabs", "searchTabs", "renameTab",
-  "changeTabIcon", "returnToPinnedUrl", "tabSwitcher", "moveTabToProfile", "moveTabToWindow", "mergeAllWindows",
-  "switchProfile", "nextProfile", "previousProfile", "openProfileMenu", "bookmarkAllTabs", "keepTab", "closeOtherTabs",
+  "changeTabIcon", "returnToPinnedUrl", "tabSwitcher", "moveTabToSpace", "moveTabToWindow", "mergeAllWindows",
+  "switchSpace", "nextSpace", "previousSpace", "openSpaceMenu", "bookmarkAllTabs", "keepTab", "closeOtherTabs",
 ];

@@ -30,7 +30,7 @@ import { useTabDrag } from "./layout/tabDrag";
 import { SadTab, StatusBubble } from "./layout/PaneOverlays";
 import { DropTargets, SplitDividers, SplitToast } from "./layout/SplitChrome";
 import { SplitEmptyState } from "./layout/SplitEmptyState";
-import { pagerFor } from "./layout/profilePager";
+import { pagerFor } from "./layout/spacePager";
 import { openFromPage } from "./layout/openFromPage";
 import { setUrlAnchor, useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
 import { BlankTabSurface } from "./BlankTabSurface";

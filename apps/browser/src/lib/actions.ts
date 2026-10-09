@@ -1,8 +1,8 @@
 import * as cef from "@bay/nncore";
 import { listExtensions } from "@bay/nncore";
 import { confirm, focusWindow } from "@bay/shell";
-import { pageToProfile } from "../components/layout/profilePager";
-import { profileNames, requestCreateProfile, type CreateProfilePreset } from "../components/profiles/CreateProfile";
+import { pageToSpace } from "../components/layout/spacePager";
+import { profileNames, requestCreateSpace, type CreateSpacePreset } from "../components/spaces/CreateSpace";
 import { useBrowser, type CreateWindowOptions } from "../store/browser";
 import { closesWindow, engineProfile, isIncognitoProfile, resolveWindowId } from "../store/model";
 import { engineIdOf, sharingProfiles } from "../store/profiles";
@@ -51,11 +51,11 @@ export function toggleMute(tabId: string) {
   void webviews.get(tabId)?.setMuted(!tab.muted);
 }
 
-export function createProfile(windowId?: string, preset?: CreateProfilePreset): Promise<string | null> {
-  return requestCreateProfile(windowId, preset);
+export function createSpace(windowId?: string, preset?: CreateSpacePreset): Promise<string | null> {
+  return requestCreateSpace(windowId, preset);
 }
 
-export async function deleteProfile(profileId: string, windowId?: string) {
+export async function deleteSpace(profileId: string, windowId?: string) {
   const s = store();
   const profile = s.profiles[profileId];
   if (!profile || s.profileOrder.length <= 1) return;
@@ -85,10 +85,10 @@ async function keptExtensionsNote(): Promise<string> {
   return names ? ` Its extensions (${profileNames(names)}) stay installed on this Mac, turned off.` : " Its extensions stay installed on this Mac, turned off.";
 }
 
-export async function moveTabToProfile(tabId: string, target: string) {
+export async function moveTabToSpace(tabId: string, target: string) {
   const tab = store().tabs[tabId];
   if (!tab || isIncognitoProfile(tab.profileId)) return;
-  const profileId = target === "new" ? await createProfile(tab.windowId) : target;
+  const profileId = target === "new" ? await createSpace(tab.windowId) : target;
   if (!profileId || profileId === tab.profileId) return;
   const shared = engineProfile(profileId) === engineProfile(tab.profileId);
   if (store().settings.warnBeforeMovingTabsToProfile && !shared) {
@@ -110,12 +110,12 @@ export function moveTabToWindow(tabId: string, target: string) {
   if (windowId) focus(windowId);
 }
 
-export function switchProfile(windowId: string, profileId: string, animated = false) {
-  if (animated) pageToProfile(windowId, profileId);
+export function switchSpace(windowId: string, profileId: string, animated = false) {
+  if (animated) pageToSpace(windowId, profileId);
   else store().switchProfile(windowId, profileId);
 }
 
-export function cycleProfile(windowId: string, delta: 1 | -1) {
+export function cycleSpace(windowId: string, delta: 1 | -1) {
   if (!cycleTarget(windowId, delta)) return;
   // The native pager steps from its own selection, so rapid presses advance past a store that lags.
   void cef.stepPager(windowId, delta, true, store().profileOrder.join("\n")).then((ok) => ok || cycleFromStore(windowId, delta));
@@ -123,7 +123,7 @@ export function cycleProfile(windowId: string, delta: 1 | -1) {
 
 function cycleFromStore(windowId: string, delta: 1 | -1) {
   const target = cycleTarget(windowId, delta);
-  if (target) switchProfile(windowId, target, true);
+  if (target) switchSpace(windowId, target, true);
 }
 
 function cycleTarget(windowId: string, delta: 1 | -1) {

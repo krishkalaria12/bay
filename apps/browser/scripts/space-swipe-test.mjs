@@ -1,9 +1,9 @@
 // Profile swipes in the sidebar and swipes on web pages, through the native gesture path (BaySwipe devSimulate)
 // in a hidden instance with two profiles.
-//   node apps/browser/scripts/profile-swipe-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data]
+//   node apps/browser/scripts/space-swipe-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data]
 //     [--stale-window] [--only=<case name substring>] [--bundle-port=<Metro port>]
-// One line per case; the details go to profile-swipe.log and the evidence (native traces) to
-// profile-swipe-results.json beside the instance's data; both are kept with --keep-data or after a failure.
+// One line per case; the details go to space-swipe.log and the evidence (native traces) to
+// space-swipe-results.json beside the instance's data; both are kept with --keep-data or after a failure.
 // The launched app's ownership (scripts/lib/instance.mjs) has its own self-test: `--self-test` runs it.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -21,7 +21,7 @@ if (args.includes("--self-test")) {
 }
 const appArg = args.find((a) => !a.startsWith("--"));
 if (!appArg) {
-  console.error("usage: node profile-swipe-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data] [--stale-window] [--only=<case name substring>] [--bundle-port=<Metro port>] | --self-test");
+  console.error("usage: node space-swipe-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data] [--stale-window] [--only=<case name substring>] [--bundle-port=<Metro port>] | --self-test");
   process.exit(2);
 }
 const app = resolve(appArg);
@@ -37,9 +37,9 @@ const keep = args.includes("--keep-data");
 const stale = args.includes("--stale-window");
 const only = args.find((a) => a.startsWith("--only="))?.slice("--only=".length).toLowerCase();
 let matched = 0;
-const scratch = mkdtempSync(join(tmpdir(), "nn-profile-swipe-"));
+const scratch = mkdtempSync(join(tmpdir(), "nn-space-swipe-"));
 const data = join(scratch, "data");
-const rep = reporter(join(scratch, "profile-swipe.log"), { name: "profile-swipe-test" });
+const rep = reporter(join(scratch, "space-swipe.log"), { name: "space-swipe-test" });
 const evidence = { app, data, stale, cases: [] };
 // The instance once launched: the only process cleanup may signal (scripts/lib/instance.mjs).
 let owned;
@@ -279,7 +279,7 @@ try {
   });
   await test("rapid profile shortcuts count every queued press", async () => {
     await reset();
-    await nn('nn.runCommand({command:"nextProfile",windowId:"w1"}); nn.runCommand({command:"nextProfile",windowId:"w1"}); nn.runCommand({command:"nextProfile",windowId:"w1"}); return true;');
+    await nn('nn.runCommand({command:"nextSpace",windowId:"w1"}); nn.runCommand({command:"nextSpace",windowId:"w1"}); nn.runCommand({command:"nextSpace",windowId:"w1"}); return true;');
     await waitProfile("work");
     await sleep(450);
     const result = await nn('return globalThis.expo.modules.BaySwipe.devPagerState("w1");');
@@ -546,8 +546,8 @@ try {
     return result;
   });
   stage = "the snapshot";
-  evidence.snapshot = { path: join(data, "profile-swipe.png"),
-    saved: await nn(`return nn.shell.devSnapshotWindow("w1", ${JSON.stringify(join(data, "profile-swipe.png"))});`) };
+  evidence.snapshot = { path: join(data, "space-swipe.png"),
+    saved: await nn(`return nn.shell.devSnapshotWindow("w1", ${JSON.stringify(join(data, "space-swipe.png"))});`) };
 } catch (error) {
   evidence.error = String(error);
   if (!error.reported) rep.record(`stopped at ${stage}`, { error });
@@ -559,12 +559,12 @@ try {
   if (owned) {
     try { evidence.cleanup = await owned.quit(); } catch (error) { evidence.cleanup = { error: String(error) }; }
   }
-  writeFileSync(join(scratch, "profile-swipe-results.json"), JSON.stringify(evidence, null, 2));
+  writeFileSync(join(scratch, "space-swipe-results.json"), JSON.stringify(evidence, null, 2));
   server.close();
   const failed = evidence.error || evidence.cases.some((c) => !c.passed);
   if (!keep && !failed) {
     rmSync(data, { recursive: true, force: true });
-    rmSync(join(scratch, "profile-swipe-results.json"), { force: true });
-  } else appendFileSync(rep.logFile, `evidence: ${join(scratch, "profile-swipe-results.json")}\n`);
+    rmSync(join(scratch, "space-swipe-results.json"), { force: true });
+  } else appendFileSync(rep.logFile, `evidence: ${join(scratch, "space-swipe-results.json")}\n`);
   process.exitCode = rep.summary() && !failed ? 0 : 1;
 }

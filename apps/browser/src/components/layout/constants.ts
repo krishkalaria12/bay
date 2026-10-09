@@ -51,7 +51,7 @@ export const HISTORY_POPOVER_WIDTH = 300;
 export const LOAD_GLOW_NARROW = 30;
 export const LOAD_GLOW_WIDE = 64;
 
-// MARK: Paging between spaces (profilePager.ts)
+// MARK: Paging between spaces (spacePager.ts)
 
 // Dia: 1pt threshold, 50ms bursts, 0.25s cooldown.
 export const WHEEL_THRESHOLD = 1;

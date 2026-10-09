@@ -117,7 +117,7 @@ export function unusedSpaceIcon(profiles: Record<string, Pick<Profile, "icon">>)
   return SYMBOL_PREFIX + free.name;
 }
 
-export function ProfileBadge({ profile, size = 26 }: { profile: Pick<Profile, "name" | "color" | "icon"> & Partial<Pick<Profile, "theme">>; size?: number }) {
+export function SpaceBadge({ profile, size = 26 }: { profile: Pick<Profile, "name" | "color" | "icon"> & Partial<Pick<Profile, "theme">>; size?: number }) {
   const swatch = profile.theme?.colors[0] ?? PROFILE_COLORS[profile.color]?.swatch ?? PROFILE_COLORS.plum.swatch;
   const symbol = profileSymbol(profile.icon);
   return (

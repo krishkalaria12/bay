@@ -181,10 +181,10 @@ const shortcuts = [
   ["⌥⌘M", cmd("m", 46, "option"), { title: "Minimize All" }, "⌥⌘M", "window-only"],
   ["⇧⌘J", cmd("J", 38, "shift"), { command: "downloads" }, "⇧⌘J"],
   ["⌥⌘L", cmd("l", 37, "option"), { command: "downloads" }, "(Chrome's)"],
-  ["⇧⌘M", cmd("M", 46, "shift"), { command: "openProfileMenu" }, "(Chrome's)"],
+  ["⇧⌘M", cmd("M", 46, "shift"), { command: "openSpaceMenu" }, "(Chrome's)"],
   ["⌥⇧⌘I", cmd("I", 34, "shift", "option"), { command: "sendFeedback" }, "(Chrome's)"],
-  ["⌃1", K("1", 18, "control"), { command: "switchProfile", arg: "default" }, "⌃1"],
-  ["⌃2", K("2", 19, "control"), { command: "switchProfile", arg: "p-work" }, "⌃2"],
+  ["⌃1", K("1", 18, "control"), { command: "switchSpace", arg: "default" }, "⌃1"],
+  ["⌃2", K("2", 19, "control"), { command: "switchSpace", arg: "p-work" }, "⌃2"],
 ];
 
 const same = (f, expect) =>

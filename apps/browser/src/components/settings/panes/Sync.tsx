@@ -17,7 +17,7 @@ import {
   useSync,
   type SyncStatus,
 } from "../../../sync/engine";
-import { ProfileBadge } from "../../profiles/icons";
+import { SpaceBadge } from "../../spaces/icons";
 import { Button, Group, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { folderLabel, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
 
@@ -225,7 +225,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
           return (
             <Row
               key={p.id}
-              icon={<ProfileBadge profile={p} size={24} />}
+              icon={<SpaceBadge profile={p} size={24} />}
               title={p.name}
               description={owner ? `Shares data with ${owner.name}: its tabs sync here, its data syncs with ${owner.name}.` : undefined}
             >
@@ -234,7 +234,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
           );
         })}
         {remoteProfiles.map((p) => (
-          <Row key={p.syncId} icon={<ProfileBadge profile={{ name: p.name, color: p.color, icon: p.icon }} size={24} />} title={p.name} description="On your other devices">
+          <Row key={p.syncId} icon={<SpaceBadge profile={{ name: p.name, color: p.color, icon: p.icon }} size={24} />} title={p.name} description="On your other devices">
             <Button title="Add to This Mac" onPress={() => addRemoteProfile(p.syncId)} />
           </Row>
         ))}

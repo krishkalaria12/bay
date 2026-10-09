@@ -16,7 +16,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "profiles";
+  needs?: "page" | "site" | "tab" | "spaces";
 };
 
 const page = "page" as const;
@@ -84,8 +84,8 @@ const DEFS: ActionDef[] = [
   { command: "clearBrowsingData", title: "Clear Browsing Data", icon: "trash", keywords: ["clear history", "clear cache", "clear cookies"] },
   { command: "importBrowserData", title: "Import Browser Data", icon: "square.and.arrow.down", keywords: ["import bookmarks", "import passwords"] },
   { command: "keyboardShortcuts", title: "Keyboard Shortcuts", icon: "keyboard", keywords: ["shortcuts", "hotkeys"] },
-  { command: "mergeAllWindows", title: "Merge All Windows", icon: "rectangle.stack", needs: "profiles" },
-  { command: "newProfile", title: "New Space", icon: "plus.square.on.square", keywords: ["create space", "new profile", "create profile"], needs: "profiles" },
+  { command: "mergeAllWindows", title: "Merge All Windows", icon: "rectangle.stack", needs: "spaces" },
+  { command: "newSpace", title: "New Space", icon: "plus.square.on.square", keywords: ["create space", "new profile", "create profile"], needs: "spaces" },
   { command: "setAppearance", arg: "dark", title: "Dark Appearance", icon: "moon", keywords: ["dark mode"] },
   { command: "setAppearance", arg: "light", title: "Light Appearance", icon: "sun.max", keywords: ["light mode"] },
   { command: "setAppearance", arg: "auto", title: "Use System Appearance", icon: "circle.lefthalf.filled", keywords: ["auto appearance", "system appearance"] },
@@ -102,7 +102,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     if (d.needs === "page" && !tab?.url) continue;
     if (d.needs === "tab" && !tab) continue;
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
-    if (d.needs === "profiles" && w?.incognito) continue;
+    if (d.needs === "spaces" && w?.incognito) continue;
     out.push({
       id: actionId(d),
       title: typeof d.title === "string" ? d.title : d.title(c),
@@ -115,7 +115,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     s.profileOrder.forEach((id, i) => {
       if (id === w.profileId) return;
       const name = s.profiles[id]?.name ?? "";
-      out.push({ id: `switchProfile:${id}`, title: `Switch to ${name}`, icon: "person.crop.circle", hint: i < 9 ? `⌃${i + 1}` : undefined, keywords: [name, "profile"] });
+      out.push({ id: `switchSpace:${id}`, title: `Switch to ${name}`, icon: "person.crop.circle", hint: i < 9 ? `⌃${i + 1}` : undefined, keywords: [name, "profile"] });
     });
   }
   return out;

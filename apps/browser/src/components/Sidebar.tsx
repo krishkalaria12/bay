@@ -16,10 +16,10 @@ import { SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
 import { SIDEBAR_PLAYER_HEIGHT } from "./media/constants";
 import { HoverSlot } from "./HoverSlot";
 import { IconButton, useHover } from "./primitives";
-import { ProfileIndicator } from "./ProfileIndicator";
-import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./profiles/constants";
-import { usePageStyle, usePagerPages } from "./layout/profilePager";
-import { SpaceSwitcher } from "./profiles/SpaceSwitcher";
+import { SpaceIndicator } from "./SpaceIndicator";
+import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./spaces/constants";
+import { usePageStyle, usePagerPages } from "./layout/spacePager";
+import { SpaceSwitcher } from "./spaces/SpaceSwitcher";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
 import { DragProvider, DragScope, useDragController, useDragItem, type Ghost } from "./sidebar/dnd";
@@ -155,7 +155,7 @@ export function Sidebar() {
             ) : (
               // Box-none: the header's empty space is the drag region's (it moves the window), not the row's.
               <View pointerEvents="box-none" style={{ height: layout.sidebarHeader, flexDirection: "row", alignItems: "flex-start", paddingLeft: profileX, paddingRight: 7, paddingTop: 27 - 17 }}>
-                <ProfileIndicator room={width - profileX - 7} />
+                <SpaceIndicator room={width - profileX - 7} />
                 <View pointerEvents="none" style={{ flex: 1 }} />
               </View>
             )}

@@ -3,7 +3,7 @@ import { useLayoutEffect, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { createProfile, deleteProfile } from "../../../lib/actions";
+import { createSpace, deleteSpace } from "../../../lib/actions";
 import { hex, PROFILE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser, type BrowserState } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";
@@ -12,10 +12,10 @@ import { sharingProfiles } from "../../../store/profiles";
 import type { Profile, ProfileColor } from "../../../store/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../primitives";
-import { ColorStack } from "../../profiles/CreateProfile";
+import { ColorStack } from "../../spaces/CreateSpace";
 import { IconGrid } from "../../IconGrid";
-import { ProfileBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../profiles/icons";
-import { openThemeEditor } from "../../profiles/ThemeEditor";
+import { SpaceBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../spaces/icons";
+import { openThemeEditor } from "../../spaces/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { useSettingsNav } from "../windows";
@@ -30,7 +30,7 @@ function useSharedWith(profileId: string): string[] {
   return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
 }
 
-export function ProfilesPane() {
+export function SpacesPane() {
   const theme = useTheme();
   const profiles = useProfiles();
   const defaultId = useBrowser((s) => s.settings.defaultProfileId);
@@ -57,16 +57,16 @@ export function ProfilesPane() {
       <SectionHeader
         title="Spaces"
         description="Drag to reorder. ⌃1–⌃9 switch to the first nine."
-        action={<Button title="Create Space" icon="plus" onPress={() => void createProfile()} />}
+        action={<Button title="Create Space" icon="plus" onPress={() => void createSpace()} />}
       />
-      <ProfileList />
+      <SpaceList />
     </View>
   );
 }
 
 const settle = (value: SharedValue<number>, toValue: number) => value.set(withTiming(toValue, { duration: 160, easing: Easing.out(Easing.cubic) }));
 
-function ProfileList() {
+function SpaceList() {
   const colors = useFormColors();
   const order = useBrowser((s) => s.profileOrder);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -76,7 +76,7 @@ function ProfileList() {
   return (
     <View style={{ borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder }}>
       {order.map((id, i) => (
-        <ProfileRow key={id} profileId={id} first={i === 0} offset={controller.offsetOf(id)} lifted={dragging === id} controller={controller} />
+        <SpaceRow key={id} profileId={id} first={i === 0} offset={controller.offsetOf(id)} lifted={dragging === id} controller={controller} />
       ))}
     </View>
   );
@@ -136,7 +136,7 @@ function profileReorder(setDragging: (id: string | null) => void) {
 
 type DragController = { start(id: string): void; move(dy: number): void; end(commit: boolean): void };
 
-function ProfileRow({
+function SpaceRow({
   profileId,
   first,
   offset,
@@ -179,9 +179,9 @@ function ProfileRow({
       { separator: true },
       { id: "delete", title: "Delete Space…", enabled: s.profileOrder.length > 1 },
     ]);
-    if (choice === "details") go("profiles", profileId);
+    if (choice === "details") go("spaces", profileId);
     else if (choice === "default") s.setDefaultProfile(profileId);
-    else if (choice === "delete") void deleteProfile(profileId);
+    else if (choice === "delete") void deleteSpace(profileId);
   };
 
   return (
@@ -198,7 +198,7 @@ function ProfileRow({
       {!first && !lifted && <View style={{ height: StyleSheet.hairlineWidth * 2, marginHorizontal: 12, backgroundColor: colors.separator }} />}
       <ContextMenuArea onContextMenu={() => void openMenu()}>
         <View {...hoverProps}>
-          <Pressable onPress={() => go("profiles", profileId)}>
+          <Pressable onPress={() => go("spaces", profileId)}>
             <View
               style={{
                 height: PROFILE_ROW_HEIGHT - (first ? 0 : StyleSheet.hairlineWidth * 2),
@@ -213,7 +213,7 @@ function ProfileRow({
               <View tooltip="Drag to reorder">
                 <Symbol name="line.3.horizontal" size={11} color={theme.textTertiary} style={{ width: 14, height: 14 }} />
               </View>
-              <ProfileBadge profile={profile} />
+              <SpaceBadge profile={profile} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 13, color: theme.textPrimary }}>{profile.name}</Text>
                 {description ? <Text style={{ fontSize: 11.5, marginTop: 2, color: theme.textSecondary }}>{description}</Text> : null}
@@ -239,7 +239,7 @@ function bookmarkCount(s: BrowserState, profileId: string): number {
   return count;
 }
 
-export function ProfileDetailsPane({ profileId }: { profileId: string }) {
+export function SpaceDetailsPane({ profileId }: { profileId: string }) {
   const theme = useTheme();
   const profile = useBrowser((s) => s.profiles[profileId]);
   const isDefault = useBrowser((s) => s.settings.defaultProfileId === profileId);
@@ -266,7 +266,7 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
     <View>
       <View style={{ alignItems: "center", marginTop: 24, gap: 10 }}>
         <Pressable onPress={() => setPicking(!picking)} tooltip="Change Icon">
-          <ProfileBadge profile={profile} size={64} />
+          <SpaceBadge profile={profile} size={64} />
         </Pressable>
         <Text style={{ fontSize: 12, color: theme.textSecondary }}>{stats}</Text>
       </View>
@@ -349,8 +349,8 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
             kind="destructive"
             disabled={only}
             onPress={() =>
-              void deleteProfile(profileId).then(() => {
-                if (!useBrowser.getState().profiles[profileId]) useSettingsNav.getState().go("profiles");
+              void deleteSpace(profileId).then(() => {
+                if (!useBrowser.getState().profiles[profileId]) useSettingsNav.getState().go("spaces");
               })
             }
           />

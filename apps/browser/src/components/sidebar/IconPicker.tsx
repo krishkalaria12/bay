@@ -5,7 +5,7 @@ import { useSidebarOnRight } from "../layout/windowLayout";
 import { useLive } from "../../live/store";
 import { useBrowser } from "../../store/browser";
 import { IconGrid, type IconChoice } from "../IconGrid";
-import { SPACE_SYMBOLS } from "../profiles/icons";
+import { SPACE_SYMBOLS } from "../spaces/icons";
 import { setIcon } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
 import { useSidebarTokens } from "./tokens";

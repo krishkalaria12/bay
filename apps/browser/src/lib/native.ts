@@ -175,9 +175,9 @@ const PAGE_COMMANDS = [
 const INTERNAL_PAGE_COMMANDS = ["copyUrl", "copyUrlAsMarkdown", "bookmarkPage", "addBookmarkToFolder"];
 const WINDOW_COMMANDS = [
   ...PAGE_COMMANDS, "focusCommandBar", "closeTab", "closeAllTabs", "back", "forward", "nextTab", "previousTab", "togglePin",
-  "togglePinRow", "duplicateTab", "moveTabToProfile", "moveTabToWindow", "toggleSidebar", "downloads", "mergeAllWindows", "switchProfile",
-  "nextProfile", "previousProfile", "openBookmark", "selectTab", "selectLastTab", "moveTabDown", "moveTabUp", "closeTabGroup",
-  "openProfileMenu",
+  "togglePinRow", "duplicateTab", "moveTabToSpace", "moveTabToWindow", "toggleSidebar", "downloads", "mergeAllWindows",
+  "switchSpace", "nextSpace", "previousSpace", "openBookmark", "selectTab", "selectLastTab", "moveTabDown", "moveTabUp",
+  "closeTabGroup", "openSpaceMenu",
 ];
 
 function menuBookmarks(b: Bookmarks, folderId: string, depth = 0): MenuBookmark[] {
@@ -237,8 +237,8 @@ export function menuState(s: BrowserState): MenuState {
     if (!tab || !canGoBack(tab.id, live ?? IDLE_LIVE)) disabled.push("back");
     if (!tab || !canGoForward(tab.id, live ?? IDLE_LIVE)) disabled.push("forward");
     if (!live?.isLoading) disabled.push("stop");
-    if (w.incognito) disabled.push("moveTabToProfile", "moveTabToWindow", "switchProfile", "nextProfile", "previousProfile");
-    else if (tab) disabled.push(`moveTabToProfile:${tab.profileId}`);
+    if (w.incognito) disabled.push("moveTabToSpace", "moveTabToWindow", "switchSpace", "nextSpace", "previousSpace");
+    else if (tab) disabled.push(`moveTabToSpace:${tab.profileId}`);
     if (regularWindows.length < 2) disabled.push("mergeAllWindows");
   }
   if (!s.closedTabs.length && !s.closedWindows.length && !s.closedGroups.length) disabled.push("reopenClosedTab");
@@ -283,7 +283,7 @@ export function menuState(s: BrowserState): MenuState {
     checked,
     disabled,
     titles,
-    profiles: s.profileOrder.map((id) => ({ id, title: s.profiles[id]!.name, current: w?.profileId === id })),
+    spaces: s.profileOrder.map((id) => ({ id, title: s.profiles[id]!.name, current: w?.profileId === id })),
     windows: w?.incognito ? [] : regularWindows.filter((id) => id !== windowId).map((id) => ({ id, title: windowTitle(s, id) })),
     ...bookmarkMenus(s.bookmarks, bookmarkProfile),
     recentlyClosed: closed,

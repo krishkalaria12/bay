@@ -1,13 +1,13 @@
 import { Symbol, showMenu, type MenuItem } from "@bay/shell";
 import { Pressable, Text, View } from "react-native";
-import { createProfile, switchProfile } from "../lib/actions";
+import { createSpace, switchSpace } from "../lib/actions";
 import { PROFILE_COLORS, profileNameColor, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useIsIncognito, useProfiles, useWindowId, useWindowProfile } from "../store/hooks";
 import { setMeasuredWidth, useMeasuredWidth } from "./layout/measuredWidths";
 import { useHover } from "./primitives";
 import { openSettings } from "./settings/windows";
-import { INDICATOR_HEIGHT, INDICATOR_ICON_WIDTH, INDICATOR_MIN_CUT_NAME, INDICATOR_PAD } from "./profiles/constants";
+import { INDICATOR_HEIGHT, INDICATOR_ICON_WIDTH, INDICATOR_MIN_CUT_NAME, INDICATOR_PAD } from "./spaces/constants";
 
 function useIndicator(room: number) {
   const theme = useTheme();
@@ -25,9 +25,9 @@ function useIndicator(room: number) {
 }
 
 /** The indicator's width at `room` (0 when it isn't shown), known before it lays out: the tab strip sizes its tabs by it. */
-export const useProfileIndicatorWidth = (room: number) => useIndicator(room).width;
+export const useSpaceIndicatorWidth = (room: number) => useIndicator(room).width;
 
-export function ProfileIndicator({ room }: { room: number }) {
+export function SpaceIndicator({ room }: { room: number }) {
   const theme = useTheme();
   const windowId = useWindowId();
   const { hovered, hoverProps } = useHover();
@@ -45,7 +45,7 @@ export function ProfileIndicator({ room }: { room: number }) {
           {title}
         </Text>
       </View>
-      <Pressable onPress={() => !incognito && void openProfileMenu(windowId)} disabled={incognito}>
+      <Pressable onPress={() => !incognito && void openSpaceMenu(windowId)} disabled={incognito}>
         {({ pressed }) => (
           <View
             style={{
@@ -73,7 +73,7 @@ export function ProfileIndicator({ room }: { room: number }) {
   );
 }
 
-export async function openProfileMenu(windowId: string) {
+export async function openSpaceMenu(windowId: string) {
   const s = useBrowser.getState();
   const current = s.windows[windowId]?.profileId;
   const items: MenuItem[] = [
@@ -90,9 +90,9 @@ export async function openProfileMenu(windowId: string) {
   ];
   const choice = await showMenu(items);
   if (!choice) return;
-  if (choice.startsWith("switch:")) switchProfile(windowId, choice.slice("switch:".length), true);
+  if (choice.startsWith("switch:")) switchSpace(windowId, choice.slice("switch:".length), true);
   else if (choice === "new") {
-    const id = await createProfile(windowId);
-    if (id) switchProfile(windowId, id);
-  } else if (choice === "edit") openSettings("profiles", current);
+    const id = await createSpace(windowId);
+    if (id) switchSpace(windowId, id);
+  } else if (choice === "edit") openSettings("spaces", current);
 }

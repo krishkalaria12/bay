@@ -1,7 +1,7 @@
 // Profiles' and spaces' constants: the profile indicator, the sidebar footer's dots and space switcher, and the
 // theme editor.
 
-// MARK: Profile indicator (ProfileIndicator.tsx)
+// MARK: Profile indicator (SpaceIndicator.tsx)
 
 export const INDICATOR_PAD = 9;
 export const INDICATOR_HEIGHT = 34;
@@ -9,7 +9,7 @@ export const INDICATOR_MIN_CUT_NAME = 52;
 export const INDICATOR_ICON_WIDTH = 32;
 export const PROFILE_INDICATOR_X = 84;
 
-// MARK: Profile dots (ProfileDots.tsx)
+// MARK: Profile dots (SpaceDots.tsx)
 
 // Dia: 41pt height; 12pt cell, 6pt dot, 28pt band; opacity 0.85/0.4/0.2.
 export const PROFILE_DOTS_HEIGHT = 41;

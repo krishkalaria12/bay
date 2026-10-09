@@ -102,7 +102,7 @@ export function ChooseStep({ flow }: StepProps) {
   );
 }
 
-export function ProfilesStep({ flow }: StepProps) {
+export function SpacesStep({ flow }: StepProps) {
   const theme = useTheme();
   const { source, isArc, isDiaTabs } = flow;
   if (!source) return <EmptyStep />;

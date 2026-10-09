@@ -19,7 +19,7 @@ function restPages(current: string | null, order: string[]): PagerPage[] {
 }
 
 // The native controller (NNPager) tracks, settles and selects; JS only commits its selections.
-class ProfilePager {
+class SpacePager {
   // The absolute profile index, written only by the native controller's frames.
   readonly pos: SharedValue<number>;
   // pages: the current profile's neighbours to keep warm; ack: the newest native sequence JS has handled.
@@ -162,15 +162,15 @@ class ProfilePager {
   }
 }
 
-const pagers = new Map<string, ProfilePager>();
+const pagers = new Map<string, SpacePager>();
 
-export function pagerFor(windowId: string): ProfilePager {
+export function pagerFor(windowId: string): SpacePager {
   let pager = pagers.get(windowId);
-  if (!pager) pagers.set(windowId, (pager = new ProfilePager(windowId)));
+  if (!pager) pagers.set(windowId, (pager = new SpacePager(windowId)));
   return pager;
 }
 
-export function pageToProfile(windowId: string, profileId: string) {
+export function pageToSpace(windowId: string, profileId: string) {
   pagerFor(windowId).switchTo(profileId);
 }
 
@@ -178,7 +178,7 @@ export function usePagerSurface(windowId: string) {
   useEffect(() => pagerFor(windowId).attach(), [windowId]);
 }
 
-export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: boolean; pager: ProfilePager } {
+export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: boolean; pager: SpacePager } {
   const pager = pagerFor(windowId);
   const current = useBrowser((s) => s.windows[windowId]?.profileId ?? null);
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);

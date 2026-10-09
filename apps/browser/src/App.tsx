@@ -14,10 +14,10 @@ import { DownloadsPanel } from "./components/DownloadsPanel";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
 import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding";
-import { CreateProfileHost } from "./components/profiles/CreateProfile";
-import { ThemeEditorHost } from "./components/profiles/ThemeEditor";
+import { CreateSpaceHost } from "./components/spaces/CreateSpace";
+import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
-import { ProfileSwipe, ProfileTint } from "./components/layout/ProfileSwipe";
+import { SpaceSwipe, SpaceTint } from "./components/layout/SpaceSwipe";
 import { TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
 import { TOP_CARD_INSET } from "./components/layout/constants";
 import { TOP_STRIP_HEIGHT } from "./components/layout/constants";
@@ -99,7 +99,7 @@ function BrowserWindow() {
     <View style={{ flex: 1, flexDirection: right ? "row-reverse" : "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
-      <ProfileTint />
+      <SpaceTint />
       {!topTabs && (
         <Animated.View
           pointerEvents={fullscreen || !showSidebar ? "none" : "auto"}
@@ -107,9 +107,9 @@ function BrowserWindow() {
         >
           {dock.mounted ? (
             <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
-              <ProfileSwipe>
+              <SpaceSwipe>
                 <Sidebar />
-              </ProfileSwipe>
+              </SpaceSwipe>
             </Animated.View>
           ) : null}
         </Animated.View>
@@ -142,7 +142,7 @@ function BrowserWindow() {
       <DownloadMagnet />
       <BookmarkDialog />
       <EditBookmarkDialog />
-      <CreateProfileHost />
+      <CreateSpaceHost />
       <SidebarOverlays windowWidth={width} />
       {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
       <DownloadsPanel windowWidth={width} windowHeight={size.height} />

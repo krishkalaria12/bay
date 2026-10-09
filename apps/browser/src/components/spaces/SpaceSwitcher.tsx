@@ -2,12 +2,12 @@ import { ContextMenuArea, prompt, showMenu, Symbol } from "@bay/shell";
 import { Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { createProfile, deleteProfile, switchProfile } from "../../lib/actions";
+import { createSpace, deleteSpace, switchSpace } from "../../lib/actions";
 import { PROFILE_COLORS, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import type { ProfileColor } from "../../store/types";
-import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/profilePager";
+import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
 import { IconButton, useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
 import { useSidebarWidth } from "../sidebar/tokens";
@@ -16,7 +16,7 @@ import { registerRow } from "../sidebar/state";
 import { iconColor } from "../symbolColors";
 import { profileSymbol } from "./icons";
 import { openThemeEditor } from "./ThemeEditor";
-import { ProfileDots } from "./ProfileDots";
+import { SpaceDots } from "./SpaceDots";
 import { PROFILE_DOTS_HEIGHT, SPACE_CELL, SPACE_GLYPH, SPACE_HOVERED_OPACITY, SPACE_IDLE_OPACITY, SPACE_PLUS, SPACE_SELECTED_OPACITY, SPACE_SIDE } from "./constants";
 
 // Arc's space switcher, at the foot of the sidebar: a space's icon each (Bay's profiles are Arc's spaces), the shown
@@ -36,7 +36,7 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
           ))}
         </View>
       ) : (
-        <ProfileDots windowId={windowId} />
+        <SpaceDots windowId={windowId} />
       )}
       <View style={{ position: "absolute", right: layout.sidebarInset, top: (PROFILE_DOTS_HEIGHT - 3 - SPACE_PLUS) / 2 }}>
         <IconButton icon="plus" size={14} box={SPACE_PLUS} radius={8} tooltip="New Space" onPress={() => void newSpace(windowId)} />
@@ -56,7 +56,7 @@ function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page:
   return (
     <View ref={(v) => registerRow(windowId, id, v)} {...hoverProps} tooltip={profile.name}>
       <ContextMenuArea onContextMenu={() => void openSpaceMenu(windowId, id)}>
-        <Pressable accessibilityRole="button" accessibilityLabel={profile.name} onPress={() => switchProfile(windowId, id, true)}>
+        <Pressable accessibilityRole="button" accessibilityLabel={profile.name} onPress={() => switchSpace(windowId, id, true)}>
           <Animated.View style={[{ width: SPACE_CELL, height: SPACE_CELL, borderRadius: 7, alignItems: "center", justifyContent: "center" }, opacity]}>
             {symbol ? (
               <Symbol
@@ -78,8 +78,8 @@ function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page:
 }
 
 async function newSpace(windowId: string) {
-  const id = await createProfile(windowId);
-  if (id) switchProfile(windowId, id);
+  const id = await createSpace(windowId);
+  if (id) switchSpace(windowId, id);
 }
 
 /** A space's menu (right-click on its icon): its name, icon and theme, its settings, and deleting it. */
@@ -111,6 +111,6 @@ export async function openSpaceMenu(windowId: string, id: string) {
   } else if (choice === "icon") void openIconPicker(windowId, { kind: "space", id });
   else if (choice?.startsWith("theme:")) update(id, { color: choice.slice("theme:".length) as ProfileColor, theme: null });
   else if (choice === "editTheme") openThemeEditor(windowId, id);
-  else if (choice === "settings") openSettings("profiles", id);
-  else if (choice === "delete") void deleteProfile(id, windowId);
+  else if (choice === "settings") openSettings("spaces", id);
+  else if (choice === "delete") void deleteSpace(id, windowId);
 }

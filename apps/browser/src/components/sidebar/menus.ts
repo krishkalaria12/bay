@@ -1,5 +1,5 @@
 import { showMenu, type MenuItem } from "@bay/shell";
-import { closeTab, moveTabToProfile, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
+import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
 import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
@@ -113,7 +113,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const away = awayFromPin(tab);
   const active = activeTabId(s, windowId);
   const current = tab.id === active;
-  const moveToProfile: MenuItem[] = [
+  const moveToSpace: MenuItem[] = [
     ...s.profileOrder.map((id) => ({ id: `profile:${id}`, title: s.profiles[id]!.name, checked: id === tab.profileId, enabled: id !== tab.profileId })),
     sep,
     { id: "profile:new", title: "New Space…" },
@@ -152,7 +152,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "siteControls", title: "Site Controls", symbol: "slider.horizontal.3", enabled: !!tab.url },
     { id: "copy", title: "Copy Address", symbol: "link", enabled: !!tab.url, ...hint("c", "shift", "command") },
     { id: "copyMd", title: "Copy Markdown Link", symbol: "m.square", enabled: !!tab.url, ...hint("c", "option", "shift", "command") },
-    { id: "moveToProfile", title: "Move to Space", symbol: "square.stack.3d.up", enabled: !incognito, children: moveToProfile },
+    { id: "moveToSpace", title: "Move to Space", symbol: "square.stack.3d.up", enabled: !incognito, children: moveToSpace },
     ...(!current && active && !split?.tabIds.includes(active) ? [{ id: "split", title: "Split with Current Tab", symbol: "rectangle.split.2x1" }] : []),
     { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
     sep,
@@ -197,7 +197,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     setPopover(tab.id, "siteControls");
   } else if (choice === "copy") copyUrls([tab.id], false);
   else if (choice === "copyMd") copyUrls([tab.id], true);
-  else if (choice.startsWith("profile:")) void moveTabToProfile(tab.id, choice.slice(8));
+  else if (choice.startsWith("profile:")) void moveTabToSpace(tab.id, choice.slice(8));
   else if (choice === "split") openInSplit(tab.id);
   else if (choice === "sleep") void sleepTab(tab.id);
   else if (choice === "icon") void openIconPicker(windowId, t);

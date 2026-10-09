@@ -11,15 +11,15 @@ import { Button, Sheet, TextField, useFormColors } from "../settings/controls";
 import { closeSettingsSheet, showSettingsSheet } from "../settings/sheet";
 import { IconGrid } from "../IconGrid";
 import { CREATE_SPACE_ICON_COLUMNS } from "./constants";
-import { ProfileBadge, SPACE_SYMBOLS, unusedSpaceIcon } from "./icons";
+import { SpaceBadge, SPACE_SYMBOLS, unusedSpaceIcon } from "./icons";
 
-export type CreateProfilePreset = { name?: string; shareWith?: string };
+export type CreateSpacePreset = { name?: string; shareWith?: string };
 
-type Request = { windowId: string; preset: CreateProfilePreset; resolve: (id: string | null) => void };
+type Request = { windowId: string; preset: CreateSpacePreset; resolve: (id: string | null) => void };
 
 const useRequest = create<{ request: Request | null }>(() => ({ request: null }));
 
-export function requestCreateProfile(windowId?: string, preset: CreateProfilePreset = {}): Promise<string | null> {
+export function requestCreateSpace(windowId?: string, preset: CreateSpacePreset = {}): Promise<string | null> {
   return new Promise((resolve) => {
     if (windowId && useBrowser.getState().windows[windowId]) {
       useRequest.getState().request?.resolve(null);
@@ -30,11 +30,11 @@ export function requestCreateProfile(windowId?: string, preset: CreateProfilePre
       closeSettingsSheet();
       resolve(id);
     };
-    showSettingsSheet(<CreateProfileSheet windowId={null} preset={preset} onDone={done} />);
+    showSettingsSheet(<CreateSpaceSheet windowId={null} preset={preset} onDone={done} />);
   });
 }
 
-export function CreateProfileHost() {
+export function CreateSpaceHost() {
   const windowId = useWindowId();
   const request = useRequest((r) => (r.request?.windowId === windowId ? r.request : null));
   if (!request) return null;
@@ -42,7 +42,7 @@ export function CreateProfileHost() {
     useRequest.setState({ request: null });
     request.resolve(id);
   };
-  return <CreateProfileSheet windowId={windowId} preset={request.preset} onDone={done} />;
+  return <CreateSpaceSheet windowId={windowId} preset={request.preset} onDone={done} />;
 }
 
 export function profileNames(names: string[]): string {
@@ -50,7 +50,7 @@ export function profileNames(names: string[]): string {
   return `${names.slice(0, 2).join(", ")}, & ${names.length - 2} more`;
 }
 
-function CreateProfileSheet({ windowId, preset, onDone }: { windowId: string | null; preset: CreateProfilePreset; onDone: (id: string | null) => void }) {
+function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | null; preset: CreateSpacePreset; onDone: (id: string | null) => void }) {
   const theme = useTheme();
   const colors = useFormColors();
   const profiles = useBrowser((s) => s.profiles);
@@ -72,7 +72,7 @@ function CreateProfileSheet({ windowId, preset, onDone }: { windowId: string | n
   return (
     <Sheet width={420} onClose={() => onDone(null)}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <ProfileBadge profile={{ name: name || "Space", color, icon }} size={30} />
+        <SpaceBadge profile={{ name: name || "Space", color, icon }} size={30} />
         <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Create a Space</Text>
       </View>
       <Text style={{ fontSize: 12.5, lineHeight: 17, marginTop: 8, color: theme.textSecondary }}>

@@ -7,19 +7,19 @@ import { useShallow } from "zustand/react/shallow";
 import { spaceThemeKey, themeFor } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
-import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./profilePager";
+import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./spacePager";
 
 
-export function ProfileSwipe({ children }: { children: ReactNode }) {
+export function SpaceSwipe({ children }: { children: ReactNode }) {
   return (
     <View style={{ height: "100%" }}>
       {children}
-      <ProfileSwipeArea surface="sidebar" style={StyleSheet.absoluteFill} />
+      <SpaceSwipeArea surface="sidebar" style={StyleSheet.absoluteFill} />
     </View>
   );
 }
 
-export function ProfileSwipeArea({ surface, style, pageWidth }: { surface: "sidebar" | "strip"; style: StyleProp<ViewStyle>; pageWidth?: number }) {
+export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sidebar" | "strip"; style: StyleProp<ViewStyle>; pageWidth?: number }) {
   const windowId = useWindowId();
   usePagerSurface(windowId);
   const [previous, next, multiple] = useBrowser(
@@ -79,7 +79,7 @@ export function ProfileSwipeArea({ surface, style, pageWidth }: { surface: "side
   );
 }
 
-export function ProfileTint() {
+export function SpaceTint() {
   const windowId = useWindowId();
   const { pages, paging } = usePagerPages(windowId);
   const keys = useBrowser(useShallow((s) => pages.map((p) => spaceThemeKey(s.profiles[p.id], s.ui.appDark, s.settings.windowMaterial === "glass"))));

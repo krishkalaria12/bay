@@ -132,11 +132,11 @@ export function useImportFlow() {
     const clash = s.profileOrder.find((id) => s.profiles[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (clash) {
       const { confirmed } = await confirm({
-        title: "Import as new profile?",
+        title: "Import as new Space?",
         message:
-          "Import this data as a new profile to avoid data loss. If you replace a profile, your passwords, cookies, and payment info will be replaced, while your bookmarks and history will be combined.",
-        confirmTitle: "Import as new profile",
-        cancelTitle: "Replace this profile",
+          "Import this data as a new Space to avoid data loss. If you replace a Space, your passwords, cookies, and payment info will be replaced, while your bookmarks and history will be combined.",
+        confirmTitle: "Import as new Space",
+        cancelTitle: "Replace this Space",
       });
       if (!confirmed) return clash;
     }

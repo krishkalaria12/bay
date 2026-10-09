@@ -7,7 +7,7 @@ import { useWindowId } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { NewTabExtras } from "./ntp";
 import { tourAnchorRef } from "./onboarding/tour/anchors";
-import { themeEditorOpen } from "./profiles/ThemeEditor";
+import { themeEditorOpen } from "./spaces/ThemeEditor";
 import { useHover } from "./primitives";
 
 // Restored blank tabs and Back to New Tab retain their tab and history. Search lives in the window palette.

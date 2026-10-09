@@ -2154,11 +2154,11 @@ try {
     const lights = () => evalApp(`return globalThis.expo.modules.BayCEF.devWindow(${windowNumber}, "lights")`);
     const before = await lights();
     const id = await evalApp(`return nn.store.getState().createProfile({ name: "Lights" })`);
-    await evalApp(`nn.actions.switchProfile("${s.windowId}", "${id}"); return true`);
+    await evalApp(`nn.actions.switchSpace("${s.windowId}", "${id}"); return true`);
     await until("profile shown", async () => (await state()).profileId === id);
     await sleep(500);
     const during = await lights();
-    await evalApp(`nn.actions.switchProfile("${s.windowId}", "${s.profileId}"); return true`);
+    await evalApp(`nn.actions.switchSpace("${s.windowId}", "${s.profileId}"); return true`);
     await until("profile back", async () => (await state()).profileId === s.profileId);
     await sleep(500);
     const after = await lights();
@@ -3009,10 +3009,10 @@ try {
       if (update2.kind !== "updateAddress") throw new Error(`second update offer ${JSON.stringify(update2)}`);
       const s = await state();
       profileB = await evalApp(`return nn.store.getState().createProfile({ name: "Prompts" })`);
-      await evalApp(`nn.actions.switchProfile(${JSON.stringify(s.windowId)}, ${JSON.stringify(profileB)}); return true`);
+      await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(profileB)}); return true`);
       await until("profile B shown", async () => (await state()).profileId === profileB);
       await sleep(1000);
-      await evalApp(`nn.actions.switchProfile(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`);
+      await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`);
       await until("profile A back", async () => (await state()).profileId === s.profileId && (await state()).active === first.id);
       await sleep(500);
       const kept = await appPrompt();
@@ -3734,10 +3734,10 @@ try {
       // Another Space.
       await fsEnter(tab.id, t);
       profileB = await evalApp(`return nn.store.getState().createProfile({ name: "Full screen" })`);
-      await evalApp(`nn.actions.switchProfile(${JSON.stringify(s.windowId)}, ${JSON.stringify(profileB)}); return true`);
+      await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(profileB)}); return true`);
       await until("the other Space shown", async () => (await state()).profileId === profileB);
       await fsLeft(tab.id, t, "the Space switch ended the page's full screen");
-      await evalApp(`nn.actions.switchProfile(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`);
+      await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`);
       await until("the first Space back", async () => (await state()).profileId === s.profileId && (await state()).active === tab.id);
       await sleep(500);
       out.space = { flag: await fsFlag(tab.id), element: await fsElement(t), window: await fsWindow(tab.id) };
@@ -3756,7 +3756,7 @@ try {
       await fsLeft(tab.id, t, "the split pane out of full screen");
       return out;
     } finally {
-      await evalApp(`nn.actions.switchProfile(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`).catch(() => null);
+      await evalApp(`nn.actions.switchSpace(${JSON.stringify(s.windowId)}, ${JSON.stringify(s.profileId)}); return true`).catch(() => null);
       if (profileB) await evalApp(`nn.store.getState().deleteProfile(${JSON.stringify(profileB)}); return true`).catch(() => null);
       await closeTab(tab.id);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
@@ -4209,7 +4209,7 @@ try {
     const s = await state();
     const id = await evalApp(`return nn.store.getState().createProfile({ name: "Work" })`);
     if (!id) throw new Error("no profile made");
-    await evalApp(`nn.actions.switchProfile("${s.windowId}", "${id}"); return true`);
+    await evalApp(`nn.actions.switchSpace("${s.windowId}", "${id}"); return true`);
     await until("profile shown", async () => (await state()).profileId === id);
     await evalApp(`nn.actions.openUrls(["${base}/cookie?B"], ${JSON.stringify(mainWindow)}); return true`);
     const tb = await until("cookie page in B", async () => (await state()).tabs.find((x) => x.profileId === id && x.url?.includes("/cookie")));
@@ -4220,7 +4220,7 @@ try {
     const cookieB = (await cdp(b, "Runtime.evaluate", { expression: "document.cookie", returnByValue: true })).result.value;
     if (cookieA.includes("who=B")) throw new Error("profile A sees B's cookie");
     const windows = await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`);
-    await evalApp(`nn.actions.switchProfile("${s.windowId}", "${s.profileId}"); return true`);
+    await evalApp(`nn.actions.switchSpace("${s.windowId}", "${s.profileId}"); return true`);
     return { profile: id, tab: tb.id, cookieB, cookieA, chromeWindows: windows.chromeWindows };
   });
 
@@ -4558,7 +4558,7 @@ try {
     await evalApp(`nn.actions.openUrls(["${base}/cookie?personal"], ${JSON.stringify(mainWindow)}); return true`);
     await until("Personal's cookie page", async () => (await state()).tabs.find((x) => !before.has(x.id) && x.title === "Cookie" && !x.loading), 10000);
     const play = await evalApp(`return nn.store.getState().createProfile({ name: "Play" })`);
-    await evalApp(`nn.actions.switchProfile("${s.windowId}", "${play}"); return true`);
+    await evalApp(`nn.actions.switchSpace("${s.windowId}", "${play}"); return true`);
     await until("Play shown", async () => (await state()).profileId === play);
     await evalApp(`nn.actions.openUrls(["${base}/cookie?play"], ${JSON.stringify(mainWindow)}); return true`);
     await until("Play's cookie page", async () => (await state()).tabs.find((x) => x.profileId === play && x.url?.includes("cookie?play") && !x.loading), 10000);
@@ -4610,7 +4610,7 @@ try {
     }, 90000);
     const windowId = await until("a window", async () => (await state()).windowId, 30000);
     mainWindow = windowId;
-    await evalApp(`nn.actions.switchProfile("${windowId}", "${personal}"); return true`);
+    await evalApp(`nn.actions.switchSpace("${windowId}", "${personal}"); return true`);
     await until("Personal shown", async () => (await state()).profileId === personal, 10000);
     const before = new Set((await state()).tabs.map((x) => x.id));
     await evalApp(`nn.actions.openUrls(["${base}/b?personal-again"], ${JSON.stringify(windowId)}); return true`);

@@ -5,9 +5,9 @@ import { openSettings, type SettingsPane } from "../settings/windows";
 
 const PANES: Record<string, SettingsPane> = {
   general: "general",
-  profiles: "profiles",
-  people: "profiles",
-  manageprofile: "profiles",
+  spaces: "spaces",
+  people: "spaces",
+  manageprofile: "spaces",
   sync: "sync",
   syncsetup: "sync",
   tabs: "tabs",

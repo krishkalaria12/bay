@@ -16,7 +16,7 @@ import { ExtensionsPane } from "./panes/Extensions";
 import { PasswordsPane } from "./panes/Passwords";
 import { AutofillPane } from "./panes/Autofill";
 import { PrivacyPane } from "./panes/Privacy";
-import { ProfileDetailsPane, ProfilesPane } from "./panes/Profiles";
+import { SpaceDetailsPane, SpacesPane } from "./panes/Spaces";
 import { SearchPane } from "./panes/Search";
 import { ShortcutsPane } from "./panes/Shortcuts";
 import { SyncPane } from "./panes/Sync";
@@ -39,7 +39,7 @@ const TABS: Tab[] = [
       { id: "search", title: "Search Engine" },
     ],
   },
-  { title: "Spaces", icon: "square.stack", panes: [{ id: "profiles", title: "Spaces" }] },
+  { title: "Spaces", icon: "square.stack", panes: [{ id: "spaces", title: "Spaces" }] },
   {
     title: "Appearance",
     icon: "circle.lefthalf.filled",
@@ -78,7 +78,7 @@ export function SettingsWindow() {
   const nav = useSettingsNav();
   const profileName = useBrowser((s) => (nav.profileId ? s.profiles[nav.profileId]?.name : undefined));
   const tab = tabOf(nav.pane);
-  const details = nav.pane === "profiles" && !!nav.profileId;
+  const details = nav.pane === "spaces" && !!nav.profileId;
   const title = details && profileName ? profileName : tab.title;
   const sheet = useSettingsSheet((s) => s.sheet);
   useEffect(() => trackSettingsSection(nav.pane), [nav.pane]);
@@ -126,7 +126,7 @@ function PaneHeader({ tab, details }: { tab: Tab; details: boolean }) {
   if (details) {
     return (
       <View style={{ flexDirection: "row", marginTop: 18 }}>
-        <Button title="All Spaces" kind="plain" icon="chevron.left" onPress={() => nav.go("profiles")} />
+        <Button title="All Spaces" kind="plain" icon="chevron.left" onPress={() => nav.go("spaces")} />
       </View>
     );
   }
@@ -144,8 +144,8 @@ function Pane({ pane, profileId }: { pane: SettingsPane; profileId: string | nul
   switch (pane) {
     case "general":
       return <GeneralPane />;
-    case "profiles":
-      return profileId ? <ProfileDetailsPane profileId={profileId} /> : <ProfilesPane />;
+    case "spaces":
+      return profileId ? <SpaceDetailsPane profileId={profileId} /> : <SpacesPane />;
     case "sync":
       return <SyncPane />;
     case "tabs":

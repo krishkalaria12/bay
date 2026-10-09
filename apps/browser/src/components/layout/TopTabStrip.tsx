@@ -7,7 +7,7 @@ import { layout } from "../../lib/constants";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { PageProfileContext, useIsActiveTab, usePageProfileId, useSettings, useTab, useTabLive, useWindowId, useWindowProfileId } from "../../store/hooks";
-import { ProfileIndicator, useProfileIndicatorWidth } from "../ProfileIndicator";
+import { SpaceIndicator, useSpaceIndicatorWidth } from "../SpaceIndicator";
 import { HoverSlot } from "../HoverSlot";
 import { IconButton, useHover } from "../primitives";
 import { clickTab } from "../sidebar/actions";
@@ -16,8 +16,8 @@ import { TabIcon } from "../sidebar/TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { GROUP_COLORS, useSidebarTokens, withAlpha } from "../sidebar/tokens";
 import { modifiersOf } from "./controls";
-import { usePageStyle, usePagerPages } from "./profilePager";
-import { ProfileSwipeArea } from "./ProfileSwipe";
+import { usePageStyle, usePagerPages } from "./spacePager";
+import { SpaceSwipeArea } from "./SpaceSwipe";
 import { openNewTabInSplit } from "./splitActions";
 import { setMeasuredWidth, useMeasuredWidths } from "./measuredWidths";
 import { usePeek } from "./usePeek";
@@ -86,8 +86,8 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
   const windowId = useWindowId();
   const current = useWindowProfileId();
   const { pages } = usePagerPages(windowId);
-  const profileChip = useProfileIndicatorWidth(STRIP_PROFILE_ROOM);
-  const controls = (profileChip ? profileChip + STRIP_CONTROLS_GAP : 0) + STRIP_DOWNLOADS_BOX;
+  const spaceChip = useSpaceIndicatorWidth(STRIP_PROFILE_ROOM);
+  const controls = (spaceChip ? spaceChip + STRIP_CONTROLS_GAP : 0) + STRIP_DOWNLOADS_BOX;
   const left = floating ? 8 : layout.trafficLightsWidth + STRIP_LIGHTS_GAP;
   const right = Math.max(84, controls + 8 + 6);
   const pageWidth = Math.max(0, width - left - right);
@@ -111,7 +111,7 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
           ))}
         </View>
         <View mouseDownCanMoveWindow={false} style={{ position: "absolute", right: 8, top: STRIP_MID - 17, flexDirection: "row", alignItems: "center", gap: STRIP_CONTROLS_GAP }}>
-          <ProfileIndicator room={STRIP_PROFILE_ROOM} />
+          <SpaceIndicator room={STRIP_PROFILE_ROOM} />
           <IconButton
             icon="arrow.down.circle"
             size={16}
@@ -124,7 +124,7 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
             }}
           />
         </View>
-        {swipe && <ProfileSwipeArea surface="strip" style={StyleSheet.absoluteFill} pageWidth={pageWidth + flare * 2} />}
+        {swipe && <SpaceSwipeArea surface="strip" style={StyleSheet.absoluteFill} pageWidth={pageWidth + flare * 2} />}
         {!floating && <StripDropHighlight left={left} right={right} />}
       </View>
     </FloatingStrip.Provider>

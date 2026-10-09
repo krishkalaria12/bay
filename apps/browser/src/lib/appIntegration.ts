@@ -21,7 +21,7 @@ import { trackAppVersion } from "../components/ntp/releaseNotes";
 import { openTaskManager } from "../components/taskManager/window";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { activeTabId, resolveWindowId, viewTabIds, windowTitle } from "../store/model";
-import { focus, openUrls, openWindow, switchProfile, switchToTab } from "./actions";
+import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions";
 import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
 import { webviews } from "./webviews";
 import { handleWebNotificationResponse } from "./webNotifications";
@@ -266,7 +266,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
       const windowId = resolveWindowId(s, null);
       if (!s.profiles[request.profileId]) throw new Error("That profile no longer exists.");
       if (!windowId || s.windows[windowId]!.incognito) throw new Error("There's no window to show the space in.");
-      return switchProfile(windowId, request.profileId);
+      return switchSpace(windowId, request.profileId);
     }
     case "execute": {
       tabOf(request.tabId);
