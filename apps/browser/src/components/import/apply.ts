@@ -97,14 +97,17 @@ export function openInWebStore(profileId: string, urls: string[]) {
   urls.forEach((url, i) => useBrowser.getState().newTab(windowId, { url, profileId, background: i > 0 }));
 }
 
-export function importTabs(profileId: string, tabs: Pick<ImportedTab, "url" | "title" | "pinned" | "customTitle">[], group: string | null): number {
-  const usable = tabs.filter((t) => /^(https?|file):/.test(t.url));
-  if (!usable.length) return 0;
+type TabDraft = Pick<ImportedTab, "url" | "title" | "pinned" | "customTitle">;
+
+const usable = (t: TabDraft) => /^(https?|file):/.test(t.url);
+
+/** Opens the tabs in the profile's window, unpinned ones in order after each other; the ids line up with `tabs`. */
+function openTabs(profileId: string, tabs: TabDraft[]): (string | null)[] {
   const windowId = windowFor(profileId);
   let s = useBrowser.getState();
-  const unpinned: string[] = [];
-  for (const t of usable) {
-    const after = t.pinned ? undefined : unpinned.at(-1);
+  let last: string | undefined;
+  const ids = tabs.map((t) => {
+    const after = t.pinned ? undefined : last;
     const [next, id] = withNewTab(s, windowId, {
       url: t.url,
       profileId,
@@ -113,33 +116,40 @@ export function importTabs(profileId: string, tabs: Pick<ImportedTab, "url" | "t
       snapshot: { title: t.title, customTitle: t.customTitle ?? null },
       index: after ? s.windows[windowId]!.tabIds.indexOf(after) + 1 : undefined,
     });
-    if (!id) continue;
+    if (!id) return null;
     s = { ...next, tabs: { ...next.tabs, [id]: { ...next.tabs[id]!, navigation: null } } };
-    if (!t.pinned) unpinned.push(id);
-  }
+    if (!t.pinned) last = id;
+    return id;
+  });
   useBrowser.setState(s);
-  if (group && unpinned.length) useBrowser.getState().createGroup(unpinned, { name: group });
-  return usable.length;
+  return ids;
 }
 
-export function importArcSpace(profileId: string, space: SpaceSuggestion, spaceName: string): { tabs: number; bookmarks: number } {
-  const links = space.pinned.filter((n) => n.type === "url" && n.url);
-  const folders = space.pinned.filter((n) => n.type === "folder");
-  let tabs = importTabs(
-    profileId,
-    links.map((n) => ({ url: n.url!, title: n.pageTitle ?? n.title, pinned: true, customTitle: n.pageTitle ? n.title : undefined })),
-    null,
-  );
-  tabs += importTabs(profileId, space.tabs.map((t) => ({ ...t, pinned: false })), "Imported");
-  let bookmarks = 0;
-  if (folders.length) {
-    const roots = useBrowser.getState().bookmarks.roots[profileId];
-    if (roots) {
-      useBrowser.getState().addBookmarkTree(profileId, [{ title: `${spaceName} (Arc)`, children: folders.map(toDraft) }], roots.bar);
-      bookmarks = linkCount(folders);
-    }
+export function importTabs(profileId: string, tabs: TabDraft[], group: string | null): number {
+  const fresh = tabs.filter(usable);
+  if (!fresh.length) return 0;
+  const ids = openTabs(profileId, fresh);
+  const unpinned = ids.filter((id, i): id is string => !!id && !fresh[i]!.pinned);
+  if (group && unpinned.length) useBrowser.getState().createGroup(unpinned, { name: group });
+  return fresh.length;
+}
+
+/** A space's pinned tabs become the Pinned section's rows, in Arc's order, and its folders the section's folders.
+ * Bay's folders don't nest: a folder inside one gives its tabs to the outer one. */
+export function importArcSpace(profileId: string, space: SpaceSuggestion): number {
+  const links = (n: ImportedNode): ImportedNode[] => (n.type === "url" ? (n.url ? [n] : []) : (n.children ?? []).flatMap(links));
+  const asTab = (n: ImportedNode): TabDraft => ({ url: n.url!, title: n.pageTitle ?? n.title, pinned: false, customTitle: n.pageTitle ? n.title : undefined });
+  const entries = space.pinned.map((n) => ({ folder: n.type === "folder" ? n.title : null, tabs: links(n).map(asTab).filter(usable) }));
+  const ids = openTabs(profileId, entries.flatMap((e) => e.tabs));
+  const rows = ids.filter((id): id is string => !!id);
+  if (rows.length) useBrowser.getState().pinRows(rows, true);
+  const windowId = rows.length ? useBrowser.getState().tabs[rows[0]!]!.windowId : windowFor(profileId);
+  let at = 0;
+  for (const e of entries) {
+    const members = ids.slice(at, (at += e.tabs.length)).filter((id): id is string => !!id);
+    if (e.folder !== null) useBrowser.getState().newPinnedFolder(windowId, { tabIds: members, name: e.folder });
   }
-  return { tabs, bookmarks };
+  return rows.length + importTabs(profileId, space.tabs.map((t) => ({ ...t, pinned: false })), "Imported");
 }
 
 function pageKey(url: string): string {

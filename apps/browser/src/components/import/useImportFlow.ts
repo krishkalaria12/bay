@@ -201,8 +201,7 @@ export function useImportFlow() {
           const name = space.name || "Space";
           const spaceDest = await destination(destinationIndex++, name, space.color, space.emoji);
           if (first === null) first = spaceDest;
-          const r = importArcSpace(spaceDest, space, name);
-          add({ ...emptyCounts(), tabs: r.tabs, bookmarks: r.bookmarks });
+          add({ ...emptyCounts(), tabs: importArcSpace(spaceDest, space) });
         }
         dest = first ?? (await destination(destinationIndex++, result.profile?.name ?? profile.name, result.profile?.color));
       } else {
