@@ -295,7 +295,7 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
                           ))}
                           <Tail id="tail:pinned" section="pinned" />
                         </View>
-                        <PinnedDivider />
+                        <PinnedDivider shown={pinned.length > 0} />
                         <View
                           ref={(v) => {
                             controller?.regions.set("pinnedGroups", v);
@@ -365,8 +365,9 @@ const PinnedEntry = memo(function PinnedEntry({ entry }: { entry: string }) {
   return entry.startsWith("f:") ? <FolderBlock folderId={id} /> : <TabRowItem tabId={id} section="pinned" />;
 });
 
-// The line under the Pinned section: dropping a tab above its middle pins it, so it's there with nothing pinned too.
-function PinnedDivider() {
+// The line under the Pinned section: dropping a tab above its middle pins it. With nothing pinned there's no line,
+// and no room: a tab dropped above the list's first row is pinned.
+function PinnedDivider({ shown }: { shown: boolean }) {
   const tokens = useSidebarTokens();
   const controller = useDragController();
   return (
@@ -374,9 +375,9 @@ function PinnedDivider() {
       ref={(v) => {
         controller?.regions.set("divider", v);
       }}
-      style={{ paddingVertical: PINNED_DIVIDER_PAD, paddingHorizontal: 9 }}
+      style={{ paddingVertical: shown ? PINNED_DIVIDER_PAD : 0, paddingHorizontal: 9 }}
     >
-      <View style={{ height: 1, borderRadius: 0.5, backgroundColor: tokens.separator }} />
+      {shown ? <View style={{ height: 1, borderRadius: 0.5, backgroundColor: tokens.separator }} /> : null}
     </View>
   );
 }
