@@ -3,7 +3,7 @@ import { orderSections, syncGroupOrder } from "./groups";
 import { IDLE_LIVE, makeTab, newId, pinnedPage } from "./model";
 import { samePage } from "./organize";
 import type { HeldPins } from "./parkedPins";
-import { dataIdOf } from "./profiles";
+import { profileIdOf } from "./spaces";
 import { removeTabs } from "./tabs";
 import type { BrowserWindow, PinnedFolder, Tab } from "./types";
 
@@ -24,9 +24,9 @@ type Folder = { key: string; name: string; icon: string | null; createdAt: numbe
 type Layout = { pins: Pin[]; folders: Folder[] };
 type View = { layouts: Map<string, Map<string, Layout>>; sigs: Map<string, Map<string, string>> };
 
-const dataOf = (s: Pick<BrowserState, "profiles">, profileId: string) => {
-  const p = s.profiles[profileId];
-  return p ? dataIdOf(p) : undefined;
+const profileOf = (s: Pick<BrowserState, "spaces">, spaceId: string) => {
+  const p = s.spaces[spaceId];
+  return p ? profileIdOf(p) : undefined;
 };
 
 // A window's pins by scope: "t:<profile>" its favourites, "r:<space>" a space's pinned rows and folders. The window
@@ -39,28 +39,28 @@ function layoutsOf(s: BrowserState, w: BrowserWindow): Map<string, Layout> {
     return layout;
   };
   const joined = new Set<string>();
-  const join = (profileId: string) => {
-    if (joined.has(profileId)) return;
-    joined.add(profileId);
-    const data = dataOf(s, profileId);
+  const join = (spaceId: string) => {
+    if (joined.has(spaceId)) return;
+    joined.add(spaceId);
+    const data = profileOf(s, spaceId);
     if (data === undefined) return;
     scope(`t:${data}`);
-    scope(`r:${profileId}`);
+    scope(`r:${spaceId}`);
   };
-  join(w.profileId);
+  join(w.spaceId);
   const folders = new Map<string, PinnedFolder>();
-  for (const f of Object.values(s.pinnedFolders)) if (f.windowId === w.id && s.profiles[f.profileId]) folders.set(f.id, f);
+  for (const f of Object.values(s.pinnedFolders)) if (f.windowId === w.id && s.spaces[f.spaceId]) folders.set(f.id, f);
   for (const id of w.tabIds) {
     const t = s.tabs[id];
     if (!t) continue;
-    join(t.profileId);
-    const data = pinnedPage(t) ? dataOf(s, t.profileId) : undefined;
+    join(t.spaceId);
+    const data = pinnedPage(t) ? profileOf(s, t.spaceId) : undefined;
     if (data === undefined) continue;
     const folder = !t.pinned && t.folderId ? folders.get(t.folderId) : undefined;
-    scope(t.pinned ? `t:${data}` : `r:${t.profileId}`).pins.push({
+    scope(t.pinned ? `t:${data}` : `r:${t.spaceId}`).pins.push({
       key: pinKeyOf(t),
       row: !t.pinned,
-      folder: folder && folder.profileId === t.profileId ? folderKeyOf(folder) : null,
+      folder: folder && folder.spaceId === t.spaceId ? folderKeyOf(folder) : null,
       home: t.pinnedUrl || t.url,
       customTitle: t.customTitle,
       customIcon: t.customIcon,
@@ -68,7 +68,7 @@ function layoutsOf(s: BrowserState, w: BrowserWindow): Map<string, Layout> {
     });
   }
   for (const f of folders.values()) {
-    scope(`r:${f.profileId}`).folders.push({ key: folderKeyOf(f), name: f.name, icon: f.icon, createdAt: f.createdAt, collapsed: f.collapsed });
+    scope(`r:${f.spaceId}`).folders.push({ key: folderKeyOf(f), name: f.name, icon: f.icon, createdAt: f.createdAt, collapsed: f.collapsed });
   }
   return out;
 }
@@ -129,7 +129,7 @@ function merged(list: Layout[]): Layout {
  * to a space (and a launch, when every window is) adds what it has that the others don't.
  */
 export function mirrorPins(s: BrowserState, prev: BrowserState): BrowserState | null {
-  if (s.tabs === prev.tabs && s.windows === prev.windows && s.pinnedFolders === prev.pinnedFolders && s.profiles === prev.profiles) return null;
+  if (s.tabs === prev.tabs && s.windows === prev.windows && s.pinnedFolders === prev.pinnedFolders && s.spaces === prev.spaces) return null;
   const was = viewOf(prev);
   const now = viewOf(s);
   if (now.layouts.size < 2) return null;
@@ -176,7 +176,7 @@ function applyLayouts(s: BrowserState, windowId: string, current: Map<string, La
   const pool = [...wanted.keys()].flatMap((scope) => current.get(scope)?.pins ?? []);
   const unused = new Set(pool.map((p) => p.tabId));
   const take = (p: Pin, data: string | undefined, folder: string | null) => {
-    const free = pool.filter((x) => unused.has(x.tabId) && dataOf(s, tabs[x.tabId]!.profileId) === data);
+    const free = pool.filter((x) => unused.has(x.tabId) && profileOf(s, tabs[x.tabId]!.spaceId) === data);
     const found = free.find((x) => x.key === p.key) ?? free.find((x) => x.row === p.row && x.folder === folder && samePage(x.home, p.home));
     if (found) unused.delete(found.tabId);
     return found ? tabs[found.tabId] : undefined;
@@ -184,16 +184,16 @@ function applyLayouts(s: BrowserState, windowId: string, current: Map<string, La
 
   for (const [scope, layout] of wanted) {
     const space = scope.startsWith("r:") ? scope.slice(2) : null;
-    const data = space ? dataOf(s, space) : scope.slice(2);
+    const data = space ? profileOf(s, space) : scope.slice(2);
     const folderIds = new Map<string, string>();
     if (space) {
-      const own = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.profileId === space);
+      const own = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.spaceId === space);
       const free = new Set(own.map((f) => f.id));
       for (const f of layout.folders) {
         const mine = own.find((x) => free.has(x.id) && folderKeyOf(x) === f.key) ?? own.find((x) => free.has(x.id) && x.name === f.name);
         const id = mine?.id ?? newId("pf");
         free.delete(id);
-        const base: PinnedFolder = mine ? { ...mine } : { id, windowId, profileId: space, name: f.name, icon: f.icon, collapsed: f.collapsed, createdAt: f.createdAt };
+        const base: PinnedFolder = mine ? { ...mine } : { id, windowId, spaceId: space, name: f.name, icon: f.icon, collapsed: f.collapsed, createdAt: f.createdAt };
         delete base.key;
         // Its createdAt places it as the others' when it's empty (components/sidebar/entries.ts).
         pinnedFolders[id] = { ...base, ...(f.key === id ? {} : { key: f.key }), name: f.name, icon: f.icon, createdAt: f.createdAt };
@@ -211,12 +211,12 @@ function applyLayouts(s: BrowserState, windowId: string, current: Map<string, La
       if (t) {
         const { pinnedRow: _r, folderId: _f, pinKey: _k, ...rest } = t;
         const asleep = !t.navigation && !t.adoptId;
-        const page = asleep && t.url && !samePage(t.url, p.home) ? pageOf(s, p, t.profileId) : {};
-        tabs[id] = { ...rest, ...shape, ...marks, ...page, profileId: space ?? t.profileId };
+        const page = asleep && t.url && !samePage(t.url, p.home) ? pageOf(s, p, t.spaceId) : {};
+        tabs[id] = { ...rest, ...shape, ...marks, ...page, spaceId: space ?? t.spaceId };
       } else {
         const source = s.tabs[p.tabId];
-        const owner = space ?? source?.profileId;
-        if (!owner || !s.profiles[owner]) continue;
+        const owner = space ?? source?.spaceId;
+        if (!owner || !s.spaces[owner]) continue;
         tabs[id] = {
           ...makeTab(windowId, owner, p.home, { ...pageOf(s, p, owner), ...shape, muted: false, zoom: source?.zoom ?? 1 }),
           ...marks,
@@ -254,10 +254,10 @@ function applyLayouts(s: BrowserState, windowId: string, current: Map<string, La
 }
 
 // What a pin's tab shows before it loads: its page's title and icon, from its source tab or the history.
-function pageOf(s: BrowserState, p: Pin, profileId: string): Pick<Tab, "url" | "title" | "favicon"> {
+function pageOf(s: BrowserState, p: Pin, spaceId: string): Pick<Tab, "url" | "title" | "favicon"> {
   const source = s.tabs[p.tabId];
   if (source && (!source.url || samePage(source.url, p.home))) return { url: p.home, title: source.title, favicon: source.favicon };
-  const entry = (s.history[profileId] ?? []).find((h) => samePage(h.url, p.home));
+  const entry = (s.history[spaceId] ?? []).find((h) => samePage(h.url, p.home));
   return { url: p.home, title: entry?.title ?? source?.title ?? "", favicon: entry?.favicon ?? source?.favicon ?? null };
 }
 
@@ -266,9 +266,9 @@ export function pinsHeldElsewhere(s: BrowserState, windowId: string): HeldPins {
   const spaces = new Set<string>();
   for (const w of Object.values(s.windows)) {
     if (w.id === windowId || !mirrorsPins(w)) continue;
-    spaces.add(w.profileId);
-    for (const id of w.tabIds) if (s.tabs[id]) spaces.add(s.tabs[id]!.profileId);
+    spaces.add(w.spaceId);
+    for (const id of w.tabIds) if (s.tabs[id]) spaces.add(s.tabs[id]!.spaceId);
   }
-  const data = new Set([...spaces].map((p) => dataOf(s, p)).filter((d) => d !== undefined));
-  return { tiles: (profileId) => data.has(dataOf(s, profileId) ?? ""), rows: (profileId) => spaces.has(profileId) };
+  const data = new Set([...spaces].map((p) => profileOf(s, p)).filter((d) => d !== undefined));
+  return { tiles: (spaceId) => data.has(profileOf(s, spaceId) ?? ""), rows: (spaceId) => spaces.has(spaceId) };
 }

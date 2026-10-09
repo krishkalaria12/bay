@@ -1,7 +1,7 @@
 import { appUrlOrigin, displayHost } from "@bay/core";
 import type { BrowserState } from "./browser";
-import { DEFAULT_PROFILE_ID } from "./constants";
-import type { BrowserWindow, Profile, Tab, TabLive, TabSnapshot } from "./types";
+import { DEFAULT_SPACE_ID } from "./constants";
+import type { BrowserWindow, Space, Tab, TabLive, TabSnapshot } from "./types";
 
 
 const launch = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -11,20 +11,20 @@ export const newId = (prefix: string) => `${prefix}-${launch}-${(++counter).toSt
 let navSeq = 0;
 export const navigationTo = (url: string, userInitiated = false) => ({ url, seq: ++navSeq, ...(userInitiated ? { userInitiated } : {}) });
 
-export const incognitoProfileId = (windowId: string) => `incognito:${windowId}`;
-export const isIncognitoProfile = (profileId: string) => profileId.startsWith("incognito:");
+export const incognitoSpaceId = (windowId: string) => `incognito:${windowId}`;
+export const isIncognitoSpace = (spaceId: string) => spaceId.startsWith("incognito:");
 
-let sharedDataIds: Record<string, string> = {};
-export const setSharedDataIds = (map: Record<string, string>) => {
-  sharedDataIds = map;
+let spaceProfiles: Record<string, string> = {};
+export const setSpaceProfiles = (map: Record<string, string>) => {
+  spaceProfiles = map;
 };
 
-export const engineProfile = (profileId: string) => {
-  const id = sharedDataIds[profileId] ?? profileId;
-  return id === DEFAULT_PROFILE_ID ? "" : id;
+export const engineProfile = (spaceId: string) => {
+  const id = spaceProfiles[spaceId] ?? spaceId;
+  return id === DEFAULT_SPACE_ID ? "" : id;
 };
 
-export const INCOGNITO_PROFILE: Profile = { id: "incognito", name: "Incognito", color: "neutral", icon: null, createdAt: 0 };
+export const INCOGNITO_SPACE: Space = { id: "incognito", name: "Incognito", color: "neutral", icon: null, createdAt: 0 };
 
 export const IDLE_LIVE: TabLive = {
   isLoading: false,
@@ -35,12 +35,12 @@ export const IDLE_LIVE: TabLive = {
   themeColor: null,
 };
 
-export function makeTab(windowId: string, profileId: string, url = "", snapshot?: Partial<TabSnapshot>): Tab {
+export function makeTab(windowId: string, spaceId: string, url = "", snapshot?: Partial<TabSnapshot>): Tab {
   const now = Date.now();
   return {
     id: newId("tab"),
     windowId,
-    profileId,
+    spaceId,
     url,
     title: "",
     favicon: null,
@@ -73,7 +73,7 @@ export const snapshotTab = (t: Tab): TabSnapshot => ({
   customTitle: t.customTitle,
   customIcon: t.customIcon,
   pinnedUrl: t.pinnedUrl,
-  profileId: t.profileId,
+  spaceId: t.spaceId,
   ...(t.pinnedRow ? { pinnedRow: true } : {}),
 });
 
@@ -99,42 +99,42 @@ export function inPinnedContainer(s: Pick<BrowserState, "tabs" | "groups">, id: 
   return false;
 }
 
-export function viewTabIds(s: BrowserState, windowId: string, profileId?: string): string[] {
+export function viewTabIds(s: BrowserState, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
   if (!w) return [];
-  const profile = profileId ?? w.profileId;
-  return w.tabIds.filter((id) => s.tabs[id]?.profileId === profile);
+  const profile = spaceId ?? w.spaceId;
+  return w.tabIds.filter((id) => s.tabs[id]?.spaceId === profile);
 }
 
 /** Two spaces with the same profile (its data): as Arc, they share their favourites (the pinned tiles). */
-export function sharesProfile(s: Pick<BrowserState, "profiles">, a: string, b: string): boolean {
-  const pa = s.profiles[a];
-  const pb = s.profiles[b];
-  return !!pa && !!pb && (pa.dataId ?? pa.id) === (pb.dataId ?? pb.id);
+export function sharesProfile(s: Pick<BrowserState, "spaces">, a: string, b: string): boolean {
+  const pa = s.spaces[a];
+  const pb = s.spaces[b];
+  return !!pa && !!pb && (pa.profileId ?? pa.id) === (pb.profileId ?? pb.id);
 }
 
 /** A space's favourites: the window's pinned tiles of every space that shares its profile, in the window's order. */
-export function favoriteTabIds(s: BrowserState, windowId: string, profileId?: string): string[] {
+export function favoriteTabIds(s: BrowserState, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
   if (!w) return [];
-  const profile = profileId ?? w.profileId;
+  const profile = spaceId ?? w.spaceId;
   return w.tabIds.filter((id) => {
     const t = s.tabs[id];
-    return !!t?.pinned && (t.profileId === profile || sharesProfile(s, t.profileId, profile));
+    return !!t?.pinned && (t.spaceId === profile || sharesProfile(s, t.spaceId, profile));
   });
 }
 
 export function closesWindow(s: BrowserState, id: string): boolean {
   const tab = s.tabs[id];
   const w = tab && s.windows[tab.windowId];
-  if (!tab || !w || tab.profileId !== w.profileId || inPinnedContainer(s, id)) return false;
+  if (!tab || !w || tab.spaceId !== w.spaceId || inPinnedContainer(s, id)) return false;
   return viewTabIds(s, w.id).every((t) => t === id || s.tabs[t]!.unloaded);
 }
 
-export function activeTabId(s: BrowserState, windowId: string, profileId?: string): string | undefined {
+export function activeTabId(s: BrowserState, windowId: string, spaceId?: string): string | undefined {
   const w = s.windows[windowId];
   if (!w) return undefined;
-  const id = w.activeTabIds[profileId ?? w.profileId];
+  const id = w.activeTabIds[spaceId ?? w.spaceId];
   return id && s.tabs[id]?.windowId === windowId ? id : undefined;
 }
 
@@ -143,12 +143,12 @@ export function activeTab(s: BrowserState, windowId: string): Tab | undefined {
   return id ? s.tabs[id] : undefined;
 }
 
-export function profileFor(s: BrowserState, profileId: string): Profile {
-  return isIncognitoProfile(profileId) ? INCOGNITO_PROFILE : (s.profiles[profileId] ?? s.profiles[s.settings.defaultProfileId] ?? INCOGNITO_PROFILE);
+export function spaceFor(s: BrowserState, spaceId: string): Space {
+  return isIncognitoSpace(spaceId) ? INCOGNITO_SPACE : (s.spaces[spaceId] ?? s.spaces[s.settings.defaultSpaceId] ?? INCOGNITO_SPACE);
 }
 
-export function bookmarkProfileId(s: BrowserState, window: BrowserWindow | undefined): string {
-  return !window || window.incognito ? s.settings.defaultProfileId : window.profileId;
+export function bookmarkSpaceId(s: BrowserState, window: BrowserWindow | undefined): string {
+  return !window || window.incognito ? s.settings.defaultSpaceId : window.spaceId;
 }
 
 export function resolveWindowId(s: BrowserState, id?: string | null): string | undefined {
@@ -200,5 +200,5 @@ export function windowTitle(s: BrowserState, windowId: string): string {
   const tab = activeTab(s, windowId);
   const others = viewTabIds(s, windowId).length - 1;
   const label = tab ? tabLabel(tab) : "New Tab";
-  return `${profileFor(s, w.profileId).name} — ${label}${others > 0 ? ` & ${plural(others, "Tab")}` : ""}`;
+  return `${spaceFor(s, w.spaceId).name} — ${label}${others > 0 ? ` & ${plural(others, "Tab")}` : ""}`;
 }

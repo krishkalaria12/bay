@@ -12,8 +12,8 @@ export async function requestAutofill(windowId: string, arg: string | null) {
   if (browserId && (await showAutofillSuggestions(browserId, passwords ? "passwords" : "field"))) return;
   const s = useBrowser.getState();
   const w = s.windows[windowId];
-  const profileId = w && !w.incognito && s.profiles[w.profileId] ? w.profileId : null;
-  openSettings(passwords ? "passwords" : "autofill", profileId);
+  const spaceId = w && !w.incognito && s.spaces[w.spaceId] ? w.spaceId : null;
+  openSettings(passwords ? "passwords" : "autofill", spaceId);
 }
 
 const BADGES: Record<CardNetwork, { label: string; fill: string; text: string }> = {

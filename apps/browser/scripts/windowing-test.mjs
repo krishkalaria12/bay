@@ -52,7 +52,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const tab = (id, windowId, url, createdAt) => ({ id, windowId, url, title: url ? id : "", createdAt, lastActiveAt: createdAt });
 // Frames are AppKit's (from the bottom of the screen); w2 sits clear of w1, to the right.
 const fixture = () => session({
-  profiles: [{ id: "default", name: "Personal", color: "plum" }],
+  spaces: [{ id: "default", name: "Personal", color: "plum" }],
   settings: { tabLayout: "sidebar" },
   windows: [
     { id: "w1", tabIds: ["n1", "g1", "b1", "n2"], activeTabIds: { default: "g1" }, frame: [40, 222, 1000, 700] },

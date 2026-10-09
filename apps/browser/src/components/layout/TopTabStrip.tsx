@@ -6,7 +6,7 @@ import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { PageProfileContext, useIsActiveTab, usePageProfileId, useSettings, useTab, useTabLive, useWindowId, useWindowProfileId } from "../../store/hooks";
+import { PageSpaceContext, useIsActiveTab, usePageSpaceId, useSettings, useTab, useTabLive, useWindowId, useWindowSpaceId } from "../../store/hooks";
 import { SpaceIndicator, useSpaceIndicatorWidth } from "../SpaceIndicator";
 import { HoverSlot } from "../HoverSlot";
 import { IconButton, useHover } from "../primitives";
@@ -84,7 +84,7 @@ type Entry = { kind: "dock"; ids: string[] } | GroupEntry | Member;
 // `swipe`: the strip pages profiles; a hidden peek's doesn't, or switching profiles would wait on its pager.
 export function TopTabStrip({ width, floating = false, hidden = false, swipe = true }: { width: number; floating?: boolean; hidden?: boolean; swipe?: boolean }) {
   const windowId = useWindowId();
-  const current = useWindowProfileId();
+  const current = useWindowSpaceId();
   const { pages } = usePagerPages(windowId);
   const spaceChip = useSpaceIndicatorWidth(STRIP_PROFILE_ROOM);
   const controls = (spaceChip ? spaceChip + STRIP_CONTROLS_GAP : 0) + STRIP_DOWNLOADS_BOX;
@@ -107,7 +107,7 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
             download button, so tabs scrolled past the end never show under them. */}
         <View style={{ position: "absolute", left: left - flare, right: Math.max(right - flare, controls + 8), top: 0, bottom: 0, overflow: "hidden" }}>
           {pages.map((page) => (
-            <StripPage key={page.id} profileId={page.id} slot={page.slot} pageWidth={pageWidth} current={page.id === current} resting={!!page.resting} />
+            <StripPage key={page.id} spaceId={page.id} slot={page.slot} pageWidth={pageWidth} current={page.id === current} resting={!!page.resting} />
           ))}
         </View>
         <View mouseDownCanMoveWindow={false} style={{ position: "absolute", right: 8, top: STRIP_MID - 17, flexDirection: "row", alignItems: "center", gap: STRIP_CONTROLS_GAP }}>
@@ -213,14 +213,14 @@ function IncomingGap({ open, width, origin }: { open: boolean; width: number; or
   return <Animated.View ref={origin} pointerEvents="none" style={[{ height: TOP_STRIP_HEIGHT }, roomStyle]} />;
 }
 
-function StripPage({ profileId, slot, pageWidth, current, resting }: { profileId: string; slot: number; pageWidth: number; current: boolean; resting: boolean }) {
+function StripPage({ spaceId, slot, pageWidth, current, resting }: { spaceId: string; slot: number; pageWidth: number; current: boolean; resting: boolean }) {
   const windowId = useWindowId();
   const flare = useContext(FloatingStrip) ? 0 : STRIP_FLARE;
   // Pages sit their whole width apart, flares included: only a page's width apart, the next profile's selected tab
   // and its flare showed at the clip's end, under the profile chip.
   const pageStyle = usePageStyle(windowId, slot, pageWidth + flare * 2);
-  const entries = useBrowser((s) => stripEntries(s, windowId, profileId));
-  const activeId = useBrowser((s) => s.windows[windowId]?.activeTabIds[profileId] ?? "");
+  const entries = useBrowser((s) => stripEntries(s, windowId, spaceId));
+  const activeId = useBrowser((s) => s.windows[windowId]?.activeTabIds[spaceId] ?? "");
   const parsed = parseEntries(entries);
   // Each group's chip as measured (its name's width), so the tabs' width leaves it room. Kept for the session: a strip
   // mounting again (the peek, a layout or sidebar switch) lays out right at once. A new group shows once it's measured.
@@ -270,7 +270,7 @@ function StripPage({ profileId, slot, pageWidth, current, resting }: { profileId
       pointerEvents={current ? "auto" : "none"}
       style={[{ position: "absolute", left: 0, top: 0, bottom: 0, width: pageWidth + flare * 2, display: resting ? "none" : "flex" }, pageStyle]}
     >
-      <PageProfileContext.Provider value={profileId}>
+      <PageSpaceContext.Provider value={spaceId}>
         <ThemeScope>
           <DockContext.Provider value={strip}>
             <ScrollView
@@ -308,7 +308,7 @@ function StripPage({ profileId, slot, pageWidth, current, resting }: { profileId
             </ScrollView>
           </DockContext.Provider>
         </ThemeScope>
-      </PageProfileContext.Provider>
+      </PageSpaceContext.Provider>
     </Animated.View>
   );
 }
@@ -555,7 +555,7 @@ function reorder(ids: string[], { geometry, from, pinned, groupId }: StripDrag, 
   const to = dropIndex(geometry, from, dx);
   if (ids.length === 1) {
     // One tab: its place among the section's tabs (which keeps it in or out of its group as it was).
-    const section = w.tabIds.filter((id) => s.tabs[id]?.profileId === tab.profileId && !!s.tabs[id]?.pinned === pinned);
+    const section = w.tabIds.filter((id) => s.tabs[id]?.spaceId === tab.spaceId && !!s.tabs[id]?.pinned === pinned);
     const index = moveIndex(section, tab.id, geometry.slots, from, to);
     if (index === null) return false;
     s.moveTab(tab.id, index);
@@ -914,7 +914,7 @@ function StripGroup({
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const windowId = useWindowId();
-  const profileId = usePageProfileId();
+  const spaceId = usePageSpaceId();
   const group = useBrowser((s) => s.groups[entry.id]);
   const { hovered, hoverProps } = useHover();
   const expanded = !entry.collapsed;
@@ -924,7 +924,7 @@ function StripGroup({
   const { offsets, width } = groupLayout(chipSize, widths, STRIP_GAP, expanded, shown);
   // Inside an open group, a member trades places with the other members only.
   const members = dragGeometry(entry.members.map((m, i) => ({ tabIds: tabsOf(m), width: widths[i]! })), STRIP_GAP);
-  const tuckable = useBrowser((s) => !expanded && shown >= 0 && !!tuckTarget(s, windowId, profileId, entry.id));
+  const tuckable = useBrowser((s) => !expanded && shown >= 0 && !!tuckTarget(s, windowId, spaceId, entry.id));
   const open = useSharedValue(expanded ? 1 : 0);
   const size = useSharedValue(width);
   const state = `${expanded}:${shown >= 0 ? entry.members[shown]!.id : ""}`;
@@ -991,7 +991,7 @@ function StripGroup({
   const divider = theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)";
   const tuck = () => {
     const s = useBrowser.getState();
-    const target = tuckTarget(s, windowId, profileId, entry.id);
+    const target = tuckTarget(s, windowId, spaceId, entry.id);
     if (target) s.activate(target);
   };
   return (
@@ -1120,8 +1120,8 @@ function GroupGlyph({ color }: { color: string }) {
 function SplitChip({ tabIds, width, geometry, from, group }: { tabIds: string[]; width: number; geometry: DragGeometry; from: number; group: string | null }) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const profileId = usePageProfileId();
-  const focusedId = useBrowser((s) => s.windows[windowId]?.activeTabIds[profileId] ?? "");
+  const spaceId = usePageSpaceId();
+  const focusedId = useBrowser((s) => s.windows[windowId]?.activeTabIds[spaceId] ?? "");
   const active = tabIds.includes(focusedId);
   // Each pane has its own card and toolbar; the tab takes the focused pane's colour.
   const { band, palette } = useWebsiteBand(active ? focusedId : tabIds[0]!);
@@ -1159,7 +1159,7 @@ function SplitPart({ tabId, first, ink }: { tabId: string; first: boolean; ink: 
         {!first && <View style={{ width: StyleSheet.hairlineWidth, height: 16, marginHorizontal: 6, backgroundColor: ink?.divider ?? theme.textTertiary }} />}
         <Pressable onPress={() => useBrowser.getState().activate(tab.id)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }} tooltip={tab.title || tab.url}>
           <View pointerEvents="none">
-            <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} profileId={tab.profileId} />
+            <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} spaceId={tab.spaceId} />
           </View>
           <FadeLabel text={tab.customTitle || tab.title || tab.url || "New Tab"} fontSize={12} color={ink ? (focused ? ink.text : ink.secondary) : focused ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 16, marginLeft: 5 }} />
         </Pressable>

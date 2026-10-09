@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { engineProfile, plural } from "../../../store/model";
 import { importModule } from "../../import/module";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
@@ -38,10 +38,10 @@ function passwordManagerAppsNote() {
 const unlockedUntil = new Map<string, number>();
 const isUnlocked = (profile: string) => Date.now() < (unlockedUntil.get(profile) ?? 0);
 
-export function PasswordsPane({ profileId: initial }: { profileId?: string | null }) {
+export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => initial ?? useBrowser.getState().settings.defaultProfileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
   const [, setUnlockedAt] = useState(0);
   const [list, setList] = useState<SavedPassword[] | null>(null);
   const [never, setNever] = useState<string[]>([]);
@@ -49,7 +49,7 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
   const [query, setQuery] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [exportStatus, setExportStatus] = useState("");
-  const profile = engineProfile(profileId);
+  const profile = engineProfile(spaceId);
   const unlocked = isUnlocked(profile);
 
   const load = () => {
@@ -58,7 +58,7 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
   };
   useEffect(() => {
     if (unlocked) load();
-  }, [unlocked, profileId]);
+  }, [unlocked, spaceId]);
   useEffect(() => void getPasswordAutofill(profile).then(setAutofill).catch(() => {}), [profile]);
 
   const unlock = async () => {
@@ -99,7 +99,7 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
         description="Saved on this Mac, separately for each profile, and encrypted with a key in your Keychain."
         action={
           profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
+            <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} />
           ) : undefined
         }
       />

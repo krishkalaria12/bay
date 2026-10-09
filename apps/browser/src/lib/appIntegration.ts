@@ -86,7 +86,7 @@ export async function diagnostics(): Promise<string> {
     engine ? `Engine: NNCore, Chromium ${engine.chromiumVersion}` : "Engine: unavailable",
     `macOS ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
     `Bundle: ${app.bundleId}, locale ${app.locale}`,
-    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, profiles: ${s.profileOrder.length}`,
+    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, profiles: ${s.spaceOrder.length}`,
     !updates?.available
       ? "Updates: not built in"
       : !updates.configured
@@ -146,7 +146,7 @@ function scriptState(s: BrowserState): ScriptState {
       return {
         id,
         title: windowTitle(s, id),
-        profileId: w.profileId,
+        profileId: w.spaceId,
         incognito: w.incognito,
         activeTabId: activeTabId(s, id) ?? null,
         tabs: viewTabIds(s, id).map((tabId) => {
@@ -161,7 +161,7 @@ function scriptState(s: BrowserState): ScriptState {
         }),
       };
     }),
-    profiles: s.profileOrder.map((id) => ({ id, name: s.profiles[id]!.name })),
+    profiles: s.spaceOrder.map((id) => ({ id, name: s.spaces[id]!.name })),
   };
 }
 
@@ -176,7 +176,7 @@ function startScripting() {
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
   useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs && s.windows === prev.windows && s.live === prev.live && s.profiles === prev.profiles) return;
+    if (s.tabs === prev.tabs && s.windows === prev.windows && s.live === prev.live && s.spaces === prev.spaces) return;
     timer ??= setTimeout(() => {
       timer = undefined;
       void push();
@@ -212,7 +212,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
   };
   switch (request.command) {
     case "newWindow": {
-      const windowId = openWindow({ url: request.url, incognito: request.incognito, profileId: request.profileId });
+      const windowId = openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
       return { windowId };
     }
     case "newTab": {
@@ -264,7 +264,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
     }
     case "focusProfile": {
       const windowId = resolveWindowId(s, null);
-      if (!s.profiles[request.profileId]) throw new Error("That profile no longer exists.");
+      if (!s.spaces[request.profileId]) throw new Error("That profile no longer exists.");
       if (!windowId || s.windows[windowId]!.incognito) throw new Error("There's no window to show the space in.");
       return switchSpace(windowId, request.profileId);
     }

@@ -150,7 +150,7 @@ export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId
     <Animated.View pointerEvents="none" style={[{ overflow: "hidden" }, style]}>
       <View style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}>
         {active && <SelectedFill borderWidth={0.5} />}
-        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
+        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
         <FadeLabel text={tabTitle(tab)} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
       </View>
     </Animated.View>

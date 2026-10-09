@@ -6,8 +6,8 @@ import { isSmall, mainWindowFor } from "../../store/small";
 const store = () => useBrowser.getState();
 
 // ⌘⌥N, and links from other apps. Without a page the bar's field opens, ready to type.
-export function openLittleBay(url?: string, profileId?: string): string {
-  const id = store().createWindow({ small: true, url, profileId });
+export function openLittleBay(url?: string, spaceId?: string): string {
+  const id = store().createWindow({ small: true, url, spaceId });
   if (!url) store().openPanel(id, "");
   return id;
 }
@@ -19,22 +19,22 @@ const opensInLittleBay = (url: string) => /^(https?|file):/i.test(url);
 // Little Bay is already in front; several at once, or set to a new tab, they open as tabs of the main window.
 export function openExternalUrls(urls: string[]) {
   const [url] = urls;
-  const profileId = store().settings.defaultProfileId;
-  if (store().settings.openLinksInLittleBay && urls.length === 1 && url && opensInLittleBay(url)) return void openLittleBay(url, profileId);
-  openLinksInMainWindow(urls, profileId);
+  const spaceId = store().settings.defaultSpaceId;
+  if (store().settings.openLinksInLittleBay && urls.length === 1 && url && opensInLittleBay(url)) return void openLittleBay(url, spaceId);
+  openLinksInMainWindow(urls, spaceId);
 }
 
 // New tabs in the frontmost main window showing the profile (else the frontmost main window, paged to it), which
 // comes forward; a new window when there's none. The blank window a launch opens takes the first link itself.
-function openLinksInMainWindow(urls: string[], profileId: string) {
-  let target = mainWindowFor(store(), profileId);
+function openLinksInMainWindow(urls: string[], spaceId: string) {
+  let target = mainWindowFor(store(), spaceId);
   for (const url of urls) {
     const s = store();
     const w = target ? s.windows[target] : undefined;
     const blank = w && w.tabIds.length === 1 ? s.tabs[w.tabIds[0]!] : undefined;
-    if (!w) target = openWindow({ url, profileId });
-    else if (blank && !blank.url && !blank.navigation && blank.profileId === profileId && !s.windowUi[w.id]?.panel.open) s.navigate(blank.id, url);
-    else s.newTab(w.id, { url, profileId });
+    if (!w) target = openWindow({ url, spaceId });
+    else if (blank && !blank.url && !blank.navigation && blank.spaceId === spaceId && !s.windowUi[w.id]?.panel.open) s.navigate(blank.id, url);
+    else s.newTab(w.id, { url, spaceId });
   }
   if (target) focus(target);
 }
@@ -46,11 +46,11 @@ export function openInMainWindow(windowId: string) {
   if (!isSmall(s, windowId)) return;
   const tabId = activeTabId(s, windowId);
   const tab = tabId ? s.tabs[tabId] : undefined;
-  const target = mainWindowFor(s, tab?.profileId ?? s.windows[windowId]!.profileId);
+  const target = mainWindowFor(s, tab?.spaceId ?? s.windows[windowId]!.spaceId);
   if (!tab?.url) {
     s.closeWindow(windowId);
     if (target) focus(target);
-    else openWindow({ profileId: tab?.profileId });
+    else openWindow({ spaceId: tab?.spaceId });
     return;
   }
   const moved = s.moveTabsToWindow([tab.id], target ?? null);

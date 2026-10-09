@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { changedIds } from "../../store/changes";
-import { isIncognitoProfile } from "../../store/model";
+import { isIncognitoSpace } from "../../store/model";
 import { hideKeyedToast, showToast } from "../layout/splitActions";
 import { translatorCall, type Passage } from "./pageTranslator";
 import { TRANSLATE_BATCH, TRANSLATE_BATCH_CHARS, TRANSLATE_FOLLOW_MS, TRANSLATE_PROGRESS_AFTER_MS, TRANSLATE_PROGRESS_TOAST } from "./constants";
@@ -46,21 +46,21 @@ function hostOf(url: string): string {
 
 // MARK: Never Translate This Site (per profile; incognito windows follow their default profile's)
 
-function listOwner(profileId: string): string {
-  return isIncognitoProfile(profileId) ? useBrowser.getState().settings.defaultProfileId : profileId;
+function listOwner(spaceId: string): string {
+  return isIncognitoSpace(spaceId) ? useBrowser.getState().settings.defaultSpaceId : spaceId;
 }
-export function isNeverTranslated(profileId: string, url: string): boolean {
+export function isNeverTranslated(spaceId: string, url: string): boolean {
   const host = hostOf(url);
-  return !!host && (useBrowser.getState().settings.neverTranslateSites[listOwner(profileId)] ?? []).includes(host);
+  return !!host && (useBrowser.getState().settings.neverTranslateSites[listOwner(spaceId)] ?? []).includes(host);
 }
 export function setNeverTranslate(tabId: string, never: boolean) {
   const s = useBrowser.getState();
   const tab = s.tabs[tabId];
   const host = tab ? hostOf(tab.url) : "";
-  if (!tab || !host || isIncognitoProfile(tab.profileId)) return;
+  if (!tab || !host || isIncognitoSpace(tab.spaceId)) return;
   const all = s.settings.neverTranslateSites;
-  const list = (all[tab.profileId] ?? []).filter((h) => h !== host);
-  s.updateSettings({ neverTranslateSites: { ...all, [tab.profileId]: never ? [...list, host] : list } });
+  const list = (all[tab.spaceId] ?? []).filter((h) => h !== host);
+  s.updateSettings({ neverTranslateSites: { ...all, [tab.spaceId]: never ? [...list, host] : list } });
   if (!never) return void detect(tabId);
   if (stateOf(tabId).status !== "idle") void revertPage(tabId, { quiet: true });
   patch(tabId, { source: null });
@@ -84,7 +84,7 @@ async function detect(tabId: string) {
   if (!page) return;
   // Navigation replaces the document and clears its translation.
   if (!page.active && stateOf(tabId).status === "translated") patch(tabId, { status: "idle", target: null, token: null });
-  if (isNeverTranslated(tab.profileId, tab.url)) return patch(tabId, { source: null });
+  if (isNeverTranslated(tab.spaceId, tab.url)) return patch(tabId, { source: null });
   const mine = new Set(languages().map(baseLanguage));
   const source = page.language && !mine.has(baseLanguage(page.language)) ? page.language : null;
   if (source && (await translation.status(source, defaultTarget())) === "unsupported") return patch(tabId, { source: null });

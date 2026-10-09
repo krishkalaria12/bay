@@ -2,11 +2,11 @@ import { Symbol } from "@bay/shell";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { create } from "zustand";
-import { PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
-import { dataGroups, unusedProfileColor } from "../../store/profiles";
-import type { ProfileColor } from "../../store/types";
+import { profileGroups, unusedSpaceColor } from "../../store/spaces";
+import type { SpaceColor } from "../../store/types";
 import { Button, Sheet, TextField, useFormColors } from "../settings/controls";
 import { closeSettingsSheet, showSettingsSheet } from "../settings/sheet";
 import { IconGrid } from "../IconGrid";
@@ -52,37 +52,37 @@ export function profileNames(names: string[]): string {
 
 type ProfileChoice = { value: string; title: string; separatorBefore?: boolean };
 
-/** The profiles a space can use: its own, each other one (named by the spaces using it), or a new one if it shares. */
-export function profileChoices(s: Pick<BrowserState, "profiles" | "profileOrder">, profileId: string): { value: string; options: ProfileChoice[] } {
-  const names = (ids: string[]) => profileNames(ids.map((id) => s.profiles[id]?.name ?? ""));
-  const groups = dataGroups(s);
-  const own = groups.find((g) => g.profileIds.includes(profileId));
+/** The spaces a space can use: its own, each other one (named by the spaces using it), or a new one if it shares. */
+export function profileChoices(s: Pick<BrowserState, "spaces" | "spaceOrder">, spaceId: string): { value: string; options: ProfileChoice[] } {
+  const names = (ids: string[]) => profileNames(ids.map((id) => s.spaces[id]?.name ?? ""));
+  const groups = profileGroups(s);
+  const own = groups.find((g) => g.spaceIds.includes(spaceId));
   const title = (ids: string[]) => {
-    if (!ids.includes(profileId)) return `Same as ${names(ids)}`;
-    const others = ids.filter((id) => id !== profileId);
+    if (!ids.includes(spaceId)) return `Same as ${names(ids)}`;
+    const others = ids.filter((id) => id !== spaceId);
     return others.length ? `Shared with ${names(others)}` : "Its own profile";
   };
-  const options = groups.map((g): ProfileChoice => ({ value: g.profileIds[0]!, title: title(g.profileIds) }));
-  if (own && own.profileIds.length > 1) options.push({ value: "new", title: "New Profile", separatorBefore: true });
-  return { value: own?.profileIds[0] ?? "new", options };
+  const options = groups.map((g): ProfileChoice => ({ value: g.spaceIds[0]!, title: title(g.spaceIds) }));
+  if (own && own.spaceIds.length > 1) options.push({ value: "new", title: "New Profile", separatorBefore: true });
+  return { value: own?.spaceIds[0] ?? "new", options };
 }
 
 function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | null; preset: CreateSpacePreset; onDone: (id: string | null) => void }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const profiles = useBrowser((s) => s.profiles);
-  const profileOrder = useBrowser((s) => s.profileOrder);
-  const groups = dataGroups({ profiles, profileOrder });
-  const current = useBrowser((s) => (windowId && !s.windows[windowId]?.incognito ? s.windows[windowId]!.profileId : s.settings.defaultProfileId));
+  const spaces = useBrowser((s) => s.spaces);
+  const spaceOrder = useBrowser((s) => s.spaceOrder);
+  const groups = profileGroups({ spaces, spaceOrder });
+  const current = useBrowser((s) => (windowId && !s.windows[windowId]?.incognito ? s.windows[windowId]!.spaceId : s.settings.defaultSpaceId));
   const [name, setName] = useState(preset.name ?? "");
-  const [color, setColor] = useState<ProfileColor>(() => unusedProfileColor(useBrowser.getState().profiles));
-  const [icon, setIcon] = useState<string | null>(() => unusedSpaceIcon(useBrowser.getState().profiles));
+  const [color, setColor] = useState<SpaceColor>(() => unusedSpaceColor(useBrowser.getState().spaces));
+  const [icon, setIcon] = useState<string | null>(() => unusedSpaceIcon(useBrowser.getState().spaces));
   // As Arc: a new space uses the current space's profile (its logins and cookies) unless a new one is chosen.
   const [shareWith, setShareWith] = useState<string | null>(preset.shareWith ?? current);
-  const selectedGroup = shareWith === null ? null : (groups.find((g) => g.profileIds.includes(shareWith)) ?? groups[0]);
+  const selectedGroup = shareWith === null ? null : (groups.find((g) => g.spaceIds.includes(shareWith)) ?? groups[0]);
 
   const submit = () => {
-    const id = useBrowser.getState().createProfile({ name, color, icon, shareWith: selectedGroup?.profileIds[0] ?? null });
+    const id = useBrowser.getState().createSpace({ name, color, icon, shareWith: selectedGroup?.spaceIds[0] ?? null });
     onDone(id);
   };
 
@@ -108,10 +108,10 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
 
       <Label>Theme</Label>
       <View style={{ flexDirection: "row", gap: 7 }}>
-        {(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => (
-          <Pressable key={c} onPress={() => setColor(c)} tooltip={PROFILE_COLORS[c].name}>
-            <View style={{ width: 22, height: 22, borderRadius: 11, padding: 2, borderWidth: 2, borderColor: color === c ? PROFILE_COLORS[c].swatch : "transparent" }}>
-              <View style={{ flex: 1, borderRadius: 9, backgroundColor: PROFILE_COLORS[c].swatch }} />
+        {(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => (
+          <Pressable key={c} onPress={() => setColor(c)} tooltip={SPACE_COLORS[c].name}>
+            <View style={{ width: 22, height: 22, borderRadius: 11, padding: 2, borderWidth: 2, borderColor: color === c ? SPACE_COLORS[c].swatch : "transparent" }}>
+              <View style={{ flex: 1, borderRadius: 9, backgroundColor: SPACE_COLORS[c].swatch }} />
             </View>
           </Pressable>
         ))}
@@ -120,12 +120,12 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
       <Label>Profile</Label>
       <View style={{ borderRadius: 8, backgroundColor: colors.field, borderWidth: 1, borderColor: colors.fieldBorder, overflow: "hidden" }}>
         {groups.map((g, i) => (
-          <Pressable key={g.dataId} onPress={() => setShareWith(g.profileIds[0]!)}>
+          <Pressable key={g.profileId} onPress={() => setShareWith(g.spaceIds[0]!)}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 32, paddingHorizontal: 10, borderTopWidth: i ? 1 : 0, borderColor: colors.separator }}>
               <RadioDot on={g === selectedGroup} />
-              <ColorStack colors={g.profileIds.map((id) => PROFILE_COLORS[profiles[id]!.color]?.swatch ?? "#888888")} />
+              <ColorStack colors={g.spaceIds.map((id) => SPACE_COLORS[spaces[id]!.color]?.swatch ?? "#888888")} />
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
-                Same as {profileNames(g.profileIds.map((id) => profiles[id]!.name))}
+                Same as {profileNames(g.spaceIds.map((id) => spaces[id]!.name))}
               </Text>
             </View>
           </Pressable>

@@ -20,7 +20,7 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
       const inSplit = new Set(Object.values(s.splits).find((v) => v.tabIds.includes(tabId))?.tabIds ?? [tabId]);
       return w.tabIds
         .map((id) => s.tabs[id]!)
-        .filter((t) => t && t.url && t.profileId === tab.profileId && !inSplit.has(t.id))
+        .filter((t) => t && t.url && t.spaceId === tab.spaceId && !inSplit.has(t.id))
         .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
         .slice(0, 5)
         .map((t) => t.id);
@@ -81,7 +81,7 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
 function Suggestion({ tabId, onPress }: { tabId: string; onPress: () => void }) {
   const tab = useBrowser((s) => s.tabs[tabId]);
   if (!tab) return null;
-  return <Row icon={<Favicon url={tab.url} favicon={tab.favicon} profileId={tab.profileId} />} label={tabLabel(tab)} detail={tab.title} onPress={onPress} />;
+  return <Row icon={<Favicon url={tab.url} favicon={tab.favicon} spaceId={tab.spaceId} />} label={tabLabel(tab)} detail={tab.title} onPress={onPress} />;
 }
 
 function Row({ icon, label, detail, secondary, onPress }: { icon: React.ReactNode; label: string; detail?: string; secondary?: boolean; onPress: () => void }) {

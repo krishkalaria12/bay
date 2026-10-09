@@ -46,7 +46,7 @@ function writeRenderSeed(dir, origin, version, count) {
   const files = buildSeed(origin, version);
   const session = files["session.json"];
   const w = session.windows[0];
-  const base = session.tabs.find((t) => t.profileId === "default");
+  const base = session.tabs.find((t) => t.spaceId === "default");
   const now = Date.now();
   const pinned = Math.min(3, count - 1);
   const grouped = count >= 10 ? 4 : 0;
@@ -64,7 +64,7 @@ function writeRenderSeed(dir, origin, version, count) {
   active.lastActiveAt = now;
   session.tabs = tabs;
   session.groups = grouped
-    ? [{ id: "g-0", windowId: w.id, profileId: "default", name: "Reading", icon: null, color: "blue", collapsed: false, pinned: false, tabIds: tabs.slice(pinned, pinned + grouped).map((t) => t.id), createdAt: now }]
+    ? [{ id: "g-0", windowId: w.id, spaceId: "default", name: "Reading", icon: null, color: "blue", collapsed: false, pinned: false, tabIds: tabs.slice(pinned, pinned + grouped).map((t) => t.id), createdAt: now }]
     : [];
   w.tabIds = tabs.map((t) => t.id);
   w.activeTabIds = { default: active.id };

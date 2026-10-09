@@ -12,7 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { bookmarksByUrl } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { bookmarkProfileId } from "../../store/model";
+import { bookmarkSpaceId } from "../../store/model";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
 import type { Bookmarks, HistoryEntry } from "../../store/types";
 import { currentBarActions } from "./actions";
@@ -25,17 +25,17 @@ const EMPTY: SuggestionResult = { items: [], completion: "" };
 type BookmarkRow = { url: string; title: string; favicon: string | null };
 const bookmarkCache = new WeakMap<Bookmarks, Map<string, BookmarkRow[]>>();
 
-function profileBookmarks(b: Bookmarks, profileId: string): BookmarkRow[] {
+function profileBookmarks(b: Bookmarks, spaceId: string): BookmarkRow[] {
   let perProfile = bookmarkCache.get(b);
   if (!perProfile) bookmarkCache.set(b, (perProfile = new Map()));
-  let rows = perProfile.get(profileId);
+  let rows = perProfile.get(spaceId);
   if (!rows) {
     rows = [];
-    for (const [url, ids] of bookmarksByUrl(b, profileId)) {
+    for (const [url, ids] of bookmarksByUrl(b, spaceId)) {
       const node = b.nodes[ids[0]!];
       if (node?.kind === "url") rows.push({ url, title: node.title, favicon: node.favicon });
     }
-    perProfile.set(profileId, rows);
+    perProfile.set(spaceId, rows);
   }
   return rows;
 }
@@ -53,16 +53,16 @@ function historyHosts(history: HistoryEntry[]): string[] {
   return hosts;
 }
 
-function knownHosts(s: BrowserState, profileId: string): string[] {
+function knownHosts(s: BrowserState, spaceId: string): string[] {
   const hosts: string[] = [];
-  for (const t of Object.values(s.tabs)) if (t.profileId === profileId && t.url) hosts.push(hostOf(t.url));
-  return hosts.concat(historyHosts(s.history[profileId] ?? NO_HISTORY));
+  for (const t of Object.values(s.tabs)) if (t.spaceId === spaceId && t.url) hosts.push(hostOf(t.url));
+  return hosts.concat(historyHosts(s.history[spaceId] ?? NO_HISTORY));
 }
 
 export function scopeFor(text: string, windowId: string): SearchScope | null {
   const s = useBrowser.getState();
-  const profileId = s.windows[windowId]?.profileId ?? "";
-  return findScope(text, { engines: searchEngines(s.settings), hosts: knownHosts(s, profileId) });
+  const spaceId = s.windows[windowId]?.spaceId ?? "";
+  return findScope(text, { engines: searchEngines(s.settings), hosts: knownHosts(s, spaceId) });
 }
 
 function suggestEngine(scope: SearchScope | null, engines: SearchEngine[], fallback: SearchEngine): SearchEngine {
@@ -81,7 +81,7 @@ export function useSuggestions({
   text,
   active,
   windowId,
-  profileId,
+  spaceId,
   currentTabId,
   currentUrl,
   scope,
@@ -92,7 +92,7 @@ export function useSuggestions({
   text: string;
   active: boolean;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   currentTabId?: string;
   currentUrl?: string;
   scope: SearchScope | null;
@@ -101,15 +101,15 @@ export function useSuggestions({
   remoteFirst?: boolean;
 }): SuggestionResult {
   const allTabs = useBrowser((s) => s.tabs);
-  const history = useBrowser((s) => s.history[profileId] ?? NO_HISTORY);
+  const history = useBrowser((s) => s.history[spaceId] ?? NO_HISTORY);
   const bookmarks = useBrowser((s) => s.bookmarks);
-  const bookmarkProfile = useBrowser((s) => bookmarkProfileId(s, s.windows[windowId]));
+  const bookmarkProfile = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
   const engines = useBrowser((s) => searchEngines(s.settings));
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const preference = useBrowser((s) => s.settings.commandBarPreference);
   const suggestionsOn = useBrowser((s) => s.settings.searchSuggestions);
 
-  const tabs = Object.values(allTabs).filter((t) => t.profileId === profileId);
+  const tabs = Object.values(allTabs).filter((t) => t.spaceId === spaceId);
   const bookmarkRows = profileBookmarks(bookmarks, bookmarkProfile);
   const source = { tabs, history, bookmarks: bookmarkRows };
 

@@ -1,5 +1,5 @@
 import { useBrowser } from "../store/browser";
-import { isIncognitoProfile } from "../store/model";
+import { isIncognitoSpace } from "../store/model";
 import { MAX_TAB_PICTURES, PICTURE_SETTLE_MS } from "./constants";
 import { webviews } from "./webviews";
 
@@ -44,19 +44,19 @@ export function startTabPictures() {
         timers.delete(windowId);
       }
     for (const w of Object.values(s.windows)) {
-      const id = w.activeTabIds[w.profileId];
+      const id = w.activeTabIds[w.spaceId];
       if (!id || w.incognito) continue;
       // A tab just shown (another tab, or another profile's page), or the one shown going to another page.
       const was = prev.windows[w.id];
-      if (id === was?.activeTabIds[was.profileId] && s.tabs[id]?.url === prev.tabs[id]?.url) continue;
-      if (isIncognitoProfile(s.tabs[id]?.profileId ?? "")) continue;
+      if (id === was?.activeTabIds[was.spaceId] && s.tabs[id]?.url === prev.tabs[id]?.url) continue;
+      if (isIncognitoSpace(s.tabs[id]?.spaceId ?? "")) continue;
       clearTimeout(timers.get(w.id));
       timers.set(
         w.id,
         setTimeout(() => {
           timers.delete(w.id);
           const now = useBrowser.getState().windows[w.id];
-          if (now?.activeTabIds[now.profileId] === id) remember(id);
+          if (now?.activeTabIds[now.spaceId] === id) remember(id);
         }, PICTURE_SETTLE_MS),
       );
     }

@@ -1,8 +1,8 @@
 import type { AreaLightPalette } from "@bay/shaders";
 import { createContext, createElement, useContext, type ReactNode } from "react";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { PageProfileContext, WindowContext } from "../store/hooks";
-import type { Profile, ProfileColor } from "../store/types";
+import { PageSpaceContext, WindowContext } from "../store/hooks";
+import type { Space, SpaceColor } from "../store/types";
 import { backdropTint, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
 
 export type Theme = typeof dark & ProfileTheme & {
@@ -135,7 +135,7 @@ type ProfileTheme = {
   edgeLight: string;
 };
 
-type ProfileColorSpec = {
+type SpaceColorSpec = {
   name: string;
   swatch: string;
   palette: AreaLightPalette | null;
@@ -146,7 +146,7 @@ type ProfileColorSpec = {
   light?: ProfileTheme;
 };
 
-export const PROFILE_COLORS: Record<ProfileColor, ProfileColorSpec> = {
+export const SPACE_COLORS: Record<SpaceColor, SpaceColorSpec> = {
   plum: {
     name: "Plum",
     swatch: "#C07A98",
@@ -177,8 +177,8 @@ export const PROFILE_COLORS: Record<ProfileColor, ProfileColorSpec> = {
 const INCOGNITO_TINT = "#3A3A3C";
 const INCOGNITO: ProfileTheme = { lightPalette: null, edgeLight: "#FFFFFF33" };
 
-export function profileNameColor(color: ProfileColor, dark: boolean): string {
-  const spec = PROFILE_COLORS[color] ?? PROFILE_COLORS.plum;
+export function profileNameColor(color: SpaceColor, dark: boolean): string {
+  const spec = SPACE_COLORS[color] ?? SPACE_COLORS.plum;
   const base = spec.action ?? spec.swatch;
   return dark ? mix(base, "#FFFFFF", 0.6) : mix(base, "#000000", 0.4);
 }
@@ -189,8 +189,8 @@ function mix(a: string, b: string, t: number): string {
   return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 }
 
-function profileTheme(color: ProfileColor, isDark: boolean): ProfileTheme {
-  const spec = PROFILE_COLORS[color] ?? PROFILE_COLORS.plum;
+function profileTheme(color: SpaceColor, isDark: boolean): ProfileTheme {
+  const spec = SPACE_COLORS[color] ?? SPACE_COLORS.plum;
   const explicit = isDark ? spec.dark : spec.light;
   if (explicit) return explicit;
   return isDark
@@ -206,7 +206,7 @@ const CUSTOM = "custom|";
 const GLASS = ":glass";
 
 /** A space's theme key: its preset colour's, or its own theme's (the theme editor); glass windows' end in ":glass". */
-export function spaceThemeKey(profile: Pick<Profile, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
+export function spaceThemeKey(profile: Pick<Space, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
   const mode = `${dark ? "dark" : "light"}${glass ? GLASS : ""}`;
   const t = profile?.theme;
   if (!t?.colors.length) return `${profile?.color ?? "plum"}:${mode}`;
@@ -247,10 +247,10 @@ export function themeFor(key: string): Theme {
     for (const old of custom.slice(0, Math.max(0, custom.length - MAX_CUSTOM))) cache.delete(old);
   }
   if (!theme) {
-    const [color, mode, material] = key.split(":") as [ProfileColor | "incognito", string, string | undefined];
+    const [color, mode, material] = key.split(":") as [SpaceColor | "incognito", string, string | undefined];
     const solid = material !== "glass";
     const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
-    const spec = color === "incognito" ? null : (PROFILE_COLORS[color] ?? PROFILE_COLORS.plum);
+    const spec = color === "incognito" ? null : (SPACE_COLORS[color] ?? SPACE_COLORS.plum);
     // Dia: neutral band 0.502 at 0.65.
     const powerUpColor = !spec ? null : spec.palette ? (spec.powerUp ?? spec.swatch) : "#808080A6";
     const backdrop = backdropTint(spec ? (spec.tint ?? tintForHue(spec.swatch, !spec.palette)) : INCOGNITO_TINT, !spec?.palette);
@@ -270,7 +270,7 @@ function themeKey(s: BrowserState, windowId: string | null, page: string | null)
   const w = s.windows[windowId ?? s.ui.focusedWindowId ?? ""];
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
-  return spaceThemeKey(s.profiles[page ?? w?.profileId ?? s.settings.defaultProfileId], s.ui.appDark, glass);
+  return spaceThemeKey(s.spaces[page ?? w?.spaceId ?? s.settings.defaultSpaceId], s.ui.appDark, glass);
 }
 
 const ThemeContext = createContext<Theme | null>(null);
@@ -280,7 +280,7 @@ const ThemeContext = createContext<Theme | null>(null);
 // instead of each subscribing to the store (each subscription runs on every store update).
 export function ThemeScope({ children }: { children: ReactNode }) {
   const windowId = useContext(WindowContext);
-  const page = useContext(PageProfileContext);
+  const page = useContext(PageSpaceContext);
   const key = useBrowser((s) => themeKey(s, windowId, page));
   return createElement(ThemeContext.Provider, { value: themeFor(key) }, children);
 }

@@ -45,7 +45,7 @@ export function chromeChanged(
   // An extension moving a tab to another window: it arrives in a strip of another app window.
   const home = homeWindow(s, after, siblings, stayed);
   const movedIn = (t: Keyed) =>
-    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.profileId) === after.profile;
+    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.spaceId) === after.profile;
   const taken = new Set(now.filter((t) => firstFromChrome(t) || movedIn(t)).map((t) => t.key));
 
   for (const t of now) if (movedIn(t)) s = intoWindow(s, t.key, home!);
@@ -220,7 +220,7 @@ function homeWindow(s: BrowserState, strip: StripState, siblings: StripState[], 
 
 const shownIn = (s: BrowserState, key: string) => {
   const tab = s.tabs[key]!;
-  return s.windows[tab.windowId]?.activeTabIds[tab.profileId] === key;
+  return s.windows[tab.windowId]?.activeTabIds[tab.spaceId] === key;
 };
 
 // The tabs that kept their relative order: the heaviest run of increasing old indexes; the others moved. Which tab of
@@ -306,8 +306,8 @@ function intoWindow(s: BrowserState, key: string, to: string): BrowserState {
 function show(s: BrowserState, key: string): BrowserState {
   const tab = s.tabs[key]!;
   const w = s.windows[tab.windowId];
-  if (!w || w.profileId !== tab.profileId) return s;
-  const shown = w.activeTabIds[tab.profileId];
+  if (!w || w.spaceId !== tab.spaceId) return s;
+  const shown = w.activeTabIds[tab.spaceId];
   if (shown === key || (shown && splitOf(s, shown)?.tabIds.includes(key))) return s;
   let next = apply(s, activated(s, key));
   if (shown && !switchKeepsOpeners(s, shown, key)) next = forgetOpeners(next, w.id);
@@ -328,7 +328,7 @@ export function stripPlan(s: BrowserState, strip: StripState): StripPlan | null 
   const keys = w.tabIds.filter((id) => inStrip.has(id));
   const pinned = keys.filter((id) => s.tabs[id]!.pinned);
   // Profiles sharing their engine data share a strip: the one the window shows wins.
-  const profiles = [w.profileId, ...new Set(keys.map((id) => s.tabs[id]!.profileId))];
+  const profiles = [w.spaceId, ...new Set(keys.map((id) => s.tabs[id]!.spaceId))];
   const active = profiles.map((p) => w.activeTabIds[p]).find((id) => !!id && inStrip.has(id)) ?? null;
   return { keys: [...pinned, ...keys.filter((id) => !s.tabs[id]!.pinned)], pinned: pinned.length, active };
 }

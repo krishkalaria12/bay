@@ -3,7 +3,7 @@ import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { AccessibilityInfo, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { useHover } from "../primitives";
@@ -21,8 +21,8 @@ const cardFrame = (size: { width: number }) => ({
 
 function useArtworkColors(): [string, string] {
   const windowId = useWindowId();
-  const color = useBrowser((s) => s.profiles[s.windows[windowId]?.profileId ?? ""]?.color ?? "plum");
-  const swatch = PROFILE_COLORS[color]?.swatch ?? PROFILE_COLORS.plum.swatch;
+  const color = useBrowser((s) => s.spaces[s.windows[windowId]?.spaceId ?? ""]?.color ?? "plum");
+  const swatch = SPACE_COLORS[color]?.swatch ?? SPACE_COLORS.plum.swatch;
   return [mix(swatch, "#FFFFFF", 0.45), mix(swatch, "#10121A", 0.5)];
 }
 

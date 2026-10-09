@@ -112,7 +112,7 @@ export function newLiveFolder(windowId: string, kind: LiveFolderKind): string | 
     kind === "pullRequests"
       ? (["github", "bitbucket"] as const).filter((id) => s.accounts[id])
       : (["notion", "confluence", "gdrive"] as const).filter((id) => s.accounts[id]);
-  const id = createFolder(w.profileId, kind, sources.length ? sources : undefined);
+  const id = createFolder(w.spaceId, kind, sources.length ? sources : undefined);
   void refreshFolder(id);
   return id;
 }
@@ -157,8 +157,8 @@ export function startLiveEngine() {
   });
 
   useBrowser.subscribe((s, prev) => {
-    if (s.profiles === prev.profiles) return;
-    for (const f of Object.values(live().folders)) if (!s.profiles[f.profileId]) removeFolder(f.id);
+    if (s.spaces === prev.spaces) return;
+    for (const f of Object.values(live().folders)) if (!s.spaces[f.spaceId]) removeFolder(f.id);
   });
 
   const due = (id: string, maxAge: number) => {

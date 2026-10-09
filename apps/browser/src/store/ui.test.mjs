@@ -137,10 +137,10 @@ test("stale, foreign-window and foreign-profile group requests cannot create a t
   S().ungroup(group);
   assert.equal(S().submitNewTabPanel(w, "b.com"), "");
   assert.equal(S().windows[w].tabIds.length, 1);
-  const foreign = S().createProfile({ name: "Work" });
-  const foreignTab = S().newTab(w, { url: "work.com", profileId: foreign });
+  const foreign = S().createSpace({ name: "Work" });
+  const foreignTab = S().newTab(w, { url: "work.com", spaceId: foreign });
   const foreignGroup = S().groupTabs([foreignTab]);
-  S().activate(S().windows[w].tabIds.find((id) => S().tabs[id].profileId !== foreign));
+  S().activate(S().windows[w].tabIds.find((id) => S().tabs[id].spaceId !== foreign));
   S().openNewTabPanel(w, foreignGroup);
   assert.equal(S().windowUi[w].panel.open, false);
 });
@@ -150,8 +150,8 @@ test("private New Tab submissions remain in their private profile", () => {
   const w = S().createWindow({ incognito: true, url: "secret.com" });
   S().openNewTabPanel(w);
   const opened = S().submitNewTabPanel(w, "private.com");
-  assert.equal(S().tabs[opened].profileId, S().windows[w].profileId);
-  assert.match(S().tabs[opened].profileId, /^incognito:/);
+  assert.equal(S().tabs[opened].spaceId, S().windows[w].spaceId);
+  assert.match(S().tabs[opened].spaceId, /^incognito:/);
 });
 
 test("Little Bay sends New Tab to an existing main window and focuses it", () => {

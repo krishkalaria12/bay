@@ -4,8 +4,8 @@ import { confirm, focusWindow } from "@bay/shell";
 import { pageToSpace } from "../components/layout/spacePager";
 import { profileNames, requestCreateSpace, type CreateSpacePreset } from "../components/spaces/CreateSpace";
 import { useBrowser, type CreateWindowOptions } from "../store/browser";
-import { closesWindow, engineProfile, isIncognitoProfile, resolveWindowId } from "../store/model";
-import { engineIdOf, sharingProfiles } from "../store/profiles";
+import { closesWindow, engineProfile, isIncognitoSpace, resolveWindowId } from "../store/model";
+import { engineIdOf, sharingSpaces } from "../store/spaces";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
 import { closeWindowDialog } from "./windowClose";
@@ -55,11 +55,11 @@ export function createSpace(windowId?: string, preset?: CreateSpacePreset): Prom
   return requestCreateSpace(windowId, preset);
 }
 
-export async function deleteSpace(profileId: string, windowId?: string) {
+export async function deleteSpace(spaceId: string, windowId?: string) {
   const s = store();
-  const profile = s.profiles[profileId];
-  if (!profile || s.profileOrder.length <= 1) return;
-  const sharing = sharingProfiles(s, profileId).map((id) => s.profiles[id]!.name);
+  const profile = s.spaces[spaceId];
+  if (!profile || s.spaceOrder.length <= 1) return;
+  const sharing = sharingSpaces(s, spaceId).map((id) => s.spaces[id]!.name);
   const { confirmed } = await confirm({
     title: `Delete “${profile.name}”?`,
     message: sharing.length
@@ -71,25 +71,25 @@ export async function deleteSpace(profileId: string, windowId?: string) {
   });
   if (!confirmed) return;
   // The store queues its engine data for deletion (lib/profileData.ts).
-  store().deleteProfile(profileId);
+  store().deleteSpace(spaceId);
 }
 
 /** As Arc's Change Profile: the space uses `shareWith`'s profile, or a new one of its own (null). Its tabs reload. */
-export async function changeSpaceProfile(profileId: string, shareWith: string | null, windowId?: string) {
+export async function changeSpaceProfile(spaceId: string, shareWith: string | null, windowId?: string) {
   const s = store();
-  const profile = s.profiles[profileId];
-  const target = shareWith ? s.profiles[shareWith] : undefined;
+  const profile = s.spaces[spaceId];
+  const target = shareWith ? s.spaces[shareWith] : undefined;
   if (!profile || (shareWith && !target)) return;
-  const sharing = sharingProfiles(s, profileId);
+  const sharing = sharingSpaces(s, spaceId);
   // Already so: the target's profile is its own, or it has a profile to itself.
-  const unchanged = target ? target.id === profileId || sharing.includes(target.id) : !sharing.length;
+  const unchanged = target ? target.id === spaceId || sharing.includes(target.id) : !sharing.length;
   if (unchanged) return;
-  const names = target ? [target.id, ...sharingProfiles(s, target.id)].map((id) => s.profiles[id]!.name) : [];
+  const names = target ? [target.id, ...sharingSpaces(s, target.id)].map((id) => s.spaces[id]!.name) : [];
   const uses = target ? `the profile it shares with ${profileNames(names)}` : "a new profile";
   const { confirmed } = await confirm({
     title: `Change “${profile.name}”'s Profile?`,
     message: sharing.length
-      ? `Its tabs will reload in ${uses}, with that profile's logins, cookies, extensions, bookmarks and history. Its current profile stays with ${profileNames(sharing.map((id) => s.profiles[id]!.name))}.`
+      ? `Its tabs will reload in ${uses}, with that profile's logins, cookies, extensions, bookmarks and history. Its current profile stays with ${profileNames(sharing.map((id) => s.spaces[id]!.name))}.`
       : `Its tabs will reload in ${uses}, with that profile's logins, cookies, extensions, bookmarks and history. Its current profile and all its data (cookies, passwords, extensions, bookmarks and history) will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
     confirmTitle: "Change Profile",
     destructive: !sharing.length,
@@ -97,7 +97,7 @@ export async function changeSpaceProfile(profileId: string, shareWith: string | 
   });
   if (!confirmed) return;
   // A profile no space uses any more is queued for deletion (lib/profileData.ts).
-  store().changeProfileData(profileId, shareWith);
+  store().setSpaceProfile(spaceId, shareWith);
 }
 
 // Chrome won't remove the original profile's extensions without asking, so they're only turned off
@@ -113,11 +113,11 @@ async function keptExtensionsNote(): Promise<string> {
 
 export async function moveTabToSpace(tabId: string, target: string) {
   const tab = store().tabs[tabId];
-  if (!tab || isIncognitoProfile(tab.profileId)) return;
-  const profileId = target === "new" ? await createSpace(tab.windowId) : target;
-  if (!profileId || profileId === tab.profileId) return;
-  const shared = engineProfile(profileId) === engineProfile(tab.profileId);
-  if (store().settings.warnBeforeMovingTabsToProfile && !shared) {
+  if (!tab || isIncognitoSpace(tab.spaceId)) return;
+  const spaceId = target === "new" ? await createSpace(tab.windowId) : target;
+  if (!spaceId || spaceId === tab.spaceId) return;
+  const shared = engineProfile(spaceId) === engineProfile(tab.spaceId);
+  if (store().settings.warnBeforeMovingTabsToSpace && !shared) {
     const { confirmed, suppressed } = await confirm({
       title: "Move Tab to Space?",
       message: "This space uses a different profile, so some of the tab's site data could be lost.",
@@ -125,10 +125,10 @@ export async function moveTabToSpace(tabId: string, target: string) {
       suppression: "Don't warn me again",
       windowId: tab.windowId,
     });
-    if (suppressed) store().updateSettings({ warnBeforeMovingTabsToProfile: false });
+    if (suppressed) store().updateSettings({ warnBeforeMovingTabsToSpace: false });
     if (!confirmed) return;
   }
-  store().moveTabToProfile(tabId, profileId);
+  store().moveTabToSpace(tabId, spaceId);
 }
 
 export function moveTabToWindow(tabId: string, target: string) {
@@ -136,15 +136,15 @@ export function moveTabToWindow(tabId: string, target: string) {
   if (windowId) focus(windowId);
 }
 
-export function switchSpace(windowId: string, profileId: string, animated = false) {
-  if (animated) pageToSpace(windowId, profileId);
-  else store().switchProfile(windowId, profileId);
+export function switchSpace(windowId: string, spaceId: string, animated = false) {
+  if (animated) pageToSpace(windowId, spaceId);
+  else store().switchSpace(windowId, spaceId);
 }
 
 export function cycleSpace(windowId: string, delta: 1 | -1) {
   if (!cycleTarget(windowId, delta)) return;
   // The native pager steps from its own selection, so rapid presses advance past a store that lags.
-  void cef.stepPager(windowId, delta, true, store().profileOrder.join("\n")).then((ok) => ok || cycleFromStore(windowId, delta));
+  void cef.stepPager(windowId, delta, true, store().spaceOrder.join("\n")).then((ok) => ok || cycleFromStore(windowId, delta));
 }
 
 function cycleFromStore(windowId: string, delta: 1 | -1) {
@@ -155,9 +155,9 @@ function cycleFromStore(windowId: string, delta: 1 | -1) {
 function cycleTarget(windowId: string, delta: 1 | -1) {
   const s = store();
   const w = s.windows[windowId];
-  if (!w || w.incognito || s.profileOrder.length < 2) return null;
-  const i = s.profileOrder.indexOf(w.profileId);
-  return s.profileOrder[(i + delta + s.profileOrder.length) % s.profileOrder.length]!;
+  if (!w || w.incognito || s.spaceOrder.length < 2) return null;
+  const i = s.spaceOrder.indexOf(w.spaceId);
+  return s.spaceOrder[(i + delta + s.spaceOrder.length) % s.spaceOrder.length]!;
 }
 
 export function openUrls(urls: string[], windowId?: string | null) {

@@ -6,7 +6,7 @@ import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
-import { openFromPage, pageProfileId } from "../layout/openFromPage";
+import { openFromPage, pageSpaceId } from "../layout/openFromPage";
 import { useResizeDrag } from "../layout/useResizeDrag";
 import { IconButton } from "../primitives";
 import { closeSidePanel, findExtension, showExtensionMenu, useExtensions, type SidePanel } from "./state";
@@ -96,7 +96,7 @@ function PanelCard({ windowId, panel }: { windowId: string; panel: SidePanel }) 
           extensionHost="sidePanel"
           pageBackgroundColor="#FFFFFF"
           onWindowClose={() => closeSidePanel(windowId, extensionId)}
-          onOpenWindow={(request) => openFromPage(request, { windowId, profileId: pageProfileId(windowId, pageProfile) })}
+          onOpenWindow={(request) => openFromPage(request, { windowId, spaceId: pageSpaceId(windowId, pageProfile) })}
         />
       </View>
     </View>

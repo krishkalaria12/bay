@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { useBrowser } from "../../store/browser";
-import { bookmarkProfileId } from "../../store/model";
+import { bookmarkSpaceId } from "../../store/model";
 import { BookmarksPage } from "./BookmarksPage";
 import { DownloadsPage } from "./DownloadsPage";
 import { HistoryPage } from "./HistoryPage";
@@ -13,8 +13,8 @@ export function InternalPage({ tabId }: { tabId: string }) {
     return t ? tabDestination(t) : "";
   });
   const page = internalPageOf(url);
-  const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
-  const bookmarkProfile = useBrowser((s) => bookmarkProfileId(s, s.windows[s.tabs[tabId]?.windowId ?? ""]));
+  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const bookmarkProfile = useBrowser((s) => bookmarkSpaceId(s, s.windows[s.tabs[tabId]?.windowId ?? ""]));
 
   useEffect(() => {
     if (!page) return;
@@ -27,8 +27,8 @@ export function InternalPage({ tabId }: { tabId: string }) {
   if (!page) return null;
   return (
     <View style={StyleSheet.absoluteFill}>
-      {page === "history" && <HistoryPage tabId={tabId} profileId={profileId} initialQuery={internalQuery(url)} />}
-      {page === "bookmarks" && <BookmarksPage key={bookmarkProfile} tabId={tabId} profileId={bookmarkProfile} />}
+      {page === "history" && <HistoryPage tabId={tabId} spaceId={spaceId} initialQuery={internalQuery(url)} />}
+      {page === "bookmarks" && <BookmarksPage key={bookmarkProfile} tabId={tabId} spaceId={bookmarkProfile} />}
       {page === "downloads" && <DownloadsPage tabId={tabId} />}
     </View>
   );

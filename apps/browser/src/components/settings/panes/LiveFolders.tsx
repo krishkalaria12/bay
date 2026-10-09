@@ -25,7 +25,7 @@ const DESCRIPTIONS: Record<LiveSourceId, string> = {
 
 export function LiveFoldersPane() {
   const folders = useLive(useShallow((s) => s.folderOrder.map((id) => s.folders[id]!).filter(Boolean)));
-  const profiles = useBrowser((s) => s.profiles);
+  const profiles = useBrowser((s) => s.spaces);
   useLive((s) => s.status);
   return (
     <View>
@@ -36,7 +36,7 @@ export function LiveFoldersPane() {
       {folders.length ? (
         <Group>
           {folders.map((f) => (
-            <Row key={f.id} title={f.name} description={`${profiles[f.profileId]?.name ?? "Profile"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}>
+            <Row key={f.id} title={f.name} description={`${profiles[f.spaceId]?.name ?? "Profile"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}>
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <Button title="Refresh" onPress={() => void refreshFolder(f.id)} />
                 <Button title="Delete" kind="destructive" onPress={() => deleteLiveFolder(f.id)} />

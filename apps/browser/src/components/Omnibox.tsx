@@ -6,7 +6,7 @@ import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowser } from "../store/browser";
-import { useWindowId, useWindowProfileId } from "../store/hooks";
+import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
@@ -73,7 +73,7 @@ export function Omnibox({
 }) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const profileId = useWindowProfileId();
+  const spaceId = useWindowSpaceId();
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const engines = useBrowser((s) => searchEngines(s.settings));
   const searchTemplates = engines.map((e) => e.url);
@@ -103,7 +103,7 @@ export function Omnibox({
     text: typed,
     active: edited || !!scope,
     windowId,
-    profileId,
+    spaceId,
     currentTabId: tabId,
     currentUrl: currentUrl || undefined,
     scope,
@@ -111,8 +111,8 @@ export function Omnibox({
     // ten at most) right after the search row, then matching pages.
     ...(palette ? { limit: 20, remoteLimit: 10, remoteFirst: true } : {}),
   });
-  const start = useDropdownStart(dropdown && !edited && !scope, tabId, profileId);
-  const idleSections = usePaletteStart(windowId, profileId, tabId);
+  const start = useDropdownStart(dropdown && !edited && !scope, tabId, spaceId);
+  const idleSections = usePaletteStart(windowId, spaceId, tabId);
   const idle = !scope && (!edited || !typed.trim());
   const pageContext = palette && !newTab && !!currentUrl && initialText === currentUrl && typed === initial && !edited && !scope;
   let sections = idleSections;
@@ -216,8 +216,8 @@ export function Omnibox({
 
   const forget = (s: PaletteSuggestion) => {
     const { history, removeHistory } = useBrowser.getState();
-    const urls = s.host ? (history[profileId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
-    removeHistory(profileId, urls);
+    const urls = s.host ? (history[spaceId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
+    removeHistory(spaceId, urls);
   };
 
   const openRowMenu = (target = current) => {
@@ -384,7 +384,7 @@ export function Omnibox({
 
   // Stable, so the rows (memoized) don't re-render as the bar does.
   const chooseRow = useEffectEvent((s: Suggestion) => choose(s));
-  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(profileId, [url]));
+  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(spaceId, [url]));
   const rowActions: RowActions = { choose: chooseRow, hover: setSelected, remove: removeRow };
   const suggestionList = (
     <SuggestionList
@@ -401,7 +401,7 @@ export function Omnibox({
       <View ref={root}>
         <PaletteContent
           pageContext={pageContext}
-          leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} profileId={profileId} /> : undefined}
+          leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} spaceId={spaceId} /> : undefined}
           field={<ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}><View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>{scope ? <ScopeChip scope={scope} large /> : null}{field}</View></ContextMenuArea>}
           sections={sections}
           selectedIndex={selectedIndex}

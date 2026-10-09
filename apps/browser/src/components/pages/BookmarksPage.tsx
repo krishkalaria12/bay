@@ -23,11 +23,11 @@ import { useResetOn } from "../../lib/useResetOn";
 type Target = { kind: "folder"; id: string } | { kind: "row"; id: string; index: number; folder: boolean };
 type Drop = { into: string } | { parentId: string; index: number };
 
-export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: string }) {
+export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: string }) {
   const theme = useTheme();
   const colors = useFormColors();
   const windowId = useBrowser((s) => s.tabs[tabId]?.windowId ?? "");
-  const roots = useBrowser((s) => s.bookmarks.roots[profileId]);
+  const roots = useBrowser((s) => s.bookmarks.roots[spaceId]);
   const [folderId, setFolderId] = useState<string | null>(roots?.bar ?? null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -123,8 +123,8 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
       { id: "import", title: "Import Bookmarks…" },
     ]);
     const parentId = folderId ?? undefined;
-    if (choice === "bookmark") editBookmark(null, windowId, { profileId, parentId });
-    if (choice === "folder") editBookmark(null, windowId, { profileId, parentId, folder: true });
+    if (choice === "bookmark") editBookmark(null, windowId, { spaceId, parentId });
+    if (choice === "folder") editBookmark(null, windowId, { spaceId, parentId, folder: true });
     if (choice === "import") openImport();
   };
 
@@ -146,7 +146,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
       <View style={{ flex: 1, flexDirection: "row", paddingHorizontal: 16, paddingBottom: 16, gap: 16 }}>
         <ScrollView style={{ width: 230, flexGrow: 0 }} contentContainerStyle={{ paddingVertical: 4 }}>
           <FolderTree
-            profileId={profileId}
+            spaceId={spaceId}
             selectedId={searching ? null : folderId}
             onSelect={(id) => {
               setQuery("");
@@ -206,7 +206,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
                     id={id}
                     index={index}
                     windowId={windowId}
-                    profileId={profileId}
+                    spaceId={spaceId}
                     showPath={searching}
                     selected={selected.includes(id)}
                     highlighted={!!drop && "into" in drop && drop.into === id}
@@ -253,7 +253,7 @@ function BookmarkRow({
   id,
   index,
   windowId,
-  profileId,
+  spaceId,
   showPath,
   selected,
   highlighted,
@@ -268,7 +268,7 @@ function BookmarkRow({
   id: string;
   index: number;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   showPath: boolean;
   selected: boolean;
   highlighted: boolean;
@@ -345,7 +345,7 @@ function BookmarkRow({
     if (choice === "incognito") open("incognito");
     if (choice === "split") open("split");
     if (choice === "copy" && node.kind === "url") copyText(cleanUrl(node.url));
-    if (choice === "edit") editBookmark(node.id, windowId, { profileId });
+    if (choice === "edit") editBookmark(node.id, windowId, { spaceId });
     if (choice === "openAll") void openFolder(node.id, windowId);
     if (choice === "openAllWindow") void openFolder(node.id, windowId, "window");
     if (choice === "show" && node.parentId) onOpenFolder(node.parentId);
@@ -375,7 +375,7 @@ function BookmarkRow({
               }}
             >
               {node.kind === "url" ? (
-                <Favicon url={node.url} favicon={node.favicon} profileId={profileId} />
+                <Favicon url={node.url} favicon={node.favicon} spaceId={spaceId} />
               ) : (
                 <Symbol name="folder" size={14} color={theme.icon} style={{ width: 16, height: 16 }} />
               )}

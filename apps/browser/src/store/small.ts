@@ -13,13 +13,13 @@ export const isSmall = (s: Pick<BrowserState, "windows">, windowId?: string | nu
 const isMain = (w: BrowserWindow | undefined): w is BrowserWindow => !!w && !w.incognito && w.kind !== "small";
 
 // Where a Little Bay page goes: the frontmost main window showing its profile, else the frontmost main window.
-export function mainWindowFor(s: BrowserState, profileId?: string): string | undefined {
+export function mainWindowFor(s: BrowserState, spaceId?: string): string | undefined {
   const order = [...new Set([...s.ui.focusOrder, ...s.windowOrder])].filter((id) => isMain(s.windows[id]));
-  return (profileId ? order.find((id) => s.windows[id]!.profileId === profileId) : undefined) ?? order[0];
+  return (spaceId ? order.find((id) => s.windows[id]!.spaceId === spaceId) : undefined) ?? order[0];
 }
 
 // A new Little Bay uses the profile the frontmost main window shows, else the default profile.
 export function littleBayProfile(s: BrowserState): string {
   const main = mainWindowFor(s);
-  return main ? s.windows[main]!.profileId : s.settings.defaultProfileId;
+  return main ? s.windows[main]!.spaceId : s.settings.defaultSpaceId;
 }

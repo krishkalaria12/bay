@@ -153,9 +153,9 @@ export function ContentCard() {
   const warm = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
-      const shown = w?.activeTabIds[w.profileId];
+      const shown = w?.activeTabIds[w.spaceId];
       // Two spaces with one profile can remember the same favourite: its page is on screen once, in the shown one.
-      const ids = !w || !pagerPages ? [] : [...new Set(pagerPages.map((p) => (p.id === w.profileId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id && id !== shown))];
+      const ids = !w || !pagerPages ? [] : [...new Set(pagerPages.map((p) => (p.id === w.spaceId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id && id !== shown))];
       return successor && s.tabs[successor]?.windowId === windowId && !ids.includes(successor) ? [...ids, successor] : ids;
     }),
   );
@@ -173,7 +173,7 @@ export function ContentCard() {
         // Keep mount order stable; reordering native subviews while tabs move can shuffle them.
         .sort((a, b) => a!.createdAt - b!.createdAt)
         // A tab whose space changed profile is another view: its page is the other engine profile's.
-        .map((t) => `${t!.id}|${t!.profileId}|${engineProfile(t!.profileId)}`);
+        .map((t) => `${t!.id}|${t!.spaceId}|${engineProfile(t!.spaceId)}`);
       shownMemo.current = { mounted, panes: framed, tabs: s.tabs, keys };
       return keys;
     }),
@@ -406,7 +406,7 @@ const hostOf = (url: string) => url.match(/^[a-z][\w+.-]*:\/\/([^/?#]*)/i)?.[1]?
 function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean; warm: boolean }) {
   const navigation = useBrowser((s) => s.tabs[tabId]?.navigation);
   const adoptId = useBrowser((s) => s.tabs[tabId]?.adoptId);
-  const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
+  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
   const tab = () => useBrowser.getState().tabs[tabId];
   const store = () => useBrowser.getState();
   // One for the view's life (its tab never changes): it keeps the handle it registered, to unregister only that.
@@ -428,18 +428,18 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
   // This view goes while its tab keeps its page (lib/tabPages.ts): handed off before the native unmount (a layout
   // effect's cleanup runs in the commit). A tab that closed, went to sleep, changed profile or is going to one of the
   // app's own pages closes its page with the view.
-  const mountedProfile = useRef(engineProfile(profileId));
+  const mountedProfile = useRef(engineProfile(spaceId));
   useLayoutEffect(
     () => () => {
       const t = tab();
-      if (wantsPage(t) && engineProfile(t.profileId) === mountedProfile.current && !isQuitting()) handOff(tabId, mountedProfile.current);
+      if (wantsPage(t) && engineProfile(t.spaceId) === mountedProfile.current && !isQuitting()) handOff(tabId, mountedProfile.current);
     },
     [],
   );
 
   const onOpenWindow = (request: OpenWindowRequest) => {
     const t = tab();
-    if (t) openFromPage(request, { windowId: t.windowId, profileId: t.profileId, tabId });
+    if (t) openFromPage(request, { windowId: t.windowId, spaceId: t.spaceId, tabId });
   };
 
   return (
@@ -447,7 +447,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       ref={ref}
       style={StyleSheet.absoluteFill}
       url={navigation?.url ?? (adoptId ? tab()?.url : undefined)}
-      profile={engineProfile(profileId)}
+      profile={engineProfile(spaceId)}
       adoptId={adoptId}
       transferKey={tabId}
       visible={visible}
@@ -505,7 +505,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
           if (t.url !== committedUrl) s.updateTab(tabId, { url: committedUrl });
           return;
         }
-        const others = s.windows[t.windowId]?.tabIds.some((id) => id !== tabId && s.tabs[id]?.profileId === t.profileId);
+        const others = s.windows[t.windowId]?.tabIds.some((id) => id !== tabId && s.tabs[id]?.spaceId === t.spaceId);
         const opened = !!(t.openerId || t.adoptId) && !pageOf(tabId).wasNewTab;
         if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return s.closeTab(tabId);
         patchPage(tabId, { backToNewTab: false, newTabShown: null });
@@ -541,14 +541,14 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       onPopupBlocked={(popup) => {
         const first = !pageOf(tabId).popups.length;
         patchPage(tabId, { popups: [...pageOf(tabId).popups, popup] });
-        if (first) void shouldPromptForPopups(engineProfile(profileId), popup.origin).then((ask) => ask && setPopover(tabId, "popups"));
+        if (first) void shouldPromptForPopups(engineProfile(spaceId), popup.origin).then((ask) => ask && setPopover(tabId, "popups"));
       }}
       onPasswordPrompt={(prompt) => showPasswordPrompt(tabId, prompt)}
       onAutofillPrompt={(prompt, id) => showAutofillPrompt(tabId, prompt, id)}
       onExternalApp={(externalApp) => patchPage(tabId, { externalApp })}
       onPageFocus={() => {
         const t = tab();
-        if (t && splitOf(store(), tabId) && store().windows[t.windowId]?.activeTabIds[t.profileId] !== tabId) store().activate(tabId);
+        if (t && splitOf(store(), tabId) && store().windows[t.windowId]?.activeTabIds[t.spaceId] !== tabId) store().activate(tabId);
       }}
       // Engine close callbacks also fire during quit; don't remove saved-session tabs then.
       onWindowClose={() => !isQuitting() && store().closeTab(tabId)}

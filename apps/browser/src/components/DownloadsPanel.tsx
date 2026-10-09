@@ -74,7 +74,7 @@ async function openDownloadsFolder(windowId: string) {
 }
 
 const ASK_PREF = "download.prompt_for_download";
-const enginePrefsProfile = (windowId: string) => engineProfile(useBrowser.getState().windows[windowId]?.profileId ?? "");
+const enginePrefsProfile = (windowId: string) => engineProfile(useBrowser.getState().windows[windowId]?.spaceId ?? "");
 
 type Primary = "open" | "pause" | "resume" | "remove" | "folder";
 

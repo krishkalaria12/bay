@@ -108,7 +108,7 @@ export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string
     patchPage(tabId, { popups: [] });
     close();
   };
-  const profile = () => engineProfile(useBrowser.getState().tabs[tabId]?.profileId ?? "");
+  const profile = () => engineProfile(useBrowser.getState().tabs[tabId]?.spaceId ?? "");
   return (
     <Popover width={360} top={top} right={right} left={left} onDismiss={close}>
       <View style={{ paddingBottom: 6 }}>

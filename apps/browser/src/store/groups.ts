@@ -84,14 +84,14 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
     const s = get();
     const tabs = tabIds.map((id) => s.tabs[id]).filter((t) => t && !pinnedPage(t));
     const first = tabs[0];
-    if (!first || tabs.some((t) => t!.windowId !== first.windowId || t!.profileId !== first.profileId)) return "";
+    if (!first || tabs.some((t) => t!.windowId !== first.windowId || t!.spaceId !== first.spaceId)) return "";
     const w = s.windows[first.windowId]!;
     const members = new Set(tabs.map((t) => t!.id));
     const window = { ...w, tabIds: placeBlock(w.tabIds, w.tabIds.filter((id) => members.has(id))) };
     const group: TabGroup = {
       id: newId("g"),
       windowId: w.id,
-      profileId: first.profileId,
+      spaceId: first.spaceId,
       name: options.name ?? "",
       icon: options.icon ?? null,
       color: options.color ?? null,
@@ -122,7 +122,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       if (!group) return {};
       const adding = tabIds.filter((id) => {
         const t = s.tabs[id];
-        return t && !pinnedPage(t) && t.windowId === group.windowId && t.profileId === group.profileId && !group.tabIds.includes(id);
+        return t && !pinnedPage(t) && t.windowId === group.windowId && t.spaceId === group.spaceId && !group.tabIds.includes(id);
       });
       if (!adding.length) return {};
       const w = s.windows[group.windowId]!;

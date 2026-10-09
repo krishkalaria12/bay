@@ -28,12 +28,12 @@ function useShareFor(tabId: string): [string, TabShare] | null {
   const capturers = useBrowser((s) => {
     const tab = s.tabs[tabId];
     if (!tab || !/^https?:|^file:/.test(tab.url)) return null;
-    const profile = engineProfile(tab.profileId);
+    const profile = engineProfile(tab.spaceId);
     return capturing
       .split(",")
       .filter((id) => {
         const owner = s.tabs[id];
-        return !!owner && engineProfile(owner.profileId) === profile;
+        return !!owner && engineProfile(owner.spaceId) === profile;
       })
       .join(",");
   });

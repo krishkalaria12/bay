@@ -104,7 +104,7 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   const fallback = useBrowser((s) => {
     if (!dragging || Object.keys(panes).length !== 1 || !panes[dragging]) return null;
     const tab = s.tabs[dragging];
-    const others = (s.windows[windowId]?.tabIds ?? []).map((id) => s.tabs[id]!).filter((t) => t && t.id !== dragging && t.profileId === tab?.profileId);
+    const others = (s.windows[windowId]?.tabIds ?? []).map((id) => s.tabs[id]!).filter((t) => t && t.id !== dragging && t.spaceId === tab?.spaceId);
     return others.sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]?.id ?? null;
   });
   // Memoized by hand: an effect keeps it (the zones mounted for their slide out), so a new one each render would loop.

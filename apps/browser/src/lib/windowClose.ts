@@ -1,6 +1,6 @@
 import { confirm, onWindowEvent } from "@bay/shell";
 import { useBrowser } from "../store/browser";
-import { inPinnedContainer, plural, profileFor } from "../store/model";
+import { inPinnedContainer, plural, spaceFor } from "../store/model";
 import { CLOSE_WARNING_MIN_TABS } from "./constants";
 
 export function startWindowCloseGuard() {
@@ -37,14 +37,14 @@ export function closeWindowDialog(windowId: string) {
   const byProfile = new Map<string, number>();
   const closing = closingTabs(windowId);
   for (const id of closing) {
-    const profileId = s.tabs[id]?.profileId ?? w.profileId;
-    byProfile.set(profileId, (byProfile.get(profileId) ?? 0) + 1);
+    const spaceId = s.tabs[id]?.spaceId ?? w.spaceId;
+    byProfile.set(spaceId, (byProfile.get(spaceId) ?? 0) + 1);
   }
   const count = closing.length;
   const message =
     byProfile.size > 1
-      ? ["Closing this window closes all tabs open across spaces:", ...[...byProfile].map(([id, n]) => `  • ${tabs(n)} in ${profileFor(s, id).name}`)].join("\n")
-      : `This window has ${tabs(count)} open in your ${profileFor(s, w.profileId).name} profile.`;
+      ? ["Closing this window closes all tabs open across spaces:", ...[...byProfile].map(([id, n]) => `  • ${tabs(n)} in ${spaceFor(s, id).name}`)].join("\n")
+      : `This window has ${tabs(count)} open in your ${spaceFor(s, w.spaceId).name} profile.`;
   return {
     title: count === 1 ? "Close 1 tab?" : `Close ${count} tabs?`,
     message,

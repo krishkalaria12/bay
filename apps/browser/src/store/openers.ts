@@ -16,14 +16,14 @@ const regular = (s: BrowserState, id: string) => !inPinnedContainer(s, id);
 export function insertionIndex(s: BrowserState, w: BrowserWindow, tab: Tab, background: boolean): number {
   const opener = tab.openerId ? s.tabs[tab.openerId] : undefined;
   let index: number;
-  if (opener && opener.windowId === w.id && opener.profileId === tab.profileId && regular(s, opener.id)) {
+  if (opener && opener.windowId === w.id && opener.spaceId === tab.spaceId && regular(s, opener.id)) {
     // A split is one row: its tabs go after its last pane.
     const panes = splitOf(s, opener.id)?.tabIds ?? [opener.id];
     const at = Math.max(...panes.map((id) => w.tabIds.indexOf(id))) + 1;
     index = background ? afterFamily(s, w, tab, at, opener.id) : at;
-  } else if (opener && opener.windowId === w.id && opener.profileId === tab.profileId) {
+  } else if (opener && opener.windowId === w.id && opener.spaceId === tab.spaceId) {
     // From a pinned tab: just below the pinned tabs, after the links it opened before (Dia gathers them there).
-    const gathered = pinnedChildGroup(s, opener.id, tab.profileId);
+    const gathered = pinnedChildGroup(s, opener.id, tab.spaceId);
     index = gathered
       ? Math.max(...gathered.tabIds.map((id) => w.tabIds.indexOf(id))) + 1
       : afterFamily(s, w, tab, firstRegular(s, w, tab), opener.id);
@@ -36,7 +36,7 @@ export function insertionIndex(s: BrowserState, w: BrowserWindow, tab: Tab, back
 }
 
 function firstRegular(s: BrowserState, w: BrowserWindow, tab: Tab): number {
-  const first = w.tabIds.findIndex((id) => s.tabs[id]?.profileId === tab.profileId && regular(s, id));
+  const first = w.tabIds.findIndex((id) => s.tabs[id]?.spaceId === tab.spaceId && regular(s, id));
   return first >= 0 ? first : w.tabIds.length;
 }
 
@@ -50,7 +50,7 @@ function afterFamily(s: BrowserState, w: BrowserWindow, tab: Tab, from: number, 
   let index = from;
   for (let i = from; i < w.tabIds.length; i++) {
     const t = s.tabs[w.tabIds[i]!];
-    if (!t || t.profileId !== tab.profileId) continue;
+    if (!t || t.spaceId !== tab.spaceId) continue;
     if (!t.openerId || !family.has(t.openerId) || groupOf(s, t.id)?.id !== group) break;
     family.add(t.id);
     index = i + 1;

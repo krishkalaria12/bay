@@ -16,15 +16,15 @@ export function openFromBar(url: string, tabId: string, disposition: Disposition
   const w = s.windows[tab.windowId];
   if (disposition === "current") return s.navigate(tabId, url);
   s.closePanel(tab.windowId);
-  if (disposition === "newTab") return void s.newTab(tab.windowId, { url, profileId: tab.profileId, openerId: tab.url ? tabId : undefined });
-  openWindow(w?.incognito ? { incognito: true, url } : { profileId: tab.profileId, url });
+  if (disposition === "newTab") return void s.newTab(tab.windowId, { url, spaceId: tab.spaceId, openerId: tab.url ? tabId : undefined });
+  openWindow(w?.incognito ? { incognito: true, url } : { spaceId: tab.spaceId, url });
 }
 
 export function openInBackground(url: string, barTabId: string) {
   const s = useBrowser.getState();
   const tab = s.tabs[barTabId];
   if (!url || !tab) return;
-  s.newTab(tab.windowId, { url, profileId: tab.profileId, background: true });
+  s.newTab(tab.windowId, { url, spaceId: tab.spaceId, background: true });
 }
 
 export function switchFromBar(targetTabId: string, url: string, barTabId: string, disposition: Disposition) {

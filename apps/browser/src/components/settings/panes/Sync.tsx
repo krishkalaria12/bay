@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
-import { ownsProfileData, sharingProfiles } from "../../../store/profiles";
+import { useSpaces } from "../../../store/hooks";
+import { ownsProfileData, sharingSpaces } from "../../../store/spaces";
 import {
   addRemoteProfile,
   chooseSyncFolder,
@@ -172,9 +172,9 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
   const links = useSync((s) => s.profiles);
   const devices = useSync((s) => s.devices);
   const remoteProfiles = useSync((s) => s.remoteProfiles);
-  const profiles = useProfiles();
-  const allProfiles = useBrowser((s) => s.profiles);
-  const order = useBrowser((s) => s.profileOrder);
+  const profiles = useSpaces();
+  const allProfiles = useBrowser((s) => s.spaces);
+  const order = useBrowser((s) => s.spaceOrder);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000);
@@ -223,8 +223,8 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       <Group>
         {profiles.map((p) => {
           const link = links[p.id];
-          const state = { profiles: allProfiles, profileOrder: order };
-          const ownerId = ownsProfileData(state, p.id) ? undefined : [p.id, ...sharingProfiles(state, p.id)].find((id) => ownsProfileData(state, id));
+          const state = { spaces: allProfiles, spaceOrder: order };
+          const ownerId = ownsProfileData(state, p.id) ? undefined : [p.id, ...sharingSpaces(state, p.id)].find((id) => ownsProfileData(state, id));
           const owner = ownerId ? allProfiles[ownerId] : undefined;
           return (
             <Row

@@ -18,9 +18,9 @@ function chromeTree(profile = "") {
   };
   return { bar: walk("bar"), other: walk("other") };
 }
-function storeTree(profileId = "default") {
+function storeTree(spaceId = "default") {
   const b = S().bookmarks;
-  const roots = b.roots[profileId];
+  const roots = b.roots[spaceId];
   const walk = (id) => {
     const n = b.nodes[id];
     return n.kind === "url" ? `${n.title}=${n.url}` : { [n.title]: n.children.map(walk) };
@@ -78,10 +78,10 @@ test("the store's tree and Chrome's stay alike: the app's edits go as ops, an ex
   assert.ok(S().bookmarksReady.default);
   const same = () => assert.deepEqual(chromeTree(), storeTree());
 
-  const a = S().addBookmark({ profileId: "default", url: "https://a.example/", title: "A" });
-  const f = S().addBookmarkFolder({ profileId: "default", title: "F" });
-  const g = S().addBookmarkFolder({ profileId: "default", title: "G", parentId: f });
-  const b = S().addBookmark({ profileId: "default", url: "https://b.example/", title: "B", parentId: g });
+  const a = S().addBookmark({ spaceId: "default", url: "https://a.example/", title: "A" });
+  const f = S().addBookmarkFolder({ spaceId: "default", title: "F" });
+  const g = S().addBookmarkFolder({ spaceId: "default", title: "G", parentId: f });
+  const b = S().addBookmark({ spaceId: "default", url: "https://b.example/", title: "B", parentId: g });
   await settle();
   same();
   S().moveBookmark(a, f, 0);
@@ -118,7 +118,7 @@ test("an edit made at launch, before Chrome's tree is read, reaches Chrome and s
   stub.docs.clear();
   stub.bookmarkDbs.clear();
   stub.chromeBookmarkEdit("", [{ op: "add", id: "0f0f0f0f-0000-4000-8000-0000000000a1", k: "u", t: "In Chrome", u: "https://chrome.example/", a: 1, parent: "bar" }]);
-  S().addBookmark({ profileId: "default", url: "https://early.example/", title: "Early" });
+  S().addBookmark({ spaceId: "default", url: "https://early.example/", title: "Early" });
   const stop = startBookmarks();
   await reloadBookmarks();
   assert.deepEqual(chromeTree().bar, { "Bookmarks Bar": ["Early=https://early.example/", "In Chrome=https://chrome.example/"] });
@@ -132,9 +132,9 @@ test("ops Chrome can't apply (an extension moved things meanwhile) stop there: n
   stub.bookmarkDbs.clear();
   const stop = startBookmarks();
   await reloadBookmarks();
-  const b = S().addBookmarkFolder({ profileId: "default", title: "B" });
-  const f = S().addBookmarkFolder({ profileId: "default", title: "F" });
-  const a = S().addBookmarkFolder({ profileId: "default", title: "A", parentId: f });
+  const b = S().addBookmarkFolder({ spaceId: "default", title: "B" });
+  const f = S().addBookmarkFolder({ spaceId: "default", title: "F" });
+  const a = S().addBookmarkFolder({ spaceId: "default", title: "A", parentId: f });
   await reloadBookmarks();
   // An extension puts B inside A; before the app hears of it, the app moves A into B and deletes F.
   const db = stub.chromeBookmarks("");

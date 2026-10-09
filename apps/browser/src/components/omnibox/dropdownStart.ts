@@ -20,11 +20,11 @@ function recentPages(history: HistoryEntry[], url: string): Suggestion[] {
   return out;
 }
 
-export function useDropdownStart(enabled: boolean, tabId: string, profileId: string): Suggestion[] {
+export function useDropdownStart(enabled: boolean, tabId: string, spaceId: string): Suggestion[] {
   const url = useBrowser((s) => (enabled ? (s.tabs[tabId]?.url ?? "") : ""));
   const title = useBrowser((s) => (enabled ? (s.tabs[tabId]?.title ?? "") : ""));
   const favicon = useBrowser((s) => (enabled ? (s.tabs[tabId]?.favicon ?? null) : null));
-  const history = useBrowser((s) => (enabled ? (s.history[profileId] ?? NO_HISTORY) : NO_HISTORY));
+  const history = useBrowser((s) => (enabled ? (s.history[spaceId] ?? NO_HISTORY) : NO_HISTORY));
   const recent = recentPages(history, url);
   return url ? [{ kind: "page" as const, url, title, favicon }, ...recent] : recent;
 }

@@ -49,7 +49,7 @@ process.on("unhandledRejection", (error) => {
 app = await launch(appPath, {
   data, port,
   session: session({
-    profiles: [{ id: "default", name: "Personal", color: "plum" }, { id: "p-work", name: "Work", color: "blue" }],
+    spaces: [{ id: "default", name: "Personal", color: "plum" }, { id: "p-work", name: "Work", color: "blue" }],
     windows: [{ id: "w1", tabIds: ids, activeTabIds: { default: "t3" } }],
     tabs: ids.map((id) => tab(id, id.startsWith("pin"))),
   }),
@@ -79,9 +79,9 @@ async function cdp(urlPart, expression) {
 }
 
 const state = () => nn(`const s = nn.store.getState(), w = s.windows.w1;
-  return { profile: w.profileId, active: w.activeTabIds[w.profileId], tabs: w.tabIds.length,
+  return { profile: w.spaceId, active: w.activeTabIds[w.spaceId], tabs: w.tabIds.length,
     panel: !!s.windowUi.w1?.panel.open, panelMode: s.windowUi.w1?.panel.mode };`);
-const activeUrl = async () => (await nn(`const s = nn.store.getState(), w = s.windows.w1; return w ? s.tabs[w.activeTabIds[w.profileId]]?.url ?? "" : "no window w1";`));
+const activeUrl = async () => (await nn(`const s = nn.store.getState(), w = s.windows.w1; return w ? s.tabs[w.activeTabIds[w.spaceId]]?.url ?? "" : "no window w1";`));
 const press = (key, options) => nn(`return nn.shell.devKeyEquivalent("w1", ${JSON.stringify({ ...key, ...options })});`);
 
 const F = (code) => String.fromCharCode(code);
@@ -280,8 +280,8 @@ const check = (name, ok, detail) => {
   if (!ok) failures++;
   since = Date.now();
 };
-await nn(`globalThis.selections = []; nn.store.subscribe((s, p) => { const w = s.windows.w1, a = w?.activeTabIds[w.profileId];
-  if (a !== p.windows.w1?.activeTabIds[p.windows.w1.profileId]) globalThis.selections.push(a); }); return 1;`);
+await nn(`globalThis.selections = []; nn.store.subscribe((s, p) => { const w = s.windows.w1, a = w?.activeTabIds[w.spaceId];
+  if (a !== p.windows.w1?.activeTabIds[p.windows.w1.spaceId]) globalThis.selections.push(a); }); return 1;`);
 const real = async (label, key, focus, expectUrl) => {
   await nn(`globalThis.selections.length = 0; return 1;`);
   const r = await press(key, focus);
@@ -317,12 +317,12 @@ await real("⌃⇟ (Next Tab)", K(F(0xf72d), 121, "control", "function"), sideba
 await showPage("t3");
 await sleep(2000);
 {
-  const next = await nn(`const s = nn.store.getState(), w = s.windows.w1, ids = w.tabIds.filter((id) => s.tabs[id].profileId === w.profileId);
+  const next = await nn(`const s = nn.store.getState(), w = s.windows.w1, ids = w.tabIds.filter((id) => s.tabs[id].spaceId === w.spaceId);
     return ids[ids.indexOf("t3") + 1];`);
   const before = await activeUrl();
   const r = await press(cmd("}", 30, "shift"), page);
   await sleep(300);
-  const now = await nn(`const s = nn.store.getState(), w = s.windows.w1; return w.activeTabIds[w.profileId];`);
+  const now = await nn(`const s = nn.store.getState(), w = s.windows.w1; return w.activeTabIds[w.spaceId];`);
   check("⇧⌘] in a page selects the next tab", before.endsWith("?t3") && now === next, `${next} expected, ${now} selected; ${describe(r)}`);
 }
 

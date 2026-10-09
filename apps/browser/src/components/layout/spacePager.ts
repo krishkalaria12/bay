@@ -41,10 +41,10 @@ class SpacePager {
       if (!w) return this.dispose();
       // Native selection survives root swaps; React's selection reaches it through props.
       const was = prev.windows[windowId];
-      if (w.profileId !== was?.profileId || w.incognito !== was?.incognito || s.profileOrder !== prev.profileOrder) {
+      if (w.spaceId !== was?.spaceId || w.incognito !== was?.incognito || s.spaceOrder !== prev.spaceOrder) {
         this.state.setState({ pages: this.warmPages() });
       }
-      if (!this.switching && !w.incognito && w.profileId !== was?.profileId) this.selectExternal(w.profileId, s.profileOrder);
+      if (!this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
     });
   }
 
@@ -63,7 +63,7 @@ class SpacePager {
 
   // A profile chosen outside the pager: native jumps to it, and no older native event may move the
   // store until that has landed.
-  private selectExternal(profileId: string, order: string[]) {
+  private selectExternal(spaceId: string, order: string[]) {
     const generation = ++this.externalGeneration;
     this.external = generation;
     const done = (ok: boolean) => {
@@ -72,7 +72,7 @@ class SpacePager {
       // The latest state, not the requested profile: a gesture after the command wins.
       if (ok) this.commitNative(cef.pagerState(this.windowId));
     };
-    cef.selectPager(this.windowId, profileId, order.join("\n")).then(done, () => done(false));
+    cef.selectPager(this.windowId, spaceId, order.join("\n")).then(done, () => done(false));
   }
 
   private commitNative(snapshot: Pick<PagerStateEvent, "sequence" | "selected" | "profileId"> | null, event?: PagerStateEvent) {
@@ -81,12 +81,13 @@ class SpacePager {
     const s = useBrowser.getState();
     const w = s.windows[this.windowId];
     // The native order may differ from the store's by now; the index is only a fallback without one.
-    const id = snapshot.profileId !== undefined ? snapshot.profileId : s.profileOrder[snapshot.selected];
+    // The pager names the space it shows `profileId` (packages/nncore swipe.tsx).
+    const id = snapshot.profileId !== undefined ? snapshot.profileId : s.spaceOrder[snapshot.selected];
     unstable_batchedUpdates(() => {
-      if (w && !w.incognito && id && s.profiles[id] && id !== w.profileId) {
+      if (w && !w.incognito && id && s.spaces[id] && id !== w.spaceId) {
         this.switching = true;
         try {
-          s.switchProfile(this.windowId, id);
+          s.switchSpace(this.windowId, id);
         } finally {
           this.switching = false;
         }
@@ -97,13 +98,13 @@ class SpacePager {
 
   private index() {
     const current = this.current();
-    return current ? useBrowser.getState().profileOrder.indexOf(current) : -1;
+    return current ? useBrowser.getState().spaceOrder.indexOf(current) : -1;
   }
 
   private warmPages(): PagerPage[] | null {
     const i = this.index();
     if (i < 0) return null;
-    const order = useBrowser.getState().profileOrder;
+    const order = useBrowser.getState().spaceOrder;
     return [i - 1, i, i + 1].filter((slot) => slot >= 0 && slot < order.length).map((slot) => ({ id: order[slot]!, slot }));
   }
 
@@ -128,26 +129,26 @@ class SpacePager {
   step(delta: -1 | 1) {
     if (!this.current()) return;
     // Native steps from where it is headed when the command runs, which may be ahead of the store.
-    void cef.stepPager(this.windowId, delta, false, useBrowser.getState().profileOrder.join("\n")).then((ok) => {
+    void cef.stepPager(this.windowId, delta, false, useBrowser.getState().spaceOrder.join("\n")).then((ok) => {
       if (ok) return;
-      const next = useBrowser.getState().profileOrder[this.index() + delta];
-      if (this.index() >= 0 && next) useBrowser.getState().switchProfile(this.windowId, next);
+      const next = useBrowser.getState().spaceOrder[this.index() + delta];
+      if (this.index() >= 0 && next) useBrowser.getState().switchSpace(this.windowId, next);
     });
   }
 
-  switchTo(profileId: string) {
+  switchTo(spaceId: string) {
     const s = useBrowser.getState();
-    const index = s.profileOrder.indexOf(profileId);
-    if (!s.profiles[profileId] || !this.current() || index < 0) return;
-    if (!this.active) return s.switchProfile(this.windowId, profileId);
-    void cef.switchPager(this.windowId, index, s.profileOrder.join("\n")).then((ok) => {
-      if (!ok) useBrowser.getState().switchProfile(this.windowId, profileId);
+    const index = s.spaceOrder.indexOf(spaceId);
+    if (!s.spaces[spaceId] || !this.current() || index < 0) return;
+    if (!this.active) return s.switchSpace(this.windowId, spaceId);
+    void cef.switchPager(this.windowId, index, s.spaceOrder.join("\n")).then((ok) => {
+      if (!ok) useBrowser.getState().switchSpace(this.windowId, spaceId);
     });
   }
 
   private current() {
     const w = useBrowser.getState().windows[this.windowId];
-    return w && !w.incognito ? w.profileId : null;
+    return w && !w.incognito ? w.spaceId : null;
   }
 
   private dispose() {
@@ -170,8 +171,8 @@ export function pagerFor(windowId: string): SpacePager {
   return pager;
 }
 
-export function pageToSpace(windowId: string, profileId: string) {
-  pagerFor(windowId).switchTo(profileId);
+export function pageToSpace(windowId: string, spaceId: string) {
+  pagerFor(windowId).switchTo(spaceId);
 }
 
 export function usePagerSurface(windowId: string) {
@@ -180,9 +181,9 @@ export function usePagerSurface(windowId: string) {
 
 export function usePagerPages(windowId: string): { pages: PagerPage[]; paging: boolean; pager: SpacePager } {
   const pager = pagerFor(windowId);
-  const current = useBrowser((s) => s.windows[windowId]?.profileId ?? null);
+  const current = useBrowser((s) => s.windows[windowId]?.spaceId ?? null);
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
-  const order = useBrowser((s) => s.profileOrder);
+  const order = useBrowser((s) => s.spaceOrder);
   // Every profile stays mounted at its absolute index, so a drag needs no JS to start.
   const all = !incognito && !!current && order.includes(current);
   const pages = all ? order.map((id, slot) => ({ id, slot })) : restPages(current, order).map((p) => (p.id === current ? p : { ...p, resting: true }));
@@ -197,8 +198,8 @@ export function usePagerNativeConfig(windowId: string, width?: number): NativePa
   const [selected, count, order] = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
-      const i = w && !w.incognito ? s.profileOrder.indexOf(w.profileId) : -1;
-      return [i, s.profileOrder.length, s.profileOrder.join("\n")] as const;
+      const i = w && !w.incognito ? s.spaceOrder.indexOf(w.spaceId) : -1;
+      return [i, s.spaceOrder.length, s.spaceOrder.join("\n")] as const;
     }),
   );
   return selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;

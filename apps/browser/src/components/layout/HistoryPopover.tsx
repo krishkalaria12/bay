@@ -12,8 +12,8 @@ import { HISTORY_POPOVER_WIDTH } from "./constants";
 
 export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; windowId: string; anchors: { back: number; forward: number } }) {
   const menu = useHistoryMenu((s) => (s.menu?.tabId === tabId ? s.menu : null));
-  const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
-  const favicons = useHistoryFavicons(profileId, menu?.items ?? []);
+  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const favicons = useHistoryFavicons(spaceId, menu?.items ?? []);
   useEffect(() => () => void (useHistoryMenu.getState().menu?.tabId === tabId && closeHistoryMenu()), [tabId]);
   if (!menu) return null;
 

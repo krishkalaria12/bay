@@ -1,7 +1,7 @@
 import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } from "@bay/nncore";
 import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
-import { DEFAULT_PROFILE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
+import { DEFAULT_SPACE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { orderSections, syncGroupOrder } from "../store/groups";
 import { engineProfile, makeTab, pinnedFirst, without } from "../store/model";
@@ -9,7 +9,7 @@ import { pinKeyOf } from "../store/mirroredPins";
 import { adoptParkedPins, parkWindowPins } from "../store/parkedPins";
 import { removeTabs } from "../store/tabs";
 import type { Settings } from "../store/settings";
-import type { BookmarkNode, HistoryEntry, Profile, Tab, TabGroup } from "../store/types";
+import type { BookmarkNode, HistoryEntry, Space, Tab, TabGroup } from "../store/types";
 import { HISTORY_WINDOW_MS, MAX_DEVICE_TABS, PASSWORD_READ_INTERVAL_MS, SAME_VISIT_MS } from "./constants";
 
 const store = () => useBrowser.getState();
@@ -28,7 +28,7 @@ export const SYNCED_SETTINGS = [
   "hideToolbarWhileScrolling",
   "newTabPosition",
   "warnBeforeClosingLastTab",
-  "warnBeforeMovingTabsToProfile",
+  "warnBeforeMovingTabsToSpace",
   "tabReorderHaptics",
   "extendWebsiteColor",
   "cmdClickCreatesTabGroup",
@@ -63,18 +63,18 @@ export const settingsAdapter: Adapter = {
   },
 };
 
-export type ProfileRecord = { n: string; c: Profile["color"]; i: string | null; d?: true };
+export type ProfileRecord = { n: string; c: Space["color"]; i: string | null; d?: true };
 
 export function profilesAdapter(links: () => Record<string, { syncId: string }>): Adapter {
-  const linked = () => Object.entries(links()).filter(([id]) => store().profiles[id]);
+  const linked = () => Object.entries(links()).filter(([id]) => store().spaces[id]);
   return {
     prefix: "prof:",
     adoptRemoteOnJoin: true,
     extract: () => {
       const values = new Map<string, unknown>();
       for (const [id, { syncId }] of linked()) {
-        const p = store().profiles[id]!;
-        values.set(`prof:${syncId}`, { n: p.name, c: p.color, i: p.icon, ...(id === DEFAULT_PROFILE_ID ? { d: true } : {}) } satisfies ProfileRecord);
+        const p = store().spaces[id]!;
+        values.set(`prof:${syncId}`, { n: p.name, c: p.color, i: p.icon, ...(id === DEFAULT_SPACE_ID ? { d: true } : {}) } satisfies ProfileRecord);
       }
       const mine = new Set(values.keys());
       return { values, ignore: (key) => !mine.has(key) };
@@ -83,7 +83,7 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
       for (const [id, { syncId }] of linked()) {
         const record = visible.get(`prof:${syncId}`) as ProfileRecord | undefined;
         if (!record || !changed.has(`prof:${syncId}`)) continue;
-        store().updateProfile(id, { name: record.n, color: record.c, icon: record.i });
+        store().updateSpace(id, { name: record.n, color: record.c, icon: record.i });
       }
     },
   };
@@ -109,15 +109,15 @@ type BookmarkValue = { k: "u" | "f"; p: string; t: string; u?: string; a: number
 // A bookmark's record key is its sync key: Chrome's UUID, or for a bookmark synced before Chrome kept bookmarks,
 // its old id (kept on Chrome's node as `syncKey`), so Macs not yet updated and updated ones name it alike. A key
 // that isn't a UUID becomes the node bookmarkUuidFor gives, on every Mac.
-export function bookmarksAdapter(profileId: string): Adapter {
+export function bookmarksAdapter(spaceId: string): Adapter {
   // Before the tree is read from Chrome it's empty, which would read as every bookmark deleted.
-  const ready = () => !!store().bookmarksReady[profileId];
+  const ready = () => !!store().bookmarksReady[spaceId];
   return {
     prefix: "bm:",
     extract: (base) => {
       if (!ready()) return null;
       const b = store().bookmarks;
-      const roots = b.roots[profileId];
+      const roots = b.roots[spaceId];
       const values = new Map<string, unknown>();
       if (!roots) return { values };
       // An old key names this node only if it maps to it (a copy of a bookmark carries its original's key along).
@@ -160,7 +160,7 @@ export function bookmarksAdapter(profileId: string): Adapter {
     apply: (visible) => {
       if (!ready()) return false;
       const s = store();
-      const [b, roots] = ensureRoots(s.bookmarks, profileId);
+      const [b, roots] = ensureRoots(s.bookmarks, spaceId);
       // By node id; a key that isn't a UUID names the node bookmarkUuidFor gives it.
       const values = new Map([...visible].map(([k, v]) => [bookmarkUuidFor(k.slice(3)), v as BookmarkValue]));
       const keys = new Map([...visible.keys()].map((k) => [bookmarkUuidFor(k.slice(3)), k.slice(3)]));
@@ -228,8 +228,8 @@ export const historyExpired = (key: string, value: unknown, now: number) =>
 // Chrome, so Chrome's copy then differs from the record (its own visit count and title). A local edit is a visit
 // the record doesn't have; anything else publishes the record unchanged. Two Macs settle on the union of their
 // visits instead of trading versions.
-export function historyAdapter(profileId: string): Adapter {
-  const ready = () => !!store().historyReady[profileId];
+export function historyAdapter(spaceId: string): Adapter {
+  const ready = () => !!store().historyReady[spaceId];
   return {
     prefix: "h:",
     extract: (base) => {
@@ -238,9 +238,9 @@ export function historyAdapter(profileId: string): Adapter {
       const since = Date.now() - HISTORY_WINDOW_MS;
       const values = new Map<string, unknown>();
       const older = new Set<string>();
-      const view = store().history[profileId] ?? [];
+      const view = store().history[spaceId] ?? [];
       // The view holds Chrome's newest MAX_HISTORY URLs: one visited at or before this may only be missing from it.
-      const floor = store().historyFloor[profileId] ?? -Infinity;
+      const floor = store().historyFloor[spaceId] ?? -Infinity;
       for (const e of view) {
         if (!keptInHistory(e.url)) continue;
         const key = `h:${e.url}`;
@@ -265,7 +265,7 @@ export function historyAdapter(profileId: string): Adapter {
     apply: async (visible, changed) => {
       if (!ready()) return false;
       const since = Date.now() - HISTORY_WINDOW_MS;
-      const byUrl = new Map((store().history[profileId] ?? []).map((e) => [e.url, e]));
+      const byUrl = new Map((store().history[spaceId] ?? []).map((e) => [e.url, e]));
       const add: { url: string; title: string; visitTimes: number[] }[] = [];
       const remove: string[] = [];
       const updates = new Map<string, HistoryEntry | null>();
@@ -294,11 +294,11 @@ export function historyAdapter(profileId: string): Adapter {
         }
       }
       if (!updates.size) return;
-      const engine = engineProfile(profileId);
+      const engine = engineProfile(spaceId);
       await Promise.all([addHistoryVisits(engine, add, SAME_VISIT_MS), deleteHistoryUrls(engine, remove)]);
       // The view as it is now (Chrome's reports may have landed meanwhile), with the records merged in.
       useBrowser.setState((s) => {
-        const current = new Map((s.history[profileId] ?? []).map((e) => [e.url, e]));
+        const current = new Map((s.history[spaceId] ?? []).map((e) => [e.url, e]));
         for (const [url, update] of updates) {
           const now = current.get(url);
           if (!update) current.delete(url);
@@ -309,7 +309,7 @@ export function historyAdapter(profileId: string): Adapter {
           }
         }
         const list = [...current.values()].sort((a, z) => z.lastVisit - a.lastVisit).slice(0, MAX_HISTORY);
-        return { history: { ...s.history, [profileId]: list } };
+        return { history: { ...s.history, [spaceId]: list } };
       });
     },
   };
@@ -317,7 +317,7 @@ export function historyAdapter(profileId: string): Adapter {
 
 export type DeviceTabs = { n: string; tabs: { u: string; t: string }[] };
 
-export function deviceTabsAdapter(profileId: string, deviceId: string, name: () => string, retired = false): Adapter {
+export function deviceTabsAdapter(spaceId: string, deviceId: string, name: () => string, retired = false): Adapter {
   const key = `tabs:${deviceId}`;
   return {
     prefix: "tabs:",
@@ -326,7 +326,7 @@ export function deviceTabsAdapter(profileId: string, deviceId: string, name: () 
       const s = store();
       const open = Object.values(s.tabs)
         // Pinned tabs sync as pinned tabs; unloaded tiles aren't open.
-        .filter((t) => t.profileId === profileId && !t.pinned && !t.unloaded && /^(https?|file):/.test(t.url) && !s.windows[t.windowId]?.incognito)
+        .filter((t) => t.spaceId === spaceId && !t.pinned && !t.unloaded && /^(https?|file):/.test(t.url) && !s.windows[t.windowId]?.incognito)
         .sort((a, z) => z.lastActiveAt - a.lastActiveAt)
         .slice(0, MAX_DEVICE_TABS)
         .map((t) => ({ u: t.url, t: t.customTitle || t.title }));
@@ -344,12 +344,12 @@ type Window = BrowserState["windows"][string];
 // Little Bay's page isn't one of the open tabs: it's thrown away when the window closes.
 const openWindows = (s: BrowserState) => s.windowOrder.map((id) => s.windows[id]).filter((w): w is Window => !!w && !w.incognito && w.kind !== "small");
 
-function homeWindow(s: BrowserState, profileId: string): Window | undefined {
+function homeWindow(s: BrowserState, spaceId: string): Window | undefined {
   const order = [...s.ui.focusOrder, ...s.windowOrder].map((id) => s.windows[id]).filter((w): w is Window => !!w && !w.incognito && w.kind !== "small");
-  return order.find((w) => w.profileId === profileId) ?? order[0];
+  return order.find((w) => w.spaceId === spaceId) ?? order[0];
 }
 
-export function pinnedAdapter(profileId: string): Adapter {
+export function pinnedAdapter(spaceId: string): Adapter {
   return {
     prefix: "pin:",
     extract: (base) => {
@@ -359,12 +359,12 @@ export function pinnedAdapter(profileId: string): Adapter {
       const groups: Pick<TabGroup, "id" | "name" | "icon" | "color">[] = [];
       const members = new Map<string, Pin[]>();
       const pinnedGroupOf = new Map<string, TabGroup>();
-      for (const g of Object.values(s.groups)) if (g.pinned && g.profileId === profileId) g.tabIds.forEach((id) => pinnedGroupOf.set(id, g));
+      for (const g of Object.values(s.groups)) if (g.pinned && g.spaceId === spaceId) g.tabIds.forEach((id) => pinnedGroupOf.set(id, g));
       const tiled = new Set<string>();
       for (const w of openWindows(s)) {
         for (const id of w.tabIds) {
           const t = s.tabs[id];
-          if (!t || t.profileId !== profileId) continue;
+          if (!t || t.spaceId !== spaceId) continue;
           const g = pinnedGroupOf.get(id);
           // Each window has a tab for a favourite (store/mirroredPins.ts): it's one pin, named by its key.
           if (t.pinned) {
@@ -381,7 +381,7 @@ export function pinnedAdapter(profileId: string): Adapter {
           }
         }
       }
-      const park = s.parkedPins[profileId];
+      const park = s.parkedPins[spaceId];
       for (const g of park?.groups ?? []) if (!members.has(g.id)) (members.set(g.id, []), groups.push(g));
       for (const p of park?.tabs ?? []) (p.groupId ? members.get(p.groupId) : tiles)?.push(p);
       const values = new Map<string, unknown>();
@@ -401,12 +401,12 @@ export function pinnedAdapter(profileId: string): Adapter {
     },
     apply: (visible, changed) => {
       let s = store();
-      const home = homeWindow(s, profileId);
+      const home = homeWindow(s, spaceId);
       if (!home) return false;
-      const PARK = `park:${profileId}`;
-      if (s.parkedPins[profileId]) {
-        const stand: Window = { id: PARK, profileId, incognito: false, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame: null, createdAt: 0 };
-        s = adoptParkedPins({ ...s, windows: { ...s.windows, [PARK]: stand } }, PARK, profileId);
+      const PARK = `park:${spaceId}`;
+      if (s.parkedPins[spaceId]) {
+        const stand: Window = { id: PARK, spaceId, incognito: false, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame: null, createdAt: 0 };
+        s = adoptParkedPins({ ...s, windows: { ...s.windows, [PARK]: stand } }, PARK, spaceId);
       }
       const pins = new Map<string, PinValue>();
       const groupValues = new Map<string, PinGroupValue>();
@@ -446,7 +446,7 @@ export function pinnedAdapter(profileId: string): Adapter {
         const old = groups[id];
         groups[id] = old
           ? { ...old, name: v.n, icon: v.i, color: v.c, pinned: true }
-          : { id, windowId: home.id, profileId, name: v.n, icon: v.i, color: v.c, collapsed: false, pinned: true, tabIds: [], createdAt: Date.now() };
+          : { id, windowId: home.id, spaceId, name: v.n, icon: v.i, color: v.c, collapsed: false, pinned: true, tabIds: [], createdAt: Date.now() };
       }
       for (const [key, v] of pins) {
         const id = local(key);
@@ -467,7 +467,7 @@ export function pinnedAdapter(profileId: string): Adapter {
         const w = windows[windowId];
         if (!w) continue;
         const tab: Tab = {
-          ...makeTab(windowId, profileId, v.u, { title: v.ti, pinned: !group, customTitle: v.t, customIcon: v.i }),
+          ...makeTab(windowId, spaceId, v.u, { title: v.ti, pinned: !group, customTitle: v.t, customIcon: v.i }),
           id,
           pinnedUrl: group ? null : v.u,
           navigation: null,
@@ -479,11 +479,11 @@ export function pinnedAdapter(profileId: string): Adapter {
       for (const [g, keys] of memberOrder) memberOrder.set(g, keys.map(local));
       const inGroup = new Set([...memberOrder.values()].flat().filter((id) => tabs[id]));
       for (const g of Object.values(groups)) {
-        if (g.profileId !== profileId) continue;
+        if (g.spaceId !== spaceId) continue;
         const wanted = g.pinned && memberOrder.has(g.id) ? memberOrder.get(g.id)!.filter((id) => tabs[id]) : g.tabIds.filter((id) => !inGroup.has(id));
         groups[g.id] = { ...g, tabIds: wanted };
       }
-      for (const g of Object.values(groups)) if (g.profileId === profileId && !g.tabIds.length) delete groups[g.id];
+      for (const g of Object.values(groups)) if (g.spaceId === spaceId && !g.tabIds.length) delete groups[g.id];
 
       const sequence = [...tileOrder.map(local), ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
       const rank = new Map(sequence.map((id, i) => [id, i]));
@@ -518,14 +518,14 @@ type PasswordValue = { o: string; u: string; p: string };
 
 // Sync passwords through Chrome; disabling sync never deletes local passwords.
 export function passwordsAdapter(
-  profileId: string,
+  spaceId: string,
   forced: () => boolean,
   readLogins: (engineProfile: string) => Promise<SavedLogin[] | null | undefined> = async (p) => SyncNative?.readPasswords(p),
 ): Adapter {
   let lastRead = 0;
   let quietUntil = 0;
   let created = new Map<string, number>();
-  const profile = () => engineProfile(profileId);
+  const profile = () => engineProfile(spaceId);
   const keyOf = (origin: string, username: string) => `pw:${origin}\n${username}`;
   const read = async () => {
     const logins = await readLogins(profile());

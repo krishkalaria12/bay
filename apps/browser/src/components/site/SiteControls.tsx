@@ -19,7 +19,7 @@ import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
-import { bookmarkProfileId, engineProfile, tabLabel } from "../../store/model";
+import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../layout/controls";
 import { toggleDeveloperMode } from "../developer/devMode";
@@ -86,7 +86,7 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
   const actions = useExtensions((e) => e.actions[browserId]);
   const origin = originOf(url);
   const host = origin ? new URL(origin).hostname : "";
-  const profile = engineProfile(tab?.profileId ?? "");
+  const profile = engineProfile(tab?.spaceId ?? "");
   const close = () => setPopover(tabId, null);
   // Document PiP may have a window without a tab session.
   const video = useMedia((m) => !!m.sessions[tabId]?.hasVideo || !!m.pipOpen[tabId]);
@@ -221,7 +221,7 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
                 title={bookmarked ? "Remove Bookmark" : "Bookmark Page"}
                 onPress={() => {
                   const s = useBrowser.getState();
-                  s.toggleBookmark(bookmarkProfileId(s, s.windows[tab.windowId]), tab);
+                  s.toggleBookmark(bookmarkSpaceId(s, s.windows[tab.windowId]), tab);
                 }}
               />
               <ActionTile icon="plus.magnifyingglass" title="Zoom and Site Settings" onPress={() => setDetailsOpen((open) => !open)} />
@@ -284,7 +284,7 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
           <>
             <PopoverRow icon="chevron.left" title="Site controls" onPress={() => setDetailsOpen(false)} />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 13, paddingTop: 6, paddingBottom: 8 }}>
-              <Favicon url={url} favicon={tab.favicon} size={20} profileId={tab.profileId} />
+              <Favicon url={url} favicon={tab.favicon} size={20} spaceId={tab.spaceId} />
               <View style={{ flex: 1 }}>
                 <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
                   {host ? displayHost(host) : tabLabel(tab)}

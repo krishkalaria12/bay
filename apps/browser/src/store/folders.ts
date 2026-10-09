@@ -29,7 +29,7 @@ export function folderTabIds(s: Pick<BrowserState, "tabs" | "windows" | "pinnedF
 }
 
 export const inFolder = (t: Tab | undefined, f: PinnedFolder) =>
-  !!t?.pinnedRow && t.folderId === f.id && t.windowId === f.windowId && t.profileId === f.profileId;
+  !!t?.pinnedRow && t.folderId === f.id && t.windowId === f.windowId && t.spaceId === f.spaceId;
 
 /** Folders of windows that are gone, and members' marks of folders that are gone. */
 export function prunePinnedFolders(s: BrowserState): BrowserState {
@@ -52,10 +52,10 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
     const s = get();
     const w = s.windows[windowId];
     if (!w) return "";
-    const profileId = tabIds.map((id) => s.tabs[id]?.profileId).find(Boolean) ?? w.profileId;
-    const folder: PinnedFolder = { id: newId("pf"), windowId, profileId, name, icon: null, collapsed: false, createdAt: Date.now() };
+    const spaceId = tabIds.map((id) => s.tabs[id]?.spaceId).find(Boolean) ?? w.spaceId;
+    const folder: PinnedFolder = { id: newId("pf"), windowId, spaceId, name, icon: null, collapsed: false, createdAt: Date.now() };
     let next: BrowserState = { ...s, pinnedFolders: { ...s.pinnedFolders, [folder.id]: folder } };
-    const members = tabIds.filter((id) => next.tabs[id]?.windowId === windowId && next.tabs[id]!.profileId === profileId);
+    const members = tabIds.filter((id) => next.tabs[id]?.windowId === windowId && next.tabs[id]!.spaceId === spaceId);
     if (members.length) {
       // Where the first of them was, if it was a pinned row; else at the end of the Pinned section.
       const at = w.tabIds.findIndex((id) => members.includes(id));

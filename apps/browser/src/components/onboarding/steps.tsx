@@ -11,7 +11,7 @@ import {
 } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { PROFILE_COLORS, themeFor, useTheme } from "../../lib/theme";
+import { SPACE_COLORS, themeFor, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
@@ -193,10 +193,10 @@ export function PersonalizeStep() {
 function WindowPreview({ windowId }: { windowId: string }) {
   const colors = useOnboardingColors();
   const dark = useTheme().dark;
-  const color = useBrowser((s) => s.profiles[s.windows[windowId]?.profileId ?? ""]?.color ?? "plum");
+  const color = useBrowser((s) => s.spaces[s.windows[windowId]?.spaceId ?? ""]?.color ?? "plum");
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
   const theme = themeFor(`${color}:${dark ? "dark" : "light"}`);
-  const swatch = PROFILE_COLORS[color]?.swatch ?? PROFILE_COLORS.plum.swatch;
+  const swatch = SPACE_COLORS[color]?.swatch ?? SPACE_COLORS.plum.swatch;
   const line = { height: 6, borderRadius: 3, backgroundColor: colors.progressTrack };
   return (
     <View
@@ -323,7 +323,7 @@ export function ImportStep() {
 export function PinnedTabsStep() {
   const next = useOnboarding((s) => s.next);
   const windowId = useOnboarding((s) => s.windowId);
-  const history = useBrowser((s) => s.history[s.windows[windowId ?? ""]?.profileId ?? ""]);
+  const history = useBrowser((s) => s.history[s.windows[windowId ?? ""]?.spaceId ?? ""]);
   // Preselected from the history as the step opens.
   const [selected, setSelected] = useState<string[]>(() => preselectedSites(history ?? []));
 

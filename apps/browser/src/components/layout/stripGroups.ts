@@ -32,10 +32,10 @@ export function groupLayout(chip: number, widths: number[], gap: number, expande
 }
 
 /** Dia's "–" on the active tab of a collapsed group: the tab to go back to, the most recent one outside the group. */
-export function tuckTarget(s: BrowserState, windowId: string, profileId: string, groupId: string): string | undefined {
+export function tuckTarget(s: BrowserState, windowId: string, spaceId: string, groupId: string): string | undefined {
   const members = new Set(s.groups[groupId]?.tabIds ?? []);
   let best: string | undefined;
-  for (const id of viewTabIds(s, windowId, profileId)) {
+  for (const id of viewTabIds(s, windowId, spaceId)) {
     const t = s.tabs[id];
     if (!t || members.has(id)) continue;
     if (!best || t.lastActiveAt > s.tabs[best]!.lastActiveAt) best = id;
@@ -131,8 +131,8 @@ const stripMemo = new Map<string, { inputs: unknown[]; result: string[] }>();
  * slide them in and out. Recomputed only when tabs, windows, groups or splits change, and the same array comes
  * back while the entries don't, so a progress update costs a lookup.
  */
-export function stripEntries(s: BrowserState, windowId: string, profileId: string): string[] {
-  const key = `${windowId}|${profileId}`;
+export function stripEntries(s: BrowserState, windowId: string, spaceId: string): string[] {
+  const key = `${windowId}|${spaceId}`;
   const inputs = [s.tabs, s.windows, s.groups, s.splits];
   const cached = stripMemo.get(key);
   if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
@@ -140,7 +140,7 @@ export function stripEntries(s: BrowserState, windowId: string, profileId: strin
   const splits = splitIndex(s.splits);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const id of viewTabIds(s, windowId, profileId)) {
+  for (const id of viewTabIds(s, windowId, spaceId)) {
     const t = s.tabs[id]!;
     if (t.pinned) {
       out.push(`pinned:${id}`);

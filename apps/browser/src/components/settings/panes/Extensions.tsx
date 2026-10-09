@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Image, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { engineProfile, resolveWindowId } from "../../../store/model";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";
 import {
@@ -31,9 +31,9 @@ const siteAccessOf = (ext: InstalledExtension): SiteAccess =>
 
 export function ExtensionsPane() {
   const theme = useTheme();
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => useBrowser.getState().settings.defaultProfileId);
-  const profile = engineProfile(profileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const profile = engineProfile(spaceId);
   const list = useExtensionList(profile);
   const [detail, setDetail] = useState<string | null>(null);
   const [link, setLink] = useState("");
@@ -60,7 +60,7 @@ export function ExtensionsPane() {
         description="Add features to Bay with extensions from the Chrome Web Store. Each profile has its own."
         action={
           profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
+            <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} />
           ) : undefined
         }
       />

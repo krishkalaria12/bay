@@ -24,7 +24,7 @@ export function useSidebarPlayerTab(windowId: string): string | undefined {
     useShallow((s) => {
       const w = s.windows[windowId];
       if (!sessions.length || !w) return NO_IDS;
-      const ids = sessions.filter((id) => s.tabs[id]?.windowId === windowId && s.tabs[id]!.profileId === w.profileId && !isTabShown(s, id));
+      const ids = sessions.filter((id) => s.tabs[id]?.windowId === windowId && s.tabs[id]!.spaceId === w.spaceId && !isTabShown(s, id));
       // In sidebar order, which breaks ties between equally recent sessions.
       return ids.length > 1 ? ids.sort((a, b) => w.tabIds.indexOf(a) - w.tabIds.indexOf(b)) : ids;
     }),
@@ -60,7 +60,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
               {artwork ? (
                 <Image source={{ uri: artwork }} resizeMode="cover" style={{ width: 32, height: 32 }} />
               ) : (
-                <Favicon url={tab.url} favicon={tab.favicon} size={18} profileId={tab.profileId} />
+                <Favicon url={tab.url} favicon={tab.favicon} size={18} spaceId={tab.spaceId} />
               )}
             </View>
           </Pressable>

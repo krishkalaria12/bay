@@ -80,8 +80,8 @@ export type HistoryItem = {
 
 /** The favicons the profile's history has for `items`, as of the call (a menu's rows don't follow history). */
 /** The favicons the profile's history holds for `items`, followed as the history changes. */
-export function useHistoryFavicons(profileId: string, items: HistoryItem[]): Map<string, string | null> {
-  const history = useBrowser((s) => s.history[profileId]);
+export function useHistoryFavicons(spaceId: string, items: HistoryItem[]): Map<string, string | null> {
+  const history = useBrowser((s) => s.history[spaceId]);
   const urls = new Set(items.map((i) => i.url));
   return new Map((history ?? []).filter((h) => urls.has(h.url)).map((h) => [h.url, h.favicon]));
 }

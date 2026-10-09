@@ -10,12 +10,12 @@ export type SidebarEntries = { tiles: string[]; pinned: string[]; pinnedGroups: 
 
 const memo = new Map<string, { inputs: unknown[]; result: SidebarEntries }>();
 
-export function sidebarEntries(s: BrowserState, windowId: string, profileId?: string): SidebarEntries {
+export function sidebarEntries(s: BrowserState, windowId: string, spaceId?: string): SidebarEntries {
   const inputs = [s.tabs, s.windows, s.groups, s.splits, s.pinnedFolders];
-  const key = profileId ? `${windowId}|${profileId}` : windowId;
+  const key = spaceId ? `${windowId}|${spaceId}` : windowId;
   const cached = memo.get(key);
   if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
-  let result = computeEntries(s, windowId, profileId);
+  let result = computeEntries(s, windowId, spaceId);
   // Keep the previous object when nothing listed changed (a title or a switch), so subscribers compare by identity.
   if (cached) {
     const was = cached.result;
@@ -33,9 +33,9 @@ export function sidebarEntries(s: BrowserState, windowId: string, profileId?: st
   return result;
 }
 
-function computeEntries(s: BrowserState, windowId: string, profileId?: string): SidebarEntries {
+function computeEntries(s: BrowserState, windowId: string, spaceId?: string): SidebarEntries {
   // Favourites are shared by the spaces with this space's profile: theirs show here too.
-  const tiles = favoriteTabIds(s, windowId, profileId);
+  const tiles = favoriteTabIds(s, windowId, spaceId);
   const pinned: string[] = [];
   const pinnedGroups: string[] = [];
   const list: string[] = [];
@@ -43,7 +43,7 @@ function computeEntries(s: BrowserState, windowId: string, profileId?: string): 
   for (const g of Object.values(s.groups)) if (g.windowId === windowId) g.tabIds.forEach((id) => groupOf.set(id, g.id));
   const splits = splitIndex(s.splits);
   const seen = new Set<string>();
-  for (const id of viewTabIds(s, windowId, profileId)) {
+  for (const id of viewTabIds(s, windowId, spaceId)) {
     const tab = s.tabs[id]!;
     if (tab.pinned) continue;
     if (tab.pinnedRow) {
@@ -62,8 +62,8 @@ function computeEntries(s: BrowserState, windowId: string, profileId?: string): 
     else list.push(entry);
   }
   // A folder with nothing in it still shows, after the rest.
-  const profile = profileId ?? s.windows[windowId]?.profileId;
-  const empty = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.profileId === profile && !seen.has(`f:${f.id}`));
+  const profile = spaceId ?? s.windows[windowId]?.spaceId;
+  const empty = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.spaceId === profile && !seen.has(`f:${f.id}`));
   for (const f of empty.sort((a, b) => a.createdAt - b.createdAt)) pinned.push(`f:${f.id}`);
   return { tiles, pinned, pinnedGroups, list };
 }
@@ -128,8 +128,8 @@ function splitEntry(s: BrowserState, tabId: string, splits = splitIndex(s.splits
   return `t:${tabId}`;
 }
 
-export function useSidebarEntries(windowId: string, profileId?: string): SidebarEntries {
-  return useBrowser((s) => sidebarEntries(s, windowId, profileId));
+export function useSidebarEntries(windowId: string, spaceId?: string): SidebarEntries {
+  return useBrowser((s) => sidebarEntries(s, windowId, spaceId));
 }
 
 export const useGroupEntries = (groupId: string) => useBrowser(useShallow((s) => groupEntries(s, groupId)));

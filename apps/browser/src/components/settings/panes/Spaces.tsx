@@ -4,12 +4,12 @@ import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { changeSpaceProfile, createSpace, deleteSpace } from "../../../lib/actions";
-import { hex, PROFILE_COLORS, useTheme } from "../../../lib/theme";
+import { hex, SPACE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser, type BrowserState } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { plural, resolveWindowId } from "../../../store/model";
-import { sharingProfiles } from "../../../store/profiles";
-import type { Profile, ProfileColor } from "../../../store/types";
+import { sharingSpaces } from "../../../store/spaces";
+import type { Space, SpaceColor } from "../../../store/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../primitives";
 import { ColorStack, profileChoices } from "../../spaces/CreateSpace";
@@ -23,11 +23,11 @@ import { CLEAN_UP_CHOICES, PROFILE_ROW_HEIGHT, SPACE_PANE_ICON_COLUMNS } from ".
 
 const listOf = (names: string[]) => (names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`);
 
-function useSharedWith(profileId: string): string[] {
-  const order = useBrowser((s) => s.profileOrder);
-  const profiles = useBrowser((s) => s.profiles);
-  const others = sharingProfiles({ profiles, profileOrder: order }, profileId);
-  return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
+function useSharedWith(spaceId: string): string[] {
+  const order = useBrowser((s) => s.spaceOrder);
+  const spaces = useBrowser((s) => s.spaces);
+  const others = sharingSpaces({ spaces, spaceOrder: order }, spaceId);
+  return others.length ? order.filter((id) => id === spaceId || others.includes(id)) : [spaceId];
 }
 
 const cleanUpTitle = (hours: number) => CLEAN_UP_CHOICES.find((c) => c.value === String(hours))?.title ?? plural(hours, "hour");
@@ -45,16 +45,16 @@ function cleanUpHoursOf(choice: string): number | null | undefined {
   return Number(choice);
 }
 
-function useProfileChoices(profileId: string) {
-  const profileOrder = useBrowser((s) => s.profileOrder);
-  const profiles = useBrowser((s) => s.profiles);
-  return profileChoices({ profiles, profileOrder }, profileId);
+function useProfileChoices(spaceId: string) {
+  const spaceOrder = useBrowser((s) => s.spaceOrder);
+  const spaces = useBrowser((s) => s.spaces);
+  return profileChoices({ spaces, spaceOrder }, spaceId);
 }
 
 export function SpacesPane() {
   const theme = useTheme();
-  const profiles = useProfiles();
-  const defaultId = useBrowser((s) => s.settings.defaultProfileId);
+  const spaces = useSpaces();
+  const defaultId = useBrowser((s) => s.settings.defaultSpaceId);
 
   return (
     <View>
@@ -68,8 +68,8 @@ export function SpacesPane() {
         <Row title="Default space" description="Used for new windows and links opened from other apps.">
           <PopUp
             value={defaultId}
-            options={profiles.map((p) => ({ value: p.id, title: p.name }))}
-            onChange={(id) => useBrowser.getState().setDefaultProfile(id)}
+            options={spaces.map((p) => ({ value: p.id, title: p.name }))}
+            onChange={(id) => useBrowser.getState().setDefaultSpace(id)}
             minWidth={160}
           />
         </Row>
@@ -89,7 +89,7 @@ const settle = (value: SharedValue<number>, toValue: number) => value.set(withTi
 
 function SpaceList() {
   const colors = useFormColors();
-  const order = useBrowser((s) => s.profileOrder);
+  const order = useBrowser((s) => s.spaceOrder);
   const [dragging, setDragging] = useState<string | null>(null);
   const [controller] = useState(() => profileReorder(setDragging));
   useLayoutEffect(() => controller.reordered(), [order, controller]);
@@ -97,7 +97,7 @@ function SpaceList() {
   return (
     <View style={{ borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder }}>
       {order.map((id, i) => (
-        <SpaceRow key={id} profileId={id} first={i === 0} offset={controller.offsetOf(id)} lifted={dragging === id} controller={controller} />
+        <SpaceRow key={id} spaceId={id} first={i === 0} offset={controller.offsetOf(id)} lifted={dragging === id} controller={controller} />
       ))}
     </View>
   );
@@ -121,14 +121,14 @@ function profileReorder(setDragging: (id: string | null) => void) {
       offsets.forEach((v) => v.set(0));
     },
     start(id: string) {
-      const ids = useBrowser.getState().profileOrder;
+      const ids = useBrowser.getState().spaceOrder;
       const from = ids.indexOf(id);
       drag = { id, from, to: from, reorderPending: false };
       setDragging(id);
     },
     move(dy: number) {
       const { id, from } = drag;
-      const ids = useBrowser.getState().profileOrder;
+      const ids = useBrowser.getState().spaceOrder;
       const max = ids.length - 1;
       offsetOf(id).set(Math.max(-from * PROFILE_ROW_HEIGHT - 6, Math.min((max - from) * PROFILE_ROW_HEIGHT + 6, dy)));
       const to = Math.max(0, Math.min(max, Math.round(from + dy / PROFILE_ROW_HEIGHT)));
@@ -147,10 +147,10 @@ function profileReorder(setDragging: (id: string | null) => void) {
         offsets.forEach((v) => settle(v, 0));
         return;
       }
-      const ids = useBrowser.getState().profileOrder.filter((x) => x !== id);
+      const ids = useBrowser.getState().spaceOrder.filter((x) => x !== id);
       ids.splice(to, 0, id);
       drag.reorderPending = true;
-      useBrowser.getState().reorderProfiles(ids);
+      useBrowser.getState().reorderSpaces(ids);
     },
   };
 }
@@ -158,13 +158,13 @@ function profileReorder(setDragging: (id: string | null) => void) {
 type DragController = { start(id: string): void; move(dy: number): void; end(commit: boolean): void };
 
 function SpaceRow({
-  profileId,
+  spaceId,
   first,
   offset,
   lifted,
   controller,
 }: {
-  profileId: string;
+  spaceId: string;
   first: boolean;
   offset: SharedValue<number>;
   lifted: boolean;
@@ -172,16 +172,16 @@ function SpaceRow({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const profile = useBrowser((s) => s.profiles[profileId]);
-  const isDefault = useBrowser((s) => s.settings.defaultProfileId === profileId);
-  const shared = useSharedWith(profileId);
-  const names = useBrowser(useShallow((s) => shared.filter((id) => id !== profileId).map((id) => s.profiles[id]?.name ?? "")));
+  const profile = useBrowser((s) => s.spaces[spaceId]);
+  const isDefault = useBrowser((s) => s.settings.defaultSpaceId === spaceId);
+  const shared = useSharedWith(spaceId);
+  const names = useBrowser(useShallow((s) => shared.filter((id) => id !== spaceId).map((id) => s.spaces[id]?.name ?? "")));
   const { hovered, hoverProps } = useHover();
   const go = useSettingsNav((n) => n.go);
   const [pan] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
-      onPanResponderGrant: () => controller.start(profileId),
+      onPanResponderGrant: () => controller.start(spaceId),
       onPanResponderMove: (_, g) => controller.move(g.dy),
       onPanResponderRelease: () => controller.end(true),
       onPanResponderTerminate: () => controller.end(false),
@@ -198,11 +198,11 @@ function SpaceRow({
       { id: "details", title: "Show Space Details" },
       { id: "default", title: "Make Default Space", enabled: !isDefault },
       { separator: true },
-      { id: "delete", title: "Delete Space…", enabled: s.profileOrder.length > 1 },
+      { id: "delete", title: "Delete Space…", enabled: s.spaceOrder.length > 1 },
     ]);
-    if (choice === "details") go("spaces", profileId);
-    else if (choice === "default") s.setDefaultProfile(profileId);
-    else if (choice === "delete") void deleteSpace(profileId);
+    if (choice === "details") go("spaces", spaceId);
+    else if (choice === "default") s.setDefaultSpace(spaceId);
+    else if (choice === "delete") void deleteSpace(spaceId);
   };
 
   return (
@@ -219,7 +219,7 @@ function SpaceRow({
       {!first && !lifted && <View style={{ height: StyleSheet.hairlineWidth * 2, marginHorizontal: 12, backgroundColor: colors.separator }} />}
       <ContextMenuArea onContextMenu={() => void openMenu()}>
         <View {...hoverProps}>
-          <Pressable onPress={() => go("spaces", profileId)}>
+          <Pressable onPress={() => go("spaces", spaceId)}>
             <View
               style={{
                 height: PROFILE_ROW_HEIGHT - (first ? 0 : StyleSheet.hairlineWidth * 2),
@@ -248,8 +248,8 @@ function SpaceRow({
   );
 }
 
-function bookmarkCount(s: BrowserState, profileId: string): number {
-  const roots = s.bookmarks.roots[profileId];
+function bookmarkCount(s: BrowserState, spaceId: string): number {
+  const roots = s.bookmarks.roots[spaceId];
   let count = 0;
   const walk = (id: string) => {
     const n = s.bookmarks.nodes[id];
@@ -260,26 +260,26 @@ function bookmarkCount(s: BrowserState, profileId: string): number {
   return count;
 }
 
-export function SpaceDetailsPane({ profileId }: { profileId: string }) {
+export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
   const theme = useTheme();
-  const profile = useBrowser((s) => s.profiles[profileId]);
-  const isDefault = useBrowser((s) => s.settings.defaultProfileId === profileId);
-  const only = useBrowser((s) => s.profileOrder.length <= 1);
-  const shared = useSharedWith(profileId);
-  const choices = useProfileChoices(profileId);
+  const profile = useBrowser((s) => s.spaces[spaceId]);
+  const isDefault = useBrowser((s) => s.settings.defaultSpaceId === spaceId);
+  const only = useBrowser((s) => s.spaceOrder.length <= 1);
+  const shared = useSharedWith(spaceId);
+  const choices = useProfileChoices(spaceId);
   const appCleanUp = useBrowser((s) => s.settings.cleanUpInactiveTabsAfterHours);
-  const sharedNames = useBrowser(useShallow((s) => shared.map((id) => s.profiles[id]?.name ?? "")));
-  const sharedColors = useBrowser(useShallow((s) => shared.map((id) => PROFILE_COLORS[s.profiles[id]?.color ?? "plum"]?.swatch ?? "#888888")));
-  const stats = useBrowser((s) => `${plural((s.history[profileId] ?? []).length, "page")} in history · ${plural(bookmarkCount(s, profileId), "bookmark")}`);
+  const sharedNames = useBrowser(useShallow((s) => shared.map((id) => s.spaces[id]?.name ?? "")));
+  const sharedColors = useBrowser(useShallow((s) => shared.map((id) => SPACE_COLORS[s.spaces[id]?.color ?? "plum"]?.swatch ?? "#888888")));
+  const stats = useBrowser((s) => `${plural((s.history[spaceId] ?? []).length, "page")} in history · ${plural(bookmarkCount(s, spaceId), "bookmark")}`);
   const [name, setName] = useState(profile?.name ?? "");
   const [picking, setPicking] = useState(false);
   const colors = useFormColors();
   if (!profile) return null;
-  const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>) => useBrowser.getState().updateProfile(profileId, patch);
+  const update = (patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>) => useBrowser.getState().updateSpace(spaceId, patch);
   // The editor shows in a browser window (settings is its own), on this space, so the window is its preview.
   const customize = () => {
     const windowId = resolveWindowId(useBrowser.getState());
-    if (windowId) openThemeEditor(windowId, profileId);
+    if (windowId) openThemeEditor(windowId, spaceId);
   };
   const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
   const sharing = shared.length > 1;
@@ -312,8 +312,8 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
         ) : null}
         <Row title="Theme colour" description="Tints this space's windows and New Tab page.">
           <View style={{ flexDirection: "row", gap: 7 }}>
-            {(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => (
-              <Pressable key={c} onPress={() => update({ color: c, theme: null })} tooltip={PROFILE_COLORS[c].name}>
+            {(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => (
+              <Pressable key={c} onPress={() => update({ color: c, theme: null })} tooltip={SPACE_COLORS[c].name}>
                 <View
                   style={{
                     width: 20,
@@ -321,10 +321,10 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
                     borderRadius: 10,
                     padding: 2,
                     borderWidth: 2,
-                    borderColor: !profile.theme && profile.color === c ? PROFILE_COLORS[c].swatch : "transparent",
+                    borderColor: !profile.theme && profile.color === c ? SPACE_COLORS[c].swatch : "transparent",
                   }}
                 >
-                  <View style={{ flex: 1, borderRadius: 8, backgroundColor: PROFILE_COLORS[c].swatch }} />
+                  <View style={{ flex: 1, borderRadius: 8, backgroundColor: SPACE_COLORS[c].swatch }} />
                 </View>
               </Pressable>
             ))}
@@ -367,7 +367,7 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
           <PopUp
             value={choices.value}
             options={choices.options}
-            onChange={(v) => v !== choices.value && void changeSpaceProfile(profileId, v === "new" ? null : v)}
+            onChange={(v) => v !== choices.value && void changeSpaceProfile(spaceId, v === "new" ? null : v)}
             minWidth={180}
           />
         </Row>
@@ -379,13 +379,13 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
           />
         ) : null}
         <Row title="Make Default Space" description={isDefault ? "New windows already open with this space." : "Open new windows with this space."}>
-          <Button title="Make Default" disabled={isDefault} onPress={() => useBrowser.getState().setDefaultProfile(profileId)} />
+          <Button title="Make Default" disabled={isDefault} onPress={() => useBrowser.getState().setDefaultSpace(spaceId)} />
         </Row>
         <Row
           title="Clear Browsing Data"
           description={sharing ? "History, cookies, site data and cached files, for every space that shares this profile." : "History, cookies, site data and cached files for this space's profile."}
         >
-          <Button title="Clear…" onPress={() => showSettingsSheet(<ClearDataDialog profileId={profileId} onClose={closeSettingsSheet} />)} />
+          <Button title="Clear…" onPress={() => showSettingsSheet(<ClearDataDialog spaceId={spaceId} onClose={closeSettingsSheet} />)} />
         </Row>
         <Row
           title="Delete Selected Space"
@@ -396,8 +396,8 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
             kind="destructive"
             disabled={only}
             onPress={() =>
-              void deleteSpace(profileId).then(() => {
-                if (!useBrowser.getState().profiles[profileId]) useSettingsNav.getState().go("spaces");
+              void deleteSpace(spaceId).then(() => {
+                if (!useBrowser.getState().spaces[spaceId]) useSettingsNav.getState().go("spaces");
               })
             }
           />

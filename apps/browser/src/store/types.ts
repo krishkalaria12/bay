@@ -1,19 +1,19 @@
 
 export type Frame = [number, number, number, number];
 
-export type ProfileColor = "plum" | "blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "neutral";
+export type SpaceColor = "plum" | "blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "neutral";
 
 // A space's own theme, from the theme editor: its colours (one to three, a gradient), how strongly they tint the
 // window (0–1) and its grain (0–1). Without one, a space takes its preset colour's.
 export type SpaceTheme = { colors: string[]; intensity: number; grain: number };
 
-export type Profile = {
+export type Space = {
   id: string;
   name: string;
-  color: ProfileColor;
+  color: SpaceColor;
   icon: string | null;
   createdAt: number;
-  dataId?: string;
+  profileId?: string;
   theme?: SpaceTheme | null;
   // How long its tabs stay unused before they're cleaned up (Arc's archive, per profile there): hours, never (null),
   // or the app's setting (unset).
@@ -22,7 +22,7 @@ export type Profile = {
 
 export type BrowserWindow = {
   id: string;
-  profileId: string;
+  spaceId: string;
   incognito: boolean;
   tabIds: string[];
   activeTabIds: Record<string, string>;
@@ -37,7 +37,7 @@ export type BrowserWindow = {
 export type Tab = {
   id: string;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   url: string;
   title: string;
   favicon: string | null;
@@ -81,7 +81,7 @@ export type GroupColor = "grey" | "blue" | "red" | "yellow" | "green" | "pink" |
 export type TabGroup = {
   id: string;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   name: string;
   icon: string | null;
   color: GroupColor | null;
@@ -101,7 +101,7 @@ export type PinnedFolder = {
   // Each window's folder for it shares this key (else its id), as pinned pages do.
   key?: string;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   name: string;
   icon: string | null;
   collapsed: boolean;
@@ -141,7 +141,7 @@ export type Bookmarks = {
 
 export type TabSnapshot = Pick<
   Tab,
-  "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "profileId"
+  "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "spaceId"
 > &
   Partial<Pick<Tab, "pinnedUrl" | "pinnedRow">>;
 
@@ -161,7 +161,7 @@ export type ClosedTab = {
 export type ClosedWindow = {
   kind: "window";
   id: string;
-  window: Pick<BrowserWindow, "profileId" | "sidebarOpen" | "frame">;
+  window: Pick<BrowserWindow, "spaceId" | "sidebarOpen" | "frame">;
   tabs: (TabSnapshot & { active: boolean; tabId?: string })[];
   groups: (Omit<TabGroup, "tabIds" | "windowId"> & { tabIndexes: number[] })[];
   closedAt: number;

@@ -25,7 +25,7 @@ function Sheet({ state }: { state: EditorState }) {
   const [title, setTitle] = useState(node?.title ?? "");
   const [url, setUrl] = useState(node?.kind === "url" ? node.url : "");
   const [parentId, setParentId] = useState<string | null>(
-    () => node?.parentId ?? state.parentId ?? useBrowser.getState().bookmarks.roots[state.profileId]?.bar ?? null,
+    () => node?.parentId ?? state.parentId ?? useBrowser.getState().bookmarks.roots[state.spaceId]?.bar ?? null,
   );
   const searchPrefix = useBrowser((s) => searchUrlPrefix(s.settings));
   const close = () => useBookmarkEditor.getState().set(null);
@@ -39,9 +39,9 @@ function Sheet({ state }: { state: EditorState }) {
       s.updateBookmark(node.id, state.folder ? { title: title.trim() } : { title: title.trim(), url: resolvedUrl });
       if (parentId && parentId !== node.parentId) s.moveBookmark(node.id, parentId);
     } else if (state.folder) {
-      s.addBookmarkFolder({ profileId: state.profileId, title: title.trim(), parentId: parentId ?? undefined, index: state.index });
+      s.addBookmarkFolder({ spaceId: state.spaceId, title: title.trim(), parentId: parentId ?? undefined, index: state.index });
     } else {
-      s.addBookmark({ profileId: state.profileId, url: resolvedUrl, title: title.trim() || resolvedUrl, parentId: parentId ?? undefined, index: state.index });
+      s.addBookmark({ spaceId: state.spaceId, url: resolvedUrl, title: title.trim() || resolvedUrl, parentId: parentId ?? undefined, index: state.index });
     }
     close();
   };
@@ -78,7 +78,7 @@ function Sheet({ state }: { state: EditorState }) {
               style={{ height: 180, borderRadius: 7, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.fieldBorder, backgroundColor: colors.field }}
             >
               <ScrollView contentContainerStyle={{ padding: 4 }}>
-                <FolderTree profileId={state.profileId} selectedId={parentId} onSelect={setParentId} rowHeight={24} />
+                <FolderTree spaceId={state.spaceId} selectedId={parentId} onSelect={setParentId} rowHeight={24} />
               </ScrollView>
             </View>
           </>

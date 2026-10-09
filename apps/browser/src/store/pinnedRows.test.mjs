@@ -127,10 +127,10 @@ test("a window's pinned rows and folders come back with the next window of its s
   S().pinRows([a, b], true);
   const f = S().newPinnedFolder(w, { tabIds: [b], name: "Kept" });
   S().newPinnedFolder(w, { name: "Empty" });
-  const profileId = S().windows[w].profileId;
+  const spaceId = S().windows[w].spaceId;
   S().closeWindow(w);
   assert.equal(S().pinnedFolders[f], undefined, "the window's folders go with it");
-  const w2 = S().createWindow({ profileId, url: "https://z.com" });
+  const w2 = S().createWindow({ spaceId, url: "https://z.com" });
   assert.deepEqual(entries(w2).pinned, ["a", "[Kept]", "[Empty]"]);
   const kept = Object.values(S().pinnedFolders).find((x) => x.name === "Kept");
   assert.deepEqual(folderTabIds(S(), kept.id).map(short), ["b"]);
@@ -141,7 +141,7 @@ test("a session keeps its folders, and drops the mark of a folder that's gone", 
   S().pinRows([a, b], true);
   const f = S().newPinnedFolder(w, { tabIds: [a], name: "Saved" });
   const s = S();
-  const data = { profiles: s.profiles, windows: s.windows, tabs: s.tabs, pinnedFolders: s.pinnedFolders };
+  const data = { spaces: s.spaces, windows: s.windows, tabs: s.tabs, pinnedFolders: s.pinnedFolders };
   S().hydrate(data);
   assert.deepEqual(entries(w).pinned, ["[Saved]", "b"]);
   S().hydrate({ ...data, pinnedFolders: {} });

@@ -26,19 +26,19 @@ const title = (n) => words(n).replace(/^\w/, (c) => c.toUpperCase());
 
 export function buildSeed(origin, appVersion = "") {
   const now = Date.now();
-  const profiles = {
+  const spaces = {
     default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 },
     work: { id: "work", name: "Work", color: "blue", icon: null, createdAt: 1 },
   };
   const windowId = "w-bench";
   const tabs = [];
   const groups = [];
-  const tab = (profileId, i, extra = {}) => {
+  const tab = (spaceId, i, extra = {}) => {
     const t = {
-      id: `t-${profileId}-${i}`,
+      id: `t-${spaceId}-${i}`,
       windowId,
-      profileId,
-      url: `${origin}/p/${profileId}-${i}`,
+      spaceId,
+      url: `${origin}/p/${spaceId}-${i}`,
       title: title(3 + (i % 5)),
       favicon: null,
       pinned: false,
@@ -55,20 +55,20 @@ export function buildSeed(origin, appVersion = "") {
     tabs.push(t);
     return t;
   };
-  const layoutProfile = (profileId, count, pinned, groupSizes) => {
+  const layoutProfile = (spaceId, count, pinned, groupSizes) => {
     const ids = [];
     let i = 0;
-    for (; i < pinned; i++) ids.push(tab(profileId, i, { pinned: true, pinnedUrl: `${origin}/p/${profileId}-${i}` }).id);
+    for (; i < pinned; i++) ids.push(tab(spaceId, i, { pinned: true, pinnedUrl: `${origin}/p/${spaceId}-${i}` }).id);
     for (const [g, size] of groupSizes.entries()) {
       const members = [];
-      for (let k = 0; k < size; k++, i++) members.push(tab(profileId, i).id);
+      for (let k = 0; k < size; k++, i++) members.push(tab(spaceId, i).id);
       groups.push({
-        id: `g-${profileId}-${g}`, windowId, profileId, name: title(2), icon: null, color: pick(["blue", "green", "orange"]),
+        id: `g-${spaceId}-${g}`, windowId, spaceId, name: title(2), icon: null, color: pick(["blue", "green", "orange"]),
         collapsed: false, pinned: false, tabIds: members, createdAt: now,
       });
       ids.push(...members);
     }
-    for (; i < count; i++) ids.push(tab(profileId, i).id);
+    for (; i < count; i++) ids.push(tab(spaceId, i).id);
     return ids;
   };
   const personal = layoutProfile("default", 158, 8, [5, 5]);
@@ -78,13 +78,13 @@ export function buildSeed(origin, appVersion = "") {
 
   const session = {
     version: 2,
-    profiles,
-    profileOrder: ["default", "work"],
+    spaces,
+    spaceOrder: ["default", "work"],
     orphanedProfileData: [],
     settings: { searchSuggestions: false, warnBeforeClosingLastTab: false, warnBeforeClosingWindow: false },
     windows: [
       {
-        id: windowId, profileId: "default", incognito: false, tabIds: [...personal, ...work], activeTabIds: active,
+        id: windowId, spaceId: "default", incognito: false, tabIds: [...personal, ...work], activeTabIds: active,
         sidebarOpen: true, frame: [80, 80, 1440, 900], createdAt: now,
       },
     ],
@@ -124,11 +124,11 @@ export function buildSeed(origin, appVersion = "") {
     if (parentId) nodes[parentId].children.push(id);
     return id;
   };
-  for (const profileId of ["default", "work"]) {
+  for (const spaceId of ["default", "work"]) {
     const bar = folder(null, "Bookmarks Bar");
     const other = folder(null, "Other Bookmarks");
-    roots[profileId] = { bar, other };
-    const count = profileId === "default" ? 900 : 100;
+    roots[spaceId] = { bar, other };
+    const count = spaceId === "default" ? 900 : 100;
     const folders = [bar, other, ...Array.from({ length: 20 }, (_, k) => folder(k % 2 ? bar : other, title(2)))];
     for (let k = 0; k < count; k++) {
       const parentId = k < 12 ? bar : pick(folders);

@@ -1,7 +1,7 @@
 import { cancelDownload, type Download } from "@bay/nncore";
 import { readDocument, writeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
-import { inPinnedContainer, isIncognitoProfile, newId, snapshotTab } from "../store/model";
+import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../store/model";
 import { parkWindowPins } from "../store/parkedPins";
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
 import { startFavicons } from "./favicons";
@@ -18,7 +18,7 @@ const serialized =
     JSON.stringify(serialize(s));
 
 const persistedTab = ({ navigation: _n, adoptId: _a, wakeAdoptId: _w, ...t }: Tab) => t;
-const publicTab = (t: { profileId: string }) => !isIncognitoProfile(t.profileId);
+const publicTab = (t: { spaceId: string }) => !isIncognitoSpace(t.spaceId);
 
 const DOCS: Doc[] = [
   {
@@ -27,21 +27,21 @@ const DOCS: Doc[] = [
     json: serialized((s) => ({
       version: PERSIST_VERSION,
       downloads: s.downloads
-        .filter((d) => !d.profile || !isIncognitoProfile(d.profile))
+        .filter((d) => !d.profile || !isIncognitoSpace(d.profile))
         .map((d) => (d.state === "downloading" ? { ...d, state: "failed" } : d)),
     })),
   },
   {
     name: "session.json",
-    sources: (s) => [s.profiles, s.profileOrder, s.orphanedProfileData, s.windows, s.windowOrder, s.tabs, s.groups, s.pinnedFolders, s.splits, s.closedTabs, s.closedWindows, s.parkedPins, s.settings, s.ui.focusedWindowId, s.closedGroups, s.deletedGroups, s.cleanedTabs],
+    sources: (s) => [s.spaces, s.spaceOrder, s.orphanedProfileData, s.windows, s.windowOrder, s.tabs, s.groups, s.pinnedFolders, s.splits, s.closedTabs, s.closedWindows, s.parkedPins, s.settings, s.ui.focusedWindowId, s.closedGroups, s.deletedGroups, s.cleanedTabs],
     json: serialized((s) => {
       // Little Bay windows aren't restored: closing (or quitting) throws their page away.
       const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
       const kept = new Set(windows.map((w) => w.id));
       return {
         version: PERSIST_VERSION,
-        profiles: s.profiles,
-        profileOrder: s.profileOrder,
+        profiles: s.spaces,
+        profileOrder: s.spaceOrder,
         orphanedProfileData: s.orphanedProfileData,
         settings: s.settings,
         windows,
@@ -54,7 +54,7 @@ const DOCS: Doc[] = [
         // The store keeps private windows out of these lists; filter again so nothing private is ever written.
         closedTabs: s.closedTabs.filter((c) => publicTab(c.tab)),
         closedWindows: s.closedWindows.filter((c) => c.tabs.every(publicTab)),
-        parkedPins: Object.fromEntries(Object.entries(s.parkedPins).filter(([profileId]) => publicTab({ profileId }))),
+        parkedPins: Object.fromEntries(Object.entries(s.parkedPins).filter(([spaceId]) => publicTab({ spaceId }))),
         closedGroups: s.closedGroups.filter((c) => c.tabs.every(publicTab)),
         deletedGroups: s.deletedGroups.filter((c) => c.tabs.every(publicTab)),
         cleanedTabs: s.cleanedTabs.filter((c) => publicTab(c.tab)),
@@ -85,7 +85,7 @@ const byId = <T extends { id: string }>(list: T[] | undefined) => Object.fromEnt
 
 type SessionV2 = {
   version: 2;
-  profiles: HydrateData["profiles"];
+  profiles: HydrateData["spaces"];
   profileOrder: string[];
   orphanedProfileData?: string[];
   settings: HydrateData["settings"];
@@ -109,8 +109,8 @@ export function loadSession(): HydrateData | null {
   if (session?.version !== 2) return null;
   const downloads = read<{ downloads: Download[] }>("downloads.json");
   const data: HydrateData = {
-    profiles: session.profiles,
-    profileOrder: session.profileOrder,
+    spaces: session.profiles,
+    spaceOrder: session.profileOrder,
     orphanedProfileData: session.orphanedProfileData ?? [],
     settings: session.settings,
     windows: byId(session.windows),
@@ -137,7 +137,7 @@ export function loadSession(): HydrateData | null {
       ...session.windows.map((w) => ({
         kind: "window" as const,
         id: newId("cw"),
-        window: { profileId: w.profileId, sidebarOpen: w.sidebarOpen, frame: w.frame },
+        window: { spaceId: w.spaceId, sidebarOpen: w.sidebarOpen, frame: w.frame },
         tabs: w.tabIds
           .map((id) => data.tabs?.[id])
           .filter((t): t is Tab => !!t && !inPinnedContainer(pinSource, t.id))
@@ -230,7 +230,7 @@ export function startPersistence() {
 function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
   for (const w of Object.values(prev.windows)) {
     if (!w.incognito || s.windows[w.id]) continue;
-    for (const d of s.downloads) if (d.profile === w.profileId && d.state === "downloading") void cancelDownload(d.id);
-    s.forgetDownloads(w.profileId);
+    for (const d of s.downloads) if (d.profile === w.spaceId && d.state === "downloading") void cancelDownload(d.id);
+    s.forgetDownloads(w.spaceId);
   }
 }

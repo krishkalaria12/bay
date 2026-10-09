@@ -45,17 +45,17 @@ function listItems(history: HistoryEntry[], query: string): Item[] {
   return out;
 }
 
-export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string; profileId: string; initialQuery: string }) {
+export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; spaceId: string; initialQuery: string }) {
   const theme = useTheme();
   const windowId = useBrowser((s) => s.tabs[tabId]?.windowId ?? "");
-  const history = useBrowser((s) => s.history[profileId] ?? NO_HISTORY);
+  const history = useBrowser((s) => s.history[spaceId] ?? NO_HISTORY);
   const [query, setQuery] = useState(initialQuery);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [clearOpen, setClearOpen] = useState(false);
   const lastClicked = useRef<string | null>(null);
 
   const clearRequest = useClearDataRequest((r) => r.windowId);
-  const activeHere = useBrowser((s) => s.windows[windowId]?.activeTabIds[s.windows[windowId]!.profileId] === tabId);
+  const activeHere = useBrowser((s) => s.windows[windowId]?.activeTabIds[s.windows[windowId]!.spaceId] === tabId);
   useEffect(() => {
     if (clearRequest === windowId && activeHere) {
       setClearOpen(true);
@@ -91,7 +91,7 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
       windowId,
     });
     if (!confirmed) return;
-    useBrowser.getState().removeHistory(profileId, [...selected]);
+    useBrowser.getState().removeHistory(spaceId, [...selected]);
     setSelected(new Set());
   };
 
@@ -133,7 +133,7 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
             ) : (
               <HistoryRow
                 entry={item.entry}
-                profileId={profileId}
+                spaceId={spaceId}
                 first={item.first}
                 last={item.last}
                 selected={selected.has(item.entry.url)}
@@ -141,20 +141,20 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
                 windowId={windowId}
                 onToggle={(shift) => toggle(item.entry.url, shift)}
                 onMoreFromSite={() => setQuery(hostLabel(item.entry.url))}
-                onRemove={() => useBrowser.getState().removeHistory(profileId, [item.entry.url])}
+                onRemove={() => useBrowser.getState().removeHistory(spaceId, [item.entry.url])}
               />
             )
           }
         />
       )}
-      {clearOpen && <ClearDataDialog profileId={profileId} onClose={() => setClearOpen(false)} />}
+      {clearOpen && <ClearDataDialog spaceId={spaceId} onClose={() => setClearOpen(false)} />}
     </View>
   );
 }
 
 function HistoryRow({
   entry,
-  profileId,
+  spaceId,
   first,
   last,
   selected,
@@ -165,7 +165,7 @@ function HistoryRow({
   onRemove,
 }: {
   entry: HistoryEntry;
-  profileId: string;
+  spaceId: string;
   first: boolean;
   last: boolean;
   selected: boolean;
@@ -235,7 +235,7 @@ function HistoryRow({
               }}
               style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
             >
-              <Favicon url={entry.url} favicon={entry.favicon} profileId={profileId} />
+              <Favicon url={entry.url} favicon={entry.favicon} spaceId={spaceId} />
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, color: theme.textPrimary }}>
                 {entry.title || entry.url}
               </Text>

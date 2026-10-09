@@ -60,11 +60,11 @@ const server = createServer((req, res) => {
   res.end('<!doctype html><title>Swipe scroll fixture</title><body style="margin:0"><div style="width:2600px;height:4000px;background:linear-gradient(120deg,#ffd9dd,#addbff)">Native scroll fixture</div>');
 });
 
-const tab = (id, profileId) => ({ id, profileId, url: "bay://newtab", title: "New Tab" });
-const fixture = session({ profiles: ["Personal", "Work"], tabs: [tab("t1", "default"), tab("t2", "work")] });
+const tab = (id, spaceId) => ({ id, spaceId, url: "bay://newtab", title: "New Tab" });
+const fixture = session({ spaces: ["Personal", "Work"], tabs: [tab("t1", "default"), tab("t2", "work")] });
 
 const nn = (body, timeout = 15000) => owned.eval(body, { timeout });
-const profile = () => nn('return nn.store.getState().windows.w1.profileId;');
+const profile = () => nn('return nn.store.getState().windows.w1.spaceId;');
 async function waitProfile(expected) {
   for (let start = Date.now(); Date.now() - start < 1800;) {
     if (await profile() === expected) return;
@@ -73,7 +73,7 @@ async function waitProfile(expected) {
   assert.equal(await profile(), expected, "profile should switch within 1.8s");
 }
 async function reset() {
-  await nn('nn.store.getState().switchProfile("w1", "default"); return true;');
+  await nn('nn.store.getState().switchSpace("w1", "default"); return true;');
   await waitProfile("default");
   await sleep(250);
 }
@@ -133,7 +133,7 @@ async function nativeBatch(steps, blockedMs = 0) {
     },20);
     return simulation.then(result=>new Promise(resolve=>setTimeout(()=>{
       globalThis.expo.modules.BaySwipe.devPagerState("w1").then(state=>resolve({result,state,
-        profile:nn.store.getState().windows.w1.profileId,pager:globalThis.nnPager("w1").debug()}));
+        profile:nn.store.getState().windows.w1.spaceId,pager:globalThis.nnPager("w1").debug()}));
     },650)));
   `, 15000);
 }
@@ -293,11 +293,11 @@ try {
     const steps=gesture(-1).map((s)=>({...s, atMs:s.atMs*3, timestampMs:s.timestampMs*3}));
     const result = await nn(`
       const simulation=globalThis.nnSwipe.sidebar("w1").devSimulate(${JSON.stringify(steps)},{ignorePreference:true});
-      setTimeout(()=>nn.store.getState().switchProfile("w1","work"),40);
-      setTimeout(()=>nn.store.getState().switchProfile("w1","default"),56);
+      setTimeout(()=>nn.store.getState().switchSpace("w1","work"),40);
+      setTimeout(()=>nn.store.getState().switchSpace("w1","default"),56);
       return simulation.then(native=>new Promise(resolve=>setTimeout(()=>{
         globalThis.expo.modules.BaySwipe.devPagerState("w1").then(state=>resolve({native,state,
-          profile:nn.store.getState().windows.w1.profileId}));
+          profile:nn.store.getState().windows.w1.spaceId}));
       },650)));
     `);
     assert.equal(result.profile,"default");
@@ -365,7 +365,7 @@ try {
       const source = (await nativeWindow()).window;
       const first = await simulate(gesture(-1), source);
       await waitProfile("work");
-      const otherId = await nn('return nn.store.getState().createWindow({profileId:"default", frame:[80,80,1280,800]});');
+      const otherId = await nn('return nn.store.getState().createWindow({spaceId:"default", frame:[80,80,1280,800]});');
       try {
         await sleep(500);
         const all = await windows();
@@ -377,7 +377,7 @@ try {
         const reverse = await simulate(gesture(1), source);
         assert.equal(reverse.acks.find((a) => a.diag === "begin")?.window, source, "recognition should run in the source window");
         await waitProfile("default");
-        assert.equal(await nn(`return nn.store.getState().windows[${JSON.stringify(otherId)}].profileId;`), "default");
+        assert.equal(await nn(`return nn.store.getState().windows[${JSON.stringify(otherId)}].spaceId;`), "default");
         return { source, first, reverse, other: other.window };
       } finally {
         await nn(`nn.store.getState().closeWindow(${JSON.stringify(otherId)}); return true;`);
@@ -407,10 +407,10 @@ try {
       nn.store.getState().activate("t1");
       nn.store.getState().navigate("t1", ${JSON.stringify(url)});
       const w = nn.store.getState().windows.w1;
-      return { profileId: w.profileId, activeTabId: w.activeTabIds.default };
+      return { spaceId: w.spaceId, activeTabId: w.activeTabIds.default };
     `);
     try {
-      assert.equal(fixtureState.profileId, "default", "the fixture's profile must be active");
+      assert.equal(fixtureState.spaceId, "default", "the fixture's profile must be active");
       assert.equal(fixtureState.activeTabId, "t1", "the fixture tab must own the visible pane");
     } catch (error) { error.evidence = { fixtureState }; throw error; }
     let loaded = false;
@@ -518,7 +518,7 @@ try {
         },20);
         return simulation.then(native=>new Promise(resolve=>setTimeout(()=>{
           globalThis.expo.modules.BaySwipe.devPagerState("w1").then(state=>resolve({native,state,
-            profile:nn.store.getState().windows.w1.profileId,order:nn.store.getState().profileOrder}));
+            profile:nn.store.getState().windows.w1.spaceId,order:nn.store.getState().spaceOrder}));
         },650)));
       `);
       assert.equal(result.profile, "work");
@@ -531,10 +531,10 @@ try {
     }
   });
   await test("removing the other profile keeps the remaining sidebar at its origin", async () => {
-    await nn('nn.store.getState().switchProfile("w1","work"); return true;');
+    await nn('nn.store.getState().switchSpace("w1","work"); return true;');
     await waitProfile("work");
     await sleep(350);
-    await nn('nn.store.getState().deleteProfile("default"); return true;');
+    await nn('nn.store.getState().deleteSpace("default"); return true;');
     await sleep(350);
     const result = await nn('return globalThis.expo.modules.BaySwipe.devPagerState("w1");');
     assert.equal(await profile(), "work");

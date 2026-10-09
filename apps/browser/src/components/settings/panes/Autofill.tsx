@@ -17,21 +17,21 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { IconButton } from "../../primitives";
 import { NetworkBadge } from "../../site/Autofill";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, type Option } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
-export function AutofillPane({ profileId: initial }: { profileId?: string | null }) {
+export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => initial ?? useBrowser.getState().settings.defaultProfileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
   const [addresses, setAddresses] = useState<SavedAddress[] | null>(null);
   const [cards, setCards] = useState<SavedCard[] | null>(null);
   const [enabled, setEnabled] = useState<{ addresses: boolean; cards: boolean } | null>(null);
-  const profile = engineProfile(profileId);
+  const profile = engineProfile(spaceId);
 
   const load = () => {
     const addressesLoaded = listAddresses(profile).then(setAddresses).catch(() => setAddresses([]));
@@ -48,7 +48,7 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
         .catch(() => {}),
     );
     return () => void (current = false);
-  }, [profileId]);
+  }, [spaceId]);
   const toggle = (key: "addresses" | "cards", value: boolean) =>
     void setAutofillSettings({ [key]: value }, profile).then(() => setEnabled((e) => e && { ...e, [key]: value }));
 
@@ -59,7 +59,7 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
         description="Addresses and cards you save are offered when you fill in a form, separately for each profile. Card numbers are kept in your macOS Keychain."
         action={
           profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
+            <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} />
           ) : undefined
         }
       />

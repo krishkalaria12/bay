@@ -6,7 +6,7 @@ import { ThemeScope, useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
-import { PageProfileContext, useIsIncognito, useSettings, useWindowId, useWindowProfileId } from "../store/hooks";
+import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
@@ -45,7 +45,7 @@ const dockedIn = ({ available, list }: Room) => available > 0 && list + ROW_PITC
 export function Sidebar() {
   const windowId = useWindowId();
   const width = useSidebarWidth(windowId);
-  const current = useWindowProfileId();
+  const current = useWindowSpaceId();
   const { pages, paging } = usePagerPages(windowId);
   // The list's height matters only through `docked`: the latest is kept in a ref, and the state takes it only when the
   // New Tab row docks or undocks (or the room changes), so a tab opening or closing doesn't re-render the sidebar.
@@ -102,7 +102,7 @@ export function Sidebar() {
             {pages.map((page) => (
               <SidebarPage
                 key={page.id}
-                profileId={page.id}
+                spaceId={page.id}
                 slot={page.slot}
                 width={width}
                 current={page.id === current}
@@ -178,7 +178,7 @@ export function Sidebar() {
 }
 
 type PageProps = {
-  profileId: string;
+  spaceId: string;
   slot: number;
   width: number;
   current: boolean;
@@ -194,9 +194,9 @@ type PageProps = {
   onScrollY: (y: number) => void;
 };
 
-function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoom, ghost, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
+function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom, ghost, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
   const windowId = useWindowId();
-  const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, profileId);
+  const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, spaceId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
   // long sidebar neither holds up the window's first frame nor mounts in one long task after it.
   const [mountedRows, setMountedRows] = useState(FIRST_PAINT_ROWS);
@@ -221,7 +221,7 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
   const listed = limit === undefined ? motion.rows : list;
   // Rows still to mount hold their room (rows are fixed-height): the list is as tall as it will be, so a tab revealed
   // early scrolls to its place, and the New Tab row docks once.
-  const pending = useBrowser((s) => (growing ? entriesHeight(s, windowId, profileId, all.slice(mountedRows)) : 0));
+  const pending = useBrowser((s) => (growing ? entriesHeight(s, windowId, spaceId, all.slice(mountedRows)) : 0));
   const topGap = listTopGap(useSidebarFieldShown());
   const newTabsAtTop = useSettings((s) => s.newTabPosition === "top");
   const innerWidth = width - layout.sidebarInset * 2;
@@ -255,7 +255,7 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
       pointerEvents={current ? "auto" : "none"}
       style={[{ position: "absolute", top: 0, bottom: 0, left: 0, width, display: resting ? "none" : "flex" }, pageStyle]}
     >
-      <PageProfileContext.Provider value={profileId}>
+      <PageSpaceContext.Provider value={spaceId}>
         <ThemeScope>
           <DragScope enabled={current}>
             <PageContent>
@@ -342,7 +342,7 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
             </PageContent>
           </DragScope>
         </ThemeScope>
-      </PageProfileContext.Provider>
+      </PageSpaceContext.Provider>
     </Animated.View>
   );
 }
@@ -412,10 +412,10 @@ function useRevealTabs(windowId: string, scroll: RefObject<ScrollView | null>, s
       const tabId = switched ?? opened;
       switched = opened = null;
       const s = useBrowser.getState();
-      const profileId = s.windows[windowId]?.profileId;
-      if (!tabId || !profileId) return;
+      const spaceId = s.windows[windowId]?.spaceId;
+      if (!tabId || !spaceId) return;
       const { regions, newTabAtTop } = geometryRef.current;
-      const span = rowSpan(s, windowId, profileId, tabId, newTabAtTop);
+      const span = rowSpan(s, windowId, spaceId, tabId, newTabAtTop);
       if (span) return show(glowRoom + regions[span.section] + span.top, span.height);
       // A pinned tile or a live folder's row: always mounted, so measured once.
       const view = scroll.current as unknown as View;

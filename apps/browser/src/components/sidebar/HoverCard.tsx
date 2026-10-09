@@ -5,7 +5,7 @@ import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, isIncognitoProfile } from "../../store/model";
+import { activeTabId, isIncognitoSpace } from "../../store/model";
 import { splitOf } from "../../store/splits";
 import { lastPicture } from "../../lib/tabPictures";
 import { awayFromPin, groupLabel } from "../../store/organize";
@@ -94,7 +94,7 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
 // be captured now). Never for a private window's tabs. Nothing until there's one.
 function PagePreview({ tabId }: { tabId: string }) {
   const theme = useTheme();
-  const incognito = useBrowser((s) => isIncognitoProfile(s.tabs[tabId]?.profileId ?? ""));
+  const incognito = useBrowser((s) => isIncognitoSpace(s.tabs[tabId]?.spaceId ?? ""));
   const picture = incognito ? null : lastPicture(tabId);
   if (!picture) return null;
   const [, , width, height] = picture.frame;
@@ -154,7 +154,7 @@ function PeekRow({ tabId, windowId }: { tabId: string; windowId: string }) {
         onMouseLeave={() => setHovered(false)}
         style={{ height: 28, borderRadius: 7, flexDirection: "row", alignItems: "center", paddingHorizontal: 5, backgroundColor: hovered ? theme.rowHover : undefined }}
       >
-        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} profileId={tab.profileId} />
+        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} spaceId={tab.spaceId} />
         <FadeLabel text={tabTitle(tab)} fontSize={12.5} color={theme.textTab} style={{ flex: 1, height: 17, marginLeft: 7 }} />
       </View>
     </Pressable>

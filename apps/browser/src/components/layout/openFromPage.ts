@@ -7,7 +7,7 @@ import { openLinkInSplit, openSplitPane } from "./splitActions";
 
 // Where a page's new tab, window or split goes (the engine's openWindow): one place for tabs, extension
 // popups and side panels. `tabId` is the page's tab, the new tab's opener; extension pages have none.
-export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, from: { windowId: string; profileId: string; tabId?: string }) {
+export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, from: { windowId: string; spaceId: string; tabId?: string }) {
   const s = useBrowser.getState();
   const w = s.windows[from.windowId];
   if (!w) return;
@@ -17,7 +17,7 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
   }
   // Links stay in Little Bay; new tabs (target=_blank, ⌘-click, split) open behind, in a main window.
   if (isSmall(s, w.id) && disposition !== "window" && disposition !== "incognito") {
-    return void s.newTab(w.id, { url, adoptId, openerId: from.tabId, profileId: from.profileId, background: true });
+    return void s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background: true });
   }
   if (disposition === "split") {
     if (from.tabId) return openLinkInSplit(from.tabId, url, adoptId);
@@ -32,16 +32,16 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
   }
   // A private window's new window is private too: a session of its own, so the page loads afresh there.
   if (disposition === "window") {
-    return void openWindow(w.incognito ? { incognito: true, url } : { profileId: from.profileId, url, adoptId });
+    return void openWindow(w.incognito ? { incognito: true, url } : { spaceId: from.spaceId, url, adoptId });
   }
   const background = disposition === "background";
-  s.newTab(w.id, { url, adoptId, openerId: from.tabId, profileId: from.profileId, background });
+  s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background });
 }
 
 // The store profile of a page outside tabs (an extension popup or side panel): its engine profile's.
-export function pageProfileId(windowId: string, pageProfile: string): string {
+export function pageSpaceId(windowId: string, pageProfile: string): string {
   const s = useBrowser.getState();
   const w = s.windows[windowId];
-  if (w && engineProfile(w.profileId) === pageProfile) return w.profileId;
-  return s.profileOrder.find((p) => engineProfile(p) === pageProfile) ?? w?.profileId ?? s.settings.defaultProfileId;
+  if (w && engineProfile(w.spaceId) === pageProfile) return w.spaceId;
+  return s.spaceOrder.find((p) => engineProfile(p) === pageProfile) ?? w?.spaceId ?? s.settings.defaultSpaceId;
 }

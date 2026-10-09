@@ -7,7 +7,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId, pinnedPage } from "../../store/model";
-import { useIsActiveTab, usePageProfileId, useTab, useWindowId } from "../../store/hooks";
+import { useIsActiveTab, usePageSpaceId, useTab, useWindowId } from "../../store/hooks";
 import { HoverSlot } from "../HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
 import { IconButton } from "../primitives";
@@ -57,7 +57,7 @@ function rowFlags(s: BrowserState, windowId: string, tabId: string): number {
   const tab = s.tabs[tabId];
   const live = s.live[tabId];
   let flags = 0;
-  if (tab && activeTabId(s, tab.windowId, tab.profileId) === tabId) flags |= ACTIVE;
+  if (tab && activeTabId(s, tab.windowId, tab.spaceId) === tabId) flags |= ACTIVE;
   if (s.selection[windowId]?.includes(tabId)) flags |= SELECTED;
   if (live?.playingAudio) flags |= PLAYING;
   if (live?.isLoading) flags |= LOADING;
@@ -115,7 +115,7 @@ export function TabRow({ tabId }: { tabId: string }) {
                   style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
                 >
                   <View>
-                    <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
+                    <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
                     <TabBadges tabId={tab.id} />
                   </View>
                   {(playingAudio || tab.muted) && (
@@ -223,8 +223,8 @@ export const SplitRowItem = memo(function SplitRowItem({
   const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).join(",") ?? "").split(",").filter(Boolean);
   const { ref, style, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });
   const theme = useTheme();
-  const profileId = usePageProfileId();
-  const active = useBrowser((s) => tabIds.includes(s.windows[windowId]?.activeTabIds[profileId] ?? ""));
+  const spaceId = usePageSpaceId();
+  const active = useBrowser((s) => tabIds.includes(s.windows[windowId]?.activeTabIds[spaceId] ?? ""));
   const { hovered, hoverProps } = useRowHover(windowId, null);
   if (tabIds.length < 2) return null;
   return (

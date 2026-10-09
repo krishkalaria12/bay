@@ -165,7 +165,7 @@ function takePicture({ chip, grab }: Picture, windowId: string) {
   // shows the window's page.
   const s = useBrowser.getState();
   const w = s.windows[windowId];
-  const active = w?.activeTabIds[w.profileId];
+  const active = w?.activeTabIds[w.spaceId];
   const shown = tabId ?? active;
   // Only a page on screen is painted: a background tab would wait out the capture's deadline.
   const onScreen = !!shown && (shown === active || !!splitOf(s, active)?.tabIds.includes(shown));

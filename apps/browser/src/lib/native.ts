@@ -18,7 +18,7 @@ import {
 import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { activeTab, bookmarkProfileId, engineProfile, IDLE_LIVE, incognitoProfileId, tabLabel, windowTitle } from "../store/model";
+import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
 import { splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/layout/history";
 import type { Bookmarks, BookmarkNode } from "../store/types";
@@ -83,7 +83,7 @@ export function startNativeSync() {
   const titles = new Map<string, string>();
 
   const releaseIfIncognito = (id: string, s: BrowserState) => {
-    if (s.windows[id]?.incognito) void releaseProfile(incognitoProfileId(id));
+    if (s.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
   };
 
   const syncWindows = (s: BrowserState, prev?: BrowserState) => {
@@ -96,7 +96,7 @@ export function startNativeSync() {
       if (!open.has(id)) {
         open.add(id);
         titles.set(id, windowTitle(s, id));
-        const profile = engineProfile(w.profileId);
+        const profile = engineProfile(w.spaceId);
         const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.littleBaySize } : {};
         void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus: id === s.ui.focusedWindowId, profile, ...small });
       }
@@ -106,9 +106,9 @@ export function startNativeSync() {
       open.delete(id);
       titles.delete(id);
       void closeWindow(id);
-      if (prev?.windows[id]?.incognito) void releaseProfile(incognitoProfileId(id));
+      if (prev?.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
     }
-    if (prev && s.tabs === prev.tabs && s.windows === prev.windows && s.profiles === prev.profiles) return;
+    if (prev && s.tabs === prev.tabs && s.windows === prev.windows && s.spaces === prev.spaces) return;
     for (const id of open) {
       const title = windowTitle(s, id);
       if (titles.get(id) !== title) {
@@ -191,12 +191,12 @@ function menuBookmarks(b: Bookmarks, folderId: string, depth = 0): MenuBookmark[
 type BookmarkMenus = Pick<MenuState, "bookmarkFolders" | "recentBookmarks" | "bookmarksBar" | "otherBookmarks">;
 const bookmarkMenuCache = new WeakMap<Bookmarks, Map<string, BookmarkMenus>>();
 
-function bookmarkMenus(b: Bookmarks, profileId: string): BookmarkMenus {
+function bookmarkMenus(b: Bookmarks, spaceId: string): BookmarkMenus {
   let perProfile = bookmarkMenuCache.get(b);
   if (!perProfile) bookmarkMenuCache.set(b, (perProfile = new Map()));
-  const cached = perProfile.get(profileId);
+  const cached = perProfile.get(spaceId);
   if (cached) return cached;
-  const roots = b.roots[profileId];
+  const roots = b.roots[spaceId];
   const menus: BookmarkMenus = roots
     ? {
         bookmarkFolders: [
@@ -215,7 +215,7 @@ function bookmarkMenus(b: Bookmarks, profileId: string): BookmarkMenus {
         otherBookmarks: menuBookmarks(b, roots.other),
       }
     : { bookmarkFolders: [], recentBookmarks: [], bookmarksBar: [], otherBookmarks: [] };
-  perProfile.set(profileId, menus);
+  perProfile.set(spaceId, menus);
   return menus;
 }
 
@@ -224,7 +224,7 @@ export function menuState(s: BrowserState): MenuState {
   const w = windowId ? s.windows[windowId] : undefined;
   const tab = windowId ? activeTab(s, windowId) : undefined;
   const live = tab ? s.live[tab.id] : undefined;
-  const bookmarkProfile = bookmarkProfileId(s, w);
+  const bookmarkProfile = bookmarkSpaceId(s, w);
   const regularWindows = s.windowOrder.filter((id) => !s.windows[id]!.incognito && s.windows[id]!.kind !== "small");
 
   const disabled: string[] = [];
@@ -238,7 +238,7 @@ export function menuState(s: BrowserState): MenuState {
     if (!tab || !canGoForward(tab.id, live ?? IDLE_LIVE)) disabled.push("forward");
     if (!live?.isLoading) disabled.push("stop");
     if (w.incognito) disabled.push("moveTabToSpace", "moveTabToWindow", "switchSpace", "nextSpace", "previousSpace");
-    else if (tab) disabled.push(`moveTabToSpace:${tab.profileId}`);
+    else if (tab) disabled.push(`moveTabToSpace:${tab.spaceId}`);
     if (regularWindows.length < 2) disabled.push("mergeAllWindows");
   }
   if (!s.closedTabs.length && !s.closedWindows.length && !s.closedGroups.length) disabled.push("reopenClosedTab");
@@ -272,7 +272,7 @@ export function menuState(s: BrowserState): MenuState {
   }
 
   const closed = [
-    ...s.closedTabs.filter((c) => !c.tab.profileId.startsWith("incognito:")).map((c) => ({ id: c.id, title: c.tab.title || tabLabel(c.tab), at: c.closedAt })),
+    ...s.closedTabs.filter((c) => !c.tab.spaceId.startsWith("incognito:")).map((c) => ({ id: c.id, title: c.tab.title || tabLabel(c.tab), at: c.closedAt })),
     ...s.closedWindows.map((c) => ({ id: c.id, title: c.tabs.length === 1 ? "Window (1 Tab)" : `Window (${c.tabs.length} Tabs)`, at: c.closedAt })),
   ]
     .sort((a, b) => b.at - a.at)
@@ -283,7 +283,7 @@ export function menuState(s: BrowserState): MenuState {
     checked,
     disabled,
     titles,
-    spaces: s.profileOrder.map((id) => ({ id, title: s.profiles[id]!.name, current: w?.profileId === id })),
+    spaces: s.spaceOrder.map((id) => ({ id, title: s.spaces[id]!.name, current: w?.spaceId === id })),
     windows: w?.incognito ? [] : regularWindows.filter((id) => id !== windowId).map((id) => ({ id, title: windowTitle(s, id) })),
     ...bookmarkMenus(s.bookmarks, bookmarkProfile),
     recentlyClosed: closed,

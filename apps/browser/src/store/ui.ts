@@ -1,7 +1,7 @@
 import type { Download } from "@bay/nncore";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { isIncognitoProfile, newId } from "./model";
+import { isIncognitoSpace, newId } from "./model";
 import type { FindState, WindowUi } from "./types";
 import { MAX_DOWNLOADS } from "./constants";
 
@@ -29,10 +29,10 @@ export type UiSlice = {
   forgetDownloads(profile: string): void;
 };
 
-export function downloadVisibleIn(d: Pick<Download, "profile">, window: { incognito: boolean; profileId: string } | undefined): boolean {
+export function downloadVisibleIn(d: Pick<Download, "profile">, window: { incognito: boolean; spaceId: string } | undefined): boolean {
   if (!window) return false;
-  const incognito = !!d.profile && isIncognitoProfile(d.profile);
-  return window.incognito ? d.profile === window.profileId : !incognito;
+  const incognito = !!d.profile && isIncognitoSpace(d.profile);
+  return window.incognito ? d.profile === window.spaceId : !incognito;
 }
 
 export const downloadsIn = (s: Pick<BrowserState, "downloads" | "windows">, windowId: string) =>
@@ -70,7 +70,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     const s = get();
     const window = s.windows[windowId];
     const group = groupId ? s.groups[groupId] : undefined;
-    if (!window || window.kind === "small" || (groupId && (!group || group.windowId !== windowId || group.profileId !== window.profileId))) return;
+    if (!window || window.kind === "small" || (groupId && (!group || group.windowId !== windowId || group.spaceId !== window.spaceId))) return;
     set(patchWindowUi(s, windowId, {
       panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : {}) },
     }));
@@ -83,7 +83,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     if (!window || window.kind === "small" || !url.trim() || !panel?.open || panel.mode !== "newTab") return "";
     if (panel.groupId) {
       const group = s.groups[panel.groupId];
-      if (!group || group.windowId !== windowId || group.profileId !== window.profileId) {
+      if (!group || group.windowId !== windowId || group.spaceId !== window.spaceId) {
         s.closePanel(windowId);
         return "";
       }
@@ -109,7 +109,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     set((s) => {
       const exists = s.downloads.some((x) => x.id === d.id);
       // A private window's downloads leave with it; the engine's late "cancelled" update mustn't bring one back.
-      if (!exists && d.profile && isIncognitoProfile(d.profile) && !Object.values(s.windows).some((w) => w.profileId === d.profile)) {
+      if (!exists && d.profile && isIncognitoSpace(d.profile) && !Object.values(s.windows).some((w) => w.spaceId === d.profile)) {
         return {};
       }
       // A new download doesn't open the panel: the magnet flies its icon to the downloads button instead.

@@ -2,7 +2,7 @@ import { addHistoryVisits, onHistoryChanged, queryHistory, watchHistory, type En
 import { readDocument, removeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
-import { engineProfile, isIncognitoProfile } from "../store/model";
+import { engineProfile, isIncognitoSpace } from "../store/model";
 import type { HistoryEntry } from "../store/types";
 import { CHROME_HISTORY_KEEPS_MS, HISTORY_CHUNK, LEGACY_HISTORY_FILE, LEGACY_HISTORY_KEPT_MS, LEGACY_HISTORY_TOLERANCE_MS } from "./constants";
 
@@ -25,11 +25,11 @@ const toEntry = (e: EngineHistoryEntry): HistoryEntry => ({
   visitTimes: e.visitTimes,
 });
 
-const engineProfiles = (s: Pick<BrowserState, "profiles">) =>
-  [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map(engineProfile))];
+const engineProfiles = (s: Pick<BrowserState, "spaces">) =>
+  [...new Set(Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id)).map(engineProfile))];
 
-const profilesUsing = (s: Pick<BrowserState, "profiles">, engine: string) =>
-  Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfile(id) === engine);
+const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
+  Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfile(id) === engine);
 
 function viewOf(engine: string): HistoryEntry[] {
   const s = store();
@@ -174,9 +174,9 @@ export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_HIS
   if (!file) return "none";
   const s = store();
   const perEngine = new Map<string, HistoryEntry[]>();
-  for (const [profileId, list] of Object.entries(file.history ?? {})) {
-    if (!s.profiles[profileId] || isIncognitoProfile(profileId) || !Array.isArray(list)) continue;
-    const engine = engineProfile(profileId);
+  for (const [spaceId, list] of Object.entries(file.history ?? {})) {
+    if (!s.spaces[spaceId] || isIncognitoSpace(spaceId) || !Array.isArray(list)) continue;
+    const engine = engineProfile(spaceId);
     // Profiles sharing data saved the same list.
     if (!perEngine.has(engine)) perEngine.set(engine, list);
   }
@@ -208,7 +208,7 @@ export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_HIS
 
 export function startHistory() {
   const events = onHistoryChanged(changed);
-  const loadAll = (s: Pick<BrowserState, "profiles">) => {
+  const loadAll = (s: Pick<BrowserState, "spaces">) => {
     for (const engine of engineProfiles(s)) if (!loaded.has(engine) && !loads.has(engine)) void load(engine);
   };
   // With an old history.json to move in, the views are first read (and Chrome's changes watched) once it's in:
@@ -225,11 +225,11 @@ export function startHistory() {
     else if (legacyMoved) for (const engine of loaded) setView(engine, viewOf(engine));
   });
   const stop = useBrowser.subscribe((s, prev) => {
-    if (s.profiles === prev.profiles) return;
+    if (s.spaces === prev.spaces) return;
     if (!moving) loadAll(s);
     // A profile sharing another's data shows its list at once.
-    for (const id of Object.keys(s.profiles)) {
-      if (prev.profiles[id] || isIncognitoProfile(id) || s.history[id]) continue;
+    for (const id of Object.keys(s.spaces)) {
+      if (prev.spaces[id] || isIncognitoSpace(id) || s.history[id]) continue;
       const list = viewOf(engineProfile(id));
       if (list.length) setView(engineProfile(id), list);
     }

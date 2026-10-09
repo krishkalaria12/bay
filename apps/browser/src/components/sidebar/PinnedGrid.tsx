@@ -95,7 +95,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
   const { ref, style, handle } = useDragItem(`t:${tabId}`, { kind: "tile", tabIds: [tabId], section: "tiles" }, () => useBrowser.getState().selection[windowId] ?? []);
   const away = !!tab && awayFromPin(tab);
-  const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.profileId ?? "");
+  const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.spaceId ?? "");
   const badge = useSharedValue(away ? 1 : 0);
   useEffect(() => {
     badge.set(withSpring(away ? 1 : 0, PINNED_BADGE_SPRING));

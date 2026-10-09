@@ -9,7 +9,7 @@ import { useHover } from "../primitives";
 import { DOT_HOVERED_OPACITY, DOT_IDLE_OPACITY, DOT_SELECTED_OPACITY, DOTS_BAND, DOTS_CELL, DOTS_DOT, PROFILE_DOTS_HEIGHT } from "./constants";
 
 export function SpaceDots({ windowId }: { windowId: string }) {
-  const ids = useBrowser(useShallow((s) => s.profileOrder));
+  const ids = useBrowser(useShallow((s) => s.spaceOrder));
   const { pages } = usePagerPages(windowId);
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT, alignItems: "center" }}>
@@ -24,7 +24,7 @@ export function SpaceDots({ windowId }: { windowId: string }) {
 
 function Dot({ id, windowId, page }: { id: string; windowId: string; page: PagerPage | undefined }) {
   const theme = useTheme();
-  const name = useBrowser((s) => s.profiles[id]?.name ?? "");
+  const name = useBrowser((s) => s.spaces[id]?.name ?? "");
   const { hovered, hoverProps } = useHover();
   const rest = hovered ? DOT_HOVERED_OPACITY : DOT_IDLE_OPACITY;
   const opacity = usePagerOpacity(windowId, page?.slot, rest, DOT_SELECTED_OPACITY);

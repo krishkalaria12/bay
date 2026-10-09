@@ -9,7 +9,7 @@ import { layout } from "../lib/constants";
 import { webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
 import { useIsBookmarked, useSettings, useTabLive } from "../store/hooks";
-import { bookmarkProfileId } from "../store/model";
+import { bookmarkSpaceId } from "../store/model";
 import type { Tab } from "../store/types";
 import { ToolbarButton, type ClickModifiers } from "./layout/controls";
 import type { ToolbarGeometry } from "./layout/geometry";
@@ -249,7 +249,7 @@ export function UrlField({
     const s = useBrowser.getState();
     // The whole tab (its favicon too) as it is now; the field itself follows only what it shows.
     const page = s.tabs[tab.id];
-    if (page) s.toggleBookmark(bookmarkProfileId(s, s.windows[windowId]), page);
+    if (page) s.toggleBookmark(bookmarkSpaceId(s, s.windows[windowId]), page);
   };
   const toggleSiteControls = () => {
     onFocus();

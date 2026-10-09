@@ -10,7 +10,7 @@ import {
 } from "@bay/shell";
 import { markdownLink } from "@bay/core";
 import { useBrowser } from "../store/browser";
-import { activeTabId, bookmarkProfileId, resolveWindowId } from "../store/model";
+import { activeTabId, bookmarkSpaceId, resolveWindowId } from "../store/model";
 import {
   closeTab,
   createSpace,
@@ -55,7 +55,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
 
   switch (command) {
     case "newWindow":
-      return void openWindow({ profileId: arg ?? undefined });
+      return void openWindow({ spaceId: arg ?? undefined });
     case "newIncognitoWindow":
       return void openWindow({ incognito: true });
     case "newLittleBay":
@@ -100,7 +100,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
 
   // From Little Bay, tabs, windows and the sidebar's commands act on the main window.
   if (isSmall(s, requested) && !LITTLE_BAY_PAGE_COMMANDS.has(command)) {
-    requested = mainWindowFor(s, s.windows[requested!]!.profileId) ?? null;
+    requested = mainWindowFor(s, s.windows[requested!]!.spaceId) ?? null;
     if (requested) focus(requested);
   }
 
@@ -209,7 +209,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void web?.showDevTools("console");
     case "viewSource":
       if (!page || !web || !/^(https?|file):/.test(page.url)) return;
-      return void s.newTab(windowId, { url: `view-source:${page.url}`, openerId: page.id, profileId: page.profileId });
+      return void s.newTab(windowId, { url: `view-source:${page.url}`, openerId: page.id, spaceId: page.spaceId });
     case "back":
       return tabId ? goBack(tabId) : undefined;
     case "forward":
@@ -231,7 +231,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "moveTabDown":
     case "moveTabUp": {
       if (!tab) return;
-      const section = s.windows[windowId]!.tabIds.filter((id) => s.tabs[id]?.profileId === tab.profileId && !!s.tabs[id]?.pinned === tab.pinned);
+      const section = s.windows[windowId]!.tabIds.filter((id) => s.tabs[id]?.spaceId === tab.spaceId && !!s.tabs[id]?.pinned === tab.pinned);
       const at = section.indexOf(tab.id) + (command === "moveTabDown" ? 1 : -1);
       return at >= 0 && at < section.length ? s.moveTab(tab.id, at) : undefined;
     }
@@ -333,14 +333,14 @@ async function addBookmarkToFolder(windowId: string, folder: string) {
   const tabId = activeTabId(s, windowId);
   const tab = tabId ? s.tabs[tabId] : undefined;
   if (!tab?.url) return;
-  const profileId = bookmarkProfileId(s, s.windows[windowId]);
+  const spaceId = bookmarkSpaceId(s, s.windows[windowId]);
   let parentId = folder;
   if (folder === "new") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (!title) return;
-    parentId = useBrowser.getState().addBookmarkFolder({ profileId, title });
+    parentId = useBrowser.getState().addBookmarkFolder({ spaceId, title });
   }
-  useBrowser.getState().addBookmark({ profileId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
+  useBrowser.getState().addBookmark({ spaceId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
 }
 
 async function openFiles(windowId: string | null) {

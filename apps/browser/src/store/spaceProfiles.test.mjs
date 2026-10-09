@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
 const model = await import("./model.ts");
-const { ownsProfileData, sharingProfiles } = await import("./profiles.ts");
+const { ownsProfileData, sharingSpaces } = await import("./spaces.ts");
 
 const S = () => useBrowser.getState();
 const urls = (ids) => ids.map((id) => S().tabs[id].url);
@@ -13,25 +13,25 @@ const urls = (ids) => ids.map((id) => S().tabs[id].url);
 // profile of its own and a page (c.com).
 const setup = () => {
   S().hydrate({});
-  const personal = S().settings.defaultProfileId;
-  const work = S().createProfile({ name: "Work", shareWith: personal });
-  const side = S().createProfile({ name: "Side", shareWith: null });
-  const w = S().createWindow({ profileId: personal, url: "https://a.com" });
+  const personal = S().settings.defaultSpaceId;
+  const work = S().createSpace({ name: "Work", shareWith: personal });
+  const side = S().createSpace({ name: "Side", shareWith: null });
+  const w = S().createWindow({ spaceId: personal, url: "https://a.com" });
   const fav = S().windows[w].tabIds[0];
   S().newTab(w, { url: "https://b.com" });
   S().pinTabs([fav], true);
-  S().switchProfile(w, side);
+  S().switchSpace(w, side);
   const page = S().newTab(w, { url: "https://c.com" });
-  S().switchProfile(w, work);
+  S().switchSpace(w, work);
   return { personal, work, side, w, fav, page };
 };
 
 test("a space sharing a profile can take a new one of its own; the other keeps the old one", () => {
   const { personal, work, w } = setup();
-  S().changeProfileData(work, null);
-  assert.equal(S().profiles[work].dataId, undefined, "its own id names its new profile");
+  S().setSpaceProfile(work, null);
+  assert.equal(S().spaces[work].profileId, undefined, "its own id names its new profile");
   assert.notEqual(model.engineProfile(work), model.engineProfile(personal));
-  assert.deepEqual(sharingProfiles(S(), work), []);
+  assert.deepEqual(sharingSpaces(S(), work), []);
   assert.deepEqual(S().orphanedProfileData, [], "Personal still uses the old profile");
   assert.deepEqual(model.favoriteTabIds(S(), w, work), [], "Personal's favourite isn't Work's any more");
   assert.notDeepEqual(S().bookmarks.roots[work], S().bookmarks.roots[personal]);
@@ -41,8 +41,8 @@ test("a space sharing a profile can take a new one of its own; the other keeps t
 test("the space a profile is named after can leave it: it takes a new id, and the others keep the profile", () => {
   const { personal, work } = setup();
   const engine = model.engineProfile(personal);
-  S().changeProfileData(personal, null);
-  assert.ok(S().profiles[personal].dataId, "its own id still names the profile Work uses");
+  S().setSpaceProfile(personal, null);
+  assert.ok(S().spaces[personal].profileId, "its own id still names the profile Work uses");
   assert.notEqual(model.engineProfile(personal), engine);
   assert.equal(model.engineProfile(work), engine);
   assert.ok(ownsProfileData(S(), work), "Work syncs the profile's data now");
@@ -52,7 +52,7 @@ test("the space a profile is named after can leave it: it takes a new id, and th
 test("a space can take another's profile: it shares their favourites and bookmarks, and its old profile goes", () => {
   const { personal, side, w } = setup();
   const engine = model.engineProfile(side);
-  S().changeProfileData(side, personal);
+  S().setSpaceProfile(side, personal);
   assert.equal(model.engineProfile(side), model.engineProfile(personal));
   assert.deepEqual(S().orphanedProfileData, [engine], "no space uses Side's old profile");
   assert.deepEqual(urls(model.favoriteTabIds(S(), w, side)), ["https://a.com"]);
@@ -63,11 +63,11 @@ test("a space can take another's profile: it shares their favourites and bookmar
 test("a space's pages reload in its new profile; one that hasn't loaded stays so", () => {
   const { side, w, page } = setup();
   const before = S().tabs[page].navigation;
-  const asleep = S().newTab(w, { url: "https://d.com", profileId: side, background: true });
+  const asleep = S().newTab(w, { url: "https://d.com", spaceId: side, background: true });
   S().updateTab(asleep, { navigation: null, wakeAdoptId: "restore:x" });
-  S().changeProfileData(side, null);
+  S().setSpaceProfile(side, null);
   assert.equal(S().tabs[page].navigation, before, "Side has its own profile already: nothing changes");
-  S().changeProfileData(side, S().settings.defaultProfileId);
+  S().setSpaceProfile(side, S().settings.defaultSpaceId);
   assert.notEqual(S().tabs[page].navigation, before);
   assert.equal(S().tabs[page].navigation.url, "https://c.com");
   assert.equal(S().tabs[asleep].navigation, null);
@@ -76,9 +76,9 @@ test("a space's pages reload in its new profile; one that hasn't loaded stays so
 
 test("a profile left while its data is still going isn't reused", () => {
   const { personal, side } = setup();
-  S().changeProfileData(side, personal);
+  S().setSpaceProfile(side, personal);
   const gone = S().orphanedProfileData[0];
-  S().changeProfileData(side, null);
+  S().setSpaceProfile(side, null);
   assert.notEqual(model.engineProfile(side), gone);
-  assert.ok(S().profiles[side].dataId);
+  assert.ok(S().spaces[side].profileId);
 });

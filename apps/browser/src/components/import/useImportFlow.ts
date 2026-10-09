@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { APP_NAME } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
-import type { ProfileColor } from "../../store/types";
+import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID } from "../settings/windows";
 import { applyResult, applySafari, emptyCounts, importArcSpace, importBookmarks, importDiaProfile, openInWebStore, profileColorFor, type ImportCounts } from "./apply";
 import { DIA_LAUNCH_MS, DIA_POLL_MS, DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
@@ -34,7 +34,7 @@ export function useImportFlow() {
   const [safariCookies, setSafariCookies] = useState(true);
   // What was left behind (cookies or cards that didn't decrypt, isolated Firefox cookies), shown at the end.
   const [notes, setNotes] = useState<string[]>([]);
-  const [extensions, setExtensions] = useState<{ profileId: string; list: ImportedExtension[] }>({ profileId: "", list: [] });
+  const [extensions, setExtensions] = useState<{ spaceId: string; list: ImportedExtension[] }>({ spaceId: "", list: [] });
   const [diaStatus, setDiaStatus] = useState<DiaAutomationStatus | "checking" | "reading">("checking");
   const [dia, setDia] = useState<DiaTabsResult | null>(null);
   const [asking, setAsking] = useState(false);
@@ -67,7 +67,7 @@ export function useImportFlow() {
     setKinds(new Set(available));
     if (b.family === "safari" && api) setFullDiskAccess(api.safariHasFullDiskAccess());
     setDia(null);
-    setExtensions({ profileId: "", list: [] });
+    setExtensions({ spaceId: "", list: [] });
     setNotes([]);
     setError(null);
   };
@@ -80,7 +80,7 @@ export function useImportFlow() {
       return next;
     });
 
-  const allSpaces: (SpaceSummary & { profileId: string })[] = (source?.profiles ?? []).flatMap((p) => (p.spaces ?? []).map((s) => ({ ...s, profileId: p.id })));
+  const allSpaces: (SpaceSummary & { spaceId: string })[] = (source?.profiles ?? []).flatMap((p) => (p.spaces ?? []).map((s) => ({ ...s, spaceId: p.id })));
   const isArc = source?.family === "arc";
   const isDiaTabs = source?.family === "automation";
 
@@ -129,7 +129,7 @@ export function useImportFlow() {
   const destination = async (index: number, name: string, color?: string, emoji?: string): Promise<string> => {
     if (index === 0) return target;
     const s = useBrowser.getState();
-    const clash = s.profileOrder.find((id) => s.profiles[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
+    const clash = s.spaceOrder.find((id) => s.spaces[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (clash) {
       const { confirmed } = await confirm({
         title: "Import as new Space?",
@@ -140,7 +140,7 @@ export function useImportFlow() {
       });
       if (!confirmed) return clash;
     }
-    return s.createProfile({ name, color: profileColorFor(color) as ProfileColor | undefined, icon: emoji ?? null });
+    return s.createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji ?? null });
   };
 
   const finish = () => setTimeout(() => setStep("done"), DONE_DELAY_MS);
@@ -213,7 +213,7 @@ export function useImportFlow() {
         for (const e of await api.listExtensions(source.id, profile.id).catch(() => [])) found.set(e.id, e);
       }
     }
-    setExtensions({ profileId: extensionsProfile, list: [...found.values()] });
+    setExtensions({ spaceId: extensionsProfile, list: [...found.values()] });
     setNotes(left);
     setStatus((st) => Object.fromEntries(Object.entries(st).map(([k, v]) => [k, failed.has(k as ImportKind) ? "failed" : v === "failed" ? v : "done"])));
     setFailures([...failed].map(([kind, names]) => ({ kind, profiles: selected.length > 1 ? names : [] })));
@@ -365,8 +365,8 @@ export function useImportFlow() {
   };
 
   const openExtensions = () => {
-    openInWebStore(extensions.profileId || target, extensions.list.map((e) => e.webStoreUrl));
-    setExtensions({ profileId: "", list: [] });
+    openInWebStore(extensions.spaceId || target, extensions.list.map((e) => e.webStoreUrl));
+    setExtensions({ spaceId: "", list: [] });
   };
 
   const close = () => void closeWindow(IMPORT_WINDOW_ID);
@@ -511,5 +511,5 @@ async function readDiaTabs(api: ImportApi, launchedAt: number): Promise<DiaTabsR
 function defaultTarget(): string {
   const s = useBrowser.getState();
   const w = s.windows[s.ui.focusedWindowId ?? ""];
-  return w && !w.incognito ? w.profileId : s.settings.defaultProfileId;
+  return w && !w.incognito ? w.spaceId : s.settings.defaultSpaceId;
 }

@@ -6,7 +6,7 @@ import { create } from "zustand";
 import { pruneProfileFavicons } from "../../lib/favicons";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { engineProfile, isIncognitoProfile, profileFor } from "../../store/model";
+import { engineProfile, isIncognitoSpace, spaceFor } from "../../store/model";
 import { Button, Checkbox, PopUp } from "../settings/controls";
 
 const RANGES = [
@@ -23,10 +23,10 @@ export const useClearDataRequest = create<{ windowId: string | null; request(win
   request: (windowId) => set({ windowId }),
 }));
 
-export function ClearDataDialog({ profileId, onClose }: { profileId: string; onClose: () => void }) {
+export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const theme = useTheme();
-  const profileName = useBrowser((s) => profileFor(s, profileId).name);
-  const multipleProfiles = useBrowser((s) => s.profileOrder.length > 1);
+  const profileName = useBrowser((s) => spaceFor(s, spaceId).name);
+  const multipleProfiles = useBrowser((s) => s.spaceOrder.length > 1);
   const [range, setRange] = useState<Range>("hour");
   const [history, setHistory] = useState(true);
   const [siteData, setSiteData] = useState(true);
@@ -37,11 +37,11 @@ export function ClearDataDialog({ profileId, onClose }: { profileId: string; onC
     const ms = RANGES.find((r) => r.value === range)!.ms;
     const since = ms === Infinity ? undefined : Date.now() - ms;
     if (history) {
-      useBrowser.getState().clearHistory(profileId, since);
-      pruneProfileFavicons(profileId);
+      useBrowser.getState().clearHistory(spaceId, since);
+      pruneProfileFavicons(spaceId);
     }
     const types: BrowsingDataType[] = [...(history ? ["history" as const] : []), ...(siteData ? ["siteData" as const, "cache" as const] : [])];
-    if (types.length && !isIncognitoProfile(profileId)) await clearBrowsingData(engineProfile(profileId), types, since);
+    if (types.length && !isIncognitoSpace(spaceId)) await clearBrowsingData(engineProfile(spaceId), types, since);
     setBusy(false);
     onClose();
   };

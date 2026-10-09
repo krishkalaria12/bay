@@ -76,9 +76,9 @@ const tabOf = (pane: SettingsPane) => TABS.find((t) => t.panes.some((p) => p.id 
 export function SettingsWindow() {
   const theme = useTheme();
   const nav = useSettingsNav();
-  const profileName = useBrowser((s) => (nav.profileId ? s.profiles[nav.profileId]?.name : undefined));
+  const profileName = useBrowser((s) => (nav.spaceId ? s.spaces[nav.spaceId]?.name : undefined));
   const tab = tabOf(nav.pane);
-  const details = nav.pane === "spaces" && !!nav.profileId;
+  const details = nav.pane === "spaces" && !!nav.spaceId;
   const title = details && profileName ? profileName : tab.title;
   const sheet = useSettingsSheet((s) => s.sheet);
   useEffect(() => trackSettingsSection(nav.pane), [nav.pane]);
@@ -109,10 +109,10 @@ export function SettingsWindow() {
           }}
         />
       </View>
-      <ScrollView key={`${nav.pane}:${nav.profileId}`} contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
+      <ScrollView key={`${nav.pane}:${nav.spaceId}`} contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
         <View style={{ width: "100%", maxWidth: 600, paddingHorizontal: 24 }}>
           <PaneHeader tab={tab} details={details} />
-          <Pane pane={nav.pane} profileId={nav.profileId} />
+          <Pane pane={nav.pane} spaceId={nav.spaceId} />
         </View>
       </ScrollView>
       {sheet}
@@ -132,7 +132,7 @@ function PaneHeader({ tab, details }: { tab: Tab; details: boolean }) {
   }
   if (tab.panes.length < 2) return null;
   // Passwords and Autofill keep the space they were opened for.
-  const profileFor = (pane: SettingsPane) => (pane === "passwords" || pane === "autofill" ? nav.profileId : null);
+  const profileFor = (pane: SettingsPane) => (pane === "passwords" || pane === "autofill" ? nav.spaceId : null);
   return (
     <View style={{ alignItems: "center", marginTop: 18 }}>
       <Segmented options={tab.panes} value={nav.pane} onChange={(pane) => nav.go(pane, profileFor(pane))} />
@@ -140,12 +140,12 @@ function PaneHeader({ tab, details }: { tab: Tab; details: boolean }) {
   );
 }
 
-function Pane({ pane, profileId }: { pane: SettingsPane; profileId: string | null }): ReactNode {
+function Pane({ pane, spaceId }: { pane: SettingsPane; spaceId: string | null }): ReactNode {
   switch (pane) {
     case "general":
       return <GeneralPane />;
     case "spaces":
-      return profileId ? <SpaceDetailsPane profileId={profileId} /> : <SpacesPane />;
+      return spaceId ? <SpaceDetailsPane spaceId={spaceId} /> : <SpacesPane />;
     case "sync":
       return <SyncPane />;
     case "tabs":
@@ -155,9 +155,9 @@ function Pane({ pane, profileId }: { pane: SettingsPane; profileId: string | nul
     case "privacy":
       return <PrivacyPane />;
     case "passwords":
-      return <PasswordsPane profileId={profileId} />;
+      return <PasswordsPane spaceId={spaceId} />;
     case "autofill":
-      return <AutofillPane profileId={profileId} />;
+      return <AutofillPane spaceId={spaceId} />;
     case "extensions":
       return <ExtensionsPane />;
     case "search":

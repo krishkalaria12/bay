@@ -1,7 +1,7 @@
 import { Symbol } from "@bay/shell";
 import { Text, View } from "react-native";
-import { PROFILE_COLORS } from "../../lib/theme";
-import type { Profile } from "../../store/types";
+import { SPACE_COLORS } from "../../lib/theme";
+import type { Space } from "../../store/types";
 import { SYMBOL_PREFIX } from "../../lib/constants";
 import type { IconChoice } from "../IconGrid";
 
@@ -111,14 +111,14 @@ export function spaceIconTitle(icon: string | null): string {
 }
 
 /** A new space's icon, as Arc gives one: the first of the set no other space uses. */
-export function unusedSpaceIcon(profiles: Record<string, Pick<Profile, "icon">>): string {
+export function unusedSpaceIcon(profiles: Record<string, Pick<Space, "icon">>): string {
   const used = new Set(Object.values(profiles).map((p) => p.icon));
   const free = SPACE_SYMBOLS.find((s) => !used.has(SYMBOL_PREFIX + s.name)) ?? SPACE_SYMBOLS[0]!;
   return SYMBOL_PREFIX + free.name;
 }
 
-export function SpaceBadge({ profile, size = 26 }: { profile: Pick<Profile, "name" | "color" | "icon"> & Partial<Pick<Profile, "theme">>; size?: number }) {
-  const swatch = profile.theme?.colors[0] ?? PROFILE_COLORS[profile.color]?.swatch ?? PROFILE_COLORS.plum.swatch;
+export function SpaceBadge({ profile, size = 26 }: { profile: Pick<Space, "name" | "color" | "icon"> & Partial<Pick<Space, "theme">>; size?: number }) {
+  const swatch = profile.theme?.colors[0] ?? SPACE_COLORS[profile.color]?.swatch ?? SPACE_COLORS.plum.swatch;
   const symbol = profileSymbol(profile.icon);
   return (
     <View

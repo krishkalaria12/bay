@@ -18,7 +18,7 @@ export const TabIcon = memo(function TabIcon({
   icon,
   size = 16,
   color,
-  profileId: profile,
+  spaceId: profile,
   direct,
 }: {
   tabId?: string;
@@ -27,23 +27,23 @@ export const TabIcon = memo(function TabIcon({
   icon?: string | null;
   size?: number;
   color?: string;
-  profileId?: string;
+  spaceId?: string;
   direct?: boolean;
 }) {
   const sleeping = useIsSleeping(tabId ?? "");
   const props = { url, favicon, icon, size, color, direct };
   return (
     <View style={{ opacity: sleeping ? SLEEPING_OPACITY : 1 }}>
-      {profile || !tabId ? <Icon {...props} profileId={profile} /> : <TabSpaceIcon {...props} tabId={tabId} />}
+      {profile || !tabId ? <Icon {...props} spaceId={profile} /> : <TabSpaceIcon {...props} tabId={tabId} />}
     </View>
   );
 });
 
 // Looks the tab's profile up only when the caller didn't pass it: a subscription per icon adds up in
 // the sidebar, where every row runs its selectors on every store update.
-function TabSpaceIcon({ tabId, ...props }: Omit<Parameters<typeof Icon>[0], "profileId"> & { tabId: string }) {
-  const profileId = useBrowser((s) => s.tabs[tabId]?.profileId);
-  return <Icon {...props} profileId={profileId} />;
+function TabSpaceIcon({ tabId, ...props }: Omit<Parameters<typeof Icon>[0], "spaceId"> & { tabId: string }) {
+  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId);
+  return <Icon {...props} spaceId={spaceId} />;
 }
 
 function Icon({
@@ -52,7 +52,7 @@ function Icon({
   icon,
   size = 16,
   color,
-  profileId,
+  spaceId,
   direct,
 }: {
   url: string;
@@ -60,7 +60,7 @@ function Icon({
   icon?: string | null;
   size?: number;
   color?: string;
-  profileId?: string;
+  spaceId?: string;
   direct?: boolean;
 }) {
   const theme = useTheme();
@@ -85,5 +85,5 @@ function Icon({
       </View>
     );
   }
-  return <Favicon url={url} favicon={favicon} size={size} profileId={profileId} direct={direct} />;
+  return <Favicon url={url} favicon={favicon} size={size} spaceId={spaceId} direct={direct} />;
 }

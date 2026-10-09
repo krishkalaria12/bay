@@ -3,10 +3,10 @@ import { Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { changeSpaceProfile, createSpace, deleteSpace, switchSpace } from "../../lib/actions";
-import { PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { SPACE_COLORS, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
-import type { ProfileColor } from "../../store/types";
+import type { SpaceColor } from "../../store/types";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
 import { IconButton, useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
@@ -24,7 +24,7 @@ import { PROFILE_DOTS_HEIGHT, SPACE_CELL, SPACE_GLYPH, SPACE_HOVERED_OPACITY, SP
 // one at full strength as the pager moves, and + for a new space. Dots once the icons don't fit.
 
 export function SpaceSwitcher({ windowId }: { windowId: string }) {
-  const ids = useBrowser(useShallow((s) => s.profileOrder));
+  const ids = useBrowser(useShallow((s) => s.spaceOrder));
   const width = useSidebarWidth(windowId);
   const { pages } = usePagerPages(windowId);
   const fits = ids.length * SPACE_CELL <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
@@ -48,7 +48,7 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
 
 function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page: PagerPage | undefined }) {
   const theme = useTheme();
-  const profile = useBrowser((s) => s.profiles[id]);
+  const profile = useBrowser((s) => s.spaces[id]);
   const { hovered, hoverProps } = useHover();
   const opacity = usePagerOpacity(windowId, page?.slot, hovered ? SPACE_HOVERED_OPACITY : SPACE_IDLE_OPACITY, SPACE_SELECTED_OPACITY);
   if (!profile) return null;
@@ -86,7 +86,7 @@ async function newSpace(windowId: string) {
 /** A space's menu (right-click on its icon): its name, icon and theme, its settings, and deleting it. */
 export async function openSpaceMenu(windowId: string, id: string) {
   const s = useBrowser.getState();
-  const space = s.profiles[id];
+  const space = s.spaces[id];
   if (!space) return;
   const profiles = profileChoices(s, id);
   const choice = await showMenu([
@@ -97,7 +97,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
       title: "Theme",
       symbol: "paintpalette",
       children: [
-        ...(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => ({ id: `theme:${c}`, title: PROFILE_COLORS[c].name, swatch: PROFILE_COLORS[c].swatch, checked: !space.theme && c === space.color })),
+        ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ id: `theme:${c}`, title: SPACE_COLORS[c].name, swatch: SPACE_COLORS[c].swatch, checked: !space.theme && c === space.color })),
         { separator: true as const },
         { id: "editTheme", title: "Edit Theme…", symbol: "slider.horizontal.3", checked: !!space.theme },
       ],
@@ -113,14 +113,14 @@ export async function openSpaceMenu(windowId: string, id: string) {
     },
     { separator: true },
     { id: "settings", title: "Space Settings…", symbol: "gearshape" },
-    { id: "delete", title: "Delete Space…", symbol: "trash", enabled: s.profileOrder.length > 1 },
+    { id: "delete", title: "Delete Space…", symbol: "trash", enabled: s.spaceOrder.length > 1 },
   ]);
-  const update = useBrowser.getState().updateProfile;
+  const update = useBrowser.getState().updateSpace;
   if (choice === "rename") {
     const name = await prompt({ title: "Rename Space", value: space.name, placeholder: "Space name", confirmTitle: "Rename", windowId });
     if (name?.trim()) update(id, { name: name.trim() });
   } else if (choice === "icon") void openIconPicker(windowId, { kind: "space", id });
-  else if (choice?.startsWith("theme:")) update(id, { color: choice.slice("theme:".length) as ProfileColor, theme: null });
+  else if (choice?.startsWith("theme:")) update(id, { color: choice.slice("theme:".length) as SpaceColor, theme: null });
   else if (choice === "editTheme") openThemeEditor(windowId, id);
   else if (choice?.startsWith("profile:") && choice !== `profile:${profiles.value}`) {
     const target = choice.slice("profile:".length);

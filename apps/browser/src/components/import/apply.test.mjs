@@ -13,12 +13,12 @@ const link = (name, title) => ({ type: "url", url: `https://${name}.com`, title:
 test("an Arc space's pinned tabs become pinned rows and its folders pinned folders, in Arc's order", () => {
   S().hydrate({});
   const w = S().createWindow({ url: "https://home.com" });
-  const profileId = S().windows[w].profileId;
+  const spaceId = S().windows[w].spaceId;
   const bookmarks = Object.keys(S().bookmarks.nodes).length;
-  const n = importArcSpace(profileId, {
+  const n = importArcSpace(spaceId, {
     id: "s",
     name: "Space",
-    profileId: "Default",
+    spaceId: "Default",
     pinned: [
       link("a"),
       { type: "folder", title: "Work", children: [link("b"), { type: "folder", title: "Inner", children: [link("c")] }, { type: "url", url: "chrome://x", title: "x" }] },

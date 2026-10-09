@@ -28,7 +28,7 @@ export function AdvancedPane() {
           <Toggle value={settings.showFullUrl} onChange={(v) => update({ showFullUrl: v })} />
         </Row>
         <Row title="Warn before moving tabs between spaces" description="Some site data doesn't come along.">
-          <Toggle value={settings.warnBeforeMovingTabsToProfile} onChange={(v) => update({ warnBeforeMovingTabsToProfile: v })} />
+          <Toggle value={settings.warnBeforeMovingTabsToSpace} onChange={(v) => update({ warnBeforeMovingTabsToSpace: v })} />
         </Row>
         <Row title="Show the Import bookmarks button" description="On an empty bookmarks bar.">
           <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => update({ hideBookmarksBarImport: !v })} />

@@ -170,10 +170,10 @@ test("abandoned New Tab cleanup never closes a window or the tab it shows", () =
   const front = S().newTab(w);
   S().closeAbandonedNewTabs();
   assert.deepEqual(S().windows[w].tabIds, [front]);
-  const p = S().createProfile({ name: "Work" });
-  S().switchProfile(w, p);
+  const p = S().createSpace({ name: "Work" });
+  S().switchSpace(w, p);
   const work = model.activeTabId(S(), w);
-  S().switchProfile(w, "default");
+  S().switchSpace(w, "default");
   S().closeAbandonedNewTabs();
   assert.ok(S().tabs[work] && S().tabs[front]);
   const w2 = S().createWindow();

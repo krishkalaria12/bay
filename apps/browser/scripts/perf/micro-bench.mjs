@@ -42,7 +42,7 @@ function bigSession(count, bigGroup = 0) {
     const id = `t${i}`;
     const host = ["github.com", "x.com", "news.ycombinator.com", "en.wikipedia.org"][i % 4];
     tabs[id] = {
-      id, windowId: "w", profileId: "default", url: `https://${host}/page/${i}`, title: `Page ${i} - ${host.split(".")[0]}`,
+      id, windowId: "w", spaceId: "default", url: `https://${host}/page/${i}`, title: `Page ${i} - ${host.split(".")[0]}`,
       favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, pinnedUrl: null, openerId: null,
       createdAt: t0 + i, lastActiveAt: t0 + i,
     };
@@ -51,18 +51,18 @@ function bigSession(count, bigGroup = 0) {
   const groups = {};
   let at = 0;
   if (bigGroup) {
-    groups.big = { id: "big", windowId: "w", profileId: "default", name: "", icon: null, color: null, collapsed: false, pinned: false, tabIds: ids.slice(0, bigGroup), createdAt: t0 };
+    groups.big = { id: "big", windowId: "w", spaceId: "default", name: "", icon: null, color: null, collapsed: false, pinned: false, tabIds: ids.slice(0, bigGroup), createdAt: t0 };
     at = bigGroup;
   }
   for (let g = 0; at + 20 <= count && g < count / 40; g++, at += 40) {
-    groups[`g${g}`] = { id: `g${g}`, windowId: "w", profileId: "default", name: "", icon: null, color: null, collapsed: g % 2 === 0, pinned: false, tabIds: ids.slice(at, at + 20), createdAt: t0 };
+    groups[`g${g}`] = { id: `g${g}`, windowId: "w", spaceId: "default", name: "", icon: null, color: null, collapsed: g % 2 === 0, pinned: false, tabIds: ids.slice(at, at + 20), createdAt: t0 };
   }
   const splits = {};
   for (let i = 0; i + 1 < count; i += 10) splits[`s${i}`] = { id: `s${i}`, windowId: "w", tabIds: [ids[i], ids[i + 1]], orientation: "horizontal", sizes: [0.5, 0.5] };
   S().hydrate({
-    profiles: { default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 } },
-    profileOrder: ["default"],
-    windows: { w: { id: "w", profileId: "default", incognito: false, tabIds: ids, activeTabIds: { default: ids[5] }, sidebarOpen: true, frame: null, createdAt: t0 } },
+    spaces: { default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 } },
+    spaceOrder: ["default"],
+    windows: { w: { id: "w", spaceId: "default", incognito: false, tabIds: ids, activeTabIds: { default: ids[5] }, sidebarOpen: true, frame: null, createdAt: t0 } },
     windowOrder: ["w"],
     tabs,
     groups,
@@ -151,7 +151,7 @@ const benches = {
   "suggest-seed"(query = "github.com/facebook/react/pull") {
     const seed = buildSeed("http://127.0.0.1:47817");
     const history = seed["history.json"].history.default;
-    const tabs = seed["session.json"].tabs.filter((t) => t.profileId === "default");
+    const tabs = seed["session.json"].tabs.filter((t) => t.spaceId === "default");
     const bookmarks = Object.values(seed["bookmarks.json"].bookmarks.nodes)
       .filter((n) => n.kind === "url")
       .map((n) => ({ url: n.url, title: n.title, favicon: n.favicon }));

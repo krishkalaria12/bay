@@ -8,7 +8,7 @@ import { useEffectEvent } from "../../lib/useEffectEvent";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
-import { bookmarkProfileId } from "../../store/model";
+import { bookmarkSpaceId } from "../../store/model";
 import type { BookmarkNode } from "../../store/types";
 import { openInternalPage } from "../pages/urls";
 import { Favicon, useHover } from "../primitives";
@@ -35,9 +35,9 @@ export function useBookmarksBarShown(tabId: string): boolean {
 
 function Bar({ windowId }: { windowId: string }) {
   const theme = useTheme();
-  const profileId = useBrowser((s) => bookmarkProfileId(s, s.windows[windowId]));
-  const barId = useBrowser((s) => s.bookmarks.roots[profileId]?.bar);
-  const otherId = useBrowser((s) => s.bookmarks.roots[profileId]?.other);
+  const spaceId = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
+  const barId = useBrowser((s) => s.bookmarks.roots[spaceId]?.bar);
+  const otherId = useBrowser((s) => s.bookmarks.roots[spaceId]?.other);
   const children = useBrowser((s) => {
     const bar = barId ? s.bookmarks.nodes[barId] : undefined;
     return bar?.kind === "folder" ? bar.children : EMPTY;
@@ -102,7 +102,7 @@ function Bar({ windowId }: { windowId: string }) {
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={{ height: BOOKMARKS_BAR_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 8 }}
     >
-      <ContextMenuArea onContextMenu={() => void openBarMenu(windowId, profileId, null)} style={StyleSheet.absoluteFill} />
+      <ContextMenuArea onContextMenu={() => void openBarMenu(windowId, spaceId, null)} style={StyleSheet.absoluteFill} />
       <View style={{ flex: 1, height: BOOKMARK_ITEM_HEIGHT, flexDirection: "row", alignItems: "center", overflow: "hidden" }}>
         {children.length === 0 && !hideImport ? (
           <ImportButton />
@@ -114,7 +114,7 @@ function Bar({ windowId }: { windowId: string }) {
               key={id}
               id={id}
               windowId={windowId}
-              profileId={profileId}
+              spaceId={spaceId}
               hidden={!fits(id)}
               highlighted={drop?.into === id}
               onLayout={(r) => setFrames((prev) => (sameRect(prev[id], r) ? prev : { ...prev, [id]: r }))}
@@ -156,7 +156,7 @@ const sameRect = (a: LayoutRectangle | undefined, b: LayoutRectangle) => !!a && 
 function BarItem({
   id,
   windowId,
-  profileId,
+  spaceId,
   hidden,
   highlighted,
   onLayout,
@@ -165,7 +165,7 @@ function BarItem({
 }: {
   id: string;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   hidden: boolean;
   highlighted: boolean;
   onLayout: (r: LayoutRectangle) => void;
@@ -211,7 +211,7 @@ function BarItem({
       pointerEvents={hidden ? "none" : "auto"}
       style={[{ opacity: hidden ? 0 : dragging ? 0.85 : 1, zIndex: dragging ? 10 : 0 }, dxStyle]}
     >
-      <ContextMenuArea onContextMenu={() => void openBarMenu(windowId, profileId, node)}>
+      <ContextMenuArea onContextMenu={() => void openBarMenu(windowId, spaceId, node)}>
         <MouseArea onMiddleClick={(e) => open({ ...e, middle: true })}>
           <BarButton
             favicon={node.kind === "url" ? node : undefined}
@@ -249,7 +249,7 @@ function BarButton({
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const windowId = useWindowId();
-  const profileId = useBrowser((s) => bookmarkProfileId(s, s.windows[windowId]));
+  const spaceId = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
   return (
     <View {...hoverProps} tooltip={tooltip}>
       <Pressable onPress={(e) => onPress(e.nativeEvent as unknown as ClickMods)}>
@@ -269,7 +269,7 @@ function BarButton({
             }}
           >
             {favicon ? (
-              <Favicon url={favicon.url} favicon={favicon.favicon} size={14} profileId={profileId} />
+              <Favicon url={favicon.url} favicon={favicon.favicon} size={14} spaceId={spaceId} />
             ) : icon ? (
               <Symbol name={icon} size={12} color={theme.icon} style={{ width: 16, height: 16 }} />
             ) : null}
@@ -336,7 +336,7 @@ const splitChoice = (choice: string): [string, string] => {
   return i < 0 ? [choice, ""] : [choice.slice(0, i), choice.slice(i + 1)];
 };
 
-async function openBarMenu(windowId: string, profileId: string, node: BookmarkNode | null) {
+async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode | null) {
   const s = useBrowser.getState();
   const barMode = s.settings.bookmarksBar;
   const items: MenuItem[] = [];
@@ -381,7 +381,7 @@ async function openBarMenu(windowId: string, profileId: string, node: BookmarkNo
   );
   const choice = await showMenu(items);
   if (!choice) return;
-  const bar = s.bookmarks.roots[profileId]?.bar;
+  const bar = s.bookmarks.roots[spaceId]?.bar;
   if (node?.kind === "url") {
     if (choice === "tab") openUrl(node.url, windowId, "foreground");
     if (choice === "window") openUrl(node.url, windowId, "window");
@@ -399,10 +399,10 @@ async function openBarMenu(windowId: string, profileId: string, node: BookmarkNo
   if (choice === "delete" && node) useBrowser.getState().removeBookmark(node.id);
   const parentId = node?.parentId ?? bar;
   const index = node && parentId ? (folderChildren(useBrowser.getState().bookmarks, parentId).findIndex((n) => n.id === node.id) + 1) : undefined;
-  if (choice === "addPage") void editBookmark(null, windowId, { profileId, parentId: parentId ?? undefined, index });
+  if (choice === "addPage") void editBookmark(null, windowId, { spaceId, parentId: parentId ?? undefined, index });
   if (choice === "addFolder") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
-    if (title) useBrowser.getState().addBookmarkFolder({ profileId, title, parentId: parentId ?? undefined, index });
+    if (title) useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index });
   }
   if (choice === "manage") openInternalPage("bookmarks", windowId);
   if (choice.startsWith("bar:")) useBrowser.getState().updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode });

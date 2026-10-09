@@ -25,8 +25,8 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
   const [previous, next, multiple] = useBrowser(
     useShallow((s) => {
       const w = s.windows[windowId];
-      const i = w && !w.incognito ? s.profileOrder.indexOf(w.profileId) : -1;
-      return i < 0 ? [false, false, false] : [i > 0, i < s.profileOrder.length - 1, s.profileOrder.length > 1];
+      const i = w && !w.incognito ? s.spaceOrder.indexOf(w.spaceId) : -1;
+      return i < 0 ? [false, false, false] : [i > 0, i < s.spaceOrder.length - 1, s.spaceOrder.length > 1];
     }),
   );
   const area = useRef<SwipeAreaHandle>(null);
@@ -45,7 +45,7 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
   const onSwipe = (event: SwipeEvent) => {
     if (__DEV__) {
       if (received.length >= 4096) received.shift();
-      received.push({ at: performance.now(), surface, profile: useBrowser.getState().windows[windowId]?.profileId, ...event });
+      received.push({ at: performance.now(), surface, profile: useBrowser.getState().windows[windowId]?.spaceId, ...event });
     }
     const e = pageWidth ? { ...event, width: pageWidth } : event;
     if (e.phase === "swipe") return pager.step(e.direction === "back" ? -1 : 1);
@@ -82,7 +82,7 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
 export function SpaceTint() {
   const windowId = useWindowId();
   const { pages, paging } = usePagerPages(windowId);
-  const keys = useBrowser(useShallow((s) => pages.map((p) => spaceThemeKey(s.profiles[p.id], s.ui.appDark, s.settings.windowMaterial === "glass"))));
+  const keys = useBrowser(useShallow((s) => pages.map((p) => spaceThemeKey(s.spaces[p.id], s.ui.appDark, s.settings.windowMaterial === "glass"))));
   if (!paging) return null;
   return (
     <>

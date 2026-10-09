@@ -1,9 +1,9 @@
 import { Symbol, showMenu, type MenuItem } from "@bay/shell";
 import { Pressable, Text, View } from "react-native";
 import { createSpace, switchSpace } from "../lib/actions";
-import { PROFILE_COLORS, profileNameColor, useTheme } from "../lib/theme";
+import { SPACE_COLORS, profileNameColor, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
-import { useIsIncognito, useProfiles, useWindowId, useWindowProfile } from "../store/hooks";
+import { useIsIncognito, useSpaces, useWindowId, useWindowSpace } from "../store/hooks";
 import { setMeasuredWidth, useMeasuredWidth } from "./layout/measuredWidths";
 import { useHover } from "./primitives";
 import { openSettings } from "./settings/windows";
@@ -12,8 +12,8 @@ import { INDICATOR_HEIGHT, INDICATOR_ICON_WIDTH, INDICATOR_MIN_CUT_NAME, INDICAT
 function useIndicator(room: number) {
   const theme = useTheme();
   const incognito = useIsIncognito();
-  const profiles = useProfiles();
-  const profile = useWindowProfile();
+  const profiles = useSpaces();
+  const profile = useWindowSpace();
   const title = incognito ? "Incognito" : profile.name;
   const textWidth = useMeasuredWidth(`profile-name|${title}`);
   const shown = (incognito || profiles.length >= 2) && room >= INDICATOR_ICON_WIDTH;
@@ -75,13 +75,13 @@ export function SpaceIndicator({ room }: { room: number }) {
 
 export async function openSpaceMenu(windowId: string) {
   const s = useBrowser.getState();
-  const current = s.windows[windowId]?.profileId;
+  const current = s.windows[windowId]?.spaceId;
   const items: MenuItem[] = [
-    ...s.profileOrder.map((id, i) => ({
+    ...s.spaceOrder.map((id, i) => ({
       id: `switch:${id}`,
-      title: s.profiles[id]!.name,
+      title: s.spaces[id]!.name,
       checked: id === current,
-      swatch: PROFILE_COLORS[s.profiles[id]!.color]?.swatch,
+      swatch: SPACE_COLORS[s.spaces[id]!.color]?.swatch,
       ...(i < 9 ? { key: String(i + 1), modifiers: ["control" as const] } : {}),
     })),
     { separator: true },

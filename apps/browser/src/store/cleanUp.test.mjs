@@ -7,20 +7,20 @@ const { cleanUpHours } = await import("./organize.ts");
 
 const S = () => useBrowser.getState();
 const HOUR = 3_600_000;
-const urls = (w, profileId) => S().windows[w].tabIds.filter((id) => S().tabs[id].profileId === profileId).map((id) => S().tabs[id].url);
+const urls = (w, spaceId) => S().windows[w].tabIds.filter((id) => S().tabs[id].spaceId === spaceId).map((id) => S().tabs[id].url);
 
 // Personal with an active page (a.com) and one unused for `hours` (b.com); Work with the same, c.com and d.com. The
 // window ends on Personal.
 const setup = (hours) => {
   S().hydrate({});
-  const personal = S().settings.defaultProfileId;
-  const work = S().createProfile({ name: "Work" });
-  const w = S().createWindow({ profileId: personal, url: "https://a.com" });
+  const personal = S().settings.defaultSpaceId;
+  const work = S().createSpace({ name: "Work" });
+  const w = S().createWindow({ spaceId: personal, url: "https://a.com" });
   const b = S().newTab(w, { url: "https://b.com", background: true });
-  S().switchProfile(w, work);
+  S().switchSpace(w, work);
   S().navigate(S().windows[w].activeTabIds[work], "https://c.com");
   const d = S().newTab(w, { url: "https://d.com", background: true });
-  S().switchProfile(w, personal);
+  S().switchSpace(w, personal);
   for (const id of [b, d]) S().updateTab(id, { lastActiveAt: Date.now() - hours * HOUR });
   return { personal, work, w };
 };
@@ -28,7 +28,7 @@ const setup = (hours) => {
 test("a new install cleans up tabs unused for 12 hours", () => {
   S().hydrate({});
   assert.equal(S().settings.cleanUpInactiveTabsAfterHours, 12);
-  assert.equal(cleanUpHours(S(), S().settings.defaultProfileId), 12);
+  assert.equal(cleanUpHours(S(), S().settings.defaultSpaceId), 12);
 });
 
 test("a saved choice to never clean up stays", () => {
@@ -41,15 +41,15 @@ test("the automatic clean up reaches the spaces a window isn't showing", () => {
   assert.equal(S().cleanUpInactiveTabs(), 2);
   assert.deepEqual(urls(w, personal), ["https://a.com"]);
   assert.deepEqual(urls(w, work), ["https://c.com"], "Work's active tab stays");
-  assert.equal(S().windows[w].profileId, personal, "the window stays on its space");
+  assert.equal(S().windows[w].spaceId, personal, "the window stays on its space");
 });
 
 test("a space's own time overrides the app's, and never keeps its tabs", () => {
   const { personal, work, w } = setup(30);
-  S().updateProfile(personal, { cleanUpAfterHours: 168 });
-  S().updateProfile(work, { cleanUpAfterHours: null });
+  S().updateSpace(personal, { cleanUpAfterHours: 168 });
+  S().updateSpace(work, { cleanUpAfterHours: null });
   assert.equal(S().cleanUpInactiveTabs(), 0);
-  S().updateProfile(personal, { cleanUpAfterHours: 24 });
+  S().updateSpace(personal, { cleanUpAfterHours: 24 });
   S().updateSettings({ cleanUpInactiveTabsAfterHours: null });
   assert.equal(S().cleanUpInactiveTabs(), 1, "Personal's 24 hours, with the app's turned off");
   assert.deepEqual(urls(w, work), ["https://c.com", "https://d.com"]);

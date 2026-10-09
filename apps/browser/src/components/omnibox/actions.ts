@@ -3,7 +3,7 @@ import type { BrowserCommand } from "@bay/shell";
 import { runCommand } from "../../lib/commands";
 import { isBookmarked } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTab, bookmarkProfileId } from "../../store/model";
+import { activeTab, bookmarkSpaceId } from "../../store/model";
 import { isDeveloperUrl, siteKey } from "../developer/sites";
 import type { Tab } from "../../store/types";
 
@@ -49,7 +49,7 @@ const DEFS: ActionDef[] = [
   {
     command: "bookmarkPage",
     title: ({ s, windowId, tab }) =>
-      tab?.url && isBookmarked(s.bookmarks, bookmarkProfileId(s, s.windows[windowId]), tab.url) ? "Remove Bookmark" : "Bookmark This Page",
+      tab?.url && isBookmarked(s.bookmarks, bookmarkSpaceId(s, s.windows[windowId]), tab.url) ? "Remove Bookmark" : "Bookmark This Page",
     icon: "bookmark",
     hint: "⌘D",
     keywords: ["add bookmark", "bookmark"],
@@ -112,9 +112,9 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     });
   }
   if (w && !w.incognito) {
-    s.profileOrder.forEach((id, i) => {
-      if (id === w.profileId) return;
-      const name = s.profiles[id]?.name ?? "";
+    s.spaceOrder.forEach((id, i) => {
+      if (id === w.spaceId) return;
+      const name = s.spaces[id]?.name ?? "";
       out.push({ id: `switchSpace:${id}`, title: `Switch to ${name}`, icon: "person.crop.circle", hint: i < 9 ? `⌃${i + 1}` : undefined, keywords: [name, "profile"] });
     });
   }

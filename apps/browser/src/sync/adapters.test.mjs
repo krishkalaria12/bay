@@ -50,7 +50,7 @@ class Device {
       this.browser = S();
     }
   }
-  async sync(profileId = "default") {
+  async sync(spaceId = "default") {
     stub.current.device = this.id;
     useBrowser.setState(this.browser, true);
     const run = (scope, list, options) =>
@@ -67,10 +67,10 @@ class Device {
     const p = await run(
       "p",
       [
-        adapters.pinnedAdapter(profileId),
-        adapters.bookmarksAdapter(profileId),
-        adapters.historyAdapter(profileId),
-        adapters.deviceTabsAdapter(profileId, this.id, () => `${this.id}'s MacBook Pro`),
+        adapters.pinnedAdapter(spaceId),
+        adapters.bookmarksAdapter(spaceId),
+        adapters.historyAdapter(spaceId),
+        adapters.deviceTabsAdapter(spaceId, this.id, () => `${this.id}'s MacBook Pro`),
         this.passwords,
       ],
       { expired: adapters.historyExpired },
@@ -84,10 +84,10 @@ async function syncAll(devices, rounds = 2) {
   for (let i = 0; i < rounds; i++) for (const d of devices) await d.sync();
 }
 
-function tree(device, profileId = "default") {
+function tree(device, spaceId = "default") {
   return device.with(() => {
     const b = S().bookmarks;
-    const roots = b.roots[profileId];
+    const roots = b.roots[spaceId];
     const walk = (id) => {
       const n = b.nodes[id];
       return n.kind === "url" ? `${n.title}=${n.url}` : { [n.title]: n.children.map(walk) };
@@ -110,11 +110,11 @@ test("bookmarks: a folder deleted on one Mac while the other adds to it keeps th
   const folder = new Folder();
   const a = new Device("devA", folder);
   const b = new Device("devB", folder);
-  a.with(() => S().addBookmarkFolder({ profileId: "default", title: "Trip" }));
+  a.with(() => S().addBookmarkFolder({ spaceId: "default", title: "Trip" }));
   await syncAll([a, b]);
   const trip = (d) => d.with(() => Object.values(S().bookmarks.nodes).find((n) => n.title === "Trip")?.id);
   a.with(() => S().removeBookmark(trip(a)));
-  b.with(() => S().addBookmark({ profileId: "default", url: "https://hotel.example/", title: "Hotel", parentId: trip(b) }));
+  b.with(() => S().addBookmark({ spaceId: "default", url: "https://hotel.example/", title: "Hotel", parentId: trip(b) }));
   await syncAll([a, b, a]);
   assert.deepEqual(tree(a), tree(b));
   assert.deepEqual(tree(a).other, { "Other Bookmarks": ["Hotel=https://hotel.example/"] });
@@ -127,8 +127,8 @@ test("bookmarks: folders moved into each other on two Macs don't make a cycle", 
   const a = new Device("devA", folder);
   const b = new Device("devB", folder);
   a.with(() => {
-    S().addBookmarkFolder({ profileId: "default", title: "One" });
-    S().addBookmarkFolder({ profileId: "default", title: "Two" });
+    S().addBookmarkFolder({ spaceId: "default", title: "One" });
+    S().addBookmarkFolder({ spaceId: "default", title: "Two" });
   });
   await syncAll([a, b]);
   const id = (d, title) => d.with(() => Object.values(S().bookmarks.nodes).find((n) => n.title === title).id);
@@ -188,7 +188,7 @@ test("pinned tabs parked by a closed window still sync, and come back with the n
     aHome = S().createWindow({ url: "https://mail.example/" });
     S().pinTabs([model.viewTabIds(S(), aHome)[0]], true);
     // A window on a space with a profile of its own doesn't show them: closing the other parks them.
-    S().createWindow({ profileId: S().createProfile({ name: "Side" }), url: "https://side.example/" });
+    S().createWindow({ spaceId: S().createSpace({ name: "Side" }), url: "https://side.example/" });
   });
   b.with(() => S().createWindow({ url: "https://b-home.example/" }));
   await syncAll([a, b]);
@@ -302,9 +302,9 @@ test("bookmarks: a Mac on old ids and one on Chrome's UUIDs keep one tree", asyn
   now.with(() => {
     S().hydrate({ bookmarks: { nodes: {}, roots: {} } });
     useBrowser.setState({ bookmarksReady: { default: true } });
-    const f = S().addBookmarkFolder({ profileId: "default", title: "F" });
-    const a = S().addBookmark({ profileId: "default", url: "https://a.example/", title: "A", parentId: f });
-    const b = S().addBookmark({ profileId: "default", url: "https://b.example/", title: "B", parentId: f });
+    const f = S().addBookmarkFolder({ spaceId: "default", title: "F" });
+    const a = S().addBookmark({ spaceId: "default", url: "https://a.example/", title: "A", parentId: f });
+    const b = S().addBookmark({ spaceId: "default", url: "https://b.example/", title: "B", parentId: f });
     const nodes = { ...S().bookmarks.nodes };
     const rename = (id, legacy) => {
       const node = { ...nodes[id], id: bookmarkUuidFor(legacy), syncKey: legacy, addedAt: 5 };
@@ -331,7 +331,7 @@ test("bookmarks: a Mac on old ids and one on Chrome's UUIDs keep one tree", asyn
   // (This "old" Mac runs today's adapter, which names its nodes by UUID once it applies; it edits by sync key.)
   const onOld = (key) => old.with(() => Object.values(S().bookmarks.nodes).find((n) => (n.syncKey ?? n.id) === key).id);
   old.with(() => S().updateBookmark(onOld("bm-a"), { title: "A, renamed" }));
-  now.with(() => S().addBookmark({ profileId: "default", url: "https://c.example/", title: "C", parentId: bookmarkUuidFor("bm-f") }));
+  now.with(() => S().addBookmark({ spaceId: "default", url: "https://c.example/", title: "C", parentId: bookmarkUuidFor("bm-f") }));
   await syncAll([old, now]);
   assert.deepEqual(tree(now), tree(old));
   assert.deepEqual(tree(now).bar, { "Bookmarks Bar": [{ F: ["A, renamed=https://a.example/", "B=https://b.example/", "C=https://c.example/"] }] });

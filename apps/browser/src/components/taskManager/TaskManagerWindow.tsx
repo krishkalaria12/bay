@@ -24,7 +24,7 @@ const COLUMNS: Column[] = [
   { key: "gpu", title: "GPU Memory", width: 110 },
 ];
 
-type Row = EngineTask & { label: string; tabIds: string[]; favicon: { url: string; favicon: string | null; profileId: string } | null };
+type Row = EngineTask & { label: string; tabIds: string[]; favicon: { url: string; favicon: string | null; spaceId: string } | null };
 
 const TYPE_ICONS: Partial<Record<EngineTask["type"], string>> = {
   gpu: "cpu",
@@ -52,7 +52,7 @@ function taskRows(tasks: EngineTask[], tabs: Record<string, Tab>, browsers: Reco
       : task.type === "browser"
         ? APP_NAME
         : task.title;
-    return { ...task, label, tabIds, favicon: first ? { url: first.url, favicon: first.favicon, profileId: first.profileId } : null };
+    return { ...task, label, tabIds, favicon: first ? { url: first.url, favicon: first.favicon, spaceId: first.spaceId } : null };
   });
   const value = (r: Row) => (sort.key === "memory" ? r.memory : sort.key === "cpu" ? r.cpu : sort.key === "gpu" ? r.gpuMemory : 0);
   return resolved.sort((a, b) => {
@@ -227,7 +227,7 @@ function TaskRow({ row, stripe, selected, onSelect, onOpen }: { row: Row; stripe
       >
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 7, paddingLeft: 8, paddingRight: 8 }}>
           {row.favicon ? (
-            <Favicon url={row.favicon.url} favicon={row.favicon.favicon} size={16} profileId={row.favicon.profileId} />
+            <Favicon url={row.favicon.url} favicon={row.favicon.favicon} size={16} spaceId={row.favicon.spaceId} />
           ) : row.type === "browser" ? (
             <Image source={APP_ICON} style={{ width: 16, height: 16 }} />
           ) : (

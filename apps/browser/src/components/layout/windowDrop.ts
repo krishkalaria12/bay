@@ -46,5 +46,5 @@ export function dropTabsOutside(
   const [, , width, height] = from.frame ?? [0, 0, 1200, 800];
   const frame: Frame = [Math.round(point[0] - 90), Math.round(point[1] - height + 70), width, height];
   onNewWindow?.(frame);
-  return s.createWindow({ profileId: s.tabs[tabIds[0]!]?.profileId, tabIds, frame });
+  return s.createWindow({ spaceId: s.tabs[tabIds[0]!]?.spaceId, tabIds, frame });
 }

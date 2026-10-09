@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
-import { usePageProfileId, useWindowId } from "../../store/hooks";
+import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { groupLabel } from "../../store/organize";
 import { MeetingTimeLabel, useMeetingCountdown } from "../live/MeetingCountdown";
 import { HoverSlot } from "../HoverSlot";
@@ -36,9 +36,9 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
     const selection = s.selection[windowId];
     return !!selection?.length && !!s.groups[groupId]?.tabIds.some((id) => selection.includes(id));
   });
-  const profileId = usePageProfileId();
+  const spaceId = usePageSpaceId();
   // The window's active tab, when it's a member: it stays out while the group is collapsed, as in Arc and Dia.
-  const activeEntry = useBrowser((s) => keptEntry(s, windowId, profileId, entries));
+  const activeEntry = useBrowser((s) => keptEntry(s, windowId, spaceId, entries));
   const { ref, style, handle, headerRef } = useDragItem(`g:${groupId}`, { kind: "group", tabIds: tabIds.split(",").filter(Boolean), section, groupId, collapsed });
   const { ref: tailRef, style: tailStyle } = useDragItem(`tail:group:${groupId}`, { kind: "tail", tabIds: [], section, parentGroup: groupId });
 
@@ -91,7 +91,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const firstTab = useBrowser(
     useShallow((s) => {
       const t = s.tabs[s.groups[groupId]?.tabIds[0] ?? ""];
-      return t && { url: t.url, favicon: t.favicon, customIcon: t.customIcon, profileId: t.profileId };
+      return t && { url: t.url, favicon: t.favicon, customIcon: t.customIcon, spaceId: t.spaceId };
     }),
   );
   const renaming = useSidebarUi((u) => u.renaming?.kind === "group" && u.renaming.id === groupId);
@@ -123,7 +123,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
               style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - GROUP_PAD }}
             >
               {group.icon || firstTab ? (
-                <TabIcon url={firstTab?.url ?? ""} favicon={firstTab?.favicon} icon={group.icon ?? firstTab?.customIcon} profileId={firstTab?.profileId} />
+                <TabIcon url={firstTab?.url ?? ""} favicon={firstTab?.favicon} icon={group.icon ?? firstTab?.customIcon} spaceId={firstTab?.spaceId} />
               ) : (
                 <View style={{ width: 16 }} />
               )}

@@ -5,7 +5,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
 import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
-import { useProfiles } from "../../store/hooks";
+import { useSpaces } from "../../store/hooks";
 import { plural } from "../../store/model";
 import { useHover } from "../primitives";
 import { Button, Checkbox, PopUp, useFormColors } from "../settings/controls";
@@ -50,9 +50,9 @@ export function StepLayout({ footer, children }: { footer: ReactNode; children: 
 }
 
 /** The profile the import goes into, with more than one to choose from. */
-export function TargetPicker({ value, onChange }: { value: string; onChange: (profileId: string) => void }) {
+export function TargetPicker({ value, onChange }: { value: string; onChange: (spaceId: string) => void }) {
   const theme = useTheme();
-  const profiles = useProfiles();
+  const profiles = useSpaces();
   if (profiles.length < 2) return <View />;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

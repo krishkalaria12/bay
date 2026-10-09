@@ -7,7 +7,7 @@ import { useMedia } from "../components/media/state";
 import { isInternalTab } from "../components/pages";
 import { openSettings } from "../components/settings/windows";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { activeTabId, engineProfile, isIncognitoProfile, wake } from "../store/model";
+import { activeTabId, engineProfile, isIncognitoSpace, wake } from "../store/model";
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
@@ -132,7 +132,7 @@ export async function sleepTab(id: string): Promise<boolean> {
 
 export function noteReady(tabId: string) {
   const tab = store().tabs[tabId];
-  if (tab) loadedProfiles.add(engineProfile(tab.profileId));
+  if (tab) loadedProfiles.add(engineProfile(tab.spaceId));
   forget(tabId, false);
 }
 
@@ -185,7 +185,7 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
       // A kept tab sleeps only when asked (the tab menu's Put Tab to Sleep).
       if (!tab || tab.kept || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
       const idle = now - (hiddenAt.get(id) ?? now);
-      if (!unused.has(tab.profileId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
+      if (!unused.has(tab.spaceId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
       return !keepAliveReason(s, id);
     });
     candidates.sort((a, b) => (hiddenAt.get(a) ?? now) - (hiddenAt.get(b) ?? now));
@@ -201,9 +201,9 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
 }
 
 function unusedProfiles(s: BrowserState, now: number, idleMs: number): Set<string> {
-  const shownProfiles = new Set(Object.values(s.windows).map((w) => w.profileId));
+  const shownProfiles = new Set(Object.values(s.windows).map((w) => w.spaceId));
   const unused = new Set<string>();
-  for (const id of Object.keys(s.profiles)) {
+  for (const id of Object.keys(s.spaces)) {
     if (shownProfiles.has(id)) {
       unusedSince.delete(id);
       continue;
@@ -211,19 +211,19 @@ function unusedProfiles(s: BrowserState, now: number, idleMs: number): Set<strin
     if (!unusedSince.has(id)) unusedSince.set(id, now);
     if (now - unusedSince.get(id)! >= idleMs) unused.add(id);
   }
-  for (const id of unusedSince.keys()) if (!s.profiles[id]) unusedSince.delete(id);
+  for (const id of unusedSince.keys()) if (!s.spaces[id]) unusedSince.delete(id);
   return unused;
 }
 
 function releaseUnusedProfiles() {
   const s = store();
-  const inUse = new Set(Object.values(s.windows).map((w) => engineProfile(w.profileId)));
+  const inUse = new Set(Object.values(s.windows).map((w) => engineProfile(w.spaceId)));
   for (const id of webviews.keys()) {
     const tab = s.tabs[id];
-    if (tab) inUse.add(engineProfile(tab.profileId));
+    if (tab) inUse.add(engineProfile(tab.spaceId));
   }
   for (const profile of [...loadedProfiles]) {
-    if (!profile || isIncognitoProfile(profile) || inUse.has(profile)) continue;
+    if (!profile || isIncognitoSpace(profile) || inUse.has(profile)) continue;
     loadedProfiles.delete(profile);
     void releaseProfile(profile);
   }
@@ -313,7 +313,7 @@ export function reloadRecentTabs(sys: SystemState) {
   const since = Date.now() - 24 * 60 * 60_000;
   const ids = Object.values(s.tabs)
     .filter((t) => t.url && !t.navigation && !t.adoptId && !t.unloaded && !shown.has(t.id) && !isInternalTab(t) && t.lastActiveAt >= since)
-    .filter((t) => s.windows[t.windowId]?.profileId === t.profileId)
+    .filter((t) => s.windows[t.windowId]?.spaceId === t.spaceId)
     .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
     .slice(0, count)
     .map((t) => t.id);

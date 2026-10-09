@@ -59,7 +59,7 @@ function SwitcherRow({ tabId, focused, index, focusFill, outline }: { tabId: str
           borderColor: outline,
         }}
       >
-        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={18} profileId={tab.profileId} />
+        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={18} spaceId={tab.spaceId} />
         <View style={{ flex: 1 }}>
           <FadeLabel text={tabTitle(tab)} fontSize={13} weight={focused ? "medium" : "regular"} color={theme.textPrimary} style={{ height: 17 }} />
           {tab.url ? <FadeLabel text={displayUrl(tab.url)} fontSize={11} color={theme.textSecondary} style={{ height: 14 }} /> : null}

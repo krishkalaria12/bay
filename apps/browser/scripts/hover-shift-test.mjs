@@ -31,7 +31,7 @@ let app;
 try {
   app = await launch(resolve(appArg), {
     data, port,
-    session: session({ profiles: ["Personal", "Work"], windows: [{ id: "w1", tabIds: ids, activeTabIds: { default: "t2" } }], tabs: ids.map(tab) }),
+    session: session({ spaces: ["Personal", "Work"], windows: [{ id: "w1", tabIds: ids, activeTabIds: { default: "t2" } }], tabs: ids.map(tab) }),
     ready: "return !!nn.hoverShift",
   });
   const nn = (body) => app.eval(body, { timeout: 120000 });

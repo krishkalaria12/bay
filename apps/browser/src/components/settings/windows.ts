@@ -27,38 +27,38 @@ export type SettingsPane =
 
 type Nav = {
   pane: SettingsPane;
-  profileId: string | null;
-  back: { pane: SettingsPane; profileId: string | null }[];
-  forward: { pane: SettingsPane; profileId: string | null }[];
-  go(pane: SettingsPane, profileId?: string | null): void;
+  spaceId: string | null;
+  back: { pane: SettingsPane; spaceId: string | null }[];
+  forward: { pane: SettingsPane; spaceId: string | null }[];
+  go(pane: SettingsPane, spaceId?: string | null): void;
   goBack(): void;
   goForward(): void;
 };
 
 export const useSettingsNav = create<Nav>((set, get) => ({
   pane: "general",
-  profileId: null,
+  spaceId: null,
   back: [],
   forward: [],
-  go(pane, profileId = null) {
-    const { pane: from, profileId: fromProfile, back } = get();
-    if (from === pane && fromProfile === profileId) return;
-    set({ pane, profileId, back: [...back, { pane: from, profileId: fromProfile }].slice(-30), forward: [] });
+  go(pane, spaceId = null) {
+    const { pane: from, spaceId: fromProfile, back } = get();
+    if (from === pane && fromProfile === spaceId) return;
+    set({ pane, spaceId, back: [...back, { pane: from, spaceId: fromProfile }].slice(-30), forward: [] });
   },
   goBack() {
-    const { back, forward, pane, profileId } = get();
+    const { back, forward, pane, spaceId } = get();
     const prev = back.at(-1);
-    if (prev) set({ ...prev, back: back.slice(0, -1), forward: [{ pane, profileId }, ...forward] });
+    if (prev) set({ ...prev, back: back.slice(0, -1), forward: [{ pane, spaceId }, ...forward] });
   },
   goForward() {
-    const { back, forward, pane, profileId } = get();
+    const { back, forward, pane, spaceId } = get();
     const next = forward[0];
-    if (next) set({ ...next, forward: forward.slice(1), back: [...back, { pane, profileId }] });
+    if (next) set({ ...next, forward: forward.slice(1), back: [...back, { pane, spaceId }] });
   },
 }));
 
-export function openSettings(pane?: SettingsPane, profileId?: string | null) {
-  if (pane) useSettingsNav.getState().go(pane, profileId ?? null);
+export function openSettings(pane?: SettingsPane, spaceId?: string | null) {
+  if (pane) useSettingsNav.getState().go(pane, spaceId ?? null);
   void openWindow(SETTINGS_WINDOW_ID, { kind: "settings", title: "Settings" });
 }
 

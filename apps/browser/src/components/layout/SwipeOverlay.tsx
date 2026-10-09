@@ -261,8 +261,8 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
 
 function DestinationList({ tabId, items, selected, appear, pill }: { tabId: string; items: HistoryItem[]; selected: number; appear: SharedValue<number>; pill: SharedValue<number> }) {
   const theme = useTheme();
-  const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
-  const favicons = useHistoryFavicons(profileId, items);
+  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const favicons = useHistoryFavicons(spaceId, items);
   const appearStyle = useAnimatedStyle(() => ({ opacity: appear.get(), transform: [{ scale: interpolate(appear.get(), [0, 1], [0.9, 1]) }] }));
   const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pill.get() }] }));
   return (

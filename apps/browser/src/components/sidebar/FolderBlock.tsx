@@ -5,7 +5,7 @@ import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reani
 import { hex, useTheme } from "../../lib/theme";
 import { layout, SYMBOL_PREFIX } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
-import { usePageProfileId, useWindowId } from "../../store/hooks";
+import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { commitRename, endRename, startRename } from "./actions";
 import { useDragItem, useDropInto } from "./dnd";
 import { Fold, useFold } from "./Fold";
@@ -25,14 +25,14 @@ import { useSidebarTokens, withAlpha } from "./tokens";
  */
 export const FolderBlock = memo(function FolderBlock({ folderId }: { folderId: string }) {
   const windowId = useWindowId();
-  const profileId = usePageProfileId();
+  const spaceId = usePageSpaceId();
   const collapsed = useBrowser((s) => !!s.pinnedFolders[folderId]?.collapsed);
   const entries = useFolderEntries(folderId);
   const selectedInside = useBrowser((s) => {
     const selection = s.selection[windowId];
     return !!selection?.length && entries.some((e) => selection.includes(e.slice(2)));
   });
-  const activeEntry = useBrowser((s) => keptEntry(s, windowId, profileId, entries));
+  const activeEntry = useBrowser((s) => keptEntry(s, windowId, spaceId, entries));
   const tabIds = entries.map((e) => e.slice(2));
   const { ref, style, handle, headerRef } = useDragItem(`f:${folderId}`, { kind: "folder", tabIds, section: "pinned", folderId, collapsed });
   const { ref: tailRef, style: tailStyle } = useDragItem(`tail:folder:${folderId}`, { kind: "tail", tabIds: [], section: "pinned", parentGroup: folderId });

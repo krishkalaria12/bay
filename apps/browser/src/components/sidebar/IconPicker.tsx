@@ -42,7 +42,7 @@ function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { pick
       case "folder":
         return s.pinnedFolders[picker.id]?.icon ?? null;
       case "space":
-        return s.profiles[picker.id]?.icon ?? null;
+        return s.spaces[picker.id]?.icon ?? null;
       default:
         return s.groups[picker.id]?.icon ?? null;
     }

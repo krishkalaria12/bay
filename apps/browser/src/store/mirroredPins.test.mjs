@@ -10,8 +10,8 @@ const parked = await import("./parkedPins.ts");
 const S = () => useBrowser.getState();
 const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com$/g, "");
 const label = (id) => S().tabs[id].customTitle ?? short(id);
-const entries = (w, profileId) => {
-  const e = sidebarEntries(S(), w, profileId);
+const entries = (w, spaceId) => {
+  const e = sidebarEntries(S(), w, spaceId);
   const name = (entry) => {
     if (!entry.startsWith("f:")) return label(entry.slice(2));
     const f = S().pinnedFolders[entry.slice(2)];
@@ -91,22 +91,22 @@ test("moving, re-homing and folders follow; collapsing a folder stays the window
 
 test("a window on a space with its own profile doesn't show them, until it switches to the space", () => {
   const { one } = setup();
-  const personal = S().windows[one].profileId;
-  const side = S().createProfile({ name: "Side" });
-  const w = S().createWindow({ profileId: side, url: "https://s.com" });
+  const personal = S().windows[one].spaceId;
+  const side = S().createSpace({ name: "Side" });
+  const w = S().createWindow({ spaceId: side, url: "https://s.com" });
   assert.deepEqual(entries(w), { tiles: [], pinned: [], list: ["s"] });
-  S().switchProfile(w, personal);
+  S().switchSpace(w, personal);
   assert.deepEqual({ ...entries(w), list: [] }, { tiles: ["a"], pinned: ["b"], list: [] });
 });
 
 test("a space sharing the profile lists the favourites in every window, and its own pinned tabs only", () => {
   const { one, two } = setup();
-  const work = S().createProfile({ name: "Work", shareWith: S().windows[one].profileId });
-  S().switchProfile(two, work);
+  const work = S().createSpace({ name: "Work", shareWith: S().windows[one].spaceId });
+  S().switchSpace(two, work);
   assert.deepEqual(entries(two, work).tiles, ["a"]);
   assert.deepEqual(entries(two, work).pinned, []);
   S().pinRows([S().windows[two].activeTabIds[work]], true);
-  S().switchProfile(one, work);
+  S().switchSpace(one, work);
   assert.equal(entries(one, work).pinned.length, 1);
 });
 
@@ -143,7 +143,7 @@ test("closing one of two windows parks nothing; closing the last parks its pins 
 
 test("a session from before keeps every window's pins: each window has them all, once", () => {
   S().hydrate({});
-  const w = (id, tabIds) => ({ id, profileId: "default", incognito: false, tabIds, activeTabIds: { default: tabIds.at(-1) }, sidebarOpen: true, frame: null, createdAt: 0 });
+  const w = (id, tabIds) => ({ id, spaceId: "default", incognito: false, tabIds, activeTabIds: { default: tabIds.at(-1) }, sidebarOpen: true, frame: null, createdAt: 0 });
   const t = (id, windowId, url, pin) => ({
     ...model.makeTab(windowId, "default", url),
     id,

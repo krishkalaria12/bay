@@ -52,7 +52,7 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
         {folder ? (
           <TabIcon url="" icon={folder.icon ?? `${SYMBOL_PREFIX}folder`} color={folder.icon ? undefined : theme.textTab} />
         ) : tab ? (
-          <TabIcon url={tab.url} favicon={tab.favicon} icon={item.kind === "group" ? null : tab.customIcon} profileId={tab.profileId} />
+          <TabIcon url={tab.url} favicon={tab.favicon} icon={item.kind === "group" ? null : tab.customIcon} spaceId={tab.spaceId} />
         ) : null}
         {!tile ? <FadeLabel text={label} fontSize={13} weight={item.kind === "group" || folder ? "medium" : "regular"} color={theme.textPrimary} style={{ flex: 1, height: 18, marginLeft: 7 }} /> : null}
       </Surface>

@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { PROFILE_COLORS } from "../../lib/theme";
+import { SPACE_COLORS } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import type { ProfileColor } from "../../store/types";
+import type { SpaceColor } from "../../store/types";
 import { useHover } from "../primitives";
 import { useOnboardingColors } from "./ui";
 
@@ -13,24 +13,24 @@ export const PERSONALIZE_COPY = {
   layouts: "Choose how you would like to view your tabs:",
 } as const;
 
-const COLORS = Object.keys(PROFILE_COLORS) as ProfileColor[];
+const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
 
 export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; size?: number }) {
-  const profileId = useBrowser((s) => s.windows[windowId]?.profileId);
-  const current = useBrowser((s) => (profileId ? s.profiles[profileId]?.color : undefined));
+  const spaceId = useBrowser((s) => s.windows[windowId]?.spaceId);
+  const current = useBrowser((s) => (spaceId ? s.spaces[spaceId]?.color : undefined));
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
-  if (!profileId || incognito) return null;
+  if (!spaceId || incognito) return null;
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 8 : 6 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
       {COLORS.map((c) => (
-        <ColorButton key={c} color={c} size={size} selected={current === c} onPress={() => useBrowser.getState().updateProfile(profileId, { color: c })} />
+        <ColorButton key={c} color={c} size={size} selected={current === c} onPress={() => useBrowser.getState().updateSpace(spaceId, { color: c })} />
       ))}
     </View>
   );
 }
 
-function ColorButton({ color, size, selected, onPress }: { color: ProfileColor; size: number; selected: boolean; onPress: () => void }) {
-  const { swatch, name } = PROFILE_COLORS[color];
+function ColorButton({ color, size, selected, onPress }: { color: SpaceColor; size: number; selected: boolean; onPress: () => void }) {
+  const { swatch, name } = SPACE_COLORS[color];
   const { hovered, hoverProps } = useHover();
   const t = useSharedValue(selected ? 1 : 0);
   useEffect(() => {

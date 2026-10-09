@@ -4,7 +4,7 @@ import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, pinnedPage, plural, tabLabel, viewTabIds, windowTitle } from "../../store/model";
+import { activeTabId, bookmarkSpaceId, inPinnedContainer, isIncognitoSpace, pinnedPage, plural, tabLabel, viewTabIds, windowTitle } from "../../store/model";
 import { awayFromPin, cleanedTabsFor, groupLabel, groupOf, keptDeletedGroups, selectedTabIds } from "../../store/organize";
 import { splitOf } from "../../store/splits";
 import type { GroupColor, Tab } from "../../store/types";
@@ -36,7 +36,7 @@ const hint = (key: string, ...modifiers: Mods) => ({ key, modifiers });
 
 function bookmarkFolderItems(windowId: string, prefix: string): MenuItem[] {
   const s = store();
-  const roots = s.bookmarks.roots[bookmarkProfileId(s, s.windows[windowId])];
+  const roots = s.bookmarks.roots[bookmarkSpaceId(s, s.windows[windowId])];
   const folders = roots
     ? [...folderChildren(s.bookmarks, roots.bar), ...folderChildren(s.bookmarks, roots.other)].filter((n) => n.kind === "folder")
     : [];
@@ -62,7 +62,7 @@ function moveToWindowItems(windowId: string): MenuItem[] {
 function moveToGroupItems(windowId: string, exclude: string | undefined): MenuItem[] {
   const s = store();
   const w = s.windows[windowId];
-  const groups = Object.values(s.groups).filter((g) => g.windowId === windowId && g.profileId === w?.profileId && g.id !== exclude);
+  const groups = Object.values(s.groups).filter((g) => g.windowId === windowId && g.spaceId === w?.spaceId && g.id !== exclude);
   return groups.map((g) => ({ id: `group:${g.id}`, title: groupLabel(s, g), symbol: g.pinned ? "pin" : "square.on.square" }));
 }
 
@@ -70,7 +70,7 @@ function moveToGroupItems(windowId: string, exclude: string | undefined): MenuIt
 function moveToFolderItems(windowId: string, exclude: string | undefined): MenuItem[] {
   const s = store();
   const w = s.windows[windowId];
-  const folders = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.profileId === w?.profileId && f.id !== exclude);
+  const folders = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.spaceId === w?.spaceId && f.id !== exclude);
   return [
     ...folders.map((f) => ({ id: `pfolder:${f.id}`, title: f.name || "New Folder", symbol: "folder" })),
     ...(folders.length ? [sep] : []),
@@ -108,13 +108,13 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const { above, below, others } = tabsAround(windowId, tab);
   const group = groupOf(s, tab.id);
   const split = splitOf(s, tab.id);
-  const incognito = isIncognitoProfile(tab.profileId);
+  const incognito = isIncognitoSpace(tab.spaceId);
   const across = (s.windows[windowId]?.tabLayout ?? s.settings.tabLayout) === "top";
   const away = awayFromPin(tab);
   const active = activeTabId(s, windowId);
   const current = tab.id === active;
   const moveToSpace: MenuItem[] = [
-    ...s.profileOrder.map((id) => ({ id: `profile:${id}`, title: s.profiles[id]!.name, checked: id === tab.profileId, enabled: id !== tab.profileId })),
+    ...s.spaceOrder.map((id) => ({ id: `profile:${id}`, title: s.spaces[id]!.name, checked: id === tab.spaceId, enabled: id !== tab.spaceId })),
     sep,
     { id: "profile:new", title: "New Space…" },
   ];
@@ -191,7 +191,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "rename") void startRename(windowId, t);
   else if (choice === "resetName") s.updateTab(tab.id, { customTitle: null });
   else if (choice === "duplicate") s.duplicateTab(tab.id);
-  else if (choice === "copyToWindow") openWindow(incognito ? { incognito: true, url: tab.url } : { profileId: tab.profileId, url: tab.url });
+  else if (choice === "copyToWindow") openWindow(incognito ? { incognito: true, url: tab.url } : { spaceId: tab.spaceId, url: tab.url });
   else if (choice === "siteControls") {
     switchToTab(tab.id);
     setPopover(tab.id, "siteControls");
@@ -223,7 +223,7 @@ async function openMultiMenu(windowId: string, ids: string[]) {
   const tabs = ids.map((id) => s.tabs[id]!);
   const allPinned = tabs.every((t) => t.pinned);
   const allRows = tabs.every((t) => t.pinnedRow);
-  const incognito = tabs.some((t) => isIncognitoProfile(t.profileId));
+  const incognito = tabs.some((t) => isIncognitoSpace(t.spaceId));
   const groups = moveToGroupItems(windowId, undefined);
   const choice = await showMenu([
     { id: "pinRow", title: allRows ? `Unpin ${n} Tabs` : `Pin ${n} Tabs`, symbol: allRows ? "pin.slash" : "pin" },
@@ -258,7 +258,7 @@ async function openMultiMenu(windowId: string, ids: string[]) {
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, ids, choice.slice(7));
   else if (choice.startsWith("window:")) {
     const target = store().moveTabsToWindow(ids, choice === "window:new" ? null : choice.slice(7));
-    if (target) switchToTab(store().windows[target]?.activeTabIds[tabs[0]!.profileId] ?? ids[0]!);
+    if (target) switchToTab(store().windows[target]?.activeTabIds[tabs[0]!.spaceId] ?? ids[0]!);
   } else if (choice === "close") s.closeTabs(ids);
   if (choice !== "copy" && choice !== "copyMd") store().setSelection(windowId, []);
 }
@@ -392,7 +392,7 @@ export async function openOverflowMenu(windowId: string) {
   const open = viewTabIds(s, windowId).map((id) => s.tabs[id]!);
   const closed = [
     ...s.closedTabs
-      .filter((c) => c.tab.profileId === w.profileId)
+      .filter((c) => c.tab.spaceId === w.spaceId)
       .map((c) => ({ id: `restore:${c.id}`, title: c.tab.customTitle || c.tab.title || tabLabel(c.tab), symbol: "clock.arrow.circlepath", at: c.closedAt })),
     ...s.closedGroups.map((c) => ({ id: `restore:${c.id}`, title: `${c.group.name} (${plural(c.tabs.length, "Tab")})`, symbol: "rectangle.stack", at: c.closedAt })),
   ]
@@ -405,7 +405,7 @@ export async function openOverflowMenu(windowId: string) {
     .reverse()
     .map((c) => ({ id: `restore:${c.id}`, title: `${c.group.name} (${plural(c.tabs.length, "Tab")})`, symbol: "trash" }));
   const daily = s.settings.cleanUpInactiveTabsAfterHours !== null;
-  const synced = syncedDevicesMenuItem(w.profileId);
+  const synced = syncedDevicesMenuItem(w.spaceId);
   const choice = await showMenu([
     { id: "search", title: "Search Tabs…", symbol: "magnifyingglass", ...hint("a", "shift", "command") },
     sep,
@@ -414,7 +414,7 @@ export async function openOverflowMenu(windowId: string) {
       title: "Open Tabs",
       symbol: "square.stack",
       enabled: open.length > 0,
-      children: open.map((t) => ({ id: `tab:${t.id}`, title: tabTitle(t), checked: w.activeTabIds[w.profileId] === t.id })),
+      children: open.map((t) => ({ id: `tab:${t.id}`, title: tabTitle(t), checked: w.activeTabIds[w.spaceId] === t.id })),
     },
     ...(synced ? [synced] : []),
     { id: "closed", title: "Recently Closed", symbol: "clock.arrow.circlepath", enabled: closed.length > 0, children: closed.length ? closed : [{ id: "none", title: "Empty", enabled: false }] },
@@ -442,7 +442,7 @@ export async function openOverflowMenu(windowId: string) {
   if (!choice) return;
   if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice.startsWith("tab:")) switchToTab(choice.slice(4));
-  else if (openSyncedTab(choice, windowId, w.profileId)) return;
+  else if (openSyncedTab(choice, windowId, w.spaceId)) return;
   else if (choice.startsWith("restore:")) s.restoreClosed(choice.slice(8), windowId);
   else if (choice.startsWith("cleaned:")) s.restoreCleaned(choice.slice(8), windowId);
   else if (choice === "restoreAll") s.restoreCleaned(undefined, windowId);

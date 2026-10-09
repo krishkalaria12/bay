@@ -32,7 +32,7 @@ const rep = reporter(join(scratch, "tab-drag-test.log"), { name: "tab-drag-test"
 // Each tab on a page of its own: a blank tab shown opens the window's palette, whose dismiss layer covers the strip.
 const tab = (id, windowId, pinned = false) => ({ id, windowId, pinned, url: `data:text/html,<title>${id}</title>`, title: id, lastActiveAt: id === "t1" ? 2 : 1 });
 const fixture = () => session({
-  profiles: [{ id: "default", name: "Personal", color: "plum" }],
+  spaces: [{ id: "default", name: "Personal", color: "plum" }],
   settings: { tabLayout: "top" },
   windows: [
     // Low enough to leave room above it on a laptop's screen for the card of a tab dragged out over its top (a card
@@ -46,7 +46,7 @@ const fixture = () => session({
   ],
   tabs: [tab("p1", "w1", true), tab("p2", "w1", true), tab("t1", "w1"), tab("t2", "w1"), tab("t3", "w1"), tab("t4", "w1"), tab("l1", "w2"),
     tab("g1", "w3"), tab("g2", "w3"), tab("x1", "w3"), tab("a1", "w5"), tab("a2", "w5"), tab("b1", "w6"), tab("b2", "w6"), tab("b3", "w6")],
-  groups: [{ id: "grp", windowId: "w3", profileId: "default", name: "Group", icon: null, color: null, collapsed: false, pinned: false, tabIds: ["g1", "g2"], createdAt: 1 }],
+  groups: [{ id: "grp", windowId: "w3", spaceId: "default", name: "Group", icon: null, color: null, collapsed: false, pinned: false, tabIds: ["g1", "g2"], createdAt: 1 }],
 });
 
 let app = null;

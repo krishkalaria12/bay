@@ -27,9 +27,9 @@ const shownWith = (s: BrowserState, tabId: string) => splitOf(s, tabId)?.tabIds 
 
 function tabOrder(s: BrowserState, windowId: string, strip: boolean): string[] {
   if (!strip) return sidebarTabOrder(s, windowId);
-  const profileId = s.windows[windowId]?.profileId;
-  if (!profileId) return [];
-  return stripEntries(s, windowId, profileId).flatMap((entry) => {
+  const spaceId = s.windows[windowId]?.spaceId;
+  if (!spaceId) return [];
+  return stripEntries(s, windowId, spaceId).flatMap((entry) => {
     const [kind, id, tabs] = entry.split(":");
     return kind === "group" ? [] : kind === "split" ? tabs!.split(",") : [id!];
   });
@@ -54,7 +54,7 @@ useBrowser.subscribe((s, prev) => {
     if (!to || !from || to === from) continue;
     // Another space pages in with its pager; a tab dragged to another window leaves the next one shown at once.
     const movedAway = !!s.tabs[from] && s.tabs[from].windowId !== windowId;
-    if (w.profileId !== was.profileId || movedAway) {
+    if (w.spaceId !== was.spaceId || movedAway) {
       switches.delete(windowId);
       continue;
     }

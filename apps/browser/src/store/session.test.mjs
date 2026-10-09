@@ -33,19 +33,19 @@ function windowWith(...hosts) {
 
 test("hydrate repairs dangling references", () => {
   S().hydrate({
-    profiles: { default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 } },
+    spaces: { default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 } },
     windows: {
-      w1: { id: "w1", profileId: "gone", incognito: false, tabIds: ["t1", "missing"], activeTabIds: { gone: "missing" }, sidebarOpen: true, frame: null, createdAt: 0 },
-      w2: { id: "w2", profileId: "default", incognito: false, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame: null, createdAt: 0 },
+      w1: { id: "w1", spaceId: "gone", incognito: false, tabIds: ["t1", "missing"], activeTabIds: { gone: "missing" }, sidebarOpen: true, frame: null, createdAt: 0 },
+      w2: { id: "w2", spaceId: "default", incognito: false, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame: null, createdAt: 0 },
     },
     tabs: {
-      t1: { id: "t1", windowId: "w1", profileId: "default", url: "https://a.com", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, navigation: null, openerId: null, createdAt: 0, lastActiveAt: 0 },
-      t2: { id: "t2", windowId: "nowhere", profileId: "default", url: "https://b.com", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, navigation: null, openerId: null, createdAt: 0, lastActiveAt: 0 },
+      t1: { id: "t1", windowId: "w1", spaceId: "default", url: "https://a.com", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, navigation: null, openerId: null, createdAt: 0, lastActiveAt: 0 },
+      t2: { id: "t2", windowId: "nowhere", spaceId: "default", url: "https://b.com", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, navigation: null, openerId: null, createdAt: 0, lastActiveAt: 0 },
     },
-    groups: { g: { id: "g", windowId: "w1", profileId: "default", name: "", icon: null, color: null, collapsed: false, pinned: false, tabIds: ["missing"], createdAt: 0 } },
+    groups: { g: { id: "g", windowId: "w1", spaceId: "default", name: "", icon: null, color: null, collapsed: false, pinned: false, tabIds: ["missing"], createdAt: 0 } },
   });
   assert.deepEqual(S().windowOrder, ["w1"]);
-  assert.equal(S().windows.w1.profileId, "default");
+  assert.equal(S().windows.w1.spaceId, "default");
   assert.equal(active("w1"), "t1");
   assert.equal(S().tabs.t2, undefined);
   assert.deepEqual(S().groups, {});
@@ -75,10 +75,10 @@ test("a reopened window's tabs wake with their back/forward list", () => {
 
 test("profiles sharing data still share it after a save and reload", () => {
   reset();
-  const a = S().createProfile({ name: "A" });
-  const b = S().createProfile({ name: "B", shareWith: a });
+  const a = S().createSpace({ name: "A" });
+  const b = S().createSpace({ name: "B", shareWith: a });
   S().importHistory(b, [{ url: "https://a.com/", title: "A", visits: 1, lastVisit: Date.now() }]);
-  const saved = JSON.parse(JSON.stringify({ profiles: S().profiles, profileOrder: S().profileOrder, history: S().history, bookmarks: S().bookmarks }));
+  const saved = JSON.parse(JSON.stringify({ spaces: S().spaces, spaceOrder: S().spaceOrder, history: S().history, bookmarks: S().bookmarks }));
   reset();
   assert.equal(model.engineProfile(b), b, "registry follows the loaded profiles");
   S().hydrate(saved);
@@ -97,8 +97,8 @@ test("history.json moves into Chrome once: Chrome's own visits aren't doubled, a
   stub.docs.clear();
   stub.historyDbs.clear();
   const now = Date.now();
-  const work = S().createProfile({ name: "Work" });
-  const shared = S().createProfile({ name: "Shared", shareWith: work });
+  const work = S().createSpace({ name: "Work" });
+  const shared = S().createSpace({ name: "Shared", shareWith: work });
   // Chrome recorded a.com 20 s after the app did; b.com (imported) and c.com (another Mac's) only the app has.
   stub.chromeVisit("", "https://a.com/", "A", now - DAY + 20_000);
   // d.com: Chrome has one of two visits 30 s apart; the other is still added.

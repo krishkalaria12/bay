@@ -30,10 +30,10 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
   const fieldSide = right ? { right: layout.sidebarInset } : { left: layout.sidebarInset };
   const toolbarEnd = (right && sidebarOpen ? sidebarWidth : layout.cardInset) + 10;
   const bookmark = useBrowser((s) => (state.kind === "page" ? s.bookmarks.nodes[state.bookmarkId] : undefined));
-  const profileId = state.kind === "page" ? profileOfNode(state.bookmarkId) : state.profileId;
+  const spaceId = state.kind === "page" ? profileOfNode(state.bookmarkId) : state.spaceId;
   const [name, setName] = useState(() => (state.kind === "page" ? (bookmark?.title ?? "") : ""));
   const [folderId, setFolderId] = useState<string | null>(() =>
-    state.kind === "page" ? (bookmark?.parentId ?? null) : (useBrowser.getState().bookmarks.roots[state.profileId]?.bar ?? null),
+    state.kind === "page" ? (bookmark?.parentId ?? null) : (useBrowser.getState().bookmarks.roots[state.spaceId]?.bar ?? null),
   );
   const close = () => useBookmarkDialog.getState().set(null);
 
@@ -49,7 +49,7 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
       if (folderId && folderId !== bookmark?.parentId) s.moveBookmark(state.bookmarkId, folderId);
     } else {
       const title = name.trim() || "Tabs";
-      s.addBookmarkTree(state.profileId, [{ title, children: state.tabs.map((t) => ({ title: t.title, url: t.url })) }], folderId ?? undefined);
+      s.addBookmarkTree(state.spaceId, [{ title, children: state.tabs.map((t) => ({ title: t.title, url: t.url })) }], folderId ?? undefined);
     }
     close();
   };
@@ -61,8 +61,8 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
 
   const newFolder = async () => {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId: state.windowId });
-    if (!title || !profileId) return;
-    const id = useBrowser.getState().addBookmarkFolder({ profileId, title, parentId: folderId ?? undefined });
+    if (!title || !spaceId) return;
+    const id = useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: folderId ?? undefined });
     setFolderId(id);
   };
 
@@ -102,7 +102,7 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
           }}
         >
           <ScrollView contentContainerStyle={{ padding: 4 }}>
-            {profileId && <FolderTree profileId={profileId} selectedId={folderId} onSelect={setFolderId} rowHeight={24} />}
+            {spaceId && <FolderTree spaceId={spaceId} selectedId={folderId} onSelect={setFolderId} rowHeight={24} />}
           </ScrollView>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>

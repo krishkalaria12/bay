@@ -2,7 +2,7 @@ import type { HistoryEntry } from "./types";
 
 // The store's constants: the default profile's id, and how much each slice keeps.
 
-export const DEFAULT_PROFILE_ID = "default";
+export const DEFAULT_SPACE_ID = "default";
 
 // MARK: History
 

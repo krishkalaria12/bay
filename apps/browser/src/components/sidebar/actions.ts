@@ -2,7 +2,7 @@ import { cleanUrl, markdownLink } from "@bay/core";
 import { copyText, prompt } from "@bay/shell";
 import { updateFolder } from "../../live/store";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, bookmarkProfileId, pinnedPage, viewTabIds } from "../../store/model";
+import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
@@ -101,7 +101,7 @@ export function setIcon(target: Target, icon: string | null) {
   // A live folder's header row ("livefolder|<id>").
   else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
   else if (target.kind === "folder") store().updatePinnedFolder(target.id, { icon });
-  else if (target.kind === "space") store().updateProfile(target.id, { icon });
+  else if (target.kind === "space") store().updateSpace(target.id, { icon });
   else store().updateGroup(target.id, { icon });
 }
 
@@ -124,16 +124,16 @@ export function copyUrls(ids: string[], markdown: boolean) {
 
 export async function bookmarkTabs(windowId: string, ids: string[], folder: string | "bar" | "new") {
   const s = store();
-  const profileId = bookmarkProfileId(s, s.windows[windowId]);
+  const spaceId = bookmarkSpaceId(s, s.windows[windowId]);
   let parentId: string | undefined = folder === "bar" ? undefined : folder;
   if (folder === "new") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (!title) return;
-    parentId = store().addBookmarkFolder({ profileId, title });
+    parentId = store().addBookmarkFolder({ spaceId, title });
   }
   for (const id of ids) {
     const t = store().tabs[id];
-    if (t?.url) store().addBookmark({ profileId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId });
+    if (t?.url) store().addBookmark({ spaceId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId });
   }
 }
 

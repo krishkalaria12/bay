@@ -4,9 +4,9 @@ import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./fol
 import { createGroupsSlice, placeFolders, type GroupsSlice } from "./groups";
 import { createHistorySlice, type HistorySlice } from "./history";
 import { mirrorPins } from "./mirroredPins";
-import { IDLE_LIVE, isIncognitoProfile, pinnedFirst, pinnedPage } from "./model";
+import { IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
-import { createProfilesSlice, DEFAULT_PROFILE, engineIdOf, type ProfilesSlice } from "./profiles";
+import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, type SpacesSlice } from "./spaces";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
 import { activated, apply, createTabsSlice, type TabsSlice } from "./tabs";
@@ -14,7 +14,7 @@ import type { BrowserWindow, Tab } from "./types";
 import { createUiSlice, type UiSlice } from "./ui";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
 
-export type BrowserState = ProfilesSlice &
+export type BrowserState = SpacesSlice &
   WindowsSlice &
   TabsSlice &
   GroupsSlice &
@@ -31,8 +31,8 @@ export type BrowserState = ProfilesSlice &
 export type HydrateData = Partial<
   Pick<
     BrowserState,
-    | "profiles"
-    | "profileOrder"
+    | "spaces"
+    | "spaceOrder"
     | "orphanedProfileData"
     | "windows"
     | "windowOrder"
@@ -70,7 +70,7 @@ const batched =
   };
 
 export const useBrowser = create<BrowserState>()(batched((...a) => ({
-  ...createProfilesSlice(...a),
+  ...createSpacesSlice(...a),
   ...createWindowsSlice(...a),
   ...createTabsSlice(...a),
   ...createGroupsSlice(...a),
@@ -85,19 +85,19 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
   hydrate(data) {
     const [set, get] = a;
     const s = get();
-    const profiles = data.profiles && Object.keys(data.profiles).length ? data.profiles : { [DEFAULT_PROFILE.id]: DEFAULT_PROFILE };
-    const profileOrder = [
-      ...(data.profileOrder ?? []).filter((id) => profiles[id]),
-      ...Object.keys(profiles).filter((id) => !data.profileOrder?.includes(id)),
+    const spaces = data.spaces && Object.keys(data.spaces).length ? data.spaces : { [DEFAULT_SPACE.id]: DEFAULT_SPACE };
+    const spaceOrder = [
+      ...(data.spaceOrder ?? []).filter((id) => spaces[id]),
+      ...Object.keys(spaces).filter((id) => !data.spaceOrder?.includes(id)),
     ];
     const settings = { ...DEFAULT_SETTINGS, ...data.settings };
-    if (!profiles[settings.defaultProfileId]) settings.defaultProfileId = profileOrder[0]!;
+    if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
 
     const rawWindows = data.windows ?? {};
-    const profileOk = (p: string) => !!profiles[p] || isIncognitoProfile(p);
+    const profileOk = (p: string) => !!spaces[p] || isIncognitoSpace(p);
     const tabs: Record<string, Tab> = {};
     for (const t of Object.values(data.tabs ?? {})) {
-      if (!rawWindows[t.windowId] || !profileOk(t.profileId)) continue;
+      if (!rawWindows[t.windowId] || !profileOk(t.spaceId)) continue;
       const { adoptId: _, ...rest } = t;
       tabs[t.id] = { ...rest, navigation: null, pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null) };
     }
@@ -105,10 +105,10 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
     for (const w of Object.values(rawWindows)) {
       const tabIds = placeFolders(pinnedFirst(w.tabIds.filter((id) => tabs[id]?.windowId === w.id), tabs), tabs);
       if (!tabIds.length) continue;
-      const activeTabIds = Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => tabs[id]?.profileId === p));
-      const profileId = tabIds.some((id) => tabs[id]!.profileId === w.profileId) ? w.profileId : tabs[tabIds[0]!]!.profileId;
-      activeTabIds[profileId] ??= tabIds.find((id) => tabs[id]!.profileId === profileId)!;
-      windows[w.id] = { ...w, tabIds, profileId, activeTabIds };
+      const activeTabIds = Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => tabs[id]?.spaceId === p));
+      const spaceId = tabIds.some((id) => tabs[id]!.spaceId === w.spaceId) ? w.spaceId : tabs[tabIds[0]!]!.spaceId;
+      activeTabIds[spaceId] ??= tabIds.find((id) => tabs[id]!.spaceId === spaceId)!;
+      windows[w.id] = { ...w, tabIds, spaceId, activeTabIds };
     }
     for (const t of Object.values(tabs)) if (!windows[t.windowId]) delete tabs[t.id];
     const windowOrder = [...(data.windowOrder ?? []).filter((id) => windows[id]), ...Object.keys(windows).filter((id) => !data.windowOrder?.includes(id))];
@@ -121,14 +121,14 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
     );
     const splits = sanitizeSplits(data.splits ?? {}, tabs);
     let bookmarks = data.bookmarks ?? s.bookmarks;
-    for (const id of profileOrder) bookmarks = ensureRoots(bookmarks, id)[0];
+    for (const id of spaceOrder) bookmarks = ensureRoots(bookmarks, id)[0];
     const focused = data.focusedWindowId && windows[data.focusedWindowId] ? data.focusedWindowId : (windowOrder.at(-1) ?? null);
 
-    const engines = new Set(Object.values(profiles).map(engineIdOf));
+    const engines = new Set(Object.values(spaces).map(engineIdOf));
     let next: BrowserState = {
       ...s,
-      profiles,
-      profileOrder,
+      spaces,
+      spaceOrder,
       orphanedProfileData: (data.orphanedProfileData ?? []).filter((e) => !engines.has(e)),
       settings,
       windows,
@@ -140,27 +140,27 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
       splits,
       closedTabs: data.closedTabs ?? [],
       closedWindows: data.closedWindows ?? [],
-      parkedPins: Object.fromEntries(Object.entries(data.parkedPins ?? {}).filter(([p]) => profiles[p])),
+      parkedPins: Object.fromEntries(Object.entries(data.parkedPins ?? {}).filter(([p]) => spaces[p])),
       closedGroups: data.closedGroups ?? [],
       deletedGroups: keptDeletedGroups(data.deletedGroups ?? []),
       // Older builds saved private windows' cleaned tabs; drop them.
-      cleanedTabs: (data.cleanedTabs ?? []).filter((c) => !isIncognitoProfile(c.tab.profileId)),
+      cleanedTabs: (data.cleanedTabs ?? []).filter((c) => !isIncognitoSpace(c.tab.spaceId)),
       privateCleanedTabs: {},
       privateSiteMutes: {},
       selection: {},
-      history: Object.fromEntries(Object.entries(data.history ?? {}).filter(([p]) => profiles[p])),
+      history: Object.fromEntries(Object.entries(data.history ?? {}).filter(([p]) => spaces[p])),
       // A view handed in (tests) counts as read; the app's history and bookmarks come from Chrome later
       // (lib/history.ts, lib/bookmarks.ts).
-      historyReady: Object.fromEntries(Object.keys(data.history ?? {}).filter((p) => profiles[p]).map((p) => [p, true as const])),
+      historyReady: Object.fromEntries(Object.keys(data.history ?? {}).filter((p) => spaces[p]).map((p) => [p, true as const])),
       bookmarks,
-      bookmarksReady: Object.fromEntries(Object.keys(data.bookmarks?.roots ?? {}).filter((p) => profiles[p]).map((p) => [p, true as const])),
+      bookmarksReady: Object.fromEntries(Object.keys(data.bookmarks?.roots ?? {}).filter((p) => spaces[p]).map((p) => [p, true as const])),
       downloads: data.downloads ?? [],
       windowUi: {},
       find: {},
       ui: { ...s.ui, focusedWindowId: focused, focusOrder: focused ? [focused, ...windowOrder.filter((id) => id !== focused).reverse()] : [] },
     };
     next = prunePinnedFolders(next);
-    for (const w of Object.values(windows)) next = apply(next, activated(next, w.activeTabIds[w.profileId]!));
+    for (const w of Object.values(windows)) next = apply(next, activated(next, w.activeTabIds[w.spaceId]!));
     set(next);
   },
 })));

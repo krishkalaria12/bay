@@ -12,7 +12,7 @@ import {
 } from "@bay/core";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { DEFAULT_PROFILE_ID } from "./constants";
+import { DEFAULT_SPACE_ID } from "./constants";
 
 export type SearchEngineId = string;
 
@@ -32,7 +32,7 @@ export type Settings = {
   hideToolbarWhileScrolling: boolean;
   newTabPosition: "top" | "bottom";
   warnBeforeClosingLastTab: boolean;
-  warnBeforeMovingTabsToProfile: boolean;
+  warnBeforeMovingTabsToSpace: boolean;
   tabReorderHaptics: boolean;
   extendWebsiteColor: boolean;
   cmdClickCreatesTabGroup: boolean;
@@ -60,7 +60,7 @@ export type Settings = {
   windowMaterial: "solid" | "glass";
   addressBar: "toolbar" | "sidebar";
 
-  defaultProfileId: string;
+  defaultSpaceId: string;
 
   shortcuts: Record<string, string[]>;
 
@@ -82,7 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideToolbarWhileScrolling: true,
   newTabPosition: "bottom",
   warnBeforeClosingLastTab: true,
-  warnBeforeMovingTabsToProfile: true,
+  warnBeforeMovingTabsToSpace: true,
   tabReorderHaptics: true,
   extendWebsiteColor: true,
   cmdClickCreatesTabGroup: true,
@@ -104,7 +104,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: "auto",
   windowMaterial: "solid",
   addressBar: "sidebar",
-  defaultProfileId: DEFAULT_PROFILE_ID,
+  defaultSpaceId: DEFAULT_SPACE_ID,
   shortcuts: {},
   openLinksInLittleBay: true,
   littleBaySize: [900, 640],

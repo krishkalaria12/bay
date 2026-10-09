@@ -19,10 +19,10 @@ function shareableTabs(tabId: string) {
   const s = useBrowser.getState();
   const tab = s.tabs[tabId];
   if (!tab) return [];
-  const profile = engineProfile(tab.profileId);
+  const profile = engineProfile(tab.spaceId);
   const live = new Set(Object.values(usePages.getState().browsers));
   return Object.values(s.tabs)
-    .filter((t) => live.has(t.id) && engineProfile(t.profileId) === profile && /^https?:|^file:/.test(t.url))
+    .filter((t) => live.has(t.id) && engineProfile(t.spaceId) === profile && /^https?:|^file:/.test(t.url))
     .sort((a, b) => (a.id === tabId ? 1 : b.id === tabId ? -1 : b.lastActiveAt - a.lastActiveAt));
 }
 

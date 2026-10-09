@@ -4,11 +4,11 @@ import { Image, PanResponder, Pressable, Text, View, type GestureResponderEvent 
 import { create } from "zustand";
 import { editableTheme, spectrumColor, spectrumPosition, THEME_PRESETS } from "../../lib/spaceTheme";
 import { MAX_THEME_COLORS } from "../../lib/constants";
-import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser } from "../../store/browser";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
-import type { ProfileColor, SpaceTheme } from "../../store/types";
+import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { useSidebarOnRight } from "../layout/windowLayout";
@@ -18,17 +18,17 @@ import { THEME_DOT, THEME_EDITOR_PAD, THEME_FIELD_HEIGHT, THEME_FIELD_WIDTH } fr
 // is the preview. Up to three colours on a colour field (a gradient), how strongly they tint, grain, and presets.
 const SPECTRUM = require("../../../assets/theme-spectrum.png");
 
-type Request = { windowId: string; profileId: string; original: SpaceTheme | null; originalColor: ProfileColor };
+type Request = { windowId: string; spaceId: string; original: SpaceTheme | null; originalColor: SpaceColor };
 
 const useEditor = create<{ request: Request | null }>(() => ({ request: null }));
 
 /** Edits a space's theme in a window, which shows that space meanwhile. */
-export function openThemeEditor(windowId: string, profileId: string) {
+export function openThemeEditor(windowId: string, spaceId: string) {
   const s = useBrowser.getState();
-  const space = s.profiles[profileId];
+  const space = s.spaces[spaceId];
   if (!space || !s.windows[windowId]) return;
-  s.switchProfile(windowId, profileId);
-  useEditor.setState({ request: { windowId, profileId, original: space.theme ?? null, originalColor: space.color } });
+  s.switchSpace(windowId, spaceId);
+  useEditor.setState({ request: { windowId, spaceId, original: space.theme ?? null, originalColor: space.color } });
 }
 
 const close = () => useEditor.setState({ request: null });
@@ -39,12 +39,12 @@ export const themeEditorOpen = (windowId: string) => useEditor.getState().reques
 export function ThemeEditorHost() {
   const windowId = useWindowId();
   const request = useEditor((e) => (e.request?.windowId === windowId ? e.request : null));
-  return request ? <ThemeEditor key={request.profileId} request={request} /> : null;
+  return request ? <ThemeEditor key={request.spaceId} request={request} /> : null;
 }
 
 function ThemeEditor({ request }: { request: Request }) {
   const theme = useTheme();
-  const space = useBrowser((s) => s.profiles[request.profileId]);
+  const space = useBrowser((s) => s.spaces[request.spaceId]);
   const sidebarOpen = useSidebarOpen();
   const sidebarWidth = useSidebarWidth(request.windowId);
   // Over the page's corner beside the sidebar, on whichever side it is.
@@ -56,7 +56,7 @@ function ThemeEditor({ request }: { request: Request }) {
   const frame = useRef<number | null>(null);
   if (!space) return null;
 
-  const current = draft && space.theme ? draft : editableTheme(space.theme, PROFILE_COLORS[space.color].swatch);
+  const current = draft && space.theme ? draft : editableTheme(space.theme, SPACE_COLORS[space.color].swatch);
   const chosen = Math.min(selected, current.colors.length - 1);
   // Many changes a second while dragging: the store (and the window's theme) takes the latest once a frame.
   const set = (patch: Partial<SpaceTheme>) => {
@@ -66,7 +66,7 @@ function ThemeEditor({ request }: { request: Request }) {
     if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
-      if (pending.current) useBrowser.getState().updateProfile(request.profileId, { theme: pending.current });
+      if (pending.current) useBrowser.getState().updateSpace(request.spaceId, { theme: pending.current });
     });
   };
   const setColor = (i: number, color: string) => set({ colors: (pending.current ?? current).colors.map((c, k) => (k === i ? color : c)) });
@@ -84,15 +84,15 @@ function ThemeEditor({ request }: { request: Request }) {
     set({ colors: colors.filter((_, k) => k !== chosen) });
     setSelected(Math.max(0, chosen - 1));
   };
-  const usePreset = (patch: { color?: ProfileColor; colors?: string[] }) => {
+  const usePreset = (patch: { color?: SpaceColor; colors?: string[] }) => {
     pending.current = null;
     setDraft(null);
     setSelected(0);
-    if (patch.color) useBrowser.getState().updateProfile(request.profileId, { color: patch.color, theme: null });
-    else useBrowser.getState().updateProfile(request.profileId, { theme: { ...current, colors: patch.colors! } });
+    if (patch.color) useBrowser.getState().updateSpace(request.spaceId, { color: patch.color, theme: null });
+    else useBrowser.getState().updateSpace(request.spaceId, { theme: { ...current, colors: patch.colors! } });
   };
   const cancel = () => {
-    useBrowser.getState().updateProfile(request.profileId, { theme: request.original, color: request.originalColor });
+    useBrowser.getState().updateSpace(request.spaceId, { theme: request.original, color: request.originalColor });
     close();
   };
 
@@ -134,8 +134,8 @@ function ThemeEditor({ request }: { request: Request }) {
 
       <Text style={{ fontSize: 11.5, fontWeight: "600", color: theme.textSecondary, marginTop: 12, marginBottom: 7 }}>Presets</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-        {(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => (
-          <Swatch key={c} tooltip={PROFILE_COLORS[c].name} colors={[PROFILE_COLORS[c].swatch]} on={!space.theme && space.color === c} onPress={() => usePreset({ color: c })} />
+        {(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => (
+          <Swatch key={c} tooltip={SPACE_COLORS[c].name} colors={[SPACE_COLORS[c].swatch]} on={!space.theme && space.color === c} onPress={() => usePreset({ color: c })} />
         ))}
         {THEME_PRESETS.map((p) => (
           <Swatch key={p.name} tooltip={p.name} colors={p.colors} on={!!space.theme && space.theme.colors.join() === p.colors.join()} onPress={() => usePreset({ colors: p.colors })} />

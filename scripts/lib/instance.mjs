@@ -92,33 +92,33 @@ export const onScreenWindows = (pid) => JSON.parse(execFileSync("osascript", ["-
 const profileColors = ["plum", "blue", "green", "orange", "red"];
 /**
  * A session.json the app restores at launch (store version 2). Everything is optional and filled in:
- *   profiles: ["Personal", "Work"] or [{ id, name, color }] (the first one's id is "default")
- *   windows:  [{ id, profileId, tabIds, activeTabIds, frame, sidebarOpen, incognito }] (default one window, w1)
- *   tabs:     [{ id, windowId, profileId, url, title, pinned, … }] (windowId defaults to the first window)
+ *   spaces: ["Personal", "Work"] or [{ id, name, color }] (the first one's id is "default")
+ *   windows:  [{ id, spaceId, tabIds, activeTabIds, frame, sidebarOpen, incognito }] (default one window, w1)
+ *   tabs:     [{ id, windowId, spaceId, url, title, pinned, … }] (windowId defaults to the first window)
  * and anything else the store keeps (settings, groups, splits, focusedWindowId…) is passed through.
  */
-export function session({ profiles = ["Personal"], windows = [{}], tabs = [], ...rest } = {}) {
-  const ps = profiles.map((p, i) => {
+export function session({ spaces = ["Personal"], windows = [{}], tabs = [], ...rest } = {}) {
+  const ps = spaces.map((p, i) => {
     const o = typeof p === "string" ? { name: p } : p;
     return { id: o.id ?? (i ? o.name.toLowerCase() : "default"), name: o.name ?? o.id, color: o.color ?? profileColors[i % 5], icon: null, createdAt: i, ...o };
   });
-  const ws = windows.map((w, i) => ({ id: w.id ?? `w${i + 1}`, profileId: ps[0].id, ...w }));
+  const ws = windows.map((w, i) => ({ id: w.id ?? `w${i + 1}`, spaceId: ps[0].id, ...w }));
   const ts = tabs.map((t) => {
     const windowId = t.windowId ?? ws[0].id;
-    return { windowId, profileId: ws.find((w) => w.id === windowId)?.profileId ?? ps[0].id, url: "", title: "", favicon: null,
+    return { windowId, spaceId: ws.find((w) => w.id === windowId)?.spaceId ?? ps[0].id, url: "", title: "", favicon: null,
       pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, pinnedUrl: null, openerId: null,
       createdAt: 1, lastActiveAt: 1, ...t };
   });
   const fullWindows = ws.map((w, i) => {
     const tabIds = w.tabIds ?? ts.filter((t) => t.windowId === w.id).map((t) => t.id);
-    const activeTabIds = w.activeTabIds ?? Object.fromEntries(ps.map((p) => [p.id, ts.find((t) => t.windowId === w.id && t.profileId === p.id)?.id])
+    const activeTabIds = w.activeTabIds ?? Object.fromEntries(ps.map((p) => [p.id, ts.find((t) => t.windowId === w.id && t.spaceId === p.id)?.id])
       .filter(([, id]) => id));
     return { incognito: false, sidebarOpen: true, frame: [80, 80, 1280, 800], createdAt: i + 1, ...w, tabIds, activeTabIds };
   });
   return {
     version: 2,
-    profiles: Object.fromEntries(ps.map((p) => [p.id, p])),
-    profileOrder: ps.map((p) => p.id),
+    spaces: Object.fromEntries(ps.map((p) => [p.id, p])),
+    spaceOrder: ps.map((p) => p.id),
     windows: fullWindows, windowOrder: fullWindows.map((w) => w.id), focusedWindowId: fullWindows[0]?.id ?? null, tabs: ts,
     groups: [], splits: [], closedTabs: [], closedWindows: [], closedGroups: [], cleanedTabs: [],
     ...rest,
@@ -526,10 +526,10 @@ if (process.argv[1] === here) {
     assert.throws(() => ownedCandidate([7], new Set(), cmd({}), bin), /is not/);
     assert.throws(() => ownedCandidate([7, 8], new Set(), cmd({ 7: bin, 8: bin }), bin), /2 listeners/);
     assert.ok(isAlive(process.pid));
-    const s = session({ profiles: ["Personal", "Work"], tabs: [{ id: "t1" }, { id: "t2", profileId: "work" }] });
+    const s = session({ spaces: ["Personal", "Work"], tabs: [{ id: "t1" }, { id: "t2", spaceId: "work" }] });
     assert.deepEqual(s.windows[0].tabIds, ["t1", "t2"]);
     assert.deepEqual(s.windows[0].activeTabIds, { default: "t1", work: "t2" });
-    assert.deepEqual(s.profileOrder, ["default", "work"]);
+    assert.deepEqual(s.spaceOrder, ["default", "work"]);
     console.log("PASS self-test");
   }
 }

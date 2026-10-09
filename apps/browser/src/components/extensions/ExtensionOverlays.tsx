@@ -7,7 +7,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { useWindowId } from "../../store/hooks";
-import { openFromPage, pageProfileId } from "../layout/openFromPage";
+import { openFromPage, pageSpaceId } from "../layout/openFromPage";
 import { PromptButton } from "../layout/controls";
 import { Checkbox } from "../settings/controls";
 import { extensionPopupGeometry } from "./geometry";
@@ -140,7 +140,7 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
               }}
               onWindowClose={closeExtensionPopup}
               onOpenWindow={(request) => {
-                openFromPage(request, { windowId, profileId: pageProfileId(windowId, pageProfile) });
+                openFromPage(request, { windowId, spaceId: pageSpaceId(windowId, pageProfile) });
                 if (request.disposition !== "background") closeExtensionPopup();
               }}
             />
