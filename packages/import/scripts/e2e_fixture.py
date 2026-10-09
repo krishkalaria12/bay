@@ -83,10 +83,10 @@ CREATE TABLE credit_cards (guid VARCHAR PRIMARY KEY, name_on_card VARCHAR, expir
 g = "00000000-0000-4000-8000-00000000e2e1"
 wd.execute("INSERT INTO addresses VALUES (?,1,0,0,'en','',0,0)", (g,))
 # Chrome's FieldType numbers: name, company, street, city, state, zip, country, phone, email.
-for t, v in [(7, "Big Yahu"), (60, "Bay Test Co"), (77, "1 Fixture Way"), (33, "Testville"), (34, "CA"),
-             (35, "94000"), (36, "US"), (14, "+14155550100"), (9, "bigyahu@example.com")]:
+for t, v in [(7, "Test User"), (60, "Bay Test Co"), (77, "1 Fixture Way"), (33, "Testville"), (34, "CA"),
+             (35, "94000"), (36, "US"), (14, "+14155550100"), (9, "testuser@example.com")]:
     wd.execute("INSERT INTO address_type_tokens VALUES (?,?,?,0,NULL)", (g, t, v))
-wd.execute("INSERT INTO credit_cards VALUES ('00000000-0000-4000-8000-00000000e2c1','Big Yahu',12,2031,?,0,'',0,0,'',NULL)",
+wd.execute("INSERT INTO credit_cards VALUES ('00000000-0000-4000-8000-00000000e2c1','Test User',12,2031,?,0,'',0,0,'',NULL)",
            (v10(b"4111111111111111"),))
 wd.commit()
 wd.close()

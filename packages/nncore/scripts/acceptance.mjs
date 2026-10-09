@@ -2188,7 +2188,7 @@ try {
   });
 
   await check("autofill", async () => {
-    const saved = await cef(`saveAddress("", { fullName: "Big Yahu", city: "Tel Aviv", country: "IL" })`);
+    const saved = await cef(`saveAddress("", { fullName: "Test User", city: "Tel Aviv", country: "IL" })`);
     if (saved?.error) throw new Error(saved.error);
     const list = await until("the address", async () => {
       const r = await cef(`listAddresses("")`);
@@ -2966,7 +2966,7 @@ try {
       await cdp(t, "Input.dispatchMouseEvent", { type: "mouseReleased", ...at, buttons: 0 });
       await until("the form sent", async () => (await state()).tabs.find((x) => x.id === first.id && x.title === "Saved" && !x.loading), 15000);
     };
-    const address = [["name", "Big Yahu"], ["street", "1 Satire Way"], ["city", "Springfield"], ["state", "IL"], ["zip", "62701"], ["country", "United States"]];
+    const address = [["name", "Test User"], ["street", "1 Satire Way"], ["city", "Springfield"], ["state", "IL"], ["zip", "62701"], ["country", "United States"]];
     const card = (number, name) => [["ccname", name], ["ccnumber", number], ["ccmonth", "12"], ["ccyear", "2031"]];
     let profileB = null;
     let other = null;
@@ -2987,7 +2987,7 @@ try {
 
       // The same address with an email: "Update address?", pending while another tab is shown: Chrome's tab switch
       // closes it (the app's offer goes) and it doesn't come back; the address is untouched.
-      const email = "big.yahu@example.com";
+      const email = "test.user@example.com";
       let seen = await lastId();
       await sendForm("/address?email", "Address", [...address.slice(0, 1), ["email", email], ...address.slice(1)]);
       const update = await offerAfter(seen, "the update-address offer");
@@ -3025,13 +3025,13 @@ try {
 
       // A card: "Save card?", saved on accept; a second one declined ("No thanks") saves nothing.
       seen = await lastId();
-      await sendForm("/card", "Card", card("4111111111111111", "Big Yahu"));
+      await sendForm("/card", "Card", card("4111111111111111", "Test User"));
       const cardOffer = await offerAfter(seen, "the save-card offer");
       if (cardOffer.kind !== "saveCard" || !JSON.stringify(cardOffer.lines).includes("1111")) throw new Error(`card offer ${JSON.stringify(cardOffer)}`);
       await answer(cardOffer.id, "accept");
       const savedCard = await until("the card saved", async () => (await cards()).find((c) => c.last4 === "1111") ?? null);
       seen = await lastId();
-      await sendForm("/card", "Card", card("5555555555554444", "Big Yahu"));
+      await sendForm("/card", "Card", card("5555555555554444", "Test User"));
       const declined = await offerAfter(seen, "the second card's offer");
       await answer(declined.id, "decline");
       await until("the declined offer closed", () => closed(declined.id), 5000);
@@ -4532,7 +4532,7 @@ try {
     // checked, as packages/cef's ProfileData.deleteDefault.
     const origin = "https://original.test";
     await cef(`savePassword("", "${origin}", "nnoriginal", "s3cret")`);
-    await cef(`saveAddress("", { fullName: "Original Yahu", city: "Haifa", country: "IL" })`);
+    await cef(`saveAddress("", { fullName: "Original User", city: "Haifa", country: "IL" })`);
     await cef(`setZoom("", "original.test", 1.5)`);
     await cef(`setSiteSetting("", "${origin}", "popups", "allow")`);
     await until("the data saved", async () => {
