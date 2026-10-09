@@ -31,6 +31,11 @@ export const SPACE_SELECTED_OPACITY = 0.95;
 export const SPACE_HOVERED_OPACITY = 0.6;
 export const SPACE_IDLE_OPACITY = 0.38;
 
+// MARK: Create a space (CreateProfile.tsx)
+
+// The icon grid's columns: twelve fill the sheet.
+export const CREATE_SPACE_ICON_COLUMNS = 12;
+
 // MARK: Theme editor (ThemeEditor.tsx)
 
 export const THEME_FIELD_WIDTH = 268;

@@ -13,12 +13,13 @@ import type { Profile, ProfileColor } from "../../../store/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../primitives";
 import { ColorStack } from "../../profiles/CreateProfile";
-import { iconMenuItems, PROFILE_SYMBOLS, ProfileBadge, profileSymbol } from "../../profiles/icons";
+import { IconGrid } from "../../IconGrid";
+import { ProfileBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../profiles/icons";
 import { openThemeEditor } from "../../profiles/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { useSettingsNav } from "../windows";
-import { PROFILE_ROW_HEIGHT } from "../constants";
+import { PROFILE_ROW_HEIGHT, SPACE_PANE_ICON_COLUMNS } from "../constants";
 
 const listOf = (names: string[]) => (names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`);
 
@@ -226,12 +227,6 @@ function ProfileRow({
   );
 }
 
-function iconTitle(icon: string | null): string {
-  const symbol = profileSymbol(icon);
-  if (symbol) return PROFILE_SYMBOLS.find((s) => s.name === symbol)?.title ?? "Symbol";
-  return icon ?? "Initial";
-}
-
 function bookmarkCount(s: BrowserState, profileId: string): number {
   const roots = s.bookmarks.roots[profileId];
   let count = 0;
@@ -254,6 +249,8 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
   const sharedColors = useBrowser(useShallow((s) => shared.map((id) => PROFILE_COLORS[s.profiles[id]?.color ?? "plum"]?.swatch ?? "#888888")));
   const stats = useBrowser((s) => `${plural((s.history[profileId] ?? []).length, "page")} in history · ${plural(bookmarkCount(s, profileId), "bookmark")}`);
   const [name, setName] = useState(profile?.name ?? "");
+  const [picking, setPicking] = useState(false);
+  const colors = useFormColors();
   if (!profile) return null;
   const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme">>) => useBrowser.getState().updateProfile(profileId, patch);
   // The editor shows in a browser window (settings is its own), on this space, so the window is its preview.
@@ -264,15 +261,11 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
   const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
   const sharing = shared.length > 1;
 
-  const pickIcon = async () => {
-    const choice = await showMenu(iconMenuItems(profile.icon));
-    if (choice?.startsWith("icon:")) update({ icon: choice.slice("icon:".length) || null });
-  };
 
   return (
     <View>
       <View style={{ alignItems: "center", marginTop: 24, gap: 10 }}>
-        <Pressable onPress={() => void pickIcon()} tooltip="Change Icon">
+        <Pressable onPress={() => setPicking(!picking)} tooltip="Change Icon">
           <ProfileBadge profile={profile} size={64} />
         </Pressable>
         <Text style={{ fontSize: 12, color: theme.textSecondary }}>{stats}</Text>
@@ -283,9 +276,17 @@ export function ProfileDetailsPane({ profileId }: { profileId: string }) {
         <Row title="Name">
           <TextField value={name} onChangeText={setName} onSubmit={commitName} onBlur={commitName} style={{ width: 220 }} />
         </Row>
-        <Row title="Icon" description={iconTitle(profile.icon)}>
-          <Button title="Change…" onPress={() => void pickIcon()} />
+        <Row title="Icon" description={spaceIconTitle(profile.icon)}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {profile.icon ? <Button title="Use Initial" onPress={() => update({ icon: null })} /> : null}
+            <Button title={picking ? "Done" : "Change…"} onPress={() => setPicking(!picking)} />
+          </View>
         </Row>
+        {picking ? (
+          <View style={{ padding: 12, alignItems: "center" }}>
+            <IconGrid symbols={SPACE_SYMBOLS} current={profile.icon} onChoose={(icon) => update({ icon })} columns={SPACE_PANE_ICON_COLUMNS} cell={30} rows={4} highlight={colors.selected} bold />
+          </View>
+        ) : null}
         <Row title="Theme colour" description="Tints this space's windows and New Tab page.">
           <View style={{ flexDirection: "row", gap: 7 }}>
             {(Object.keys(PROFILE_COLORS) as ProfileColor[]).map((c) => (

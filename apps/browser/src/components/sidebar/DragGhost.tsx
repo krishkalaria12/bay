@@ -50,7 +50,7 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
         }}
       >
         {folder ? (
-          <TabIcon url="" icon={folder.icon ?? `${SYMBOL_PREFIX}folder`} color={theme.textTab} />
+          <TabIcon url="" icon={folder.icon ?? `${SYMBOL_PREFIX}folder`} color={folder.icon ? undefined : theme.textTab} />
         ) : tab ? (
           <TabIcon url={tab.url} favicon={tab.favicon} icon={item.kind === "group" ? null : tab.customIcon} profileId={tab.profileId} />
         ) : null}

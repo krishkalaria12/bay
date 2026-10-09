@@ -101,6 +101,7 @@ export function setIcon(target: Target, icon: string | null) {
   // A live folder's header row ("livefolder|<id>").
   else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
   else if (target.kind === "folder") store().updatePinnedFolder(target.id, { icon });
+  else if (target.kind === "space") store().updateProfile(target.id, { icon });
   else store().updateGroup(target.id, { icon });
 }
 

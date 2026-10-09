@@ -57,6 +57,10 @@ export function startDevHarness() {
     get switcher(): typeof import("../components/sidebar/switcher") {
       return require("../components/sidebar/switcher");
     },
+    // The sidebar's actions: menus a test can't click open what these do (the icon picker, renaming).
+    get sidebar(): typeof import("../components/sidebar/actions") {
+      return require("../components/sidebar/actions");
+    },
     get toolbarAutoHide(): typeof import("../components/layout/toolbarAutoHide") {
       return require("../components/layout/toolbarAutoHide");
     },

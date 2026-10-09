@@ -11,7 +11,10 @@ import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/profil
 import { IconButton, useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
 import { useSidebarWidth } from "../sidebar/tokens";
-import { iconMenuItems, profileSymbol } from "./icons";
+import { openIconPicker } from "../sidebar/actions";
+import { registerRow } from "../sidebar/state";
+import { iconColor } from "../symbolColors";
+import { profileSymbol } from "./icons";
 import { openThemeEditor } from "./ThemeEditor";
 import { ProfileDots } from "./ProfileDots";
 import { PROFILE_DOTS_HEIGHT, SPACE_CELL, SPACE_GLYPH, SPACE_HOVERED_OPACITY, SPACE_IDLE_OPACITY, SPACE_PLUS, SPACE_SELECTED_OPACITY, SPACE_SIDE } from "./constants";
@@ -51,12 +54,19 @@ function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page:
   const ink = theme.dark ? "#FFFFFF" : "#000000";
   const symbol = profileSymbol(profile.icon);
   return (
-    <View {...hoverProps} tooltip={profile.name}>
+    <View ref={(v) => registerRow(windowId, id, v)} {...hoverProps} tooltip={profile.name}>
       <ContextMenuArea onContextMenu={() => void openSpaceMenu(windowId, id)}>
         <Pressable accessibilityRole="button" accessibilityLabel={profile.name} onPress={() => switchProfile(windowId, id, true)}>
           <Animated.View style={[{ width: SPACE_CELL, height: SPACE_CELL, borderRadius: 7, alignItems: "center", justifyContent: "center" }, opacity]}>
             {symbol ? (
-              <Symbol name={symbol} size={SPACE_GLYPH - 2} weight="semibold" color={ink} style={{ width: SPACE_GLYPH + 2, height: SPACE_GLYPH + 2 }} />
+              <Symbol
+                name={symbol}
+                size={SPACE_GLYPH - 2}
+                weight="semibold"
+                color={iconColor(profile.icon, theme.dark) ?? ink}
+                rendering="hierarchical"
+                style={{ width: SPACE_GLYPH + 2, height: SPACE_GLYPH + 2 }}
+              />
             ) : (
               <Text style={{ fontSize: profile.icon ? SPACE_GLYPH : 12, fontWeight: "700", color: ink }}>{profile.icon ?? (profile.name.trim()[0] ?? "?").toUpperCase()}</Text>
             )}
@@ -79,7 +89,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
   if (!space) return;
   const choice = await showMenu([
     { id: "rename", title: "Rename Space…", symbol: "pencil" },
-    { id: "iconMenu", title: "Change Icon", symbol: "face.smiling", children: iconMenuItems(space.icon) },
+    { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
     {
       id: "themeMenu",
       title: "Theme",
@@ -98,7 +108,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
   if (choice === "rename") {
     const name = await prompt({ title: "Rename Space", value: space.name, placeholder: "Space name", confirmTitle: "Rename", windowId });
     if (name?.trim()) update(id, { name: name.trim() });
-  } else if (choice?.startsWith("icon:")) update(id, { icon: choice.slice("icon:".length) || null });
+  } else if (choice === "icon") void openIconPicker(windowId, { kind: "space", id });
   else if (choice?.startsWith("theme:")) update(id, { color: choice.slice("theme:".length) as ProfileColor, theme: null });
   else if (choice === "editTheme") openThemeEditor(windowId, id);
   else if (choice === "settings") openSettings("profiles", id);

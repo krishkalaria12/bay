@@ -94,7 +94,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
               cornerRadius={10}
               style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}
             >
-              <TabIcon url="" icon={folder.icon ?? `${SYMBOL_PREFIX}${collapsed ? "folder.fill" : "folder"}`} color={theme.textTab} />
+              <TabIcon url="" icon={folder.icon ?? `${SYMBOL_PREFIX}${collapsed ? "folder.fill" : "folder"}`} color={folder.icon ? undefined : theme.textTab} />
               {renaming ? (
                 <RenameField
                   initial={folder.name}

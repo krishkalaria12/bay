@@ -2,7 +2,7 @@ import type { View } from "react-native";
 import { create } from "zustand";
 
 export type Anchor = { x: number; y: number; width: number; height: number };
-export type Target = { kind: "tab" | "group" | "folder" | "live"; id: string };
+export type Target = { kind: "tab" | "group" | "folder" | "live" | "space"; id: string };
 
 type SidebarUi = {
   renaming: (Target & { windowId: string }) | null;

@@ -1,39 +1,17 @@
-import { Surface, Symbol } from "@bay/shell";
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Surface } from "@bay/shell";
+import { Pressable, Text, View } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import { useLive } from "../../live/store";
 import { useBrowser } from "../../store/browser";
+import { IconGrid, type IconChoice } from "../IconGrid";
+import { SPACE_SYMBOLS } from "../profiles/icons";
 import { setIcon } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
 import { useSidebarTokens } from "./tokens";
-import { onEscapeKey } from "../../lib/escapeKey";
-import { SYMBOL_PREFIX } from "../../lib/constants";
-import { ICON_PICKER_CELL, ICON_PICKER_WIDTH } from "./constants";
+import { ICON_PICKER_CELL, ICON_PICKER_COLUMNS, ICON_PICKER_WIDTH } from "./constants";
 
-const EMOJI: [string, string][] = [
-  ["⭐️", "star favorite"], ["🔥", "fire hot"], ["❤️", "heart love"], ["✅", "check done"], ["📌", "pin"], ["🚀", "rocket launch ship"],
-  ["💡", "idea bulb"], ["📝", "note memo write"], ["📚", "books read study"], ["📖", "book read"], ["🎓", "school graduate"], ["💼", "work briefcase"],
-  ["🏠", "home house"], ["🛒", "shopping cart"], ["💰", "money"], ["💳", "card pay"], ["📈", "chart growth stocks"], ["📊", "chart data"],
-  ["🗓️", "calendar date"], ["⏰", "alarm time"], ["📧", "email mail"], ["💬", "chat message"], ["📞", "phone call"], ["🎥", "video camera"],
-  ["🎵", "music song"], ["🎧", "headphones music"], ["🎮", "game play"], ["🎨", "art design paint"], ["📷", "photo camera"], ["🎬", "movie film"],
-  ["📺", "tv watch"], ["🍿", "popcorn movie"], ["✈️", "travel plane"], ["🗺️", "map travel"], ["🏖️", "beach holiday"], ["🌍", "world earth globe"],
-  ["🍕", "pizza food"], ["🍔", "burger food"], ["☕️", "coffee"], ["🍷", "wine"], ["🍎", "apple fruit"], ["🥗", "salad food healthy"],
-  ["🏋️", "gym fitness"], ["⚽️", "football soccer sport"], ["🏀", "basketball sport"], ["🚴", "bike cycling"], ["🧘", "yoga calm"], ["💊", "health pill"],
-  ["🐶", "dog pet"], ["🐱", "cat pet"], ["🦊", "fox"], ["🐼", "panda"], ["🦄", "unicorn"], ["🐙", "octopus github"],
-  ["🌱", "plant grow"], ["🌸", "flower blossom"], ["🌈", "rainbow"], ["☀️", "sun"], ["🌙", "moon night"], ["❄️", "snow cold"],
-  ["⚡️", "lightning fast"], ["💎", "gem diamond"], ["🎁", "gift present"], ["🎉", "party celebrate"], ["🏆", "trophy win"], ["🎯", "target goal"],
-  ["🧠", "brain think"], ["👀", "eyes look"], ["🤖", "robot ai bot"], ["👾", "alien game"], ["💻", "laptop computer code"], ["🖥️", "desktop computer"],
-  ["⌨️", "keyboard type"], ["🛠️", "tools build"], ["⚙️", "settings gear"], ["🔧", "wrench fix"], ["🧪", "test lab science"], ["🔬", "science research"],
-  ["🐛", "bug"], ["🔒", "lock secure"], ["🔑", "key"], ["🧩", "puzzle extension"], ["📦", "package box"], ["🗂️", "folder files"],
-  ["📁", "folder"], ["🗃️", "archive"], ["📰", "news paper"], ["🔗", "link"], ["🔍", "search find"], ["🧭", "compass explore"],
-  ["🏷️", "tag label"], ["💭", "thought"], ["❓", "question"], ["❗️", "important"], ["⚠️", "warning"], ["🚧", "construction wip"],
-  ["🟥", "red square"], ["🟧", "orange square"], ["🟨", "yellow square"], ["🟩", "green square"], ["🟦", "blue square"], ["🟪", "purple square"],
-  ["🔴", "red circle"], ["🟠", "orange circle"], ["🟡", "yellow circle"], ["🟢", "green circle"], ["🔵", "blue circle"], ["🟣", "purple circle"],
-];
-
-const SYMBOLS = [
+const SYMBOLS: IconChoice[] = [
   "star", "heart", "bookmark", "flag", "pin", "bolt", "flame", "leaf", "globe", "house", "briefcase", "cart", "bag", "creditcard",
   "dollarsign.circle", "chart.bar", "chart.line.uptrend.xyaxis", "calendar", "clock", "alarm", "envelope", "bubble.left", "phone", "video",
   "music.note", "headphones", "gamecontroller", "paintbrush", "camera", "film", "tv", "airplane", "map", "car", "fork.knife", "cup.and.saucer",
@@ -41,22 +19,16 @@ const SYMBOLS = [
   "eye", "laptopcomputer", "desktopcomputer", "keyboard", "hammer", "wrench.and.screwdriver", "gearshape", "testtube.2", "ant", "lock",
   "key", "puzzlepiece", "shippingbox", "folder", "archivebox", "newspaper", "link", "magnifyingglass", "safari", "tag", "lightbulb",
   "questionmark.circle", "exclamationmark.triangle", "book", "graduationcap", "doc.text", "list.bullet", "checkmark.circle", "person.2",
-];
+].map((name) => ({ name, words: "" }));
 
-export function IconPicker({ windowId, sidebarWidth, windowWidth }: { windowId: string; sidebarWidth: number; windowWidth: number }) {
+export function IconPicker({ windowId, sidebarWidth, windowWidth, windowHeight }: { windowId: string; sidebarWidth: number; windowWidth: number; windowHeight: number }) {
   const picker = useSidebarUi((u) => (u.iconPicker?.windowId === windowId ? u.iconPicker : null));
-  return picker ? <PickerPanel key={picker.id} picker={picker} sidebarWidth={sidebarWidth} windowWidth={windowWidth} /> : null;
+  return picker ? <PickerPanel key={picker.id} picker={picker} sidebarWidth={sidebarWidth} windowWidth={windowWidth} windowHeight={windowHeight} /> : null;
 }
 
 type Picker = NonNullable<ReturnType<typeof useSidebarUi.getState>["iconPicker"]>;
 
-function pickerItems(tab: "emoji" | "symbols", q: string): string[] {
-  return tab === "emoji"
-    ? EMOJI.filter(([, words]) => !q || words.includes(q)).map(([e]) => e)
-    : SYMBOLS.filter((name) => !q || name.includes(q)).map((name) => SYMBOL_PREFIX + name);
-}
-
-function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; sidebarWidth: number; windowWidth: number }) {
+function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { picker: Picker; sidebarWidth: number; windowWidth: number; windowHeight: number }) {
   const theme = useTheme();
   const right = useSidebarOnRight();
   const tokens = useSidebarTokens();
@@ -69,26 +41,34 @@ function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; si
         return liveIcon ?? null;
       case "folder":
         return s.pinnedFolders[picker.id]?.icon ?? null;
+      case "space":
+        return s.profiles[picker.id]?.icon ?? null;
       default:
         return s.groups[picker.id]?.icon ?? null;
     }
   });
-  const [tab, setTab] = useState<"emoji" | "symbols">(current?.startsWith(SYMBOL_PREFIX) ? "symbols" : "emoji");
-  const [query, setQuery] = useState("");
-  const items = pickerItems(tab, query.trim().toLowerCase());
+  const space = picker.kind === "space";
   const close = () => setSidebarUi({ iconPicker: null });
   const choose = (icon: string | null) => {
     setIcon(picker, icon);
     close();
   };
-  const top = Math.max(8, (picker.anchor?.y ?? 60) - 8);
-  // Beside the row it's for, toward the page, and no further into the page than the sidebar's edge.
-  let left: number;
-  if (right) {
-    const edge = windowWidth - sidebarWidth - 6 - ICON_PICKER_WIDTH;
-    left = picker.anchor ? Math.min(windowWidth - ICON_PICKER_WIDTH - 8, Math.max(edge, picker.anchor.x - 6 - ICON_PICKER_WIDTH)) : edge;
+  const width = ICON_PICKER_WIDTH;
+  let place: { top?: number; bottom?: number; left: number };
+  if (space) {
+    // Above the space's icon at the sidebar's foot, centred on it.
+    const x = picker.anchor ? picker.anchor.x + picker.anchor.width / 2 - width / 2 : right ? windowWidth - sidebarWidth : 8;
+    const y = picker.anchor?.y ?? windowHeight - 44;
+    place = { bottom: Math.max(8, windowHeight - y + 6), left: Math.max(8, Math.min(windowWidth - width - 8, x)) };
+  } else if (right) {
+    // Beside the row it's for, toward the page, and no further into the page than the sidebar's edge.
+    const edge = windowWidth - sidebarWidth - 6 - width;
+    place = { top: Math.max(8, (picker.anchor?.y ?? 60) - 8), left: picker.anchor ? Math.min(windowWidth - width - 8, Math.max(edge, picker.anchor.x - 6 - width)) : edge };
   } else {
-    left = picker.anchor ? Math.max(8, Math.min(sidebarWidth + 6, picker.anchor.x + picker.anchor.width + 6)) : sidebarWidth + 6;
+    place = {
+      top: Math.max(8, (picker.anchor?.y ?? 60) - 8),
+      left: picker.anchor ? Math.max(8, Math.min(sidebarWidth + 6, picker.anchor.x + picker.anchor.width + 6)) : sidebarWidth + 6,
+    };
   }
 
   return (
@@ -103,78 +83,31 @@ function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; si
         shadowOpacity={theme.panelShadowOpacity}
         shadowRadius={20}
         shadowOffset={[0, 8]}
-        style={{ position: "absolute", top, left, width: ICON_PICKER_WIDTH, padding: 8, gap: 8 }}
+        style={{ position: "absolute", ...place, width, padding: 8, gap: 8 }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <View style={{ flex: 1, height: 26, borderRadius: 8, backgroundColor: theme.urlPill, flexDirection: "row", alignItems: "center", paddingHorizontal: 7 }}>
-            <Symbol name="magnifyingglass" size={11} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
-            <TextInput
-              autoFocus
-              value={query}
-              onChangeText={setQuery}
-              placeholder={tab === "emoji" ? "Search emoji" : "Search icons"}
-              placeholderTextColor={theme.placeholder}
-              enableFocusRing={false}
-              keyDownEvents={[{ key: "Escape" }]}
-              onKeyPress={onEscapeKey(close)}
-              onSubmitEditing={() => items[0] && choose(items[0])}
-              style={{ flex: 1, fontSize: 12, marginLeft: 5, color: theme.textPrimary, paddingVertical: 0 }}
-            />
-          </View>
-          {(["emoji", "symbols"] as const).map((t) => (
-            <Pressable key={t} onPress={() => setTab(t)}>
-              <View style={{ width: 28, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: tab === t ? tokens.pickerCellHover : undefined }}>
-                <Symbol name={t === "emoji" ? "face.smiling" : "star.square.on.square"} size={13} color={theme.icon} style={{ width: 16, height: 16 }} />
-              </View>
-            </Pressable>
-          ))}
-        </View>
-        <ScrollView style={{ maxHeight: ICON_PICKER_CELL * 6 }} showsVerticalScrollIndicator={false}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-            {items.map((icon) => (
-              <Cell key={icon} icon={icon} selected={icon === current} onPress={() => choose(icon)} />
-            ))}
-            {items.length === 0 ? <Text style={{ padding: 8, fontSize: 12, color: theme.textTertiary }}>No matches</Text> : null}
-          </View>
-        </ScrollView>
+        <IconGrid
+          symbols={space ? SPACE_SYMBOLS : SYMBOLS}
+          current={current}
+          onChoose={choose}
+          onEscape={close}
+          columns={ICON_PICKER_COLUMNS}
+          cell={ICON_PICKER_CELL}
+          rows={6}
+          highlight={tokens.pickerCellHover}
+          bold={space}
+          prefer={space ? "symbols" : "emoji"}
+          autoFocus
+        />
         {current ? (
           <Pressable onPress={() => choose(null)}>
             {({ pressed }) => (
               <View style={{ height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? tokens.pickerCellHover : theme.urlPill }}>
-                <Text style={{ fontSize: 12, color: theme.textPrimary }}>Reset Icon</Text>
+                <Text style={{ fontSize: 12, color: theme.textPrimary }}>{space ? "Use Initial" : "Reset Icon"}</Text>
               </View>
             )}
           </Pressable>
         ) : null}
       </Surface>
     </>
-  );
-}
-
-function Cell({ icon, selected, onPress }: { icon: string; selected: boolean; onPress(): void }) {
-  const theme = useTheme();
-  const tokens = useSidebarTokens();
-  const [hovered, setHovered] = useState(false);
-  return (
-    <Pressable onPress={onPress}>
-      <View
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        style={{
-          width: ICON_PICKER_CELL,
-          height: ICON_PICKER_CELL,
-          borderRadius: 8,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: hovered || selected ? tokens.pickerCellHover : undefined,
-        }}
-      >
-        {icon.startsWith(SYMBOL_PREFIX) ? (
-          <Symbol name={icon.slice(SYMBOL_PREFIX.length)} size={15} color={theme.icon} style={{ width: 20, height: 20 }} />
-        ) : (
-          <Text style={{ fontSize: 18 }}>{icon}</Text>
-        )}
-      </View>
-    </Pressable>
   );
 }

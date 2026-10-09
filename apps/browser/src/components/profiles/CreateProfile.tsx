@@ -1,4 +1,4 @@
-import { showMenu, Symbol } from "@bay/shell";
+import { Symbol } from "@bay/shell";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { create } from "zustand";
@@ -9,11 +9,9 @@ import { dataGroups, unusedProfileColor } from "../../store/profiles";
 import type { ProfileColor } from "../../store/types";
 import { Button, Sheet, TextField, useFormColors } from "../settings/controls";
 import { closeSettingsSheet, showSettingsSheet } from "../settings/sheet";
-import { iconMenuItems, PROFILE_SYMBOLS, ProfileBadge, profileSymbol } from "./icons";
-
-// The icons offered in a row (one row in the sheet, with the initial, a chosen other icon and More); the rest, and
-// emoji, through More.
-const QUICK_SYMBOLS = PROFILE_SYMBOLS.slice(0, 7).map((s) => `symbol:${s.name}`);
+import { IconGrid } from "../IconGrid";
+import { CREATE_SPACE_ICON_COLUMNS } from "./constants";
+import { ProfileBadge, SPACE_SYMBOLS, unusedSpaceIcon } from "./icons";
 
 export type CreateProfilePreset = { name?: string; shareWith?: string };
 
@@ -61,7 +59,7 @@ function CreateProfileSheet({ windowId, preset, onDone }: { windowId: string | n
   const current = useBrowser((s) => (windowId && !s.windows[windowId]?.incognito ? s.windows[windowId]!.profileId : s.settings.defaultProfileId));
   const [name, setName] = useState(preset.name ?? "");
   const [color, setColor] = useState<ProfileColor>(() => unusedProfileColor(useBrowser.getState().profiles));
-  const [icon, setIcon] = useState<string | null>(null);
+  const [icon, setIcon] = useState<string | null>(() => unusedSpaceIcon(useBrowser.getState().profiles));
   // As Arc: a new space uses the current space's profile (its logins and cookies) unless a new one is chosen.
   const [shareWith, setShareWith] = useState<string | null>(preset.shareWith ?? current);
   const selectedGroup = shareWith === null ? null : (groups.find((g) => g.profileIds.includes(shareWith)) ?? groups[0]);
@@ -69,10 +67,6 @@ function CreateProfileSheet({ windowId, preset, onDone }: { windowId: string | n
   const submit = () => {
     const id = useBrowser.getState().createProfile({ name, color, icon, shareWith: selectedGroup?.profileIds[0] ?? null });
     onDone(id);
-  };
-  const moreIcons = async () => {
-    const choice = await showMenu(iconMenuItems(icon));
-    if (choice?.startsWith("icon:")) setIcon(choice.slice("icon:".length) || null);
   };
 
   return (
@@ -87,29 +81,13 @@ function CreateProfileSheet({ windowId, preset, onDone }: { windowId: string | n
 
       <TextField value={name} onChangeText={setName} placeholder="Space name" autoFocus onSubmit={submit} onEscape={() => onDone(null)} style={{ marginTop: 16 }} />
 
-      <Label>Icon</Label>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-        <IconChoice selected={!icon} tooltip="Initial" onPress={() => setIcon(null)}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.textPrimary }}>{(name.trim()[0] ?? "A").toUpperCase()}</Text>
-        </IconChoice>
-        {QUICK_SYMBOLS.map((s) => (
-          <IconChoice key={s} selected={icon === s} tooltip={PROFILE_SYMBOLS.find((p) => `symbol:${p.name}` === s)?.title} onPress={() => setIcon(s)}>
-            <Symbol name={profileSymbol(s)!} size={13} weight="semibold" color={theme.textPrimary} style={{ width: 16, height: 16 }} />
-          </IconChoice>
-        ))}
-        {icon && !QUICK_SYMBOLS.includes(icon) ? (
-          <IconChoice selected tooltip="Chosen icon" onPress={() => void moreIcons()}>
-            {profileSymbol(icon) ? (
-              <Symbol name={profileSymbol(icon)!} size={13} weight="semibold" color={theme.textPrimary} style={{ width: 16, height: 16 }} />
-            ) : (
-              <Text style={{ fontSize: 15 }}>{icon}</Text>
-            )}
-          </IconChoice>
-        ) : null}
-        <IconChoice selected={false} tooltip="More Icons and Emoji" onPress={() => void moreIcons()}>
-          <Symbol name="ellipsis" size={13} weight="semibold" color={theme.textSecondary} style={{ width: 16, height: 16 }} />
-        </IconChoice>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Label>Icon</Label>
+        <Pressable onPress={() => setIcon(null)} disabled={!icon}>
+          <Text style={{ fontSize: 12, marginTop: 16, marginBottom: 7, color: icon ? colors.accent : theme.textTertiary }}>Use Initial</Text>
+        </Pressable>
       </View>
+      <IconGrid symbols={SPACE_SYMBOLS} current={icon} onChoose={setIcon} columns={CREATE_SPACE_ICON_COLUMNS} cell={30} rows={3} highlight={colors.selected} bold />
 
       <Label>Theme</Label>
       <View style={{ flexDirection: "row", gap: 7 }}>
@@ -160,28 +138,6 @@ function CreateProfileSheet({ windowId, preset, onDone }: { windowId: string | n
 function Label({ children }: { children: string }) {
   const theme = useTheme();
   return <Text style={{ fontSize: 12, fontWeight: "600", color: theme.textSecondary, marginTop: 16, marginBottom: 7 }}>{children}</Text>;
-}
-
-function IconChoice({ selected, tooltip, onPress, children }: { selected: boolean; tooltip?: string; onPress(): void; children: React.ReactNode }) {
-  const colors = useFormColors();
-  return (
-    <Pressable onPress={onPress} tooltip={tooltip}>
-      <View
-        style={{
-          width: 30,
-          height: 30,
-          borderRadius: 8,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: colors.field,
-          borderWidth: selected ? 2 : 1,
-          borderColor: selected ? colors.accent : colors.fieldBorder,
-        }}
-      >
-        {children}
-      </View>
-    </Pressable>
-  );
 }
 
 function RadioDot({ on }: { on: boolean }) {

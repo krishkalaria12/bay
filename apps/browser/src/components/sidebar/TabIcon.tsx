@@ -6,6 +6,7 @@ import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon } from "../primitives";
 import { SYMBOL_PREFIX } from "../../lib/constants";
+import { iconColor } from "../symbolColors";
 import { SLEEPING_OPACITY } from "./constants";
 
 
@@ -64,7 +65,18 @@ function Icon({
 }) {
   const theme = useTheme();
   if (icon?.startsWith(SYMBOL_PREFIX)) {
-    return <Symbol name={icon.slice(SYMBOL_PREFIX.length)} size={size - 3} weight="medium" color={color ?? theme.icon} style={{ width: size, height: size }} />;
+    // A chosen symbol keeps its colour; `color` is for the plain ones (a folder's own).
+    const own = color ? undefined : iconColor(icon, theme.dark);
+    return (
+      <Symbol
+        name={icon.slice(SYMBOL_PREFIX.length)}
+        size={size - 3}
+        weight="medium"
+        color={own ?? color ?? theme.icon}
+        rendering={own ? "hierarchical" : undefined}
+        style={{ width: size, height: size }}
+      />
+    );
   }
   if (icon) {
     return (
