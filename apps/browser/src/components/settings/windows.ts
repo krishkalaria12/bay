@@ -20,6 +20,7 @@ export type SettingsPane =
   | "extensions"
   | "search"
   | "shortcuts"
+  | "links"
   | "liveFolders"
   | "calendar"
   | "advanced";

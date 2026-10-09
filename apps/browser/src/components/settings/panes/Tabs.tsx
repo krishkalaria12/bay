@@ -2,8 +2,7 @@ import { Symbol } from "@bay/shell";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import type { Settings } from "../../../store/settings";
-import { Checkbox, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
+import { Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 
 const CLEAN_UP = [
   { value: "12", title: "12 hours" },
@@ -11,17 +10,6 @@ const CLEAN_UP = [
   { value: "168", title: "7 days" },
   { value: "720", title: "30 days" },
 ];
-
-// A row that turns one of the settings on and off.
-function SettingToggle({ setting, title, description }: { setting: keyof Settings; title: string; description?: string }) {
-  const value = useBrowser((s) => !!s.settings[setting]);
-  const update = useBrowser((s) => s.updateSettings);
-  return (
-    <Row title={title} description={description}>
-      <Toggle value={value} onChange={(v) => update({ [setting]: v })} />
-    </Row>
-  );
-}
 
 export function TabsPane() {
   const settings = useBrowser((s) => s.settings);
@@ -52,8 +40,6 @@ export function TabsPane() {
 
       <SectionHeader title="Tab groups" />
       <Group>
-        <SettingToggle setting="cmdClickCreatesTabGroup" title="⌘-clicking links creates tab groups" />
-        <SettingToggle setting="optShiftClickOpensInGroup" title="⌥⇧-click opens tab in group" description="⌥⇧-click a tab to open it in a group with the current tab. (⌥⇧-clicking a link opens it in a split.)" />
         <SettingToggle setting="autoGroupMeetingTabs" title="Automatically group tabs for meetings" />
       </Group>
 

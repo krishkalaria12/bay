@@ -4,12 +4,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { trackSettingsSection } from "../../telemetry/track";
-import { IconButton, useHover } from "../primitives";
-import { useFormColors } from "./controls";
+import { useHover } from "../primitives";
+import { Button, useFormColors } from "./controls";
 import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";
 import { CalendarPane } from "./panes/Calendar";
 import { GeneralPane } from "./panes/General";
+import { LinksPane } from "./panes/Links";
 import { LiveFoldersPane } from "./panes/LiveFolders";
 import { ExtensionsPane } from "./panes/Extensions";
 import { PasswordsPane } from "./panes/Passwords";
@@ -22,59 +23,119 @@ import { SyncPane } from "./panes/Sync";
 import { TabsPane } from "./panes/Tabs";
 import { useSettingsSheet } from "./sheet";
 import { useSettingsNav, type SettingsPane } from "./windows";
-import { SETTINGS_SIDEBAR_WIDTH, SETTINGS_TOOLBAR_HEIGHT } from "./constants";
+import { SETTINGS_TAB_BAR_HEIGHT, SETTINGS_TAB_MIN_WIDTH, SETTINGS_TITLE_HEIGHT } from "./constants";
 
-const PANES: { id: SettingsPane; title: string; icon: string }[] = [
-  { id: "general", title: "General", icon: "gearshape" },
-  { id: "profiles", title: "Spaces", icon: "square.stack" },
-  { id: "sync", title: "Sync", icon: "arrow.triangle.2.circlepath" },
-  { id: "tabs", title: "Tabs", icon: "square.on.square" },
-  { id: "appearance", title: "Appearance", icon: "circle.lefthalf.filled" },
-  { id: "privacy", title: "Privacy & Security", icon: "hand.raised" },
-  { id: "passwords", title: "Passwords", icon: "key" },
-  { id: "autofill", title: "Autofill", icon: "creditcard" },
-  { id: "extensions", title: "Extensions", icon: "puzzlepiece.extension" },
-  { id: "search", title: "Search Engine", icon: "magnifyingglass" },
-  { id: "shortcuts", title: "Keyboard Shortcuts", icon: "keyboard" },
-  { id: "liveFolders", title: "Live Folders", icon: "dot.radiowaves.left.and.right" },
-  { id: "calendar", title: "Calendar", icon: "calendar" },
-  { id: "advanced", title: "Advanced", icon: "slider.horizontal.3" },
+// Arc's settings: a row of tabs across the top, each holding one or more panes. A tab with several panes picks
+// between them with a segmented control at the top of its page.
+type Tab = { title: string; icon: string; panes: { id: SettingsPane; title: string }[] };
+
+const TABS: Tab[] = [
+  { title: "Sync", icon: "arrow.triangle.2.circlepath", panes: [{ id: "sync", title: "Sync" }] },
+  {
+    title: "General",
+    icon: "gearshape",
+    panes: [
+      { id: "general", title: "General" },
+      { id: "search", title: "Search Engine" },
+    ],
+  },
+  { title: "Spaces", icon: "square.stack", panes: [{ id: "profiles", title: "Spaces" }] },
+  {
+    title: "Appearance",
+    icon: "circle.lefthalf.filled",
+    panes: [
+      { id: "appearance", title: "Appearance" },
+      { id: "tabs", title: "Tabs" },
+    ],
+  },
+  {
+    title: "Privacy",
+    icon: "hand.raised",
+    panes: [
+      { id: "privacy", title: "Privacy & Security" },
+      { id: "passwords", title: "Passwords" },
+      { id: "autofill", title: "Autofill" },
+    ],
+  },
+  { title: "Shortcuts", icon: "keyboard", panes: [{ id: "shortcuts", title: "Shortcuts" }] },
+  { title: "Links", icon: "macwindow.on.rectangle", panes: [{ id: "links", title: "Links" }] },
+  {
+    title: "Advanced",
+    icon: "slider.horizontal.3",
+    panes: [
+      { id: "advanced", title: "Advanced" },
+      { id: "extensions", title: "Extensions" },
+      { id: "liveFolders", title: "Live Folders" },
+      { id: "calendar", title: "Calendar" },
+    ],
+  },
 ];
+
+const tabOf = (pane: SettingsPane) => TABS.find((t) => t.panes.some((p) => p.id === pane))!;
 
 export function SettingsWindow() {
   const theme = useTheme();
   const nav = useSettingsNav();
   const profileName = useBrowser((s) => (nav.profileId ? s.profiles[nav.profileId]?.name : undefined));
-  const title = nav.pane === "profiles" && profileName ? profileName : PANES.find((p) => p.id === nav.pane)!.title;
+  const tab = tabOf(nav.pane);
+  const details = nav.pane === "profiles" && !!nav.profileId;
+  const title = details && profileName ? profileName : tab.title;
   const sheet = useSettingsSheet((s) => s.sheet);
   useEffect(() => trackSettingsSection(nav.pane), [nav.pane]);
 
   return (
-    <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.dark ? "#1E1E1E" : "#F2F2F2" }}>
-      <View style={{ width: SETTINGS_SIDEBAR_WIDTH }}>
-        <VisualEffect material="sidebar" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
-        <WindowDragRegion style={{ height: SETTINGS_TOOLBAR_HEIGHT }} />
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 12, gap: 1 }}>
-          {PANES.map((p) => (
-            <SidebarItem key={p.id} title={p.title} icon={p.icon} selected={nav.pane === p.id} onPress={() => nav.go(p.id)} />
-          ))}
-        </ScrollView>
-      </View>
-      <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: theme.dark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.1)" }} />
-      <View style={{ flex: 1 }}>
-        <View style={{ height: SETTINGS_TOOLBAR_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 2 }}>
-          <WindowDragRegion style={StyleSheet.absoluteFill} />
-          <IconButton icon="chevron.left" size={13} box={28} radius={6} disabled={!nav.back.length} onPress={nav.goBack} tooltip="Back" />
-          <IconButton icon="chevron.right" size={13} box={28} radius={6} disabled={!nav.forward.length} onPress={nav.goForward} tooltip="Forward" />
-          <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{title}</Text>
+    <View style={{ flex: 1, backgroundColor: theme.dark ? "#1E1E1E" : "#ECECEC" }}>
+      <View style={{ height: SETTINGS_TITLE_HEIGHT + SETTINGS_TAB_BAR_HEIGHT }}>
+        <VisualEffect material="titlebar" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
+        <WindowDragRegion style={StyleSheet.absoluteFill} />
+        <View pointerEvents="none" style={{ height: SETTINGS_TITLE_HEIGHT, alignItems: "center", justifyContent: "center" }}>
+          <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
+            {title}
+          </Text>
         </View>
-        <ScrollView key={`${nav.pane}:${nav.profileId}`} contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
-          <View style={{ width: "100%", maxWidth: 600, paddingHorizontal: 24 }}>
-            <Pane pane={nav.pane} profileId={nav.profileId} />
-          </View>
-        </ScrollView>
+        <View style={{ flexDirection: "row", justifyContent: "center", gap: 2, paddingHorizontal: 12 }}>
+          {TABS.map((t) => (
+            <TabButton key={t.title} title={t.title} icon={t.icon} selected={t === tab} onPress={() => nav.go(t.panes[0]!.id)} />
+          ))}
+        </View>
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: StyleSheet.hairlineWidth * 2,
+            backgroundColor: theme.dark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.1)",
+          }}
+        />
       </View>
+      <ScrollView key={`${nav.pane}:${nav.profileId}`} contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
+        <View style={{ width: "100%", maxWidth: 600, paddingHorizontal: 24 }}>
+          <PaneHeader tab={tab} details={details} />
+          <Pane pane={nav.pane} profileId={nav.profileId} />
+        </View>
+      </ScrollView>
       {sheet}
+    </View>
+  );
+}
+
+// Above the pane: the way back from a space's details, or the switcher between the tab's panes.
+function PaneHeader({ tab, details }: { tab: Tab; details: boolean }) {
+  const nav = useSettingsNav();
+  if (details) {
+    return (
+      <View style={{ flexDirection: "row", marginTop: 18 }}>
+        <Button title="All Spaces" kind="plain" icon="chevron.left" onPress={() => nav.go("profiles")} />
+      </View>
+    );
+  }
+  if (tab.panes.length < 2) return null;
+  // Passwords and Autofill keep the space they were opened for.
+  const profileFor = (pane: SettingsPane) => (pane === "passwords" || pane === "autofill" ? nav.profileId : null);
+  return (
+    <View style={{ alignItems: "center", marginTop: 18 }}>
+      <Segmented options={tab.panes} value={nav.pane} onChange={(pane) => nav.go(pane, profileFor(pane))} />
     </View>
   );
 }
@@ -103,6 +164,8 @@ function Pane({ pane, profileId }: { pane: SettingsPane; profileId: string | nul
       return <SearchPane />;
     case "shortcuts":
       return <ShortcutsPane />;
+    case "links":
+      return <LinksPane />;
     case "liveFolders":
       return <LiveFoldersPane />;
     case "calendar":
@@ -112,28 +175,71 @@ function Pane({ pane, profileId }: { pane: SettingsPane; profileId: string | nul
   }
 }
 
-function SidebarItem({ title, icon, selected, onPress }: { title: string; icon: string; selected: boolean; onPress: () => void }) {
+// A toolbar tab, as in Arc and the older macOS preference windows: the symbol over its name, tinted when chosen.
+function TabButton({ title, icon, selected, onPress }: { title: string; icon: string; selected: boolean; onPress: () => void }) {
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+  const tint = selected ? colors.accent : theme.icon;
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
-        <View
-          style={{
-            height: 30,
-            borderRadius: 7,
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 8,
-            gap: 9,
-            backgroundColor: selected ? colors.accent : hovered ? colors.selected : undefined,
-          }}
-        >
-          <Symbol name={icon} size={13} color={selected ? "#FFFFFF" : theme.icon} style={{ width: 20, height: 20 }} />
-          <Text style={{ fontSize: 13, color: selected ? "#FFFFFF" : theme.textPrimary }}>{title}</Text>
-        </View>
+        {({ pressed }) => (
+          <View
+            style={{
+              minWidth: SETTINGS_TAB_MIN_WIDTH,
+              height: 50,
+              paddingHorizontal: 8,
+              borderRadius: 7,
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 3,
+              backgroundColor: selected || pressed ? colors.selected : hovered ? colors.group : undefined,
+            }}
+          >
+            <Symbol name={icon} size={17} color={tint} style={{ width: 24, height: 22 }} />
+            <Text numberOfLines={1} style={{ fontSize: 11, color: selected ? colors.accent : theme.textSecondary }}>
+              {title}
+            </Text>
+          </View>
+        )}
       </Pressable>
+    </View>
+  );
+}
+
+function Segmented<T extends string>({ options, value, onChange }: { options: { id: T; title: string }[]; value: T; onChange: (value: T) => void }) {
+  const theme = useTheme();
+  const colors = useFormColors();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        padding: 2,
+        borderRadius: 8,
+        backgroundColor: theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+      }}
+    >
+      {options.map((o) => {
+        const selected = o.id === value;
+        return (
+          <Pressable key={o.id} onPress={() => onChange(o.id)}>
+            <View
+              style={{
+                height: 22,
+                paddingHorizontal: 14,
+                borderRadius: 6,
+                justifyContent: "center",
+                backgroundColor: selected ? (theme.dark ? "rgba(255,255,255,0.16)" : "#FFFFFF") : undefined,
+                borderWidth: selected && !theme.dark ? StyleSheet.hairlineWidth * 2 : 0,
+                borderColor: colors.groupBorder,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: selected ? "500" : "400", color: selected ? theme.textPrimary : theme.textSecondary }}>{o.title}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

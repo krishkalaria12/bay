@@ -3,6 +3,8 @@ import { useEffect, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme, type Theme } from "../../lib/theme";
+import { useBrowser } from "../../store/browser";
+import type { Settings } from "../../store/settings";
 import { useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
 
@@ -421,6 +423,17 @@ export function Row({
     <View {...hoverProps}>
       <Pressable onPress={onPress}>{body}</Pressable>
     </View>
+  );
+}
+
+// A row that turns one of the settings on and off.
+export function SettingToggle({ setting, title, description }: { setting: keyof Settings; title: string; description?: string }) {
+  const value = useBrowser((s) => !!s.settings[setting]);
+  const update = useBrowser((s) => s.updateSettings);
+  return (
+    <Row title={title} description={description}>
+      <Toggle value={value} onChange={(v) => update({ [setting]: v })} />
+    </Row>
   );
 }
 

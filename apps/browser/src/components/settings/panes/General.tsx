@@ -49,24 +49,6 @@ export function GeneralPane() {
         <Row title="Warn before closing a window with multiple tabs" description="Asks before ⇧⌘W or the close button closes its tabs.">
           <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => update({ warnBeforeClosingWindow: v })} />
         </Row>
-        <Row
-          title="Open links from other apps in"
-          description={
-            settings.openLinksInSmallYahu
-              ? `A link from Discord, Slack or Mail opens in Small Yahu, a small window of its own. ⌘O moves it into ${APP_NAME}; closing it throws it away.`
-              : `A link from Discord, Slack or Mail opens as a new tab in your ${APP_NAME} window, in the default space.`
-          }
-        >
-          <PopUp
-            value={settings.openLinksInSmallYahu ? "small" : "tab"}
-            options={[
-              { value: "small", title: "Small Yahu" },
-              { value: "tab", title: "A new tab" },
-            ]}
-            onChange={(v) => update({ openLinksInSmallYahu: v === "small" })}
-            minWidth={190}
-          />
-        </Row>
       </Group>
 
       <SectionHeader title={`When quitting ${APP_NAME}:`} />
