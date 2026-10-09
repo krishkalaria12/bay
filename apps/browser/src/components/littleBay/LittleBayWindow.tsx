@@ -22,7 +22,7 @@ import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_F
 // Arc's Little Arc as a Bay window: a thin bar in the profile's colour (window buttons, the page's favicon, host
 // and title, Copy Link, Open in Bay) over one page card. Dia's card styling, the top strip's 6 pt inset.
 
-export function SmallYahuWindow() {
+export function LittleBayWindow() {
   const theme = useTheme();
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
@@ -32,7 +32,7 @@ export function SmallYahuWindow() {
         <ContentCard />
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
-        <SmallYahuBar />
+        <LittleBayBar />
       </View>
       <CommandPanel windowWidth={size.width} windowHeight={size.height} />
       <DownloadsPanel windowWidth={size.width} windowHeight={size.height} />
@@ -40,7 +40,7 @@ export function SmallYahuWindow() {
   );
 }
 
-function SmallYahuBar() {
+function LittleBayBar() {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const panelOpen = useWindowUi().panel.open;

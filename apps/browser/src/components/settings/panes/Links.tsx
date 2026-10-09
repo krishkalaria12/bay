@@ -7,18 +7,18 @@ import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls"
 
 export function LinksPane() {
   const theme = useTheme();
-  const small = useBrowser((s) => s.settings.openLinksInSmallYahu);
+  const small = useBrowser((s) => s.settings.openLinksInLittleBay);
 
   return (
     <View>
       <SectionHeader title="Links from other apps" description="Where a link you click in Discord, Slack or Mail opens." />
       <View style={{ flexDirection: "row", gap: 14 }}>
-        <OpenInChoice small title="Small Yahu" selected={small} />
+        <OpenInChoice small title="Little Bay" selected={small} />
         <OpenInChoice small={false} title={`A new tab in ${APP_NAME}`} selected={!small} />
       </View>
       <Text style={{ marginTop: 12, paddingHorizontal: 2, fontSize: 12, lineHeight: 16, color: theme.textSecondary }}>
         {small
-          ? `Small Yahu is a small window of its own, for a quick look at a link. ⌘O moves it into ${APP_NAME}; closing it throws it away.`
+          ? `Little Bay is a small window of its own, for a quick look at a link. ⌘O moves it into ${APP_NAME}; closing it throws it away.`
           : `The link opens as a new tab in your ${APP_NAME} window, in the default space.`}
       </Text>
 
@@ -43,7 +43,7 @@ function OpenInChoice({ small, title, selected }: { small: boolean; title: strin
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
   return (
-    <Pressable onPress={() => update({ openLinksInSmallYahu: small })} style={{ flex: 1, alignItems: "center", gap: 8 }}>
+    <Pressable onPress={() => update({ openLinksInLittleBay: small })} style={{ flex: 1, alignItems: "center", gap: 8 }}>
       <View
         style={{
           width: "100%",

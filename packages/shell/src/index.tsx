@@ -9,8 +9,8 @@ export type BrowserCommand =
   | "newTab"
   | "newWindow"
   | "newIncognitoWindow"
-  | "newSmallYahu"
-  | "toggleOpenLinksInSmallYahu"
+  | "newLittleBay"
+  | "toggleOpenLinksInLittleBay"
   | "removeFromSplit"
   | "togglePinRow"
   | "reopenClosedTab"
@@ -165,7 +165,7 @@ export type OpenWindowOptions = {
   focus?: boolean;
   kind?: "browser" | "small" | "settings" | "import" | "taskManager";
   profile?: string;
-  // Small Yahu: its remembered size; the window opens centred on the active screen.
+  // Little Bay: its remembered size; the window opens centred on the active screen.
   size?: [number, number];
 };
 

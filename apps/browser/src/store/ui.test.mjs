@@ -96,8 +96,8 @@ test("group submissions preserve app URL routing without creating a blank placeh
   });
   try {
     S().openNewTabPanel(w, group);
-    assert.equal(S().submitNewTabPanel(w, "yahu://settings"), "");
-    assert.deepEqual(routed, { url: "yahu://settings", windowId: w });
+    assert.equal(S().submitNewTabPanel(w, "bay://settings"), "");
+    assert.deepEqual(routed, { url: "bay://settings", windowId: w });
     assert.equal(S().tabs, tabs);
   } finally {
     setAppUrlOpener(() => false);
@@ -116,7 +116,7 @@ test("navigating to an app URL keeps a fresh New Tab palette opened by its handl
     return true;
   });
   try {
-    S().navigate(current, "yahu://newtab");
+    S().navigate(current, "bay://newtab");
     assert.equal(S().windowUi[w].panel.open, true);
     assert.equal(S().windowUi[w].panel.mode, "newTab");
     assert.notEqual(S().windowUi[w].panel.sessionId, originalSession);
@@ -154,7 +154,7 @@ test("private New Tab submissions remain in their private profile", () => {
   assert.match(S().tabs[opened].profileId, /^incognito:/);
 });
 
-test("Small Yahu sends New Tab to an existing main window and focuses it", () => {
+test("Little Bay sends New Tab to an existing main window and focuses it", () => {
   reset();
   focusedWindows.length = 0;
   const main = S().createWindow({ url: "a.com" });
@@ -168,7 +168,7 @@ test("Small Yahu sends New Tab to an existing main window and focuses it", () =>
   assert.deepEqual(focusedWindows, [main]);
 });
 
-test("Small Yahu creates a main window with one reusable initial blank when needed", () => {
+test("Little Bay creates a main window with one reusable initial blank when needed", () => {
   reset();
   focusedWindows.length = 0;
   const small = S().createWindow({ small: true, url: "small.com" });

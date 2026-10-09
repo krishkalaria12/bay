@@ -53,7 +53,7 @@ import { NavigationOverlays } from "./layout/SwipeOverlay";
 import "./layout/devExpose";
 import { closeWebNotification, showWebNotification } from "../lib/webNotifications";
 import { isSmallWindow } from "../store/small";
-import { closeSmallYahuOnEscape } from "./smallYahu/actions";
+import { closeLittleBayOnEscape } from "./littleBay/actions";
 import { PageLoadGlow } from "./layout/PageLoadGlow";
 import { usePaneSwitch, type SwitchStyle } from "./layout/switchMotion";
 import { DevBar } from "./developer/DevBar";
@@ -100,7 +100,7 @@ export function ContentCard() {
   const addressInSidebar = useAddressBarInSidebar();
   // The sidebar on the right leaves the window buttons over the page's top-left corner, open or not.
   const sidebarRight = useSidebarOnRight();
-  // Small Yahu draws its own bar above the card (components/smallYahu).
+  // Little Bay draws its own bar above the card (components/littleBay).
   const small = useBrowser((s) => isSmallWindow(s.windows[windowId]));
   const hideWhileScrolling = useBrowser((s) => s.settings.hideToolbarWhileScrolling);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -555,7 +555,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       onCommand={({ command, text, modifiers }) => {
         if (command === "search") searchSelection(tabId, text, modifiers);
         else if (command === "copyLinkToHighlight") void copyLinkToSelection(tabId);
-        else if (command === "escape") closeSmallYahuOnEscape(tabId);
+        else if (command === "escape") closeLittleBayOnEscape(tabId);
       }}
       onPageMessage={(kind, data) => {
         if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);

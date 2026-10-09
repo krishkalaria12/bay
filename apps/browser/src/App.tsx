@@ -26,7 +26,7 @@ import { useSidebarDock } from "./components/layout/useSidebarDock";
 import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/layout/windowLayout";
 import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
-import { SmallYahuWindow } from "./components/smallYahu/SmallYahuWindow";
+import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
@@ -52,7 +52,7 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <SmallYahuWindow /> : <BrowserWindow />}</ThemeScope>
+      <ThemeScope>{small ? <LittleBayWindow /> : <BrowserWindow />}</ThemeScope>
     </WindowContext.Provider>
   );
 }

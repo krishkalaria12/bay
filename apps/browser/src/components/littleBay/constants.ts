@@ -1,4 +1,4 @@
-// Small Yahu's constants: its bar's metrics over the one page card.
+// Little Bay's constants: its bar's metrics over the one page card.
 
 export const SMALL_BAR_HEIGHT = 38;
 export const SMALL_BAR_MID = SMALL_BAR_HEIGHT / 2;

@@ -153,7 +153,7 @@ export function bookmarkProfileId(s: BrowserState, window: BrowserWindow | undef
 
 export function resolveWindowId(s: BrowserState, id?: string | null): string | undefined {
   if (id && s.windows[id]) return id;
-  // Without a window named, never pick a Small Yahu: it holds one page (store/small.ts).
+  // Without a window named, never pick a Little Bay: it holds one page (store/small.ts).
   const main = (w: string) => !!s.windows[w] && s.windows[w]!.kind !== "small";
   return s.ui.focusOrder.find(main) ?? s.windowOrder.find(main);
 }

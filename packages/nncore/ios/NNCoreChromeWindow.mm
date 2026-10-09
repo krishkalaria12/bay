@@ -790,7 +790,7 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
 }
 
 - (BOOL)window:(NNCoreWindow *)window handleKeyEvent:(NSEvent *)event {
-  // An Esc the page left alone (Small Yahu closes on it): onCommand "escape" on the shown tab.
+  // An Esc the page left alone (Little Bay closes on it): onCommand "escape" on the shown tab.
   const NSEventModifierFlags mods = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if (event.type == NSEventTypeKeyDown && event.keyCode == 53 && !(mods & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl))) {
     // The page holding focus, whichever profile's Browser has it (the window's active profile can be another one

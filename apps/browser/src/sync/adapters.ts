@@ -340,7 +340,7 @@ type PinGroupValue = { n: string; i: string | null; c: TabGroup["color"]; pos: s
 
 type Window = BrowserState["windows"][string];
 
-// Small Yahu's page isn't one of the open tabs: it's thrown away when the window closes.
+// Little Bay's page isn't one of the open tabs: it's thrown away when the window closes.
 const openWindows = (s: BrowserState) => s.windowOrder.map((id) => s.windows[id]).filter((w): w is Window => !!w && !w.incognito && w.kind !== "small");
 
 function homeWindow(s: BrowserState, profileId: string): Window | undefined {

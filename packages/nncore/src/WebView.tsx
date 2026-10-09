@@ -47,7 +47,7 @@ export type OpenWindowRequest = {
 export type BlockedPopup = { id: string; url: string; origin: string };
 
 export type FindResult = { count: number; active: number; final: boolean };
-// "escape": an Esc the page left alone, outside a text field (Small Yahu closes on it).
+// "escape": an Esc the page left alone, outside a text field (Little Bay closes on it).
 // `modifiers`: the keys held when the menu item was picked ("search").
 export type PageCommand = {
   command: "search" | "ask" | "copyLinkToHighlight" | "escape";
