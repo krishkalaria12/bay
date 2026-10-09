@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bay.krishkalaria.in/sitemap-index.xml

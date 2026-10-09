@@ -1,0 +1,430 @@
+---
+import { Image } from "astro:assets";
+import Layout from "../layouts/Layout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import Feature from "../components/Feature.astro";
+import Shot from "../components/Shot.astro";
+import Sticky from "../components/Sticky.astro";
+import LiveFigure from "../components/live/LiveFigure";
+import appIcon from "../assets/app-icon.png";
+import blocker from "../assets/shots/blocker.jpg";
+import commandBar from "../assets/shots/command-bar.jpg";
+import { faqPage, faqs, ids, site } from "../site";
+
+const cards = [
+  {
+    title: "All of Arc, kept",
+    marker: "var(--color-note-yellow)",
+    body: "The sidebar, spaces, pinned tabs, folders, Peek, Split View and the little window for links. The way you left them.",
+  },
+  {
+    title: "Chrome underneath",
+    marker: "var(--color-note-pink)",
+    body: "Chrome’s own engine, so every site works and every extension from the Chrome Web Store installs.",
+  },
+  {
+    title: "Your Arc comes with you",
+    marker: "var(--color-note-blue)",
+    body: "Spaces, pinned tabs and folders come over from Arc in one go, with your bookmarks, history and passwords.",
+  },
+];
+
+// What Arc people miss, ticked one by one; then the rest of it, opened in place.
+const kept = [
+  ["The sidebar", "Tabs down the side: favorites on top, pinned tabs under them, today’s below."],
+  ["Spaces", "Work, home, a trip. Each with its own tabs, theme and sign-ins."],
+  ["Pinned tabs", "The ones you keep open all day, a click away and never closed."],
+  ["Folders", "Tabs grouped under a name, opened right where they are."],
+  ["Peek", "A link opens over the page you’re on. Close it and you’re where you were."],
+  ["Split View", "Any two tabs side by side, in one tab."],
+  ["Little Bay", "Links from Slack, Mail or Discord open in a small window, not a pile of tabs."],
+  ["Old tabs put away", "Tabs you haven’t used leave on their own, after a time you set for each space."],
+];
+const more = [
+  "Favorites in every window",
+  "Tab previews on hover",
+  "Recent tabs on ⌃Tab",
+  "Command bar",
+  "Mini player in the sidebar",
+  "Automatic Picture in Picture",
+  "Live folders for pull requests",
+  "Your next meeting, with Join",
+  "Developer Mode",
+  "Theme editor, with grain",
+  "Sidebar on the left or right",
+  "Tab groups with ⌘-click",
+  "Arc and Zen shortcuts",
+  "Incognito windows",
+  "Bring it all from Arc",
+];
+
+const extras = [
+  ["Ads and trackers blocked", "Built in, from a profile’s first page. One switch lets a site through."],
+  ["Every Chrome extension", "From the Chrome Web Store, with toolbar buttons and side panels."],
+  ["Encrypted sync", "Sealed in a folder you choose, like iCloud Drive. Only your devices can read it."],
+  ["Task manager", "See which tab is eating memory, and stop it."],
+];
+
+const schema = [
+  {
+    "@type": "WebPage",
+    "@id": `${site.url}/#webpage`,
+    url: `${site.url}/`,
+    name: site.title,
+    description: site.description,
+    isPartOf: { "@id": ids.site },
+    about: { "@id": ids.app },
+    primaryImageOfPage: { "@type": "ImageObject", url: `${site.url}/og.png`, width: 1200, height: 630 },
+    inLanguage: "en",
+  },
+  faqPage(faqs, `${site.url}/`),
+];
+---
+
+<Layout schema={schema}>
+  <Header />
+
+  <main>
+    <!-- Hero -->
+    <section class="mx-auto max-w-6xl px-5 pt-14 pb-20 text-center sm:pt-20">
+      <h1 class="mx-auto max-w-4xl animate-rise text-[44px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[68px]">
+        Everything you loved about Arc, <span class="marker">kept</span>.
+      </h1>
+      <p class="mx-auto mt-6 max-w-xl animate-rise text-[17px] leading-relaxed text-pretty text-muted [animation-delay:80ms]">
+        Bay is a beautiful, fast browser for the Mac, with everything you loved about Arc: the sidebar, spaces, pinned
+        tabs, folders, Peek and Split View, on Chrome’s own engine.
+      </p>
+      <div class="mt-8 flex animate-rise flex-wrap items-center justify-center gap-2 [animation-delay:120ms]">
+        <a href={site.downloadUrl} class="btn px-6 py-3.5 text-[16px]">Download for Mac</a>
+        <a href="#arc" class="btn-ghost">See what’s inside ›</a>
+      </div>
+      <p class="mt-3 animate-rise text-[13px] text-muted [animation-delay:140ms]">
+        For {site.requirement}. Coming from Arc? <a href="/switch-from-arc/" class="font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink">Here’s how to switch</a>.
+      </p>
+      <div class="mx-auto mt-20 max-w-[960px] animate-rise text-left [animation-delay:200ms]">
+        <LiveFigure
+          client:load
+          preset="hero"
+          label="A working Bay window: a sidebar with favorites, a Lisbon trip folder and today's tabs, beside a flight search"
+          note="it’s real, click around"
+          noteClass="-top-11 right-4 rotate-[-3deg] sm:right-14"
+        />
+      </div>
+    </section>
+
+    <!-- Three ideas -->
+    <section id="features" class="mx-auto grid max-w-6xl scroll-mt-24 gap-5 px-5 pb-8 md:grid-cols-3" aria-label="Why Bay">
+      {
+        cards.map((c) => (
+          <article class="card p-6">
+            <h2 class="inline text-[18px] font-bold underline-note" style={`--marker: ${c.marker}`}>
+              {c.title}
+            </h2>
+            <p class="mt-3 text-[15px] leading-relaxed text-muted">{c.body}</p>
+          </article>
+        ))
+      }
+    </section>
+
+    <!-- From Arc -->
+    <section id="arc" class="mx-auto max-w-6xl scroll-mt-24 px-5 py-16 sm:py-24" aria-labelledby="arc-title">
+      <p class="eyebrow">From Arc</p>
+      <h2 id="arc-title" class="mt-2 max-w-2xl text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
+        You miss Arc. So we kept <span class="marker">all of it</span>.
+      </h2>
+      <ul class="mt-12 grid max-w-4xl gap-x-12 gap-y-7 sm:grid-cols-2">
+        {
+          kept.map(([t, d]) => (
+            <li class="flex gap-3">
+              <svg viewBox="0 0 24 24" class="mt-0.5 size-6 shrink-0 text-pen" fill="none" aria-hidden="true">
+                <path d="M4 12.5l5 5L20 5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span>
+                <span class="block text-[18px] font-semibold">{t}</span>
+                <span class="mt-0.5 block text-[15px] leading-relaxed text-muted">{d}</span>
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+      <details class="reveal group mt-12 max-w-4xl">
+        <summary class="inline-flex cursor-pointer list-none items-center gap-2 rounded-full bg-white py-2.5 pr-4 pl-5 text-[15px] font-semibold shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgba(30,32,60,0.05)] transition-shadow select-none hover:shadow-[0_0_0_1px_#d3d6dc,0_10px_22px_-12px_rgba(30,32,60,0.4)] [&::-webkit-details-marker]:hidden">
+          <span class="group-open:hidden">And {more.length} more</span>
+          <span class="hidden group-open:inline">Fewer</span>
+          <svg viewBox="0 0 24 24" class="size-4 text-muted transition-transform duration-300 group-open:rotate-180" fill="none" aria-hidden="true">
+            <path d="M6 9.5l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </summary>
+        <ul class="flex flex-wrap gap-2.5 pt-6 pb-3" aria-label="More from Arc">
+          {
+            more.map((m, i) => (
+              <li class="chip" style={`--i: ${i}`}>
+                <svg viewBox="0 0 24 24" class="size-4 shrink-0 text-pen" fill="none" aria-hidden="true">
+                  <path d="M4.5 12.5l4.5 4.5L19.5 6.5" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                {m}
+              </li>
+            ))
+          }
+        </ul>
+      </details>
+    </section>
+
+    <!-- Spaces -->
+    <Feature id="spaces" eyebrow="Spaces" title={`One window. <span class="marker">Every</span> part of your life.`}>
+      <p>
+        Give each space its own icon, theme and profile, so work stays signed in to work and home stays home. Their
+        icons sit at the foot of the sidebar: click one, or swipe two fingers across the sidebar to move between them.
+      </p>
+      <p>Right-click a space for its theme. Press + and there’s a new one. Favorites and pinned tabs follow you into every window, the way Arc had them.</p>
+      <Fragment slot="visual">
+        <LiveFigure
+          client:visible
+          preset="spaces"
+          label="A working Bay window with its space switcher at the foot of the sidebar"
+          note="click a space, or swipe the sidebar"
+          spot="spaces"
+          noteClass="-bottom-12 left-0 rotate-[-2deg]"
+          bend={0.3}
+        />
+      </Fragment>
+    </Feature>
+
+    <!-- Pinned tabs and folders -->
+    <Feature id="folders" eyebrow="Pinned tabs & folders" title={`Tabs that <span class="marker" style="--marker: var(--color-note-green)">stay put</span>.`} flip>
+      <p>
+        Favorites sit on top as tiles. Pinned tabs and folders live under them and never close, so the trip, the
+        launch and the side project are always one click away.
+      </p>
+      <p>Folders open right where they are. The tab you’re in stays out when you fold one away.</p>
+      <Fragment slot="visual">
+        <LiveFigure
+          client:visible
+          preset="folders"
+          label="A working Bay window with pinned folders in the sidebar"
+          note="folders open in place"
+          spot="folder-research"
+          noteClass="-bottom-12 left-2 rotate-[-2deg]"
+          bend={0.35}
+        />
+      </Fragment>
+    </Feature>
+
+    <!-- Peek and Split View -->
+    <section class="mx-auto max-w-6xl px-5 py-16 sm:py-24" aria-labelledby="two-pages">
+      <p class="eyebrow text-center">Peek &amp; Split View</p>
+      <h2 id="two-pages" class="mt-2 text-center text-[34px] leading-[1.05] font-bold tracking-[-0.03em] sm:text-[44px]">
+        Look at two things <span class="marker" style="--marker: var(--color-note-blue)">at once</span>.
+      </h2>
+      <div class="mt-16 grid gap-x-6 gap-y-16 lg:grid-cols-2">
+        <article>
+          <LiveFigure
+            client:visible
+            preset="peek"
+            label="A working Bay window with a link open in Peek over a chat"
+            note="any link, over the page"
+            spot="peek"
+            noteClass="-top-11 left-[30%] rotate-[-3deg]"
+            bend={-0.2}
+          />
+          <div class="px-3 pt-5">
+            <h3 class="text-[19px] font-bold">Peek at any link</h3>
+            <p class="mt-1.5 text-[15px] leading-relaxed text-muted">
+              It opens over the page you’re on. Close it and you’re right where you were, or keep it as a tab, or put
+              it beside the page.
+            </p>
+          </div>
+        </article>
+        <article>
+          <LiveFigure
+            client:visible
+            preset="split"
+            label="A working Bay window with two tabs side by side in Split View"
+            note="one tab, two pages"
+            spot="pairrow"
+            noteClass="-top-11 left-2 rotate-[-2deg]"
+            bend={0.25}
+          />
+          <div class="px-3 pt-5">
+            <h3 class="text-[19px] font-bold">Any two, side by side</h3>
+            <p class="mt-1.5 text-[15px] leading-relaxed text-muted">
+              Split View puts two tabs in one row of the sidebar. Click either half to work in it, or pull them apart
+              when you’re done.
+            </p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Tidy -->
+    <Feature id="tidy" eyebrow="Old tabs put away" title={`Yesterday’s tabs, <span class="marker" style="--marker: var(--color-note-pink)">gone</span>. Not lost.`}>
+      <p>
+        Like Arc, Bay clears out tabs you haven’t looked at. Unlike Arc, you pick when, for each space: twelve hours for
+        work, a week for home.
+      </p>
+      <p>Everything put away is one search away. Skip ahead a few hours, then press New tab.</p>
+      <Fragment slot="visual">
+        <LiveFigure
+          client:visible
+          preset="tidy"
+          tidy
+          label="A working Bay window showing how long since each tab was looked at"
+          note="skip ahead, watch them go"
+          spot="skip"
+          noteClass="-bottom-14 left-0 rotate-[2deg] sm:-left-4"
+          bend={0.3}
+        />
+      </Fragment>
+    </Feature>
+
+    <!-- More than Arc -->
+    <section id="more" class="mx-auto max-w-6xl scroll-mt-24 px-5 pt-16 sm:pt-24" aria-labelledby="more-title">
+      <p class="eyebrow">More than Arc</p>
+      <h2 id="more-title" class="mt-2 max-w-2xl text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
+        Then we <span class="marker">kept going</span>.
+      </h2>
+      <ul class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {
+          extras.map(([t, d]) => (
+            <li class="card p-5">
+              <span class="block text-[16px] font-semibold">{t}</span>
+              <span class="mt-1.5 block text-[14px] leading-relaxed text-muted">{d}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <!-- Privacy -->
+    <Feature id="privacy" eyebrow="Privacy" title={`Ads stop <span class="marker">before</span> they load.`}>
+      <p>
+        Bay’s content blocker stops ads and trackers from a profile’s very first page. Click the address to see what it
+        caught, and one switch lets a site you trust through.
+      </p>
+      <p>Camera, microphone, location and notifications are asked for per site, and remembered the way you answered.</p>
+      <Fragment slot="visual">
+        <LiveFigure
+          client:visible
+          preset="privacy"
+          label="A working Bay window on a news page with its ads blocked"
+          note="click the address, flip the switch"
+          spot="plate"
+          noteClass="-top-11 left-2 rotate-[-3deg]"
+          bend={-0.3}
+        />
+      </Fragment>
+    </Feature>
+
+    <!-- Command bar -->
+    <Feature eyebrow="Command bar" title={`<span class="marker" style="--marker: var(--color-note-blue)">⌘T</span>, type, go.`} flip>
+      <p>
+        One bar for addresses, searches, open tabs and the ones put away. Start typing a tab you already have open and
+        Bay takes you to it instead of opening another.
+      </p>
+      <p>Go on, type something. Arrow keys and Return work.</p>
+      <Fragment slot="visual">
+        <LiveFigure
+          client:visible
+          preset="command"
+          label="A working Bay window with the command bar open"
+          note="type a tab’s name, or anything"
+          spot="omni"
+          noteClass="-top-11 right-2 rotate-[2deg]"
+          bend={0.25}
+        />
+      </Fragment>
+    </Feature>
+
+    <!-- Import -->
+    <Feature id="import" eyebrow="Moving in" title={`Bring it all <span class="marker">from Arc</span>.`} flip>
+      <p>
+        Spaces, pinned tabs and folders come over from Arc, right where you left them. Bookmarks, history and passwords
+        come from Arc, Chrome, Safari, Firefox and Dia.
+      </p>
+      <p><a href="/switch-from-arc/" class="font-semibold text-ink underline decoration-note-yellow decoration-[3px] underline-offset-4">How to switch from Arc, step by step ›</a></p>
+      <Fragment slot="visual">
+        <div class="card mx-auto max-w-xl p-6 shadow-[0_30px_60px_-30px_rgba(30,32,60,0.35)] sm:p-8">
+          <p class="text-[20px] font-bold tracking-tight">Import from</p>
+          <div class="mt-4 grid grid-cols-4 gap-2 text-center text-[13px] font-semibold">
+            {
+              ["Arc", "Chrome", "Safari", "Firefox"].map((b, i) => (
+                <span class:list={["rounded-xl border px-2 py-3", i === 0 ? "border-ink bg-ink text-white" : "border-line text-muted"]}>{b}</span>
+              ))
+            }
+          </div>
+          <ul class="mt-6 space-y-3 text-[15px]">
+            {
+              ["Spaces, with their colors", "Pinned tabs and folders", "Bookmarks", "History", "Passwords"].map((x) => (
+                <li class="flex items-center gap-3">
+                  <span class="grid size-5 place-items-center rounded-md bg-pen text-[12px] font-bold text-white" aria-hidden="true">✓</span>
+                  {x}
+                </li>
+              ))
+            }
+          </ul>
+          <span class="btn mt-7 w-full">Import</span>
+        </div>
+      </Fragment>
+    </Feature>
+
+    <!-- The real thing -->
+    <section class="mx-auto max-w-6xl px-5 py-16 sm:py-24" aria-labelledby="real">
+      <p class="eyebrow">Straight from the app</p>
+      <h2 id="real" class="mt-2 text-[34px] leading-[1.05] font-bold tracking-[-0.03em] sm:text-[44px]">
+        The <span class="marker">real</span> thing.
+      </h2>
+      <p class="mt-3 max-w-xl text-[17px] text-muted">The windows above are drawn for this page. These are Bay itself.</p>
+      <div class="mt-10 grid gap-6 lg:grid-cols-2">
+        <Shot src={blocker} alt="Bay's site panel open over a dictionary page, showing Block Ads and Trackers switched on with 3 blocked on this page">
+          <Sticky color="pink" tilt={-5} class="absolute -bottom-6 -left-3 w-40 p-3.5 text-[21px] leading-tight sm:-left-6">
+            the site panel, for real
+          </Sticky>
+        </Shot>
+        <Shot src={commandBar} alt="Bay's command bar open at the top of the window, reading Search or enter address" />
+      </div>
+    </section>
+
+    <!-- Note to self -->
+    <div class="px-5 py-12">
+      <Sticky tilt={-2} class="mx-auto max-w-md px-9 py-9">
+        <p class="text-[34px] leading-[1.05] sm:text-[38px]">“Stop mourning Arc. The sidebar’s fine.”</p>
+        <p class="mt-4 font-sans text-[13px] text-ink/70">— a note to self, finally true</p>
+      </Sticky>
+    </div>
+
+    <!-- FAQ -->
+    <section id="faq" class="mx-auto max-w-3xl scroll-mt-24 px-5 py-16 sm:py-24" aria-labelledby="faq-title">
+      <h2 id="faq-title" class="text-center text-[34px] leading-[1.05] font-bold tracking-[-0.03em] sm:text-[44px]">
+        Questions, answered.
+      </h2>
+      <div class="mt-10 space-y-3">
+        {
+          faqs.map((f, i) => (
+            <details class="reveal faq card group px-6 py-1" open={i === 0}>
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[17px] font-semibold [&::-webkit-details-marker]:hidden">
+                {f.q}
+                <span class="grid size-7 shrink-0 place-items-center rounded-full bg-paper text-muted transition duration-300 ease-out group-open:rotate-45 group-hover:bg-line" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <p class="pb-5 text-[15px] leading-relaxed text-muted">{f.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- Closing -->
+    <section id="download" class="mx-auto max-w-6xl px-5 pt-10 pb-24 text-center">
+      <Image src={appIcon} alt="Bay app icon" width={112} height={112} class="mx-auto size-28" />
+      <h2 class="mt-6 text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
+        Your spaces have a new <span class="marker">home</span>.
+      </h2>
+      <a href={site.downloadUrl} class="btn mt-8 px-7 py-3.5 text-[16px]">Download for Mac</a>
+      <p class="mt-4 text-[13px] text-muted">For {site.requirement}. Bring your Arc; we’ll unpack it.</p>
+    </section>
+  </main>
+
+  <Footer />
+</Layout>

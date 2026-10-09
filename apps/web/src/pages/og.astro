@@ -1,0 +1,27 @@
+---
+// The social card. Open /og at 1200×630 and screenshot it to public/og.png.
+import { Image } from "astro:assets";
+import Layout from "../layouts/Layout.astro";
+import { StillWindow } from "../components/live/Still";
+import appIcon from "../assets/app-icon.png";
+---
+
+<Layout title="Bay social card" noindex>
+  <div class="relative flex h-[630px] w-[1200px] overflow-hidden bg-paper">
+    <div class="flex w-[520px] shrink-0 flex-col justify-center pl-[72px]">
+      <div class="flex items-center gap-3 text-[30px] font-bold tracking-tight">
+        <Image src={appIcon} alt="" width={52} height={52} class="size-[52px]" />
+        Bay
+      </div>
+      <p class="mt-8 text-[56px] leading-[1.02] font-bold tracking-[-0.04em]">
+        Everything you loved about Arc, <span class="marker">kept</span>.
+      </p>
+      <p class="mt-6 text-[22px] leading-snug text-muted">The sidebar browser for Mac, on Chrome’s own engine.</p>
+    </div>
+    <div class="absolute top-[70px] left-[560px] w-[860px]">
+      <div class="card p-3 shadow-[0_30px_60px_-30px_rgba(30,32,60,0.45)]">
+        <StillWindow preset="card" />
+      </div>
+    </div>
+  </div>
+</Layout>

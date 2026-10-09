@@ -6,6 +6,7 @@ A macOS browser built on Chrome's own framework: a patched Chromium tree with ou
 ```
 apps/
   browser/            Expo + react-native-macos app (UI in src/, Xcode project in macos/)
+  web/                The website, Astro + React + Tailwind (its own pnpm workspace)
 engine/
   chromium/           Our Chromium code: src/chrome/browser/bay, copied in by apply.sh
   nncore/             The layer: src/bay/core, plus the hooks that make Chrome's framework link it

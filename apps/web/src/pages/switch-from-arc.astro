@@ -1,0 +1,188 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import Sticky from "../components/Sticky.astro";
+import { faqPage, fromArc, ids, site } from "../site";
+
+const url = `${site.url}/switch-from-arc/`;
+const title = "How to switch from Arc to Bay";
+const description =
+  "Move from Arc to Bay in a few minutes: import your spaces, tabs, pinned tabs, folders, favorites, bookmarks, history and passwords, then pick up where you left off.";
+const published = "2026-10-09";
+const updated = "2026-10-09";
+
+const steps = [
+  ["Download Bay and open it", `Bay runs on ${"macOS 14 Sonoma or later"}. Keep Arc installed: Bay reads Arc’s data where it is.`],
+  ["Open the importer", "Go to Settings › General › Import from another browser, and choose Arc."],
+  ["Pick your spaces", "Bay lists Arc’s spaces. Select the ones you want; each becomes a Bay space with its own tabs."],
+  [
+    "Choose what comes with them",
+    "Spaces and tabs, pinned tabs and folders, favorites, bookmarks, history and passwords. Arc’s pinned tabs and folders land in each space’s pinned section.",
+  ],
+  ["Add your extensions", "Extensions aren’t part of an import. Install them again from the Chrome Web Store; they work as they did in Arc."],
+  ["Make Bay your default browser", "So links from other apps open in Bay. Bay offers this when it first opens, or use System Settings › Desktop & Dock › Default web browser."],
+] as const;
+
+const faqs = [
+  {
+    q: "Do I need to uninstall Arc first?",
+    a: "No. Bay imports from Arc’s data on your Mac, so keep Arc installed until you’ve settled in.",
+  },
+  {
+    q: "Will my Arc spaces keep their pinned tabs and folders?",
+    a: "Yes. Each Arc space comes over as a Bay space, and its pinned tabs and folders go into that space’s pinned section.",
+  },
+  {
+    q: "Do my extensions come over from Arc?",
+    a: "Not automatically. Bay runs Chrome extensions, so install the ones you use from the Chrome Web Store.",
+  },
+  {
+    q: "Is there anything from Arc that Bay doesn’t have?",
+    a: "Boosts. Bay doesn’t restyle sites itself; a user-style extension from the Chrome Web Store does the same job.",
+  },
+  {
+    q: "Can I import from other browsers too?",
+    a: "Yes. The same importer brings bookmarks, history and passwords from Chrome, Safari, Firefox and Dia, and open tabs from Dia.",
+  },
+] as const;
+
+const schema = [
+  {
+    "@type": "TechArticle",
+    "@id": `${url}#article`,
+    headline: title,
+    description,
+    url,
+    datePublished: published,
+    dateModified: updated,
+    inLanguage: "en",
+    author: { "@id": ids.org },
+    publisher: { "@id": ids.org },
+    about: { "@id": ids.app },
+    isPartOf: { "@id": ids.site },
+    mainEntityOfPage: url,
+    image: `${site.url}/og.png`,
+  },
+  {
+    "@type": "BreadcrumbList",
+    "@id": `${url}#breadcrumbs`,
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Bay", item: `${site.url}/` },
+      { "@type": "ListItem", position: 2, name: "Switch from Arc", item: url },
+    ],
+  },
+  faqPage(faqs, url),
+];
+---
+
+<Layout title={`${title} | Bay`} description={description} type="article" schema={schema}>
+  <Header />
+
+  <main class="mx-auto max-w-3xl px-5 pt-10 pb-24 sm:pt-16">
+    <nav aria-label="Breadcrumb" class="text-[13px] text-muted">
+      <ol class="flex gap-2">
+        <li><a href="/" class="hover:text-ink">Bay</a></li>
+        <li aria-hidden="true">›</li>
+        <li aria-current="page" class="text-ink">Switch from Arc</li>
+      </ol>
+    </nav>
+
+    <article>
+      <header class="mt-6">
+        <h1 class="text-[40px] leading-[1.04] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
+          How to switch from Arc to <span class="marker">Bay</span>.
+        </h1>
+        <p class="mt-6 text-[18px] leading-relaxed text-pretty text-muted">
+          Bay is a beautiful, fast browser for the Mac with everything you loved about Arc: the sidebar, spaces, pinned
+          tabs, folders, Peek and Split View. Its importer brings your Arc spaces over in one go, and most people are
+          set up in a few minutes.
+        </p>
+        <p class="mt-4 text-[13px] text-faint">Updated <time datetime={updated}>9 October 2026</time></p>
+      </header>
+
+      <section class="mt-14" aria-labelledby="steps">
+        <h2 id="steps" class="text-[28px] font-bold tracking-[-0.03em] sm:text-[32px]">Switching, step by step</h2>
+        <ol class="mt-6 space-y-3">
+          {
+            steps.map(([t, d], i) => (
+              <li class="card flex gap-4 p-5">
+                <span class="grid size-8 shrink-0 place-items-center rounded-full bg-ink text-[14px] font-bold text-white" aria-hidden="true">
+                  {i + 1}
+                </span>
+                <span>
+                  <span class="block text-[17px] font-semibold">{t}</span>
+                  <span class="mt-1 block text-[15px] leading-relaxed text-muted">{d}</span>
+                </span>
+              </li>
+            ))
+          }
+        </ol>
+      </section>
+
+      <section class="mt-16" aria-labelledby="map">
+        <h2 id="map" class="text-[28px] font-bold tracking-[-0.03em] sm:text-[32px]">Where Arc’s features are in Bay</h2>
+        <p class="mt-3 text-[16px] leading-relaxed text-muted">Most have the same name. A few you’ll know by another.</p>
+        <div class="card mt-6 overflow-x-auto">
+          <table class="w-full min-w-[520px] text-left text-[15px]">
+            <thead>
+              <tr class="border-b border-line text-[13px] text-muted">
+                <th scope="col" class="px-5 py-3 font-medium">In Arc</th>
+                <th scope="col" class="px-5 py-3 font-medium">In Bay</th>
+                <th scope="col" class="px-5 py-3 font-medium">What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                fromArc.map(([arc, bay, what]) => (
+                  <tr class="border-b border-line last:border-0">
+                    <th scope="row" class="px-5 py-3.5 font-medium text-muted">{arc}</th>
+                    <td class="px-5 py-3.5 font-semibold whitespace-nowrap">{bay}</td>
+                    <td class="px-5 py-3.5 text-muted">{what}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="my-16 px-2">
+        <Sticky color="green" tilt={-1.5} class="mx-auto max-w-md px-8 py-7">
+          <p class="text-[28px] leading-[1.1]">Tip: keep Arc around for a week. You won’t open it.</p>
+        </Sticky>
+      </div>
+
+      <section aria-labelledby="questions">
+        <h2 id="questions" class="text-[28px] font-bold tracking-[-0.03em] sm:text-[32px]">Questions about switching</h2>
+        <div class="mt-6 space-y-3">
+          {
+            faqs.map((f, i) => (
+              <details class="reveal faq card group px-6 py-1" open={i === 0}>
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[17px] font-semibold [&::-webkit-details-marker]:hidden">
+                  {f.q}
+                  <span class="grid size-7 shrink-0 place-items-center rounded-full bg-paper text-muted transition duration-300 ease-out group-open:rotate-45 group-hover:bg-line" aria-hidden="true">
+                    +
+                  </span>
+                </summary>
+                <p class="pb-5 text-[15px] leading-relaxed text-muted">{f.a}</p>
+              </details>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="mt-20 text-center">
+        <h2 class="text-[32px] leading-[1.05] font-bold tracking-[-0.04em] sm:text-[44px]">
+          Ready when your <span class="marker">spaces</span> are.
+        </h2>
+        <a href={site.downloadUrl} class="btn mt-7 px-7 py-3.5 text-[16px]">Download for Mac</a>
+        <p class="mt-4 text-[13px] text-muted">
+          For {site.requirement}. Or see <a href="/#arc" class="underline underline-offset-4 hover:text-ink">everything Bay kept from Arc</a>.
+        </p>
+      </section>
+    </article>
+  </main>
+
+  <Footer />
+</Layout>

@@ -1,0 +1,6 @@
+# The landing page is its own workspace (excluded from the repo root's, which hoists for React Native),
+# so installing it never touches the app's node_modules.
+packages:
+  - .
+minimumReleaseAgeExclude:
+  - astro@7.3.8

@@ -1,0 +1,17 @@
+---
+import { site } from "../site";
+---
+
+<footer class="mx-auto max-w-6xl border-t border-line px-5 py-10">
+  <div class="flex flex-col gap-4 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between">
+    <p>Bay © {new Date().getFullYear()}</p>
+    <ul class="flex flex-wrap gap-x-5 gap-y-2">
+      <li><a class="hover:text-ink" href="/#arc">From Arc</a></li>
+      <li><a class="hover:text-ink" href="/#more">More than Arc</a></li>
+      <li><a class="hover:text-ink" href="/switch-from-arc/">Switch from Arc</a></li>
+      <li><a class="hover:text-ink" href="/#faq">FAQ</a></li>
+      <li><a class="hover:text-ink" href={site.downloadUrl}>Download</a></li>
+    </ul>
+  </div>
+  <p class="mt-6 text-[12px] text-faint">Arc is a trademark of The Browser Company. Bay is an independent browser and isn’t affiliated with it.</p>
+</footer>

@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-hand: "Caveat", "Bradley Hand", "Segoe Print", cursive;
+
+  --color-paper: #edeef1;
+  --color-ink: #1c1e23;
+  --color-ink-soft: #2a2d34;
+  --color-muted: #5c616d;
+  --color-faint: #8b909b;
+  --color-line: #dfe1e6;
+
+  /* Sticky notes, and the highlighters drawn from them. */
+  --color-note-yellow: #ffd84d;
+  --color-note-pink: #ffb3c8;
+  --color-note-green: #b8e6a0;
+  --color-note-blue: #a8d5fb;
+
+  /* The handwriting's ink. */
+  --color-pen: #1f5fe0;
+
+  --animate-rise: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The working windows' motion (src/components/live). */
+@keyframes born {
+  from {
+    opacity: 0;
+    transform: translateX(-0.8em);
+  }
+}
+@keyframes from-next {
+  from {
+    opacity: 0;
+    transform: translateX(2.5em);
+  }
+}
+@keyframes from-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-2.5em);
+  }
+}
+@keyframes omni {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4em) scale(0.98);
+  }
+}
+@keyframes loadbar {
+  from {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  80% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+@keyframes reload {
+  30% {
+    opacity: 0.3;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-paper font-sans text-ink;
+  }
+  ::selection {
+    background: var(--color-note-yellow);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-pen);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+}
+
+@layer components {
+  /* A highlighter stroke behind a word, a touch crooked. */
+  .marker {
+    position: relative;
+    isolation: isolate;
+    white-space: nowrap;
+  }
+  .marker::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: -0.06em;
+    right: -0.06em;
+    bottom: 0.02em;
+    height: 0.36em;
+    background: var(--marker, var(--color-note-yellow));
+    border-radius: 0.08em;
+    transform: rotate(-1deg);
+  }
+
+  /* A rounded felt-tip line under a short heading. */
+  .underline-note {
+    background-image: linear-gradient(var(--marker, var(--color-note-yellow)), var(--marker, var(--color-note-yellow)));
+    background-repeat: no-repeat;
+    background-size: 100% 0.24em;
+    background-position: 0 100%;
+    padding-bottom: 0.12em;
+  }
+
+  /*
+    A <details> that eases open and closed. Height animates where the browser can size to `auto`
+    (::details-content + interpolate-size); everywhere else what it reveals still fades in.
+  */
+  .reveal {
+    interpolate-size: allow-keywords;
+  }
+  .reveal::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 360ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      content-visibility 360ms allow-discrete;
+  }
+  .reveal[open]::details-content {
+    block-size: auto;
+  }
+  .reveal > :not(summary) {
+    opacity: 0;
+    transform: translateY(-4px);
+    transition:
+      opacity 260ms ease,
+      transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .reveal[open] > :not(summary) {
+    opacity: 1;
+    transform: none;
+    @starting-style {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  /* An FAQ card lifts a little while it's open. */
+  .faq {
+    transition: box-shadow 300ms ease;
+  }
+  .faq[open] {
+    box-shadow: 0 12px 28px -18px rgba(30, 32, 60, 0.25);
+  }
+
+  /* The rest of what's kept from Arc: chips that come in one after another. */
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-full bg-white py-2 pr-4 pl-3 text-[14.5px] text-ink-soft shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgba(30,32,60,0.04)] transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-[0_0_0_1px_#d3d6dc,0_8px_18px_-10px_rgba(30,32,60,0.35)];
+  }
+  .reveal[open] .chip {
+    animation: rise 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation-delay: calc(var(--i) * 22ms);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-ink px-5 py-3 text-[15px] font-semibold text-white shadow-[0_1px_0_rgba(255,255,255,0.12)_inset,0_6px_16px_-6px_rgba(20,22,28,0.5)] transition hover:-translate-y-px hover:bg-ink-soft active:translate-y-0;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-1 rounded-xl px-3 py-3 text-[15px] font-semibold text-ink transition hover:bg-black/5;
+  }
+
+  .card {
+    @apply rounded-2xl border border-line bg-white;
+  }
+
+  .hand {
+    @apply font-hand text-pen;
+    font-weight: 600;
+  }
+
+  .eyebrow {
+    @apply text-sm font-semibold text-muted;
+  }
+
+  /*
+    Browser mockups are drawn in em and scale with their container like an image.
+    Tailwind's spacing, type and radius utilities read these variables, so inside .mock
+    `p-4` is 1em of the mockup, not 1rem of the page.
+  */
+  .mock {
+    font-size: calc(100cqw / 64);
+    --spacing: 0.25em;
+    --text-xs: 0.75em;
+    --text-sm: 0.875em;
+    --text-base: 1em;
+    --text-lg: 1.125em;
+    --text-xl: 1.25em;
+    --text-2xl: 1.5em;
+    --text-3xl: 1.875em;
+    --radius-sm: 0.25em;
+    --radius-md: 0.375em;
+    --radius-lg: 0.5em;
+    --radius-xl: 0.75em;
+    --radius-2xl: 1em;
+    line-height: 1.35;
+  }
+  .mock-frame {
+    aspect-ratio: 900 / 580;
+  }
+  /* On a phone the window keeps a readable size: narrower, and taller than wide. */
+  @container (max-width: 560px) {
+    .mock {
+      font-size: calc(100cqw / 36);
+    }
+    .mock-frame {
+      aspect-ratio: 36 / 40;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
