@@ -2,5 +2,8 @@
 # so installing it never touches the app's node_modules.
 packages:
   - .
+allowBuilds:
+  esbuild: true
+  workerd: true
 minimumReleaseAgeExclude:
   - astro@7.3.8

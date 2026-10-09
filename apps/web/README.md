@@ -10,7 +10,12 @@ pnpm install
 pnpm dev          # http://localhost:4321
 pnpm build        # static site in dist/
 pnpm typecheck
+pnpm preview:cf   # the built site on Cloudflare's runtime, http://localhost:8787
+pnpm run deploy   # build and deploy to Cloudflare (run `pnpm exec wrangler login` once first)
 ```
+
+It deploys as a static Cloudflare Worker (`wrangler.jsonc`, no script) on the custom domain bay.krishkalaria.in.
+`public/_headers` caches Astro's fingerprinted `/_astro/*` files for a year.
 
 - `src/site.ts` holds the name, URL, description, download link and FAQ. The origin is repeated in
   `astro.config.mjs` and `public/robots.txt`.
