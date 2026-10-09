@@ -2,7 +2,7 @@ import { ContextMenuArea, prompt, showMenu, Symbol } from "@bay/shell";
 import { Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { createSpace, deleteSpace, switchSpace } from "../../lib/actions";
+import { changeSpaceProfile, createSpace, deleteSpace, switchSpace } from "../../lib/actions";
 import { PROFILE_COLORS, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
@@ -14,6 +14,7 @@ import { useSidebarWidth } from "../sidebar/tokens";
 import { openIconPicker } from "../sidebar/actions";
 import { registerRow } from "../sidebar/state";
 import { iconColor } from "../symbolColors";
+import { profileChoices } from "./CreateSpace";
 import { profileSymbol } from "./icons";
 import { openThemeEditor } from "./ThemeEditor";
 import { SpaceDots } from "./SpaceDots";
@@ -87,6 +88,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
   const s = useBrowser.getState();
   const space = s.profiles[id];
   if (!space) return;
+  const profiles = profileChoices(s, id);
   const choice = await showMenu([
     { id: "rename", title: "Rename Space…", symbol: "pencil" },
     { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
@@ -100,6 +102,15 @@ export async function openSpaceMenu(windowId: string, id: string) {
         { id: "editTheme", title: "Edit Theme…", symbol: "slider.horizontal.3", checked: !!space.theme },
       ],
     },
+    {
+      id: "profileMenu",
+      title: "Profile",
+      symbol: "person.crop.circle",
+      children: profiles.options.flatMap((o) => [
+        ...(o.separatorBefore ? [{ separator: true as const }] : []),
+        { id: `profile:${o.value}`, title: o.title, checked: o.value === profiles.value },
+      ]),
+    },
     { separator: true },
     { id: "settings", title: "Space Settings…", symbol: "gearshape" },
     { id: "delete", title: "Delete Space…", symbol: "trash", enabled: s.profileOrder.length > 1 },
@@ -111,6 +122,9 @@ export async function openSpaceMenu(windowId: string, id: string) {
   } else if (choice === "icon") void openIconPicker(windowId, { kind: "space", id });
   else if (choice?.startsWith("theme:")) update(id, { color: choice.slice("theme:".length) as ProfileColor, theme: null });
   else if (choice === "editTheme") openThemeEditor(windowId, id);
-  else if (choice === "settings") openSettings("spaces", id);
+  else if (choice?.startsWith("profile:") && choice !== `profile:${profiles.value}`) {
+    const target = choice.slice("profile:".length);
+    void changeSpaceProfile(id, target === "new" ? null : target, windowId);
+  } else if (choice === "settings") openSettings("spaces", id);
   else if (choice === "delete") void deleteSpace(id, windowId);
 }

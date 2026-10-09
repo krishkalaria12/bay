@@ -17,6 +17,7 @@ import {
 import { create } from "zustand";
 import { useBrowser } from "../store/browser";
 import { isIncognitoProfile } from "../store/model";
+import { ownsProfileData } from "../store/profiles";
 import { DEFAULT_PROFILE_ID } from "../store/constants";
 import type { Profile } from "../store/types";
 import {
@@ -254,7 +255,7 @@ function profileAdapters(profileId: string, retiring: boolean): Adapter[] {
   const id = doc.deviceId!;
   if (retiring) return [deviceTabsAdapter(profileId, id, deviceName, true)];
   const s = useBrowser.getState();
-  const ownsData = !s.profiles[profileId]?.dataId;
+  const ownsData = ownsProfileData(s, profileId);
   const t = doc.types;
   let passwords = passwordAdapters.get(profileId);
   if (!passwords) passwordAdapters.set(profileId, (passwords = passwordsAdapter(profileId, () => forcePasswords)));

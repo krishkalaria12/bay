@@ -77,7 +77,12 @@ export function bookmarkRoots(b: Bookmarks, profileId: string) {
 export function ensureRoots(b: Bookmarks, profileId: string): [Bookmarks, { bar: string; other: string }] {
   const existing = b.roots[profileId];
   if (existing) return [b, existing];
-  const roots = rootIdsFor(engineProfile(profileId));
+  return engineRoots(b, profileId, engineProfile(profileId));
+}
+
+/** The profile takes the engine profile's roots, made if they aren't there. */
+export function engineRoots(b: Bookmarks, profileId: string, engine: string): [Bookmarks, { bar: string; other: string }] {
+  const roots = rootIdsFor(engine);
   const nodes = { ...b.nodes };
   nodes[roots.bar] ??= { kind: "folder", id: roots.bar, parentId: null, title: "Bookmarks Bar", children: [], addedAt: 0 };
   nodes[roots.other] ??= { kind: "folder", id: roots.other, parentId: null, title: "Other Bookmarks", children: [], addedAt: 0 };

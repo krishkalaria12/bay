@@ -172,7 +172,8 @@ export function ContentCard() {
         .filter((t) => !!t)
         // Keep mount order stable; reordering native subviews while tabs move can shuffle them.
         .sort((a, b) => a!.createdAt - b!.createdAt)
-        .map((t) => `${t!.id}|${t!.profileId}`);
+        // A tab whose space changed profile is another view: its page is the other engine profile's.
+        .map((t) => `${t!.id}|${t!.profileId}|${engineProfile(t!.profileId)}`);
       shownMemo.current = { mounted, panes: framed, tabs: s.tabs, keys };
       return keys;
     }),
@@ -427,11 +428,11 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
   // This view goes while its tab keeps its page (lib/tabPages.ts): handed off before the native unmount (a layout
   // effect's cleanup runs in the commit). A tab that closed, went to sleep, changed profile or is going to one of the
   // app's own pages closes its page with the view.
-  const mountedProfile = useRef(profileId);
+  const mountedProfile = useRef(engineProfile(profileId));
   useLayoutEffect(
     () => () => {
       const t = tab();
-      if (wantsPage(t) && engineProfile(t.profileId) === engineProfile(mountedProfile.current) && !isQuitting()) handOff(tabId, engineProfile(t.profileId));
+      if (wantsPage(t) && engineProfile(t.profileId) === mountedProfile.current && !isQuitting()) handOff(tabId, mountedProfile.current);
     },
     [],
   );

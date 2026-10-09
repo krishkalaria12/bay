@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { bookmarkRoots, ensureRoots, removeBookmarkTree } from "./bookmarks";
-import { newId, setSharedDataIds, viewTabIds, without } from "./model";
+import { bookmarkRoots, engineRoots, ensureRoots, removeBookmarkTree } from "./bookmarks";
+import { navigationTo, newId, setSharedDataIds, viewTabIds, without } from "./model";
 import { SYMBOL_PREFIX } from "../lib/constants";
 import { DEFAULT_PROFILE_ID } from "./constants";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
@@ -15,6 +15,8 @@ export type ProfilesSlice = {
 
   createProfile(options: { name: string; color?: ProfileColor; icon?: string | null; shareWith?: string | null }): string;
   updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme">>): void;
+  /** The space takes another space's profile (`shareWith`'s), or a new one of its own (null). */
+  changeProfileData(id: string, shareWith: string | null): void;
   deleteProfile(id: string): void;
   reorderProfiles(ids: string[]): void;
   setDefaultProfile(id: string): void;
@@ -43,6 +45,16 @@ export function dataGroups(s: Pick<BrowserState, "profiles" | "profileOrder">): 
     groups.set(key, [...(groups.get(key) ?? []), id]);
   }
   return [...groups].map(([dataId, profileIds]) => ({ dataId, profileIds }));
+}
+
+/** The space that syncs its profile's data: the one the data is named after while it uses it, else the first using it. */
+export function ownsProfileData(s: Pick<BrowserState, "profiles" | "profileOrder">, id: string): boolean {
+  const p = s.profiles[id];
+  if (!p) return false;
+  const dataId = dataIdOf(p);
+  const named = s.profiles[dataId];
+  if (named && dataIdOf(named) === dataId) return dataId === id;
+  return s.profileOrder.find((other) => s.profiles[other] && dataIdOf(s.profiles[other]!) === dataId) === id;
 }
 
 export function sharingProfiles(s: Pick<BrowserState, "profiles" | "profileOrder">, id: string): string[] {
@@ -107,6 +119,57 @@ export const createProfilesSlice: StateCreator<BrowserState, [], [], ProfilesSli
 
     updateProfile(id, patch) {
       set((s) => (s.profiles[id] ? { profiles: { ...s.profiles, [id]: { ...s.profiles[id]!, ...patch } } } : {}));
+    },
+
+    changeProfileData(id, shareWith) {
+      const s = get();
+      const p = s.profiles[id];
+      const target = shareWith ? s.profiles[shareWith] : undefined;
+      if (!p || (shareWith && !target)) return;
+      const from = dataIdOf(p);
+      let dataId: string;
+      if (target) {
+        dataId = dataIdOf(target);
+        if (dataId === from) return;
+      } else {
+        if (!sharingProfiles(s, id).length) return;
+        // Its own id names its new profile, unless other spaces' profile has it (or that data is still going).
+        const free = !Object.values(s.profiles).some((o) => o.id !== id && dataIdOf(o) === id) && !s.orphanedProfileData.includes(engineIdOf({ ...p, dataId: id }));
+        dataId = free ? id : newId("d");
+      }
+      const { dataId: _, ...rest } = p;
+      const moved: Profile = dataId === id ? rest : { ...rest, dataId };
+      const profiles = { ...s.profiles, [id]: moved };
+      const left = engineIdOf(p);
+      const kept = Object.values(profiles).some((o) => dataIdOf(o) === from);
+      const orphanedProfileData = kept || s.orphanedProfileData.includes(left) ? s.orphanedProfileData : [...s.orphanedProfileData, left];
+
+      // Its bookmarks and history are its new profile's: another space's, or none until Chrome's are read.
+      const oldRoots = bookmarkRoots(s.bookmarks, id);
+      let bookmarks = oldRoots && !kept ? removeBookmarkTree(s.bookmarks, [oldRoots.bar, oldRoots.other]) : s.bookmarks;
+      bookmarks = target ? ensureRoots(bookmarks, target.id)[0] : bookmarks;
+      bookmarks = engineRoots(bookmarks, id, engineIdOf(moved))[0];
+      const shared = target ? s.history[target.id] : undefined;
+      const history = shared ? { ...s.history, [id]: shared } : without(s.history, [id]);
+      const ready = (map: Record<string, true>) => (target && map[target.id] ? { ...map, [id]: true as const } : without(map, [id]));
+
+      // Its pages are the old profile's: each reloads in the new one, as a tab moved to another profile does.
+      const tabs = { ...s.tabs };
+      for (const t of Object.values(s.tabs)) {
+        if (t.profileId !== id) continue;
+        const loaded = !!t.url && (!!t.navigation || !!t.adoptId);
+        const { adoptId: _a, wakeAdoptId: _w, ...tab } = t;
+        tabs[t.id] = { ...tab, navigation: loaded ? navigationTo(t.url) : null };
+      }
+      set({
+        profiles,
+        orphanedProfileData,
+        bookmarks,
+        history,
+        historyReady: ready(s.historyReady),
+        bookmarksReady: ready(s.bookmarksReady),
+        tabs,
+      });
     },
 
     deleteProfile(id) {

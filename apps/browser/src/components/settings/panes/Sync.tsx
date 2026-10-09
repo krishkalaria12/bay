@@ -5,6 +5,7 @@ import { Linking, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";
+import { ownsProfileData, sharingProfiles } from "../../../store/profiles";
 import {
   addRemoteProfile,
   chooseSyncFolder,
@@ -173,6 +174,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
   const remoteProfiles = useSync((s) => s.remoteProfiles);
   const profiles = useProfiles();
   const allProfiles = useBrowser((s) => s.profiles);
+  const order = useBrowser((s) => s.profileOrder);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000);
@@ -221,7 +223,9 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       <Group>
         {profiles.map((p) => {
           const link = links[p.id];
-          const owner = p.dataId ? allProfiles[p.dataId] : undefined;
+          const state = { profiles: allProfiles, profileOrder: order };
+          const ownerId = ownsProfileData(state, p.id) ? undefined : [p.id, ...sharingProfiles(state, p.id)].find((id) => ownsProfileData(state, id));
+          const owner = ownerId ? allProfiles[ownerId] : undefined;
           return (
             <Row
               key={p.id}

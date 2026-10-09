@@ -3,7 +3,7 @@ import { useLayoutEffect, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { createSpace, deleteSpace } from "../../../lib/actions";
+import { changeSpaceProfile, createSpace, deleteSpace } from "../../../lib/actions";
 import { hex, PROFILE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser, type BrowserState } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";
@@ -12,7 +12,7 @@ import { sharingProfiles } from "../../../store/profiles";
 import type { Profile, ProfileColor } from "../../../store/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../primitives";
-import { ColorStack } from "../../spaces/CreateSpace";
+import { ColorStack, profileChoices } from "../../spaces/CreateSpace";
 import { IconGrid } from "../../IconGrid";
 import { SpaceBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../spaces/icons";
 import { openThemeEditor } from "../../spaces/ThemeEditor";
@@ -28,6 +28,12 @@ function useSharedWith(profileId: string): string[] {
   const profiles = useBrowser((s) => s.profiles);
   const others = sharingProfiles({ profiles, profileOrder: order }, profileId);
   return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
+}
+
+function useProfileChoices(profileId: string) {
+  const profileOrder = useBrowser((s) => s.profileOrder);
+  const profiles = useBrowser((s) => s.profiles);
+  return profileChoices({ profiles, profileOrder }, profileId);
 }
 
 export function SpacesPane() {
@@ -245,6 +251,7 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
   const isDefault = useBrowser((s) => s.settings.defaultProfileId === profileId);
   const only = useBrowser((s) => s.profileOrder.length <= 1);
   const shared = useSharedWith(profileId);
+  const choices = useProfileChoices(profileId);
   const sharedNames = useBrowser(useShallow((s) => shared.map((id) => s.profiles[id]?.name ?? "")));
   const sharedColors = useBrowser(useShallow((s) => shared.map((id) => PROFILE_COLORS[s.profiles[id]?.color ?? "plum"]?.swatch ?? "#888888")));
   const stats = useBrowser((s) => `${plural((s.history[profileId] ?? []).length, "page")} in history · ${plural(bookmarkCount(s, profileId), "bookmark")}`);
@@ -324,6 +331,14 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
 
       <SectionHeader title="Profile" />
       <Group>
+        <Row title="Profile" description="Its logins, cookies, passwords, extensions, bookmarks and history. Changing it reloads the space's tabs.">
+          <PopUp
+            value={choices.value}
+            options={choices.options}
+            onChange={(v) => v !== choices.value && void changeSpaceProfile(profileId, v === "new" ? null : v)}
+            minWidth={180}
+          />
+        </Row>
         {sharing ? (
           <Row
             icon={<ColorStack colors={sharedColors} size={14} />}

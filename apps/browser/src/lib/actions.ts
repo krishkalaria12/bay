@@ -74,6 +74,32 @@ export async function deleteSpace(profileId: string, windowId?: string) {
   store().deleteProfile(profileId);
 }
 
+/** As Arc's Change Profile: the space uses `shareWith`'s profile, or a new one of its own (null). Its tabs reload. */
+export async function changeSpaceProfile(profileId: string, shareWith: string | null, windowId?: string) {
+  const s = store();
+  const profile = s.profiles[profileId];
+  const target = shareWith ? s.profiles[shareWith] : undefined;
+  if (!profile || (shareWith && !target)) return;
+  const sharing = sharingProfiles(s, profileId);
+  // Already so: the target's profile is its own, or it has a profile to itself.
+  const unchanged = target ? target.id === profileId || sharing.includes(target.id) : !sharing.length;
+  if (unchanged) return;
+  const names = target ? [target.id, ...sharingProfiles(s, target.id)].map((id) => s.profiles[id]!.name) : [];
+  const uses = target ? `the profile it shares with ${profileNames(names)}` : "a new profile";
+  const { confirmed } = await confirm({
+    title: `Change “${profile.name}”'s Profile?`,
+    message: sharing.length
+      ? `Its tabs will reload in ${uses}, with that profile's logins, cookies, extensions, bookmarks and history. Its current profile stays with ${profileNames(sharing.map((id) => s.profiles[id]!.name))}.`
+      : `Its tabs will reload in ${uses}, with that profile's logins, cookies, extensions, bookmarks and history. Its current profile and all its data (cookies, passwords, extensions, bookmarks and history) will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
+    confirmTitle: "Change Profile",
+    destructive: !sharing.length,
+    windowId,
+  });
+  if (!confirmed) return;
+  // A profile no space uses any more is queued for deletion (lib/profileData.ts).
+  store().changeProfileData(profileId, shareWith);
+}
+
 // Chrome won't remove the original profile's extensions without asking, so they're only turned off
 // (packages/nncore/ios/NNCoreProfileData.swift); say so.
 async function keptExtensionsNote(): Promise<string> {

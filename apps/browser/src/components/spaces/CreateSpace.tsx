@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { create } from "zustand";
 import { PROFILE_COLORS, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowser, type BrowserState } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { dataGroups, unusedProfileColor } from "../../store/profiles";
 import type { ProfileColor } from "../../store/types";
@@ -48,6 +48,23 @@ export function CreateSpaceHost() {
 export function profileNames(names: string[]): string {
   if (names.length <= 2) return names.join(" & ");
   return `${names.slice(0, 2).join(", ")}, & ${names.length - 2} more`;
+}
+
+type ProfileChoice = { value: string; title: string; separatorBefore?: boolean };
+
+/** The profiles a space can use: its own, each other one (named by the spaces using it), or a new one if it shares. */
+export function profileChoices(s: Pick<BrowserState, "profiles" | "profileOrder">, profileId: string): { value: string; options: ProfileChoice[] } {
+  const names = (ids: string[]) => profileNames(ids.map((id) => s.profiles[id]?.name ?? ""));
+  const groups = dataGroups(s);
+  const own = groups.find((g) => g.profileIds.includes(profileId));
+  const title = (ids: string[]) => {
+    if (!ids.includes(profileId)) return `Same as ${names(ids)}`;
+    const others = ids.filter((id) => id !== profileId);
+    return others.length ? `Shared with ${names(others)}` : "Its own profile";
+  };
+  const options = groups.map((g): ProfileChoice => ({ value: g.profileIds[0]!, title: title(g.profileIds) }));
+  if (own && own.profileIds.length > 1) options.push({ value: "new", title: "New Profile", separatorBefore: true });
+  return { value: own?.profileIds[0] ?? "new", options };
 }
 
 function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | null; preset: CreateSpacePreset; onDone: (id: string | null) => void }) {
