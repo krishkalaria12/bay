@@ -1,6 +1,6 @@
 import { displayUrl, fuzzyScore } from "@bay/core";
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
@@ -10,14 +10,11 @@ import { tabTitle } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { onEscapeKey } from "../../lib/escapeKey";
+import { SEARCH_TABS_MAX_ROWS, SEARCH_TABS_ROW, SEARCH_TABS_WIDTH } from "./constants";
 
 type Row =
   | { kind: "tab"; id: string; title: string; url: string; favicon: string | null; icon: string | null; where: string | null; current: boolean }
   | { kind: "closed"; id: string; title: string; url: string; favicon: string | null; icon: string | null; detail: string };
-
-const WIDTH = 560;
-const ROW = 36;
-const MAX_ROWS = 10;
 
 type Sources = Pick<BrowserState, "tabs" | "windows" | "windowOrder" | "closedTabs" | "closedGroups">;
 
@@ -93,13 +90,10 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
   const windowOrder = useBrowser((s) => s.windowOrder);
   const closedTabs = useBrowser((s) => s.closedTabs);
   const closedGroups = useBrowser((s) => s.closedGroups);
-  const sections = useMemo(
-    () => rankedSections(candidates({ tabs, windows, windowOrder, closedTabs, closedGroups }, windowId), query.trim()),
-    [tabs, windows, windowOrder, closedTabs, closedGroups, windowId, query],
-  );
-  const rows = useMemo(() => sections.flatMap((s) => s.rows), [sections]);
+  const sections = rankedSections(candidates({ tabs, windows, windowOrder, closedTabs, closedGroups }, windowId), query.trim());
+  const rows = sections.flatMap((s) => s.rows);
   // Each section's first row's place in `rows`, for the keyboard selection.
-  const starts = useMemo(() => sections.map((_, i) => sections.slice(0, i).reduce((n, s) => n + s.rows.length, 0)), [sections]);
+  const starts = sections.map((_, i) => sections.slice(0, i).reduce((n, s) => n + s.rows.length, 0));
   const close = () => setSidebarUi({ searchTabs: null });
   const choose = (row: Row | undefined) => {
     if (!row) return;
@@ -110,7 +104,7 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
   const move = (delta: number) => {
     const next = Math.max(0, Math.min(rows.length - 1, selected + delta));
     setSelected(next);
-    scroll.current?.scrollTo({ y: Math.max(0, (next - MAX_ROWS + 2) * ROW), animated: false });
+    scroll.current?.scrollTo({ y: Math.max(0, (next - SEARCH_TABS_MAX_ROWS + 2) * SEARCH_TABS_ROW), animated: false });
   };
 
   return (
@@ -125,7 +119,7 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
         shadowOpacity={theme.panelShadowOpacity}
         shadowRadius={24}
         shadowOffset={[0, 10]}
-        style={{ position: "absolute", top: 56, left: Math.max(12, (windowWidth - WIDTH) / 2), width: Math.min(WIDTH, windowWidth - 24), paddingBottom: 6 }}
+        style={{ position: "absolute", top: 56, left: Math.max(12, (windowWidth - SEARCH_TABS_WIDTH) / 2), width: Math.min(SEARCH_TABS_WIDTH, windowWidth - 24), paddingBottom: 6 }}
       >
         <View style={{ height: 50, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, gap: 10 }}>
           <Symbol name="magnifyingglass" size={15} weight="medium" color={theme.textPrimary} style={{ width: 18, height: 18 }} />
@@ -154,7 +148,7 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
           />
         </View>
         <View style={{ height: 0.5, backgroundColor: theme.divider }} />
-        <ScrollView ref={scroll} style={{ maxHeight: ROW * MAX_ROWS + 60 }} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scroll} style={{ maxHeight: SEARCH_TABS_ROW * SEARCH_TABS_MAX_ROWS + 60 }} showsVerticalScrollIndicator={false}>
           {rows.length === 0 ? (
             <Text style={{ paddingHorizontal: 16, paddingVertical: 14, fontSize: 13, color: theme.textTertiary }}>No tabs match “{query.trim()}”</Text>
           ) : null}
@@ -182,7 +176,7 @@ function ResultRow({ row, selected, onHover, onPress }: { row: Row; selected: bo
     <Pressable onPress={onPress}>
       <View
         onMouseEnter={onHover}
-        style={{ height: ROW, borderRadius: 10, flexDirection: "row", alignItems: "center", paddingHorizontal: 10, gap: 10, backgroundColor: selected ? theme.rowSelected : undefined }}
+        style={{ height: SEARCH_TABS_ROW, borderRadius: 10, flexDirection: "row", alignItems: "center", paddingHorizontal: 10, gap: 10, backgroundColor: selected ? theme.rowSelected : undefined }}
       >
         <TabIcon url={row.url} favicon={row.favicon} icon={row.icon} />
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 }}>

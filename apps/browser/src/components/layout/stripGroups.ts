@@ -1,23 +1,16 @@
 import type { BrowserState } from "../../store/browser";
 import { viewTabIds } from "../../store/model";
 import { groupIndex, splitIndex, stableList } from "../../store/structure";
+import { STRIP_GROUP_MARGIN_LEFT, STRIP_GROUP_MARGIN_RIGHT, STRIP_MEMBERS_INSET, STRIP_TAIL_COLLAPSED, STRIP_TAIL_EXPANDED } from "./constants";
 import { springParams } from "./swipeMotion";
 
 // Tab groups in the top strip, measured from a 2x recording of Dia 1.50.1 (dia-spec.md › Top tab strip › Groups).
 // A group is one container: the chip (glyph + name), then its members. Collapsed, only the window's active tab
 // stays out when it's a member; expanded, every member at full width, then a divider and Close Group.
 
-// The container sits 8 from the pinned dock and from the next tab.
-export const GROUP_MARGIN_LEFT = 3.5;
-export const GROUP_MARGIN_RIGHT = 4;
-// Chip → first member, and the room after the last member: 4.5 collapsed, divider + close button expanded.
-export const MEMBERS_INSET = 6.5;
-export const TAIL_COLLAPSED = 4.5;
-export const TAIL_EXPANDED = 30.25;
 // Both ways, the members and the container move on one spring: response 0.30 s, damping 0.82 (1 % overshoot,
 // settled in ~0.3 s). A tab tucked back into the group fades out in ~0.12 s.
 export const GROUP_SPRING = springParams(0.3, 0.82);
-export const TUCK_FADE_MS = 120;
 
 export type GroupLayout = { offsets: number[]; width: number };
 
@@ -33,8 +26,8 @@ export function groupLayout(chip: number, widths: number[], gap: number, expande
     x += w + gap;
   }
   const members = widths.length ? x - gap : 0;
-  if (expanded && widths.length) return { offsets, width: chip + MEMBERS_INSET + members + TAIL_EXPANDED };
-  if (shown >= 0 && widths[shown] !== undefined) return { offsets, width: chip + MEMBERS_INSET + widths[shown]! + TAIL_COLLAPSED };
+  if (expanded && widths.length) return { offsets, width: chip + STRIP_MEMBERS_INSET + members + STRIP_TAIL_EXPANDED };
+  if (shown >= 0 && widths[shown] !== undefined) return { offsets, width: chip + STRIP_MEMBERS_INSET + widths[shown]! + STRIP_TAIL_COLLAPSED };
   return { offsets, width: chip };
 }
 
@@ -63,8 +56,8 @@ export function stripTabWidth(o: {
 }): number {
   let room = o.pageWidth - o.dockWidth - o.plus - o.gap;
   for (const g of o.groups) {
-    const parts = g.expanded ? MEMBERS_INSET + TAIL_EXPANDED : g.shown ? MEMBERS_INSET + TAIL_COLLAPSED : 0;
-    room -= GROUP_MARGIN_LEFT + GROUP_MARGIN_RIGHT + g.chip + parts + o.gap;
+    const parts = g.expanded ? STRIP_MEMBERS_INSET + STRIP_TAIL_EXPANDED : g.shown ? STRIP_MEMBERS_INSET + STRIP_TAIL_COLLAPSED : 0;
+    room -= STRIP_GROUP_MARGIN_LEFT + STRIP_GROUP_MARGIN_RIGHT + g.chip + parts + o.gap;
   }
   const width = o.tabUnits ? room / o.tabUnits - o.gap : o.max;
   // Half points keep every tab edge on the 2x pixel grid, so the attached tab shows no seam against the card.

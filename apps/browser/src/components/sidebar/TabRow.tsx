@@ -3,7 +3,8 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
 import Animated from "react-native-reanimated";
 import { closeTab, toggleMute } from "../../lib/actions";
-import { hex, layout, useTheme } from "../../lib/theme";
+import { hex, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { useIsActiveTab, usePageProfileId, useTab, useWindowId } from "../../store/hooks";
@@ -19,7 +20,8 @@ import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarTokens } from "./tokens";
 import { isEscapeKey } from "../../lib/escapeKey";
-import { DEVELOPER_YELLOW, isDeveloperTab } from "../developer/sites";
+import { isDeveloperTab } from "../developer/sites";
+import { DEVELOPER_YELLOW } from "../developer/constants";
 
 export const clickMods = (e: GestureResponderEvent) => {
   const n = e.nativeEvent as unknown as { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };

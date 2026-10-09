@@ -1,6 +1,6 @@
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, showMenu, Symbol, type MenuItem } from "@bay/shell";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
@@ -17,8 +17,8 @@ import { Button, useFormColors } from "../settings/controls";
 import { openImport } from "../settings/windows";
 import { DropTargets } from "./dropTargets";
 import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
-
-const ROW = 36;
+import { BOOKMARK_ROW } from "./constants";
+import { useResetOn } from "../../lib/useResetOn";
 
 type Target = { kind: "folder"; id: string } | { kind: "row"; id: string; index: number; folder: boolean };
 type Drop = { into: string } | { parentId: string; index: number };
@@ -40,7 +40,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
   useEffect(() => {
     if (!folderExists && roots) setFolderId(roots.bar);
   }, [folderExists, roots]);
-  useEffect(() => setSelected([]), [folderId, query]);
+  useResetOn(`${folderId}|${query}`, () => setSelected([]));
 
   const folderTitle = useBrowser((s) => (folderId ? (s.bookmarks.nodes[folderId]?.title ?? "") : ""));
   const listKey = useBrowser((s) => {
@@ -54,7 +54,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
     const folder = folderId ? s.bookmarks.nodes[folderId] : undefined;
     return folder?.kind === "folder" ? folder.children.join(",") : "";
   });
-  const ids = useMemo(() => (listKey ? listKey.split(",") : []), [listKey]);
+  const ids = listKey ? listKey.split(",") : [];
   const searching = !!query.trim();
 
   const select = (id: string, e: { metaKey?: boolean; shiftKey?: boolean }) => {
@@ -291,30 +291,29 @@ function BookmarkRow({
   const dragStart = useEffectEvent(onDragStart);
   const dragMove = useEffectEvent(onDragMove);
   const dragEnd = useEffectEvent(onDragEnd);
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4 || Math.abs(g.dx) > 8,
-        onPanResponderGrant: () => {
-          setDragging(true);
-          dragStart();
-        },
-        onPanResponderMove: (_, g) => {
-          dy.set(g.dy);
-          dragMove(g.moveX, g.moveY);
-        },
-        onPanResponderRelease: (_, g) => {
-          dy.set(0);
-          setDragging(false);
-          dragEnd(g.moveX, g.moveY);
-        },
-        onPanResponderTerminate: () => {
-          dy.set(0);
-          setDragging(false);
-          dragEnd(-1, -1);
-        },
-      }),
-    [dy, dragStart, dragMove, dragEnd],
+  // One responder for the row's life: a new one mid-gesture would drop the gesture.
+  const [responder] = useState(() =>
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4 || Math.abs(g.dx) > 8,
+      onPanResponderGrant: () => {
+        setDragging(true);
+        dragStart();
+      },
+      onPanResponderMove: (_, g) => {
+        dy.set(g.dy);
+        dragMove(g.moveX, g.moveY);
+      },
+      onPanResponderRelease: (_, g) => {
+        dy.set(0);
+        setDragging(false);
+        dragEnd(g.moveX, g.moveY);
+      },
+      onPanResponderTerminate: () => {
+        dy.set(0);
+        setDragging(false);
+        dragEnd(-1, -1);
+      },
+    }),
   );
   if (!node) return null;
 
@@ -366,7 +365,7 @@ function BookmarkRow({
             <View
               onDoubleClick={() => (node.kind === "folder" ? onOpenFolder() : void open("current"))}
               style={{
-                height: ROW,
+                height: BOOKMARK_ROW,
                 borderRadius: 7,
                 flexDirection: "row",
                 alignItems: "center",

@@ -10,10 +10,9 @@ import { Favicon, IconButton, useHover } from "../primitives";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useArtwork } from "./artwork";
 import { seekTo, SeekBar, skip } from "./MiniPlayer";
-import { hasTrackControls, hostOf, isPlaying, isTabShown, mediaCommand, playerTabFor, SKIP_SECONDS, useMedia, useSession, useTicker } from "./state";
+import { hasTrackControls, hostOf, isPlaying, isTabShown, mediaCommand, playerTabFor, useMedia, useSession, useTicker } from "./state";
+import { SIDEBAR_PLAYER_HEIGHT, SKIP_SECONDS } from "./constants";
 import { useMediaTokens } from "./tokens";
-
-export const SIDEBAR_PLAYER_HEIGHT = 74 + 8;
 
 const NO_IDS: string[] = [];
 

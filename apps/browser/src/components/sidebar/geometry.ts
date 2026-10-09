@@ -1,12 +1,11 @@
 // Where rows sit in the sidebar's list, from the store alone: rows are fixed-height, so a row's place is known before
 // it mounts or lays out. GroupBlock and Fold draw groups by these numbers; revealing a tab scrolls by them.
-import { layout } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import type { BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
+import { GROUP_BORDER, GROUP_PAD } from "./constants";
 import { groupEntries, sidebarEntries } from "./entries";
 
-export const GROUP_PAD = 2;
-export const GROUP_BORDER = 0.5;
 const ROW = layout.rowHeight;
 const GAP = layout.rowGap;
 

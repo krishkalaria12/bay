@@ -7,7 +7,7 @@ import {
   type DeviceChooser as Chooser,
 } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { create } from "zustand";
 import { useTheme } from "../../lib/theme";
@@ -15,6 +15,7 @@ import { useBrowser } from "../../store/browser";
 import { Popover, PromptButton } from "../layout/controls";
 import { tabForBrowser } from "../layout/pageState";
 import { useHover } from "../primitives";
+import { useResetOn } from "../../lib/useResetOn";
 
 const useChoosers = create<{ byTab: Record<string, Chooser> }>()(() => ({ byTab: {} }));
 if (__DEV__) (globalThis as { nnDeviceChoosers?: unknown }).nnDeviceChoosers = { useChoosers, selectDevice, cancelDeviceChooser };
@@ -92,7 +93,7 @@ export function DeviceChooser({ tabId, left, top }: { tabId: string; left: numbe
   const theme = useTheme();
   const chooser = useChoosers((s) => s.byTab[tabId]);
   const [selected, setSelected] = useState<number | null>(null);
-  useEffect(() => setSelected(null), [chooser?.id]);
+  useResetOn(chooser?.id, () => setSelected(null));
   if (!chooser) return null;
   const scanning = chooser.bothButtonsEnabled;
   const blocked = chooser.adapterOff || chooser.unauthorized;

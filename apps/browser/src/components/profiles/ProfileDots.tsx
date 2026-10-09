@@ -6,22 +6,14 @@ import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/profilePager";
 import { useHover } from "../primitives";
-
-// Dia: 41pt height; 12pt cell, 6pt dot, 28pt band; opacity 0.85/0.4/0.2.
-export const PROFILE_DOTS_HEIGHT = 41;
-const CELL = 12;
-const DOT = 6;
-const BAND = 28;
-const SELECTED = 0.85;
-const HOVERED = 0.4;
-const IDLE = 0.2;
+import { DOT_HOVERED_OPACITY, DOT_IDLE_OPACITY, DOT_SELECTED_OPACITY, DOTS_BAND, DOTS_CELL, DOTS_DOT, PROFILE_DOTS_HEIGHT } from "./constants";
 
 export function ProfileDots({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.profileOrder));
   const { pages } = usePagerPages(windowId);
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT, alignItems: "center" }}>
-      <View style={{ marginTop: (PROFILE_DOTS_HEIGHT - 3 - BAND) / 2, height: BAND, flexDirection: "row" }}>
+      <View style={{ marginTop: (PROFILE_DOTS_HEIGHT - 3 - DOTS_BAND) / 2, height: DOTS_BAND, flexDirection: "row" }}>
         {ids.map((id) => (
           <Dot key={id} id={id} windowId={windowId} page={pages.find((p) => p.id === id)} />
         ))}
@@ -34,13 +26,13 @@ function Dot({ id, windowId, page }: { id: string; windowId: string; page: Pager
   const theme = useTheme();
   const name = useBrowser((s) => s.profiles[id]?.name ?? "");
   const { hovered, hoverProps } = useHover();
-  const rest = hovered ? HOVERED : IDLE;
-  const opacity = usePagerOpacity(windowId, page?.slot, rest, SELECTED);
+  const rest = hovered ? DOT_HOVERED_OPACITY : DOT_IDLE_OPACITY;
+  const opacity = usePagerOpacity(windowId, page?.slot, rest, DOT_SELECTED_OPACITY);
   return (
     <View {...hoverProps} tooltip={name}>
       <Pressable accessibilityRole="button" accessibilityLabel={name} onPress={() => switchProfile(windowId, id, true)}>
-        <View style={{ width: CELL, height: BAND, alignItems: "center", justifyContent: "center" }}>
-          <Animated.View style={[{ width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: theme.dark ? "#FFFFFF" : "#000000" }, opacity]} />
+        <View style={{ width: DOTS_CELL, height: DOTS_BAND, alignItems: "center", justifyContent: "center" }}>
+          <Animated.View style={[{ width: DOTS_DOT, height: DOTS_DOT, borderRadius: DOTS_DOT / 2, backgroundColor: theme.dark ? "#FFFFFF" : "#000000" }, opacity]} />
         </View>
       </Pressable>
     </View>

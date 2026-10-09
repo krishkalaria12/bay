@@ -1,8 +1,9 @@
 import { ContextMenuArea, Symbol, WindowDragRegion } from "@bay/shell";
-import { memo, useState } from "react";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout, MONO_FONT } from "../../lib/constants";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { useTabLive } from "../../store/hooks";
@@ -20,11 +21,8 @@ import { HistoryButton, ReloadButton, TabProgressBar } from "../Toolbar";
 import { copyScreenshot } from "./screenshot";
 import { toggleInspecting, useIsInspecting } from "./devMode";
 import { isLocalDevSite } from "./sites";
-
-/** The bar over a page in Developer Mode, sidebar address or not: its own band on the page's top. */
-export const DEV_BAR_HEIGHT = 36;
-const MONO = "Menlo";
-const STRIPE_GAP = 7;
+import { DEV_BAR_HEIGHT, STRIPE_GAP } from "./constants";
+import { TOOLBAR_BUTTON_MID } from "../layout/constants";
 
 /**
  * A page in Developer Mode's bar, as yab has it: its whole address on a hatched band, with the inspector, DevTools, its
@@ -60,7 +58,7 @@ export function DevBar({
   };
   const height = navigation ? layout.toolbarHeight : DEV_BAR_HEIGHT;
   if (!tab) return <View style={{ height }} />;
-  const center = navigation ? 21.2 : DEV_BAR_HEIGHT / 2;
+  const center = navigation ? TOOLBAR_BUTTON_MID : DEV_BAR_HEIGHT / 2;
   const at = (x: number | null) => ({ position: "absolute" as const, top: center - layout.toolbarButton / 2, left: (x ?? 0) - layout.toolbarButton / 2 });
   const button = (icon: string, tooltip: string, onPress: () => void, active = false) => (
     <ToolbarButton
@@ -134,7 +132,7 @@ function Address({ url, tabId, windowId, onFocus }: { url: string; tabId: string
           style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8, borderRadius: 7, backgroundColor: hovered ? theme.toolbarHover : undefined }}
         >
           <Symbol name={secure ? "lock" : "lock.open"} size={11} color={theme.textSecondary} style={{ width: 14, height: 16 }} />
-          <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, fontFamily: MONO, color: theme.textPrimary }}>
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, fontFamily: MONO_FONT, color: theme.textPrimary }}>
             <Text style={{ color: theme.textSecondary }}>{scheme}</Text>
             {url.slice(scheme.length)}
           </Text>
@@ -145,7 +143,7 @@ function Address({ url, tabId, windowId, onFocus }: { url: string; tabId: string
 }
 
 // Diagonal hairlines across the band, as a workbench's tape: thin views, turned, every few points.
-const Hatch = memo(function Hatch({ width, height, color }: { width: number; height: number; color: string }) {
+function Hatch({ width, height, color }: { width: number; height: number; color: string }) {
   if (!width) return null;
   const length = height * Math.SQRT2 + 2;
   const count = Math.ceil((width + height) / STRIPE_GAP);
@@ -167,4 +165,4 @@ const Hatch = memo(function Hatch({ width, height, color }: { width: number; hei
       ))}
     </View>
   );
-});
+}

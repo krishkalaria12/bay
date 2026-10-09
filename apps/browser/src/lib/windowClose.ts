@@ -1,8 +1,7 @@
 import { confirm, onWindowEvent } from "@bay/shell";
 import { useBrowser } from "../store/browser";
 import { inPinnedContainer, plural, profileFor } from "../store/model";
-
-const MIN_TABS = 2;
+import { CLOSE_WARNING_MIN_TABS } from "./constants";
 
 export function startWindowCloseGuard() {
   const pending = new Set<string>();
@@ -18,7 +17,7 @@ async function requestClose(windowId: string) {
   const w = s.windows[windowId];
   if (!w) return;
   const count = closingTabs(windowId).length;
-  if (s.settings.warnBeforeClosingWindow && count >= MIN_TABS) {
+  if (s.settings.warnBeforeClosingWindow && count >= CLOSE_WARNING_MIN_TABS) {
     const { confirmed, suppressed } = await confirm({ ...closeWindowDialog(windowId), suppression: "Don’t ask me again", windowId });
     if (suppressed) useBrowser.getState().updateSettings({ warnBeforeClosingWindow: false });
     if (!confirmed) return;

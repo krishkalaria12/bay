@@ -3,6 +3,7 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { engineProfile, isIncognitoProfile } from "./model";
 import type { HistoryEntry } from "./types";
+import { MAX_HISTORY } from "./constants";
 
 // History is Chrome's (HistoryService): Chrome records every visit itself and keeps it. `history` is the app's
 // in-memory view of it, one entry per URL, newest first, filled and kept current by lib/history.ts; nothing here
@@ -19,9 +20,6 @@ export type HistorySlice = {
   clearHistory(profileId: string, since?: number): void;
   importHistory(profileId: string, entries: Omit<HistoryEntry, "favicon">[]): number;
 };
-
-export const MAX_HISTORY = 5000;
-export const MAX_VISIT_TIMES = 50;
 
 export function withoutVisitsSince(entry: HistoryEntry, since: number): HistoryEntry | null {
   if (entry.lastVisit < since) return entry;

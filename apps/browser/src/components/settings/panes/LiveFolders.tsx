@@ -13,6 +13,7 @@ import { useBrowser } from "../../../store/browser";
 import { Favicon } from "../../primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { MONO_FONT } from "../../../lib/constants";
 
 const DESCRIPTIONS: Record<LiveSourceId, string> = {
   github: "Your open pull requests and the ones waiting for your review, with checks and conflicts.",
@@ -192,7 +193,7 @@ function GithubConnect({ busy, run }: ConnectProps) {
     return (
       <View>
         <Help>Enter this code on GitHub (it's on your clipboard), then approve Bay. This sheet closes when you're signed in.</Help>
-        <Text selectable style={{ fontSize: 26, fontWeight: "600", letterSpacing: 3, fontFamily: "Menlo", color: theme.textPrimary, textAlign: "center", marginVertical: 8 }}>
+        <Text selectable style={{ fontSize: 26, fontWeight: "600", letterSpacing: 3, fontFamily: MONO_FONT, color: theme.textPrimary, textAlign: "center", marginVertical: 8 }}>
           {flow.userCode}
         </Text>
         <Actions>

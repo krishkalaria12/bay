@@ -17,7 +17,7 @@ import {
 import { create } from "zustand";
 import { useBrowser } from "../store/browser";
 import { isIncognitoProfile } from "../store/model";
-import { DEFAULT_PROFILE_ID } from "../store/settings";
+import { DEFAULT_PROFILE_ID } from "../store/constants";
 import type { Profile } from "../store/types";
 import {
   bookmarksAdapter,
@@ -33,6 +33,7 @@ import {
   type DeviceTabs,
   type ProfileRecord,
 } from "./adapters";
+import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_CYCLE_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
 
 export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "settings";
 
@@ -65,13 +66,6 @@ type SyncDoc = {
   joining: boolean;
   seqs?: Record<string, number>;
 };
-
-const DOC = "sync.json";
-const STATE = "sync-state.nns";
-const JOURNAL = "sync-journal.nns";
-const APP_SCOPE = "app";
-const CYCLE_MS = 15_000;
-const AFTER_EDIT_MS = 3_000;
 
 const defaultTypes = (): Record<DataType, boolean> => ({ bookmarks: true, history: true, tabs: true, pinned: true, passwords: true, settings: true });
 
@@ -133,7 +127,7 @@ const passwordAdapters = new Map<string, Adapter>();
 
 function load() {
   try {
-    const json = readDocument(DOC);
+    const json = readDocument(SYNC_DOC);
     if (json) doc = { ...emptyDoc(), ...(JSON.parse(json) as SyncDoc), scopes: {} };
     savedJson = json ?? "";
   } catch (error) {
@@ -157,8 +151,8 @@ async function openSealed<T>(name: string, fallback: T): Promise<T> {
 }
 
 async function loadState() {
-  const scopes = await openSealed<SyncDoc["scopes"]>(STATE, {});
-  journal = (await openSealed<{ journal?: Journal }>(JOURNAL, {})).journal ?? {};
+  const scopes = await openSealed<SyncDoc["scopes"]>(SYNC_STATE_FILE, {});
+  journal = (await openSealed<{ journal?: Journal }>(SYNC_JOURNAL_FILE, {})).journal ?? {};
   journalOnDisk = Object.keys(journal).length > 0;
   const clock = new Clock(doc.deviceId ?? "", doc.clock);
   for (const scope of new Set([...Object.keys(doc.seqs ?? {}), ...Object.keys(journal)])) {
@@ -175,7 +169,7 @@ const persistJournal = (scope: string) => async (batches: LogFile[]) => {
   const sealed = await SyncNative!.sealLocal(JSON.stringify({ journal }));
   // The journal must be on disk before the batches are published: after a crash, it's how this device knows
   // which sequence numbers it already used.
-  await saveDocument(JOURNAL, sealed);
+  await saveDocument(SYNC_JOURNAL_FILE, sealed);
   journalOnDisk = true;
 };
 
@@ -191,7 +185,7 @@ function pruneJournal(saved: Record<string, number>) {
 function clearJournal() {
   journal = {};
   journalOnDisk = false;
-  writeDocument(JOURNAL, "");
+  writeDocument(SYNC_JOURNAL_FILE, "");
 }
 
 let savedState = "";
@@ -202,13 +196,13 @@ function save() {
   const json = JSON.stringify({ ...meta, seqs: Object.fromEntries(Object.entries(scopes).map(([k, s]) => [k, writtenSeq(s)])) });
   if (json !== savedJson) {
     savedJson = json;
-    writeDocument(DOC, json);
+    writeDocument(SYNC_DOC, json);
   }
   const state = doc.enabled ? JSON.stringify(scopes) : "";
   if (state === savedState || sealing) return;
   if (!state) {
     savedState = "";
-    writeDocument(STATE, "");
+    writeDocument(SYNC_STATE_FILE, "");
     return;
   }
   const seqs = Object.fromEntries(Object.entries(scopes).map(([k, s]) => [k, s.seq]));
@@ -217,7 +211,7 @@ function save() {
       const sealed = await SyncNative?.sealLocal(state);
       if (sealed) {
         // Only once the state is on disk may the journal entries it covers go.
-        await saveDocument(STATE, sealed);
+        await saveDocument(SYNC_STATE_FILE, sealed);
         savedState = state;
         pruneJournal(seqs);
       }
@@ -275,7 +269,7 @@ function profileAdapters(profileId: string, retiring: boolean): Adapter[] {
 
 // MARK: The cycle
 
-export function scheduleSync(delay = AFTER_EDIT_MS) {
+export function scheduleSync(delay = SYNC_AFTER_EDIT_MS) {
   if (!doc.enabled) return;
   clearTimeout(timer);
   timer = setTimeout(() => void runCycle(), delay);
@@ -357,7 +351,7 @@ async function runCycle({ retiring = false } = {}) {
         again = false;
         scheduleSync(0);
       } else {
-        scheduleSync(CYCLE_MS);
+        scheduleSync(SYNC_CYCLE_MS);
       }
     }
   }

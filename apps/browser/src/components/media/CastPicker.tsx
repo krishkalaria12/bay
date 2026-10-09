@@ -1,13 +1,13 @@
 import { CastMode, preferredCastMode, startCasting, stopCasting, type CastSink } from "@bay/nncore";
 import { openExternalURL, showMenu, Symbol } from "@bay/shell";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Popover, PromptButton } from "../layout/controls";
 import { useHover } from "../primitives";
 import { closeCastPicker, useCast } from "./cast";
-
-const WIDTH = 340;
+import { CAST_PICKER_WIDTH } from "./constants";
+import { useResetOn } from "../../lib/useResetOn";
 
 const SINK_ICON: Record<number, string> = { 0: "tv", 1: "hifispeaker.2", 2: "hifispeaker", 6: "display", 7: "tv" };
 
@@ -15,12 +15,12 @@ export function CastPicker({ tabId, paneWidth }: { tabId: string; paneWidth: num
   const theme = useTheme();
   const dialog = useCast((c) => c.dialogs[tabId]);
   const [screen, setScreen] = useState(false);
-  useEffect(() => setScreen(false), [dialog?.id]);
+  useResetOn(dialog?.id, () => setScreen(false));
   if (!dialog) return null;
   const close = () => closeCastPicker(tabId);
   const available = dialog.sinks.filter((s) => s.state !== "unavailable");
   const canScreen = dialog.sinks.some((s) => s.modes & CastMode.screen);
-  const width = Math.min(WIDTH, paneWidth - 24);
+  const width = Math.min(CAST_PICKER_WIDTH, paneWidth - 24);
   const cast = (sink: CastSink) => {
     const mode = screen && sink.modes & CastMode.screen ? CastMode.screen : preferredCastMode(sink.modes & ~CastMode.screen) || preferredCastMode(sink.modes);
     if (mode) void startCasting(dialog.id, sink.id, mode);

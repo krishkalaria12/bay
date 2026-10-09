@@ -11,8 +11,7 @@ import { PromptButton } from "../layout/controls";
 import { usePages } from "../layout/pageState";
 import { useMedia, type TabShare } from "./state";
 import { CAPTURE_RED } from "./tokens";
-
-export const SHARE_BAR_HEIGHT = 38;
+import { SHARE_BAR_HEIGHT, SHARE_END_MS } from "./constants";
 
 const hostOf = (origin: string) => {
   try {
@@ -49,10 +48,6 @@ function useShareFor(tabId: string): [string, TabShare] | null {
 export function noteTabShare(capturerTabId: string, capturedTabId: string, origin: string) {
   useMedia.setState((m) => ({ tabShares: { ...m.tabShares, [capturerTabId]: { capturedTabId, origin, dismissed: {} } } }));
 }
-
-// A share ends when its capture does. "Share this tab instead" stops the old source before it starts the new one, so the
-// capture goes off for a moment: a share is forgotten only once it stays off.
-const SHARE_END_MS = 1500;
 
 export function startTabShareCleanup() {
   return usePages.subscribe((p, prev) => {

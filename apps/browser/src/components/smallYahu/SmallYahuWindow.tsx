@@ -17,16 +17,10 @@ import { showUrlBarMenu } from "../omnibox/paste";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { copyPageUrl } from "../site/selection";
 import { openInMainWindow } from "./actions";
+import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_FIELD_HEIGHT, SMALL_FIELD_LEFT, SMALL_LIGHTS_CENTER } from "./constants";
 
 // Arc's Little Arc as a Bay window: a thin bar in the profile's colour (window buttons, the page's favicon, host
 // and title, Copy Link, Open in Bay) over one page card. Dia's card styling, the top strip's 6 pt inset.
-export const SMALL_BAR_HEIGHT = 38;
-const MID = SMALL_BAR_HEIGHT / 2;
-const INSET = 6;
-const LIGHTS_CENTER: [number, number] = [20, MID];
-const FIELD_LEFT = 84;
-const FIELD_HEIGHT = 28;
-const BUTTON = 28;
 
 export function SmallYahuWindow() {
   const theme = useTheme();
@@ -34,7 +28,7 @@ export function SmallYahuWindow() {
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
-      <View style={{ flex: 1, flexDirection: "row", paddingTop: SMALL_BAR_HEIGHT, paddingLeft: INSET, paddingRight: INSET, paddingBottom: INSET }}>
+      <View style={{ flex: 1, flexDirection: "row", paddingTop: SMALL_BAR_HEIGHT, paddingLeft: SMALL_BAR_INSET, paddingRight: SMALL_BAR_INSET, paddingBottom: SMALL_BAR_INSET }}>
         <ContentCard />
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
@@ -53,7 +47,7 @@ function SmallYahuBar() {
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
-    void setTrafficLightsCenter(windowId, LIGHTS_CENTER);
+    void setTrafficLightsCenter(windowId, SMALL_LIGHTS_CENTER);
   }, [windowId]);
   useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
@@ -68,12 +62,12 @@ function SmallYahuBar() {
   return (
     <View style={{ height: SMALL_BAR_HEIGHT }}>
       <WindowDragRegion style={StyleSheet.absoluteFill} />
-      <View style={{ position: "absolute", left: FIELD_LEFT, right: INSET + 2 * BUTTON + 8, top: MID - FIELD_HEIGHT / 2, height: FIELD_HEIGHT }}>
+      <View style={{ position: "absolute", left: SMALL_FIELD_LEFT, right: SMALL_BAR_INSET + 2 * SMALL_BUTTON + 8, top: SMALL_BAR_MID - SMALL_FIELD_HEIGHT / 2, height: SMALL_FIELD_HEIGHT }}>
         {tab ? <PageField tab={tab} windowId={windowId} hidden={panelOpen} /> : null}
       </View>
-      <View style={{ position: "absolute", right: INSET, top: MID - BUTTON / 2, flexDirection: "row", gap: 2 }}>
-        <IconButton icon={copied ? "checkmark" : "link"} size={14} box={BUTTON} radius={7} disabled={!tab?.url} tooltip="Copy Link (⇧⌘C)" onPress={copy} />
-        <IconButton icon="arrow.up.left.and.arrow.down.right" size={13} box={BUTTON} radius={7} tooltip="Open in Bay (⌘O)" onPress={() => openInMainWindow(windowId)} />
+      <View style={{ position: "absolute", right: SMALL_BAR_INSET, top: SMALL_BAR_MID - SMALL_BUTTON / 2, flexDirection: "row", gap: 2 }}>
+        <IconButton icon={copied ? "checkmark" : "link"} size={14} box={SMALL_BUTTON} radius={7} disabled={!tab?.url} tooltip="Copy Link (⇧⌘C)" onPress={copy} />
+        <IconButton icon="arrow.up.left.and.arrow.down.right" size={13} box={SMALL_BUTTON} radius={7} tooltip="Open in Bay (⌘O)" onPress={() => openInMainWindow(windowId)} />
       </View>
     </View>
   );

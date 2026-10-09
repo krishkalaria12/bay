@@ -1,8 +1,7 @@
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { withAlpha } from "../sidebar/tokens";
@@ -14,6 +13,7 @@ import { hideToast, useToasts } from "./splitActions";
 import { useWindowId } from "../../store/hooks";
 import { zoneHit, zoneRect, type ZoneStage } from "./splitDrop";
 import { setDropTarget, setOnPage, setTargetResolver, useTabDrag } from "./tabDrag";
+import { SPLIT_TOAST_SPRING, ZONE_SLIDE_MS, ZONE_SPRING } from "./constants";
 
 export function SplitDividers({ split, dividers, width, height }: { split: SplitView; dividers: Divider[]; width: number; height: number }) {
   return (
@@ -46,16 +46,15 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
     }
   });
 
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => grant(),
-        onPanResponderMove: (_, g) => move(g.dx, g.dy),
-        onPanResponderRelease: () => setDragging(false),
-        onPanResponderTerminate: () => setDragging(false),
-      }),
-    [grant, move],
+  // One responder for the handle's life: a new one mid-gesture would drop the gesture.
+  const [responder] = useState(() =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => grant(),
+      onPanResponderMove: (_, g) => move(g.dx, g.dy),
+      onPanResponderRelease: () => setDragging(false),
+      onPanResponderTerminate: () => setDragging(false),
+    }),
   );
 
   const { rect, vertical } = divider;
@@ -176,12 +175,6 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   );
 }
 
-const ZONE_SLIDE_MS = 110;
-// Dia's targets settle in about 0.12 s with no overshoot: a 0.2 s response, 0.9 damping.
-const ZONE_SPRING = { stiffness: 987, damping: 56.5, mass: 1 } as const;
-// The toast pops up on Animated's old spring (speed 18, bounciness 6).
-const TOAST_SPRING = bouncySpring(18, 6);
-
 function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect; side: "left" | "right"; shown: boolean; stage: ZoneStage; pointerX: number; onHidden(): void }) {
   const theme = useTheme();
   const rect = zoneRect(pane, side, stage, pointerX);
@@ -261,8 +254,7 @@ function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect
   );
 }
 
-// Memoized: the content card re-renders on every tab switch.
-export const SplitToast = memo(function SplitToast({ windowId }: { windowId: string }) {
+export function SplitToast({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const toast = useToasts((s) => s.toasts[windowId] ?? null);
   const appear = useSharedValue(0);
@@ -280,7 +272,7 @@ export const SplitToast = memo(function SplitToast({ windowId }: { windowId: str
     if (!toast) return;
     setShown(toast);
     appear.set(0);
-    appear.set(withSpring(1, TOAST_SPRING));
+    appear.set(withSpring(1, SPLIT_TOAST_SPRING));
     if (toast.sticky) return;
     const timer = setTimeout(() => {
       appear.set(
@@ -331,7 +323,7 @@ export const SplitToast = memo(function SplitToast({ windowId }: { windowId: str
       </Animated.View>
     </View>
   );
-});
+}
 
 function ToastAction({ title, onPress }: { title: string; onPress(): void }) {
   const theme = useTheme();

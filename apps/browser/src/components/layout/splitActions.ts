@@ -3,7 +3,8 @@ import { create } from "zustand";
 import { closeTab } from "../../lib/actions";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
-import { MAX_SPLIT_PANES, slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
+import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
+import { MAX_SPLIT_PANES } from "../../store/constants";
 
 const store = () => useBrowser.getState();
 

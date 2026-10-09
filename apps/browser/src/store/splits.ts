@@ -4,6 +4,7 @@ import { leaveGroups, syncGroupOrder } from "./groups";
 import { newId } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { BrowserWindow, SplitView, Tab } from "./types";
+import { MAX_SPLIT_PANES } from "./constants";
 
 export type SplitsSlice = {
   splits: Record<string, SplitView>;
@@ -32,8 +33,6 @@ export type OpenPaneOptions = {
   adoptId?: string;
 };
 export type OpenPaneResult = { ok: true; tabId: string; splitId: string } | { ok: false; reason: "max" | "invalid" };
-
-export const MAX_SPLIT_PANES = 3;
 
 export type SplitSlot = string[];
 

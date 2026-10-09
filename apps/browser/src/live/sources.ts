@@ -1,5 +1,20 @@
-import { CONFLUENCE_CQL, DRIVE_QUERY, mapBitbucket, mapConfluence, mapDrive, mapNotion, NOTION_SEARCH_BODY, type BitbucketPR, type BitbucketStatuses, type ConfluenceSearch, type DriveFiles, type NotionSearch, type NotionUsers } from "./documents";
-import { DETAILS_PAGE, detailIds, detailNodes, GITHUB_DETAILS_QUERY, GITHUB_QUERY, GITHUB_STATE_QUERY, GITHUB_VARIABLES, mapGithub, VIEWER_QUERY, withDetails, type DetailsResponse, type GithubResponse } from "./github";
+import {
+  CONFLUENCE_CQL,
+  DRIVE_QUERY,
+  mapBitbucket,
+  mapConfluence,
+  mapDrive,
+  mapNotion,
+  NOTION_SEARCH_BODY,
+  type BitbucketPR,
+  type BitbucketStatuses,
+  type ConfluenceSearch,
+  type DriveFiles,
+  type NotionSearch,
+  type NotionUsers,
+} from "./documents";
+import { detailIds, detailNodes, GITHUB_DETAILS_QUERY, GITHUB_QUERY, GITHUB_STATE_QUERY, GITHUB_VARIABLES, mapGithub, VIEWER_QUERY, withDetails, type DetailsResponse, type GithubResponse } from "./github";
+import { DETAILS_PAGE } from "./constants";
 import { basic, deleteSecret, endpoints, form, getSecret, request, setSecret } from "./net";
 import { live, setAccount, updateConfig } from "./store";
 import { LiveError, type CompletionState, type LiveAccount, type LiveFolder, type LiveItem, type LiveSourceId } from "./types";

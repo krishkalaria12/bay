@@ -7,12 +7,7 @@ import { useIsIncognito, useProfiles, useWindowId, useWindowProfile } from "../s
 import { setMeasuredWidth, useMeasuredWidth } from "./layout/measuredWidths";
 import { useHover } from "./primitives";
 import { openSettings } from "./settings/windows";
-
-const PAD = 9;
-const HEIGHT = 34;
-const MIN_CUT_NAME = 52;
-const ICON_WIDTH = 32;
-export const PROFILE_INDICATOR_X = 84;
+import { INDICATOR_HEIGHT, INDICATOR_ICON_WIDTH, INDICATOR_MIN_CUT_NAME, INDICATOR_PAD } from "./profiles/constants";
 
 function useIndicator(room: number) {
   const theme = useTheme();
@@ -21,10 +16,10 @@ function useIndicator(room: number) {
   const profile = useWindowProfile();
   const title = incognito ? "Incognito" : profile.name;
   const textWidth = useMeasuredWidth(`profile-name|${title}`);
-  const shown = (incognito || profiles.length >= 2) && room >= ICON_WIDTH;
-  const nameRoom = room - 2 * PAD;
-  const showName = !!textWidth && (textWidth <= nameRoom || nameRoom >= MIN_CUT_NAME);
-  const width = !shown ? 0 : showName ? Math.min(room, textWidth + 2 * PAD) : ICON_WIDTH;
+  const shown = (incognito || profiles.length >= 2) && room >= INDICATOR_ICON_WIDTH;
+  const nameRoom = room - 2 * INDICATOR_PAD;
+  const showName = !!textWidth && (textWidth <= nameRoom || nameRoom >= INDICATOR_MIN_CUT_NAME);
+  const width = !shown ? 0 : showName ? Math.min(room, textWidth + 2 * INDICATOR_PAD) : INDICATOR_ICON_WIDTH;
   const color = incognito ? theme.textPrimary : profileNameColor(profile.color, theme.dark);
   return { incognito, title, textWidth, shown, showName, width, color };
 }
@@ -54,13 +49,13 @@ export function ProfileIndicator({ room }: { room: number }) {
         {({ pressed }) => (
           <View
             style={{
-              height: HEIGHT,
+              height: INDICATOR_HEIGHT,
               width,
               borderRadius: 10,
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
-              paddingHorizontal: showName ? PAD : 0,
+              paddingHorizontal: showName ? INDICATOR_PAD : 0,
               backgroundColor: incognito ? undefined : pressed ? theme.tabPressed : hovered ? theme.tabHover : undefined,
             }}
           >

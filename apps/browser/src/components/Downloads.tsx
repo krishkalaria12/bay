@@ -3,11 +3,13 @@ import { copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, show
 import { memo, useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { layout, useTheme } from "../lib/theme";
+import { useTheme } from "../lib/theme";
+import { layout } from "../lib/constants";
 import { useBrowser } from "../store/browser";
 import { useSidebarOpen, useWindowId } from "../store/hooks";
 import { downloadVisibleIn } from "../store/ui";
-import { SIDEBAR_FOOTER_DOWNLOADS, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
+import { useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
+import { SIDEBAR_FOOTER_DOWNLOADS } from "./layout/constants";
 import { openInternalPage } from "./pages/urls";
 import { useSidebarWidth } from "./sidebar/tokens";
 

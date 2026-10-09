@@ -5,6 +5,7 @@ import { leaveGroups, orderSections, placeBlock, syncGroupOrder } from "./groups
 import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, newId, sharesProfile, snapshotTab, viewTabIds, without } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
+import { CLEAN_UP_AFTER_MS, DELETED_GROUP_MS, MAX_CLEANED, MAX_CLOSED_GROUPS } from "./constants";
 
 export type TabPlacement = {
   pinned: boolean;
@@ -42,10 +43,6 @@ export type OrganizeSlice = {
   closeAbandonedNewTabs(): void;
 };
 
-export const CLEAN_UP_AFTER_MS = 12 * 60 * 60 * 1000;
-const MAX_CLEANED = 100;
-const MAX_CLOSED_GROUPS = 20;
-export const DELETED_GROUP_MS = 7 * 86_400_000;
 export const keptDeletedGroups = (list: ClosedGroup[], now = Date.now()) => list.filter((c) => now - c.closedAt < DELETED_GROUP_MS);
 
 export const groupOf = (s: Pick<BrowserState, "groups">, tabId: string | undefined): TabGroup | undefined =>

@@ -4,8 +4,8 @@ import { startLive } from "../../live";
 import { useBrowser } from "../../store/browser";
 import { changedIds } from "../../store/changes";
 import { cancelSwitcher, commitSwitcher, moveSwitcher } from "./switcher";
+import { AUTO_CLEAN_EVERY_MS } from "./constants";
 
-const AUTO_CLEAN_EVERY_MS = 30 * 60 * 1000;
 let started = false;
 
 export function startSidebarEffects() {

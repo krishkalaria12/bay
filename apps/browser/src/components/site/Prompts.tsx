@@ -1,6 +1,14 @@
-import { getSiteSettings, resolveExternalApp, setSiteSetting, type AutofillPrompt as ChromeAutofillPrompt, type AutofillPromptAnswer, type PasswordPrompt as ChromePasswordPrompt, type PasswordPromptAnswer } from "@bay/nncore";
+import {
+  getSiteSettings,
+  resolveExternalApp,
+  setSiteSetting,
+  type AutofillPrompt as ChromeAutofillPrompt,
+  type AutofillPromptAnswer,
+  type PasswordPrompt as ChromePasswordPrompt,
+  type PasswordPromptAnswer,
+} from "@bay/nncore";
 import { Symbol } from "@bay/shell";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
@@ -236,22 +244,16 @@ export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: nu
   const well = theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
   const changes = prompt.changes ?? [];
   const values = (key: "to" | "from") => changes.filter((c) => c[key]).map((c) => c[key]);
-  const section = (lines: string[], label?: string) => (
-    <View key={label ?? "lines"} style={{ gap: 3 }}>
-      {label ? <Text style={{ fontSize: 11, color: theme.textSecondary }}>{label}</Text> : null}
-      {lines.map((line, i) => (
-        <Text key={i} numberOfLines={2} style={{ fontSize: 12, fontWeight: i === 0 && !label ? "500" : "400", color: i === 0 || label ? theme.textPrimary : theme.textSecondary }}>
-          {line}
-        </Text>
-      ))}
-    </View>
-  );
-  const sections =
-    prompt.kind !== "updateAddress"
-      ? [section(prompt.lines)]
-      : prompt.newLabel
-        ? [section(values("to"), prompt.newLabel), section(values("from"), prompt.oldLabel)]
-        : [section(values("to"))];
+  let sections: ReactNode;
+  if (prompt.kind !== "updateAddress") sections = <PromptLines lines={prompt.lines} />;
+  else if (prompt.newLabel) {
+    sections = (
+      <>
+        <PromptLines lines={values("to")} label={prompt.newLabel} />
+        <PromptLines lines={values("from")} label={prompt.oldLabel} />
+      </>
+    );
+  } else sections = <PromptLines lines={values("to")} />;
   return (
     <Popover key={prompt.id} width={350} top={top} right={right} modal={false}>
       <View>
@@ -272,6 +274,20 @@ export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: nu
         <CloseButton color={theme.textSecondary} onPress={() => answer("dismiss")} />
       </View>
     </Popover>
+  );
+}
+
+function PromptLines({ lines, label }: { lines: string[]; label?: string }) {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: 3 }}>
+      {label ? <Text style={{ fontSize: 11, color: theme.textSecondary }}>{label}</Text> : null}
+      {lines.map((line, i) => (
+        <Text key={i} numberOfLines={2} style={{ fontSize: 12, fontWeight: i === 0 && !label ? "500" : "400", color: i === 0 || label ? theme.textPrimary : theme.textSecondary }}>
+          {line}
+        </Text>
+      ))}
+    </View>
   );
 }
 

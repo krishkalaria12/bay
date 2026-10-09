@@ -21,6 +21,7 @@ import { adoptParkedPins, parkWindowPins } from "./parkedPins";
 import { isSmall, isSmallWindow, mainWindowFor, smallYahuProfile } from "./small";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, ParkedPins, Tab, TabGroup } from "./types";
+import { MAX_CLOSED_WINDOWS } from "./constants";
 
 // A closed tab's back/forward list is Chrome's (TabRestoreService), which the engine finds by the closed tab's id.
 const restoreId = (tabId: string) => `restore:${tabId}`;
@@ -56,8 +57,6 @@ export type WindowsSlice = {
   reopenClosedWindow(): void;
   restoreClosed(entryId: string, windowId?: string | null): void;
 };
-
-const MAX_CLOSED_WINDOWS = 10;
 
 function emptyWindow(id: string, profileId: string, incognito: boolean, frame: Frame | null = null): BrowserWindow {
   return { id, profileId, incognito, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame, createdAt: Date.now() };

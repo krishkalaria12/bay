@@ -22,6 +22,9 @@
         "ios/**/*.metal"
       ]
     },
+    "compiler:check": {
+      "cache": false
+    },
     "dev": {
       "cache": false,
       "persistent": true

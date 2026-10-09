@@ -3,6 +3,7 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { isIncognitoProfile, newId } from "./model";
 import type { FindState, WindowUi } from "./types";
+import { MAX_DOWNLOADS } from "./constants";
 
 export type UiSlice = {
   ui: {
@@ -39,7 +40,6 @@ export const downloadsIn = (s: Pick<BrowserState, "downloads" | "windows">, wind
 
 export const DEFAULT_WINDOW_UI: WindowUi = { panel: { open: false, initialText: "" }, downloadsOpen: false };
 export const CLOSED_FIND: FindState = { open: false, query: "", count: null, active: 0 };
-const MAX_DOWNLOADS = 100;
 
 function patchWindowUi(s: BrowserState, windowId: string, patch: Partial<WindowUi>): Partial<BrowserState> {
   if (!s.windows[windowId]) return {};

@@ -3,7 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { createProfile, deleteProfile, switchProfile } from "../../lib/actions";
-import { layout, PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import type { ProfileColor } from "../../store/types";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/profilePager";
@@ -12,24 +13,17 @@ import { openSettings } from "../settings/windows";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { iconMenuItems, profileSymbol } from "./icons";
 import { openThemeEditor } from "./ThemeEditor";
-import { PROFILE_DOTS_HEIGHT, ProfileDots } from "./ProfileDots";
+import { ProfileDots } from "./ProfileDots";
+import { PROFILE_DOTS_HEIGHT, SPACE_CELL, SPACE_GLYPH, SPACE_HOVERED_OPACITY, SPACE_IDLE_OPACITY, SPACE_PLUS, SPACE_SELECTED_OPACITY, SPACE_SIDE } from "./constants";
 
 // Arc's space switcher, at the foot of the sidebar: a space's icon each (Bay's profiles are Arc's spaces), the shown
 // one at full strength as the pager moves, and + for a new space. Dots once the icons don't fit.
-const CELL = 26;
-const GLYPH = 15;
-const PLUS = 28;
-// Room kept on each side for + (right) and the footer's downloads button (left), so the icons stay centred.
-const SIDE = PLUS + 4;
-const SELECTED = 0.95;
-const HOVERED = 0.6;
-const IDLE = 0.38;
 
 export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.profileOrder));
   const width = useSidebarWidth(windowId);
   const { pages } = usePagerPages(windowId);
-  const fits = ids.length * CELL <= width - 2 * (layout.sidebarInset + SIDE);
+  const fits = ids.length * SPACE_CELL <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT }}>
       {fits ? (
@@ -41,8 +35,8 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
       ) : (
         <ProfileDots windowId={windowId} />
       )}
-      <View style={{ position: "absolute", right: layout.sidebarInset, top: (PROFILE_DOTS_HEIGHT - 3 - PLUS) / 2 }}>
-        <IconButton icon="plus" size={14} box={PLUS} radius={8} tooltip="New Space" onPress={() => void newSpace(windowId)} />
+      <View style={{ position: "absolute", right: layout.sidebarInset, top: (PROFILE_DOTS_HEIGHT - 3 - SPACE_PLUS) / 2 }}>
+        <IconButton icon="plus" size={14} box={SPACE_PLUS} radius={8} tooltip="New Space" onPress={() => void newSpace(windowId)} />
       </View>
     </View>
   );
@@ -52,7 +46,7 @@ function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page:
   const theme = useTheme();
   const profile = useBrowser((s) => s.profiles[id]);
   const { hovered, hoverProps } = useHover();
-  const opacity = usePagerOpacity(windowId, page?.slot, hovered ? HOVERED : IDLE, SELECTED);
+  const opacity = usePagerOpacity(windowId, page?.slot, hovered ? SPACE_HOVERED_OPACITY : SPACE_IDLE_OPACITY, SPACE_SELECTED_OPACITY);
   if (!profile) return null;
   const ink = theme.dark ? "#FFFFFF" : "#000000";
   const symbol = profileSymbol(profile.icon);
@@ -60,11 +54,11 @@ function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page:
     <View {...hoverProps} tooltip={profile.name}>
       <ContextMenuArea onContextMenu={() => void openSpaceMenu(windowId, id)}>
         <Pressable accessibilityRole="button" accessibilityLabel={profile.name} onPress={() => switchProfile(windowId, id, true)}>
-          <Animated.View style={[{ width: CELL, height: CELL, borderRadius: 7, alignItems: "center", justifyContent: "center" }, opacity]}>
+          <Animated.View style={[{ width: SPACE_CELL, height: SPACE_CELL, borderRadius: 7, alignItems: "center", justifyContent: "center" }, opacity]}>
             {symbol ? (
-              <Symbol name={symbol} size={GLYPH - 2} weight="semibold" color={ink} style={{ width: GLYPH + 2, height: GLYPH + 2 }} />
+              <Symbol name={symbol} size={SPACE_GLYPH - 2} weight="semibold" color={ink} style={{ width: SPACE_GLYPH + 2, height: SPACE_GLYPH + 2 }} />
             ) : (
-              <Text style={{ fontSize: profile.icon ? GLYPH : 12, fontWeight: "700", color: ink }}>{profile.icon ?? (profile.name.trim()[0] ?? "?").toUpperCase()}</Text>
+              <Text style={{ fontSize: profile.icon ? SPACE_GLYPH : 12, fontWeight: "700", color: ink }}>{profile.icon ?? (profile.name.trim()[0] ?? "?").toUpperCase()}</Text>
             )}
           </Animated.View>
         </Pressable>

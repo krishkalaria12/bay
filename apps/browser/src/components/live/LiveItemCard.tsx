@@ -1,5 +1,5 @@
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";

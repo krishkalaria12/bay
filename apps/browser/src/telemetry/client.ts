@@ -1,22 +1,26 @@
 import { engineInfo } from "@bay/nncore";
 import { launchEnvironment, readDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
 import { create } from "zustand";
-import { DEV_SEND_ENV, LOGS_URL, MAX_BODY_BYTES } from "./config";
-import { EVENTS_SCOPE, eventRecord, LOGS_SCOPE, logRecord, logsRequest, outcome, type OtlpLogRecord, type QueuedEvent } from "./otlp";
+import {
+  BATCH_SIZE,
+  DEV_SEND_ENV,
+  EVENTS_SCOPE,
+  FLUSH_DELAY_MS,
+  LOGS_SCOPE,
+  LOGS_URL,
+  MAX_BACKOFF_MS,
+  MAX_BODY_BYTES,
+  MAX_EVENTS,
+  MAX_LOGS,
+  TELEMETRY_QUEUE_DOC,
+  TELEMETRY_REQUEST_LOG_DOC,
+  TELEMETRY_STATE_DOC,
+  URGENT_FLUSH_DELAY_MS,
+} from "./config";
+import { eventRecord, logRecord, logsRequest, outcome, type OtlpLogRecord, type QueuedEvent } from "./otlp";
 import { cleanProperties } from "./sanitize";
 
 // Send only with opt-in; never sync the choice.
-
-const STATE_DOC = "telemetry.json";
-const QUEUE_DOC = "telemetry-queue.json";
-const REQUEST_LOG_DOC = "telemetry-requests.log";
-
-const MAX_EVENTS = 1000;
-const MAX_LOGS = 200;
-const BATCH_SIZE = 100;
-const FLUSH_DELAY_MS = 30_000;
-const URGENT_FLUSH_DELAY_MS = 3_000;
-const MAX_BACKOFF_MS = 30 * 60_000;
 
 type Saved = {
   version: 1;
@@ -54,7 +58,7 @@ let saved: Saved = { ...DEFAULT };
 function save(patch: Partial<Saved>) {
   saved = { ...saved, ...patch };
   try {
-    writeDocument(STATE_DOC, JSON.stringify(saved));
+    writeDocument(TELEMETRY_STATE_DOC, JSON.stringify(saved));
   } catch {}
   useTelemetry.setState({ sharing: saved.sharing, decided: saved.decidedAt !== null, askDone: saved.askDoneAt !== null });
 }
@@ -110,7 +114,7 @@ function persistQueue(now = false) {
   persistTimer = undefined;
   const write = () => {
     try {
-      writeDocument(QUEUE_DOC, JSON.stringify(queue));
+      writeDocument(TELEMETRY_QUEUE_DOC, JSON.stringify(queue));
     } catch {}
   };
   if (now) write();
@@ -198,7 +202,7 @@ function logRequest(entry: RequestLogEntry, body: string) {
   if (__DEV__) {
     try {
       const line = JSON.stringify({ ...entry, body: JSON.parse(body) });
-      writeDocument(REQUEST_LOG_DOC, (readDocument(REQUEST_LOG_DOC) ?? "").slice(-400_000) + `${line}\n`);
+      writeDocument(TELEMETRY_REQUEST_LOG_DOC, (readDocument(TELEMETRY_REQUEST_LOG_DOC) ?? "").slice(-400_000) + `${line}\n`);
     } catch {}
   }
   if (__DEV__) console.log(`[telemetry] ${entry.dryRun ? "dry run" : "POST"} ${entry.url} ${entry.kind}×${entry.count} → ${entry.status}`);
@@ -340,7 +344,7 @@ let loaded = false;
 export function loadChoice() {
   if (loaded) return;
   loaded = true;
-  saved = { ...DEFAULT, ...readJson<Partial<Saved>>(STATE_DOC) };
+  saved = { ...DEFAULT, ...readJson<Partial<Saved>>(TELEMETRY_STATE_DOC) };
   useTelemetry.setState({ sharing: saved.sharing, decided: saved.decidedAt !== null, askDone: saved.askDoneAt !== null });
 }
 
@@ -350,11 +354,11 @@ export function startClient(): { previous: PreviousSession; updatedFrom: string 
     .then((e) => (engineVersion = `NNCore / Chromium ${e.chromiumVersion}`))
     .catch(() => {});
   if (!saved.sharing) {
-    const stale = readJson<Queue>(QUEUE_DOC);
+    const stale = readJson<Queue>(TELEMETRY_QUEUE_DOC);
     if (stale?.events?.length || stale?.logs?.length) clearQueue();
     return null;
   }
-  const stored = readJson<Queue>(QUEUE_DOC);
+  const stored = readJson<Queue>(TELEMETRY_QUEUE_DOC);
   if (stored?.version === 1) queue = { version: 1, events: [...(stored.events ?? []), ...queue.events], logs: [...(stored.logs ?? []), ...queue.logs] };
   const previous: PreviousSession = saved.lastVersion === null ? "none" : saved.sessionOpen ? "unclean" : "clean";
   const version = appInfo().appVersion;

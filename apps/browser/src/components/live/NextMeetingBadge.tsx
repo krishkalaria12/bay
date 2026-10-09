@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
-import { bouncySpring } from "../../lib/springs";
 import { useTheme } from "../../lib/theme";
 import { useCalendar, useNow } from "../../live/calendar";
 import { badgeText, isCalendarUrl } from "../../live/meetings";
@@ -9,10 +8,7 @@ import { useLive } from "../../live/store";
 import { useBrowser } from "../../store/browser";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useLiveColors } from "./colors";
-
-// Animated's old springs: in at speed 16, bounciness 10; out without a bounce.
-const BADGE_IN = bouncySpring(16, 10);
-const BADGE_OUT = bouncySpring(16, 0);
+import { MEETING_BADGE_IN, MEETING_BADGE_OUT } from "./constants";
 
 export function NextMeetingBadge({ tabId }: { tabId: string }) {
   // The URL, not the check: the selector runs on every store update, the regex only when it changes.
@@ -35,7 +31,7 @@ export function NextMeetingBadge({ tabId }: { tabId: string }) {
     // Only a finished fade-out drops the label: a badge coming back mid-fade stops it, and must stay.
     const drop = () => setLabel(null);
     shown.set(
-      withSpring(text ? 1 : 0, text ? BADGE_IN : BADGE_OUT, (finished) => {
+      withSpring(text ? 1 : 0, text ? MEETING_BADGE_IN : MEETING_BADGE_OUT, (finished) => {
         if (finished && !text) runOnJS(drop)();
       }),
     );

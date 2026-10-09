@@ -13,9 +13,6 @@ export type OtlpLogRecord = {
 
 export type QueuedEvent = { uuid: string; event: string; distinct_id: string; timestamp: string; properties: Record<string, unknown> };
 
-export const EVENTS_SCOPE = "bay.analytics";
-export const LOGS_SCOPE = "bay.app";
-
 // OTLP JSON has no nested values here: objects and arrays go as JSON text, int64 as a decimal string.
 export function otlpValue(value: unknown): OtlpValue | null {
   switch (typeof value) {

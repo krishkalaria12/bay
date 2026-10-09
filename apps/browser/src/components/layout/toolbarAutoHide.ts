@@ -6,9 +6,6 @@ import { DEFAULT_WINDOW_UI } from "../../store/ui";
 // strip that keeps the site's name; scrolling up, the top of the page, a tab switch, a navigation or a click on the
 // strip brings it back. The direction comes from the page (page_script.js › Scroll direction).
 
-// The collapsed strip's height; the page gets the rest of the toolbar's back.
-export const STRIP_HEIGHT = 20;
-
 export type PageScroll = "down" | "up" | "top";
 export type ToolbarMode = "shown" | "collapsed" | "peek";
 

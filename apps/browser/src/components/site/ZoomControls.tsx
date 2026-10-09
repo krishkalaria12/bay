@@ -5,7 +5,7 @@ import { webviews } from "../../lib/webviews";
 import { useTab } from "../../store/hooks";
 import { Popover, PromptButton, ToolbarButton } from "../layout/controls";
 import { setPopover, usePages } from "../layout/pageState";
-import { type ToolbarPalette } from "../layout/toolbarColors";
+import type { ToolbarPalette } from "../layout/toolbarColors";
 import { useHover } from "../primitives";
 
 // Chrome's zoom icon: in the address field whenever the page isn't at 100%, opening − / + / Reset.

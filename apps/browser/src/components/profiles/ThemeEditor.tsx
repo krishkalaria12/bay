@@ -2,7 +2,8 @@ import { Surface, Symbol } from "@bay/shell";
 import { useRef, useState } from "react";
 import { Image, PanResponder, Pressable, Text, View, type GestureResponderEvent } from "react-native";
 import { create } from "zustand";
-import { editableTheme, MAX_THEME_COLORS, spectrumColor, spectrumPosition, THEME_PRESETS } from "../../lib/spaceTheme";
+import { editableTheme, spectrumColor, spectrumPosition, THEME_PRESETS } from "../../lib/spaceTheme";
+import { MAX_THEME_COLORS } from "../../lib/constants";
 import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser } from "../../store/browser";
@@ -11,14 +12,11 @@ import type { ProfileColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { useSidebarOnRight } from "../layout/windowLayout";
+import { THEME_DOT, THEME_EDITOR_PAD, THEME_FIELD_HEIGHT, THEME_FIELD_WIDTH } from "./constants";
 
 // Arc's space theme editor: a floating panel by the sidebar that changes the space's theme as you go, so the window
 // is the preview. Up to three colours on a colour field (a gradient), how strongly they tint, grain, and presets.
 const SPECTRUM = require("../../../assets/theme-spectrum.png");
-const FIELD_W = 268;
-const FIELD_H = 132;
-const PAD = 14;
-const DOT = 20;
 
 type Request = { windowId: string; profileId: string; original: SpaceTheme | null; originalColor: ProfileColor };
 
@@ -108,7 +106,7 @@ function ThemeEditor({ request }: { request: Request }) {
       shadowOpacity={theme.panelShadowOpacity}
       shadowRadius={22}
       shadowOffset={[0, 8]}
-      style={{ position: "absolute", [side]: (sidebarOpen ? sidebarWidth : 0) + 10, bottom: 12, width: FIELD_W + 2 * PAD, padding: PAD }}
+      style={{ position: "absolute", [side]: (sidebarOpen ? sidebarWidth : 0) + 10, bottom: 12, width: THEME_FIELD_WIDTH + 2 * THEME_EDITOR_PAD, padding: THEME_EDITOR_PAD }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
         <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }} numberOfLines={1}>
@@ -160,15 +158,15 @@ function ColorField({ colors, selected, onSelect, onMove }: { colors: string[]; 
   const origin = useRef({ x: 0, y: 0 });
   const dragging = useRef(0);
   const point = (e: GestureResponderEvent) => ({
-    x: Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current.x) / FIELD_W)),
-    y: Math.min(1, Math.max(0, (e.nativeEvent.pageY - origin.current.y) / FIELD_H)),
+    x: Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current.x) / THEME_FIELD_WIDTH)),
+    y: Math.min(1, Math.max(0, (e.nativeEvent.pageY - origin.current.y) / THEME_FIELD_HEIGHT)),
   });
   const grant = useEffectEvent((e: GestureResponderEvent) => {
     const p = point(e);
     // The dot under the pointer, or else the selected one comes to it.
     const near = colors.findIndex((c) => {
       const at = spectrumPosition(c);
-      return Math.hypot((at.x - p.x) * FIELD_W, (at.y - p.y) * FIELD_H) <= DOT;
+      return Math.hypot((at.x - p.x) * THEME_FIELD_WIDTH, (at.y - p.y) * THEME_FIELD_HEIGHT) <= THEME_DOT;
     });
     dragging.current = near >= 0 ? near : selected;
     onSelect(dragging.current);
@@ -192,14 +190,14 @@ function ColorField({ colors, selected, onSelect, onMove }: { colors: string[]; 
       ref={field}
       {...pan.panHandlers}
       onLayout={() => field.current?.measureInWindow((x, y) => (origin.current = { x, y }))}
-      style={{ width: FIELD_W, height: FIELD_H, borderRadius: 10, overflow: "hidden" }}
+      style={{ width: THEME_FIELD_WIDTH, height: THEME_FIELD_HEIGHT, borderRadius: 10, overflow: "hidden" }}
     >
       <View pointerEvents="none">
-        <Image source={SPECTRUM} style={{ width: FIELD_W, height: FIELD_H }} />
+        <Image source={SPECTRUM} style={{ width: THEME_FIELD_WIDTH, height: THEME_FIELD_HEIGHT }} />
       </View>
       {colors.map((c, i) => {
         const { x, y } = spectrumPosition(c);
-        const size = i === selected ? DOT + 4 : DOT;
+        const size = i === selected ? THEME_DOT + 4 : THEME_DOT;
         // A dark outer ring sets the dot off a light field: no style shadow (RN macOS's view shadow takes the app
         // down; the app's shadows are Surface's).
         return (
@@ -208,8 +206,8 @@ function ColorField({ colors, selected, onSelect, onMove }: { colors: string[]; 
             pointerEvents="none"
             style={{
               position: "absolute",
-              left: x * FIELD_W - size / 2 - 1,
-              top: y * FIELD_H - size / 2 - 1,
+              left: x * THEME_FIELD_WIDTH - size / 2 - 1,
+              top: y * THEME_FIELD_HEIGHT - size / 2 - 1,
               width: size + 2,
               height: size + 2,
               borderRadius: size / 2 + 1,
@@ -229,7 +227,7 @@ function Slider({ label, value, onChange }: { label: string; value: number; onCh
   const theme = useTheme();
   const track = useRef<View>(null);
   const origin = useRef(0);
-  const change = useEffectEvent((e: GestureResponderEvent) => onChange(Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current) / FIELD_W))));
+  const change = useEffectEvent((e: GestureResponderEvent) => onChange(Math.min(1, Math.max(0, (e.nativeEvent.pageX - origin.current) / THEME_FIELD_WIDTH))));
   const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -247,16 +245,16 @@ function Slider({ label, value, onChange }: { label: string; value: number; onCh
         ref={track}
         {...pan.panHandlers}
         onLayout={() => track.current?.measureInWindow((x) => (origin.current = x))}
-        style={{ width: FIELD_W, height: thumb, justifyContent: "center" }}
+        style={{ width: THEME_FIELD_WIDTH, height: thumb, justifyContent: "center" }}
       >
         <View pointerEvents="none" style={{ height: 4, borderRadius: 2, backgroundColor: theme.dark ? "#FFFFFF24" : "#0000001A" }}>
-          <View style={{ width: value * FIELD_W, height: 4, borderRadius: 2, backgroundColor: theme.textSecondary }} />
+          <View style={{ width: value * THEME_FIELD_WIDTH, height: 4, borderRadius: 2, backgroundColor: theme.textSecondary }} />
         </View>
         <View
           pointerEvents="none"
           style={{
             position: "absolute",
-            left: value * (FIELD_W - thumb),
+            left: value * (THEME_FIELD_WIDTH - thumb),
             width: thumb,
             height: thumb,
             borderRadius: thumb / 2,

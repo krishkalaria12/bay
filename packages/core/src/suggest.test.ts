@@ -71,17 +71,6 @@ test("frecency: frequent + recent beats old, and multi-word queries match words"
   assert.deepEqual(rows(items), ["search:docs rust", "https://b.com/docs", "https://a.com/docs"]);
 });
 
-const fresh = <T,>(list: readonly T[]) => [...list];
-
-const vocabulary = ["react", "native", "banana", "nano", "layout", "github", "news", "notion", "an", "na"];
-const bigHistory = Array.from({ length: 400 }, (_, i) => ({
-  url: `https://${["github.com", "news.ycombinator.com", "notion.so", "example.org"][i % 4]}/${vocabulary[i % 10]}/${i}`,
-  title: `${vocabulary[(i * 3) % 10]} ${vocabulary[(i * 7) % 10]}${i % 5 ? "" : "ish"} page`,
-  favicon: null,
-  visits: 1 + (i % 13),
-  lastVisit: now - (i % 40) * DAY,
-}));
-
 const google = engineById(BUILT_IN_ENGINES, "google");
 const flush = () => new Promise((r) => setImmediate(r));
 

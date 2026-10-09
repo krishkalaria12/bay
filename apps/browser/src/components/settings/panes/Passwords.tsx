@@ -24,6 +24,8 @@ import { hostLabel, matchesQuery } from "../../pages/PageLayout";
 import { Favicon, IconButton } from "../../primitives";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, Sheet, TextField, Toggle } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { MONO_FONT } from "../../../lib/constants";
+import { PASSWORDS_UNLOCK_MS } from "../constants";
 
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
@@ -33,7 +35,6 @@ function passwordManagerAppsNote() {
     : `${apps} For 1Password, add Bay once: in the 1Password app, open Settings › Browser › Add Browser and choose Bay.`;
 }
 
-const UNLOCK_MS = 5 * 60_000;
 const unlockedUntil = new Map<string, number>();
 const isUnlocked = (profile: string) => Date.now() < (unlockedUntil.get(profile) ?? 0);
 
@@ -62,7 +63,7 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
 
   const unlock = async () => {
     if (!(await unlockPasswords(profile))) return;
-    unlockedUntil.set(profile, Date.now() + UNLOCK_MS);
+    unlockedUntil.set(profile, Date.now() + PASSWORDS_UNLOCK_MS);
     setUnlockedAt(Date.now());
   };
 
@@ -225,7 +226,7 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
               <TextField value={password ?? ""} onChangeText={setPassword} secure={!revealed} style={{ width: 220 }} />
             ) : (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <Text selectable style={{ fontSize: 13, color: theme.textPrimary, fontFamily: revealed ? "Menlo" : undefined }}>
+                <Text selectable style={{ fontSize: 13, color: theme.textPrimary, fontFamily: revealed ? MONO_FONT : undefined }}>
                   {password === null ? "…" : revealed ? password : "•".repeat(Math.min(password.length, 12))}
                 </Text>
                 <IconButton icon={revealed ? "eye.slash" : "eye"} size={11} box={24} radius={6} onPress={() => setRevealed(!revealed)} tooltip={revealed ? "Hide" : "Show"} />

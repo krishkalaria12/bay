@@ -54,7 +54,8 @@ test("a card beside a sidebar row opens toward the page", () => {
 });
 
 test("with the sidebar on the right the toolbar's toggle moves to its end, clear of the window buttons", async () => {
-  const { toolbarGeometry, TRAFFIC_LIGHTS_OFFSET } = await import("./geometry.ts");
+  const { toolbarGeometry } = await import("./geometry.ts");
+  const { TRAFFIC_LIGHTS_OFFSET } = await import("./constants.ts");
   const left = toolbarGeometry({ sidebarButton: true, clearTrafficLights: false });
   assert.notEqual(left.sidebarButton, null);
   assert.equal(left.sidebarButtonEnd, false);

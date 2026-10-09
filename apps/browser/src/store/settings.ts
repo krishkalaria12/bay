@@ -12,6 +12,7 @@ import {
 } from "@bay/core";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
+import { DEFAULT_PROFILE_ID } from "./constants";
 
 export type SearchEngineId = string;
 
@@ -66,8 +67,6 @@ export type Settings = {
   openLinksInSmallYahu: boolean;
   smallYahuSize: [number, number];
 };
-
-export const DEFAULT_PROFILE_ID = "default";
 
 export const DEFAULT_SETTINGS: Settings = {
   warnBeforeQuitting: false,

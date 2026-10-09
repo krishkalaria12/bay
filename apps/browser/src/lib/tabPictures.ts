@@ -1,5 +1,6 @@
 import { useBrowser } from "../store/browser";
 import { isIncognitoProfile } from "../store/model";
+import { MAX_TAB_PICTURES, PICTURE_SETTLE_MS } from "./constants";
 import { webviews } from "./webviews";
 
 // The last picture of each tab's page, for dragging a tab that isn't on screen (a page out of view isn't
@@ -7,8 +8,6 @@ import { webviews } from "./webviews";
 // private windows, the most recent few.
 type Picture = { data: string; frame: [number, number, number, number] };
 
-const SETTLE_MS = 1500;
-const KEEP = 40;
 const pictures = new Map<string, Picture>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 let started = false;
@@ -26,7 +25,7 @@ function remember(tabId: string) {
       pictures.delete(tabId);
       pictures.set(tabId, picture);
       for (const old of pictures.keys()) {
-        if (pictures.size <= KEEP) break;
+        if (pictures.size <= MAX_TAB_PICTURES) break;
         pictures.delete(old);
       }
     })
@@ -58,7 +57,7 @@ export function startTabPictures() {
           timers.delete(w.id);
           const now = useBrowser.getState().windows[w.id];
           if (now?.activeTabIds[now.profileId] === id) remember(id);
-        }, SETTLE_MS),
+        }, PICTURE_SETTLE_MS),
       );
     }
     if (s.tabs !== prev.tabs) for (const id of pictures.keys()) if (!s.tabs[id]) pictures.delete(id);

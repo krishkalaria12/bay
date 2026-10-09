@@ -6,8 +6,8 @@ import { useTheme } from "../../../lib/theme";
 import { enterRecoveryPhrase, stopSync } from "../../../sync/engine";
 import { Button, Checkbox, Sheet, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
-
-const WORDS = 24;
+import { MONO_FONT } from "../../../lib/constants";
+import { RECOVERY_WORDS } from "../constants";
 
 function Title({ children }: { children: string }) {
   const theme = useTheme();
@@ -167,13 +167,13 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
           enableFocusRing={false}
           autoCorrect={false}
           spellCheck={false}
-          style={{ flex: 1, fontSize: 13, lineHeight: 18, color: theme.textPrimary, fontFamily: "Menlo" }}
+          style={{ flex: 1, fontSize: 13, lineHeight: 18, color: theme.textPrimary, fontFamily: MONO_FONT }}
         />
       </View>
       <View style={{ flexDirection: "row", marginTop: 6 }}>
         <Text style={{ flex: 1, fontSize: 11.5, lineHeight: 15, color: error ? colors.destructive : theme.textSecondary }}>{error ?? ""}</Text>
-        <Text style={{ fontSize: 11.5, color: count > WORDS ? colors.destructive : theme.textTertiary, fontVariant: ["tabular-nums"] }}>
-          {count > WORDS ? "too many words" : `${count}/${WORDS} words`}
+        <Text style={{ fontSize: 11.5, color: count > RECOVERY_WORDS ? colors.destructive : theme.textTertiary, fontVariant: ["tabular-nums"] }}>
+          {count > RECOVERY_WORDS ? "too many words" : `${count}/${RECOVERY_WORDS} words`}
         </Text>
       </View>
       {folder ? (
@@ -187,7 +187,7 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
       ) : null}
       <Buttons>
         <Button title="Cancel" onPress={closeSettingsSheet} />
-        <Button title={busy ? "Connecting…" : "Connect"} kind="primary" disabled={busy || count !== WORDS || !folder} onPress={() => void submit()} />
+        <Button title={busy ? "Connecting…" : "Connect"} kind="primary" disabled={busy || count !== RECOVERY_WORDS || !folder} onPress={() => void submit()} />
       </Buttons>
     </Sheet>
   );
@@ -223,7 +223,7 @@ function ConnectDeviceSheet() {
       {words ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 14, padding: 10, borderRadius: 8, backgroundColor: colors.group }}>
           {words.map((w, i) => (
-            <Text key={i} style={{ width: "25%", paddingVertical: 3, fontSize: 12.5, color: theme.textPrimary, fontFamily: "Menlo" }}>
+            <Text key={i} style={{ width: "25%", paddingVertical: 3, fontSize: 12.5, color: theme.textPrimary, fontFamily: MONO_FONT }}>
               <Text style={{ color: theme.textTertiary }}>{`${i + 1}`.padStart(2, " ")} </Text>
               {w}
             </Text>

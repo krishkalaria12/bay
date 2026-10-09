@@ -1,6 +1,6 @@
 import { displayUrl, hostOf, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
 import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
@@ -76,7 +76,7 @@ export function Omnibox({
   const profileId = useWindowProfileId();
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const engines = useBrowser((s) => searchEngines(s.settings));
-  const searchTemplates = useMemo(() => engines.map((e) => e.url), [engines]);
+  const searchTemplates = engines.map((e) => e.url);
   const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
   const currentTitle = useBrowser((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
   const currentFavicon = useBrowser((s) => s.tabs[tabId]?.favicon ?? null);
@@ -115,11 +115,9 @@ export function Omnibox({
   const idleSections = usePaletteStart(windowId, profileId, tabId);
   const idle = !scope && (!edited || !typed.trim());
   const pageContext = palette && !newTab && !!currentUrl && initialText === currentUrl && typed === initial && !edited && !scope;
-  const sections = useMemo(() => {
-    if (!idle) return [{ id: "results", items: suggested }];
-    if (pageContext) return currentPageActions({ url: currentUrl, title: currentTitle, customTitle: null });
-    return idleSections;
-  }, [idle, suggested, pageContext, currentUrl, currentTitle, idleSections]);
+  let sections = idleSections;
+  if (!idle) sections = [{ id: "results", items: suggested }];
+  else if (pageContext) sections = currentPageActions({ url: currentUrl, title: currentTitle, customTitle: null });
   const items = palette ? sections.flatMap((s) => s.items) : dropdown && !edited && !scope ? start : suggested;
   const inline = useInlineCompletion(input, typed, suppressCompletion || scope ? "" : completion);
   const shownCompletion = inline.shown;

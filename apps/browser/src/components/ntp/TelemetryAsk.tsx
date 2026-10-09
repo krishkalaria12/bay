@@ -1,5 +1,5 @@
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { useDefaultBrowserCheckIn } from "../../lib/defaultBrowserCheckIn";
@@ -11,8 +11,7 @@ import { onboardingCompletedAt, useOnboarding } from "../onboarding/state";
 import { useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
 import { usePendingReleaseNotes } from "./releaseNotes";
-
-const FRAME = { width: 300 };
+import { TELEMETRY_ASK_FRAME } from "./constants";
 
 export function TelemetryAsk({ windowId }: { windowId: string }) {
   const due = useTelemetry((s) => !s.decided && !s.askDone);
@@ -29,7 +28,7 @@ export function TelemetryAsk({ windowId }: { windowId: string }) {
       setLeaving(null);
     });
   return (
-    <View style={{ position: "absolute", left: 0, top: 0, width: FRAME.width, padding: 8 }} pointerEvents="box-none">
+    <View style={{ position: "absolute", left: 0, top: 0, width: TELEMETRY_ASK_FRAME.width, padding: 8 }} pointerEvents="box-none">
       <Card
         leaving={leaving}
         onShare={() => retire(() => setSharing(true, "ask"))}

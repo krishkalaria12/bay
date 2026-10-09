@@ -6,9 +6,7 @@ import { groupOf } from "../store/organize";
 import { connectCalendar, useCalendar } from "./calendar";
 import { eventForCall, isCalendarUrl, meetingOf, relatedLinks, type CalendarEvent } from "./meetings";
 import { live, setMeetingGroup, updateCalendarSettings } from "./store";
-
-export const MEETING_FALLBACK_TITLE = "Meeting";
-const CLEANUP_IDLE_MS = 30 * 60_000;
+import { MEETING_CLEANUP_IDLE_MS, MEETING_FALLBACK_TITLE } from "./constants";
 
 const store = () => useBrowser.getState();
 
@@ -104,7 +102,7 @@ export function tick(s: BrowserState, now: number) {
     const active = w ? activeTabId(s, w.id) : undefined;
     const busy = g.tabIds.some((id) => id === active || s.live[id]?.playingAudio);
     const lastUse = Math.max(m.endedAt, ...g.tabIds.map((id) => s.tabs[id]?.lastActiveAt ?? 0));
-    if (!busy && now - lastUse >= CLEANUP_IDLE_MS) {
+    if (!busy && now - lastUse >= MEETING_CLEANUP_IDLE_MS) {
       setMeetingGroup(null, m.groupId);
       store().closeGroup(m.groupId);
     }

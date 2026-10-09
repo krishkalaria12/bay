@@ -5,6 +5,7 @@ import { SHARING_COPY } from "../../telemetry/copy";
 import { StepLayout } from "./steps";
 import { useOnboarding } from "./state";
 import { CheckRow, PrimaryButton, Reveal, StepTitle, useOnboardingColors } from "./ui";
+import { MONO_FONT } from "../../lib/constants";
 
 export function PrivacyStep() {
   const next = useOnboarding((s) => s.next);
@@ -29,19 +30,22 @@ export function PrivacyStep() {
 
 const SENT = ["Crash reports", "Error types", "Feature counts", "Speed and memory"];
 const NEVER = ["Sites you visit", "What you type", "Your tabs", "Your name"];
-const MONO = "Menlo";
+
+function ReceiptLine({ label, mark, dim }: { label: string; mark: string; dim: boolean }) {
+  const colors = useOnboardingColors();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, opacity: dim ? 0.35 : 1 }}>
+      <Text style={{ fontFamily: MONO_FONT, fontSize: 11, color: colors.title }}>{label}</Text>
+      <Text numberOfLines={1} ellipsizeMode="clip" style={{ flex: 1, fontFamily: MONO_FONT, fontSize: 11, color: colors.steps }}>
+        {".".repeat(40)}
+      </Text>
+      <Text style={{ fontFamily: MONO_FONT, fontSize: 11, color: colors.title }}>{mark}</Text>
+    </View>
+  );
+}
 
 function Receipt({ on }: { on: boolean }) {
   const colors = useOnboardingColors();
-  const line = (label: string, mark: string, dim: boolean) => (
-    <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 6, opacity: dim ? 0.35 : 1 }}>
-      <Text style={{ fontFamily: MONO, fontSize: 11, color: colors.title }}>{label}</Text>
-      <Text numberOfLines={1} ellipsizeMode="clip" style={{ flex: 1, fontFamily: MONO, fontSize: 11, color: colors.steps }}>
-        {".".repeat(40)}
-      </Text>
-      <Text style={{ fontFamily: MONO, fontSize: 11, color: colors.title }}>{mark}</Text>
-    </View>
-  );
   const rule = <View style={{ height: 1, borderBottomWidth: 1, borderStyle: "dashed", borderColor: colors.rowBorder, marginVertical: 10 }} />;
   return (
     <View
@@ -56,20 +60,20 @@ function Receipt({ on }: { on: boolean }) {
         transform: [{ rotate: "2deg" }],
       }}
     >
-      <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: "700", letterSpacing: 1, textAlign: "center", color: colors.title }}>
+      <Text style={{ fontFamily: MONO_FONT, fontSize: 11, fontWeight: "700", letterSpacing: 1, textAlign: "center", color: colors.title }}>
         BAY
       </Text>
-      <Text style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: 0.6, textAlign: "center", marginTop: 3, color: colors.subtitle }}>
+      <Text style={{ fontFamily: MONO_FONT, fontSize: 9.5, letterSpacing: 0.6, textAlign: "center", marginTop: 3, color: colors.subtitle }}>
         ITEMIZED. UNLIKE SOME EXPENSES.
       </Text>
       {rule}
-      <View style={{ gap: 6 }}>{SENT.map((label) => line(label, on ? "SENT" : "—", !on))}</View>
+      <View style={{ gap: 6 }}>{SENT.map((label) => <ReceiptLine key={label} label={label} mark={on ? "SENT" : "—"} dim={!on} />)}</View>
       {rule}
-      <View style={{ gap: 6 }}>{NEVER.map((label) => line(label, "NEVER", false))}</View>
+      <View style={{ gap: 6 }}>{NEVER.map((label) => <ReceiptLine key={label} label={label} mark="NEVER" dim={false} />)}</View>
       {rule}
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: "700", color: colors.title }}>PERSONAL DATA</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: "700", color: colors.title }}>0.00</Text>
+        <Text style={{ fontFamily: MONO_FONT, fontSize: 11, fontWeight: "700", color: colors.title }}>PERSONAL DATA</Text>
+        <Text style={{ fontFamily: MONO_FONT, fontSize: 11, fontWeight: "700", color: colors.title }}>0.00</Text>
       </View>
       <View
         style={{
@@ -83,7 +87,7 @@ function Receipt({ on }: { on: boolean }) {
           transform: [{ rotate: "-6deg" }],
         }}
       >
-        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", letterSpacing: 1, color: on ? "#2F9E5B" : colors.steps }}>
+        <Text style={{ fontFamily: MONO_FONT, fontSize: 10, fontWeight: "700", letterSpacing: 1, color: on ? "#2F9E5B" : colors.steps }}>
           {on ? "THANK YOU" : "NOT SHARED"}
         </Text>
       </View>

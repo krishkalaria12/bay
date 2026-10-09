@@ -1,34 +1,18 @@
 import { DIA_SPECTRUM, PowerUp } from "@bay/shaders";
-import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol, type IntroMusicCues } from "@bay/shell";
+import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
-import { tensionSpring } from "../../lib/springs";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
 import { introMusicMuted, saveIntroMusicMuted } from "./state";
 import { SecondaryButton, useOnboardingColors } from "./ui";
-
-const WORDMARK = "Bay";
-const ICON = require("../../../assets/app-icon.png");
-
-const LETTER = 0.52;
-const TAGLINE = 0.6;
-const EXIT = 0.65;
-const CUES: IntroMusicCues = (() => {
-  const icon = 0.25;
-  const letters = 1.15;
-  const letterStep = 0.055;
-  const letterCount = WORDMARK.length;
-  const tagline = letters + (letterCount - 1) * letterStep + LETTER + 0.15;
-  const exit = tagline + TAGLINE + 1.1;
-  return { icon, letters, letterStep, letterCount, tagline, exit, end: exit + EXIT };
-})();
+import { APP_NAME } from "../../lib/constants";
+import { APP_ICON } from "../../lib/assets";
+import { INTRO_CUES, INTRO_EXIT, INTRO_ICON_SPRING, INTRO_LETTER, INTRO_TAGLINE } from "./constants";
 
 const ms = (s: number) => Math.round(s * 1000);
 const EASE = Easing.out(Easing.cubic);
-// Animated's old spring: tension 50, friction 7.
-const ICON_SPRING = tensionSpring(50, 7);
 
 export function Intro({ onDone }: { onDone: () => void }) {
   const colors = useOnboardingColors();
@@ -46,18 +30,18 @@ export function Intro({ onDone }: { onDone: () => void }) {
   };
 
   useEffect(() => {
-    icon.set(withDelay(ms(CUES.icon), withSpring(1, ICON_SPRING)));
-    tagline.set(withDelay(ms(CUES.tagline), withTiming(1, { duration: ms(TAGLINE), easing: EASE })));
+    icon.set(withDelay(ms(INTRO_CUES.icon), withSpring(1, INTRO_ICON_SPRING)));
+    tagline.set(withDelay(ms(INTRO_CUES.tagline), withTiming(1, { duration: ms(INTRO_TAGLINE), easing: EASE })));
     // The exit comes last: the intro ends with it.
     exit.set(
       withDelay(
-        ms(CUES.exit),
-        withTiming(1, { duration: ms(EXIT), easing: Easing.inOut(Easing.cubic) }, (finished) => {
+        ms(INTRO_CUES.exit),
+        withTiming(1, { duration: ms(INTRO_EXIT), easing: Easing.inOut(Easing.cubic) }, (finished) => {
           if (finished) runOnJS(finish)();
         }),
       ),
     );
-    playIntroMusic(CUES, introMusicMuted());
+    playIntroMusic(INTRO_CUES, introMusicMuted());
     return () => {
       cancelAnimation(icon);
       cancelAnimation(tagline);
@@ -99,10 +83,10 @@ export function Intro({ onDone }: { onDone: () => void }) {
       <PowerUp palette={DIA_SPECTRUM} speed={0.8} origin={0.5} style={[StyleSheet.absoluteFill, { opacity: dark ? 0.9 : 0.6 }]} />
       <Animated.View style={[{ alignItems: "center", gap: 18 }, zoom]}>
         <Animated.View style={iconStyle}>
-          <Image source={ICON} style={{ width: 96, height: 96 }} />
+          <Image source={APP_ICON} style={{ width: 96, height: 96 }} />
         </Animated.View>
-        <View style={{ flexDirection: "row" }} accessibilityLabel={WORDMARK}>
-          {[...WORDMARK].map((ch, i) => (
+        <View style={{ flexDirection: "row" }} accessibilityLabel={APP_NAME}>
+          {[...APP_NAME].map((ch, i) => (
             <Letter key={i} letter={ch} index={i} color={colors.title} />
           ))}
         </View>
@@ -124,7 +108,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
 function Letter({ letter, index, color }: { letter: string; index: number; color: string }) {
   const t = useSharedValue(0);
   useEffect(() => {
-    t.set(withDelay(ms(CUES.letters + index * CUES.letterStep), withTiming(1, { duration: ms(LETTER), easing: EASE })));
+    t.set(withDelay(ms(INTRO_CUES.letters + index * INTRO_CUES.letterStep), withTiming(1, { duration: ms(INTRO_LETTER), easing: EASE })));
     return () => cancelAnimation(t);
   }, []);
   const style = useAnimatedStyle(() => ({ opacity: t.get(), transform: [{ translateY: interpolate(t.get(), [0, 1], [14, 0]) }] }));

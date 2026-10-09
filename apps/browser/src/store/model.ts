@@ -1,6 +1,6 @@
 import { appUrlOrigin, displayHost } from "@bay/core";
 import type { BrowserState } from "./browser";
-import { DEFAULT_PROFILE_ID } from "./settings";
+import { DEFAULT_PROFILE_ID } from "./constants";
 import type { BrowserWindow, Profile, Tab, TabLive, TabSnapshot } from "./types";
 
 

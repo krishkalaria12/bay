@@ -4,6 +4,7 @@ import { bookmarkUuidFor, isBookmarkUuid, rootIdsFor } from "../store/bookmarks"
 import { useBrowser, type BrowserState } from "../store/browser";
 import { engineProfile, isIncognitoProfile } from "../store/model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks } from "../store/types";
+import { BOOKMARKS_CACHE_FILE, BOOKMARKS_CACHE_SAVE_MS, LEGACY_BOOKMARKS_FILE, LEGACY_BOOKMARKS_KEPT_MS } from "./constants";
 
 // Bookmarks are Chrome's (BookmarkModel), so chrome.bookmarks and the app see one tree. The store's `bookmarks`
 // stays the app's model of it (its UI, sync and imports change it as before); this keeps the two alike:
@@ -13,14 +14,6 @@ import type { BookmarkFolder, BookmarkNode, Bookmarks } from "../store/types";
 //   Chrome has; the app's own ops raise no event there).
 // Once, it moves the app's old bookmarks.json into Chrome.
 
-const LEGACY_FILE = "bookmarks.json";
-// Chrome saves its bookmarks file a moment after a change; the old file stays until then, so a crash before it
-// moves it again (adding only what Chrome lacks).
-const LEGACY_KEPT_MS = 10_000;
-// The tree as last read from Chrome, shown at launch until Chrome has loaded its own (no empty bar). Display only:
-// it's never sent to Chrome, and what the app does before the read is replayed on Chrome's tree.
-const CACHE_FILE = "bookmarks-cache.json";
-const CACHE_SAVE_MS = 2000;
 const store = () => useBrowser.getState();
 
 // MARK: Trees
@@ -349,7 +342,7 @@ type CacheDoc = { version: 1; trees: Record<string, BookmarkNode[]> };
 
 function readCache(): CacheDoc["trees"] {
   try {
-    const json = readDocument(CACHE_FILE);
+    const json = readDocument(BOOKMARKS_CACHE_FILE);
     const doc = json ? (JSON.parse(json) as CacheDoc) : null;
     return doc?.version === 1 ? doc.trees : {};
   } catch {
@@ -367,7 +360,7 @@ function launchTrees(): Record<string, Flat> {
   }
   if (Object.keys(out).length) return out;
   try {
-    const legacy = (JSON.parse(readDocument(LEGACY_FILE) ?? "null") as { bookmarks?: Bookmarks } | null)?.bookmarks;
+    const legacy = (JSON.parse(readDocument(LEGACY_BOOKMARKS_FILE) ?? "null") as { bookmarks?: Bookmarks } | null)?.bookmarks;
     const s = store();
     for (const [profileId, roots] of Object.entries(legacy?.roots ?? {})) {
       if (!s.profiles[profileId] || isIncognitoProfile(profileId)) continue;
@@ -397,9 +390,9 @@ function saveCache() {
     trees[engine] = [...flatFromStore(s.bookmarks, engine).nodes.keys()].map((id) => s.bookmarks.nodes[id]!);
   }
   try {
-    writeDocument(CACHE_FILE, JSON.stringify({ version: 1, trees } satisfies CacheDoc));
+    writeDocument(BOOKMARKS_CACHE_FILE, JSON.stringify({ version: 1, trees } satisfies CacheDoc));
   } catch (error) {
-    console.warn(`[bookmarks] couldn't save ${CACHE_FILE}`, error);
+    console.warn(`[bookmarks] couldn't save ${BOOKMARKS_CACHE_FILE}`, error);
   }
 }
 
@@ -411,13 +404,13 @@ function saveCache() {
  * it is. The file goes once Chrome has saved; a failed add keeps it for the next launch. Profiles that no longer
  * exist are dropped.
  */
-export async function migrateBookmarksFile({ keepMs = LEGACY_KEPT_MS } = {}): Promise<"none" | "moved" | "kept"> {
+export async function migrateBookmarksFile({ keepMs = LEGACY_BOOKMARKS_KEPT_MS } = {}): Promise<"none" | "moved" | "kept"> {
   let file: { bookmarks?: Bookmarks } | null = null;
   try {
-    const json = readDocument(LEGACY_FILE);
+    const json = readDocument(LEGACY_BOOKMARKS_FILE);
     file = json ? JSON.parse(json) : null;
   } catch (error) {
-    console.warn(`[bookmarks] ${LEGACY_FILE} is unreadable; leaving it`, error);
+    console.warn(`[bookmarks] ${LEGACY_BOOKMARKS_FILE} is unreadable; leaving it`, error);
     return "kept";
   }
   if (!file) return "none";
@@ -454,11 +447,11 @@ export async function migrateBookmarksFile({ keepMs = LEGACY_KEPT_MS } = {}): Pr
       if (result.skipped) throw new Error(`${result.skipped} of ${ops.length} bookmarks couldn't be added`);
     }
   } catch (error) {
-    console.warn(`[bookmarks] moving ${LEGACY_FILE} into Chrome failed; trying again next launch`, error);
+    console.warn(`[bookmarks] moving ${LEGACY_BOOKMARKS_FILE} into Chrome failed; trying again next launch`, error);
     return "kept";
   }
-  if (keepMs) setTimeout(() => removeDocument(LEGACY_FILE), keepMs);
-  else removeDocument(LEGACY_FILE);
+  if (keepMs) setTimeout(() => removeDocument(LEGACY_BOOKMARKS_FILE), keepMs);
+  else removeDocument(LEGACY_BOOKMARKS_FILE);
   return "moved";
 }
 
@@ -485,7 +478,7 @@ export function startBookmarks() {
     }
     if (s.bookmarks !== prev.bookmarks) {
       push(s);
-      if ([...engines.values()].some((e) => e.shadow)) cacheTimer ??= setTimeout(saveCache, CACHE_SAVE_MS);
+      if ([...engines.values()].some((e) => e.shadow)) cacheTimer ??= setTimeout(saveCache, BOOKMARKS_CACHE_SAVE_MS);
     }
   });
   return () => {

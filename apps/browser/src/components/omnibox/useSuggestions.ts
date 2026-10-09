@@ -16,11 +16,11 @@ import { bookmarkProfileId } from "../../store/model";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
 import type { Bookmarks, HistoryEntry } from "../../store/types";
 import { currentBarActions } from "./actions";
+import { NO_HISTORY } from "../../store/constants";
+import { SUGGEST_WARM_SLICE_MS } from "./constants";
 
-const NO_HISTORY: HistoryEntry[] = [];
 const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
-const WARM_SLICE_MS = 4;
 
 type BookmarkRow = { url: string; title: string; favicon: string | null };
 const bookmarkCache = new WeakMap<Bookmarks, Map<string, BookmarkRow[]>>();
@@ -116,7 +116,7 @@ export function useSuggestions({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const step = () => {
-      timer = prepareSuggestions(source, Date.now() + WARM_SLICE_MS) ? undefined : setTimeout(step, 16);
+      timer = prepareSuggestions(source, Date.now() + SUGGEST_WARM_SLICE_MS) ? undefined : setTimeout(step, 16);
       if (!timer) historyHosts(source.history);
     };
     timer = setTimeout(step, 0);

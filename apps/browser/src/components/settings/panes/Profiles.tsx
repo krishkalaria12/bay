@@ -18,6 +18,7 @@ import { openThemeEditor } from "../../profiles/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { useSettingsNav } from "../windows";
+import { PROFILE_ROW_HEIGHT } from "../constants";
 
 const listOf = (names: string[]) => (names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`);
 
@@ -62,7 +63,6 @@ export function ProfilesPane() {
   );
 }
 
-const ROW_HEIGHT = 46;
 const settle = (value: SharedValue<number>, toValue: number) => value.set(withTiming(toValue, { duration: 160, easing: Easing.out(Easing.cubic) }));
 
 function ProfileList() {
@@ -108,14 +108,14 @@ function profileReorder(setDragging: (id: string | null) => void) {
       const { id, from } = drag;
       const ids = useBrowser.getState().profileOrder;
       const max = ids.length - 1;
-      offsetOf(id).set(Math.max(-from * ROW_HEIGHT - 6, Math.min((max - from) * ROW_HEIGHT + 6, dy)));
-      const to = Math.max(0, Math.min(max, Math.round(from + dy / ROW_HEIGHT)));
+      offsetOf(id).set(Math.max(-from * PROFILE_ROW_HEIGHT - 6, Math.min((max - from) * PROFILE_ROW_HEIGHT + 6, dy)));
+      const to = Math.max(0, Math.min(max, Math.round(from + dy / PROFILE_ROW_HEIGHT)));
       if (to === drag.to) return;
       drag.to = to;
       hapticTick();
       ids.forEach((other, j) => {
         if (other === id) return;
-        settle(offsetOf(other), from < j && j <= to ? -ROW_HEIGHT : to <= j && j < from ? ROW_HEIGHT : 0);
+        settle(offsetOf(other), from < j && j <= to ? -PROFILE_ROW_HEIGHT : to <= j && j < from ? PROFILE_ROW_HEIGHT : 0);
       });
     },
     end(commit: boolean) {
@@ -200,7 +200,7 @@ function ProfileRow({
           <Pressable onPress={() => go("profiles", profileId)}>
             <View
               style={{
-                height: ROW_HEIGHT - (first ? 0 : StyleSheet.hairlineWidth * 2),
+                height: PROFILE_ROW_HEIGHT - (first ? 0 : StyleSheet.hairlineWidth * 2),
                 paddingLeft: 8,
                 paddingRight: 12,
                 flexDirection: "row",

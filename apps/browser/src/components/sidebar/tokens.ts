@@ -1,4 +1,5 @@
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import type { GroupColor } from "../../store/types";
 import { useSidebarUi } from "./state";
@@ -99,9 +100,6 @@ export function withAlpha(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1, 7), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
-
-export const SIDEBAR_MIN_WIDTH = 160;
-export const SIDEBAR_MAX_WIDTH = 400;
 
 export function useSidebarWidth(windowId: string): number {
   const saved = useBrowser((s) => s.settings.sidebarWidth ?? layout.sidebarWidth);

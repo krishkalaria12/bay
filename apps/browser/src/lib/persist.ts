@@ -8,9 +8,7 @@ import { startFavicons } from "./favicons";
 import { startBookmarks } from "./bookmarks";
 import { startHistory } from "./history";
 import { startProfileDataCleanup } from "./profileData";
-
-const SAVE_DELAY_MS = 800;
-const VERSION = 2;
+import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
 
 type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
 
@@ -27,7 +25,7 @@ const DOCS: Doc[] = [
     name: "downloads.json",
     sources: (s) => [s.downloads],
     json: serialized((s) => ({
-      version: VERSION,
+      version: PERSIST_VERSION,
       downloads: s.downloads
         .filter((d) => !d.profile || !isIncognitoProfile(d.profile))
         .map((d) => (d.state === "downloading" ? { ...d, state: "failed" } : d)),
@@ -41,7 +39,7 @@ const DOCS: Doc[] = [
       const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
       const kept = new Set(windows.map((w) => w.id));
       return {
-        version: VERSION,
+        version: PERSIST_VERSION,
         profiles: s.profiles,
         profileOrder: s.profileOrder,
         orphanedProfileData: s.orphanedProfileData,

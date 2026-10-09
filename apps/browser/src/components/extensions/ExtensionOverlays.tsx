@@ -21,6 +21,7 @@ import {
   useWindowExtensions,
   type InstallRequest,
 } from "./state";
+import { POPUP_MAX_SIZE, POPUP_MIN_SIZE } from "./constants";
 
 export function ExtensionOverlays() {
   const windowId = useWindowId();
@@ -45,9 +46,6 @@ export function InstallDialogHost({ windowId, onClosed }: { windowId: string; on
 }
 
 // MARK: Action popup
-
-const MIN = { width: 25, height: 25 };
-const MAX = { width: 800, height: 600 };
 
 const MEASURE = `
 const measure = () => {
@@ -98,8 +96,8 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
     void web.current?.evaluate<{ w: number; h: number }>(MEASURE).then((m) => {
       if (!alive.current || !m) return;
       const next = {
-        width: Math.min(MAX.width, Math.max(MIN.width, m.w)),
-        height: Math.min(MAX.height, Math.max(MIN.height, m.h)),
+        width: Math.min(POPUP_MAX_SIZE.width, Math.max(POPUP_MIN_SIZE.width, m.w)),
+        height: Math.min(POPUP_MAX_SIZE.height, Math.max(POPUP_MIN_SIZE.height, m.h)),
       };
       setSize((prev) => {
         if (!prev) appear.set(withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic) }));
@@ -109,7 +107,7 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
     });
   };
 
-  const { width, height, left, top } = extensionPopupGeometry(anchor, size ?? MIN, window);
+  const { width, height, left, top } = extensionPopupGeometry(anchor, size ?? POPUP_MIN_SIZE, window);
 
   return (
     <>

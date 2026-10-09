@@ -3,9 +3,8 @@ import { StyleSheet } from "react-native";
 import Animated from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
-import { useSwitchSlide, type SlideOptions } from "../layout/switchMotion";
-
-const ROW_SLIDE: SlideOptions = { offset: 6, duration: 150, axis: "y" };
+import { useSwitchSlide } from "../layout/switchMotion";
+import { ROW_SLIDE } from "./constants";
 
 /**
  * The active row's fill, under its content. On a tab switch the row left lets it go down (or up) the list as the row

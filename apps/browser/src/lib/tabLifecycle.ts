@@ -11,6 +11,7 @@ import { activeTabId, engineProfile, isIncognitoProfile, wake } from "../store/m
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
+import { FREEZE_SWEEP_MS, LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
 
 export const POLICY = {
   protectedRecent: 10,
@@ -20,10 +21,6 @@ export const POLICY = {
   busyCpu: 10,
   freezeAfterMs: 60_000,
 };
-
-const SWEEP_MS = 15_000;
-const FREEZE_SWEEP_MS = 30_000;
-const EVAL_TIMEOUT_MS = 2_000;
 
 // Whether a page is frozen is the engine's alone (showing a page unfreezes it), so nothing here keeps a copy.
 type Lifecycle = {
@@ -113,7 +110,7 @@ const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T) =>
   Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
 
 async function hasUnsavedInput(handle: WebViewHandle): Promise<boolean | null> {
-  const result = await withTimeout(handle.evaluate<boolean>(UNSAVED_INPUT_CHECK).catch(() => null), EVAL_TIMEOUT_MS, null);
+  const result = await withTimeout(handle.evaluate<boolean>(UNSAVED_INPUT_CHECK).catch(() => null), LIFECYCLE_EVAL_TIMEOUT_MS, null);
   return typeof result === "boolean" ? result : null;
 }
 
@@ -379,7 +376,7 @@ export function startTabLifecycle() {
   setInterval(() => {
     track(store());
     void sweep();
-  }, SWEEP_MS);
+  }, LIFECYCLE_SWEEP_MS);
   setInterval(() => {
     if (useLifecycle.getState().batterySaver) void freezeBusyTabs();
   }, FREEZE_SWEEP_MS);

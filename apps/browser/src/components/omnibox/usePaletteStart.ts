@@ -1,8 +1,7 @@
 import { useBrowser } from "../../store/browser";
-import type { HistoryEntry } from "../../store/types";
+import { NO_HISTORY } from "../../store/constants";
 import { paletteStart } from "./paletteStart";
 
-const NO_HISTORY: HistoryEntry[] = [];
 
 export function usePaletteStart(windowId: string, profileId: string, tabId: string) {
   const tabs = useBrowser((s) => s.tabs);

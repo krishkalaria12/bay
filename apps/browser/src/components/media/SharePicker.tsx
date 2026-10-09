@@ -11,9 +11,8 @@ import { usePages } from "../layout/pageState";
 import { Favicon, useHover } from "../primitives";
 import { noteTabShare } from "./ShareBar";
 import { useMedia } from "./state";
+import { SHARE_PICKER_WIDTH, SHARE_SOURCES_REFRESH_MS } from "./constants";
 
-const WIDTH = 460;
-const REFRESH_MS = 2500;
 const TAB = "tab:";
 
 function shareableTabs(tabId: string) {
@@ -97,7 +96,7 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
     setSources(request.sources);
     setSelected(null);
     let live = true;
-    const t = setInterval(() => void getDisplayMediaSources().then((next) => live && setSources(next)), REFRESH_MS);
+    const t = setInterval(() => void getDisplayMediaSources().then((next) => live && setSources(next)), SHARE_SOURCES_REFRESH_MS);
     setTimeout(() => (list.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
     return () => {
       live = false;
@@ -125,7 +124,7 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
     if (sources.some((s) => s.id === id)) answerDisplayMedia(tabId, id);
   };
   const cancel = () => answerDisplayMedia(tabId, null);
-  const width = Math.min(WIDTH, paneWidth - 24);
+  const width = Math.min(SHARE_PICKER_WIDTH, paneWidth - 24);
 
   return (
     <Popover key={request.id} width={width} top={4} left={(paneWidth - width) / 2} onDismiss={cancel}>

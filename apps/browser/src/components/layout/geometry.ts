@@ -1,11 +1,9 @@
-import { layout } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { slotsOf } from "../../store/splits";
 import type { SplitView } from "../../store/types";
+import { MIN_PANE, PANE_GAP, TRAFFIC_LIGHTS_OFFSET } from "./constants";
 
 export type Rect = { x: number; y: number; width: number; height: number };
-
-export const PANE_GAP = 7;
-export const MIN_PANE = 220;
 
 export type Divider = { kind: "root"; index: number; rect: Rect; vertical: boolean } | { kind: "stack"; rect: Rect; vertical: boolean };
 
@@ -80,8 +78,6 @@ export type ToolbarGeometry = {
   urlLeft: number;
 };
 
-export const TRAFFIC_LIGHTS_OFFSET = 70;
-
 const geometries = new Map<string, ToolbarGeometry>();
 
 // One object per layout, so panes that get it as a prop can skip re-rendering.
@@ -102,9 +98,6 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
   const shift = c1 - c0;
   return { sidebarButton: null, sidebarButtonEnd: end, back: offset + c1 - shift, forward: offset + c2 - shift, reload: offset + c3 - shift, urlLeft: offset + layout.breadcrumbX - 8 - shift };
 }
-
-// The end toggle's room at the toolbar's right: its button and a 2pt gap.
-export const SIDEBAR_BUTTON_END_ROOM = layout.toolbarButton + 2;
 
 export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, sidebarButtonEnd: false, back: 21, forward: 21, reload: 21, urlLeft: 8 };
 // No toolbar on the window's top-left pane with the sidebar on the right: the window buttons show over its corner on

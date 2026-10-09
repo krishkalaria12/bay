@@ -1,5 +1,5 @@
 import { FadeLabel } from "@bay/shell";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
@@ -13,6 +13,7 @@ import { dismissHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
 import { Avatar, HoverSurface, SmallButton } from "./LiveItemCard";
 import { useLiveColors } from "./colors";
+import { JOINABLE_BEFORE_MS } from "./constants";
 
 export function useIsCalendarTab(tabId: string | null): boolean {
   const pinnedCalendar = useBrowser((s) => {
@@ -22,8 +23,6 @@ export function useIsCalendarTab(tabId: string | null): boolean {
   const on = useLive((s) => s.calendar.showPreview);
   return pinnedCalendar && on;
 }
-
-const JOINABLE_BEFORE_MS = 10 * 60_000;
 
 export function CalendarPreview({ tabId, windowId, anchor }: { tabId: string; windowId: string; anchor: Anchor }) {
   const theme = useTheme();

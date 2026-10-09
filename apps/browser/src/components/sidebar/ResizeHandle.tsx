@@ -3,7 +3,7 @@ import { useBrowser } from "../../store/browser";
 import { useResizeDrag } from "../layout/useResizeDrag";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import { setSidebarUi, sidebarUi } from "./state";
-import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./tokens";
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./constants";
 
 export function ResizeHandle({ windowId }: { windowId: string }) {
   // The sidebar's edge toward the page: its left on the window's right, where dragging left widens it.

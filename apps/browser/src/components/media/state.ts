@@ -100,8 +100,6 @@ export function hostOf(url: string): string {
 
 export const hasTrackControls = (session: Session) => session.actions.includes("nexttrack") || session.actions.includes("previoustrack");
 
-export const SKIP_SECONDS = 15;
-
 export function isTabShown(s: BrowserState, tabId: string): boolean {
   const windowId = s.tabs[tabId]?.windowId;
   if (!windowId) return false;

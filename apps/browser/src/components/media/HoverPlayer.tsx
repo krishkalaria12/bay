@@ -1,12 +1,14 @@
 import { Surface } from "@bay/shell";
-import { hex, layout, useTheme } from "../../lib/theme";
+import { hex, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
 import { clickTab } from "../sidebar/actions";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
 import { measureRow, setSidebarUi, type Anchor } from "../sidebar/state";
 import { useSidebarWidth } from "../sidebar/tokens";
-import { MINI_PLAYER_HEIGHT, MINI_PLAYER_WIDTH, MiniPlayer } from "./MiniPlayer";
+import { MiniPlayer } from "./MiniPlayer";
+import { MINI_PLAYER_HEIGHT, MINI_PLAYER_WIDTH } from "./constants";
 import { useMedia } from "./state";
 import { useMediaTokens } from "./tokens";
 

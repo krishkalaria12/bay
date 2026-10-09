@@ -2,6 +2,7 @@ import { Symbol, type MenuItem } from "@bay/shell";
 import { Text, View } from "react-native";
 import { PROFILE_COLORS } from "../../lib/theme";
 import type { Profile } from "../../store/types";
+import { SYMBOL_PREFIX } from "../../lib/constants";
 
 export const PROFILE_SYMBOLS: { name: string; title: string }[] = [
   { name: "house.fill", title: "Home" },
@@ -28,7 +29,6 @@ export const PROFILE_SYMBOLS: { name: string; title: string }[] = [
 
 const EMOJI = ["😀", "😎", "🤓", "🧑‍💻", "💼", "🏠", "🎓", "🎨", "🎮", "🎵", "📚", "✈️", "🌱", "🔥", "⭐️", "🚀", "🐶", "🐱", "🦊", "🍀"];
 
-const SYMBOL_PREFIX = "symbol:";
 export const profileSymbol = (icon: string | null) => (icon?.startsWith(SYMBOL_PREFIX) ? icon.slice(SYMBOL_PREFIX.length) : null);
 
 export function iconMenuItems(current: string | null): MenuItem[] {

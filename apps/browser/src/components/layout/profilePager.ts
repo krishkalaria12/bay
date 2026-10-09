@@ -6,6 +6,7 @@ import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedV
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser } from "../../store/browser";
+import { WHEEL_BURST_MS, WHEEL_COOLDOWN_MS, WHEEL_THRESHOLD } from "./constants";
 
 export type PagerPage = { id: string; slot: number; resting?: boolean };
 
@@ -16,11 +17,6 @@ function restPages(current: string | null, order: string[]): PagerPage[] {
   const after = i >= 0 ? order[i + 1] : undefined;
   return [...(before ? [{ id: before, slot: -1 }] : []), { id: current, slot: 0 }, ...(after ? [{ id: after, slot: 1 }] : [])];
 }
-
-// Dia: 1pt threshold, 50ms bursts, 0.25s cooldown.
-const WHEEL_THRESHOLD = 1;
-const WHEEL_BURST_MS = 49;
-const WHEEL_COOLDOWN_MS = 250;
 
 // The native controller (NNPager) tracks, settles and selects; JS only commits its selections.
 class ProfilePager {

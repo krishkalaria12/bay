@@ -9,11 +9,10 @@ import { openModeFor, openUrl } from "../bookmarks/actions";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { Button, Checkbox, useFormColors } from "../settings/controls";
 import { ClearDataDialog, useClearDataRequest } from "./ClearDataDialog";
-import { dayLabel, dayStart, EmptyState, hostLabel, matchesQuery, PAGE_WIDTH, PageHeader, timeLabel } from "./PageLayout";
-
-const ROW = 38;
-const HEADER = 44;
-const NO_HISTORY: HistoryEntry[] = [];
+import { dayLabel, dayStart, EmptyState, hostLabel, matchesQuery, PageHeader, timeLabel } from "./PageLayout";
+import { HISTORY_HEADER, HISTORY_ROW, PAGE_WIDTH } from "./constants";
+import { NO_HISTORY } from "../../store/constants";
+import { useResetOn } from "../../lib/useResetOn";
 
 type Item =
   | { type: "day"; key: string; label: string; offset: number }
@@ -30,7 +29,7 @@ function listItems(history: HistoryEntry[], query: string): Item[] {
     if (start !== day) {
       day = start;
       out.push({ type: "day", key: `d${start}`, label: dayLabel(start), offset });
-      offset += HEADER;
+      offset += HISTORY_HEADER;
     }
     const next = matches[i + 1];
     out.push({
@@ -41,7 +40,7 @@ function listItems(history: HistoryEntry[], query: string): Item[] {
       last: !next || dayStart(next.lastVisit) !== start,
       offset,
     });
-    offset += ROW;
+    offset += HISTORY_ROW;
   });
   return out;
 }
@@ -64,7 +63,7 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
     }
   }, [clearRequest, activeHere]);
 
-  useEffect(() => setQuery(initialQuery), [initialQuery]);
+  useResetOn(initialQuery, () => setQuery(initialQuery));
 
   const items = listItems(history, query);
 
@@ -121,14 +120,14 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
           keyExtractor={(i) => i.key}
           getItemLayout={(_, index) => {
             const item = items[index]!;
-            return { length: item.type === "day" ? HEADER : ROW, offset: item.offset, index };
+            return { length: item.type === "day" ? HISTORY_HEADER : HISTORY_ROW, offset: item.offset, index };
           }}
           initialNumToRender={30}
           windowSize={8}
           contentContainerStyle={{ paddingBottom: 40, alignItems: "center" }}
           renderItem={({ item }) =>
             item.type === "day" ? (
-              <View style={{ width: PAGE_WIDTH, maxWidth: "100%", height: HEADER, justifyContent: "flex-end", paddingBottom: 8, paddingHorizontal: 30 }}>
+              <View style={{ width: PAGE_WIDTH, maxWidth: "100%", height: HISTORY_HEADER, justifyContent: "flex-end", paddingBottom: 8, paddingHorizontal: 30 }}>
                 <Text style={{ fontSize: 12.5, fontWeight: "600", color: theme.textSecondary }}>{item.label}</Text>
               </View>
             ) : (
@@ -204,7 +203,7 @@ function HistoryRow({
       style={{
         width: PAGE_WIDTH,
         maxWidth: "100%",
-        height: ROW,
+        height: HISTORY_ROW,
         paddingHorizontal: 16,
       }}
     >

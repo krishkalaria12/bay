@@ -2,20 +2,23 @@ import { ContextMenuArea, FadeLabel, Symbol, WindowDragRegion } from "@bay/shell
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { layout, ThemeScope, useTheme } from "../lib/theme";
+import { ThemeScope, useTheme } from "../lib/theme";
+import { layout } from "../lib/constants";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
 import { PageProfileContext, useIsIncognito, useSettings, useWindowId, useWindowProfileId } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
-import { listTopGap, SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
-import { SIDEBAR_PLAYER_HEIGHT, SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
+import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
+import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD } from "./layout/constants";
+import { SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
+import { SIDEBAR_PLAYER_HEIGHT } from "./media/constants";
 import { HoverSlot } from "./HoverSlot";
 import { IconButton, useHover } from "./primitives";
-import { PROFILE_INDICATOR_X, ProfileIndicator } from "./ProfileIndicator";
+import { ProfileIndicator } from "./ProfileIndicator";
+import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./profiles/constants";
 import { usePageStyle, usePagerPages } from "./layout/profilePager";
-import { PROFILE_DOTS_HEIGHT } from "./profiles/ProfileDots";
 import { SpaceSwitcher } from "./profiles/SpaceSwitcher";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
@@ -32,17 +35,7 @@ import { measureRow } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./sidebar/RowMotion";
 import { useSidebarTokens, useSidebarWidth } from "./sidebar/tokens";
-
-const GLOW_ROOM = 24;
-// The pin target's band between the header and the first row, with no address field there.
-const PIN_BAND = 17;
-const ROW_PITCH = layout.rowHeight + layout.rowGap;
-const DOCKED_BOTTOM = 6;
-// Room the docked New Tab row takes from the list: the row plus one row gap above it.
-const DOCK = DOCKED_BOTTOM + ROW_PITCH;
-// Rows in 2400 pt, more than the tallest sidebar.
-const FIRST_PAINT_ROWS = 64;
-const ROWS_PER_FRAME = 32;
+import { CLEAN_UP_UPSELL_MIN, DOCKED_BOTTOM, FIRST_PAINT_ROWS, GLOW_ROOM, NEW_TAB_DOCK, PIN_BAND, ROW_PITCH, ROWS_PER_FRAME } from "./sidebar/constants";
 
 // The list's room and its height: the New Tab row docks below the list once the list leaves no room for it.
 type Room = { available: number; list: number };
@@ -100,10 +93,10 @@ export function Sidebar() {
               left: 0,
               right: 0,
               top: header - glowRoom,
-              bottom: (docked ? DOCK : 0) + playerHeight + footer,
+              bottom: (docked ? NEW_TAB_DOCK : 0) + playerHeight + footer,
               overflow: paging ? "hidden" : "visible",
             }}
-            onLayout={(e) => setRoom({ available: e.nativeEvent.layout.height + (docked ? DOCK : 0), list: listHeight.current })}
+            onLayout={(e) => setRoom({ available: e.nativeEvent.layout.height + (docked ? NEW_TAB_DOCK : 0), list: listHeight.current })}
           >
             {pages.map((page) => (
               <SidebarPage
@@ -133,7 +126,7 @@ export function Sidebar() {
           </View>
 
           {playerTab ? (
-            <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: (docked ? DOCK : 8) + footer }}>
+            <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: (docked ? NEW_TAB_DOCK : 8) + footer }}>
               <SidebarPlayer tabId={playerTab} />
             </View>
           ) : null}
@@ -437,7 +430,7 @@ function DownloadsButton({ windowId }: { windowId: string }) {
   );
 }
 
-const NewTabRow = memo(function NewTabRow({ windowId }: { windowId: string }) {
+function NewTabRow({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const cleaned = useBrowser((s) => cleanedTabsFor(s, windowId).length);
@@ -483,16 +476,15 @@ const NewTabRow = memo(function NewTabRow({ windowId }: { windowId: string }) {
       </View>
     </View>
   );
-});
+}
 
-const UPSELL_MIN = 10;
 // Declined for the session: no window offers it again until the app restarts.
 let upsellDeclined = false;
 const declineUpsell = () => {
   upsellDeclined = true;
 };
 
-const CleanUpUpsell = memo(function CleanUpUpsell({ windowId }: { windowId: string }) {
+function CleanUpUpsell({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const [count, setCount] = useState(0);
@@ -504,8 +496,44 @@ const CleanUpUpsell = memo(function CleanUpUpsell({ windowId }: { windowId: stri
     const t = setInterval(check, 60_000);
     return () => clearInterval(t);
   }, [windowId]);
-  if (hidden || daily || count < UPSELL_MIN) return null;
-  const button = (title: string, onPress: () => void, primary = false) => (
+  if (hidden || daily || count < CLEAN_UP_UPSELL_MIN) return null;
+  const dismiss = () => {
+    declineUpsell();
+    setHidden(true);
+  };
+  return (
+    <View style={{ marginTop: 10, borderRadius: 12, padding: 10, backgroundColor: tokens.groupFill, borderWidth: 0.5, borderColor: tokens.groupStroke, gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Symbol name="wand.and.stars" size={12} color={theme.icon} style={{ width: 16, height: 16 }} />
+        <Text style={{ flex: 1, fontSize: 12, fontWeight: "600", color: theme.textPrimary }}>{count} tabs haven’t been touched in a while</Text>
+      </View>
+      <Text style={{ fontSize: 12, color: theme.textSecondary }}>Bay can tidy up for you. You can always reopen closed tabs from the ⌄ menu.</Text>
+      <View style={{ gap: 6 }}>
+        <UpsellButton
+          title="Clean Up Once"
+          primary
+          onPress={() => {
+            useBrowser.getState().cleanUpTabs(windowId);
+            dismiss();
+          }}
+        />
+        <UpsellButton
+          title="Clean Up Daily"
+          onPress={() => {
+            useBrowser.getState().updateSettings({ cleanUpInactiveTabsAfterHours: 24 });
+            useBrowser.getState().cleanUpTabs(windowId);
+          }}
+        />
+        <UpsellButton title="Not Now" onPress={dismiss} />
+      </View>
+    </View>
+  );
+}
+
+function UpsellButton({ title, onPress, primary = false }: { title: string; onPress: () => void; primary?: boolean }) {
+  const theme = useTheme();
+  const tokens = useSidebarTokens();
+  return (
     <Pressable onPress={onPress}>
       {({ pressed }) => (
         <View
@@ -523,28 +551,4 @@ const CleanUpUpsell = memo(function CleanUpUpsell({ windowId }: { windowId: stri
       )}
     </Pressable>
   );
-  const dismiss = () => {
-    declineUpsell();
-    setHidden(true);
-  };
-  return (
-    <View style={{ marginTop: 10, borderRadius: 12, padding: 10, backgroundColor: tokens.groupFill, borderWidth: 0.5, borderColor: tokens.groupStroke, gap: 8 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <Symbol name="wand.and.stars" size={12} color={theme.icon} style={{ width: 16, height: 16 }} />
-        <Text style={{ flex: 1, fontSize: 12, fontWeight: "600", color: theme.textPrimary }}>{count} tabs haven’t been touched in a while</Text>
-      </View>
-      <Text style={{ fontSize: 12, color: theme.textSecondary }}>Bay can tidy up for you. You can always reopen closed tabs from the ⌄ menu.</Text>
-      <View style={{ gap: 6 }}>
-        {button("Clean Up Once", () => {
-          useBrowser.getState().cleanUpTabs(windowId);
-          dismiss();
-        }, true)}
-        {button("Clean Up Daily", () => {
-          useBrowser.getState().updateSettings({ cleanUpInactiveTabsAfterHours: 24 });
-          useBrowser.getState().cleanUpTabs(windowId);
-        })}
-        {button("Not Now", dismiss)}
-      </View>
-    </View>
-  );
-});
+}

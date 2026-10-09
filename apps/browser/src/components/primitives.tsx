@@ -103,7 +103,7 @@ export const Favicon = memo(function Favicon({
 });
 
 // Before Chrome has the page's icon: the one the app ships for the site (lib/siteIcons), else the host's initial.
-export const FaviconFallback = memo(function FaviconFallback({ url, size = 16 }: { url: string; size?: number }) {
+export function FaviconFallback({ url, size = 16 }: { url: string; size?: number }) {
   const theme = useTheme();
   const bundled = bundledSiteIcon(url, theme.dark);
   if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3 }} />;
@@ -127,7 +127,7 @@ export const FaviconFallback = memo(function FaviconFallback({ url, size = 16 }:
       </View>
     </View>
   );
-});
+}
 
 function hostInitial(url: string): string {
   const host = /^(?:https?|ftp):\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec(url)?.[1];

@@ -1,4 +1,5 @@
 import { appInfo, capture, isSharing } from "./client";
+import { MAX_SAMPLES, SAMPLE_EVERY } from "./config";
 
 export type SuggestionType = "history" | "bookmark" | "tab" | "url" | "search" | "calc" | "action" | "create" | "typed";
 
@@ -25,8 +26,6 @@ export const trackSettingsSection = (section: string) => capture("settings_secti
 
 // MARK: Command bar speed (sampled)
 
-const SAMPLE_EVERY = 5;
-const MAX_SAMPLES = 500;
 const latency: number[] = [];
 let keystrokes = 0;
 

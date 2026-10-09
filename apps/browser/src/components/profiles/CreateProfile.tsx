@@ -1,5 +1,5 @@
 import { showMenu, Symbol } from "@bay/shell";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { create } from "zustand";
 import { PROFILE_COLORS, useTheme } from "../../lib/theme";
@@ -57,7 +57,7 @@ function CreateProfileSheet({ windowId, preset, onDone }: { windowId: string | n
   const colors = useFormColors();
   const profiles = useBrowser((s) => s.profiles);
   const profileOrder = useBrowser((s) => s.profileOrder);
-  const groups = useMemo(() => dataGroups({ profiles, profileOrder }), [profiles, profileOrder]);
+  const groups = dataGroups({ profiles, profileOrder });
   const current = useBrowser((s) => (windowId && !s.windows[windowId]?.incognito ? s.windows[windowId]!.profileId : s.settings.defaultProfileId));
   const [name, setName] = useState(preset.name ?? "");
   const [color, setColor] = useState<ProfileColor>(() => unusedProfileColor(useBrowser.getState().profiles));

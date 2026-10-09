@@ -8,19 +8,16 @@ import { useSidebarUi } from "./state";
 import { commitSwitcher, focusSwitcherRow } from "./switcher";
 import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
-
-const WIDTH = 400;
-const ROW = 40;
-const MAX_ROWS = 9;
+import { SWITCHER_MAX_ROWS, SWITCHER_ROW, SWITCHER_WIDTH } from "./constants";
 
 export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const switcher = useSidebarUi((u) => (u.switcher?.windowId === windowId && u.switcher.visible ? u.switcher : null));
   if (!switcher) return null;
-  const start = Math.max(0, Math.min(switcher.index - Math.floor(MAX_ROWS / 2), switcher.ids.length - MAX_ROWS));
-  const shown = switcher.ids.slice(start, start + MAX_ROWS);
-  const height = shown.length * ROW + 16 + 26;
+  const start = Math.max(0, Math.min(switcher.index - Math.floor(SWITCHER_MAX_ROWS / 2), switcher.ids.length - SWITCHER_MAX_ROWS));
+  const shown = switcher.ids.slice(start, start + SWITCHER_MAX_ROWS);
+  const height = shown.length * SWITCHER_ROW + 16 + 26;
   return (
     <Surface
       fill={hex(theme.panel)}
@@ -31,7 +28,7 @@ export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId:
       shadowOpacity={theme.panelShadowOpacity}
       shadowRadius={28}
       shadowOffset={[0, 12]}
-      style={{ position: "absolute", left: (windowWidth - WIDTH) / 2, top: Math.max(40, (windowHeight - height) / 2 - 40), width: WIDTH, padding: 8 }}
+      style={{ position: "absolute", left: (windowWidth - SWITCHER_WIDTH) / 2, top: Math.max(40, (windowHeight - height) / 2 - 40), width: SWITCHER_WIDTH, padding: 8 }}
     >
       <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 8, paddingBottom: 6, paddingTop: 2 }}>Recent Tabs</Text>
       {shown.map((id, i) => (
@@ -51,7 +48,7 @@ function SwitcherRow({ tabId, focused, index, focusFill, outline }: { tabId: str
       <View
         onMouseEnter={() => focusSwitcherRow(index)}
         style={{
-          height: ROW,
+          height: SWITCHER_ROW,
           borderRadius: 10,
           flexDirection: "row",
           alignItems: "center",

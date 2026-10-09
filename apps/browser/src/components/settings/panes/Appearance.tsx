@@ -6,6 +6,7 @@ import { useBrowser } from "../../../store/browser";
 import type { Settings } from "../../../store/settings";
 import { useHover } from "../../primitives";
 import { SectionHeader, useFormColors } from "../controls";
+import { APP_ICON_CHOICE_SIZE } from "../constants";
 
 const MODES: { value: Settings["appearance"]; title: string; description: string }[] = [
   { value: "auto", title: "Automatic", description: "Follow the system appearance setting" },
@@ -228,7 +229,7 @@ function AppIconPicker() {
   const [icons, setIcons] = useState<AppIcon[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
   useEffect(() => {
-    void Promise.all([appIcons(ICON_SIZE), currentAppIcon()]).then(([list, id]) => {
+    void Promise.all([appIcons(APP_ICON_CHOICE_SIZE), currentAppIcon()]).then(([list, id]) => {
       setIcons(list);
       setCurrent(id);
     });
@@ -250,8 +251,6 @@ function AppIconPicker() {
   );
 }
 
-const ICON_SIZE = 56;
-
 function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: boolean; onPress: () => void }) {
   const theme = useTheme();
   const colors = useFormColors();
@@ -270,7 +269,7 @@ function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: bool
           backgroundColor: hovered && !selected ? colors.selected : "transparent",
         }}
       >
-        {icon.preview ? <Image source={{ uri: icon.preview }} style={{ width: ICON_SIZE, height: ICON_SIZE }} /> : null}
+        {icon.preview ? <Image source={{ uri: icon.preview }} style={{ width: APP_ICON_CHOICE_SIZE, height: APP_ICON_CHOICE_SIZE }} /> : null}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         {selected && <Symbol name="checkmark.circle.fill" size={11} color={colors.accent} style={{ width: 13, height: 13 }} />}
@@ -297,16 +296,6 @@ function ModeChoice({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const window = (dark: boolean) => (
-    <View style={{ flex: 1, backgroundColor: dark ? "#2B2226" : "#EDE6EA", padding: 6, flexDirection: "row", gap: 5 }}>
-      <View style={{ width: "24%", gap: 3, paddingTop: 8 }}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)" }} />
-        ))}
-      </View>
-      <View style={{ flex: 1, borderRadius: 4, backgroundColor: dark ? "#1A1618" : "#FFFFFF" }} />
-    </View>
-  );
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }} tooltip={description}>
       <View
@@ -322,11 +311,11 @@ function ModeChoice({
       >
         {mode === "auto" ? (
           <>
-            {window(false)}
-            {window(true)}
+            <MiniWindow dark={false} />
+            <MiniWindow dark />
           </>
         ) : (
-          window(mode === "dark")
+          <MiniWindow dark={mode === "dark"} />
         )}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
@@ -334,5 +323,19 @@ function ModeChoice({
         <Text style={{ fontSize: 12, color: selected ? theme.textPrimary : theme.textSecondary }}>{title}</Text>
       </View>
     </Pressable>
+  );
+}
+
+// A window in miniature, light or dark: a sidebar's rows beside a page.
+function MiniWindow({ dark }: { dark: boolean }) {
+  return (
+    <View style={{ flex: 1, backgroundColor: dark ? "#2B2226" : "#EDE6EA", padding: 6, flexDirection: "row", gap: 5 }}>
+      <View style={{ width: "24%", gap: 3, paddingTop: 8 }}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)" }} />
+        ))}
+      </View>
+      <View style={{ flex: 1, borderRadius: 4, backgroundColor: dark ? "#1A1618" : "#FFFFFF" }} />
+    </View>
   );
 }

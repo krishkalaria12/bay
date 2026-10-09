@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import { FOLD_MS } from "./constants";
 
-// Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in about 150 ms, fast at first.
-const FOLD_MS = 150;
+// Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in FOLD_MS, fast at first.
 const FOLD_EASING = Easing.bezier(0.2, 0.9, 0.3, 1);
 
 export type FoldState = { open: SharedValue<number>; moving: boolean };

@@ -6,21 +6,13 @@ import { hex, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useWindowId, useWindowUi } from "../store/hooks";
 import { activeTabId } from "../store/model";
-import { PAGE_MS, SWITCH_EASING } from "./layout/switchMotion";
+import { SWITCH_EASING } from "./layout/switchMotion";
+import { PAGE_SWITCH_MS } from "./layout/constants";
 import { useUrlAnchors } from "./layout/windowLayout";
 import { Omnibox } from "./Omnibox";
 import { PaletteSurface } from "./omnibox/PaletteSurface";
 import { webviews } from "../lib/webviews";
-
-// Dia: 37.4pt offset, 5.5pt rise, 888pt max, 12pt margin/radius.
-const LEFT_OF_URL = 37.4;
-const ABOVE_PANE = 5.5;
-const MAX_WIDTH = 888;
-const MIN_WIDTH = 420;
-const WINDOW_MARGIN = 12;
-const DROPDOWN_MIN_WIDTH = 350;
-const DROPDOWN_PAST_FIELD = 137;
-const DROPDOWN_RADIUS = 12;
+import { DROPDOWN_MIN_WIDTH, DROPDOWN_PAST_FIELD, DROPDOWN_RADIUS, PANEL_ABOVE_PANE, PANEL_LEFT_OF_URL, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, PANEL_WINDOW_MARGIN } from "./omnibox/constants";
 
 export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth: number; windowHeight?: number }) {
   const theme = useTheme();
@@ -52,7 +44,7 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
   }
   if (!panel.open || !activeId || !anchor) return null;
 
-  const room = (left: number, fallback: number) => (windowWidth > 0 ? windowWidth - left - WINDOW_MARGIN : fallback);
+  const room = (left: number, fallback: number) => (windowWidth > 0 ? windowWidth - left - PANEL_WINDOW_MARGIN : fallback);
   const onCancel = () => useBrowser.getState().closePanel(windowId);
 
   if (anchor.sidebar) {
@@ -74,10 +66,10 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
     );
   }
 
-  const left = Math.max(WINDOW_MARGIN, anchor.left - LEFT_OF_URL);
-  const top = Math.max(0.5, anchor.top - ABOVE_PANE);
-  const fitted = Math.min(MAX_WIDTH, anchor.width + LEFT_OF_URL);
-  const width = Math.min(Math.max(fitted, MIN_WIDTH), room(left, fitted));
+  const left = Math.max(PANEL_WINDOW_MARGIN, anchor.left - PANEL_LEFT_OF_URL);
+  const top = Math.max(0.5, anchor.top - PANEL_ABOVE_PANE);
+  const fitted = Math.min(PANEL_MAX_WIDTH, anchor.width + PANEL_LEFT_OF_URL);
+  const width = Math.min(Math.max(fitted, PANEL_MIN_WIDTH), room(left, fitted));
   return (
     <Surface
       fill={hex(theme.panel)}
@@ -115,7 +107,7 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
     }
     // Out with a tab switch's crossfade (switchMotion.ts).
     appear.set(
-      withTiming(0, { duration: PAGE_MS, easing: SWITCH_EASING, reduceMotion: ReduceMotion.System }, (finished) => {
+      withTiming(0, { duration: PAGE_SWITCH_MS, easing: SWITCH_EASING, reduceMotion: ReduceMotion.System }, (finished) => {
         if (finished) runOnJS(onClosed)();
       }),
     );

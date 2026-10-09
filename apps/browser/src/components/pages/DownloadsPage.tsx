@@ -10,7 +10,8 @@ import { openUrl } from "../bookmarks/actions";
 import { downloadMenu, downloadStatus, FileIcon } from "../Downloads";
 import { IconButton, useHover } from "../primitives";
 import { Button, useFormColors } from "../settings/controls";
-import { EmptyState, hostLabel, matchesQuery, PAGE_WIDTH, PageHeader } from "./PageLayout";
+import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
+import { PAGE_WIDTH } from "./constants";
 
 export function DownloadsPage({ tabId }: { tabId: string }) {
   const theme = useTheme();

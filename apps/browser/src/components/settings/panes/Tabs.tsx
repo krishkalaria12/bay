@@ -12,14 +12,20 @@ const CLEAN_UP = [
   { value: "720", title: "30 days" },
 ];
 
+// A row that turns one of the settings on and off.
+function SettingToggle({ setting, title, description }: { setting: keyof Settings; title: string; description?: string }) {
+  const value = useBrowser((s) => !!s.settings[setting]);
+  const update = useBrowser((s) => s.updateSettings);
+  return (
+    <Row title={title} description={description}>
+      <Toggle value={value} onChange={(v) => update({ [setting]: v })} />
+    </Row>
+  );
+}
+
 export function TabsPane() {
   const settings = useBrowser((s) => s.settings);
   const update = useBrowser((s) => s.updateSettings);
-  const toggle = (key: keyof Settings, title: string, description?: string) => (
-    <Row key={key} title={title} description={description}>
-      <Toggle value={!!settings[key]} onChange={(v) => update({ [key]: v })} />
-    </Row>
-  );
   const top = settings.tabLayout === "top";
 
   return (
@@ -30,11 +36,7 @@ export function TabsPane() {
         <LayoutChoice layout="top" title="Tab layout across the top of the window" selected={top} />
       </View>
       <Group style={{ marginTop: 14 }}>
-        {toggle(
-          "hideToolbarWhileScrolling",
-          "Hide toolbar while scrolling",
-          "With tabs across the top, scrolling down tucks the toolbar into a thin strip with the site's name. Scroll up, or click the strip, to bring it back.",
-        )}
+        <SettingToggle setting="hideToolbarWhileScrolling" title="Hide toolbar while scrolling" description="With tabs across the top, scrolling down tucks the toolbar into a thin strip with the site's name. Scroll up, or click the strip, to bring it back." />
       </Group>
 
       <SectionHeader title="General" />
@@ -42,17 +44,17 @@ export function TabsPane() {
         <Row title={top ? "Add new tabs to the left" : "Add new tabs to the top"}>
           <Toggle value={settings.newTabPosition === "top"} onChange={(v) => update({ newTabPosition: v ? "top" : "bottom" })} />
         </Row>
-        {toggle("warnBeforeClosingLastTab", "Warn before closing last tab in a Space")}
-        {toggle("tabReorderHaptics", "Haptic feedback when reordering tabs")}
-        {toggle("extendWebsiteColor", "Extend website color into tab bar")}
-        {toggle("autoPictureInPicture", "Automatic Picture in Picture", "A video or call you're watching pops out when you switch tabs or leave the window, and returns when you come back.")}
+        <SettingToggle setting="warnBeforeClosingLastTab" title="Warn before closing last tab in a Space" />
+        <SettingToggle setting="tabReorderHaptics" title="Haptic feedback when reordering tabs" />
+        <SettingToggle setting="extendWebsiteColor" title="Extend website color into tab bar" />
+        <SettingToggle setting="autoPictureInPicture" title="Automatic Picture in Picture" description="A video or call you're watching pops out when you switch tabs or leave the window, and returns when you come back." />
       </Group>
 
       <SectionHeader title="Tab groups" />
       <Group>
-        {toggle("cmdClickCreatesTabGroup", "⌘-clicking links creates tab groups")}
-        {toggle("optShiftClickOpensInGroup", "⌥⇧-click opens tab in group", "⌥⇧-click a tab to open it in a group with the current tab. (⌥⇧-clicking a link opens it in a split.)")}
-        {toggle("autoGroupMeetingTabs", "Automatically group tabs for meetings")}
+        <SettingToggle setting="cmdClickCreatesTabGroup" title="⌘-clicking links creates tab groups" />
+        <SettingToggle setting="optShiftClickOpensInGroup" title="⌥⇧-click opens tab in group" description="⌥⇧-click a tab to open it in a group with the current tab. (⌥⇧-clicking a link opens it in a split.)" />
+        <SettingToggle setting="autoGroupMeetingTabs" title="Automatically group tabs for meetings" />
       </Group>
 
       <SectionHeader

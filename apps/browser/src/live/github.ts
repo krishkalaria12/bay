@@ -31,8 +31,6 @@ export const GITHUB_QUERY = `query LiveFolder($authored: String!, $review: Strin
 // `state`: a PR can close or merge between the searches (is:open) and this query; withDetails drops it.
 export const GITHUB_DETAILS_QUERY = `query LiveFolderDetails($ids: [ID!]!) { nodes(ids: $ids) { ${PR_FIELDS} ... on PullRequest { state } } }`;
 
-export const DETAILS_PAGE = 10;
-
 export const GITHUB_VARIABLES = {
   authored: "is:pr is:open author:@me archived:false sort:updated-desc",
   review: "is:pr is:open review-requested:@me archived:false sort:updated-desc",

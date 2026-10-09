@@ -1,14 +1,15 @@
 import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } from "@bay/nncore";
 import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
-import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/history";
+import { DEFAULT_PROFILE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { orderSections, syncGroupOrder } from "../store/groups";
 import { engineProfile, makeTab, pinnedFirst, without } from "../store/model";
 import { adoptParkedPins, parkWindowPins } from "../store/parkedPins";
 import { removeTabs } from "../store/tabs";
-import { DEFAULT_PROFILE_ID, type Settings } from "../store/settings";
+import type { Settings } from "../store/settings";
 import type { BookmarkNode, HistoryEntry, Profile, Tab, TabGroup } from "../store/types";
+import { HISTORY_WINDOW_MS, MAX_DEVICE_TABS, PASSWORD_READ_INTERVAL_MS, SAME_VISIT_MS } from "./constants";
 
 const store = () => useBrowser.getState();
 
@@ -214,14 +215,10 @@ export function bookmarksAdapter(profileId: string): Adapter {
   };
 }
 
-export const HISTORY_WINDOW_MS = 90 * 86_400_000;
-
 type HistoryValue = { t: string; n: number; vt: number[] };
 const lastVisitOf = (v: HistoryValue) => Math.max(0, ...v.vt);
 // What Chrome keeps in history (an app page, bay://, it doesn't): other records are left alone.
 const keptInHistory = (url: string) => /^(https?|file):/i.test(url);
-// Chrome stores visit times in microseconds and reports them in whole ms: the same visit reads back within this.
-const SAME_VISIT_MS = 1;
 
 export const historyExpired = (key: string, value: unknown, now: number) =>
   key.startsWith("h:") && lastVisitOf(value as HistoryValue) < now - HISTORY_WINDOW_MS;
@@ -318,7 +315,6 @@ export function historyAdapter(profileId: string): Adapter {
 }
 
 export type DeviceTabs = { n: string; tabs: { u: string; t: string }[] };
-const MAX_DEVICE_TABS = 30;
 
 export function deviceTabsAdapter(profileId: string, deviceId: string, name: () => string, retired = false): Adapter {
   const key = `tabs:${deviceId}`;
@@ -501,7 +497,6 @@ export function pinnedAdapter(profileId: string): Adapter {
 // MARK: Passwords
 
 type PasswordValue = { o: string; u: string; p: string };
-const PASSWORD_READ_INTERVAL = 30_000;
 
 // Sync passwords through Chrome; disabling sync never deletes local passwords.
 export function passwordsAdapter(
@@ -528,7 +523,7 @@ export function passwordsAdapter(
     prefix: "pw:",
     extract: async () => {
       const now = Date.now();
-      if (now < quietUntil || (now - lastRead < PASSWORD_READ_INTERVAL && !forced())) return null;
+      if (now < quietUntil || (now - lastRead < PASSWORD_READ_INTERVAL_MS && !forced())) return null;
       const logins = await read();
       if (!logins) return null;
       lastRead = now;

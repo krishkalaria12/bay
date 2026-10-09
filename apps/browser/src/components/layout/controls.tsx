@@ -1,5 +1,5 @@
 import { ContextMenuArea, Surface, Symbol, VisualEffect, type SymbolProps } from "@bay/shell";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";

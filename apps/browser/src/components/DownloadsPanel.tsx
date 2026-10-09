@@ -19,12 +19,9 @@ import { PaletteSurface } from "./omnibox/PaletteSurface";
 import { usePointerHover } from "./omnibox/usePointerHover";
 import { hostLabel, matchesQuery } from "./pages/PageLayout";
 import { IconButton, useHover } from "./primitives";
+import { DOWNLOADS_LIST_TOP, DOWNLOADS_ROW_HEIGHT, PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT } from "./omnibox/constants";
 
 // The downloads, as a palette: search, a file-type filter, ↩ for the selected file and ⌘K for the rest.
-const FIELD_HEIGHT = 58;
-const FOOTER_HEIGHT = 44;
-const ROW_HEIGHT = 44;
-const LIST_TOP = 4;
 
 // MARK: Filters
 
@@ -152,8 +149,8 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
   useEffect(() => {
     const visible = viewport.current;
     if (!visible.height) return;
-    const top = LIST_TOP + selectedIndex * ROW_HEIGHT;
-    const y = top < visible.y ? top : top + ROW_HEIGHT > visible.y + visible.height ? top + ROW_HEIGHT - visible.height + LIST_TOP : visible.y;
+    const top = DOWNLOADS_LIST_TOP + selectedIndex * DOWNLOADS_ROW_HEIGHT;
+    const y = top < visible.y ? top : top + DOWNLOADS_ROW_HEIGHT > visible.y + visible.height ? top + DOWNLOADS_ROW_HEIGHT - visible.height + DOWNLOADS_LIST_TOP : visible.y;
     if (y !== visible.y) {
       visible.y = y;
       scroll.current?.scrollTo({ y, animated: false });
@@ -242,7 +239,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
       <Pressable accessibilityLabel="Close downloads" onPress={dismiss} style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]} />
       <Animated.View style={[{ position: "absolute", width, height, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2) }, appearStyle]}>
         <PaletteSurface style={{ flex: 1 }}>
-          <View style={{ height: FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingLeft: 10, paddingRight: 10, gap: 6 }}>
+          <View style={{ height: PALETTE_FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingLeft: 10, paddingRight: 10, gap: 6 }}>
             <IconButton icon="chevron.left" size={14} weight="semibold" box={30} radius={8} color={theme.textSecondary} tooltip="Close (Esc)" onPress={dismiss} />
             <TextInput
               ref={input}
@@ -272,7 +269,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
             <ScrollView
               ref={scroll}
               style={{ flex: 1 }}
-              contentContainerStyle={{ paddingHorizontal: 7, paddingTop: LIST_TOP, paddingBottom: 6 }}
+              contentContainerStyle={{ paddingHorizontal: 7, paddingTop: DOWNLOADS_LIST_TOP, paddingBottom: 6 }}
               keyboardShouldPersistTaps="always"
               onLayout={(e) => {
                 viewport.current.height = e.nativeEvent.layout.height;
@@ -302,7 +299,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
             </ScrollView>
           )}
 
-          <View style={{ height: FOOTER_HEIGHT, paddingHorizontal: 7, paddingBottom: 7, flexDirection: "row", alignItems: "center" }}>
+          <View style={{ height: PALETTE_FOOTER_HEIGHT, paddingHorizontal: 7, paddingBottom: 7, flexDirection: "row", alignItems: "center" }}>
             <View
               style={{
                 height: 30,
@@ -346,10 +343,10 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
                 title={presence.shown.title}
                 actions={presence.shown.actions}
                 side="right"
-                top={presence.shown.kind === "filter" ? FIELD_HEIGHT - 8 : undefined}
+                top={presence.shown.kind === "filter" ? PALETTE_FIELD_HEIGHT - 8 : undefined}
                 placeholder={presence.shown.kind === "filter" ? "Search filters…" : undefined}
                 width={Math.min(presence.shown.kind === "filter" ? 280 : 320, width - 16)}
-                maxHeight={height - 16 - (presence.shown.kind === "filter" ? FIELD_HEIGHT : 0)}
+                maxHeight={height - 16 - (presence.shown.kind === "filter" ? PALETTE_FIELD_HEIGHT : 0)}
                 onClose={closeMenu}
                 progress={presence.progress}
                 closing={presence.closing}
@@ -483,7 +480,7 @@ const PanelRow = memo(function PanelRow({ id, selected, onHover, onPress, onMenu
       <MouseArea path={done ? d.path : null}>
         <ContextMenuArea onContextMenu={() => onMenu(d)}>
           <Pressable accessibilityRole="button" accessibilityLabel={d.filename || "Download"} accessibilityState={{ selected }} onPress={() => onPress(d)}>
-            <View style={{ height: ROW_HEIGHT, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 9, paddingHorizontal: 10, backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined }}>
+            <View style={{ height: DOWNLOADS_ROW_HEIGHT, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 9, paddingHorizontal: 10, backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined }}>
               <View style={{ opacity: exists ? 1 : 0.45 }}>
                 <FileIcon path={d.path || d.filename} size={26} />
               </View>

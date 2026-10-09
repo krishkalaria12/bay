@@ -2,9 +2,9 @@ import { ContextMenuArea, DockSelection, MouseArea, Surface, Symbol } from "@bay
 import { memo, useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
-import { bouncySpring } from "../../lib/springs";
 import { closeTab } from "../../lib/actions";
-import { hex, layout, useTheme } from "../../lib/theme";
+import { hex, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
 import { GlassFill, liquidGlass } from "../glass";
 import { listTopGap, useSidebarFieldShown } from "../layout/windowLayout";
@@ -21,19 +21,12 @@ import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { clickMods } from "./TabRow";
 import { useSidebarTokens } from "./tokens";
+import { MIN_PINNED_TILE, PINNED_BADGE_SPRING, PINNED_GLASS_RIM, PINNED_SELECTION_STROKE, PINNED_TILE_GAP } from "./constants";
 
-const GAP = 6;
-const MIN_TILE = 50;
-// Dia: 3pt stroke.
-const SELECTION_STROKE = 3;
-const GLASS_RIM = 1;
-// The back-to-pinned badge pops in and out on Animated's old spring (speed 18, bounciness 8).
-const BADGE_SPRING = bouncySpring(18, 8);
-
-export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: number }) {
+export function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: number }) {
   const controller = useDragController();
-  const columns = Math.max(1, Math.min(tabs.length || 1, Math.floor((innerWidth + GAP) / (MIN_TILE + GAP))));
-  const width = Math.floor(((innerWidth - GAP * (columns - 1)) / columns) * 2) / 2;
+  const columns = Math.max(1, Math.min(tabs.length || 1, Math.floor((innerWidth + PINNED_TILE_GAP) / (MIN_PINNED_TILE + PINNED_TILE_GAP))));
+  const width = Math.floor(((innerWidth - PINNED_TILE_GAP * (columns - 1)) / columns) * 2) / 2;
   const { ref: tailRef } = useDragItem("tail:tiles", { kind: "tail", tabIds: [], section: "tiles" });
   const topGap = listTopGap(useSidebarFieldShown());
   // With no pinned tabs a drag's pin target is an overlay that takes no room (PinDropZone): nothing here.
@@ -43,7 +36,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs:
       ref={(v) => {
         controller?.regions.set("tiles", v);
       }}
-      style={{ marginTop: topGap, flexDirection: "row", flexWrap: "wrap", rowGap: GAP, columnGap: GAP }}
+      style={{ marginTop: topGap, flexDirection: "row", flexWrap: "wrap", rowGap: PINNED_TILE_GAP, columnGap: PINNED_TILE_GAP }}
     >
       {tabs.map((id) => (
         <PinnedTile key={id} tabId={id} width={width} />
@@ -51,7 +44,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs:
       <Animated.View ref={tailRef} style={{ position: "absolute", right: 0, bottom: 0, width: 0, height: 0 }} />
     </View>
   );
-});
+}
 
 /**
  * The pin target while a tab is dragged and nothing is pinned yet: laid over the sidebar in room it already has (the
@@ -105,7 +98,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.profileId ?? "");
   const badge = useSharedValue(away ? 1 : 0);
   useEffect(() => {
-    badge.set(withSpring(away ? 1 : 0, BADGE_SPRING));
+    badge.set(withSpring(away ? 1 : 0, PINNED_BADGE_SPRING));
   }, [away]);
   const badgeStyle = useAnimatedStyle(() => ({ opacity: badge.get(), transform: [{ scale: interpolate(badge.get(), [0, 1], [0.4, 1]) }] }));
   if (!tab) return null;
@@ -142,7 +135,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
                     fill={tileTheme.theme.kind === "template" ? tileTheme.theme.fill : undefined}
                     stroke={tileTheme.theme.kind === "template" ? tileTheme.theme.stroke : undefined}
                     cornerRadius={radius}
-                    strokeWidth={SELECTION_STROKE}
+                    strokeWidth={PINNED_SELECTION_STROKE}
                     dark={theme.dark}
                     style={{ width, height: layout.pinnedHeight, alignItems: "center", justifyContent: "center" }}
                   >
@@ -259,7 +252,7 @@ function GlassTile({
           theme={tileTheme?.theme.kind}
           fill={tileTheme?.theme.kind === "template" ? tileTheme.theme.fill : undefined}
           cornerRadius={radius}
-          strokeWidth={GLASS_RIM}
+          strokeWidth={PINNED_GLASS_RIM}
           dark={theme.dark}
           glass
           style={StyleSheet.absoluteFill}

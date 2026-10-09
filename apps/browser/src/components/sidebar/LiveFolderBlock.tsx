@@ -1,12 +1,13 @@
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from "react-native-reanimated";
-import { bouncySpring } from "../../lib/springs";
 import { useShallow } from "zustand/react/shallow";
 import { closeTab } from "../../lib/actions";
-import { hex, layout, useTheme } from "../../lib/theme";
-import { COMPLETION_MS, errorText, openLiveItem, refreshFolder, statusText } from "../../live/engine";
+import { hex, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
+import { errorText, openLiveItem, refreshFolder, statusText } from "../../live/engine";
+import { COMPLETION_MS } from "../../live/constants";
 import { prBadge } from "../../live/github";
 import { folderRows, type FolderRow } from "../../live/rows";
 import { SOURCES } from "../../live/sources";
@@ -26,15 +27,14 @@ import { openLiveFolderMenu, openLiveItemMenu } from "./liveMenus";
 import { registerRow } from "./state";
 import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
+import { LIVE_FOLDER_PAD, LIVE_POP_SPRING } from "./constants";
 
-const PAD = 2;
 const EMPTY: LiveItem[] = [];
 const NONE: string[] = [];
 
 export const liveRowKey = (folderId: string, itemId: string) => `live|${folderId}|${itemId}`;
 
-// Memoized: the sidebar page re-renders whenever a tab opens or closes.
-export const LiveFolders = memo(function LiveFolders({ windowId, spaced }: { windowId: string; spaced: boolean }) {
+export function LiveFolders({ windowId, spaced }: { windowId: string; spaced: boolean }) {
   const page = usePageProfileId();
   const profileId = useBrowser((s) => (s.windows[windowId]?.incognito ? "" : page));
   const ids = useLive(useShallow((s) => profileFolders(s, profileId)));
@@ -46,7 +46,7 @@ export const LiveFolders = memo(function LiveFolders({ windowId, spaced }: { win
       ))}
     </View>
   );
-});
+}
 
 function LiveFolderBlock({ folderId, windowId }: { folderId: string; windowId: string }) {
   const tokens = useSidebarTokens();
@@ -54,7 +54,7 @@ function LiveFolderBlock({ folderId, windowId }: { folderId: string; windowId: s
   const items = useLive((s) => s.items[folderId] ?? EMPTY);
   const showAll = useLive((s) => s.showAll);
   const collapsed = !!folder?.collapsed;
-  const rows = useMemo(() => (folder ? folderRows(folder, items, showAll) : []), [folder, items, showAll]);
+  const rows = folder ? folderRows(folder, items, showAll) : [];
   const itemIds = new Set(items.map((i) => i.id));
   const profileId = usePageProfileId();
   const strays = useBrowser(
@@ -83,9 +83,9 @@ function LiveFolderBlock({ folderId, windowId }: { folderId: string; windowId: s
       : (rows.find((r) => (r.kind === "item" && r.item.id === activeItem) || (r.kind === "stack" && r.items.some((i) => i.id === activeItem)))?.key ?? null);
 
   return (
-    <View style={{ borderRadius: 12, backgroundColor: tokens.groupFill, borderWidth: 0.5, borderColor: tokens.groupStroke, paddingHorizontal: PAD }}>
+    <View style={{ borderRadius: 12, backgroundColor: tokens.groupFill, borderWidth: 0.5, borderColor: tokens.groupStroke, paddingHorizontal: LIVE_FOLDER_PAD }}>
       <FolderHeader folderId={folderId} windowId={windowId} collapsed={collapsed} />
-      <Fold fold={fold} collapsed={collapsed} entries={entries} keep={keep} gap={layout.rowGap} padBottom={PAD} />
+      <Fold fold={fold} collapsed={collapsed} entries={entries} keep={keep} gap={layout.rowGap} padBottom={LIVE_FOLDER_PAD} />
     </View>
   );
 }
@@ -143,7 +143,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
             <Surface
               fill={hex(pressed ? theme.tabPressed : hovered ? tokens.groupHeaderHover : "rgba(0,0,0,0)")}
               cornerRadius={10}
-              style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - PAD }}
+              style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - LIVE_FOLDER_PAD }}
             >
               <TabIcon url={sourceSite} icon={icon} />
               <FadeLabel text={folder.name} fontSize={13} weight="medium" color={tokens.groupTitle} style={{ flex: 1, height: 18, marginLeft: 5 }} />
@@ -383,9 +383,6 @@ function PositionChip({ position }: { position: number }) {
   );
 }
 
-// The completion glyph pops in on Animated's old spring (speed 14, bounciness 14).
-const POP_SPRING = bouncySpring(14, 14);
-
 const COMPLETION_GLYPH: Record<CompletedItem["state"], { symbol: string; color: keyof LiveColors }> = {
   merged: { symbol: "checkmark.circle.fill", color: "merged" },
   reviewed: { symbol: "checkmark.circle.fill", color: "success" },
@@ -397,7 +394,7 @@ function ItemIcon({ item, completion, colors }: { item: LiveItem; completion: Co
   useEffect(() => {
     if (!completion) return;
     pop.set(0);
-    pop.set(withSpring(1, POP_SPRING));
+    pop.set(withSpring(1, LIVE_POP_SPRING));
   }, [completion]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: interpolate(pop.get(), [0, 1], [0.3, 1]) }] }));
   if (completion) {

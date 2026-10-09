@@ -208,8 +208,6 @@ export type PromptOptions = {
   windowId?: string;
 };
 
-type Frame = [number, number, number, number];
-
 const Shell = requireNativeModule<{
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
   showMenu(items: MenuItem[]): Promise<string | null>;

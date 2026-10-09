@@ -2,8 +2,8 @@ import { setSwitcherCapture } from "@bay/shell";
 import { useBrowser } from "../../store/browser";
 import { recentTabIds } from "../../store/organize";
 import { setSidebarUi, sidebarUi } from "./state";
+import { SWITCHER_SHOW_AFTER_MS } from "./constants";
 
-const SHOW_AFTER_MS = 140;
 let showTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function switcherStep(windowId: string, backward: boolean) {
@@ -17,7 +17,7 @@ export function switcherStep(windowId: string, backward: boolean) {
   showTimer = setTimeout(() => {
     const s = sidebarUi().switcher;
     if (s) setSidebarUi({ switcher: { ...s, visible: true } });
-  }, SHOW_AFTER_MS);
+  }, SWITCHER_SHOW_AFTER_MS);
 }
 
 export function moveSwitcher(step: 1 | -1) {

@@ -1,6 +1,7 @@
 import { readDocument, writeDocument } from "@bay/shell";
 import { create } from "zustand";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
+import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 
 export type LiveConfig = {
   githubClientId: string;
@@ -58,12 +59,11 @@ export const DEFAULT_CALENDAR: CalendarSettings = {
   prompted: false,
 };
 
-const DOC = "live.json";
 const PERSISTED = ["folders", "folderOrder", "items", "known", "unread", "completed", "expandedStacks", "accounts", "config", "calendar", "meetingGroups", "dismissedAlerts"] as const;
 
 function load(): Partial<LiveState> {
   try {
-    const json = readDocument(DOC);
+    const json = readDocument(LIVE_DOC);
     return json ? (JSON.parse(json) as Partial<LiveState>) : {};
   } catch {
     return {};
@@ -100,7 +100,7 @@ useLive.subscribe((s, prev) => {
   timer = setTimeout(() => {
     const s = live();
     try {
-      writeDocument(DOC, JSON.stringify(Object.fromEntries(PERSISTED.map((k) => [k, s[k]]))));
+      writeDocument(LIVE_DOC, JSON.stringify(Object.fromEntries(PERSISTED.map((k) => [k, s[k]]))));
     } catch (error) {
       console.warn("Couldn't save live folders", error);
     }
@@ -169,9 +169,6 @@ export function moveFolder(id: string, delta: -1 | 1) {
   });
 }
 
-const MAX_KNOWN = 600;
-const MAX_COMPLETED = 20;
-
 export function applyFetch(folderId: string, next: LiveItem[], gone: Record<string, CompletionState>, now = Date.now(), quiet: Set<string> = new Set()) {
   setLive((s) => {
     if (!s.folders[folderId]) return {};
@@ -188,11 +185,11 @@ export function applyFetch(folderId: string, next: LiveItem[], gone: Record<stri
     const completed = [
       ...leaving.map((item) => ({ item, state: gone[item.id]!, at: now })),
       ...(s.completed[folderId] ?? []).filter((c) => !ids.has(c.item.id) && !leaving.some((l) => l.id === c.item.id)),
-    ].slice(0, MAX_COMPLETED);
+    ].slice(0, MAX_COMPLETED_ITEMS);
     const stillThere = new Set(merged.map((it) => it.id));
     return {
       items: { ...s.items, [folderId]: merged },
-      known: { ...s.known, [folderId]: [...known, ...fresh].slice(-MAX_KNOWN) },
+      known: { ...s.known, [folderId]: [...known, ...fresh].slice(-MAX_KNOWN_ITEMS) },
       unread: { ...s.unread, [folderId]: first ? [] : [...new Set([...(s.unread[folderId] ?? []), ...unreadFresh])].filter((id) => stillThere.has(id)) },
       completed: leaving.length || (s.completed[folderId] ?? []).length !== completed.length ? { ...s.completed, [folderId]: completed } : s.completed,
       completing: leaving.length ? { ...s.completing, [folderId]: [...(s.completing[folderId] ?? []), ...leaving.map((l) => l.id)] } : s.completing,

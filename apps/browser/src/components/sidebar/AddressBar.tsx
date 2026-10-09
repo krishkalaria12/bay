@@ -1,7 +1,8 @@
 import { useRef } from "react";
 import { FadeLabel } from "@bay/shell";
 import { Pressable, StyleSheet, View } from "react-native";
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId } from "../../store/hooks";
 import { splitOf } from "../../store/splits";
@@ -9,42 +10,35 @@ import type { Tab } from "../../store/types";
 import { useHistoryAvailability } from "../layout/history";
 import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
-import { addressBarInSidebar, setUrlAnchor, SIDEBAR_FIELD, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
+import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
+import { SIDEBAR_FIELD } from "../layout/constants";
 import { GlassFill, liquidGlass } from "../glass";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
+import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
 
-const BUTTON = layout.toolbarButton;
-const GAP = 5;
-const NAV_WIDTH = 3 * BUTTON + 2 * GAP;
-// Dia: lights y26.75pt, x70.75pt; 5pt gap, 7pt inset.
-const LIGHTS_Y = 26.75;
-const TOGGLE_X = 70.75 + 27;
-const EDGE = 7;
-// On the window's right there are no window buttons to clear: the toggle starts at the edge.
-const TOGGLE_X_RIGHT = EDGE + BUTTON / 2;
-const toggleMinWidth = (x: number) => x + BUTTON / 2 + GAP + NAV_WIDTH + EDGE;
+const toggleMinWidth = (x: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + ADDRESS_EDGE;
 
 export function SidebarHeaderTools({ width }: { width: number }) {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const palette = toolbarPalette(useTheme(), null);
-  const top = LIGHTS_Y - BUTTON / 2;
+  const top = ADDRESS_LIGHTS_Y - ADDRESS_BUTTON / 2;
   const right = useSidebarOnRight();
-  const toggleX = right ? TOGGLE_X_RIGHT : TOGGLE_X;
+  const toggleX = right ? ADDRESS_TOGGLE_X_RIGHT : ADDRESS_TOGGLE_X;
   const sidebarSymbol = useSidebarSymbol();
   return (
     <>
       {width >= toggleMinWidth(toggleX) ? (
         <ToolbarButton
-          style={{ position: "absolute", top, left: toggleX - BUTTON / 2 }}
+          style={{ position: "absolute", top, left: toggleX - ADDRESS_BUTTON / 2 }}
           palette={palette}
           icon={sidebarSymbol}
           onPress={() => useBrowser.getState().toggleSidebar(windowId)}
           tooltip="Auto-Hide Tabs (⌘S)"
         />
       ) : null}
-      <View style={{ position: "absolute", top, right: EDGE, flexDirection: "row", gap: GAP }}>
+      <View style={{ position: "absolute", top, right: ADDRESS_EDGE, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
         {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
       </View>
     </>

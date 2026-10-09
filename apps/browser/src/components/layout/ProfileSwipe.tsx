@@ -81,7 +81,7 @@ export function ProfileSwipeArea({ surface, style, pageWidth }: { surface: "side
 
 export function ProfileTint() {
   const windowId = useWindowId();
-  const { pages, paging, pager } = usePagerPages(windowId);
+  const { pages, paging } = usePagerPages(windowId);
   const keys = useBrowser(useShallow((s) => pages.map((p) => spaceThemeKey(s.profiles[p.id], s.ui.appDark, s.settings.windowMaterial === "glass"))));
   if (!paging) return null;
   return (

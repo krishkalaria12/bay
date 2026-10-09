@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { markHoverProps } from "../../lib/hoverShift";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
+import { HOVER_HIDE_DELAY_MS, HOVER_SHOW_DELAY_MS } from "./constants";
 
-const SHOW_DELAY_MS = 650;
-const HIDE_DELAY_MS = 160;
 let showTimer: ReturnType<typeof setTimeout> | undefined;
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 let suppressed = false;
@@ -29,14 +28,14 @@ export function hoverEnter(windowId: string, target: Target) {
   if (current?.id === target.id) return;
   const mine = ++ticket;
   if (current) void show(windowId, target, mine);
-  else showTimer = setTimeout(() => void show(windowId, target, mine), SHOW_DELAY_MS);
+  else showTimer = setTimeout(() => void show(windowId, target, mine), HOVER_SHOW_DELAY_MS);
 }
 
 export function hoverLeave() {
   ticket++;
   clearTimeout(showTimer);
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => setSidebarUi({ hover: null }), HIDE_DELAY_MS);
+  hideTimer = setTimeout(() => setSidebarUi({ hover: null }), HOVER_HIDE_DELAY_MS);
 }
 
 export const keepHover = () => clearTimeout(hideTimer);

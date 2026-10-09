@@ -43,7 +43,7 @@ export type RowActions = {
   remove(url: string): void;
 };
 
-export const SuggestionList = memo(function SuggestionList({
+export function SuggestionList({
   items,
   selectedIndex,
   trailing,
@@ -71,7 +71,7 @@ export const SuggestionList = memo(function SuggestionList({
       ))}
     </View>
   );
-});
+}
 
 function sameSuggestion(a: Suggestion, b: Suggestion): boolean {
   if (a === b) return true;

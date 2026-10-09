@@ -2,10 +2,7 @@ import { useState } from "react";
 import { PanResponder, type GestureResponderHandlers } from "react-native";
 import { cancelAnimation, Easing, runOnJS, useAnimatedReaction, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { useEffectEvent } from "../../lib/useEffectEvent";
-
-// Past its range the edge follows the pointer less and less, never more than BAND pt.
-const BAND = 36;
-const BAND_SCALE = 90;
+import { RESIZE_BAND, RESIZE_BAND_SCALE } from "./constants";
 
 type ResizeOptions = {
   min: number;
@@ -50,8 +47,8 @@ function resizeDrag(options: () => ResizeOptions, springWidth: SharedValue<numbe
     options().onCommit(width);
     options().onLive(null);
   };
-  const band = (over: number) => BAND * (1 - Math.exp(-over / BAND_SCALE));
-  const unband = (stretch: number) => -BAND_SCALE * Math.log(1 - Math.min(stretch, BAND - 0.01) / BAND);
+  const band = (over: number) => RESIZE_BAND * (1 - Math.exp(-over / RESIZE_BAND_SCALE));
+  const unband = (stretch: number) => -RESIZE_BAND_SCALE * Math.log(1 - Math.min(stretch, RESIZE_BAND - 0.01) / RESIZE_BAND);
   const rubberBand = (width: number) => {
     const { min, max } = options();
     if (width > max) return max + band(width - max);

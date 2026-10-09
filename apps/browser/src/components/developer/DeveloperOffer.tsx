@@ -5,9 +5,7 @@ import { useTheme } from "../../lib/theme";
 import { Popover } from "../layout/controls";
 import { useHover } from "../primitives";
 import { answerDeveloperOffer, useDeveloperOffer } from "./devMode";
-import { DEVELOPER_YELLOW } from "./sites";
-
-const WIDTH = 380;
+import { DEVELOPER_OFFER_WIDTH, DEVELOPER_YELLOW } from "./constants";
 
 /**
  * "Turn on Developer Mode for localhost:3000?", over a local server's page the first time it's shown. It takes the
@@ -16,7 +14,7 @@ const WIDTH = 380;
 export function DeveloperOffer({ tabId, left, top, paneWidth }: { tabId: string; left: number; top: number; paneWidth: number }) {
   const site = useDeveloperOffer(tabId);
   if (!site) return null;
-  return <Offer key={site} tabId={tabId} site={site} left={left} top={top} width={Math.min(WIDTH, paneWidth - 2 * left)} />;
+  return <Offer key={site} tabId={tabId} site={site} left={left} top={top} width={Math.min(DEVELOPER_OFFER_WIDTH, paneWidth - 2 * left)} />;
 }
 
 function Offer({ tabId, site, left, top, width }: { tabId: string; site: string; left: number; top: number; width: number }) {

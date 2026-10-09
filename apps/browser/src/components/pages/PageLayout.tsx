@@ -4,8 +4,6 @@ import { Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { SearchField } from "../settings/controls";
 
-export const PAGE_WIDTH = 880;
-
 export function PageHeader({
   title,
   query,

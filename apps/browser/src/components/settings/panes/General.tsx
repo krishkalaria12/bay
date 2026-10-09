@@ -17,8 +17,8 @@ import { useBrowser } from "../../../store/browser";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { openImport } from "../windows";
+import { APP_NAME } from "../../../lib/constants";
 
-const APP = "Bay";
 
 export function GeneralPane() {
   const settings = useBrowser((s) => s.settings);
@@ -35,7 +35,7 @@ export function GeneralPane() {
       <SectionHeader title="General" />
       <Group>
         <Row
-          title={`Open ${APP} at login`}
+          title={`Open ${APP_NAME} at login`}
           description={loginStatus === "requiresApproval" ? "Allow it in System Settings › General › Login Items." : undefined}
         >
           <Toggle
@@ -43,7 +43,7 @@ export function GeneralPane() {
             onChange={(on) => void setLaunchAtLogin(on).catch(() => {}).finally(refreshLogin)}
           />
         </Row>
-        <Row title="Warn before quitting" description={`Asks before ${APP} quits with ⌘Q.`}>
+        <Row title="Warn before quitting" description={`Asks before ${APP_NAME} quits with ⌘Q.`}>
           <Toggle value={settings.warnBeforeQuitting} onChange={(v) => update({ warnBeforeQuitting: v })} />
         </Row>
         <Row title="Warn before closing a window with multiple tabs" description="Asks before ⇧⌘W or the close button closes its tabs.">
@@ -53,8 +53,8 @@ export function GeneralPane() {
           title="Open links from other apps in"
           description={
             settings.openLinksInSmallYahu
-              ? `A link from Discord, Slack or Mail opens in Small Yahu, a small window of its own. ⌘O moves it into ${APP}; closing it throws it away.`
-              : `A link from Discord, Slack or Mail opens as a new tab in your ${APP} window, in the default space.`
+              ? `A link from Discord, Slack or Mail opens in Small Yahu, a small window of its own. ⌘O moves it into ${APP_NAME}; closing it throws it away.`
+              : `A link from Discord, Slack or Mail opens as a new tab in your ${APP_NAME} window, in the default space.`
           }
         >
           <PopUp
@@ -69,7 +69,7 @@ export function GeneralPane() {
         </Row>
       </Group>
 
-      <SectionHeader title={`When quitting ${APP}:`} />
+      <SectionHeader title={`When quitting ${APP_NAME}:`} />
       <Group>
         <Row title="Windows and tabs" description="What you see the next time you open it. Closed windows stay in History › Recently Closed.">
           <PopUp
@@ -136,14 +136,14 @@ function UpdatesSection() {
         <Row title="Check for updates automatically" description={SHARING_COPY.updateChecks}>
           <Toggle value={ready && state.automaticChecks} disabled={!ready} onChange={(v) => set({ automaticChecks: v })} />
         </Row>
-        <Row title={`Automatically update ${APP}`} description="Downloads updates in the background and installs them the next time it restarts.">
+        <Row title={`Automatically update ${APP_NAME}`} description="Downloads updates in the background and installs them the next time it restarts.">
           <Toggle
             value={ready && state.automaticChecks && state.automaticDownloads}
             disabled={!ready || !state.automaticChecks}
             onChange={(v) => set({ automaticDownloads: v })}
           />
         </Row>
-        <Row title={`${APP} ${state.version}`} description={ready ? lastCheck : undefined}>
+        <Row title={`${APP_NAME} ${state.version}`} description={ready ? lastCheck : undefined}>
           <Button title="Check Now" disabled={ready && (!state.canCheck || state.sessionInProgress)} onPress={() => void checkForUpdates().finally(refresh)} />
         </Row>
       </Group>
@@ -183,9 +183,9 @@ function DefaultBrowserBanner() {
         style={{ width: 28, height: 28 }}
       />
       <Text style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
-        {isDefault ? `${APP} is your default browser` : `${APP} works best as your default browser`}
+        {isDefault ? `${APP_NAME} is your default browser` : `${APP_NAME} works best as your default browser`}
       </Text>
-      {!isDefault && <Button title={`Set ${APP} as Default`} kind="primary" onPress={() => void setAsDefaultBrowser().then(setIsDefault)} />}
+      {!isDefault && <Button title={`Set ${APP_NAME} as Default`} kind="primary" onPress={() => void setAsDefaultBrowser().then(setIsDefault)} />}
     </View>
   );
 }

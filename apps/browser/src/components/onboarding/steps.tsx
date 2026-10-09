@@ -19,8 +19,8 @@ import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personali
 import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, recordDefaultBrowserTrial, useOnboarding } from "./state";
 import { CheckMark, CheckRow, PrimaryButton, Reveal, SecondaryButton, StepProgress, StepTitle, useOnboardingColors } from "./ui";
+import { APP_ICON } from "../../lib/assets";
 
-const ICON = require("../../../assets/app-icon.png");
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
@@ -130,11 +130,10 @@ export function DefaultBrowserStep() {
   );
 }
 
-function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
+function SystemChip({ on, icon, label }: { on: boolean; icon: string; label: string }) {
   const colors = useOnboardingColors();
-  const chip = (on: boolean, icon: string, label: string) => (
+  return (
     <View
-      key={label}
       style={{
         flexDirection: "row",
         alignItems: "center",
@@ -154,13 +153,16 @@ function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: b
       <CheckMark on={on} size={16} />
     </View>
   );
+}
+
+function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
   return (
     <View style={{ alignItems: "center", gap: 28 }}>
-      <Image source={ICON} style={{ width: 132, height: 132 }} />
+      <Image source={APP_ICON} style={{ width: 132, height: 132 }} />
       <View style={{ gap: 8, alignItems: "center" }}>
-        {chip(isDefault, "globe", "Default browser")}
-        {chip(dock, "dock.rectangle", "In your Dock")}
-        {chip(login, "power", "Opens at login")}
+        <SystemChip on={isDefault} icon="globe" label="Default browser" />
+        <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />
+        <SystemChip on={login} icon="power" label="Opens at login" />
       </View>
     </View>
   );
@@ -298,7 +300,7 @@ export function ImportStep() {
             ))}
           </View>
           <Symbol name="arrow.down" size={18} weight="medium" color={colors.steps} style={{ width: 24, height: 24 }} />
-          <Image source={ICON} style={{ width: 72, height: 72 }} />
+          <Image source={APP_ICON} style={{ width: 72, height: 72 }} />
         </View>
       }
     >
@@ -496,7 +498,7 @@ function Postcard() {
       <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />
       <View style={{ width: 104, paddingLeft: 14, justifyContent: "space-between", alignItems: "flex-end" }}>
         <View style={{ padding: 4, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.rowBorder, borderRadius: 3 }}>
-          <Image source={ICON} style={{ width: 46, height: 46 }} />
+          <Image source={APP_ICON} style={{ width: 46, height: 46 }} />
         </View>
         <View style={{ alignSelf: "stretch", gap: 12 }}>
           {[0, 1, 2].map((i) => (

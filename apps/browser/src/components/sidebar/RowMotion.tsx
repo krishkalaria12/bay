@@ -3,7 +3,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { reduceMotion } from "../../lib/reduceMotion";
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import type { Tab } from "../../store/types";
@@ -11,15 +12,12 @@ import { tabTitle } from "./actions";
 import { SelectedFill } from "./ActiveHighlight";
 import { useDragSource } from "./dnd";
 import { TabIcon } from "./TabIcon";
+import { MAX_MOVING_ROWS, ROW_FRESH_MS, ROW_MS } from "./constants";
 
 // As yab opens and closes tabs: a new tab's row fades in where it goes as the rows under it make room, and a closed
 // one's fades where it was as they close the gap. Eased in and out: the switch's curve, half done in its first frame,
 // shut a closing row at once.
-const ROW_MS = 180;
 const ROW_EASING = Easing.inOut(Easing.cubic);
-// Opening or closing more at once (restoring a window, cleaning up) just shows the list as it is.
-const MAX_MOVING = 3;
-const FRESH_MS = 500;
 
 export type ClosingTab = { tab: Tab; active: boolean };
 
@@ -38,7 +36,7 @@ useBrowser.subscribe((s, prev) => {
       if (!kept.has(id) && !s.tabs[id] && tab) closed.set(id, { tab, active: activeTabId(prev, windowId) === id, at: now });
     }
   }
-  for (const [id, c] of closed) if (now - c.at > FRESH_MS) closed.delete(id);
+  for (const [id, c] of closed) if (now - c.at > ROW_FRESH_MS) closed.delete(id);
 });
 
 type Ghost = ClosingTab & { after: string | null };
@@ -72,15 +70,15 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
     const animate = enabled && !reduceMotion();
 
     const tabs = useBrowser.getState().tabs;
-    const fresh = entries.filter((e) => !had.has(e) && e.startsWith("t:") && now - (tabs[e.slice(2)]?.createdAt ?? 0) <= FRESH_MS);
+    const fresh = entries.filter((e) => !had.has(e) && e.startsWith("t:") && now - (tabs[e.slice(2)]?.createdAt ?? 0) <= ROW_FRESH_MS);
     const stillOpening = [...opening].filter((e) => listed.has(e));
-    const nextOpening = animate && fresh.length <= MAX_MOVING ? [...stillOpening, ...fresh] : stillOpening;
+    const nextOpening = animate && fresh.length <= MAX_MOVING_ROWS ? [...stillOpening, ...fresh] : stillOpening;
     if (nextOpening.length !== opening.size || nextOpening.some((e) => !opening.has(e))) setOpening(nextOpening.length ? new Set(nextOpening) : NONE);
 
     const gone: Ghost[] = [];
     before.forEach((entry, i) => {
       const closing = !listed.has(entry) && entry.startsWith("t:") ? closed.get(entry.slice(2)) : undefined;
-      if (!closing || now - closing.at > FRESH_MS) return;
+      if (!closing || now - closing.at > ROW_FRESH_MS) return;
       // Placed after the nearest entry above it that stays (null: the top of the list).
       let after: string | null = null;
       for (let k = i - 1; k >= 0 && after === null; k--) if (listed.has(before[k]!)) after = before[k]!;
@@ -88,7 +86,7 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
     });
     // A row whose place went too can't stay; one placed at the top stays there.
     const staying = ghosts.filter((g) => g.after === null || listed.has(g.after));
-    const next = animate && gone.length <= MAX_MOVING ? [...staying, ...gone] : staying;
+    const next = animate && gone.length <= MAX_MOVING_ROWS ? [...staying, ...gone] : staying;
     if (next.length !== ghosts.length || next.some((g, i) => g !== ghosts[i])) setGhosts(next);
   }
   // Made once: every row gets them, and a new function would re-render them all.

@@ -22,6 +22,7 @@ import { SyncPane } from "./panes/Sync";
 import { TabsPane } from "./panes/Tabs";
 import { useSettingsSheet } from "./sheet";
 import { useSettingsNav, type SettingsPane } from "./windows";
+import { SETTINGS_SIDEBAR_WIDTH, SETTINGS_TOOLBAR_HEIGHT } from "./constants";
 
 const PANES: { id: SettingsPane; title: string; icon: string }[] = [
   { id: "general", title: "General", icon: "gearshape" },
@@ -40,9 +41,6 @@ const PANES: { id: SettingsPane; title: string; icon: string }[] = [
   { id: "advanced", title: "Advanced", icon: "slider.horizontal.3" },
 ];
 
-const SIDEBAR = 214;
-const TOOLBAR = 52;
-
 export function SettingsWindow() {
   const theme = useTheme();
   const nav = useSettingsNav();
@@ -53,9 +51,9 @@ export function SettingsWindow() {
 
   return (
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.dark ? "#1E1E1E" : "#F2F2F2" }}>
-      <View style={{ width: SIDEBAR }}>
+      <View style={{ width: SETTINGS_SIDEBAR_WIDTH }}>
         <VisualEffect material="sidebar" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
-        <WindowDragRegion style={{ height: TOOLBAR }} />
+        <WindowDragRegion style={{ height: SETTINGS_TOOLBAR_HEIGHT }} />
         <ScrollView contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 12, gap: 1 }}>
           {PANES.map((p) => (
             <SidebarItem key={p.id} title={p.title} icon={p.icon} selected={nav.pane === p.id} onPress={() => nav.go(p.id)} />
@@ -64,7 +62,7 @@ export function SettingsWindow() {
       </View>
       <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: theme.dark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.1)" }} />
       <View style={{ flex: 1 }}>
-        <View style={{ height: TOOLBAR, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 2 }}>
+        <View style={{ height: SETTINGS_TOOLBAR_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 2 }}>
           <WindowDragRegion style={StyleSheet.absoluteFill} />
           <IconButton icon="chevron.left" size={13} box={28} radius={6} disabled={!nav.back.length} onPress={nav.goBack} tooltip="Back" />
           <IconButton icon="chevron.right" size={13} box={28} radius={6} disabled={!nav.forward.length} onPress={nav.goForward} tooltip="Forward" />

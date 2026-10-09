@@ -4,10 +4,7 @@ import { activeTabId, viewTabIds } from "../store/model";
 import { SOURCES } from "./sources";
 import { applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./store";
 import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
-
-const INTERVAL_MS: Record<LiveFolderKind, number> = { pullRequests: 3 * 60_000, documents: 10 * 60_000 };
-const STALE_ON_FOCUS_MS = 60_000;
-export const COMPLETION_MS = 2600;
+import { COMPLETION_MS, REFRESH_INTERVAL_MS, STALE_ON_FOCUS_MS } from "./constants";
 
 const inflight = new Map<string, Promise<void>>();
 const fetchedSources = new Map<string, Set<LiveSourceId>>();
@@ -171,7 +168,7 @@ export function startLiveEngine() {
   };
   setTimeout(() => live().folderOrder.forEach((id) => void refreshFolder(id)), 2500);
   setInterval(() => {
-    for (const id of live().folderOrder) if (due(id, INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
+    for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
   }, 30_000);
   onWindowEvent((e) => {
     if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);

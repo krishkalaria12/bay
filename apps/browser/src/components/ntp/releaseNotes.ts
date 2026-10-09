@@ -1,5 +1,6 @@
 import { launchEnvironment, readDocument, systemInfo, writeDocument } from "@bay/shell";
 import { create } from "zustand";
+import { POSTCARD_SECONDS, RELEASE_NOTES_DOC } from "./constants";
 
 export type ReleaseNotes = {
   version: string;
@@ -26,14 +27,11 @@ export const RELEASE_NOTES: ReleaseNotes[] = [
   },
 ];
 
-export const POSTCARD_SECONDS = 86_400;
-
-const DOC = "release-notes.json";
 type Saved = { version: 1; lastVersion: string; pending: { version: string; since: number } | null };
 
 function readSaved(): Saved | null {
   try {
-    const json = readDocument(DOC);
+    const json = readDocument(RELEASE_NOTES_DOC);
     return json ? (JSON.parse(json) as Saved) : null;
   } catch {
     return null;
@@ -42,7 +40,7 @@ function readSaved(): Saved | null {
 
 function save(saved: Omit<Saved, "version">) {
   try {
-    writeDocument(DOC, JSON.stringify({ version: 1, ...saved } satisfies Saved));
+    writeDocument(RELEASE_NOTES_DOC, JSON.stringify({ version: 1, ...saved } satisfies Saved));
   } catch (error) {
     console.warn("Couldn't save release notes state", error);
   }

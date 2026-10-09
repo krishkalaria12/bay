@@ -7,9 +7,10 @@ import { useLive } from "../../live/store";
 import { useBrowser } from "../../store/browser";
 import { setIcon } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
-import { SYMBOL_PREFIX } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
 import { onEscapeKey } from "../../lib/escapeKey";
+import { SYMBOL_PREFIX } from "../../lib/constants";
+import { ICON_PICKER_CELL, ICON_PICKER_WIDTH } from "./constants";
 
 const EMOJI: [string, string][] = [
   ["⭐️", "star favorite"], ["🔥", "fire hot"], ["❤️", "heart love"], ["✅", "check done"], ["📌", "pin"], ["🚀", "rocket launch ship"],
@@ -42,10 +43,6 @@ const SYMBOLS = [
   "questionmark.circle", "exclamationmark.triangle", "book", "graduationcap", "doc.text", "list.bullet", "checkmark.circle", "person.2",
 ];
 
-const COLUMNS = 8;
-const CELL = 30;
-const WIDTH = COLUMNS * CELL + 16;
-
 export function IconPicker({ windowId, sidebarWidth, windowWidth }: { windowId: string; sidebarWidth: number; windowWidth: number }) {
   const picker = useSidebarUi((u) => (u.iconPicker?.windowId === windowId ? u.iconPicker : null));
   return picker ? <PickerPanel key={picker.id} picker={picker} sidebarWidth={sidebarWidth} windowWidth={windowWidth} /> : null;
@@ -77,8 +74,8 @@ function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; si
   // Beside the row it's for, toward the page, and no further into the page than the sidebar's edge.
   let left: number;
   if (right) {
-    const edge = windowWidth - sidebarWidth - 6 - WIDTH;
-    left = picker.anchor ? Math.min(windowWidth - WIDTH - 8, Math.max(edge, picker.anchor.x - 6 - WIDTH)) : edge;
+    const edge = windowWidth - sidebarWidth - 6 - ICON_PICKER_WIDTH;
+    left = picker.anchor ? Math.min(windowWidth - ICON_PICKER_WIDTH - 8, Math.max(edge, picker.anchor.x - 6 - ICON_PICKER_WIDTH)) : edge;
   } else {
     left = picker.anchor ? Math.max(8, Math.min(sidebarWidth + 6, picker.anchor.x + picker.anchor.width + 6)) : sidebarWidth + 6;
   }
@@ -95,7 +92,7 @@ function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; si
         shadowOpacity={theme.panelShadowOpacity}
         shadowRadius={20}
         shadowOffset={[0, 8]}
-        style={{ position: "absolute", top, left, width: WIDTH, padding: 8, gap: 8 }}
+        style={{ position: "absolute", top, left, width: ICON_PICKER_WIDTH, padding: 8, gap: 8 }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           <View style={{ flex: 1, height: 26, borderRadius: 8, backgroundColor: theme.urlPill, flexDirection: "row", alignItems: "center", paddingHorizontal: 7 }}>
@@ -121,7 +118,7 @@ function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; si
             </Pressable>
           ))}
         </View>
-        <ScrollView style={{ maxHeight: CELL * 6 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ maxHeight: ICON_PICKER_CELL * 6 }} showsVerticalScrollIndicator={false}>
           <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
             {items.map((icon) => (
               <Cell key={icon} icon={icon} selected={icon === current} onPress={() => choose(icon)} />
@@ -153,8 +150,8 @@ function Cell({ icon, selected, onPress }: { icon: string; selected: boolean; on
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
-          width: CELL,
-          height: CELL,
+          width: ICON_PICKER_CELL,
+          height: ICON_PICKER_CELL,
           borderRadius: 8,
           alignItems: "center",
           justifyContent: "center",

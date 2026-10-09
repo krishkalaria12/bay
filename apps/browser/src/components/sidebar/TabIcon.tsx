@@ -5,8 +5,9 @@ import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon } from "../primitives";
+import { SYMBOL_PREFIX } from "../../lib/constants";
+import { SLEEPING_OPACITY } from "./constants";
 
-export const SYMBOL_PREFIX = "symbol:";
 
 // Memoized: rows re-render on hover and selection, and the icon's props rarely change.
 export const TabIcon = memo(function TabIcon({
@@ -43,8 +44,6 @@ function TabProfileIcon({ tabId, ...props }: Omit<Parameters<typeof Icon>[0], "p
   const profileId = useBrowser((s) => s.tabs[tabId]?.profileId);
   return <Icon {...props} profileId={profileId} />;
 }
-
-const SLEEPING_OPACITY = 0.45;
 
 function Icon({
   url,

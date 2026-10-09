@@ -1,3 +1,5 @@
+import { INACTIVE_FILL, SOLID_FILL, TINT_LIGHTNESS } from "./constants";
+
 // AppKit makes the visual-effect fill opaque when inactive or Reduce Transparency is on.
 export type BackdropTint = {
   tintColor: string;
@@ -5,17 +7,10 @@ export type BackdropTint = {
   tintLightness: number;
 };
 
-// Dia: 0.25.
-const LIGHTNESS = 0.25;
-
 export function backdropTint(color: string, neutral: boolean): BackdropTint {
   // Dia: 0.12 / 0.36.
-  return { tintColor: color, tintAlpha: neutral ? 0.12 : 0.36, tintLightness: LIGHTNESS };
+  return { tintColor: color, tintAlpha: neutral ? 0.12 : 0.36, tintLightness: TINT_LIGHTNESS };
 }
-
-const INACTIVE_FILL = { dark: [40.7, 33.1, 31.8], light: [235, 231, 230] };
-// A solid window's grey before its space's colour: yab's sidebar (#1E1E21) in dark, a light one to match.
-const SOLID_FILL = { dark: [30, 30, 33], light: [235, 235, 237] };
 
 // What the tint is laid over.
 function baseFill(dark: boolean, solid: boolean): number[] {

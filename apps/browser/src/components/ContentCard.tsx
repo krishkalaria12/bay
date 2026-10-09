@@ -1,5 +1,5 @@
 import { WebView, type OpenWindowRequest } from "@bay/nncore";
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useStore } from "zustand";
@@ -7,7 +7,8 @@ import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../lib/actions";
 import { noteFavicon } from "../lib/favicons";
 import { isQuitting } from "../lib/native";
-import { layout, useTheme } from "../lib/theme";
+import { useTheme } from "../lib/theme";
+import { layout } from "../lib/constants";
 import { startChromeTabs } from "../lib/chromeTabs";
 import { handOff, wantsPage } from "../lib/tabPages";
 import { noteDiscarded, noteGone, noteReady } from "../lib/tabLifecycle";
@@ -18,9 +19,11 @@ import { activeTabId, engineProfile, wake } from "../store/model";
 import { removeTabs } from "../store/tabs";
 import { splitOf } from "../store/splits";
 import type { SplitView } from "../store/types";
-import { BOOKMARKS_BAR_HEIGHT, BookmarksBar, useBookmarksBarShown } from "./bookmarks/BookmarksBar";
+import { BookmarksBar, useBookmarksBarShown } from "./bookmarks/BookmarksBar";
+import { BOOKMARKS_BAR_HEIGHT } from "./bookmarks/constants";
 import { FindBar } from "./FindBar";
-import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, SIDEBAR_BUTTON_END_ROOM, splitGeometry, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
+import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, splitGeometry, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
+import { SIDEBAR_BUTTON_END_ROOM } from "./layout/constants";
 import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
 import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
@@ -53,7 +56,8 @@ import { isSmallWindow } from "../store/small";
 import { closeSmallYahuOnEscape } from "./smallYahu/actions";
 import { PageLoadGlow } from "./layout/PageLoadGlow";
 import { usePaneSwitch, type SwitchStyle } from "./layout/switchMotion";
-import { DEV_BAR_HEIGHT, DevBar } from "./developer/DevBar";
+import { DevBar } from "./developer/DevBar";
+import { DEV_BAR_HEIGHT } from "./developer/constants";
 import { DeveloperOffer } from "./developer/DeveloperOffer";
 import { onDeveloperMessage, startDeveloperMode } from "./developer/devMode";
 import { useIsDeveloperTab } from "./developer/sites";
@@ -398,14 +402,14 @@ const isBlank = (url: string) => !url || url === "about:blank";
 const pageKey = (url: string) => url.replace(/#.*$/, "");
 const hostOf = (url: string) => url.match(/^[a-z][\w+.-]*:\/\/([^/?#]*)/i)?.[1]?.toLowerCase() ?? "";
 
-// Memoized: its pane re-renders on layout changes, and the web view's props only change with these.
-const TabWebView = memo(function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean; warm: boolean }) {
+function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean; warm: boolean }) {
   const navigation = useBrowser((s) => s.tabs[tabId]?.navigation);
   const adoptId = useBrowser((s) => s.tabs[tabId]?.adoptId);
   const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
   const tab = () => useBrowser.getState().tabs[tabId];
   const store = () => useBrowser.getState();
-  const ref = useMemo(() => webviewRef(tabId), [tabId]);
+  // One for the view's life (its tab never changes): it keeps the handle it registered, to unregister only that.
+  const [ref] = useState(() => webviewRef(tabId));
   const autoPictureInPicture = useAutoPictureInPicture(tabId, visible);
 
   const lastPage = useRef<string | null>(null);
@@ -495,16 +499,16 @@ const TabWebView = memo(function TabWebView({ tabId, visible, warm }: { tabId: s
         const t = tab();
         if (!t) return;
         const s = store();
-        store().updateLive(tabId, { isLoading: false });
+        s.updateLive(tabId, { isLoading: false });
         if (committedUrl) {
-          if (t.url !== committedUrl) store().updateTab(tabId, { url: committedUrl });
+          if (t.url !== committedUrl) s.updateTab(tabId, { url: committedUrl });
           return;
         }
         const others = s.windows[t.windowId]?.tabIds.some((id) => id !== tabId && s.tabs[id]?.profileId === t.profileId);
         const opened = !!(t.openerId || t.adoptId) && !pageOf(tabId).wasNewTab;
-        if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return store().closeTab(tabId);
+        if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return s.closeTab(tabId);
         patchPage(tabId, { backToNewTab: false, newTabShown: null });
-        store().updateTab(tabId, { url: "", title: "", favicon: null });
+        s.updateTab(tabId, { url: "", title: "", favicon: null });
       }}
       onProgress={(progress) => store().updateLive(tabId, { progress })}
       onZoom={({ zoom }) => store().updateTab(tabId, { zoom })}
@@ -574,4 +578,4 @@ const TabWebView = memo(function TabWebView({ tabId, visible, warm }: { tabId: s
       }}
     />
   );
-});
+}

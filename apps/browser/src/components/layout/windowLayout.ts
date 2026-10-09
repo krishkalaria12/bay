@@ -1,8 +1,9 @@
 import { create } from "zustand";
-import { layout } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { developerTabShown } from "../developer/sites";
+import { SIDEBAR_FIELD } from "./constants";
 
 export function useTabLayout(): "sidebar" | "top" {
   const windowId = useWindowId();
@@ -49,15 +50,9 @@ export function besideRow(anchor: { x: number; width: number }, width: number, r
   return right ? Math.max(8, anchor.x - gap - width) : anchor.x + anchor.width + gap;
 }
 
-// yab: a 32pt field.
-export const SIDEBAR_FIELD = { top: 48, height: 32, radius: 10 } as const;
-// The space switcher's + mirrored: a 28pt button centred on the 41pt footer's band (3pt short of its bottom).
-export const SIDEBAR_FOOTER_DOWNLOADS = { bottom: 3 + (41 - 3 - 28) / 2, size: 28 } as const;
 export function listTopGap(addressBar: boolean): number {
   return addressBar ? 6 : layout.pinnedTop - layout.sidebarHeader;
 }
-
-export const SIDEBAR_HEADER_WITH_FIELD = SIDEBAR_FIELD.top + SIDEBAR_FIELD.height;
 
 export type UrlAnchor = { left: number; top: number; width: number; sidebar?: { height: number } };
 

@@ -24,6 +24,7 @@ import { searchUrlPrefix } from "./settings";
 import { mainWindowFor } from "./small";
 import { removeFromSplits, splitOf } from "./splits";
 import type { BrowserWindow, ClosedTab, Tab, TabLive, TabSnapshot } from "./types";
+import { MAX_CLOSED_TABS } from "./constants";
 
 export type NewTabOptions = {
   url?: string;
@@ -66,8 +67,6 @@ export type TabsSlice = {
   togglePin(id: string): void;
   moveTab(id: string, toIndex: number): void;
 };
-
-const MAX_CLOSED_TABS = 50;
 
 function pinnedInsertionIndex(s: BrowserState, w: BrowserWindow): number {
   let last = -1;

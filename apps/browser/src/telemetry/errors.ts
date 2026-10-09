@@ -2,10 +2,10 @@ import { crashReports, systemInfo } from "@bay/shell";
 import { advanceCrashCursor, capture, crashCursor, isSharing, loadChoice } from "./client";
 import { recordLog } from "./logs";
 import { errorCode, errorMessage, errorType, nativeCrashExceptions, parseStack, type ExceptionFrame } from "./sanitize";
+import { MAX_ERRORS_PER_SESSION } from "./config";
 
 type Mechanism = "onerror" | "onunhandledrejection" | "react" | "console" | "native_crash";
 
-const MAX_PER_SESSION = 25;
 const reported = new WeakSet<object>();
 const seen = new Set<string>();
 
@@ -25,7 +25,7 @@ export function captureException(error: unknown, mechanism: Mechanism, { fatal =
     const frames = parseStack(error && typeof error === "object" ? (error as { stack?: unknown }).stack : undefined);
     const code = errorCode(error);
     const key = `${type}|${value}|${code ?? ""}|${frames.at(-1)?.function ?? ""}`;
-    if (seen.has(key) || seen.size >= MAX_PER_SESSION) return;
+    if (seen.has(key) || seen.size >= MAX_ERRORS_PER_SESSION) return;
     seen.add(key);
     capture(
       "$exception",

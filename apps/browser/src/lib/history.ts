@@ -1,24 +1,14 @@
 import { addHistoryVisits, onHistoryChanged, queryHistory, watchHistory, type EngineHistoryEntry, type HistoryChange } from "@bay/nncore";
 import { readDocument, removeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/history";
+import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
 import { engineProfile, isIncognitoProfile } from "../store/model";
 import type { HistoryEntry } from "../store/types";
+import { CHROME_HISTORY_KEEPS_MS, HISTORY_CHUNK, LEGACY_HISTORY_FILE, LEGACY_HISTORY_KEPT_MS, LEGACY_HISTORY_TOLERANCE_MS } from "./constants";
 
 // Keeps the store's `history` view of Chrome's history (store/history.ts): read from Chrome at launch and for
 // each new profile, then kept current from Chrome's change events. Once, it moves the app's old history.json
 // into Chrome.
-
-const LEGACY_FILE = "history.json";
-// Chrome recorded the same visits the old file did, a moment apart (it notes a visit at commit, the app did at
-// load end): within this, a saved visit is one Chrome has.
-const LEGACY_TOLERANCE_MS = 60_000;
-// Chrome expires visits older than this; there's no use adding them.
-const CHROME_KEEPS_MS = 90 * 86_400_000;
-const CHUNK = 500;
-// Chrome commits history a few seconds after a change; the old file stays until then, so a crash before it moves
-// it again (adding only what Chrome lacks).
-const LEGACY_KEPT_MS = 15_000;
 
 const store = () => useBrowser.getState();
 
@@ -172,13 +162,13 @@ type LegacyFile = { history?: Record<string, HistoryEntry[]> };
  * has accounts for one saved visit), so a launch that stops halfway starts over. Profiles that no longer exist
  * are dropped.
  */
-export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_KEPT_MS } = {}): Promise<"none" | "moved" | "kept"> {
+export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_HISTORY_KEPT_MS } = {}): Promise<"none" | "moved" | "kept"> {
   let file: LegacyFile | null = null;
   try {
-    const json = readDocument(LEGACY_FILE);
+    const json = readDocument(LEGACY_HISTORY_FILE);
     file = json ? (JSON.parse(json) as LegacyFile) : null;
   } catch (error) {
-    console.warn(`[history] ${LEGACY_FILE} is unreadable; leaving it`, error);
+    console.warn(`[history] ${LEGACY_HISTORY_FILE} is unreadable; leaving it`, error);
     return "kept";
   }
   if (!file) return "none";
@@ -198,19 +188,19 @@ export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_KEP
         .map((e) => ({
           url: e.url,
           title: e.title ?? "",
-          visitTimes: (e.visitTimes?.length ? e.visitTimes : [e.lastVisit]).filter((t) => typeof t === "number" && t > now - CHROME_KEEPS_MS),
+          visitTimes: (e.visitTimes?.length ? e.visitTimes : [e.lastVisit]).filter((t) => typeof t === "number" && t > now - CHROME_HISTORY_KEEPS_MS),
         }))
         .filter((p) => p.visitTimes.length);
-      for (let i = 0; i < pages.length; i += CHUNK) await addHistoryVisits(engine, pages.slice(i, i + CHUNK), LEGACY_TOLERANCE_MS);
+      for (let i = 0; i < pages.length; i += HISTORY_CHUNK) await addHistoryVisits(engine, pages.slice(i, i + HISTORY_CHUNK), LEGACY_HISTORY_TOLERANCE_MS);
     }
   } catch (error) {
-    console.warn(`[history] moving ${LEGACY_FILE} into Chrome failed; trying again next launch`, error);
+    console.warn(`[history] moving ${LEGACY_HISTORY_FILE} into Chrome failed; trying again next launch`, error);
     return "kept";
   } finally {
     migrating.clear();
   }
-  if (keepMs) setTimeout(() => removeDocument(LEGACY_FILE), keepMs);
-  else removeDocument(LEGACY_FILE);
+  if (keepMs) setTimeout(() => removeDocument(LEGACY_HISTORY_FILE), keepMs);
+  else removeDocument(LEGACY_HISTORY_FILE);
   return "moved";
 }
 
@@ -224,7 +214,7 @@ export function startHistory() {
   // With an old history.json to move in, the views are first read (and Chrome's changes watched) once it's in:
   // watching during the move sent the JS one event per moved visit (~88,000 for a long-used profile, ~200 ms of
   // the startup JS), all of them ignored, and the views are read again after it anyway.
-  let moving = readDocument(LEGACY_FILE) !== null;
+  let moving = readDocument(LEGACY_HISTORY_FILE) !== null;
   if (!moving) loadAll(store());
   void migrateHistoryFile().then((result) => {
     legacyMoved = result !== "kept";

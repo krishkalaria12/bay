@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { bookmarkRoots, ensureRoots, removeBookmarkTree } from "./bookmarks";
 import { newId, setSharedDataIds, viewTabIds, without } from "./model";
-import { DEFAULT_PROFILE_ID } from "./settings";
+import { DEFAULT_PROFILE_ID } from "./constants";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { Profile, ProfileColor } from "./types";
 

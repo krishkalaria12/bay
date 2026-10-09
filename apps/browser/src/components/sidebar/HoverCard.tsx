@@ -17,10 +17,7 @@ import { dismissHover, hoverLeave, keepHover } from "./hover";
 import { useSidebarUi, type Anchor } from "./state";
 import { TabIcon } from "./TabIcon";
 import { HoverPlayer, useShowsMiniPlayer } from "../media/HoverPlayer";
-
-const WIDTH = 264;
-const PAD = 10;
-const PREVIEW_HEIGHT = 140;
+import { HOVER_CARD_PAD, HOVER_CARD_PEEK_ROWS, HOVER_CARD_PREVIEW_HEIGHT, HOVER_CARD_WIDTH } from "./constants";
 
 export function HoverCard({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
   const hover = useSidebarUi((u) => (u.hover?.windowId === windowId ? u.hover : null));
@@ -48,7 +45,7 @@ function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode 
       shadowOpacity={theme.panelShadowOpacity * 0.8}
       shadowRadius={16}
       shadowOffset={[0, 6]}
-      style={{ position: "absolute", left: besideRow(anchor, WIDTH, right), top: Math.max(8, anchor.y - 6), width: WIDTH, padding: PAD }}
+      style={{ position: "absolute", left: besideRow(anchor, HOVER_CARD_WIDTH, right), top: Math.max(8, anchor.y - 6), width: HOVER_CARD_WIDTH, padding: HOVER_CARD_PAD }}
     >
       {children}
     </Surface>
@@ -102,13 +99,13 @@ function PagePreview({ tabId }: { tabId: string }) {
   if (!picture) return null;
   const [, , width, height] = picture.frame;
   // The page's top, at the card's width: the image keeps its shape and the frame crops the rest.
-  const shown = width > 0 ? (WIDTH * height) / width : PREVIEW_HEIGHT;
+  const shown = width > 0 ? (HOVER_CARD_WIDTH * height) / width : HOVER_CARD_PREVIEW_HEIGHT;
   return (
     <View
       style={{
-        height: Math.min(PREVIEW_HEIGHT, shown),
-        margin: -PAD,
-        marginBottom: PAD,
+        height: Math.min(HOVER_CARD_PREVIEW_HEIGHT, shown),
+        margin: -HOVER_CARD_PAD,
+        marginBottom: HOVER_CARD_PAD,
         overflow: "hidden",
         borderTopLeftRadius: 12,
         borderTopRightRadius: 12,
@@ -116,25 +113,23 @@ function PagePreview({ tabId }: { tabId: string }) {
         borderBottomColor: theme.panelBorder,
       }}
     >
-      <Image source={{ uri: `data:image/jpeg;base64,${picture.data}` }} style={{ width: WIDTH, height: shown }} accessibilityIgnoresInvertColors />
+      <Image source={{ uri: `data:image/jpeg;base64,${picture.data}` }} style={{ width: HOVER_CARD_WIDTH, height: shown }} accessibilityIgnoresInvertColors />
     </View>
   );
 }
-
-const PEEK_ROWS = 8;
 
 function GroupPeek({ groupId, windowId, anchor }: { groupId: string; windowId: string; anchor: Anchor }) {
   const theme = useTheme();
   const group = useBrowser((s) => s.groups[groupId]);
   const label = useBrowser((s) => (s.groups[groupId] ? groupLabel(s, s.groups[groupId]!) : ""));
   if (!group) return null;
-  const more = group.tabIds.length - PEEK_ROWS;
+  const more = group.tabIds.length - HOVER_CARD_PEEK_ROWS;
   return (
     <Card anchor={anchor}>
       <Text style={{ fontSize: 12, fontWeight: "600", color: theme.textSecondary, marginBottom: 4, marginLeft: 4 }}>
         {label} · {group.tabIds.length === 1 ? "1 tab" : `${group.tabIds.length} tabs`}
       </Text>
-      {group.tabIds.slice(0, PEEK_ROWS).map((id) => (
+      {group.tabIds.slice(0, HOVER_CARD_PEEK_ROWS).map((id) => (
         <PeekRow key={id} tabId={id} windowId={windowId} />
       ))}
       {more > 0 ? <Text style={{ fontSize: 11.5, color: theme.textTertiary, marginTop: 4, marginLeft: 4 }}>and {more} more</Text> : null}

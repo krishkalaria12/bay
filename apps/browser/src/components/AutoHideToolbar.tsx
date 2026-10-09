@@ -3,14 +3,16 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { reduceMotion } from "../lib/reduceMotion";
-import { layout, useTheme } from "../lib/theme";
+import { useTheme } from "../lib/theme";
+import { layout } from "../lib/constants";
 import { useBrowser } from "../store/browser";
 import { useSettings, useTabLive } from "../store/hooks";
 import type { ToolbarGeometry } from "./layout/geometry";
 import { toolbarPalette, useEasedColor, useEasedColorStyle } from "./layout/toolbarColors";
 import { useHistoryMenu } from "./layout/history";
 import { usePages } from "./layout/pageState";
-import { needsBar, revealToolbar, setToolbarPeek, STRIP_HEIGHT, toolbarMode, useToolbarAutoHide, type ToolbarMode } from "./layout/toolbarAutoHide";
+import { needsBar, revealToolbar, setToolbarPeek, toolbarMode, useToolbarAutoHide, type ToolbarMode } from "./layout/toolbarAutoHide";
+import { AUTO_HIDE_STRIP_HEIGHT, TOOLBAR_BAR_ROOM, TOOLBAR_HIDE_MS, TOOLBAR_PEEK_DELAY_MS, TOOLBAR_PEEK_SHRINK, TOOLBAR_SHOW_MS, TOOLBAR_UNPEEK_DELAY_MS } from "./layout/constants";
 import { Toolbar } from "./Toolbar";
 
 // The toolbar that hides while scrolling (layout/toolbarAutoHide.ts), drawn over the top of its pane, with the page
@@ -23,19 +25,9 @@ import { Toolbar } from "./Toolbar";
 // bubble stays above it). Each motion is one transform on the UI thread, from where the layout moved the page (set in
 // the commit's layout effect, so they land in the same frame) to its place; a reversal carries on from where the page is.
 
-// Dia (owner's clip, 60 fps): the page's top glides up over ~150 ms, eased out (17, 32, 49, 68, 76, 88, 93, 95,
-// 100 % per frame); the controls are gone in ~5 frames (45, 25, 11, 3 % left). Showing mirrors it, a little longer and
-// softer at the end so the page settles rather than snaps, the controls fading and growing back in.
-const HIDE_MS = 150;
+// Eased out as Dia's: the page's top glides up quickly and settles (TOOLBAR_HIDE_MS); showing, a little softer.
 const HIDE_EASING = Easing.out(Easing.quad);
-const SHOW_MS = 200;
 const SHOW_EASING = Easing.out(Easing.cubic);
-// Resting on the strip this long peeks the bar (crossing it on the way to the tab strip doesn't).
-const PEEK_DELAY = 150;
-const UNPEEK_DELAY = 250;
-const SHRINK = 0.94;
-// What the page gets back from the bar itself.
-const BAR_ROOM = layout.toolbarHeight - STRIP_HEIGHT;
 
 export function useToolbarMode(tabId: string, windowId: string, enabled: boolean): ToolbarMode {
   const scrolledDown = useToolbarAutoHide((s) => !!s.scrolledDown[tabId]);
@@ -81,7 +73,7 @@ export function useToolbarMotion({
   const collapsed = mode !== "shown";
   const hidden = mode === "collapsed";
   const shownTop = layout.toolbarHeight + extra;
-  const room = shownTop - STRIP_HEIGHT;
+  const room = shownTop - AUTO_HIDE_STRIP_HEIGHT;
   // The strip's size from the first hide (the one resize, held in place by the transform like any other move) until
   // the next document. A page that never scrolls far enough to hide the bar keeps all of it in view. Set while
   // rendering, so the layout changes in the commit that starts the motion.
@@ -108,7 +100,7 @@ export function useToolbarMotion({
     const before = was.current;
     was.current = { collapsed, hidden };
     if (before.collapsed === collapsed && before.hidden === hidden) return;
-    const glide = (value: number, show: boolean) => withTiming(value, { duration: show ? SHOW_MS : HIDE_MS, easing: show ? SHOW_EASING : HIDE_EASING });
+    const glide = (value: number, show: boolean) => withTiming(value, { duration: show ? TOOLBAR_SHOW_MS : TOOLBAR_HIDE_MS, easing: show ? SHOW_EASING : HIDE_EASING });
     if (before.collapsed !== collapsed) {
       const to = collapsed ? 1 : 0;
       const barTo = hidden ? 1 : 0;
@@ -139,8 +131,8 @@ export function useToolbarMotion({
   return {
     bar,
     fade,
-    groupStyle: [{ position: "absolute", left: 0, right: 0, top: (collapsed ? STRIP_HEIGHT : shownTop) - extra }, shift],
-    pageHeight: height - (tall.on ? STRIP_HEIGHT : shownTop),
+    groupStyle: [{ position: "absolute", left: 0, right: 0, top: (collapsed ? AUTO_HIDE_STRIP_HEIGHT : shownTop) - extra }, shift],
+    pageHeight: height - (tall.on ? AUTO_HIDE_STRIP_HEIGHT : shownTop),
     bottomStyle,
   };
 }
@@ -181,13 +173,13 @@ export function AutoHideToolbar({
   const H = layout.toolbarHeight;
   // The band: the bar's height down to the strip's, its top edge fixed (scaled about its middle, then lifted).
   const bandStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -BAR_ROOM / 2]) }, { scaleY: interpolate(bar.get(), [0, 1], [1, STRIP_HEIGHT / H]) }],
+    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -TOOLBAR_BAR_ROOM / 2]) }, { scaleY: interpolate(bar.get(), [0, 1], [1, AUTO_HIDE_STRIP_HEIGHT / H]) }],
   }));
-  const dividerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -BAR_ROOM]) }] }));
+  const dividerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -TOOLBAR_BAR_ROOM]) }] }));
   const controlsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(fade.get(), [0, 0.2, 0.4, 0.6, 1], [1, 0.45, 0.15, 0, 0]),
     // Toward the top centre: scaled about its middle, then lifted so its top edge stays put, and a little more.
-    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -((1 - SHRINK) * H) / 2 - 3]) }, { scale: interpolate(bar.get(), [0, 1], [1, SHRINK]) }],
+    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -((1 - TOOLBAR_PEEK_SHRINK) * H) / 2 - 3]) }, { scale: interpolate(bar.get(), [0, 1], [1, TOOLBAR_PEEK_SHRINK]) }],
   }));
   const labelStyle = useAnimatedStyle(() => ({ opacity: interpolate(fade.get(), [0, 0.5, 1], [0, 0, 1]) }));
   const host = url.startsWith("file:") ? "File" : breadcrumb(url).host;
@@ -207,18 +199,18 @@ export function AutoHideToolbar({
       <Animated.View
         pointerEvents={collapsed ? "none" : "box-none"}
         onMouseEnter={() => mode === "peek" && clearTimeout(peekTimer.current)}
-        onMouseLeave={() => mode === "peek" && peekLater(false, UNPEEK_DELAY)}
+        onMouseLeave={() => mode === "peek" && peekLater(false, TOOLBAR_UNPEEK_DELAY_MS)}
         style={[{ position: "absolute", left: 0, right: 0, top: 0, height: H }, controlsStyle]}
       >
         <Toolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused} bare />
       </Animated.View>
-      <Animated.View pointerEvents={collapsed ? "auto" : "none"} style={[{ position: "absolute", left: 0, right: 0, top: 0, height: STRIP_HEIGHT }, labelStyle]}>
+      <Animated.View pointerEvents={collapsed ? "auto" : "none"} style={[{ position: "absolute", left: 0, right: 0, top: 0, height: AUTO_HIDE_STRIP_HEIGHT }, labelStyle]}>
         <Pressable
           onPress={() => {
             clearTimeout(peekTimer.current);
             revealToolbar(tabId);
           }}
-          onMouseEnter={() => mode === "collapsed" && peekLater(true, PEEK_DELAY)}
+          onMouseEnter={() => mode === "collapsed" && peekLater(true, TOOLBAR_PEEK_DELAY_MS)}
           onMouseLeave={() => mode === "collapsed" && clearTimeout(peekTimer.current)}
           tooltip="Show Toolbar"
           style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 }}

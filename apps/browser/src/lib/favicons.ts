@@ -4,8 +4,9 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browser";
 import { engineProfile, isIncognitoProfile } from "../store/model";
-import { DEFAULT_PROFILE_ID } from "../store/settings";
+import { DEFAULT_PROFILE_ID } from "../store/constants";
 import { webviews } from "./webviews";
+import { APPEARANCE_SWAP_MS, FAVICON_FLUSH_MS, FAVICON_LOOKUP_BATCH, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS } from "./constants";
 
 // Favicons are Chrome's (FaviconService): Chrome saves a page's icon when the page shows it and drops it with the
 // page's history. This is the app's in-memory cache of them, by page, plus what Chrome doesn't keep:
@@ -23,11 +24,6 @@ type Icons = {
 };
 
 const EMPTY: Icons = { pages: {}, srcs: {}, appearances: {} };
-const APPEARANCE_SWAP_MS = 5000;
-const MAX_ICONS = 3000;
-const LOOKUP_DELAY_MS = 16;
-// Per engine call (nn_favicons_get answers up to 500).
-const LOOKUP_BATCH = 200;
 let appearanceChangedAt = -Infinity;
 
 type Favicons = {
@@ -47,14 +43,13 @@ export const pageKey = (url: string) => url.replace(/#.*$/, "");
 // wait for the next frame and land together, in order: one store update and one commit. A change that gives back
 // what it got changes nothing, and no icon re-renders for it.
 type Change = (f: Favicons) => Favicons;
-const FLUSH_MS = 16;
 const changes: Change[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
 function queue(change: Change, now = false) {
   changes.push(change);
   if (now) flush();
-  else flushTimer ??= setTimeout(flush, FLUSH_MS);
+  else flushTimer ??= setTimeout(flush, FAVICON_FLUSH_MS);
 }
 
 function flush() {
@@ -76,7 +71,7 @@ function update(key: string, change: (icons: Icons) => Icons, now = false) {
 
 // Bounded: past MAX_ICONS a map starts over (Chrome still has every icon; pages ask again).
 const capped = <T,>(map: Record<string, T>, key: string, value: T): Record<string, T> =>
-  Object.keys(map).length >= MAX_ICONS ? { [key]: value } : { ...map, [key]: value };
+  Object.keys(map).length >= MAX_FAVICONS ? { [key]: value } : { ...map, [key]: value };
 
 // The pages whose answer the queued changes may change, for the icons waiting on one (onFavicons); null: any page.
 let watching = false;
@@ -95,7 +90,7 @@ function ask(key: string, page: string) {
   asked.add(`${key}|${page}`);
   if (!queued.has(key)) queued.set(key, new Set());
   queued.get(key)!.add(page);
-  lookupTimer ??= setTimeout(lookUp, LOOKUP_DELAY_MS);
+  lookupTimer ??= setTimeout(lookUp, FAVICON_LOOKUP_DELAY_MS);
 }
 
 function lookUp() {
@@ -104,7 +99,7 @@ function lookUp() {
   queued.clear();
   for (const [key, pages] of batches) {
     const all = [...pages];
-    for (let i = 0; i < all.length; i += LOOKUP_BATCH) lookUpPages(key, all.slice(i, i + LOOKUP_BATCH));
+    for (let i = 0; i < all.length; i += FAVICON_LOOKUP_BATCH) lookUpPages(key, all.slice(i, i + FAVICON_LOOKUP_BATCH));
   }
 }
 
@@ -170,7 +165,7 @@ function remember(key: string, page: string, src: string, uri: string) {
     let appearances = icons.appearances;
     if (swapped && previous && previous !== uri) appearances = { ...appearances, [page]: dark ? [previous, uri] : [uri, previous] };
     // As `capped`; a map that starts over forgets every other page.
-    const startsOver = Object.keys(icons.pages).length >= MAX_ICONS;
+    const startsOver = Object.keys(icons.pages).length >= MAX_FAVICONS;
     if (startsOver) touchAll();
     else touch(page);
     const pages = startsOver ? { [page]: uri } : { ...icons.pages, [page]: uri };

@@ -2,18 +2,15 @@ import { WebView } from "@bay/nncore";
 import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { openFromPage, pageProfileId } from "../layout/openFromPage";
 import { useResizeDrag } from "../layout/useResizeDrag";
 import { IconButton } from "../primitives";
 import { closeSidePanel, findExtension, showExtensionMenu, useExtensions, type SidePanel } from "./state";
-
-const MIN_WIDTH = 320;
-const MAX_WIDTH = 600;
-const HEADER = 40;
-
+import { SIDE_PANEL_HEADER, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH } from "./constants";
 
 export function ExtensionSidePanel() {
   const windowId = useWindowId();
@@ -39,8 +36,8 @@ export function ExtensionSidePanel() {
 
   const width = dragWidth ?? savedWidth;
   const resize = useResizeDrag({
-    min: MIN_WIDTH,
-    max: MAX_WIDTH,
+    min: SIDE_PANEL_MIN_WIDTH,
+    max: SIDE_PANEL_MAX_WIDTH,
     direction: -1,
     saved: () => useBrowser.getState().settings.extensionSidePanelWidth ?? 360,
     onLive: setDragWidth,
@@ -73,7 +70,7 @@ function PanelCard({ windowId, panel }: { windowId: string; panel: SidePanel }) 
   const icon = ext?.actionIcon || ext?.icon;
   return (
     <View style={{ flex: 1, borderRadius: layout.cardRadius, overflow: "hidden", backgroundColor: theme.card }}>
-      <View style={{ height: HEADER, flexDirection: "row", alignItems: "center", paddingLeft: 12, paddingRight: 5, gap: 8 }}>
+      <View style={{ height: SIDE_PANEL_HEADER, flexDirection: "row", alignItems: "center", paddingLeft: 12, paddingRight: 5, gap: 8 }}>
         {icon ? <Image source={{ uri: icon }} style={{ width: 16, height: 16 }} /> : null}
         <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "500", color: theme.textPrimary }}>
           {title}

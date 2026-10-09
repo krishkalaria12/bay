@@ -1,6 +1,6 @@
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/shell";
-import { memo, useMemo, useState } from "react";
+import { useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View, type LayoutRectangle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
@@ -15,18 +15,14 @@ import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
 import { openFolder, openModeFor, openUrl } from "./actions";
 import { editBookmark } from "./edit";
+import { BOOKMARK_ITEM_HEIGHT, BOOKMARKS_BAR_HEIGHT, BOOKMARKS_OVERFLOW_WIDTH } from "./constants";
 
-export const BOOKMARKS_BAR_HEIGHT = 30;
-const ITEM_HEIGHT = 24;
-const OVERFLOW_WIDTH = 28;
-
-// Memoized: every tab's pane renders one, and panes re-render on layout changes (sidebar, splits).
-export const BookmarksBar = memo(function BookmarksBar({ tabId, placeholder }: { tabId: string; placeholder?: boolean }) {
+export function BookmarksBar({ tabId, placeholder }: { tabId: string; placeholder?: boolean }) {
   const windowId = useWindowId();
   const shown = useBookmarksBarShown(tabId);
   if (!shown) return null;
   return placeholder ? <View style={{ height: BOOKMARKS_BAR_HEIGHT }} /> : <Bar windowId={windowId} />;
-});
+}
 
 export function useBookmarksBarShown(tabId: string): boolean {
   return useBrowser((s) => {
@@ -60,7 +56,7 @@ function Bar({ windowId }: { windowId: string }) {
   const available = width - reserved;
   const fits = (id: string) => {
     const f = frames[id];
-    return !f || f.x + f.width <= available - (overflowing() ? OVERFLOW_WIDTH : 0);
+    return !f || f.x + f.width <= available - (overflowing() ? BOOKMARKS_OVERFLOW_WIDTH : 0);
   };
   function overflowing() {
     const last = children.at(-1);
@@ -107,7 +103,7 @@ function Bar({ windowId }: { windowId: string }) {
       style={{ height: BOOKMARKS_BAR_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 8 }}
     >
       <ContextMenuArea onContextMenu={() => void openBarMenu(windowId, profileId, null)} style={StyleSheet.absoluteFill} />
-      <View style={{ flex: 1, height: ITEM_HEIGHT, flexDirection: "row", alignItems: "center", overflow: "hidden" }}>
+      <View style={{ flex: 1, height: BOOKMARK_ITEM_HEIGHT, flexDirection: "row", alignItems: "center", overflow: "hidden" }}>
         {children.length === 0 && !hideImport ? (
           <ImportButton />
         ) : children.length === 0 ? (
@@ -136,7 +132,7 @@ function Bar({ windowId }: { windowId: string }) {
           icon="chevron.right.2"
           tooltip="More bookmarks"
           onPress={(e) => void openFolderMenu(windowId, hidden, e)}
-          width={OVERFLOW_WIDTH}
+          width={BOOKMARKS_OVERFLOW_WIDTH}
         />
       )}
       {hasOther && otherId && (
@@ -182,28 +178,27 @@ function BarItem({
   const [dragging, setDragging] = useState(false);
   const dragMove = useEffectEvent(onDragMove);
   const dragEnd = useEffectEvent(onDragEnd);
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4,
-        onPanResponderGrant: () => setDragging(true),
-        onPanResponderMove: (_, g) => {
-          dx.set(g.dx);
-          dragMove(g.dx);
-        },
-        onPanResponderRelease: (_, g) => {
-          dx.set(0);
-          setDragging(false);
-          dragEnd(g.dx);
-        },
-        onPanResponderTerminate: () => {
-          dx.set(0);
-          setDragging(false);
-          dragMove(0);
-          dragEnd(0);
-        },
-      }),
-    [dx, dragMove, dragEnd],
+  // One responder for the item's life: a new one mid-gesture would drop the gesture.
+  const [responder] = useState(() =>
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4,
+      onPanResponderGrant: () => setDragging(true),
+      onPanResponderMove: (_, g) => {
+        dx.set(g.dx);
+        dragMove(g.dx);
+      },
+      onPanResponderRelease: (_, g) => {
+        dx.set(0);
+        setDragging(false);
+        dragEnd(g.dx);
+      },
+      onPanResponderTerminate: () => {
+        dx.set(0);
+        setDragging(false);
+        dragMove(0);
+        dragEnd(0);
+      },
+    }),
   );
   if (!node) return null;
   const open = (e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>
@@ -261,7 +256,7 @@ function BarButton({
         {({ pressed }) => (
           <View
             style={{
-              height: ITEM_HEIGHT,
+              height: BOOKMARK_ITEM_HEIGHT,
               width,
               maxWidth: 190,
               borderRadius: 6,

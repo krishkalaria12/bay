@@ -3,7 +3,8 @@ import { memo } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { hex, layout, useTheme } from "../../lib/theme";
+import { hex, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { usePageProfileId, useWindowId } from "../../store/hooks";
 import { groupLabel } from "../../store/organize";
@@ -13,7 +14,8 @@ import { IconButton } from "../primitives";
 import { commitRename, endRename, startRename } from "./actions";
 import { useDragItem, useDropInto } from "./dnd";
 import { Fold, useFold } from "./Fold";
-import { GROUP_BORDER, GROUP_PAD, keptEntry } from "./geometry";
+import { keptEntry } from "./geometry";
+import { GROUP_BORDER, GROUP_PAD } from "./constants";
 import { useGroupEntries } from "./entries";
 import { dismissHover, useRowHover } from "./hover";
 import { openGroupMenu } from "./menus";
@@ -22,7 +24,6 @@ import { TabIcon } from "./TabIcon";
 import { RenameField, SplitRowItem, TabRowItem } from "./TabRow";
 import { GROUP_COLORS, useSidebarTokens, withAlpha } from "./tokens";
 
-const PAD = GROUP_PAD;
 
 export const GroupBlock = memo(function GroupBlock({ groupId, section }: { groupId: string; section: "list" | "pinnedGroups" }) {
   const windowId = useWindowId();
@@ -49,7 +50,7 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
 
   return (
     <Animated.View ref={ref} style={style}>
-      <View style={{ borderRadius: 12, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, paddingHorizontal: PAD }}>
+      <View style={{ borderRadius: 12, backgroundColor: fill, borderWidth: GROUP_BORDER, borderColor: stroke, paddingHorizontal: GROUP_PAD }}>
         <View ref={headerRef} {...handle}>
           <GroupHeader groupId={groupId} windowId={windowId} collapsed={collapsed} open={fold.open} />
         </View>
@@ -63,7 +64,7 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
           keep={activeEntry}
           gap={layout.rowGap}
           rowHeight={layout.rowHeight}
-          padBottom={PAD}
+          padBottom={GROUP_PAD}
           mountClosed={selectedInside}
           footer={<Animated.View ref={tailRef} style={tailStyle} />}
         />
@@ -119,7 +120,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
             <Surface
               fill={hex(dropInto || pressed ? theme.tabPressed : hovered ? tokens.groupHeaderHover : "rgba(0,0,0,0)")}
               cornerRadius={10}
-              style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - PAD }}
+              style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - GROUP_PAD }}
             >
               {group.icon || firstTab ? (
                 <TabIcon url={firstTab?.url ?? ""} favicon={firstTab?.favicon} icon={group.icon ?? firstTab?.customIcon} profileId={firstTab?.profileId} />

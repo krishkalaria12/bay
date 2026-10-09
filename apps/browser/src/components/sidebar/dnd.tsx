@@ -3,14 +3,16 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useStat
 import { PanResponder, type ScrollView, type View } from "react-native";
 import Animated, { cancelAnimation, Easing, makeMutable, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { create, useStore } from "zustand";
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import type { TabPlacement } from "../../store/organize";
-import { SLIDE } from "../layout/stripReorder";
+import { STRIP_SLIDE } from "../layout/constants";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../layout/tabDrag";
 import { suppressHover } from "./hover";
+import { DRAG_SCROLL_EDGE, PINNED_TILE_GAP } from "./constants";
 
 type Frame = { x: number; y: number; w: number; h: number };
 type Section = "tiles" | "pinnedGroups" | "list";
@@ -44,10 +46,8 @@ export type Ghost = { item: Item; count: number; width: number; height: number; 
 
 // The list stacks rows with `gap`; a zero-height tail cancels its gap with this negative margin.
 const ROW_GAP = layout.rowGap;
-const TILE_GAP = 6;
-const EDGE = 28;
 // Rows make room and close up with Dia's slide (stripReorder.ts): gaps and sizes are margins, widths and heights.
-const spring = (value: SharedValue<number>, toValue: number) => value.set(withSpring(toValue, SLIDE));
+const spring = (value: SharedValue<number>, toValue: number) => value.set(withSpring(toValue, STRIP_SLIDE));
 
 const inside = (f: Frame, x: number, y: number, slop = 0) => x >= f.x - slop && x <= f.x + f.w + slop && y >= f.y - slop && y <= f.y + f.h + slop;
 const measure = (view: View | null): Promise<Frame | null> =>
@@ -81,8 +81,7 @@ class DragController {
   private pointer = { x: 0, y: 0 };
   private ghost: Ghost | null = null;
   private gapKey: string | null = null;
-  // The room open at gapKey, and the collapsed group the drop goes into.
-  private pitch = 0;
+  // The collapsed group the drop goes into.
   private into: string | null = null;
   private dropKey = "";
   private drop: Drop = { type: "none" };
@@ -239,9 +238,9 @@ class DragController {
       // DEV: where it landed, for the drag test to compare with the item's place.
       if (__DEV__) this.landed = at && { key: ghost.item.key, x: at.x, y: at.y };
       if (!at) return done();
-      ghost.position.x.set(withSpring(at.x - this.rootFrame.x, SLIDE));
+      ghost.position.x.set(withSpring(at.x - this.rootFrame.x, STRIP_SLIDE));
       ghost.position.y.set(
-        withSpring(at.y - this.rootFrame.y, SLIDE, () => {
+        withSpring(at.y - this.rootFrame.y, STRIP_SLIDE, () => {
           runOnJS(done)();
         }),
       );
@@ -285,7 +284,7 @@ class DragController {
 
   private autoScroll(y: number) {
     const v = this.viewport;
-    const speed = !v ? 0 : y < v.y + EDGE ? -Math.ceil((v.y + EDGE - y) / 4) : y > v.y + v.h - EDGE ? Math.ceil((y - (v.y + v.h - EDGE)) / 4) : 0;
+    const speed = !v ? 0 : y < v.y + DRAG_SCROLL_EDGE ? -Math.ceil((v.y + DRAG_SCROLL_EDGE - y) / 4) : y > v.y + v.h - DRAG_SCROLL_EDGE ? Math.ceil((y - (v.y + v.h - DRAG_SCROLL_EDGE)) / 4) : 0;
     clearInterval(this.scrollTimer);
     this.scrollTimer = undefined;
     if (!speed || !this.scroll) return;
@@ -335,7 +334,7 @@ class DragController {
       });
       drop = { type: "tabs", placement: { pinned: true, beforeId: firstTab(before) } };
       gapKey = before?.key ?? "tail:tiles";
-      pitch = (cells[0]?.frame?.w ?? source.frame?.w ?? 50) + TILE_GAP;
+      pitch = (cells[0]?.frame?.w ?? source.frame?.w ?? 50) + PINNED_TILE_GAP;
     } else {
       const groups = live.filter((i) => i.kind === "group");
       const box = tabsDrag
@@ -388,7 +387,6 @@ class DragController {
       const next = gapKey && this.items.get(gapKey);
       if (next) spring(next.gap, pitch);
       this.gapKey = gapKey;
-      this.pitch = pitch;
     }
   }
 }
@@ -503,7 +501,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
         motion,
         source
           ? horizontal
-            ? { marginRight: -TILE_GAP, opacity: 0, overflow: "hidden" as const }
+            ? { marginRight: -PINNED_TILE_GAP, opacity: 0, overflow: "hidden" as const }
             : { marginBottom: -ROW_GAP, opacity: 0, overflow: "hidden" as const }
           : landing
             ? { opacity: 0 }

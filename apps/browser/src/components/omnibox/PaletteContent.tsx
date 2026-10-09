@@ -14,18 +14,9 @@ import { useHover } from "../primitives";
 import { SuggestionIcon } from "./SuggestionRow";
 import { usePointerHover } from "./usePointerHover";
 import type { PaletteSection, PaletteSuggestion } from "./paletteStart";
+import { PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT, PALETTE_HEIGHT, PALETTE_LIST_TOP, PALETTE_ROW_HEIGHT, PALETTE_TITLE_HEIGHT } from "./constants";
 
 export type PaletteMenu = { side: "left" | "right"; title: string; actions: PaletteMenuAction[] };
-
-const FIELD_HEIGHT = 58;
-const FOOTER_HEIGHT = 44;
-const ROW_HEIGHT = 38;
-// As yab's: one height whatever it lists (room for about nine rows), the list scrolling inside, so the palette
-// neither grows nor moves as you type.
-const PALETTE_HEIGHT = 470;
-const LIST_TOP = 6;
-// A section's title over its rows (Recent Tabs, Frequent), as yab labels them.
-const TITLE_HEIGHT = 26;
 
 // Keeps a closed menu on screen while it animates out; `closing` is set until it's gone.
 export function useMenuPresence<T>(menu: T | null) {
@@ -85,14 +76,14 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
 
   return (
     <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={{ height: Math.min(PALETTE_HEIGHT, maxHeight) }}>
-      <View ref={tourAnchorRef(windowId, "commandBar")} style={{ height: FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 18, gap: 12 }}>
+      <View ref={tourAnchorRef(windowId, "commandBar")} style={{ height: PALETTE_FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 18, gap: 12 }}>
         {leadingIcon ?? <Symbol name="magnifyingglass" size={16} color={theme.textSecondary} style={{ width: 20, height: 20 }} />}
         {field}
       </View>
       <ScrollView
         ref={scroll}
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 7, paddingTop: LIST_TOP, paddingBottom: 6 }}
+        contentContainerStyle={{ paddingHorizontal: 7, paddingTop: PALETTE_LIST_TOP, paddingBottom: 6 }}
         keyboardShouldPersistTaps="always"
         onLayout={(e) => { viewport.current.height = e.nativeEvent.layout.height; keepSelectedVisible(); }}
         onScroll={(e) => { viewport.current.y = e.nativeEvent.contentOffset.y; }}
@@ -102,13 +93,13 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
           const titled = !!section.title && section.items.length > 0;
           return (
           <View key={section.id} onLayout={(e) => {
-            const top = e.nativeEvent.layout.y + (titled ? TITLE_HEIGHT : 0);
+            const top = e.nativeEvent.layout.y + (titled ? PALETTE_TITLE_HEIGHT : 0);
             const first = firsts[sectionIndex]!;
-            section.items.forEach((_, offset) => rows.current.set(first + offset, { y: top + offset * ROW_HEIGHT, height: ROW_HEIGHT }));
+            section.items.forEach((_, offset) => rows.current.set(first + offset, { y: top + offset * PALETTE_ROW_HEIGHT, height: PALETTE_ROW_HEIGHT }));
             keepSelectedVisible();
           }}>
             {titled ? (
-              <Text style={{ height: TITLE_HEIGHT, paddingHorizontal: 10, paddingTop: sectionIndex > 0 ? 9 : 4, fontSize: 11, fontWeight: "500", color: theme.textTertiary }}>{section.title}</Text>
+              <Text style={{ height: PALETTE_TITLE_HEIGHT, paddingHorizontal: 10, paddingTop: sectionIndex > 0 ? 9 : 4, fontSize: 11, fontWeight: "500", color: theme.textTertiary }}>{section.title}</Text>
             ) : null}
             {section.items.map((suggestion, offset) => {
               const rowIndex = firsts[sectionIndex]! + offset;
@@ -119,7 +110,7 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
         })}
         {!sections.some((section) => section.items.length) ? <Text style={{ fontSize: 13, color: theme.textSecondary, paddingHorizontal: 10, paddingVertical: 10 }}>Type an address or search.</Text> : null}
       </ScrollView>
-      <View style={{ height: FOOTER_HEIGHT, paddingHorizontal: 7, paddingBottom: 7, flexDirection: "row", alignItems: "center" }}>
+      <View style={{ height: PALETTE_FOOTER_HEIGHT, paddingHorizontal: 7, paddingBottom: 7, flexDirection: "row", alignItems: "center" }}>
         <FooterButton label="Bay menu" icon="line.3.horizontal" onPress={onAppMenu} round />
         <View style={{ flex: 1 }} />
         {!pageContext && <View style={{ flexDirection: "row", alignItems: "center", gap: 2, borderRadius: 18, padding: 2, backgroundColor: theme.dark ? "#FFFFFF09" : "#00000006", borderWidth: 0.5, borderColor: theme.dark ? "#FFFFFF13" : "#0000000C" }}>
@@ -155,7 +146,7 @@ function PaletteResultRow({ suggestion: s, pageContext, selected, onHover, onCho
     <View onMouseEnter={onHover}>
       <ContextMenuArea onContextMenu={onMenu}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${title}${s.kind === "page" && s.tabId ? ", switch to tab" : ""}`} accessibilityState={{ selected }} onPress={(e) => onChoose(dispositionFor(modifiersOf(e)))}>
-        <View style={{ height: ROW_HEIGHT, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 9, paddingHorizontal: 10, backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined }}>
+        <View style={{ height: PALETTE_ROW_HEIGHT, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 9, paddingHorizontal: 10, backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined }}>
           {pageContext ? <View style={{ width: 20, height: 20, borderRadius: 5, alignItems: "center", justifyContent: "center", backgroundColor: theme.toolbarHover, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.panelBorder }}><SuggestionIcon suggestion={s} /></View> : <SuggestionIcon suggestion={s} />}
           <Text numberOfLines={1} style={{ flexShrink: 1, maxWidth: detail ? "53%" : "85%", fontSize: 13, color: theme.textPrimary }}>{title}</Text>
           {detail ? <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>{detail}</Text> : <View style={{ flex: 1 }} />}
