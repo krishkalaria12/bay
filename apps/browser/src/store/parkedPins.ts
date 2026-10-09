@@ -8,7 +8,7 @@ import type { BrowserWindow, HistoryEntry, ParkedPins, Tab, TabGroup } from "./t
 
 type PinSource = Pick<BrowserState, "tabs" | "groups" | "pinnedFolders" | "history">;
 
-function atPin(t: Tab, history: HistoryEntry[]): Partial<Pick<Tab, "url" | "title" | "favicon">> {
+export function atPin(t: Tab, history: HistoryEntry[]): Partial<Pick<Tab, "url" | "title" | "favicon">> {
   const home = t.pinnedUrl;
   if (!home || !t.url || samePage(t.url, home)) return {};
   const entry = history.find((h) => samePage(h.url, home));
@@ -17,24 +17,36 @@ function atPin(t: Tab, history: HistoryEntry[]): Partial<Pick<Tab, "url" | "titl
 
 const homeOf = (t: { url: string; pinnedUrl?: string | null }) => t.pinnedUrl || t.url;
 
-export function parkWindowPins(parked: Record<string, ParkedPins>, w: BrowserWindow, s: PinSource): Record<string, ParkedPins> {
+/** Which of a space's pins another window still has (store/mirroredPins.ts): those aren't parked. */
+export type HeldPins = { tiles(profileId: string): boolean; rows(profileId: string): boolean };
+
+export function parkWindowPins(parked: Record<string, ParkedPins>, w: BrowserWindow, s: PinSource, held?: HeldPins): Record<string, ParkedPins> {
   if (w.incognito) return parked;
   const groupOf = new Map<string, TabGroup>();
   for (const g of Object.values(s.groups)) if (g.pinned && g.windowId === w.id) for (const id of g.tabIds) groupOf.set(id, g);
   let next = parked;
   const profiles = new Set(w.tabIds.map((id) => s.tabs[id]?.profileId).filter((p): p is string => !!p));
   for (const profileId of profiles) {
-    const own = w.tabIds.map((id) => s.tabs[id]).filter((t): t is Tab => !!t && t.profileId === profileId);
-    const folders = Object.values(s.pinnedFolders).filter((f) => f.windowId === w.id && f.profileId === profileId);
+    const tilesHeld = !!held?.tiles(profileId);
+    const rowsHeld = !!held?.rows(profileId);
+    const own = w.tabIds
+      .map((id) => s.tabs[id])
+      .filter((t): t is Tab => !!t && t.profileId === profileId && !(t.pinned && tilesHeld) && !(t.pinnedRow && rowsHeld));
+    const folders = rowsHeld ? [] : Object.values(s.pinnedFolders).filter((f) => f.windowId === w.id && f.profileId === profileId);
     if (!own.some((t) => t.pinned || t.pinnedRow || groupOf.has(t.id)) && !folders.length) continue;
     const old = next[profileId] ?? { tabs: [], groups: [] };
     const ids = new Set(old.tabs.map((p) => p.id));
     // A page already parked as a tile isn't parked again as one, nor a loose pinned row's as a loose row.
     const homes = old.tabs.filter((p) => !p.groupId && !p.pinnedRow).map(homeOf);
     const rowHomes = old.tabs.filter((p) => p.pinnedRow && !p.folderId).map(homeOf);
+    // A folder is parked by its key: each window's folder for it is the same one (store/mirroredPins.ts).
+    const folderRows = old.tabs.filter((p) => p.pinnedRow && p.folderId).map((p) => `${p.folderId} ${homeOf(p)}`);
     const groups = [...old.groups];
     const parkedFolders = [...(old.folders ?? [])];
-    for (const f of folders) if (!parkedFolders.some((x) => x.id === f.id)) parkedFolders.push({ id: f.id, name: f.name, icon: f.icon, collapsed: f.collapsed });
+    for (const f of folders) {
+      const key = f.key ?? f.id;
+      if (!parkedFolders.some((x) => x.id === key)) parkedFolders.push({ id: key, name: f.name, icon: f.icon, collapsed: f.collapsed });
+    }
     const tiles: ParkedPins["tabs"] = [];
     const rows: ParkedPins["tabs"] = [];
     const members: ParkedPins["tabs"] = [];
@@ -48,9 +60,15 @@ export function parkWindowPins(parked: Record<string, ParkedPins>, w: BrowserWin
         tiles.push(tile);
       } else if (t.pinnedRow) {
         const folder = folders.find((f) => inFolder(t, f));
-        const row = { ...snapshotTab(t), ...atPin(t, s.history[profileId] ?? []), id: t.id, groupId: null, ...(folder ? { folderId: folder.id } : {}) };
-        if (!folder && rowHomes.some((h) => samePage(h, homeOf(row)))) continue;
-        if (!folder) rowHomes.push(homeOf(row));
+        const row = { ...snapshotTab(t), ...atPin(t, s.history[profileId] ?? []), id: t.id, groupId: null, ...(folder ? { folderId: folder.key ?? folder.id } : {}) };
+        if (folder) {
+          const place = `${row.folderId} ${homeOf(row)}`;
+          if (folderRows.includes(place)) continue;
+          folderRows.push(place);
+        } else {
+          if (rowHomes.some((h) => samePage(h, homeOf(row)))) continue;
+          rowHomes.push(homeOf(row));
+        }
         rows.push(row);
       } else if (g) {
         if (!groups.some((x) => x.id === g.id)) groups.push({ id: g.id, name: g.name, icon: g.icon, color: g.color, collapsed: g.collapsed });

@@ -141,7 +141,7 @@ test("bookmarks: folders moved into each other on two Macs don't make a cycle", 
   assert.ok(reachable.includes("One") && reachable.includes("Two"));
 });
 
-test("pinned tabs parked by a closed window still sync: not deleted elsewhere, and changes elsewhere reach them", async () => {
+test("pinned tabs another window keeps after a close still sync: not deleted elsewhere, and changes elsewhere reach them", async () => {
   const folder = new Folder();
   const a = new Device("devA", folder);
   const b = new Device("devB", folder);
@@ -155,11 +155,12 @@ test("pinned tabs parked by a closed window still sync: not deleted elsewhere, a
   });
   b.with(() => S().createWindow({ url: "https://b-home.example/" }));
   await syncAll([a, b]);
-  const pins = (d) => d.with(() => Object.values(S().tabs).filter((t) => t.pinned).map((t) => t.pinnedUrl).sort());
+  const pins = (d) => d.with(() => [...new Set(Object.values(S().tabs).filter((t) => t.pinned).map((t) => t.pinnedUrl))].sort());
   assert.deepEqual(pins(b), ["https://cal.example/", "https://mail.example/"]);
 
+  // A's other window has them too (store/mirroredPins.ts): nothing is parked, and one record each stays.
   a.with(() => S().closeWindow(aHome));
-  assert.equal(a.with(() => S().parkedPins.default.tabs.length), 2);
+  assert.equal(a.with(() => S().parkedPins.default), undefined);
   await syncAll([a, b]);
   assert.deepEqual(pins(b), ["https://cal.example/", "https://mail.example/"], "still pinned on B");
 
@@ -169,14 +170,36 @@ test("pinned tabs parked by a closed window still sync: not deleted elsewhere, a
     S().pinTabs([cal], false);
   });
   await syncAll([b, a]);
-  const parked = a.with(() => S().parkedPins.default.tabs.map((t) => `${t.pinnedUrl} ${t.customTitle}`));
-  assert.deepEqual(parked, ["https://mail.example/ Inbox"]);
-  assert.equal(a.with(() => S().windows[aWork].tabIds.some((id) => S().tabs[id].pinned)), false, "nothing moved into A's other window");
+  const tiles = (w) => a.with(() => model.viewTabIds(S(), w).filter((id) => S().tabs[id].pinned).map((id) => `${S().tabs[id].pinnedUrl} ${S().tabs[id].customTitle}`));
+  assert.deepEqual(tiles(aWork), ["https://mail.example/ Inbox"]);
   assert.equal((await a.sync()).published, 0, "settled");
 
   const n = a.with(() => S().createWindow());
+  assert.deepEqual(tiles(n), ["https://mail.example/ Inbox"], "a new window shows them");
+  assert.equal((await a.sync()).published, 0, "its tabs for them publish nothing new");
+});
+
+test("pinned tabs parked by a closed window still sync, and come back with the next window", async () => {
+  const folder = new Folder();
+  const a = new Device("devA", folder);
+  const b = new Device("devB", folder);
+  let aHome;
+  a.with(() => {
+    aHome = S().createWindow({ url: "https://mail.example/" });
+    S().pinTabs([model.viewTabIds(S(), aHome)[0]], true);
+    // A window on a space with a profile of its own doesn't show them: closing the other parks them.
+    S().createWindow({ profileId: S().createProfile({ name: "Side" }), url: "https://side.example/" });
+  });
+  b.with(() => S().createWindow({ url: "https://b-home.example/" }));
+  await syncAll([a, b]);
+  a.with(() => S().closeWindow(aHome));
+  assert.equal(a.with(() => S().parkedPins.default.tabs.length), 1);
+  b.with(() => S().updateTab(Object.values(S().tabs).find((t) => t.pinned).id, { customTitle: "Inbox" }));
+  await syncAll([b, a]);
+  assert.deepEqual(a.with(() => S().parkedPins.default.tabs.map((t) => t.customTitle)), ["Inbox"]);
+  const n = a.with(() => S().createWindow());
   assert.deepEqual(a.with(() => model.viewTabIds(S(), n).filter((id) => S().tabs[id].pinned).map((id) => S().tabs[id].customTitle)), ["Inbox"]);
-  assert.equal((await a.sync()).published, 0, "adopting them publishes nothing new");
+  assert.equal((await a.sync()).published, 0);
 });
 
 test("passwords: saved on one Mac, changed or deleted on another; the newer edit of a login wins", async () => {

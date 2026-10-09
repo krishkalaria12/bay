@@ -5,6 +5,7 @@ import { DEFAULT_PROFILE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/const
 import { useBrowser, type BrowserState } from "../store/browser";
 import { orderSections, syncGroupOrder } from "../store/groups";
 import { engineProfile, makeTab, pinnedFirst, without } from "../store/model";
+import { pinKeyOf } from "../store/mirroredPins";
 import { adoptParkedPins, parkWindowPins } from "../store/parkedPins";
 import { removeTabs } from "../store/tabs";
 import type { Settings } from "../store/settings";
@@ -359,12 +360,18 @@ export function pinnedAdapter(profileId: string): Adapter {
       const members = new Map<string, Pin[]>();
       const pinnedGroupOf = new Map<string, TabGroup>();
       for (const g of Object.values(s.groups)) if (g.pinned && g.profileId === profileId) g.tabIds.forEach((id) => pinnedGroupOf.set(id, g));
+      const tiled = new Set<string>();
       for (const w of openWindows(s)) {
         for (const id of w.tabIds) {
           const t = s.tabs[id];
           if (!t || t.profileId !== profileId) continue;
           const g = pinnedGroupOf.get(id);
-          if (t.pinned) tiles.push(t);
+          // Each window has a tab for a favourite (store/mirroredPins.ts): it's one pin, named by its key.
+          if (t.pinned) {
+            const key = pinKeyOf(t);
+            if (!tiled.has(key)) tiles.push({ ...t, id: key });
+            tiled.add(key);
+          }
           else if (g) {
             if (!members.has(g.id)) {
               members.set(g.id, []);
@@ -413,7 +420,16 @@ export function pinnedAdapter(profileId: string): Adapter {
       const tileOrder = [...pins.keys()].filter((id) => { const g = pins.get(id)!.g; return !g || !groupValues.has(g); }).sort(byPos(pins));
       const memberOrder = new Map(groupOrder.map((g) => [g, [...pins.keys()].filter((id) => pins.get(id)!.g === g).sort(byPos(pins))]));
 
-      const goneTabs = [...changed].filter((k) => k.startsWith("pin:t:") && !visible.has(k)).map((k) => k.slice(6)).filter((id) => s.tabs[id]);
+      // A pin is its key's tab in the home window (the others follow it: store/mirroredPins.ts), else its own.
+      const homeTab = new Map<string, string>();
+      for (const id of [...(s.windows[PARK]?.tabIds ?? []), ...home.tabIds]) if (s.tabs[id]) homeTab.set(pinKeyOf(s.tabs[id]!), id);
+      const local = (key: string) => {
+        const inHome = homeTab.get(key);
+        if (inHome) return inHome;
+        if (s.tabs[key]) return key;
+        return Object.values(s.tabs).find((t) => t.pinKey === key && !s.windows[t.windowId]?.incognito)?.id ?? key;
+      };
+      const goneTabs = [...changed].filter((k) => k.startsWith("pin:t:") && !visible.has(k)).map((k) => local(k.slice(6))).filter((id) => s.tabs[id]);
       const removable = goneTabs.filter((id) => {
         const w = s.windows[s.tabs[id]!.windowId];
         return w && w.tabIds.some((other) => other !== id && !goneTabs.includes(other));
@@ -432,7 +448,8 @@ export function pinnedAdapter(profileId: string): Adapter {
           ? { ...old, name: v.n, icon: v.i, color: v.c, pinned: true }
           : { id, windowId: home.id, profileId, name: v.n, icon: v.i, color: v.c, collapsed: false, pinned: true, tabIds: [], createdAt: Date.now() };
       }
-      for (const [id, v] of pins) {
+      for (const [key, v] of pins) {
+        const id = local(key);
         const group = v.g && groups[v.g] ? groups[v.g]! : null;
         const old = tabs[id];
         if (old) {
@@ -459,6 +476,7 @@ export function pinnedAdapter(profileId: string): Adapter {
         tabs[id] = tab;
         windows[windowId] = { ...w, tabIds: [...w.tabIds, id] };
       }
+      for (const [g, keys] of memberOrder) memberOrder.set(g, keys.map(local));
       const inGroup = new Set([...memberOrder.values()].flat().filter((id) => tabs[id]));
       for (const g of Object.values(groups)) {
         if (g.profileId !== profileId) continue;
@@ -467,7 +485,7 @@ export function pinnedAdapter(profileId: string): Adapter {
       }
       for (const g of Object.values(groups)) if (g.profileId === profileId && !g.tabIds.length) delete groups[g.id];
 
-      const sequence = [...tileOrder, ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
+      const sequence = [...tileOrder.map(local), ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
       const rank = new Map(sequence.map((id, i) => [id, i]));
       for (const w of Object.values(windows)) {
         if (w.incognito) continue;

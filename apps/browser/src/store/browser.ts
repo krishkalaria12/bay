@@ -3,6 +3,7 @@ import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "./bookma
 import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./folders";
 import { createGroupsSlice, placeFolders, type GroupsSlice } from "./groups";
 import { createHistorySlice, type HistorySlice } from "./history";
+import { mirrorPins } from "./mirroredPins";
 import { IDLE_LIVE, isIncognitoProfile, pinnedFirst, pinnedPage } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createProfilesSlice, DEFAULT_PROFILE, engineIdOf, type ProfilesSlice } from "./profiles";
@@ -167,6 +168,12 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
 useBrowser.subscribe((s, prev) => {
   const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
   if (patch) useBrowser.setState(patch);
+});
+
+// Every window shows the spaces' pins: a change to one window's is made in the others (store/mirroredPins.ts).
+useBrowser.subscribe((s, prev) => {
+  const next = mirrorPins(s, prev);
+  if (next) useBrowser.setState(next);
 });
 
 export type { CreateWindowOptions } from "./windows";

@@ -10,14 +10,17 @@ import {
   navigationTo,
   newId,
   pinnedFirst,
+  pinnedPage,
   resolveWindowId,
   sharesProfile,
   snapshotTab,
   viewTabIds,
   without,
 } from "./model";
+import { orderSections, syncGroupOrder } from "./groups";
+import { mirrorsPins, pinKeyOf, pinsHeldElsewhere } from "./mirroredPins";
 import { restoringGroup } from "./organize";
-import { adoptParkedPins, parkWindowPins } from "./parkedPins";
+import { adoptParkedPins, atPin, parkWindowPins } from "./parkedPins";
 import { isSmall, isSmallWindow, mainWindowFor, littleBayProfile } from "./small";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, ParkedPins, Tab, TabGroup } from "./types";
@@ -82,25 +85,88 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
     .filter((t): t is Tab => !!t && t.windowId !== targetId && !isIncognitoProfile(t.profileId) && !target.incognito);
   if (!moving.length) return s;
 
+  // A pin is every window's (store/mirroredPins.ts). Moved out of a window that stays, it leaves its tab there,
+  // unloaded. Moved into a window with a tab for it: an unloaded one is dropped, an open one takes the place of an
+  // unloaded tab there, and two open ones stay both, the moved one as a page.
+  const movingIds = new Set(moving.map((t) => t.id));
+  const open = (t: Tab) => !!t.navigation || !!t.adoptId;
+  const leftBehind = new Map<string, Tab>();
+  for (const t of moving) {
+    const src = s.windows[t.windowId];
+    if (!pinnedPage(t) || !mirrorsPins(src) || src!.tabIds.every((id) => movingIds.has(id))) continue;
+    const { adoptId: _a, wakeAdoptId: _w, ...rest } = t;
+    leftBehind.set(t.id, { ...rest, ...atPin(t, s.history[t.profileId] ?? []), id: newId("tab"), pinKey: pinKeyOf(t), navigation: null, unloaded: true });
+  }
+  const theirs = new Map<string, Tab>();
+  if (mirrorsPins(target)) for (const id of target.tabIds) if (s.tabs[id] && pinnedPage(s.tabs[id]!)) theirs.set(pinKeyOf(s.tabs[id]!), s.tabs[id]!);
+  const dropped = new Set<string>();
+  const replacing = new Map<string, string>();
+  const asPages = new Set<string>();
+  for (const t of moving) {
+    const there = pinnedPage(t) ? theirs.get(pinKeyOf(t)) : undefined;
+    if (!there) continue;
+    if (!open(t)) dropped.add(t.id);
+    else if (!open(there)) replacing.set(there.id, t.id);
+    else asPages.add(t.id);
+  }
+
   const sources = new Set(moving.map((t) => t.windowId));
-  let next = removeTabs(s, moving.map((t) => t.id), false);
+  let next = removeTabs(s, [...movingIds, ...replacing.keys()], false);
+  if (leftBehind.size) {
+    const tabs = { ...next.tabs };
+    const live = { ...next.live };
+    const windows = { ...next.windows };
+    for (const id of sources) {
+      const src = windows[id];
+      if (!src) continue;
+      const kept = new Set(src.tabIds);
+      const tabIds = s.windows[id]!.tabIds.flatMap((t) => {
+        const copy = leftBehind.get(t);
+        if (!copy) return kept.has(t) ? [t] : [];
+        tabs[copy.id] = copy;
+        live[copy.id] = IDLE_LIVE;
+        return [copy.id];
+      });
+      windows[id] = { ...src, tabIds };
+    }
+    next = { ...next, tabs, live, windows };
+  }
   const w = next.windows[targetId]!;
   const tabs = { ...next.tabs };
   const live = { ...next.live };
   const activeTabIds = { ...w.activeTabIds };
-  for (const { adoptId, ...t } of moving) {
+  const replaced = new Map([...replacing].map(([there, id]) => [id, there]));
+  const kept = moving.filter((t) => !dropped.has(t.id));
+  for (const { adoptId, ...t } of kept) {
     const loaded = !!t.url && (!!t.navigation || !!adoptId);
-    // A pinned row stays one in its new window, out of its folder (the folder is the old window's).
-    const { folderId: _, ...rest } = t;
-    tabs[t.id] = { ...rest, windowId: targetId, navigation: loaded ? navigationTo(t.url) : null };
+    const { folderId, pinKey, pinnedRow, ...rest } = t;
+    const moved: Tab = { ...rest, windowId: targetId, navigation: loaded ? navigationTo(t.url) : null };
+    if (asPages.has(t.id)) Object.assign(moved, { pinned: false, pinnedUrl: null });
+    else if (pinnedRow) {
+      // A pinned row stays one, in the target's folder for its folder if it has one.
+      const there = replaced.has(t.id) ? s.tabs[replaced.get(t.id)!] : undefined;
+      const folder = folderId ? s.pinnedFolders[folderId] : undefined;
+      const key = folder ? (folder.key ?? folder.id) : undefined;
+      const local = there?.folderId ?? Object.values(next.pinnedFolders).find((f) => f.windowId === targetId && f.profileId === t.profileId && (f.key ?? f.id) === key)?.id;
+      Object.assign(moved, { pinnedRow: true }, local ? { folderId: local } : {});
+    }
+    if (pinKey && !asPages.has(t.id)) moved.pinKey = pinKey;
+    tabs[t.id] = moved;
     live[t.id] = IDLE_LIVE;
     activeTabIds[t.profileId] ??= t.id;
   }
+  // Where the target had it, the moved tab takes its place; the rest go after its tabs.
+  const present = new Set(w.tabIds);
+  const order = s.windows[targetId]!.tabIds.flatMap((id) => (replacing.has(id) ? [replacing.get(id)!] : present.has(id) ? [id] : []));
+  const placed = new Set(order);
+  const tabIds = [...order, ...w.tabIds.filter((id) => !placed.has(id)), ...kept.map((t) => t.id).filter((id) => !placed.has(id))];
+  const window = { ...w, tabIds: orderSections(tabIds, tabs, next.groups), activeTabIds };
   next = {
     ...next,
     tabs,
     live,
-    windows: { ...next.windows, [targetId]: { ...w, tabIds: pinnedFirst([...w.tabIds, ...moving.map((t) => t.id)], tabs), activeTabIds } },
+    windows: { ...next.windows, [targetId]: window },
+    groups: syncGroupOrder(next.groups, window),
   };
   for (const id of sources) {
     const src = next.windows[id];
@@ -179,7 +245,8 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       windowOrder: next.windowOrder.filter((w) => w !== id),
       windowUi: without(next.windowUi, [id]),
       closedWindows,
-      parkedPins: small ? s.parkedPins : parkWindowPins(s.parkedPins, w, s),
+      // The pins another window has stay there; only the rest are parked for the next window.
+      parkedPins: small ? s.parkedPins : parkWindowPins(s.parkedPins, w, s, pinsHeldElsewhere(s, id)),
       closedTabs: w.incognito ? next.closedTabs.filter((c) => c.windowId !== id) : next.closedTabs,
       ui: {
         ...next.ui,

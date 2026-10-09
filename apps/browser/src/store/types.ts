@@ -46,6 +46,8 @@ export type Tab = {
   // loose or in one of its folders (`folderId`). It stays when tabs are cleaned up, and closing it only unloads it.
   pinnedRow?: boolean;
   folderId?: string;
+  // A pinned page is every window's (store/mirroredPins.ts): each window's tab for it shares this key (else its id).
+  pinKey?: string;
   // Kept (the tab menu's Keep Tab): as a pin does, it stays when tabs are cleaned up and awake when idle ones sleep.
   kept?: boolean;
   muted: boolean;
@@ -96,6 +98,8 @@ export type TabGroup = {
 // are the window's tabs with its id, in the window's order.
 export type PinnedFolder = {
   id: string;
+  // Each window's folder for it shares this key (else its id), as pinned pages do.
+  key?: string;
   windowId: string;
   profileId: string;
   name: string;

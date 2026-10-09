@@ -247,8 +247,9 @@ test("⌘W until the window closes, then ⌘N: the pinned tabs and pinned groups
   assert.equal(S().tabs[mail].windowId, n, "same tab id (its key in sync)");
   assert.equal(S().groups[work].pinned, true);
   assert.deepEqual(S().parkedPins, {}, "the park is empty");
+  // As Arc's, a second window shows the same favourites, unloaded (store/mirroredPins.ts); pinned groups are a window's.
   const n2 = S().createWindow();
-  assert.deepEqual(sidebar(n2), []);
+  assert.deepEqual(sidebar(n2), ["https://mail.com", "https://docs.com"]);
 });
 
 test("⇧⌘T after the close, then ⌘N: no second set of pinned tabs", () => {
@@ -261,8 +262,8 @@ test("⇧⌘T after the close, then ⌘N: no second set of pinned tabs", () => {
   assert.deepEqual(sidebar(restored), PINS, "the reopened window has them");
   assert.deepEqual(model.viewTabIds(S(), restored).filter((id) => !model.inPinnedContainer(S(), id)).map((id) => S().tabs[id].url), ["https://a.com"]);
   const n = S().createWindow();
-  assert.deepEqual(sidebar(n), [], "⌘N: none again");
-  assert.equal(Object.values(S().tabs).filter((t) => t.url === "https://mail.com").length, 1);
+  assert.deepEqual(sidebar(n), ["https://mail.com", "https://docs.com"], "⌘N: the same favourites, not a second park's");
+  assert.deepEqual(Object.values(S().tabs).filter((t) => t.url === "https://mail.com").map((t) => t.windowId).sort(), [restored, n].sort(), "one tab each");
 });
 
 test("quit and relaunch after the window closed: the next window has the pinned tabs, unloaded", () => {

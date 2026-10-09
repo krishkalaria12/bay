@@ -378,8 +378,10 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     const folderId = row ? (p.row ? (folder?.id ?? undefined) : t.folderId) : undefined;
     if (t.pinned === p.pinned && !!t.pinnedRow === row && t.folderId === folderId) continue;
     const pinnedUrl = p.pinned || row ? (pinnedPage(t) ? t.pinnedUrl : t.url || null) : null;
-    const { pinnedRow: _, folderId: _f, ...rest } = t;
-    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
+    const { pinnedRow: _, folderId: _f, pinKey, ...rest } = t;
+    // Unpinned, it's this window's page only: the other windows' tabs for its pin go (store/mirroredPins.ts).
+    const key = (p.pinned || row) && pinKey ? { pinKey } : {};
+    tabs[id] = { ...rest, ...key, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
   }
   const rest = w.tabIds.filter((id) => !movingSet.has(id));
   let at: number;
