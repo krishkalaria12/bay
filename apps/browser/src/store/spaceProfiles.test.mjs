@@ -17,7 +17,7 @@ const setup = () => {
   const work = S().createSpace({ name: "Work", shareWith: personal });
   const side = S().createSpace({ name: "Side", shareWith: null });
   const w = S().createWindow({ spaceId: personal, url: "https://a.com" });
-  const fav = S().windows[w].tabIds[0];
+  const fav = S().windows[w].activeTabIds[S().windows[w].spaceId];
   S().newTab(w, { url: "https://b.com" });
   S().pinTabs([fav], true);
   S().switchSpace(w, side);

@@ -1,8 +1,8 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { newId, pinnedPage } from "./model";
+import { listOfTab, newId, pinnedPage, withList, type TabList } from "./model";
 import { closingGroup } from "./organize";
-import type { BrowserWindow, GroupColor, Tab, TabGroup } from "./types";
+import type { GroupColor, Tab, TabGroup } from "./types";
 
 export type GroupsSlice = {
   groups: Record<string, TabGroup>;
@@ -16,13 +16,15 @@ export type GroupsSlice = {
   deleteGroup(groupId: string): void;
 };
 
-export function syncGroupOrder(groups: Record<string, TabGroup>, window: BrowserWindow): Record<string, TabGroup> {
+/** The list's groups' members in the list's order. */
+export function syncGroupOrder(groups: Record<string, TabGroup>, list: TabList): Record<string, TabGroup> {
   let changed = false;
   const next = { ...groups };
+  const inList = new Set(list.tabIds);
   for (const g of Object.values(groups)) {
-    if (g.windowId !== window.id) continue;
+    if (!g.tabIds.some((id) => inList.has(id))) continue;
     const members = new Set(g.tabIds);
-    const tabIds = window.tabIds.filter((id) => members.has(id));
+    const tabIds = list.tabIds.filter((id) => members.has(id));
     if (tabIds.some((id, i) => id !== g.tabIds[i])) {
       next[g.id] = { ...g, tabIds };
       changed = true;
@@ -84,13 +86,12 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
     const s = get();
     const tabs = tabIds.map((id) => s.tabs[id]).filter((t) => t && !pinnedPage(t));
     const first = tabs[0];
-    if (!first || tabs.some((t) => t!.windowId !== first.windowId || t!.spaceId !== first.spaceId)) return "";
-    const w = s.windows[first.windowId]!;
+    const list = first && listOfTab(s, first.id);
+    if (!first || !list || tabs.some((t) => t!.spaceId !== first.spaceId)) return "";
     const members = new Set(tabs.map((t) => t!.id));
-    const window = { ...w, tabIds: placeBlock(w.tabIds, w.tabIds.filter((id) => members.has(id))) };
+    const window = { key: list.key, tabIds: placeBlock(list.tabIds, list.tabIds.filter((id) => members.has(id))) };
     const group: TabGroup = {
       id: newId("g"),
-      windowId: w.id,
       spaceId: first.spaceId,
       name: options.name ?? "",
       icon: options.icon ?? null,
@@ -100,7 +101,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       tabIds: window.tabIds.filter((id) => members.has(id)),
       createdAt: Date.now(),
     };
-    set({ groups: { ...leaveGroups(s.groups, members), [group.id]: group }, windows: { ...s.windows, [w.id]: window } });
+    set({ groups: { ...leaveGroups(s.groups, members), [group.id]: group }, tabLists: withList(s, window).tabLists });
     return group.id;
   },
 
@@ -109,10 +110,10 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       const g = s.groups[id];
       if (!g) return {};
       const groups = { ...s.groups, [id]: { ...g, ...patch } };
-      const w = s.windows[g.windowId];
-      if (patch.pinned === undefined || patch.pinned === g.pinned || !w) return { groups };
-      const window = { ...w, tabIds: orderSections(w.tabIds, s.tabs, groups) };
-      return { groups: syncGroupOrder(groups, window), windows: { ...s.windows, [w.id]: window } };
+      const list = g.tabIds[0] ? listOfTab(s, g.tabIds[0]) : undefined;
+      if (patch.pinned === undefined || patch.pinned === g.pinned || !list) return { groups };
+      const next = { key: list.key, tabIds: orderSections(list.tabIds, s.tabs, groups) };
+      return { groups: syncGroupOrder(groups, next), tabLists: withList(s, next).tabLists };
     });
   },
 
@@ -122,14 +123,14 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       if (!group) return {};
       const adding = tabIds.filter((id) => {
         const t = s.tabs[id];
-        return t && !pinnedPage(t) && t.windowId === group.windowId && t.spaceId === group.spaceId && !group.tabIds.includes(id);
+        return t && !pinnedPage(t) && t.spaceId === group.spaceId && !group.tabIds.includes(id);
       });
-      if (!adding.length) return {};
-      const w = s.windows[group.windowId]!;
-      const window = { ...w, tabIds: placeBlock(w.tabIds, [...group.tabIds, ...adding]) };
+      const list = listOfTab(s, adding[0] ?? "");
+      if (!adding.length || !list) return {};
+      const window = { key: list.key, tabIds: placeBlock(list.tabIds, [...group.tabIds, ...adding]) };
       // A new map: leaveGroups returns the current one when no added tab was in a group.
       const groups = { ...leaveGroups(s.groups, new Set(adding)), [groupId]: { ...group, tabIds: [...group.tabIds, ...adding] } };
-      return { groups, windows: { ...s.windows, [w.id]: window } };
+      return { groups, tabLists: withList(s, window).tabLists };
     });
   },
 
@@ -137,22 +138,22 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
     set((s) => {
       const leaving = new Set(tabIds);
       const groups: Record<string, TabGroup> = {};
-      const windows = { ...s.windows };
+      let next = s;
       for (const g of Object.values(s.groups)) {
         const kept = g.tabIds.filter((id) => !leaving.has(id));
         if (kept.length === g.tabIds.length) {
           groups[g.id] = g;
           continue;
         }
-        if (!kept.length) continue;
-        const w = windows[g.windowId]!;
+        const list = listOfTab(next, g.tabIds[0]!);
+        if (!kept.length || !list) continue;
         const out = g.tabIds.filter((id) => leaving.has(id));
-        const tabIds = w.tabIds.filter((id) => !out.includes(id));
+        const tabIds = list.tabIds.filter((id) => !out.includes(id));
         tabIds.splice(tabIds.indexOf(kept.at(-1)!) + 1, 0, ...out);
-        windows[g.windowId] = { ...w, tabIds };
+        next = withList(next, { key: list.key, tabIds });
         groups[g.id] = { ...g, tabIds: kept };
       }
-      return { groups, windows };
+      return { groups, tabLists: next.tabLists };
     });
   },
 

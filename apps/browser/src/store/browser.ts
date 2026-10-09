@@ -3,14 +3,13 @@ import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "./bookma
 import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./folders";
 import { createGroupsSlice, placeFolders, type GroupsSlice } from "./groups";
 import { createHistorySlice, type HistorySlice } from "./history";
-import { mirrorPins } from "./mirroredPins";
-import { IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage } from "./model";
+import { IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage, spaceListKey, tabListKey, tabToShow, windowListKey } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, type SpacesSlice } from "./spaces";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
-import { activated, apply, createTabsSlice, type TabsSlice } from "./tabs";
-import type { BrowserWindow, Tab } from "./types";
+import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
+import type { BrowserWindow, PinnedFolder, Tab, TabGroup } from "./types";
 import { createUiSlice, type UiSlice } from "./ui";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
 
@@ -42,7 +41,7 @@ export type HydrateData = Partial<
     | "splits"
     | "closedTabs"
     | "closedWindows"
-    | "parkedPins"
+    | "tabLists"
     | "closedGroups"
     | "deletedGroups"
     | "cleanedTabs"
@@ -52,6 +51,9 @@ export type HydrateData = Partial<
     | "settings"
   >
 > & { focusedWindowId?: string | null };
+
+// A session from before tabs were their space's: each window kept its tabs, in its order.
+type SavedWindow = BrowserWindow & { tabIds?: string[] };
 
 // Batch external updates; React Native otherwise commits once per subscriber.
 let batch = (update: () => void) => update();
@@ -93,29 +95,44 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
     const settings = { ...DEFAULT_SETTINGS, ...data.settings };
     if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
 
-    const rawWindows = data.windows ?? {};
-    const profileOk = (p: string) => !!spaces[p] || isIncognitoSpace(p);
+    const rawWindows: Record<string, SavedWindow> = data.windows ?? {};
+    const spaceOk = (p: string) => !!spaces[p] || isIncognitoSpace(p);
+    // A private window's tabs and a Little Bay's page only come back with their window.
+    const kept = (w: SavedWindow | undefined) => !!w && (w.incognito || w.kind === "small");
     const tabs: Record<string, Tab> = {};
     for (const t of Object.values(data.tabs ?? {})) {
-      if (!rawWindows[t.windowId] || !profileOk(t.spaceId)) continue;
+      const own = rawWindows[t.windowId];
+      if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own)) continue;
       const { adoptId: _, ...rest } = t;
-      tabs[t.id] = { ...rest, navigation: null, pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null) };
+      tabs[t.id] = { ...rest, windowId: own ? t.windowId : "", navigation: null, pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null) };
     }
+    // Each list: the saved one's order, then (an older session) each window's.
+    const lookup = { spaces, windows: rawWindows };
+    const lists: Record<string, string[]> = {};
+    const add = (id: string) => {
+      const t = tabs[id];
+      if (!t) return;
+      const list = (lists[tabListKey(lookup, t)] ??= []);
+      if (!list.includes(id)) list.push(id);
+    };
+    for (const ids of Object.values(data.tabLists ?? {})) ids.forEach(add);
+    for (const w of Object.values(rawWindows)) (w.tabIds ?? []).forEach(add);
+    Object.keys(tabs).forEach(add);
+    const tabLists = Object.fromEntries(Object.entries(lists).map(([key, ids]) => [key, placeFolders(pinnedFirst(ids, tabs), tabs)]));
+
     const windows: Record<string, BrowserWindow> = {};
-    for (const w of Object.values(rawWindows)) {
-      const tabIds = placeFolders(pinnedFirst(w.tabIds.filter((id) => tabs[id]?.windowId === w.id), tabs), tabs);
-      if (!tabIds.length) continue;
-      const activeTabIds = Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => tabs[id]?.spaceId === p));
-      const spaceId = tabIds.some((id) => tabs[id]!.spaceId === w.spaceId) ? w.spaceId : tabs[tabIds[0]!]!.spaceId;
-      activeTabIds[spaceId] ??= tabIds.find((id) => tabs[id]!.spaceId === spaceId)!;
-      windows[w.id] = { ...w, tabIds, spaceId, activeTabIds };
+    for (const { tabIds: _, ...w } of Object.values(rawWindows)) {
+      if (kept(w) && !tabLists[windowListKey(lookup, w)]) continue;
+      const spaceId = w.incognito || w.kind === "small" || spaces[w.spaceId] ? w.spaceId : settings.defaultSpaceId;
+      const listed = (p: string, id: string) => !!tabs[id] && (w.kind === "small" ? tabs[id]!.windowId === w.id : tabListKey(lookup, tabs[id]!) === spaceListKey({ spaces }, p));
+      windows[w.id] = { ...w, spaceId, activeTabIds: Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => listed(p, id))) };
     }
-    for (const t of Object.values(tabs)) if (!windows[t.windowId]) delete tabs[t.id];
+    for (const t of Object.values(tabs)) if (t.windowId && !windows[t.windowId]) tabs[t.id] = { ...t, windowId: "" };
     const windowOrder = [...(data.windowOrder ?? []).filter((id) => windows[id]), ...Object.keys(windows).filter((id) => !data.windowOrder?.includes(id))];
-    const inWindow = (id: string, windowId: string) => tabs[id]?.windowId === windowId;
+    type SavedGroup = TabGroup & { windowId?: string };
     const groups = Object.fromEntries(
-      Object.values(data.groups ?? {})
-        .map((g) => ({ ...g, tabIds: g.tabIds.filter((id) => inWindow(id, g.windowId)) }))
+      Object.values((data.groups ?? {}) as Record<string, SavedGroup>)
+        .map(({ windowId: _, ...g }) => ({ ...g, tabIds: g.tabIds.filter((id) => tabs[id]?.spaceId === g.spaceId) }))
         .filter((g) => g.tabIds.length)
         .map((g) => [g.id, g]),
     );
@@ -134,13 +151,13 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
       windows,
       windowOrder,
       tabs,
+      tabLists,
       live: Object.fromEntries(Object.keys(tabs).map((id) => [id, IDLE_LIVE])),
       groups,
-      pinnedFolders: Object.fromEntries(Object.values(data.pinnedFolders ?? {}).filter((f) => windows[f.windowId]).map((f) => [f.id, f])),
+      pinnedFolders: Object.fromEntries(Object.values(data.pinnedFolders ?? {}).filter((f) => spaces[f.spaceId]).map(({ windowId: _, ...f }: PinnedFolder & { windowId?: string }) => [f.id, f])),
       splits,
       closedTabs: data.closedTabs ?? [],
       closedWindows: data.closedWindows ?? [],
-      parkedPins: Object.fromEntries(Object.entries(data.parkedPins ?? {}).filter(([p]) => spaces[p])),
       closedGroups: data.closedGroups ?? [],
       deletedGroups: keptDeletedGroups(data.deletedGroups ?? []),
       // Older builds saved private windows' cleaned tabs; drop them.
@@ -160,7 +177,11 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
       ui: { ...s.ui, focusedWindowId: focused, focusOrder: focused ? [focused, ...windowOrder.filter((id) => id !== focused).reverse()] : [] },
     };
     next = prunePinnedFolders(next);
-    for (const w of Object.values(windows)) next = apply(next, activated(next, w.activeTabIds[w.spaceId]!));
+    // Each window shows the tab it showed, else its space's most recent one, else a new tab.
+    for (const w of Object.values(windows)) {
+      const shown = tabToShow(next, w.id, w.spaceId);
+      next = shown ? apply(next, activated(next, shown, w.id)) : withNewTab(next, w.id)[0];
+    }
     set(next);
   },
 })));
@@ -170,10 +191,6 @@ useBrowser.subscribe((s, prev) => {
   if (patch) useBrowser.setState(patch);
 });
 
-// Every window shows the spaces' pins: a change to one window's is made in the others (store/mirroredPins.ts).
-useBrowser.subscribe((s, prev) => {
-  const next = mirrorPins(s, prev);
-  if (next) useBrowser.setState(next);
-});
+
 
 export type { CreateWindowOptions } from "./windows";

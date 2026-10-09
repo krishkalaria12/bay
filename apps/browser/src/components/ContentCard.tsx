@@ -15,7 +15,7 @@ import { noteDiscarded, noteGone, noteReady } from "../lib/tabLifecycle";
 import { webviewRef, webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
 import { useActiveTabId, useSidebarOpen, useWindowId } from "../store/hooks";
-import { activeTabId, engineProfile, wake } from "../store/model";
+import { activeTabId, engineProfile, viewTabIds, wake, windowTabIds } from "../store/model";
 import { removeTabs } from "../store/tabs";
 import { splitOf } from "../store/splits";
 import type { SplitView } from "../store/types";
@@ -27,7 +27,7 @@ import { SIDEBAR_BUTTON_END_ROOM } from "./layout/constants";
 import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
 import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
-import { SadTab, StatusBubble } from "./layout/PaneOverlays";
+import { OpenElsewhere, SadTab, StatusBubble } from "./layout/PaneOverlays";
 import { DropTargets, SplitDividers, SplitToast } from "./layout/SplitChrome";
 import { SplitEmptyState } from "./layout/SplitEmptyState";
 import { pagerFor } from "./layout/spacePager";
@@ -112,18 +112,15 @@ export function ContentCard() {
   useEffect(startSelectionTools, []);
   useEffect(startDeveloperMode, []);
 
-  // Recomputed only when the window's tabs change, not on every store update (page progress, say).
-  const mountedMemo = useRef<{ tabIds?: string[]; tabs?: object; ids: string[] }>({ ids: [] });
+  // The tabs whose page is in this window. Recomputed only when tabs change, not on every store update (page
+  // progress, say).
+  const mountedMemo = useRef<{ lists?: object; tabs?: object; ids: string[] }>({ ids: [] });
   const mounted = useBrowser(
     useShallow((s) => {
-      const tabIds = s.windows[windowId]?.tabIds;
       const memo = mountedMemo.current;
-      if (memo.tabIds === tabIds && memo.tabs === s.tabs) return memo.ids;
-      const ids = (tabIds ?? [])
-        .map((id) => s.tabs[id]!)
-        .filter(wantsPage)
-        .map((t) => t.id);
-      mountedMemo.current = { tabIds, tabs: s.tabs, ids };
+      if (memo.lists === s.tabLists && memo.tabs === s.tabs) return memo.ids;
+      const ids = windowTabIds(s, windowId).filter((id) => wantsPage(s.tabs[id]));
+      mountedMemo.current = { lists: s.tabLists, tabs: s.tabs, ids };
       return ids;
     }),
   );
@@ -375,6 +372,7 @@ const TabPane = memo(function TabPane({
                   <StatusBubble tabId={tabId} maxWidth={Math.max(160, frame.width / 2)} />
                 </Animated.View>
                 <SadTab tabId={tabId} />
+                <OpenElsewhere tabId={tabId} windowId={windowId} />
                 {/* A page's own prompts go with its page: not over the New Tab page shown in its place (Back to it). */}
                 {!newTabShown && <DeveloperOffer tabId={tabId} left={pageStart} top={4} paneWidth={frame.width} />}
                 {!newTabShown && <PermissionPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 308))} top={4} />}
@@ -505,7 +503,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
           if (t.url !== committedUrl) s.updateTab(tabId, { url: committedUrl });
           return;
         }
-        const others = s.windows[t.windowId]?.tabIds.some((id) => id !== tabId && s.tabs[id]?.spaceId === t.spaceId);
+        const others = viewTabIds(s, t.windowId, t.spaceId).some((id) => id !== tabId);
         const opened = !!(t.openerId || t.adoptId) && !pageOf(tabId).wasNewTab;
         if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return s.closeTab(tabId);
         patchPage(tabId, { backToNewTab: false, newTabShown: null });

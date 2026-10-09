@@ -21,7 +21,7 @@ export function groupCall(tabId: string, event?: CalendarEvent | null): string {
   const same = Object.values(live().meetingGroups).find((m) => {
     const g = s.groups[m.groupId];
     const callTab = s.tabs[m.callTabId];
-    return g && g.windowId === tab.windowId && !m.endedAt && ((!!m.occurrence && m.occurrence === match?.occurrence) || (!!callTab && meetingOf(callTab.url)?.key === call.key));
+    return g && g.spaceId === tab.spaceId && !m.endedAt && ((!!m.occurrence && m.occurrence === match?.occurrence) || (!!callTab && meetingOf(callTab.url)?.key === call.key));
   });
   if (same) {
     s.addTabsToGroup(same.groupId, [tabId]);
@@ -98,9 +98,8 @@ export function tick(s: BrowserState, now: number) {
       if ((m.end !== null && now >= m.end) || (m.end === null && leftCall)) setMeetingGroup({ ...m, endedAt: now });
       continue;
     }
-    const w = s.windows[g.windowId];
-    const active = w ? activeTabId(s, w.id) : undefined;
-    const busy = g.tabIds.some((id) => id === active || s.live[id]?.playingAudio);
+    const shown = new Set(Object.keys(s.windows).map((w) => activeTabId(s, w, g.spaceId)));
+    const busy = g.tabIds.some((id) => shown.has(id) || s.live[id]?.playingAudio);
     const lastUse = Math.max(m.endedAt, ...g.tabIds.map((id) => s.tabs[id]?.lastActiveAt ?? 0));
     if (!busy && now - lastUse >= MEETING_CLEANUP_IDLE_MS) {
       setMeetingGroup(null, m.groupId);

@@ -63,7 +63,7 @@ export function startChromeTabs() {
     scheduleProject();
   });
   useBrowser.subscribe((s, prev) => {
-    if (s.windows !== prev.windows || s.groups !== prev.groups || placed(s, prev)) scheduleProject();
+    if (s.windows !== prev.windows || s.tabLists !== prev.tabLists || s.groups !== prev.groups || placed(s, prev)) scheduleProject();
   });
 }
 

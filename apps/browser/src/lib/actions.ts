@@ -21,11 +21,13 @@ export function openWindow(options?: CreateWindowOptions): string {
   return store().createWindow(options);
 }
 
-export function switchToTab(tabId: string) {
+/** Shows the tab: in the window with its page if there's one, else where store/tabs.ts windowFor puts it. */
+export function switchToTab(tabId: string, windowId?: string) {
   const tab = store().tabs[tabId];
   if (!tab) return;
-  store().activate(tabId);
-  if (tab.windowId !== store().ui.focusedWindowId) focus(tab.windowId);
+  store().activate(tabId, windowId ?? (store().windows[tab.windowId] ? tab.windowId : undefined));
+  const shown = store().tabs[tabId]!.windowId;
+  if (shown && shown !== store().ui.focusedWindowId) focus(shown);
 }
 
 export async function closeTab(tabId: string) {

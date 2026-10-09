@@ -11,7 +11,7 @@ export type SidebarEntries = { tiles: string[]; pinned: string[]; pinnedGroups: 
 const memo = new Map<string, { inputs: unknown[]; result: SidebarEntries }>();
 
 export function sidebarEntries(s: BrowserState, windowId: string, spaceId?: string): SidebarEntries {
-  const inputs = [s.tabs, s.windows, s.groups, s.splits, s.pinnedFolders];
+  const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits, s.pinnedFolders];
   const key = spaceId ? `${windowId}|${spaceId}` : windowId;
   const cached = memo.get(key);
   if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
@@ -40,7 +40,7 @@ function computeEntries(s: BrowserState, windowId: string, spaceId?: string): Si
   const pinnedGroups: string[] = [];
   const list: string[] = [];
   const groupOf = new Map<string, string>();
-  for (const g of Object.values(s.groups)) if (g.windowId === windowId) g.tabIds.forEach((id) => groupOf.set(id, g.id));
+  for (const g of Object.values(s.groups)) g.tabIds.forEach((id) => groupOf.set(id, g.id));
   const splits = splitIndex(s.splits);
   const seen = new Set<string>();
   for (const id of viewTabIds(s, windowId, spaceId)) {
@@ -63,7 +63,7 @@ function computeEntries(s: BrowserState, windowId: string, spaceId?: string): Si
   }
   // A folder with nothing in it still shows, after the rest.
   const profile = spaceId ?? s.windows[windowId]?.spaceId;
-  const empty = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.spaceId === profile && !seen.has(`f:${f.id}`));
+  const empty = Object.values(s.pinnedFolders).filter((f) => f.spaceId === profile && !seen.has(`f:${f.id}`));
   for (const f of empty.sort((a, b) => a.createdAt - b.createdAt)) pinned.push(`f:${f.id}`);
   return { tiles, pinned, pinnedGroups, list };
 }

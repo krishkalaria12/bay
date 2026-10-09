@@ -9,7 +9,7 @@ const { sidebarEntries } = await import("../components/sidebar/entries.ts");
 
 const S = () => useBrowser.getState();
 const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com$/g, "");
-const order = (w) => S().windows[w].tabIds.map(short);
+const order = (w) => model.listIds(S(), model.windowListKey(S(), S().windows[w])).map(short);
 const entries = (w) => {
   const e = sidebarEntries(S(), w);
   const name = (entry) => (entry.startsWith("f:") ? `[${S().pinnedFolders[entry.slice(2)].name}]` : short(entry.slice(2)));
@@ -19,7 +19,7 @@ const entries = (w) => {
 const setup = (...urls) => {
   S().hydrate({});
   const w = S().createWindow({ url: `https://${urls[0]}.com` });
-  const ids = [S().windows[w].tabIds[0], ...urls.slice(1).map((u) => S().newTab(w, { url: `https://${u}.com` }))];
+  const ids = [S().windows[w].activeTabIds[S().windows[w].spaceId], ...urls.slice(1).map((u) => S().newTab(w, { url: `https://${u}.com` }))];
   return [w, ...ids];
 };
 
@@ -122,14 +122,14 @@ test("cleaning up leaves pinned rows alone", () => {
   assert.ok(S().tabs[b]);
 });
 
-test("a window's pinned rows and folders come back with the next window of its space", () => {
+test("a space's pinned rows and folders stay when its window closes, and show in its next window", () => {
   const [w, a, b] = setup("a", "b", "c");
   S().pinRows([a, b], true);
   const f = S().newPinnedFolder(w, { tabIds: [b], name: "Kept" });
   S().newPinnedFolder(w, { name: "Empty" });
   const spaceId = S().windows[w].spaceId;
   S().closeWindow(w);
-  assert.equal(S().pinnedFolders[f], undefined, "the window's folders go with it");
+  assert.ok(S().pinnedFolders[f], "the space's folders stay");
   const w2 = S().createWindow({ spaceId, url: "https://z.com" });
   assert.deepEqual(entries(w2).pinned, ["a", "[Kept]", "[Empty]"]);
   const kept = Object.values(S().pinnedFolders).find((x) => x.name === "Kept");

@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { orderSections, syncGroupOrder } from "./groups";
-import { newId, without } from "./model";
+import { listIds, newId, spaceListKey, withList, without } from "./model";
 import { placing } from "./organize";
 import type { PinnedFolder, Tab } from "./types";
 
@@ -11,7 +11,7 @@ import type { PinnedFolder, Tab } from "./types";
 export type FoldersSlice = {
   pinnedFolders: Record<string, PinnedFolder>;
 
-  /** A folder in the window's space, at the end of its Pinned section; `tabIds` are pinned into it. */
+  /** A folder in the space the window shows, at the end of its Pinned section; `tabIds` are pinned into it. */
   newPinnedFolder(windowId: string, options?: { tabIds?: string[]; name?: string }): string;
   updatePinnedFolder(id: string, patch: Partial<Pick<PinnedFolder, "name" | "icon" | "collapsed">>): void;
   /** Moves the folder's rows before `beforeId` (a pinned row), or to the end of the Pinned section. */
@@ -20,20 +20,18 @@ export type FoldersSlice = {
   deletePinnedFolder(id: string): void;
 };
 
-/** The folder's rows, in the window's order. */
-export function folderTabIds(s: Pick<BrowserState, "tabs" | "windows" | "pinnedFolders">, folderId: string): string[] {
+/** The folder's rows, in their list's order. */
+export function folderTabIds(s: Pick<BrowserState, "tabs" | "spaces" | "tabLists" | "pinnedFolders">, folderId: string): string[] {
   const f = s.pinnedFolders[folderId];
-  const w = f && s.windows[f.windowId];
-  if (!w) return [];
-  return w.tabIds.filter((id) => inFolder(s.tabs[id], f));
+  if (!f) return [];
+  return listIds(s, spaceListKey(s, f.spaceId)).filter((id) => inFolder(s.tabs[id], f));
 }
 
-export const inFolder = (t: Tab | undefined, f: PinnedFolder) =>
-  !!t?.pinnedRow && t.folderId === f.id && t.windowId === f.windowId && t.spaceId === f.spaceId;
+export const inFolder = (t: Tab | undefined, f: PinnedFolder) => !!t?.pinnedRow && t.folderId === f.id && t.spaceId === f.spaceId;
 
-/** Folders of windows that are gone, and members' marks of folders that are gone. */
+/** Folders of spaces that are gone, and members' marks of folders that are gone. */
 export function prunePinnedFolders(s: BrowserState): BrowserState {
-  const gone = Object.values(s.pinnedFolders).filter((f) => !s.windows[f.windowId]).map((f) => f.id);
+  const gone = Object.values(s.pinnedFolders).filter((f) => !s.spaces[f.spaceId]).map((f) => f.id);
   const pinnedFolders = gone.length ? without(s.pinnedFolders, gone) : s.pinnedFolders;
   let tabs = s.tabs;
   for (const t of Object.values(s.tabs)) {
@@ -53,14 +51,15 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
     const w = s.windows[windowId];
     if (!w) return "";
     const spaceId = tabIds.map((id) => s.tabs[id]?.spaceId).find(Boolean) ?? w.spaceId;
-    const folder: PinnedFolder = { id: newId("pf"), windowId, spaceId, name, icon: null, collapsed: false, createdAt: Date.now() };
+    const folder: PinnedFolder = { id: newId("pf"), spaceId, name, icon: null, collapsed: false, createdAt: Date.now() };
     let next: BrowserState = { ...s, pinnedFolders: { ...s.pinnedFolders, [folder.id]: folder } };
-    const members = tabIds.filter((id) => next.tabs[id]?.windowId === windowId && next.tabs[id]!.spaceId === spaceId);
+    const members = tabIds.filter((id) => next.tabs[id]?.spaceId === spaceId);
+    const list = listIds(s, spaceListKey(s, spaceId));
     if (members.length) {
       // Where the first of them was, if it was a pinned row; else at the end of the Pinned section.
-      const at = w.tabIds.findIndex((id) => members.includes(id));
-      const after = w.tabIds.slice(at).find((id) => !members.includes(id));
-      const beforeId = s.tabs[w.tabIds[at] ?? ""]?.pinnedRow && after && s.tabs[after]?.pinnedRow ? after : null;
+      const at = list.findIndex((id) => members.includes(id));
+      const after = list.slice(at).find((id) => !members.includes(id));
+      const beforeId = s.tabs[list[at] ?? ""]?.pinnedRow && after && s.tabs[after]?.pinnedRow ? after : null;
       next = placing(next, members, { pinned: false, row: true, folderId: folder.id, beforeId });
     }
     set(next);
@@ -77,18 +76,18 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
   movePinnedFolder(id, beforeId) {
     set((s) => {
       const f = s.pinnedFolders[id];
-      const w = f && s.windows[f.windowId];
-      if (!f || !w) return {};
+      if (!f) return {};
+      const key = spaceListKey(s, f.spaceId);
       const members = folderTabIds(s, id);
       if (!members.length || (beforeId && members.includes(beforeId))) return {};
-      const rest = w.tabIds.filter((t) => !members.includes(t));
+      const rest = listIds(s, key).filter((t) => !members.includes(t));
       // Before a row of another folder: before that folder.
       const other = beforeId ? s.tabs[beforeId]?.folderId : undefined;
       const anchor = other ? rest.find((t) => s.tabs[t]?.pinnedRow && s.tabs[t]!.folderId === other) : beforeId;
       const at = anchor && rest.includes(anchor) ? rest.indexOf(anchor) : rest.reduce((last, t, i) => (s.tabs[t]?.pinned || s.tabs[t]?.pinnedRow ? i + 1 : last), 0);
       rest.splice(at, 0, ...members);
-      const window = { ...w, tabIds: orderSections(rest, s.tabs, s.groups) };
-      return { windows: { ...s.windows, [w.id]: window }, groups: syncGroupOrder(s.groups, window) };
+      const list = { key, tabIds: orderSections(rest, s.tabs, s.groups) };
+      return { tabLists: withList(s, list).tabLists, groups: syncGroupOrder(s.groups, list) };
     });
   },
 

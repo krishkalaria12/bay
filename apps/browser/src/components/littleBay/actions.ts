@@ -1,6 +1,6 @@
 import { focus, openWindow } from "../../lib/actions";
 import { useBrowser } from "../../store/browser";
-import { activeTabId } from "../../store/model";
+import { activeTabId, viewTabIds } from "../../store/model";
 import { isSmall, mainWindowFor } from "../../store/small";
 
 const store = () => useBrowser.getState();
@@ -31,7 +31,8 @@ function openLinksInMainWindow(urls: string[], spaceId: string) {
   for (const url of urls) {
     const s = store();
     const w = target ? s.windows[target] : undefined;
-    const blank = w && w.tabIds.length === 1 ? s.tabs[w.tabIds[0]!] : undefined;
+    const view = target ? viewTabIds(s, target) : [];
+    const blank = w && view.length === 1 ? s.tabs[view[0]!] : undefined;
     if (!w) target = openWindow({ url, spaceId });
     else if (blank && !blank.url && !blank.navigation && blank.spaceId === spaceId && !s.windowUi[w.id]?.panel.open) s.navigate(blank.id, url);
     else s.newTab(w.id, { url, spaceId });

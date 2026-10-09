@@ -1,7 +1,8 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { bookmarkRoots, engineRoots, ensureRoots, removeBookmarkTree } from "./bookmarks";
-import { navigationTo, newId, setSpaceProfiles, viewTabIds, without } from "./model";
+import { orderSections } from "./groups";
+import { listIds, navigationTo, newId, setSpaceProfiles, spaceListKey, tabToShow, viewTabIds, without } from "./model";
 import { SYMBOL_PREFIX } from "../lib/constants";
 import { DEFAULT_SPACE_ID } from "./constants";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
@@ -153,6 +154,16 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
       const history = shared ? { ...s.history, [id]: shared } : without(s.history, [id]);
       const ready = (map: Record<string, true>) => (target && map[target.id] ? { ...map, [id]: true as const } : without(map, [id]));
 
+      // Its tabs go to its new profile's list, after that list's own.
+      const oldKey = spaceListKey(s, id);
+      const newKey = spaceListKey({ spaces }, id);
+      const own = listIds(s, oldKey).filter((t) => s.tabs[t]?.spaceId === id);
+      const tabLists = { ...s.tabLists };
+      const remaining = listIds(s, oldKey).filter((t) => !own.includes(t));
+      if (remaining.length) tabLists[oldKey] = remaining;
+      else delete tabLists[oldKey];
+      tabLists[newKey] = orderSections([...listIds(s, newKey), ...own], s.tabs, s.groups);
+
       // Its pages are the old profile's: each reloads in the new one, as a tab moved to another profile does.
       const tabs = { ...s.tabs };
       for (const t of Object.values(s.tabs)) {
@@ -169,6 +180,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         historyReady: ready(s.historyReady),
         bookmarksReady: ready(s.bookmarksReady),
         tabs,
+        tabLists,
       });
     },
 
@@ -188,14 +200,13 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         ? s.orphanedProfileData
         : [...s.orphanedProfileData, engine];
 
+      // Its windows show the fallback space: the tab each showed there, else its most recent one, else a new one.
       for (const w of Object.values(s.windows)) {
-        if (w.spaceId !== id) continue;
-        const other = w.tabIds.find((t) => s.tabs[t]?.spaceId !== id);
-        if (other) s = apply(s, activated(s, w.activeTabIds[s.tabs[other]!.spaceId] ?? other));
-        else {
-          const [next, tab] = withNewTab(s, w.id, { spaceId: fallback, background: true });
-          s = apply(next, activated(next, tab));
-        }
+        if (w.spaceId !== id || w.kind === "small") continue;
+        let tab = tabToShow(s, w.id, fallback);
+        if (!tab) [s, tab] = withNewTab(s, w.id, { spaceId: fallback, background: true });
+        s = { ...s, windows: { ...s.windows, [w.id]: { ...s.windows[w.id]!, spaceId: fallback } } };
+        s = apply(s, activated(s, tab, w.id));
       }
       s = removeTabs(
         s,
@@ -222,9 +233,9 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         closedGroups: s.closedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
         deletedGroups: s.deletedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
         closedWindows: s.closedWindows
-          .map((c) => ({ ...c, tabs: c.tabs.filter((t) => t.spaceId !== id) }))
-          .filter((c) => c.tabs.length > 0),
-        parkedPins: without(s.parkedPins, [id]),
+          .filter((c) => c.window.spaceId !== id)
+          .map((c) => ({ ...c, tabs: c.tabs.filter((t) => t.spaceId !== id) })),
+        pinnedFolders: Object.fromEntries(Object.entries(s.pinnedFolders).filter(([, f]) => f.spaceId !== id)),
       });
       for (const w of Object.values(get().windows)) {
         if (!viewTabIds(get(), w.id).length) get().newTab(w.id);

@@ -4,10 +4,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
 const { cleanUpHours } = await import("./organize.ts");
+const model = await import("./model.ts");
 
 const S = () => useBrowser.getState();
 const HOUR = 3_600_000;
-const urls = (w, spaceId) => S().windows[w].tabIds.filter((id) => S().tabs[id].spaceId === spaceId).map((id) => S().tabs[id].url);
+const urls = (w, spaceId) => model.viewTabIds(S(), w, spaceId).map((id) => S().tabs[id].url);
 
 // Personal with an active page (a.com) and one unused for `hours` (b.com); Work with the same, c.com and d.com. The
 // window ends on Personal.

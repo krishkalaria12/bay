@@ -35,7 +35,7 @@ export function clickTab(windowId: string, tabId: string, mods: { metaKey?: bool
   }
   anchors.set(windowId, tabId);
   s.setSelection(windowId, []);
-  s.activate(tabId);
+  s.activate(tabId, windowId);
 }
 
 function openInCurrentGroup(windowId: string, tabId: string) {
@@ -48,7 +48,7 @@ function openInCurrentGroup(windowId: string, tabId: string) {
   }
   anchors.set(windowId, tabId);
   store().setSelection(windowId, []);
-  store().activate(tabId);
+  store().activate(tabId, windowId);
 }
 
 export async function startRename(windowId: string, target: Target) {

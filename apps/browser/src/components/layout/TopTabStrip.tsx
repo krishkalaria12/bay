@@ -71,6 +71,7 @@ import {
 import { makeRoom, registerSlot, reorderOffsets, settleRoom } from "./stripReorder";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabDrag";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "./toolbarColors";
+import { listOfTab } from "../../store/model";
 
 // The drop-down strip (full screen, auto-hidden tabs) has no card to attach the selected tab to.
 const FloatingStrip = createContext(false);
@@ -550,7 +551,7 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
 function reorder(ids: string[], { geometry, from, pinned, groupId }: StripDrag, dx: number): boolean {
   const s = useBrowser.getState();
   const tab = s.tabs[ids[0] ?? ""];
-  const w = tab && s.windows[tab.windowId];
+  const w = tab && listOfTab(s, tab.id);
   if (!tab || !w) return false;
   const to = dropIndex(geometry, from, dx);
   if (ids.length === 1) {
@@ -580,7 +581,7 @@ function withSelection(tabId: string): string[] {
   const tab = s.tabs[tabId];
   const selection = tab ? (s.selection[tab.windowId] ?? []) : [];
   if (selection.length < 2 || !selection.includes(tabId)) return [tabId];
-  return s.windows[tab!.windowId]!.tabIds.filter((id) => selection.includes(id) && !!s.tabs[id]?.pinned === tab!.pinned);
+  return (listOfTab(s, tabId)?.tabIds ?? []).filter((id) => selection.includes(id) && !!s.tabs[id]?.pinned === tab!.pinned);
 }
 
 function DraggableChip({ tabId, width, geometry, from, group, tuck }: { tabId: string; width: number; geometry: DragGeometry; from: number; group: string | null; tuck?: () => void }) {
@@ -992,7 +993,7 @@ function StripGroup({
   const tuck = () => {
     const s = useBrowser.getState();
     const target = tuckTarget(s, windowId, spaceId, entry.id);
-    if (target) s.activate(target);
+    if (target) s.activate(target, windowId);
   };
   return (
     <Animated.View
@@ -1157,7 +1158,7 @@ function SplitPart({ tabId, first, ink }: { tabId: string; first: boolean; ink: 
     <Animated.View ref={dragRef} {...dragHandlers} style={[{ flex: 1, flexDirection: "row", alignItems: "center" }, dragFade]}>
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
         {!first && <View style={{ width: StyleSheet.hairlineWidth, height: 16, marginHorizontal: 6, backgroundColor: ink?.divider ?? theme.textTertiary }} />}
-        <Pressable onPress={() => useBrowser.getState().activate(tab.id)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }} tooltip={tab.title || tab.url}>
+        <Pressable onPress={() => useBrowser.getState().activate(tab.id, windowId)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }} tooltip={tab.title || tab.url}>
           <View pointerEvents="none">
             <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} spaceId={tab.spaceId} />
           </View>

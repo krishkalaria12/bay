@@ -18,6 +18,7 @@ import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, TabRowItem } from "./TabRow";
 import { useSidebarTokens, withAlpha } from "./tokens";
+import { folderTabIds } from "../../store/folders";
 
 /**
  * A folder of the Pinned section (Arc's, Zen's): a header row with its name, and its pinned rows indented below it.
@@ -65,7 +66,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const folder = useBrowser((s) => s.pinnedFolders[folderId]);
-  const empty = useBrowser((s) => !s.windows[windowId]?.tabIds.some((id) => s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId));
+  const empty = useBrowser((s) => !folderTabIds(s, folderId).length);
   const renaming = useSidebarUi((u) => u.renaming?.kind === "folder" && u.renaming.id === folderId);
   const dropInto = useDropInto() === folderId;
   const { hovered, hoverProps } = useRowHover(windowId, null);

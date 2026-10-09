@@ -37,7 +37,7 @@ export function startTabPictures() {
   if (started) return;
   started = true;
   useBrowser.subscribe((s, prev) => {
-    if (s.windows === prev.windows && s.tabs === prev.tabs) return;
+    if (s.windows === prev.windows && s.tabs === prev.tabs && s.tabLists === prev.tabLists) return;
     for (const [windowId, timer] of timers)
       if (!s.windows[windowId]) {
         clearTimeout(timer);

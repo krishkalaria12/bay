@@ -56,11 +56,14 @@ export function useActiveTab(): Tab | undefined {
   });
 }
 
-export const useIsActiveTab = (tabId: string) =>
-  useBrowser((s) => {
+/** Whether the window it's drawn in (every window on its space lists it) shows the tab. */
+export function useIsActiveTab(tabId: string): boolean {
+  const windowId = useWindowId();
+  return useBrowser((s) => {
     const tab = s.tabs[tabId];
-    return !!tab && activeTabId(s, tab.windowId, tab.spaceId) === tabId;
+    return !!tab && activeTabId(s, windowId || tab.windowId, tab.spaceId) === tabId;
   });
+}
 
 export const useTab = (tabId: string | undefined): Tab | undefined => useBrowser((s) => (tabId ? s.tabs[tabId] : undefined));
 

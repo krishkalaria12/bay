@@ -20,11 +20,12 @@ export type Space = {
   cleanUpAfterHours?: number | null;
 };
 
+// A window shows one space at a time; its tabs are the space's (store/model.ts tab lists), as Arc's: every window
+// showing the space lists them, and a tab's page is in the window that last showed it (`Tab.windowId`).
 export type BrowserWindow = {
   id: string;
   spaceId: string;
   incognito: boolean;
-  tabIds: string[];
   activeTabIds: Record<string, string>;
   sidebarOpen: boolean;
   tabLayout?: "sidebar" | "top";
@@ -36,6 +37,8 @@ export type BrowserWindow = {
 
 export type Tab = {
   id: string;
+  // The window its page is in (the one that last showed it); "" when none has since it was made or its window
+  // closed. A Little Bay page is its window's alone.
   windowId: string;
   spaceId: string;
   url: string;
@@ -46,8 +49,6 @@ export type Tab = {
   // loose or in one of its folders (`folderId`). It stays when tabs are cleaned up, and closing it only unloads it.
   pinnedRow?: boolean;
   folderId?: string;
-  // A pinned page is every window's (store/mirroredPins.ts): each window's tab for it shares this key (else its id).
-  pinKey?: string;
   // Kept (the tab menu's Keep Tab): as a pin does, it stays when tabs are cleaned up and awake when idle ones sleep.
   kept?: boolean;
   muted: boolean;
@@ -80,7 +81,6 @@ export type GroupColor = "grey" | "blue" | "red" | "yellow" | "green" | "pink" |
 
 export type TabGroup = {
   id: string;
-  windowId: string;
   spaceId: string;
   name: string;
   icon: string | null;
@@ -95,12 +95,9 @@ export type TabGroup = {
 };
 
 // A folder of the Pinned section (Arc's and Zen's): it holds pinned rows, and stays when it's emptied. Its members
-// are the window's tabs with its id, in the window's order.
+// are its space's tabs with its id, in their list's order.
 export type PinnedFolder = {
   id: string;
-  // Each window's folder for it shares this key (else its id), as pinned pages do.
-  key?: string;
-  windowId: string;
   spaceId: string;
   name: string;
   icon: string | null;
@@ -110,7 +107,6 @@ export type PinnedFolder = {
 
 export type SplitView = {
   id: string;
-  windowId: string;
   tabIds: string[];
   orientation: "horizontal" | "vertical";
   sizes: number[];
@@ -158,19 +154,15 @@ export type ClosedTab = {
   small?: boolean;
 };
 
+// A closed window: its tabs stay their space's, so reopening it is the window (where it was, on its space). A launch
+// that doesn't restore the last session (settings.restoreSession) keeps the tabs it closed here too.
 export type ClosedWindow = {
   kind: "window";
   id: string;
   window: Pick<BrowserWindow, "spaceId" | "sidebarOpen" | "frame">;
   tabs: (TabSnapshot & { active: boolean; tabId?: string })[];
-  groups: (Omit<TabGroup, "tabIds" | "windowId"> & { tabIndexes: number[] })[];
+  groups: (Omit<TabGroup, "tabIds"> & { tabIndexes: number[] })[];
   closedAt: number;
-};
-
-export type ParkedPins = {
-  tabs: (TabSnapshot & { id: string; groupId: string | null; folderId?: string })[];
-  groups: Pick<TabGroup, "id" | "name" | "icon" | "color" | "collapsed">[];
-  folders?: Pick<PinnedFolder, "id" | "name" | "icon" | "collapsed">[];
 };
 
 export type ClosedGroup = {

@@ -134,7 +134,7 @@ function startSidePanels() {
   });
   const active = (s: BrowserState) => s.windowOrder.map((id) => `${id}:${activeTabId(s, id) ?? ""}`).join(",");
   useBrowser.subscribe((s, prev) => {
-    if (s.windows === prev.windows && s.tabs === prev.tabs) return;
+    if (s.windows === prev.windows && s.tabs === prev.tabs && s.tabLists === prev.tabLists) return;
     if (active(s) === active(prev)) return;
     for (const [windowId] of wantedSidePanels()) {
       if (!s.windows[windowId]) closeSidePanel(windowId);

@@ -17,7 +17,7 @@ const EXT = { id: "ext", name: "Ext", enabled: true, pinned: true, hasAction: tr
 function setup() {
   S().hydrate({});
   const w = S().createWindow({ url: "a.com" });
-  const a = S().windows[w].tabIds[0];
+  const a = S().windows[w].activeTabIds[S().windows[w].spaceId];
   const b = S().newTab(w, { url: "b.com", background: true });
   usePages.setState({ browsers: { 1: a, 2: b } });
   useExtensions.setState({ lists: { "": [EXT] }, actions: {}, popup: null, sidePanels: {} });

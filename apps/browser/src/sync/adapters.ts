@@ -2,11 +2,9 @@ import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } fro
 import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
 import { DEFAULT_SPACE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { useBrowser } from "../store/browser";
 import { orderSections, syncGroupOrder } from "../store/groups";
-import { engineProfile, makeTab, pinnedFirst, without } from "../store/model";
-import { pinKeyOf } from "../store/mirroredPins";
-import { adoptParkedPins, parkWindowPins } from "../store/parkedPins";
+import { engineProfile, IDLE_LIVE, listIds, makeTab, pinnedFirst, spaceListKey, withList } from "../store/model";
 import { removeTabs } from "../store/tabs";
 import type { Settings } from "../store/settings";
 import type { BookmarkNode, HistoryEntry, Space, Tab, TabGroup } from "../store/types";
@@ -339,16 +337,6 @@ export function deviceTabsAdapter(spaceId: string, deviceId: string, name: () =>
 type PinValue = { g: string | null; u: string; t: string | null; i: string | null; ti: string; pos: string };
 type PinGroupValue = { n: string; i: string | null; c: TabGroup["color"]; pos: string };
 
-type Window = BrowserState["windows"][string];
-
-// Little Bay's page isn't one of the open tabs: it's thrown away when the window closes.
-const openWindows = (s: BrowserState) => s.windowOrder.map((id) => s.windows[id]).filter((w): w is Window => !!w && !w.incognito && w.kind !== "small");
-
-function homeWindow(s: BrowserState, spaceId: string): Window | undefined {
-  const order = [...s.ui.focusOrder, ...s.windowOrder].map((id) => s.windows[id]).filter((w): w is Window => !!w && !w.incognito && w.kind !== "small");
-  return order.find((w) => w.spaceId === spaceId) ?? order[0];
-}
-
 export function pinnedAdapter(spaceId: string): Adapter {
   return {
     prefix: "pin:",
@@ -360,30 +348,20 @@ export function pinnedAdapter(spaceId: string): Adapter {
       const members = new Map<string, Pin[]>();
       const pinnedGroupOf = new Map<string, TabGroup>();
       for (const g of Object.values(s.groups)) if (g.pinned && g.spaceId === spaceId) g.tabIds.forEach((id) => pinnedGroupOf.set(id, g));
-      const tiled = new Set<string>();
-      for (const w of openWindows(s)) {
-        for (const id of w.tabIds) {
-          const t = s.tabs[id];
-          if (!t || t.spaceId !== spaceId) continue;
-          const g = pinnedGroupOf.get(id);
-          // Each window has a tab for a favourite (store/mirroredPins.ts): it's one pin, named by its key.
-          if (t.pinned) {
-            const key = pinKeyOf(t);
-            if (!tiled.has(key)) tiles.push({ ...t, id: key });
-            tiled.add(key);
+      // The space's tiles and pinned groups, in its list's order.
+      for (const id of listIds(s, spaceListKey(s, spaceId))) {
+        const t = s.tabs[id];
+        if (!t || t.spaceId !== spaceId) continue;
+        const g = pinnedGroupOf.get(id);
+        if (t.pinned) tiles.push(t);
+        else if (g) {
+          if (!members.has(g.id)) {
+            members.set(g.id, []);
+            groups.push(g);
           }
-          else if (g) {
-            if (!members.has(g.id)) {
-              members.set(g.id, []);
-              groups.push(g);
-            }
-            members.get(g.id)!.push(t);
-          }
+          members.get(g.id)!.push(t);
         }
       }
-      const park = s.parkedPins[spaceId];
-      for (const g of park?.groups ?? []) if (!members.has(g.id)) (members.set(g.id, []), groups.push(g));
-      for (const p of park?.tabs ?? []) (p.groupId ? members.get(p.groupId) : tiles)?.push(p);
       const values = new Map<string, unknown>();
       const place = (tabs: Pin[], group: string | null) => {
         const positions = assignPositions(tabs.map((t) => ((base(`pin:t:${t.id}`) as PinValue | undefined)?.g ?? null) === group ? (base(`pin:t:${t.id}`) as PinValue | undefined)?.pos : undefined));
@@ -401,13 +379,8 @@ export function pinnedAdapter(spaceId: string): Adapter {
     },
     apply: (visible, changed) => {
       let s = store();
-      const home = homeWindow(s, spaceId);
-      if (!home) return false;
-      const PARK = `park:${spaceId}`;
-      if (s.parkedPins[spaceId]) {
-        const stand: Window = { id: PARK, spaceId, incognito: false, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame: null, createdAt: 0 };
-        s = adoptParkedPins({ ...s, windows: { ...s.windows, [PARK]: stand } }, PARK, spaceId);
-      }
+      if (!s.spaces[spaceId]) return false;
+      const key = spaceListKey(s, spaceId);
       const pins = new Map<string, PinValue>();
       const groupValues = new Map<string, PinGroupValue>();
       for (const [k, v] of visible) {
@@ -420,36 +393,24 @@ export function pinnedAdapter(spaceId: string): Adapter {
       const tileOrder = [...pins.keys()].filter((id) => { const g = pins.get(id)!.g; return !g || !groupValues.has(g); }).sort(byPos(pins));
       const memberOrder = new Map(groupOrder.map((g) => [g, [...pins.keys()].filter((id) => pins.get(id)!.g === g).sort(byPos(pins))]));
 
-      // A pin is its key's tab in the home window (the others follow it: store/mirroredPins.ts), else its own.
-      const homeTab = new Map<string, string>();
-      for (const id of [...(s.windows[PARK]?.tabIds ?? []), ...home.tabIds]) if (s.tabs[id]) homeTab.set(pinKeyOf(s.tabs[id]!), id);
-      const local = (key: string) => {
-        const inHome = homeTab.get(key);
-        if (inHome) return inHome;
-        if (s.tabs[key]) return key;
-        return Object.values(s.tabs).find((t) => t.pinKey === key && !s.windows[t.windowId]?.incognito)?.id ?? key;
-      };
-      const goneTabs = [...changed].filter((k) => k.startsWith("pin:t:") && !visible.has(k)).map((k) => local(k.slice(6))).filter((id) => s.tabs[id]);
-      const removable = goneTabs.filter((id) => {
-        const w = s.windows[s.tabs[id]!.windowId];
-        return w && w.tabIds.some((other) => other !== id && !goneTabs.includes(other));
-      });
-      s = removeTabs(s, removable, false);
+      // A pin removed elsewhere goes; one whose page is open here stays, as a page.
+      const goneTabs = [...changed].filter((k) => k.startsWith("pin:t:") && !visible.has(k)).map((k) => k.slice(6)).filter((id) => s.tabs[id]);
+      const open = (id: string) => !!s.tabs[id]!.navigation || !!s.tabs[id]!.adoptId;
+      s = removeTabs(s, goneTabs.filter((id) => !open(id)), false);
       const tabs = { ...s.tabs };
       for (const id of goneTabs) if (tabs[id]) tabs[id] = { ...tabs[id]!, pinned: false, pinnedUrl: null };
       let groups = { ...s.groups };
       for (const k of changed) if (k.startsWith("pin:g:") && !visible.has(k)) delete groups[k.slice(6)];
-      const windows = { ...s.windows };
 
       for (const id of groupOrder) {
         const v = groupValues.get(id)!;
         const old = groups[id];
         groups[id] = old
           ? { ...old, name: v.n, icon: v.i, color: v.c, pinned: true }
-          : { id, windowId: home.id, spaceId, name: v.n, icon: v.i, color: v.c, collapsed: false, pinned: true, tabIds: [], createdAt: Date.now() };
+          : { id, spaceId, name: v.n, icon: v.i, color: v.c, collapsed: false, pinned: true, tabIds: [], createdAt: Date.now() };
       }
-      for (const [key, v] of pins) {
-        const id = local(key);
+      const added: string[] = [];
+      for (const [id, v] of pins) {
         const group = v.g && groups[v.g] ? groups[v.g]! : null;
         const old = tabs[id];
         if (old) {
@@ -463,20 +424,16 @@ export function pinnedAdapter(spaceId: string): Adapter {
           };
           continue;
         }
-        const windowId = group?.windowId ?? home.id;
-        const w = windows[windowId];
-        if (!w) continue;
-        const tab: Tab = {
-          ...makeTab(windowId, spaceId, v.u, { title: v.ti, pinned: !group, customTitle: v.t, customIcon: v.i }),
+        // Not shown in a window yet: its page loads in the first that shows it.
+        tabs[id] = {
+          ...makeTab("", spaceId, v.u, { title: v.ti, pinned: !group, customTitle: v.t, customIcon: v.i }),
           id,
           pinnedUrl: group ? null : v.u,
           navigation: null,
           unloaded: true,
         };
-        tabs[id] = tab;
-        windows[windowId] = { ...w, tabIds: [...w.tabIds, id] };
+        added.push(id);
       }
-      for (const [g, keys] of memberOrder) memberOrder.set(g, keys.map(local));
       const inGroup = new Set([...memberOrder.values()].flat().filter((id) => tabs[id]));
       for (const g of Object.values(groups)) {
         if (g.spaceId !== spaceId) continue;
@@ -485,29 +442,17 @@ export function pinnedAdapter(spaceId: string): Adapter {
       }
       for (const g of Object.values(groups)) if (g.spaceId === spaceId && !g.tabIds.length) delete groups[g.id];
 
-      const sequence = [...tileOrder.map(local), ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
+      // The list in the synced order: its pins where its pins were, the rest as they are.
+      const sequence = [...tileOrder, ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
       const rank = new Map(sequence.map((id, i) => [id, i]));
-      for (const w of Object.values(windows)) {
-        if (w.incognito) continue;
-        const ids = w.tabIds.filter((id) => tabs[id]);
-        const slots = ids.map((id, i) => (rank.has(id) ? i : -1)).filter((i) => i >= 0);
-        const sorted = slots.map((i) => ids[i]!).sort((a, z) => rank.get(a)! - rank.get(z)!);
-        slots.forEach((slot, i) => (ids[slot] = sorted[i]!));
-        const window = { ...w, tabIds: orderSections(pinnedFirst(ids, tabs), tabs, groups) };
-        windows[w.id] = window;
-        groups = syncGroupOrder(groups, window);
-      }
-      let { live, parkedPins } = s;
-      const parkWindow = windows[PARK];
-      if (parkWindow) {
-        parkedPins = parkWindowPins(parkedPins, parkWindow, { tabs, groups, pinnedFolders: s.pinnedFolders, history: s.history });
-        for (const id of parkWindow.tabIds) delete tabs[id];
-        live = without(live, parkWindow.tabIds);
-        groups = Object.fromEntries(Object.entries(groups).filter(([, g]) => g.windowId !== PARK));
-        delete windows[PARK];
-      }
-      const { find, splits, selection, windowOrder, windowUi } = s;
-      useBrowser.setState({ tabs, windows, groups, live, find, splits, selection, windowOrder, windowUi, parkedPins });
+      const ids = [...listIds(s, key).filter((id) => tabs[id]), ...added];
+      const slots = ids.map((id, i) => (rank.has(id) ? i : -1)).filter((i) => i >= 0);
+      const sorted = slots.map((i) => ids[i]!).sort((a, z) => rank.get(a)! - rank.get(z)!);
+      slots.forEach((slot, i) => (ids[slot] = sorted[i]!));
+      const list = { key, tabIds: orderSections(pinnedFirst(ids, tabs), tabs, groups) };
+      groups = syncGroupOrder(groups, list);
+      const live = { ...s.live, ...Object.fromEntries(added.map((id) => [id, s.live[id] ?? IDLE_LIVE])) };
+      useBrowser.setState({ ...withList({ ...s, tabs, groups, live }, list) });
     },
   };
 }

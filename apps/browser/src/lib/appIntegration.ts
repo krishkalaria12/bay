@@ -20,7 +20,7 @@ import { maybeStartOnboarding, openVideoTour, startOnboarding, startToolTour } f
 import { trackAppVersion } from "../components/ntp/releaseNotes";
 import { openTaskManager } from "../components/taskManager/window";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { activeTabId, resolveWindowId, viewTabIds, windowTitle } from "../store/model";
+import { activeTabId, listIds, resolveWindowId, viewTabIds, windowListKey, windowTitle } from "../store/model";
 import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions";
 import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
 import { webviews } from "./webviews";
@@ -128,7 +128,7 @@ function startHandoff() {
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
   useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs && s.windows === prev.windows) return;
+    if (s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows) return;
     timer ??= setTimeout(() => {
       timer = undefined;
       sync(useBrowser.getState());
@@ -176,7 +176,7 @@ function startScripting() {
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
   useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs && s.windows === prev.windows && s.live === prev.live && s.spaces === prev.spaces) return;
+    if (s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && s.live === prev.live && s.spaces === prev.spaces) return;
     timer ??= setTimeout(() => {
       timer = undefined;
       void push();
@@ -227,7 +227,8 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
       if (request.index !== undefined) {
         const pinned = view.filter((id) => s.tabs[id]!.pinned).length;
         const at = Math.max(request.index, pinned);
-        index = at < view.length ? w.tabIds.indexOf(view[at]!) : w.tabIds.length;
+        const list = listIds(s, windowListKey(s, w));
+        index = at < view.length ? list.indexOf(view[at]!) : list.length;
       }
       const tabId = s.newTab(windowId, { url: request.url, index });
       return { windowId, tabId };

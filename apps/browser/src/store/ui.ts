@@ -70,7 +70,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     const s = get();
     const window = s.windows[windowId];
     const group = groupId ? s.groups[groupId] : undefined;
-    if (!window || window.kind === "small" || (groupId && (!group || group.windowId !== windowId || group.spaceId !== window.spaceId))) return;
+    if (!window || window.kind === "small" || (groupId && (!group || group.spaceId !== window.spaceId))) return;
     set(patchWindowUi(s, windowId, {
       panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : {}) },
     }));
@@ -83,7 +83,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     if (!window || window.kind === "small" || !url.trim() || !panel?.open || panel.mode !== "newTab") return "";
     if (panel.groupId) {
       const group = s.groups[panel.groupId];
-      if (!group || group.windowId !== windowId || group.spaceId !== window.spaceId) {
+      if (!group || group.spaceId !== window.spaceId) {
         s.closePanel(windowId);
         return "";
       }

@@ -17,7 +17,7 @@ const setup = () => {
   const work = S().createSpace({ name: "Work", shareWith: personal });
   const side = S().createSpace({ name: "Side", shareWith: null });
   const w = S().createWindow({ spaceId: personal, url: "https://a.com" });
-  const fav = S().windows[w].tabIds[0];
+  const fav = S().windows[w].activeTabIds[S().windows[w].spaceId];
   S().newTab(w, { url: "https://b.com" });
   S().pinTabs([fav], true);
   return { personal, work, side, w, fav };
@@ -61,15 +61,13 @@ test("a space with its own profile doesn't take another's favourite: opening it 
   assert.equal(S().windows[w].spaceId, personal);
 });
 
-test("favourites parked with a closed window come back with a window on another space with the profile", () => {
-  const { personal, work, w } = setup();
+test("favourites stay their profile's when the window closes, and show in a window on another space with it", () => {
+  const { personal, work, w, fav } = setup();
   S().closeWindow(w);
-  assert.ok(S().parkedPins[personal], "closing the window parked Personal's favourite");
+  assert.ok(S().tabs[fav]?.unloaded, "the favourite waits, unloaded");
   const next = S().createWindow({ spaceId: work, url: "https://c.com" });
   assert.deepEqual(urls(model.favoriteTabIds(S(), next, work)), ["https://a.com"]);
-  const [tile] = model.favoriteTabIds(S(), next, work);
-  assert.equal(S().tabs[tile].spaceId, personal, "it stays Personal's until opened");
-  assert.equal(S().parkedPins[personal], undefined);
+  assert.equal(S().tabs[fav].spaceId, personal, "it stays Personal's until opened");
 });
 
 test("switching to a space whose remembered favourite is already its own shows that space", () => {

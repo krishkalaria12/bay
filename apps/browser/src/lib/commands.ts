@@ -10,7 +10,7 @@ import {
 } from "@bay/shell";
 import { markdownLink } from "@bay/core";
 import { useBrowser } from "../store/browser";
-import { activeTabId, bookmarkSpaceId, resolveWindowId } from "../store/model";
+import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
 import {
   closeTab,
   createSpace,
@@ -222,7 +222,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "selectLastTab": {
       const rows = numberedTabs(s, windowId);
       const id = command === "selectLastTab" ? rows.at(-1) : rows[Number(arg) - 1];
-      return id ? s.activate(id) : undefined;
+      return id ? s.activate(id, windowId) : undefined;
     }
     case "togglePin":
       return tab ? s.togglePin(tab.id) : undefined;
@@ -231,7 +231,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "moveTabDown":
     case "moveTabUp": {
       if (!tab) return;
-      const section = s.windows[windowId]!.tabIds.filter((id) => s.tabs[id]?.spaceId === tab.spaceId && !!s.tabs[id]?.pinned === tab.pinned);
+      const section = viewTabIds(s, windowId, tab.spaceId).filter((id) => !!s.tabs[id]?.pinned === tab.pinned);
       const at = section.indexOf(tab.id) + (command === "moveTabDown" ? 1 : -1);
       return at >= 0 && at < section.length ? s.moveTab(tab.id, at) : undefined;
     }
@@ -351,5 +351,5 @@ async function openFiles(windowId: string | null) {
   if (!target) return void openWindow({ url: urls[0] });
   let last: string | undefined;
   for (const url of urls) last = useBrowser.getState().newTab(target, { url });
-  if (last) useBrowser.getState().activate(last);
+  if (last) useBrowser.getState().activate(last, target);
 }

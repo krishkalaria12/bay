@@ -80,7 +80,7 @@ export const snapshotTab = (t: Tab): TabSnapshot => ({
 /** A pinned page: an Essential (a pinned tile) or a pinned row. It keeps the page it was pinned at (`pinnedUrl`). */
 export const pinnedPage = (t: Pick<Tab, "pinned" | "pinnedRow">) => t.pinned || !!t.pinnedRow;
 
-/** The window's order keeps the Essentials first, then the pinned rows, then every other tab. */
+/** A list's order keeps the Essentials first, then the pinned rows, then every other tab. */
 export function pinnedFirst(ids: string[], tabs: Record<string, Tab>): string[] {
   const rank = (id: string) => {
     if (tabs[id]?.pinned) return 0;
@@ -99,11 +99,80 @@ export function inPinnedContainer(s: Pick<BrowserState, "tabs" | "groups">, id: 
   return false;
 }
 
+// MARK: Tab lists
+
+// Tabs are their space's, as Arc's, not a window's: each window showing a space lists the same tabs. The spaces that
+// share a profile share one list (their favourites are the profile's, as Arc's), in sidebar order: the Essentials, the
+// pinned rows (each folder's together), the pinned groups, then the rest. A private window's tabs are its own list
+// (its space is the window's), and so is a Little Bay's page.
+
+/** The list of a space's tabs: its profile's. */
+export const spaceListKey = (s: Pick<BrowserState, "spaces">, spaceId: string) => {
+  const space = s.spaces[spaceId];
+  return space ? (space.profileId ?? space.id) : spaceId;
+};
+
+/** The list a window shows: its space's, or a Little Bay's own. */
+export const windowListKey = (s: Pick<BrowserState, "spaces">, w: BrowserWindow) => (w.kind === "small" ? w.id : spaceListKey(s, w.spaceId));
+
+/** The list the tab is in. */
+export const tabListKey = (s: Pick<BrowserState, "spaces" | "windows">, t: Tab) =>
+  s.windows[t.windowId]?.kind === "small" ? t.windowId : spaceListKey(s, t.spaceId);
+
+const NO_TABS: string[] = [];
+export const listIds = (s: Pick<BrowserState, "tabLists">, key: string): string[] => s.tabLists[key] ?? NO_TABS;
+
+/** The list the tab is in, by key and ids. */
+export function listOfTab(s: Pick<BrowserState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): TabList | undefined {
+  const t = s.tabs[id];
+  if (!t) return undefined;
+  const key = tabListKey(s, t);
+  return { key, tabIds: listIds(s, key) };
+}
+
+export type TabList = { key: string; tabIds: string[] };
+
+/** The state with the list's ids; an empty list goes. */
+export function withList<S extends Pick<BrowserState, "tabLists">>(s: S, list: TabList): S {
+  if (s.tabLists[list.key] === list.tabIds) return s;
+  return { ...s, tabLists: list.tabIds.length ? { ...s.tabLists, [list.key]: list.tabIds } : without(s.tabLists, [list.key]) };
+}
+
+/** The tabs the window lists for a space (its shown one by default), in the list's order. */
 export function viewTabIds(s: BrowserState, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
   if (!w) return [];
-  const profile = spaceId ?? w.spaceId;
-  return w.tabIds.filter((id) => s.tabs[id]?.spaceId === profile);
+  const space = w.kind === "small" ? w.spaceId : (spaceId ?? w.spaceId);
+  const key = w.kind === "small" ? w.id : spaceListKey(s, space);
+  return listIds(s, key).filter((id) => s.tabs[id]?.spaceId === space);
+}
+
+/** A space's tabs, in their list's order. */
+export const spaceTabIds = (s: Pick<BrowserState, "spaces" | "tabs" | "tabLists">, spaceId: string): string[] =>
+  listIds(s, spaceListKey(s, spaceId)).filter((id) => s.tabs[id]?.spaceId === spaceId);
+
+/** Whether another window shows the tab now. */
+export const shownElsewhere = (s: BrowserState, id: string, windowId: string) =>
+  Object.values(s.windows).some((w) => w.id !== windowId && w.activeTabIds[w.spaceId] === id);
+
+/** The tab a window shows for a space it comes to: the one it showed there, else the space's most recent one, unless
+ *  another window shows it now. None: the window takes a new tab. */
+export function tabToShow(s: BrowserState, windowId: string, spaceId: string): string | undefined {
+  const w = s.windows[windowId];
+  const view = viewTabIds(s, windowId, spaceId).filter((id) => !shownElsewhere(s, id, windowId));
+  // A favourite it showed there counts though another space with the profile has opened it since (it's theirs too).
+  const remembered = w?.activeTabIds[spaceId];
+  const tile = remembered ? s.tabs[remembered] : undefined;
+  const shared = !!tile?.pinned && w?.kind !== "small" && listIds(s, spaceListKey(s, spaceId)).includes(tile.id) && !shownElsewhere(s, tile.id, windowId);
+  if (remembered && (view.includes(remembered) || shared)) return remembered;
+  return view.reduce<string | undefined>((best, id) => (!best || s.tabs[id]!.lastActiveAt > s.tabs[best]!.lastActiveAt ? id : best), undefined);
+}
+
+/** The tabs whose page is in the window, in their lists' order. */
+export function windowTabIds(s: Pick<BrowserState, "tabs" | "tabLists">, windowId: string): string[] {
+  const out: string[] = [];
+  for (const ids of Object.values(s.tabLists)) for (const id of ids) if (s.tabs[id]?.windowId === windowId) out.push(id);
+  return out;
 }
 
 /** Two spaces with the same profile (its data): as Arc, they share their favourites (the pinned tiles). */
@@ -113,15 +182,11 @@ export function sharesProfile(s: Pick<BrowserState, "spaces">, a: string, b: str
   return !!pa && !!pb && (pa.profileId ?? pa.id) === (pb.profileId ?? pb.id);
 }
 
-/** A space's favourites: the window's pinned tiles of every space that shares its profile, in the window's order. */
+/** A space's favourites: its profile's pinned tiles, every space with the profile's, in their list's order. */
 export function favoriteTabIds(s: BrowserState, windowId: string, spaceId?: string): string[] {
   const w = s.windows[windowId];
-  if (!w) return [];
-  const profile = spaceId ?? w.spaceId;
-  return w.tabIds.filter((id) => {
-    const t = s.tabs[id];
-    return !!t?.pinned && (t.spaceId === profile || sharesProfile(s, t.spaceId, profile));
-  });
+  if (!w || w.kind === "small") return [];
+  return listIds(s, spaceListKey(s, spaceId ?? w.spaceId)).filter((id) => s.tabs[id]?.pinned);
 }
 
 export function closesWindow(s: BrowserState, id: string): boolean {
@@ -131,11 +196,14 @@ export function closesWindow(s: BrowserState, id: string): boolean {
   return viewTabIds(s, w.id).every((t) => t === id || s.tabs[t]!.unloaded);
 }
 
+/** The tab the window shows for a space (its shown one by default). */
 export function activeTabId(s: BrowserState, windowId: string, spaceId?: string): string | undefined {
   const w = s.windows[windowId];
   if (!w) return undefined;
-  const id = w.activeTabIds[spaceId ?? w.spaceId];
-  return id && s.tabs[id]?.windowId === windowId ? id : undefined;
+  const space = spaceId ?? w.spaceId;
+  const id = w.activeTabIds[space];
+  const t = id ? s.tabs[id] : undefined;
+  return t && (w.kind === "small" ? t.windowId === windowId : tabListKey(s, t) === spaceListKey(s, space)) ? id : undefined;
 }
 
 export function activeTab(s: BrowserState, windowId: string): Tab | undefined {

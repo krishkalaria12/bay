@@ -2,9 +2,23 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { autoGroupName } from "./groupNames";
 import { leaveGroups, orderSections, placeBlock, syncGroupOrder } from "./groups";
-import { activeTabId, bookmarkSpaceId, inPinnedContainer, isIncognitoSpace, newId, pinnedPage, sharesProfile, snapshotTab, viewTabIds, without } from "./model";
+import {
+  activeTabId,
+  inPinnedContainer,
+  isIncognitoSpace,
+  listOfTab,
+  newId,
+  pinnedPage,
+  sharesProfile,
+  snapshotTab,
+  viewTabIds,
+  windowTabIds,
+  withList,
+  without,
+  type TabList,
+} from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
-import type { BrowserWindow, ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
+import type { ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
 import { CLEAN_UP_AFTER_MS, DELETED_GROUP_MS, MAX_CLEANED, MAX_CLOSED_GROUPS } from "./constants";
 
 export type TabPlacement = {
@@ -43,7 +57,7 @@ export type OrganizeSlice = {
   newTabInGroup(groupId: string, url?: string): string;
   moveGroupToBookmarksBar(groupId: string): void;
 
-  /** Cleans up the window's tabs in its space on screen, or in `spaceId`. */
+  /** Cleans up the tabs of the space the window shows, or of `spaceId`. */
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; spaceId?: string }): number;
   /** The automatic clean up (Arc's archive): every window's spaces, each after its own time. */
   cleanUpInactiveTabs(): number;
@@ -131,8 +145,8 @@ export function groupWithOpener(s: BrowserState, tabId: string, openerId: string
   const tab = s.tabs[tabId];
   const opener = s.tabs[openerId];
   if (!tab || !opener) return s;
-  if (opener.windowId !== tab.windowId || opener.spaceId !== tab.spaceId) return s;
-  const w = s.windows[tab.windowId]!;
+  const w = listOfTab(s, tabId);
+  if (!w || opener.spaceId !== tab.spaceId || !w.tabIds.includes(openerId)) return s;
   if (inPinnedContainer(s, openerId)) {
     const gathered = pinnedChildGroup(s, openerId, tab.spaceId);
     if (gathered) return joinGroup(s, w, gathered, tabId);
@@ -150,11 +164,11 @@ export function groupWithOpener(s: BrowserState, tabId: string, openerId: string
 export const pinnedChildGroup = (s: Pick<BrowserState, "groups">, openerId: string, spaceId: string): TabGroup | undefined =>
   Object.values(s.groups).find((g) => g.pinnedOpenerId === openerId && g.spaceId === spaceId && g.tabIds.length);
 
-function joinGroup(s: BrowserState, w: BrowserWindow, group: TabGroup, tabId: string): BrowserState {
+function joinGroup(s: BrowserState, w: TabList, group: TabGroup, tabId: string): BrowserState {
   const members = [...group.tabIds, tabId];
-  const window = { ...w, tabIds: placeBlock(w.tabIds, w.tabIds.filter((id) => members.includes(id))) };
-  const groups = { ...s.groups, [group.id]: { ...group, tabIds: window.tabIds.filter((id) => members.includes(id)) } };
-  return { ...s, groups, windows: { ...s.windows, [w.id]: window } };
+  const list = { key: w.key, tabIds: placeBlock(w.tabIds, w.tabIds.filter((id) => members.includes(id))) };
+  const groups = { ...s.groups, [group.id]: { ...group, tabIds: list.tabIds.filter((id) => members.includes(id)) } };
+  return { ...withList(s, list), groups };
 }
 
 export function withGroup(
@@ -164,13 +178,12 @@ export function withGroup(
 ): [BrowserState, string] {
   const tabs = ids.map((id) => s.tabs[id]).filter((t): t is Tab => !!t && !pinnedPage(t));
   const first = tabs[0];
-  if (!first || tabs.some((t) => t.windowId !== first.windowId || t.spaceId !== first.spaceId)) return [s, ""];
-  const w = s.windows[first.windowId]!;
+  const w = first && listOfTab(s, first.id);
+  if (!first || !w || tabs.some((t) => t.spaceId !== first.spaceId || !w.tabIds.includes(t.id))) return [s, ""];
   const members = new Set(tabs.map((t) => t.id));
   let tabIds = placeBlock(w.tabIds, w.tabIds.filter((id) => members.has(id)));
   const group: TabGroup = {
     id: newId("g"),
-    windowId: w.id,
     spaceId: first.spaceId,
     name: o.name ?? "",
     icon: null,
@@ -184,8 +197,8 @@ export function withGroup(
   };
   const groups = { ...leaveGroups(s.groups, members), [group.id]: group };
   tabIds = orderSections(tabIds, s.tabs, groups);
-  const window = { ...w, tabIds };
-  return [{ ...s, groups: syncGroupOrder(groups, window), windows: { ...s.windows, [w.id]: window } }, group.id];
+  const list = { key: w.key, tabIds };
+  return [{ ...withList(s, list), groups: syncGroupOrder(groups, list) }, group.id];
 }
 
 function closedEntries(s: BrowserState, ids: string[]): ClosedTab[] {
@@ -200,7 +213,7 @@ function closedEntries(s: BrowserState, ids: string[]): ClosedTab[] {
         id: newId("ct"),
         tab: snapshotTab(t),
         windowId: t.windowId,
-        index: s.windows[t.windowId]?.tabIds.indexOf(t.id) ?? 0,
+        index: Math.max(listOfTab(s, t.id)?.tabIds.indexOf(t.id) ?? 0, 0),
         group: group ? { id: group.id, name: group.name, icon: group.icon, color: group.color } : null,
         closedAt: now,
       };
@@ -217,33 +230,43 @@ function closeQuietly(s: BrowserState, ids: string[]): BrowserState {
 
 // Closing a group that holds the page on screen shows the tab just above the group, as in Dia (not the opener
 // of the page, nor the tab after it); at the top of the list, the one below.
+// Each window that showed one of its tabs.
 function showAboveGroup(before: BrowserState, s: BrowserState, g: TabGroup): BrowserState {
-  const w = s.windows[g.windowId];
-  const was = before.windows[g.windowId]?.activeTabIds[g.spaceId];
-  if (!w || !was || !g.tabIds.includes(was)) return s;
-  const order = viewTabIds(before, g.windowId, g.spaceId).filter((id) => !inPinnedContainer(before, id));
-  const at = order.indexOf(g.tabIds[0]!);
-  const stays = (id: string) => !!s.tabs[id] && !g.tabIds.includes(id) && !s.tabs[id]!.unloaded;
-  const pick = order.slice(0, at).reverse().find(stays) ?? order.slice(at).find(stays);
-  if (!pick) return s;
-  if (w.spaceId === g.spaceId) return apply(s, activated(s, pick));
-  return { ...s, windows: { ...s.windows, [w.id]: { ...w, activeTabIds: { ...w.activeTabIds, [g.spaceId]: pick } } } };
+  for (const w of Object.values(s.windows)) {
+    const was = before.windows[w.id]?.activeTabIds[g.spaceId];
+    if (!was || !g.tabIds.includes(was)) continue;
+    const order = viewTabIds(before, w.id, g.spaceId).filter((id) => !inPinnedContainer(before, id));
+    const at = order.indexOf(g.tabIds[0]!);
+    const stays = (id: string) => !!s.tabs[id] && !g.tabIds.includes(id) && !s.tabs[id]!.unloaded;
+    const pick = order.slice(0, at).reverse().find(stays) ?? order.slice(at).find(stays);
+    if (!pick) continue;
+    const window = s.windows[w.id]!;
+    if (window.spaceId === g.spaceId) s = apply(s, activated(s, pick, w.id));
+    else s = { ...s, windows: { ...s.windows, [w.id]: { ...window, activeTabIds: { ...window.activeTabIds, [g.spaceId]: pick } } } };
+  }
+  return s;
+}
+
+/** The window a group is in: the frontmost one on its space, else its first tab's page's. */
+export function groupWindow(s: BrowserState, g: TabGroup): string | undefined {
+  const first = g.tabIds[0] ? s.tabs[g.tabIds[0]] : undefined;
+  return [...s.ui.focusOrder, ...s.windowOrder].find((id) => s.windows[id]?.spaceId === g.spaceId) ?? (first && s.windows[first.windowId] ? first.windowId : undefined);
 }
 
 export function closingGroup(s: BrowserState, groupId: string, deleted = false): BrowserState {
   const g = s.groups[groupId];
-  const w = g && s.windows[g.windowId];
-  if (!g || !w) return s;
+  const list = g?.tabIds[0] ? listOfTab(s, g.tabIds[0]) : undefined;
+  if (!g || !list) return s;
   const entry: ClosedGroup = {
     kind: "group",
     id: newId("cg"),
     group: { id: g.id, name: groupLabel(s, g), icon: g.icon, color: g.color, pinned: g.pinned },
     tabs: g.tabIds.map((id) => snapshotTab(s.tabs[id]!)),
-    windowId: w.id,
-    index: w.tabIds.indexOf(g.tabIds[0]!),
+    windowId: groupWindow(s, g) ?? "",
+    index: list.tabIds.indexOf(g.tabIds[0]!),
     closedAt: Date.now(),
   };
-  const recordable = !w.incognito && entry.tabs.some((t) => t.url);
+  const recordable = !isIncognitoSpace(g.spaceId) && entry.tabs.some((t) => t.url);
   const next = showAboveGroup(s, closeQuietly(s, g.tabIds), g);
   if (!recordable) return next;
   if (deleted) return { ...next, deletedGroups: [...keptDeletedGroups(next.deletedGroups), entry] };
@@ -310,10 +333,13 @@ export function cleanUpHours(s: Pick<BrowserState, "spaces" | "settings">, space
 
 export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): string[] {
   const view = viewTabIds(s, windowId, spaceId);
+  // The tab any window shows for the space stays.
+  const space = spaceId ?? s.windows[windowId]?.spaceId ?? "";
+  const shown = new Set(Object.keys(s.windows).map((w) => activeTabId(s, w, space)));
   const active = activeTabId(s, windowId, spaceId);
   const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
   const inSplit = new Set(Object.values(s.splits).flatMap((v) => v.tabIds));
-  const keep = (t: Tab) => t.id === active || pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
+  const keep = (t: Tab) => shown.has(t.id) || pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
   const out = new Set<string>();
   const byPage = new Map<string, Tab[]>();
   for (const id of view) {
@@ -340,11 +366,12 @@ export function abandonedNewTabs(s: BrowserState, windowId: string): string[] {
   if (!w) return [];
   const selected = new Set(Object.values(w.activeTabIds));
   const shown = w.activeTabIds[w.spaceId];
-  const out = w.tabIds.filter((id) => {
-    const t = s.tabs[id];
-    return !!t && t.windowId === w.id && !t.url && !t.navigation && !t.adoptId && !t.pinned && id !== shown && !selected.has(id);
+  const mine = windowTabIds(s, windowId);
+  const out = mine.filter((id) => {
+    const t = s.tabs[id]!;
+    return !t.url && !t.navigation && !t.adoptId && !t.pinned && id !== shown && !selected.has(id);
   });
-  return out.length >= w.tabIds.length ? out.slice(0, w.tabIds.length - 1) : out;
+  return out.length >= mine.length ? out.slice(0, mine.length - 1) : out;
 }
 
 export function recentTabIds(s: BrowserState, windowId: string, now = Date.now(), staleAfterMs = CLEAN_UP_AFTER_MS): string[] {
@@ -355,19 +382,19 @@ export function recentTabIds(s: BrowserState, windowId: string, now = Date.now()
 
 export function placing(s: BrowserState, ids: string[], p: TabPlacement): BrowserState {
   const first = s.tabs[ids[0] ?? ""];
-  const w = first && s.windows[first.windowId];
+  const w = first && listOfTab(s, first.id);
   if (!first || !w) return s;
   const order = new Map(w.tabIds.map((id, i) => [id, i]));
   // Favourites are shared by the spaces with one profile: a selection of them can come from several.
-  const moves = (t: Tab | undefined) => !!t && t.windowId === w.id && (t.spaceId === first.spaceId || (p.pinned && t.pinned && sharesProfile(s, t.spaceId, first.spaceId)));
+  const moves = (t: Tab | undefined) => !!t && order.has(t.id) && (t.spaceId === first.spaceId || (p.pinned && t.pinned && sharesProfile(s, t.spaceId, first.spaceId)));
   const moving = [...new Set(ids)]
     .filter((id) => moves(s.tabs[id]))
     .sort((a, b) => order.get(a)! - order.get(b)!);
   if (!moving.length) return s;
   const target = !p.pinned && !p.row && p.groupId ? s.groups[p.groupId] : undefined;
-  if (target && (target.windowId !== w.id || target.spaceId !== first.spaceId)) return s;
+  if (target && target.spaceId !== first.spaceId) return s;
   const folder = !p.pinned && p.row && p.folderId ? s.pinnedFolders[p.folderId] : undefined;
-  if (p.folderId && p.row && (!folder || folder.windowId !== w.id || folder.spaceId !== first.spaceId)) return s;
+  if (p.folderId && p.row && (!folder || folder.spaceId !== first.spaceId)) return s;
   const movingSet = new Set(moving);
 
   const tabs = { ...s.tabs };
@@ -378,10 +405,8 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     const folderId = row ? (p.row ? (folder?.id ?? undefined) : t.folderId) : undefined;
     if (t.pinned === p.pinned && !!t.pinnedRow === row && t.folderId === folderId) continue;
     const pinnedUrl = p.pinned || row ? (pinnedPage(t) ? t.pinnedUrl : t.url || null) : null;
-    const { pinnedRow: _, folderId: _f, pinKey, ...rest } = t;
-    // Unpinned, it's this window's page only: the other windows' tabs for its pin go (store/mirroredPins.ts).
-    const key = (p.pinned || row) && pinKey ? { pinKey } : {};
-    tabs[id] = { ...rest, ...key, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
+    const { pinnedRow: _, folderId: _f, ...rest } = t;
+    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
   }
   const rest = w.tabIds.filter((id) => !movingSet.has(id));
   let at: number;
@@ -402,10 +427,10 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     groups = { ...groups, [target.id]: { ...target, tabIds: rest.filter((id) => members.has(id)) } };
   }
   let tabIds = rest;
-  for (const g of Object.values(groups)) if (g.windowId === w.id) tabIds = placeBlock(tabIds, tabIds.filter((id) => g.tabIds.includes(id)));
+  for (const g of Object.values(groups)) if (g.tabIds.some((id) => order.has(id))) tabIds = placeBlock(tabIds, tabIds.filter((id) => g.tabIds.includes(id)));
   tabIds = orderSections(tabIds, tabs, groups);
-  const window: BrowserWindow = { ...w, tabIds };
-  return { ...s, tabs, groups: syncGroupOrder(groups, window), windows: { ...s.windows, [w.id]: window } };
+  const list = { key: w.key, tabIds };
+  return { ...withList({ ...s, tabs }, list), groups: syncGroupOrder(groups, list) };
 }
 
 export function forgetClosedPrivateWindows(s: BrowserState): Partial<BrowserState> | null {
@@ -440,8 +465,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
 
   pinTabs(ids, pinned) {
     const s = get();
-    const first = s.tabs[ids[0] ?? ""];
-    const w = first && s.windows[first.windowId];
+    const w = listOfTab(s, ids[0] ?? "");
     if (!w) return;
     const beforeId = pinned ? null : w.tabIds.find((id) => !inPinnedContainer(s, id) && !ids.includes(id));
     set(placing(s, ids, { pinned, beforeId }));
@@ -449,8 +473,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
 
   pinRows(ids, pinned) {
     const s = get();
-    const first = s.tabs[ids[0] ?? ""];
-    const w = first && s.windows[first.windowId];
+    const w = listOfTab(s, ids[0] ?? "");
     if (!w) return;
     // Unpinned, they go to the top of the list, below anything pinned.
     const beforeId = pinned ? null : w.tabIds.find((id) => !inPinnedContainer(s, id) && !ids.includes(id));
@@ -510,14 +533,17 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
 
   groupTabs(ids, { pinned = true, name } = {}) {
     const [next, id] = withGroup(get(), ids, { pinned, name });
-    if (id) set({ ...next, selection: { ...next.selection, [next.groups[id]!.windowId]: [] } });
+    if (!id) return id;
+    // The windows that had them selected select nothing.
+    const selection = Object.fromEntries(Object.entries(next.selection).map(([w, sel]) => [w, sel.some((t) => ids.includes(t)) ? [] : sel]));
+    set({ ...next, selection });
     return id;
   },
 
   moveGroup(groupId, p) {
     set((s) => {
       const g = s.groups[groupId];
-      const w = g && s.windows[g.windowId];
+      const w = g?.tabIds[0] ? listOfTab(s, g.tabIds[0]) : undefined;
       if (!g || !w || (p.beforeId && g.tabIds.includes(p.beforeId))) return {};
       const groups = { ...s.groups, [groupId]: { ...g, pinned: p.pinned } };
       const rest = w.tabIds.filter((id) => !g.tabIds.includes(id));
@@ -530,20 +556,21 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
         at = rest.reduce((last, id, i) => (s.tabs[id]?.pinned || pinnedGroup.has(id) ? i + 1 : last), 0);
       } else at = rest.length;
       rest.splice(at, 0, ...g.tabIds);
-      const window = { ...w, tabIds: orderSections(rest, s.tabs, groups) };
-      return { groups: syncGroupOrder(groups, window), windows: { ...s.windows, [w.id]: window } };
+      const list = { key: w.key, tabIds: orderSections(rest, s.tabs, groups) };
+      return { groups: syncGroupOrder(groups, list), tabLists: withList(s, list).tabLists };
     });
   },
 
   duplicateGroup(groupId) {
     let s = get();
     const g = s.groups[groupId];
-    const w = g && s.windows[g.windowId];
-    if (!g || !w) return "";
-    const after = w.tabIds.indexOf(g.tabIds.at(-1)!) + 1;
+    const windowId = g && groupWindow(s, g);
+    const list = g?.tabIds[0] ? listOfTab(s, g.tabIds[0]) : undefined;
+    if (!g || !windowId || !list) return "";
+    const after = list.tabIds.indexOf(g.tabIds.at(-1)!) + 1;
     const [restored, ids] = restoreSnapshots(
       s,
-      w.id,
+      windowId,
       g.tabIds.map((id, i) => ({ tab: { ...snapshotTab(s.tabs[id]!), pinned: false }, index: after + i })),
     );
     let groupId2: string;
@@ -556,22 +583,23 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
   newTabInGroup(groupId, url) {
     const s = get();
     const g = s.groups[groupId];
-    const w = g && s.windows[g.windowId];
-    if (!g || !w) return "";
+    const windowId = g && groupWindow(s, g);
+    const list = g?.tabIds[0] ? listOfTab(s, g.tabIds[0]) : undefined;
+    if (!g || !windowId || !list) return "";
+    const index = list.tabIds.indexOf(g.tabIds.at(-1)!) + 1;
     if (url) {
-      const id = get().newTab(w.id, { url, spaceId: g.spaceId, index: w.tabIds.indexOf(g.tabIds.at(-1)!) + 1 });
+      const id = get().newTab(windowId, { url, spaceId: g.spaceId, index });
       if (!id) return "";
       const next = get();
       const group = next.groups[groupId];
       if (!group) return id;
       const groups = { ...next.groups, [groupId]: { ...group, collapsed: false, tabIds: [...group.tabIds, id] } };
-      set({ groups: syncGroupOrder(groups, next.windows[w.id]!) });
+      set({ groups: syncGroupOrder(groups, listOfTab(next, id)!) });
       return id;
     }
-    const [next, id] = withNewTab(s, w.id, { spaceId: g.spaceId, index: w.tabIds.indexOf(g.tabIds.at(-1)!) + 1 });
-    const window = next.windows[w.id]!;
+    const [next, id] = withNewTab(s, windowId, { spaceId: g.spaceId, index });
     const groups = { ...next.groups, [groupId]: { ...g, collapsed: false, tabIds: [...g.tabIds, id] } };
-    set({ ...next, groups: syncGroupOrder(groups, window) });
+    set({ ...next, groups: syncGroupOrder(groups, listOfTab(next, id)!) });
     return id;
   },
 
@@ -579,7 +607,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     const s = get();
     const g = s.groups[groupId];
     if (!g) return;
-    const spaceId = bookmarkSpaceId(s, s.windows[g.windowId]);
+    const spaceId = isIncognitoSpace(g.spaceId) ? s.settings.defaultSpaceId : g.spaceId;
     const folder = get().addBookmarkFolder({ spaceId, title: groupLabel(s, g) });
     for (const id of g.tabIds) {
       const t = s.tabs[id];
@@ -607,14 +635,16 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
 
   cleanUpInactiveTabs() {
     let count = 0;
-    for (const windowId of get().windowOrder) {
-      const s = get();
-      const w = s.windows[windowId];
-      if (!w || w.kind === "small") continue;
-      for (const spaceId of new Set(w.tabIds.map((id) => s.tabs[id]!.spaceId))) {
-        const hours = cleanUpHours(get(), spaceId);
-        if (hours !== null) count += get().cleanUpTabs(windowId, { inactiveForMs: hours * 3_600_000, spaceId });
-      }
+    const s = get();
+    // Every space, through a main window (the list is the space's, whichever window); a private window its own.
+    const main = s.windowOrder.find((id) => !s.windows[id]!.incognito && s.windows[id]!.kind !== "small");
+    const runs = [
+      ...(main ? s.spaceOrder.map((spaceId) => [main, spaceId] as const) : []),
+      ...Object.values(s.windows).filter((w) => w.incognito).map((w) => [w.id, w.spaceId] as const),
+    ];
+    for (const [windowId, spaceId] of runs) {
+      const hours = cleanUpHours(get(), spaceId);
+      if (hours !== null && get().windows[windowId]) count += get().cleanUpTabs(windowId, { inactiveForMs: hours * 3_600_000, spaceId });
     }
     return count;
   },
@@ -638,13 +668,13 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
       const [restored, [id]] = restoreSnapshots(next, windowId, [{ tab: e.tab, index: windowId === e.windowId ? e.index : undefined }]);
       next = restored;
       const g = e.group && next.groups[e.group.id];
-      if (id && g && g.windowId === windowId) {
-        const w = next.windows[windowId]!;
+      const w = id ? listOfTab(next, id) : undefined;
+      if (id && g && w && g.spaceId === next.tabs[id]!.spaceId) {
         const members = [...g.tabIds, id];
-        const window = { ...w, tabIds: placeBlock(w.tabIds, w.tabIds.filter((t) => members.includes(t))) };
-        next = { ...next, windows: { ...next.windows, [windowId]: window }, groups: syncGroupOrder({ ...next.groups, [g.id]: { ...g, tabIds: members } }, window) };
+        const list = { key: w.key, tabIds: placeBlock(w.tabIds, w.tabIds.filter((t) => members.includes(t))) };
+        next = { ...withList(next, list), groups: syncGroupOrder({ ...next.groups, [g.id]: { ...g, tabIds: members } }, list) };
       }
-      if (id && entryId) next = apply(next, activated(next, id));
+      if (id && entryId) next = apply(next, activated(next, id, windowId));
     }
     set(next);
   },

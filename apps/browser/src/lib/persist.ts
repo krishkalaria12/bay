@@ -2,7 +2,6 @@ import { cancelDownload, type Download } from "@bay/nncore";
 import { readDocument, writeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
 import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../store/model";
-import { parkWindowPins } from "../store/parkedPins";
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
 import { startFavicons } from "./favicons";
 import { startBookmarks } from "./bookmarks";
@@ -33,28 +32,31 @@ const DOCS: Doc[] = [
   },
   {
     name: "session.json",
-    sources: (s) => [s.spaces, s.spaceOrder, s.orphanedProfileData, s.windows, s.windowOrder, s.tabs, s.groups, s.pinnedFolders, s.splits, s.closedTabs, s.closedWindows, s.parkedPins, s.settings, s.ui.focusedWindowId, s.closedGroups, s.deletedGroups, s.cleanedTabs],
+    sources: (s) => [s.spaces, s.spaceOrder, s.orphanedProfileData, s.windows, s.windowOrder, s.tabs, s.tabLists, s.groups, s.pinnedFolders, s.splits, s.closedTabs, s.closedWindows, s.settings, s.ui.focusedWindowId, s.closedGroups, s.deletedGroups, s.cleanedTabs],
     json: serialized((s) => {
-      // Little Bay windows aren't restored: closing (or quitting) throws their page away.
+      // Private windows and Little Bay aren't restored: closing (or quitting) throws their pages away.
       const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
       const kept = new Set(windows.map((w) => w.id));
+      const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small";
+      const tabs = Object.values(s.tabs).filter(own);
+      const saved = new Set(tabs.map((t) => t.id));
       return {
         version: PERSIST_VERSION,
-        profiles: s.spaces,
-        profileOrder: s.spaceOrder,
+        spaces: s.spaces,
+        spaceOrder: s.spaceOrder,
         orphanedProfileData: s.orphanedProfileData,
         settings: s.settings,
         windows,
         windowOrder: s.windowOrder.filter((id) => kept.has(id)),
         focusedWindowId: s.ui.focusOrder.find((id) => kept.has(id)) ?? null,
-        tabs: Object.values(s.tabs).filter((t) => kept.has(t.windowId)).map(persistedTab),
-        groups: Object.values(s.groups).filter((g) => kept.has(g.windowId)),
-        pinnedFolders: Object.values(s.pinnedFolders).filter((f) => kept.has(f.windowId)),
-        splits: Object.values(s.splits).filter((v) => kept.has(v.windowId)),
+        tabs: tabs.map((t) => persistedTab(kept.has(t.windowId) ? t : { ...t, windowId: "" })),
+        tabLists: Object.fromEntries(Object.entries(s.tabLists).map(([key, ids]) => [key, ids.filter((id) => saved.has(id))]).filter(([, ids]) => ids!.length)),
+        groups: Object.values(s.groups).filter((g) => !isIncognitoSpace(g.spaceId)),
+        pinnedFolders: Object.values(s.pinnedFolders),
+        splits: Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))),
         // The store keeps private windows out of these lists; filter again so nothing private is ever written.
         closedTabs: s.closedTabs.filter((c) => publicTab(c.tab)),
         closedWindows: s.closedWindows.filter((c) => c.tabs.every(publicTab)),
-        parkedPins: Object.fromEntries(Object.entries(s.parkedPins).filter(([spaceId]) => publicTab({ spaceId }))),
         closedGroups: s.closedGroups.filter((c) => c.tabs.every(publicTab)),
         deletedGroups: s.deletedGroups.filter((c) => c.tabs.every(publicTab)),
         cleanedTabs: s.cleanedTabs.filter((c) => publicTab(c.tab)),
@@ -85,20 +87,20 @@ const byId = <T extends { id: string }>(list: T[] | undefined) => Object.fromEnt
 
 type SessionV2 = {
   version: 2;
-  profiles: HydrateData["spaces"];
-  profileOrder: string[];
+  spaces: HydrateData["spaces"];
+  spaceOrder: string[];
   orphanedProfileData?: string[];
   settings: HydrateData["settings"];
   windows: BrowserWindow[];
   windowOrder: string[];
   focusedWindowId: string | null;
   tabs: Tab[];
+  tabLists?: BrowserState["tabLists"];
   groups: BrowserState["groups"][string][];
   pinnedFolders?: BrowserState["pinnedFolders"][string][];
   splits: BrowserState["splits"][string][];
   closedTabs: ClosedTab[];
   closedWindows: BrowserState["closedWindows"];
-  parkedPins?: BrowserState["parkedPins"];
   closedGroups?: BrowserState["closedGroups"];
   deletedGroups?: BrowserState["deletedGroups"];
   cleanedTabs?: BrowserState["cleanedTabs"];
@@ -109,46 +111,52 @@ export function loadSession(): HydrateData | null {
   if (session?.version !== 2) return null;
   const downloads = read<{ downloads: Download[] }>("downloads.json");
   const data: HydrateData = {
-    spaces: session.profiles,
-    spaceOrder: session.profileOrder,
+    spaces: session.spaces,
+    spaceOrder: session.spaceOrder,
     orphanedProfileData: session.orphanedProfileData ?? [],
     settings: session.settings,
     windows: byId(session.windows),
     windowOrder: session.windowOrder,
     focusedWindowId: session.focusedWindowId,
     tabs: byId(session.tabs),
+    tabLists: session.tabLists ?? {},
     groups: byId(session.groups),
     pinnedFolders: byId(session.pinnedFolders),
     splits: byId(session.splits),
     closedTabs: session.closedTabs,
     closedWindows: session.closedWindows,
-    parkedPins: session.parkedPins ?? {},
     closedGroups: session.closedGroups ?? [],
     deletedGroups: session.deletedGroups ?? [],
     cleanedTabs: session.cleanedTabs ?? [],
     downloads: (downloads?.downloads ?? []).map((d, i) => ({ ...d, id: `saved-${i}` })),
   };
   if (session.settings && session.settings.restoreSession === false) {
+    // A launch that doesn't restore the last session: each space keeps its pinned tabs, and its other tabs wait in
+    // Recently Closed, one window's worth per space (where a window showed it).
     const now = Date.now();
-    const pinSource = { tabs: data.tabs ?? {}, groups: data.groups ?? {}, pinnedFolders: data.pinnedFolders ?? {}, history: {} };
-    for (const w of session.windows) data.parkedPins = parkWindowPins(data.parkedPins ?? {}, w, pinSource);
+    const pinSource = { tabs: data.tabs ?? {}, groups: data.groups ?? {} };
+    const loose = Object.values(data.tabs ?? {}).filter((t) => !inPinnedContainer(pinSource, t.id));
+    const shownAt = (spaceId: string) => session.windows.find((w) => w.spaceId === spaceId) ?? session.windows[0];
+    const bySpace = new Map<string, Tab[]>();
+    for (const t of loose) bySpace.set(t.spaceId, [...(bySpace.get(t.spaceId) ?? []), t]);
     data.closedWindows = [
       ...(data.closedWindows ?? []),
-      ...session.windows.map((w) => ({
-        kind: "window" as const,
-        id: newId("cw"),
-        window: { spaceId: w.spaceId, sidebarOpen: w.sidebarOpen, frame: w.frame },
-        tabs: w.tabIds
-          .map((id) => data.tabs?.[id])
-          .filter((t): t is Tab => !!t && !inPinnedContainer(pinSource, t.id))
-          .map((t) => ({ ...snapshotTab(t), active: Object.values(w.activeTabIds).includes(t.id) })),
-        groups: [],
-        closedAt: now,
-      })).filter((c) => c.tabs.some((t) => t.url)),
+      ...[...bySpace].map(([spaceId, tabs]) => {
+        const w = shownAt(spaceId);
+        return {
+          kind: "window" as const,
+          id: newId("cw"),
+          window: { spaceId, sidebarOpen: w?.sidebarOpen ?? true, frame: w?.frame ?? null },
+          tabs: tabs.map((t) => ({ ...snapshotTab(t), active: session.windows.some((x) => x.activeTabIds[spaceId] === t.id) })),
+          groups: [],
+          closedAt: now,
+        };
+      }).filter((c) => c.tabs.some((t) => t.url)),
     ].slice(-10);
+    const gone = new Set(loose.map((t) => t.id));
     data.windows = {};
     data.windowOrder = [];
-    data.tabs = {};
+    data.tabs = Object.fromEntries(Object.entries(data.tabs ?? {}).filter(([id]) => !gone.has(id)));
   }
   return data;
 }

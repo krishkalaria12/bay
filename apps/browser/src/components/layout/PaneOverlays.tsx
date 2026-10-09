@@ -7,6 +7,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "./controls";
 import { patchPage, usePage } from "./pageState";
+import { useBrowser } from "../../store/browser";
 
 export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
   const theme = useTheme();
@@ -58,6 +59,26 @@ function displayUrl(url: string) {
     out = decodeURI(out);
   } catch {}
   return out;
+}
+
+/** The tab's page is in another window (as Arc's, a space's tab shows in one window at a time): Show Here brings it. */
+export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: string }) {
+  const theme = useTheme();
+  const elsewhere = useBrowser((s) => {
+    const shownIn = s.tabs[tabId]?.windowId;
+    return !!shownIn && shownIn !== windowId && !!s.windows[shownIn];
+  });
+  if (!elsewhere) return null;
+  return (
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}>
+      <Symbol name="macwindow.on.rectangle" size={30} weight="light" color={theme.textSecondary} style={{ width: 44, height: 40, marginBottom: 14 }} />
+      <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>Open in another window</Text>
+      <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 340, marginBottom: 18 }}>
+        This tab is showing in another window. Show it here to move it, as it is.
+      </Text>
+      <PromptButton title="Show Here" primary onPress={() => useBrowser.getState().activate(tabId, windowId)} />
+    </View>
+  );
 }
 
 export function SadTab({ tabId }: { tabId: string }) {

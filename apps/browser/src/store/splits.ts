@@ -1,9 +1,9 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { leaveGroups, syncGroupOrder } from "./groups";
-import { newId } from "./model";
+import { listOfTab, newId, tabListKey, withList } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
-import type { BrowserWindow, SplitView, Tab } from "./types";
+import type { SplitView, Tab } from "./types";
 import { MAX_SPLIT_PANES } from "./constants";
 
 export type SplitsSlice = {
@@ -88,7 +88,7 @@ export function sanitizeSplits(splits: Record<string, SplitView>, tabs: Record<s
   const used = new Set<string>();
   for (const v of Object.values(splits)) {
     const first = tabs[v.tabIds[0] ?? ""];
-    const ok = (id: string) => tabs[id]?.windowId === v.windowId && tabs[id]?.spaceId === first?.spaceId && !used.has(id);
+    const ok = (id: string) => tabs[id]?.spaceId === first?.spaceId && !used.has(id);
     const gone = new Set(v.tabIds.filter((id) => !ok(id)));
     const fixed = gone.size ? removeFromSplits({ [v.id]: v }, gone)[v.id] : v;
     if (!fixed || fixed.tabIds.length > MAX_SPLIT_PANES) continue;
@@ -100,27 +100,26 @@ export function sanitizeSplits(splits: Record<string, SplitView>, tabs: Record<s
 
 function gather(s: BrowserState, anchorId: string, members: string[]): BrowserState {
   const anchor = s.tabs[anchorId];
-  const w = anchor && s.windows[anchor.windowId];
-  if (!anchor || !w || anchor.pinned) return s;
+  const list = anchor && listOfTab(s, anchorId);
+  if (!anchor || !list || anchor.pinned) return s;
   const moving = new Set(members.filter((id) => id !== anchorId && s.tabs[id] && !s.tabs[id]!.pinned));
   if (!moving.size) return s;
   const block = members.filter((id) => id === anchorId || moving.has(id));
-  const tabIds = w.tabIds.filter((id) => !moving.has(id));
+  const tabIds = list.tabIds.filter((id) => !moving.has(id));
   tabIds.splice(tabIds.indexOf(anchorId), 1, ...block);
-  const window: BrowserWindow = { ...w, tabIds };
+  const next = { key: list.key, tabIds };
   let groups = leaveGroups(s.groups, moving);
   const group = Object.values(s.groups).find((g) => g.tabIds.includes(anchorId));
   if (group && groups[group.id]) groups = { ...groups, [group.id]: { ...groups[group.id]!, tabIds: [...groups[group.id]!.tabIds, ...moving] } };
-  return { ...s, windows: { ...s.windows, [w.id]: window }, groups: syncGroupOrder(groups, window) };
+  return { ...withList(s, next), groups: syncGroupOrder(groups, next) };
 }
 
-function withPane(existing: SplitView | undefined, anchorId: string, tabId: string, side: SplitSide, windowId: string): SplitView | null {
+function withPane(existing: SplitView | undefined, anchorId: string, tabId: string, side: SplitSide): SplitView | null {
   const horizontal = side === "left" || side === "right";
   const before = side === "left" || side === "top";
   if (!existing) {
     return {
       id: newId("split"),
-      windowId,
       tabIds: before ? [tabId, anchorId] : [anchorId, tabId],
       orientation: horizontal ? "horizontal" : "vertical",
       sizes: [0.5, 0.5],
@@ -146,10 +145,10 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     const tabs = [...new Set(tabIds)].map((id) => s.tabs[id]).filter((t): t is Tab => !!t);
     const first = tabs[0];
     if (tabs.length < 2 || tabs.length > MAX_SPLIT_PANES || !first) return "";
-    if (tabs.some((t) => t.windowId !== first.windowId || t.spaceId !== first.spaceId)) return "";
+    if (tabs.some((t) => t.spaceId !== first.spaceId || tabListKey(s, t) !== tabListKey(s, first))) return "";
     const ids = tabs.map((t) => t.id);
     const splits = removeFromSplits(s.splits, new Set(ids));
-    const split: SplitView = { id: newId("split"), windowId: first.windowId, tabIds: ids, orientation, sizes: equal(ids.length) };
+    const split: SplitView = { id: newId("split"), tabIds: ids, orientation, sizes: equal(ids.length) };
     set(gather({ ...s, splits: { ...splits, [split.id]: split } }, first.id, ids));
     return split.id;
   },
@@ -159,23 +158,23 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     const w = s.windows[windowId];
     const anchorId = o.anchorTabId ?? (w ? w.activeTabIds[w.spaceId] : undefined);
     const anchor = anchorId ? s.tabs[anchorId] : undefined;
-    if (!w || !anchor || anchor.windowId !== windowId) return { ok: false, reason: "invalid" };
+    if (!w || !anchor || anchor.spaceId !== w.spaceId) return { ok: false, reason: "invalid" };
     const existing = Object.values(s.splits).find((v) => v.tabIds.includes(anchor.id));
     if (existing && existing.tabIds.length >= MAX_SPLIT_PANES) return { ok: false, reason: "max" };
 
     let tabId = o.tabId;
     if (tabId) {
       const t = s.tabs[tabId];
-      if (!t || tabId === anchor.id || t.windowId !== windowId || t.spaceId !== anchor.spaceId) return { ok: false, reason: "invalid" };
+      if (!t || tabId === anchor.id || t.spaceId !== anchor.spaceId) return { ok: false, reason: "invalid" };
       s = { ...s, splits: removeFromSplits(s.splits, new Set([tabId])) };
     } else {
       [s, tabId] = withNewTab(s, windowId, { url: o.url, adoptId: o.url ? o.adoptId : undefined, spaceId: anchor.spaceId, openerId: o.url ? anchor.id : undefined, background: true });
     }
     const current = existing && s.splits[existing.id];
-    const split = withPane(current, anchor.id, tabId, o.side ?? "right", windowId);
+    const split = withPane(current, anchor.id, tabId, o.side ?? "right");
     if (!split) return { ok: false, reason: "max" };
     s = gather({ ...s, splits: { ...s.splits, [split.id]: split } }, anchor.id, split.tabIds);
-    if (!o.background) s = apply(s, activated(s, tabId));
+    if (!o.background) s = apply(s, activated(s, tabId, windowId));
     set(s);
     return { ok: true, tabId, splitId: split.id };
   },
@@ -185,13 +184,14 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     const split = splitOf(s, paneTabId);
     const pane = s.tabs[paneTabId];
     const tab = s.tabs[tabId];
-    if (!split || !pane || !tab || split.tabIds.includes(tabId) || tab.windowId !== pane.windowId || tab.spaceId !== pane.spaceId) return;
+    if (!split || !pane || !tab || split.tabIds.includes(tabId) || tab.spaceId !== pane.spaceId) return;
     s = { ...s, splits: removeFromSplits(s.splits, new Set([tabId])) };
     s = gather(s, paneTabId, [paneTabId, tabId]);
     const current = s.splits[split.id]!;
     s = { ...s, splits: { ...s.splits, [split.id]: { ...current, tabIds: current.tabIds.map((id) => (id === paneTabId ? tabId : id)) } } };
+    const windowId = pane.windowId;
     s = removeTabs(s, [paneTabId], false);
-    set(apply(s, activated(s, tabId)));
+    set(apply(s, activated(s, tabId, windowId)));
   },
 
   removeTabFromSplit(tabId) {
@@ -199,14 +199,14 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
       const split = splitOf(s, tabId);
       if (!split) return {};
       const splits = removeFromSplits(s.splits, new Set([tabId]));
-      if (!splits[split.id]) return { splits };
-      const w = s.windows[split.windowId]!;
+      const list = listOfTab(s, tabId);
+      if (!splits[split.id] || !list || s.tabs[tabId]?.pinned) return { splits };
       const rest = split.tabIds.filter((id) => id !== tabId);
-      const tabIds = w.tabIds.filter((id) => id !== tabId);
+      const tabIds = list.tabIds.filter((id) => id !== tabId);
       const last = Math.max(...rest.map((id) => tabIds.indexOf(id)));
       tabIds.splice(last + 1, 0, tabId);
-      const window = s.tabs[tabId]?.pinned ? w : { ...w, tabIds };
-      return { splits, windows: { ...s.windows, [w.id]: window }, groups: syncGroupOrder(s.groups, window) };
+      const next = { key: list.key, tabIds };
+      return { splits, tabLists: withList(s, next).tabLists, groups: syncGroupOrder(s.groups, next) };
     });
   },
 
@@ -265,7 +265,7 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     const split = splitOf(s, active);
     if (!split || !active) return;
     const i = split.tabIds.indexOf(active);
-    get().activate(split.tabIds[(i + delta + split.tabIds.length) % split.tabIds.length]!);
+    get().activate(split.tabIds[(i + delta + split.tabIds.length) % split.tabIds.length]!, windowId);
   },
 
   toggleTabLayout(windowId) {

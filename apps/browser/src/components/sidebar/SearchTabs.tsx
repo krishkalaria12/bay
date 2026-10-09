@@ -34,7 +34,7 @@ function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] 
       favicon: t.favicon,
       icon: t.customIcon,
       where: t.windowId === windowId ? null : `Window ${windowNumber(t.windowId)}`,
-      current: s.windows[t.windowId]?.activeTabIds[spaceId] === t.id,
+      current: s.windows[windowId]?.activeTabIds[spaceId] === t.id,
     }));
   const closed: Row[] = [
     ...s.closedTabs

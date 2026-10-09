@@ -9,6 +9,9 @@ const drop = await import("../components/layout/windowDrop.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
+const tabLists = await import("./model.ts");
+// A window's list: its space's tabs, in sidebar order (store/model.ts).
+const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const HOUR = 3_600_000;
 const OLD = () => Date.now() - 13 * HOUR;
 const saved = () => stub.docs.get("session.json") ?? "";
@@ -162,8 +165,8 @@ test("favicons: incognito icons stay in memory and in their own profile; nothing
   const stop = startPersistence();
   const normal = S().createWindow({ url: "https://site.example/a" });
   const incognito = S().createWindow({ incognito: true, url: "https://secret.example/x" });
-  const [normalTab] = S().windows[normal].tabIds;
-  const [privateTab] = S().windows[incognito].tabIds;
+  const [normalTab] = tabsOf(normal);
+  const [privateTab] = tabsOf(incognito);
   const privateProfile = S().windows[incognito].spaceId;
   const handle = (uri) => ({ downloadFavicon: () => Promise.resolve({ uri, width: 32, height: 32 }) });
   webviews.set(normalTab, handle("data:image/png;base64,SITE"));

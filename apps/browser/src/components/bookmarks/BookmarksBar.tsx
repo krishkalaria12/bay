@@ -8,7 +8,7 @@ import { useEffectEvent } from "../../lib/useEffectEvent";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
-import { bookmarkSpaceId } from "../../store/model";
+import { bookmarkSpaceId, isIncognitoSpace } from "../../store/model";
 import type { BookmarkNode } from "../../store/types";
 import { openInternalPage } from "../pages/urls";
 import { Favicon, useHover } from "../primitives";
@@ -28,7 +28,7 @@ export function useBookmarksBarShown(tabId: string): boolean {
   return useBrowser((s) => {
     const tab = s.tabs[tabId];
     const mode = s.settings.bookmarksBar;
-    if (!tab || mode === "never" || s.windows[tab.windowId]?.incognito) return false;
+    if (!tab || mode === "never" || isIncognitoSpace(tab.spaceId)) return false;
     return mode === "always" || !tab.url;
   });
 }

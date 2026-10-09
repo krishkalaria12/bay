@@ -2,7 +2,7 @@ import { savePassword } from "@bay/nncore";
 import type { BookmarkNode as ImportedNode, Credential, DiaTabsProfile, ImportedTab, ImportKind, ImportResult, SafariExport, SpaceSuggestion } from "@bay/import";
 import type { BookmarkDraft } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
-import { engineProfile, isIncognitoSpace } from "../../store/model";
+import { engineProfile, isIncognitoSpace, listIds, tabListKey } from "../../store/model";
 import { withNewTab } from "../../store/tabs";
 import type { SpaceColor } from "../../store/types";
 import { importModule } from "./module";
@@ -114,7 +114,7 @@ function openTabs(spaceId: string, tabs: TabDraft[]): (string | null)[] {
       background: true,
       pinned: t.pinned,
       snapshot: { title: t.title, customTitle: t.customTitle ?? null },
-      index: after ? s.windows[windowId]!.tabIds.indexOf(after) + 1 : undefined,
+      index: after ? listIds(s, tabListKey(s, s.tabs[after]!)).indexOf(after) + 1 : undefined,
     });
     if (!id) return null;
     s = { ...next, tabs: { ...next.tabs, [id]: { ...next.tabs[id]!, navigation: null } } };

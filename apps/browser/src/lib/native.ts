@@ -108,7 +108,7 @@ export function startNativeSync() {
       void closeWindow(id);
       if (prev?.windows[id]?.incognito) void releaseProfile(incognitoSpaceId(id));
     }
-    if (prev && s.tabs === prev.tabs && s.windows === prev.windows && s.spaces === prev.spaces) return;
+    if (prev && s.tabs === prev.tabs && s.tabLists === prev.tabLists && s.windows === prev.windows && s.spaces === prev.spaces) return;
     for (const id of open) {
       const title = windowTitle(s, id);
       if (titles.get(id) !== title) {

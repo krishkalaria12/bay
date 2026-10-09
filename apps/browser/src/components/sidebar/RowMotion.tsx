@@ -25,15 +25,14 @@ export type ClosingTab = { tab: Tab; active: boolean };
 const closed = new Map<string, ClosingTab & { at: number }>();
 
 useBrowser.subscribe((s, prev) => {
-  if (s.windows === prev.windows) return;
+  if (s.tabLists === prev.tabLists) return;
   const now = Date.now();
-  for (const [windowId, was] of Object.entries(prev.windows)) {
-    const tabIds = s.windows[windowId]?.tabIds;
-    if (tabIds === was.tabIds) continue;
-    const kept = new Set(tabIds);
-    for (const id of was.tabIds) {
+  for (const [key, was] of Object.entries(prev.tabLists)) {
+    if (s.tabLists[key] === was) continue;
+    for (const id of was) {
       const tab = prev.tabs[id];
-      if (!kept.has(id) && !s.tabs[id] && tab) closed.set(id, { tab, active: activeTabId(prev, windowId) === id, at: now });
+      if (s.tabs[id] || !tab) continue;
+      closed.set(id, { tab, active: Object.keys(prev.windows).some((w) => activeTabId(prev, w) === id), at: now });
     }
   }
   for (const [id, c] of closed) if (now - c.at > ROW_FRESH_MS) closed.delete(id);

@@ -8,9 +8,12 @@ const { controllingSearchExtension, defaultSearchEngine, searchUrlPrefix } = awa
 const media = await import("../components/media/state.ts");
 
 const S = () => useBrowser.getState();
+const tabLists = await import("./model.ts");
+// A window's list: its space's tabs, in sidebar order (store/model.ts).
+const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const view = (w) => model.viewTabIds(S(), w).map((id) => S().tabs[id].url);
 const short = (url) => url.replace(/^https:\/\/|\.com$/g, "");
-const hosts = (w) => S().windows[w].tabIds.map((id) => short(S().tabs[id].url));
+const hosts = (w) => tabsOf(w).map((id) => short(S().tabs[id].url));
 const shown = (w) => short(S().tabs[model.activeTabId(S(), w)].url);
 
 // Chrome's opener rules (store/openers.ts).
@@ -21,7 +24,7 @@ const reset = (settings = {}) => {
 const open = (w, url, opener, background = true) => S().newTab(w, { url: `${url}.com`, openerId: opener, background });
 const setup = (...urls) => {
   const w = S().createWindow({ url: `${urls[0]}.com` });
-  const ids = [S().windows[w].tabIds[0], ...urls.slice(1).map((u) => S().newTab(w, { url: `${u}.com` }))];
+  const ids = [tabsOf(w)[0], ...urls.slice(1).map((u) => S().newTab(w, { url: `${u}.com` }))];
   S().activate(ids[0]);
   return [w, ...ids];
 };
@@ -114,7 +117,7 @@ test("groups stay contiguous; splits need two panes", () => {
   const c = S().newTab(w, { url: "c.com" });
   const a = model.viewTabIds(S(), w)[0];
   const g = S().createGroup([a, c], { name: "G" });
-  assert.deepEqual(S().windows[w].tabIds, [a, c, b]);
+  assert.deepEqual(tabsOf(w), [a, c, b]);
   assert.deepEqual(S().groups[g].tabIds, [a, c]);
   S().addTabsToGroup(g, [b]);
   assert.deepEqual(S().groups[g].tabIds, [a, c, b]);
@@ -123,8 +126,10 @@ test("groups stay contiguous; splits need two panes", () => {
   const sp = S().createSplit([a, b]);
   S().closeTab(b);
   assert.equal(S().splits[sp], undefined);
+  // The window's last tab: it closes with its group's name kept for ⇧⌘T, and the window goes.
   S().closeTab(a);
-  assert.equal(S().closedWindows.at(-1).groups.length, 1);
+  assert.equal(S().closedTabs.at(-1).group?.name, "G");
+  assert.equal(S().windows[w], undefined);
 });
 
 test("hydrate drops broken splits", () => {
@@ -169,7 +174,7 @@ test("abandoned New Tab cleanup never closes a window or the tab it shows", () =
   S().newTab(w, { background: true });
   const front = S().newTab(w);
   S().closeAbandonedNewTabs();
-  assert.deepEqual(S().windows[w].tabIds, [front]);
+  assert.deepEqual(tabsOf(w), [front]);
   const p = S().createSpace({ name: "Work" });
   S().switchSpace(w, p);
   const work = model.activeTabId(S(), w);
@@ -180,7 +185,7 @@ test("abandoned New Tab cleanup never closes a window or the tab it shows", () =
   S().newTab(w2);
   useBrowser.setState((s) => ({ windows: { ...s.windows, [w2]: { ...s.windows[w2], activeTabIds: {} } } }));
   S().closeAbandonedNewTabs();
-  assert.equal(S().windows[w2].tabIds.length, 1);
+  assert.equal(model.windowTabIds(S(), w2).length, 1, "the window keeps a tab");
 });
 
 test("an extension that took the default search engine controls it until it goes", () => {

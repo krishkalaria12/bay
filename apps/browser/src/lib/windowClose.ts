@@ -1,6 +1,6 @@
 import { confirm, onWindowEvent } from "@bay/shell";
 import { useBrowser } from "../store/browser";
-import { inPinnedContainer, plural, spaceFor } from "../store/model";
+import { inPinnedContainer, listIds, plural, spaceFor, viewTabIds, windowListKey } from "../store/model";
 import { CLOSE_WARNING_MIN_TABS } from "./constants";
 
 export function startWindowCloseGuard() {
@@ -16,7 +16,8 @@ async function requestClose(windowId: string) {
   const s = useBrowser.getState();
   const w = s.windows[windowId];
   if (!w) return;
-  const count = closingTabs(windowId).length;
+  // A main window's tabs are its space's: they stay when it closes. A private window's go with it.
+  const count = w.incognito ? closingTabs(windowId).length : 0;
   if (s.settings.warnBeforeClosingWindow && count >= CLOSE_WARNING_MIN_TABS) {
     const { confirmed, suppressed } = await confirm({ ...closeWindowDialog(windowId), suppression: "Don’t ask me again", windowId });
     if (suppressed) useBrowser.getState().updateSettings({ warnBeforeClosingWindow: false });
@@ -25,9 +26,13 @@ async function requestClose(windowId: string) {
   if (useBrowser.getState().windows[windowId]) useBrowser.getState().closeWindow(windowId);
 }
 
+// The tabs closing goes with: a private window's, else (its last tab closing) the open ones it shows.
 const closingTabs = (windowId: string) => {
   const s = useBrowser.getState();
-  return (s.windows[windowId]?.tabIds ?? []).filter((id) => !inPinnedContainer(s, id));
+  const w = s.windows[windowId];
+  if (!w) return [];
+  const ids = w.incognito ? listIds(s, windowListKey(s, w)) : viewTabIds(s, windowId).filter((id) => !s.tabs[id]!.unloaded);
+  return ids.filter((id) => !inPinnedContainer(s, id));
 };
 
 export function closeWindowDialog(windowId: string) {

@@ -4,7 +4,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { tabLabel } from "../../store/model";
+import { spaceTabIds, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
 
@@ -15,12 +15,11 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
   const suggestions = useBrowser(
     useShallow((s) => {
       const tab = s.tabs[tabId];
-      const w = tab && s.windows[tab.windowId];
-      if (!w) return [];
+      if (!tab) return [];
       const inSplit = new Set(Object.values(s.splits).find((v) => v.tabIds.includes(tabId))?.tabIds ?? [tabId]);
-      return w.tabIds
+      return spaceTabIds(s, tab.spaceId)
         .map((id) => s.tabs[id]!)
-        .filter((t) => t && t.url && t.spaceId === tab.spaceId && !inSplit.has(t.id))
+        .filter((t) => t.url && !inSplit.has(t.id))
         .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
         .slice(0, 5)
         .map((t) => t.id);

@@ -192,11 +192,14 @@ const { startChromeTabs } = await import("../lib/chromeTabs.ts");
 startChromeTabs();
 
 const S = () => useBrowser.getState();
+const tabLists = await import("./model.ts");
+// A window's list: its space's tabs, in sidebar order (store/model.ts).
+const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const tick = () => new Promise((r) => setImmediate(r));
 const urlOf = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com\/?$/g, "");
 const shown = (w) => urlOf(model.activeTabId(S(), w));
 const shownIn = (w) => urlOf(S().windows[w].activeTabIds[S().windows[w].spaceId]);
-const order = (w) => S().windows[w].tabIds.map(urlOf);
+const order = (w) => tabsOf(w).map(urlOf);
 const chromeOrder = (strip) => chrome.strips.get(strip).tabs.map((t) => urlOf(t.key));
 const chromeShown = (strip) => urlOf(chrome.strips.get(strip).tabs.find((t) => t.browser === chrome.strips.get(strip).active).key);
 
@@ -214,9 +217,9 @@ function anotherWindow(...urls) {
   chrome.strip(strip).appWindow = w;
   return { w, strip };
 }
-// What ContentCard does: a browser for every loaded tab, none for closed ones.
+// What ContentCard does: a browser for every loaded tab whose page is in the window, none for closed ones.
 function mountViews({ w, strip }) {
-  for (const id of S().windows[w]?.tabIds ?? []) {
+  for (const id of model.windowTabIds(S(), w)) {
     const t = S().tabs[id];
     if ((t.navigation || t.adoptId) && !chrome.find(id)) chrome.create(strip, id);
   }
@@ -269,7 +272,7 @@ test("the app's own switches never come back as switches, however late Chrome re
 test("an extension's move, pin and activation reach the sidebar", async () => {
   const win = windowWith("a", "b", "c", "d");
   await settle(win);
-  const [a, , c, d] = S().windows[win.w].tabIds;
+  const [a, , c, d] = tabsOf(win.w);
   chrome.move(d, 0);
   await settle(win);
   assert.deepEqual(order(win.w), ["d", "a", "b", "c"]);
@@ -283,7 +286,7 @@ test("an extension's move, pin and activation reach the sidebar", async () => {
   assert.deepEqual(chromeOrder(win.strip), order(win.w), "Chrome and the sidebar agree");
   assert.equal(S().tabs[a].pinned, false);
   // Moved between two tabs of a group, a tab joins it (as in Chrome); the group's tabs stay in it.
-  const id = (u) => S().windows[win.w].tabIds.find((t) => urlOf(t) === u);
+  const id = (u) => tabsOf(win.w).find((t) => urlOf(t) === u);
   const g = S().groupTabs([id("a"), id("b")], { pinned: false });
   await settle(win);
   assert.deepEqual(order(win.w), ["c", "d", "a", "b"]);
@@ -301,7 +304,7 @@ test("an extension's move, pin and activation reach the sidebar", async () => {
 
 test("the tab Chrome shows after a close doesn't override the app's successor rule", async () => {
   const win = windowWith("a", "b");
-  const [a] = S().windows[win.w].tabIds;
+  const [a] = tabsOf(win.w);
   // A link of a's, opened behind, lines up after it; closing it goes back to a (store/openers.ts), while
   // Chrome's own rule shows the tab after it, b.
   const c = S().newTab(win.w, { url: "c.com", openerId: a, background: true });
@@ -318,7 +321,7 @@ test("the tab Chrome shows after a close doesn't override the app's successor ru
 test("a command on its way wins over Chrome's earlier change; stale transactions are dropped", async () => {
   const win = windowWith("a", "b", "c");
   await settle(win);
-  const [a, b, c] = S().windows[win.w].tabIds;
+  const [a, b, c] = tabsOf(win.w);
   S().activate(c);
   await settle(win);
   S().activate(b);
@@ -337,10 +340,10 @@ test("a command on its way wins over Chrome's earlier change; stale transactions
 test("an extension's tab groups reach the sidebar, and the sidebar's groups reach Chrome", async () => {
   const win = windowWith("a", "b", "c", "d");
   await settle(win);
-  const id = (u) => S().windows[win.w].tabIds.find((t) => urlOf(t) === u);
+  const id = (u) => tabsOf(win.w).find((t) => urlOf(t) === u);
   const ext = chrome.group([id("b"), id("c")], "Reading");
   await settle(win);
-  const made = Object.values(S().groups).find((g) => g.windowId === win.w);
+  const made = Object.values(S().groups).find((g) => g.spaceId === S().windows[win.w].spaceId);
   assert.ok(made, "the store made the group");
   assert.deepEqual(made.tabIds.map(urlOf), ["b", "c"]);
   assert.equal(made.name, "Reading");
@@ -362,7 +365,7 @@ test("an extension's tab groups reach the sidebar, and the sidebar's groups reac
   // A whole group moved in Chrome stays a group; a rename in the sidebar alone reaches Chrome.
   const before = order(win.w);
   const groupKeys = S().groups[made.id].tabIds;
-  chrome.reorder(win.strip, [...groupKeys, ...S().windows[win.w].tabIds.filter((t) => !groupKeys.includes(t))]);
+  chrome.reorder(win.strip, [...groupKeys, ...tabsOf(win.w).filter((t) => !groupKeys.includes(t))]);
   await settle(win);
   assert.notDeepEqual(order(win.w), before);
   assert.deepEqual(S().groups[made.id].tabIds, groupKeys);
@@ -374,7 +377,7 @@ test("an extension's tab groups reach the sidebar, and the sidebar's groups reac
 
 test("an extension that closes the shown tab and shows another in one go is obeyed", async () => {
   const win = windowWith("a", "b");
-  const [a, b] = S().windows[win.w].tabIds;
+  const [a, b] = tabsOf(win.w);
   // c, opened behind from a, shown: closing it on its own would go back to a (the opener rule).
   const c = S().newTab(win.w, { url: "c.com", openerId: a, background: true });
   await settle(win);
@@ -393,7 +396,7 @@ test("an extension moving a tab into a window of New Tab pages, or into a one-ta
   await settle(one);
   const empty = anotherWindow();
   await settle(one);
-  const [, b] = S().windows[one.w].tabIds;
+  const [, b] = model.windowTabIds(S(), one.w);
   chrome.moveTo(b, empty.strip);
   await settle(one);
   assert.equal(S().tabs[b].windowId, empty.w, "the window the engine named");
@@ -401,16 +404,17 @@ test("an extension moving a tab into a window of New Tab pages, or into a one-ta
   // The last tab of a window into a window with one tab: the engine names the window, nothing to guess.
   const lone = anotherWindow("c");
   await settle(lone);
-  const [a] = S().windows[one.w].tabIds;
+  const [a] = model.windowTabIds(S(), one.w);
   chrome.moveTo(a, lone.strip);
   await settle(lone);
   assert.equal(S().tabs[a].windowId, lone.w);
-  assert.deepEqual(S().windows[lone.w].tabIds.map(urlOf), ["c", "a"]);
+  // Both windows list the space's tabs; the pages in this one are its own tab's and the moved one's.
+  assert.deepEqual(model.windowTabIds(S(), lone.w).map(urlOf).sort(), ["a", "c"]);
 });
 
 test("as in Dia: an extension pinning one pane of a split leaves the split; collapsing goes both ways", async () => {
   const win = windowWith("a", "b", "c");
-  const [a, b, c] = S().windows[win.w].tabIds;
+  const [a, b, c] = tabsOf(win.w);
   S().createSplit([a, b]);
   await settle(win);
   chrome.pin(b, true);

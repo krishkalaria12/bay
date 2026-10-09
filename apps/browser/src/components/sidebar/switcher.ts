@@ -37,7 +37,7 @@ export function commitSwitcher(index?: number) {
   if (!s) return;
   endSwitcher();
   const id = s.ids[index ?? s.index];
-  if (id && useBrowser.getState().tabs[id]) useBrowser.getState().activate(id);
+  if (id && useBrowser.getState().tabs[id]) useBrowser.getState().activate(id, s.windowId);
 }
 
 export function cancelSwitcher() {

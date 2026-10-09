@@ -1,29 +1,31 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
+import { orderSections, syncGroupOrder, leaveGroups } from "./groups";
 import {
   findLast,
   IDLE_LIVE,
   incognitoSpaceId,
-  inPinnedContainer,
   isIncognitoSpace,
+  listIds,
   makeTab,
   navigationTo,
   newId,
   pinnedFirst,
-  pinnedPage,
   resolveWindowId,
   sharesProfile,
-  snapshotTab,
-  viewTabIds,
+  spaceListKey,
+  tabListKey,
+  tabToShow,
+  windowListKey,
+  windowTabIds,
+  withList,
   without,
 } from "./model";
-import { orderSections, syncGroupOrder } from "./groups";
-import { mirrorsPins, pinKeyOf, pinsHeldElsewhere } from "./mirroredPins";
 import { restoringGroup } from "./organize";
-import { adoptParkedPins, atPin, parkWindowPins } from "./parkedPins";
 import { isSmall, isSmallWindow, mainWindowFor, littleBayProfile } from "./small";
-import { activated, apply, removeTabs, withNewTab } from "./tabs";
-import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, ParkedPins, Tab, TabGroup } from "./types";
+import { removeFromSplits } from "./splits";
+import { activated, apply, removeTabs, successors, withNewTab } from "./tabs";
+import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, Tab, TabGroup } from "./types";
 import { MAX_CLOSED_WINDOWS } from "./constants";
 
 // A closed tab's back/forward list is Chrome's (TabRestoreService), which the engine finds by the closed tab's id.
@@ -45,15 +47,18 @@ export type WindowsSlice = {
   windows: Record<string, BrowserWindow>;
   windowOrder: string[];
   closedWindows: ClosedWindow[];
-  parkedPins: Record<string, ParkedPins>;
 
   createWindow(options?: CreateWindowOptions): string;
+  /** The window goes; its tabs stay their space's, their pages unloaded (as Arc's). A private window's tabs and a
+   *  Little Bay's page go with it. */
   closeWindow(id: string): void;
   setWindowFrame(id: string, frame: Frame): void;
   toggleSidebar(windowId: string): void;
   switchSpace(windowId: string, spaceId: string): void;
+  /** Shows the tabs in the window (a new one for null): their pages move there. */
   moveTabsToWindow(tabIds: string[], windowId: string | null): string | undefined;
   moveTabToSpace(tabId: string, spaceId: string): void;
+  /** The other main windows close; their pages move into this one. */
   mergeAllWindows(windowId: string): void;
   reopenClosed(windowId?: string | null): void;
   reopenClosedTab(windowId?: string | null): void;
@@ -62,7 +67,7 @@ export type WindowsSlice = {
 };
 
 function emptyWindow(id: string, spaceId: string, incognito: boolean, frame: Frame | null = null): BrowserWindow {
-  return { id, spaceId, incognito, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame, createdAt: Date.now() };
+  return { id, spaceId, incognito, activeTabIds: {}, sidebarOpen: true, frame, createdAt: Date.now() };
 }
 
 // Little Bay opens centred at its remembered size (packages/shell Windows.swift), so it keeps no frame.
@@ -77,116 +82,79 @@ function withWindow(s: BrowserState, w: BrowserWindow): BrowserState {
   };
 }
 
+function withoutWindows(s: BrowserState, ids: string[]): BrowserState {
+  if (!ids.length) return s;
+  return {
+    ...s,
+    windows: without(s.windows, ids),
+    windowOrder: s.windowOrder.filter((w) => !ids.includes(w)),
+    windowUi: without(s.windowUi, ids),
+    ui: {
+      ...s.ui,
+      focusOrder: s.ui.focusOrder.filter((f) => !ids.includes(f)),
+      focusedWindowId: s.ui.focusedWindowId && ids.includes(s.ui.focusedWindowId) ? (s.ui.focusOrder.find((f) => !ids.includes(f)) ?? null) : s.ui.focusedWindowId,
+    },
+  };
+}
+
+/** The tab's page moves to the window (lib/tabPages.ts hands it over); a loaded one loads there. */
+function pageTo(t: Tab, windowId: string): Tab {
+  if (t.windowId === windowId) return t;
+  const { adoptId, ...rest } = t;
+  const loaded = !!t.url && (!!t.navigation || !!adoptId);
+  return { ...rest, windowId, navigation: loaded ? navigationTo(t.url) : null };
+}
+
+/**
+ * The window shows these tabs: their pages move there, and a window that showed one of them shows another. A Little
+ * Bay page moves into its space's list (Little Bay goes).
+ */
 export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): BrowserState {
   const target = s.windows[targetId];
   if (!target || isSmallWindow(target)) return s;
   const moving = ids
     .map((id) => s.tabs[id])
-    .filter((t): t is Tab => !!t && t.windowId !== targetId && !isIncognitoSpace(t.spaceId) && !target.incognito);
+    .filter((t): t is Tab => !!t && t.windowId !== targetId && isIncognitoSpace(t.spaceId) === target.incognito && (!target.incognito || t.spaceId === target.spaceId));
   if (!moving.length) return s;
-
-  // A pin is every window's (store/mirroredPins.ts). Moved out of a window that stays, it leaves its tab there,
-  // unloaded. Moved into a window with a tab for it: an unloaded one is dropped, an open one takes the place of an
-  // unloaded tab there, and two open ones stay both, the moved one as a page.
   const movingIds = new Set(moving.map((t) => t.id));
-  const open = (t: Tab) => !!t.navigation || !!t.adoptId;
-  const leftBehind = new Map<string, Tab>();
-  for (const t of moving) {
-    const src = s.windows[t.windowId];
-    if (!pinnedPage(t) || !mirrorsPins(src) || src!.tabIds.every((id) => movingIds.has(id))) continue;
-    const { adoptId: _a, wakeAdoptId: _w, ...rest } = t;
-    leftBehind.set(t.id, { ...rest, ...atPin(t, s.history[t.spaceId] ?? []), id: newId("tab"), pinKey: pinKeyOf(t), navigation: null, unloaded: true });
-  }
-  const theirs = new Map<string, Tab>();
-  if (mirrorsPins(target)) for (const id of target.tabIds) if (s.tabs[id] && pinnedPage(s.tabs[id]!)) theirs.set(pinKeyOf(s.tabs[id]!), s.tabs[id]!);
-  const dropped = new Set<string>();
-  const replacing = new Map<string, string>();
-  const asPages = new Set<string>();
-  for (const t of moving) {
-    const there = pinnedPage(t) ? theirs.get(pinKeyOf(t)) : undefined;
-    if (!there) continue;
-    if (!open(t)) dropped.add(t.id);
-    else if (!open(there)) replacing.set(there.id, t.id);
-    else asPages.add(t.id);
-  }
 
-  const sources = new Set(moving.map((t) => t.windowId));
-  let next = removeTabs(s, [...movingIds, ...replacing.keys()], false);
-  if (leftBehind.size) {
-    const tabs = { ...next.tabs };
-    const live = { ...next.live };
-    const windows = { ...next.windows };
-    for (const id of sources) {
-      const src = windows[id];
-      if (!src) continue;
-      const kept = new Set(src.tabIds);
-      const tabIds = s.windows[id]!.tabIds.flatMap((t) => {
-        const copy = leftBehind.get(t);
-        if (!copy) return kept.has(t) ? [t] : [];
-        tabs[copy.id] = copy;
-        live[copy.id] = IDLE_LIVE;
-        return [copy.id];
-      });
-      windows[id] = { ...src, tabIds };
-    }
-    next = { ...next, tabs, live, windows };
+  // A Little Bay page leaves its window for its space's list, at the list's end.
+  const littles = moving.filter((t) => isSmallWindow(s.windows[t.windowId]));
+  let next = s;
+  for (const t of littles) {
+    const key = spaceListKey(next, t.spaceId);
+    const tabs = { ...next.tabs, [t.id]: { ...t, windowId: "" } };
+    next = withList(withList({ ...next, tabs }, { key: t.windowId, tabIds: listIds(next, t.windowId).filter((id) => id !== t.id) }), {
+      key,
+      tabIds: pinnedFirst([...listIds(next, key), t.id], tabs),
+    });
   }
-  const w = next.windows[targetId]!;
+  next = withoutWindows(next, littles.map((t) => t.windowId).filter((w) => !next.tabLists[w]));
+
   const tabs = { ...next.tabs };
-  const live = { ...next.live };
-  const activeTabIds = { ...w.activeTabIds };
-  const replaced = new Map([...replacing].map(([there, id]) => [id, there]));
-  const kept = moving.filter((t) => !dropped.has(t.id));
-  for (const { adoptId, ...t } of kept) {
-    const loaded = !!t.url && (!!t.navigation || !!adoptId);
-    const { folderId, pinKey, pinnedRow, ...rest } = t;
-    const moved: Tab = { ...rest, windowId: targetId, navigation: loaded ? navigationTo(t.url) : null };
-    if (asPages.has(t.id)) Object.assign(moved, { pinned: false, pinnedUrl: null });
-    else if (pinnedRow) {
-      // A pinned row stays one, in the target's folder for its folder if it has one.
-      const there = replaced.has(t.id) ? s.tabs[replaced.get(t.id)!] : undefined;
-      const folder = folderId ? s.pinnedFolders[folderId] : undefined;
-      const key = folder ? (folder.key ?? folder.id) : undefined;
-      const local = there?.folderId ?? Object.values(next.pinnedFolders).find((f) => f.windowId === targetId && f.spaceId === t.spaceId && (f.key ?? f.id) === key)?.id;
-      Object.assign(moved, { pinnedRow: true }, local ? { folderId: local } : {});
-    }
-    if (pinKey && !asPages.has(t.id)) moved.pinKey = pinKey;
-    tabs[t.id] = moved;
-    live[t.id] = IDLE_LIVE;
-    activeTabIds[t.spaceId] ??= t.id;
+  for (const t of moving) tabs[t.id] = pageTo(next.tabs[t.id]!, targetId);
+  const windows = { ...next.windows };
+  for (const w of Object.values(next.windows)) {
+    if (w.id === targetId || !Object.values(w.activeTabIds).some((id) => movingIds.has(id))) continue;
+    windows[w.id] = { ...w, activeTabIds: successors(next, w, movingIds) };
   }
-  // Where the target had it, the moved tab takes its place; the rest go after its tabs.
-  const present = new Set(w.tabIds);
-  const order = s.windows[targetId]!.tabIds.flatMap((id) => (replacing.has(id) ? [replacing.get(id)!] : present.has(id) ? [id] : []));
-  const placed = new Set(order);
-  const tabIds = [...order, ...w.tabIds.filter((id) => !placed.has(id)), ...kept.map((t) => t.id).filter((id) => !placed.has(id))];
-  const window = { ...w, tabIds: orderSections(tabIds, tabs, next.groups), activeTabIds };
-  next = {
-    ...next,
-    tabs,
-    live,
-    windows: { ...next.windows, [targetId]: window },
-    groups: syncGroupOrder(next.groups, window),
-  };
-  for (const id of sources) {
-    const src = next.windows[id];
-    if (!src || viewTabIds(next, id).length) continue;
-    const recent = src.tabIds.map((t) => next.tabs[t]!).sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0];
-    if (recent) next = apply(next, activated(next, src.activeTabIds[recent.spaceId] ?? recent.id));
+  const t = windows[targetId]!;
+  const activeTabIds = { ...t.activeTabIds };
+  for (const m of moving) activeTabIds[m.spaceId] ??= m.id;
+  windows[targetId] = { ...t, activeTabIds };
+  next = { ...next, tabs, windows, live: { ...next.live, ...Object.fromEntries(moving.map((m) => [m.id, next.live[m.id] ?? IDLE_LIVE])) } };
+  // A window whose tab moved shows its next one, woken.
+  for (const w of Object.values(next.windows)) {
+    const shown = w.activeTabIds[w.spaceId];
+    if (w.id !== targetId && shown && s.windows[w.id]?.activeTabIds[w.spaceId] !== shown) next = apply(next, activated(next, shown, w.id));
   }
   return next;
-}
-
-function restoreGroup(groups: Record<string, TabGroup>, g: Omit<TabGroup, "tabIds">, tabIds: string[]) {
-  const id = groups[g.id] ? newId("g") : g.id;
-  return { ...groups, [id]: { ...g, id, tabIds } };
 }
 
 export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice> = (set, get) => ({
   windows: {},
   windowOrder: [],
   closedWindows: [],
-  parkedPins: {},
 
   createWindow(o = {}) {
     const s = get();
@@ -201,11 +169,9 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
           : s.settings.defaultSpaceId;
     let next = withWindow(s, small ? smallWindow(id, spaceId) : emptyWindow(id, spaceId, !!o.incognito, o.frame ?? null));
     if (o.tabIds?.length && !small) next = moveTabsInto(next, o.tabIds, id);
-    if (!next.windows[id]!.tabIds.length) next = withNewTab(next, id, { url: o.url, adoptId: o.adoptId })[0];
-    const first = next.windows[id]!.tabIds[0]!;
-    const shown = next.windows[id]!.activeTabIds[next.tabs[first]!.spaceId] ?? first;
-    if (!small) next = adoptParkedPins(next, id, next.tabs[shown]!.spaceId);
-    next = apply(next, activated(next, shown));
+    const shown = o.tabIds?.length && !small ? findLast(o.tabIds, (t) => next.tabs[t]?.windowId === id) : undefined;
+    if (shown) next = apply(next, activated(next, shown, id));
+    else next = withNewTab(next, id, { url: o.url, adoptId: o.adoptId })[0];
     const focused = s.ui.focusedWindowId;
     if (o.background && focused && s.windows[focused]) {
       next = { ...next, ui: { ...next.ui, focusedWindowId: focused, focusOrder: [focused, id, ...s.ui.focusOrder.filter((w) => w !== focused)] } };
@@ -218,42 +184,35 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const s = get();
     const w = s.windows[id];
     if (!w) return;
-    const tabs = w.tabIds.map((t) => s.tabs[t]).filter((t): t is Tab => !!t && !inPinnedContainer(s, t.id));
-    const tabIds = tabs.map((t) => t.id);
     const small = isSmallWindow(w);
-    let closedWindows = s.closedWindows;
-    if (!w.incognito && !small && tabs.some((t) => t.url)) {
-      const active = new Set(Object.values(w.activeTabIds));
+    let next: BrowserState = s;
+    if (w.incognito || small) {
+      // A Little Bay page goes to Recently Closed as a tab, so ⇧⌘T brings it back in Little Bay.
+      next = removeTabs(s, listIds(s, windowListKey(s, w)), small);
+      if (w.incognito) next = { ...next, closedTabs: next.closedTabs.filter((c) => c.windowId !== id) };
+    } else {
+      // Its pages close with it: each tab waits, unloaded, to come back with its back/forward list (the engine keeps
+      // it under the tab's id: NoteClosedTabState) in the next window that shows it.
+      const tabs = { ...s.tabs };
+      const live = { ...s.live };
+      for (const tid of windowTabIds(s, id)) {
+        const t = s.tabs[tid]!;
+        const { adoptId: _, ...rest } = t;
+        const loaded = !!t.url && (!!t.navigation || !!t.adoptId);
+        tabs[tid] = { ...rest, windowId: "", navigation: null, unloaded: true, ...(loaded ? { wakeAdoptId: restoreId(tid) } : {}) };
+        live[tid] = IDLE_LIVE;
+      }
       const entry: ClosedWindow = {
         kind: "window",
         id: newId("cw"),
         window: { spaceId: w.spaceId, sidebarOpen: w.sidebarOpen, frame: w.frame },
-        // A tab with a page keeps its id: the engine holds its back/forward list under it (NoteClosedTabState).
-        tabs: tabs.map((t) => ({ ...snapshotTab(t), active: active.has(t.id), ...(t.url && (t.navigation || t.adoptId) ? { tabId: t.id } : {}) })),
-        groups: Object.values(s.groups)
-          .filter((g) => g.windowId === id && !g.pinned)
-          .map(({ tabIds: members, windowId: _, ...g }) => ({ ...g, tabIndexes: members.map((t) => tabIds.indexOf(t)) })),
+        tabs: [],
+        groups: [],
         closedAt: Date.now(),
       };
-      closedWindows = [...closedWindows, entry].slice(-MAX_CLOSED_WINDOWS);
+      next = { ...s, tabs, live, closedWindows: [...s.closedWindows, entry].slice(-MAX_CLOSED_WINDOWS) };
     }
-    // A Little Bay page goes to Recently Closed as a tab, so ⇧⌘T brings it back in Little Bay.
-    const next = removeTabs(s, w.tabIds, small);
-    set({
-      ...next,
-      windows: without(next.windows, [id]),
-      windowOrder: next.windowOrder.filter((w) => w !== id),
-      windowUi: without(next.windowUi, [id]),
-      closedWindows,
-      // The pins another window has stay there; only the rest are parked for the next window.
-      parkedPins: small ? s.parkedPins : parkWindowPins(s.parkedPins, w, s, pinsHeldElsewhere(s, id)),
-      closedTabs: w.incognito ? next.closedTabs.filter((c) => c.windowId !== id) : next.closedTabs,
-      ui: {
-        ...next.ui,
-        focusOrder: next.ui.focusOrder.filter((f) => f !== id),
-        focusedWindowId: next.ui.focusedWindowId === id ? (next.ui.focusOrder.find((f) => f !== id) ?? null) : next.ui.focusedWindowId,
-      },
-    });
+    set(withoutWindows(next, [id]));
   },
 
   setWindowFrame(id, frame) {
@@ -280,17 +239,14 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     let s = get();
     const w = s.windows[windowId];
     if (!w || w.incognito || isSmallWindow(w) || !s.spaces[spaceId] || w.spaceId === spaceId) return;
-    s = adoptParkedPins(s, windowId, spaceId);
-    const remembered = w.activeTabIds[spaceId];
-    let target = remembered && s.tabs[remembered]?.windowId === windowId ? remembered : undefined;
-    target ??= s.windows[windowId]!.tabIds.find((id) => s.tabs[id]?.spaceId === spaceId && !s.tabs[id]!.unloaded);
+    // The tab it showed there last, else the space's most recent one (not one another window shows), else a new one.
+    let target = tabToShow(s, windowId, spaceId);
     if (!target) [s, target] = withNewTab(s, windowId, { spaceId, background: true });
-    // A favourite remembered here but opened since in another space with this profile comes back to this one.
     const t = s.tabs[target]!;
     if (t.spaceId !== spaceId && t.pinned && sharesProfile(s, t.spaceId, spaceId)) s = { ...s, tabs: { ...s.tabs, [target]: { ...t, spaceId } } };
     // The window takes this space before the tab's activated: activated keeps a shared favourite in the space on screen.
-    if (s.tabs[target]!.spaceId === spaceId) s = { ...s, windows: { ...s.windows, [windowId]: { ...s.windows[windowId]!, spaceId } } };
-    set(apply(s, activated(s, target)));
+    s = { ...s, windows: { ...s.windows, [windowId]: { ...s.windows[windowId]!, spaceId } } };
+    set(apply(s, activated(s, target, windowId)));
   },
 
   moveTabsToWindow(tabIds, windowId) {
@@ -302,7 +258,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     }
     let next = moveTabsInto(s, tabIds, windowId);
     const last = findLast(tabIds, (id) => next.tabs[id]?.windowId === windowId);
-    if (last) next = apply(next, activated(next, last));
+    if (last) next = apply(next, activated(next, last, windowId));
     set(next);
     return windowId;
   },
@@ -310,26 +266,34 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
   moveTabToSpace(tabId, spaceId) {
     const s = get();
     const tab = s.tabs[tabId];
-    const w = tab && s.windows[tab.windowId];
-    if (!tab || !w || w.incognito || !s.spaces[spaceId] || tab.spaceId === spaceId) return;
-    let next = removeTabs(s, [tabId], false);
-    const base = next.windows[w.id] ?? { ...w, tabIds: [], activeTabIds: {} };
+    if (!tab || isIncognitoSpace(tab.spaceId) || !s.spaces[spaceId] || tab.spaceId === spaceId) return;
+    const from = tabListKey(s, tab);
+    const to = spaceListKey(s, spaceId);
+    const engine = sharesProfile(s, tab.spaceId, spaceId);
+    // It leaves its folder (the other space's). A tab moved to another profile reopens from its URL: its live tab
+    // belongs to the other profile.
+    const { folderId: _f, ...kept } = tab;
+    const { adoptId: _a, wakeAdoptId: _w, ...fresh } = kept;
     const loaded = !!tab.url && (!!tab.navigation || !!tab.adoptId);
-    // A tab moved to another profile reopens from its URL: its live tab belongs to the other profile.
-    const { adoptId: _, wakeAdoptId: _w, ...rest } = tab;
-    const moved: Tab = { ...rest, spaceId, navigation: loaded ? navigationTo(tab.url) : null, lastActiveAt: Date.now() };
-    const tabs = { ...next.tabs, [tabId]: moved };
-    const index = Math.min(w.tabIds.indexOf(tabId), base.tabIds.length);
-    const tabIds = [...base.tabIds];
-    tabIds.splice(index, 0, tabId);
-    next = {
-      ...next,
+    const moved: Tab = engine
+      ? { ...kept, spaceId, lastActiveAt: Date.now() }
+      : { ...fresh, spaceId, navigation: loaded ? navigationTo(tab.url) : null, lastActiveAt: Date.now() };
+    const tabs = { ...s.tabs, [tabId]: moved };
+    const windows = { ...s.windows };
+    for (const w of Object.values(s.windows)) if (w.activeTabIds[tab.spaceId] === tabId) windows[w.id] = { ...w, activeTabIds: successors(s, w, new Set([tabId])) };
+    let next: BrowserState = {
+      ...s,
       tabs,
-      live: { ...next.live, [tabId]: IDLE_LIVE },
-      windows: { ...next.windows, [w.id]: { ...base, tabIds: pinnedFirst(tabIds, tabs) } },
-      windowOrder: next.windowOrder.includes(w.id) ? next.windowOrder : s.windowOrder,
+      windows,
+      live: engine ? s.live : { ...s.live, [tabId]: IDLE_LIVE },
+      groups: leaveGroups(s.groups, new Set([tabId])),
+      splits: removeFromSplits(s.splits, new Set([tabId])),
     };
-    set(apply(next, activated(next, tabId)));
+    const fromList = listIds(next, from).filter((id) => id !== tabId);
+    next = withList(next, { key: from, tabIds: fromList });
+    const toList = from === to ? fromList : listIds(next, to);
+    next = withList(next, { key: to, tabIds: orderSections([tabId, ...toList], tabs, next.groups) });
+    set(apply(next, activated(next, tabId, s.windows[tab.windowId] ? tab.windowId : undefined)));
   },
 
   mergeAllWindows(windowId) {
@@ -337,13 +301,10 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const target = s.windows[windowId]?.incognito || isSmallWindow(s.windows[windowId]) ? mainWindowFor(s) : windowId;
     if (!target) return;
     const others = s.windowOrder.filter((id) => id !== target && !s.windows[id]?.incognito && !isSmallWindow(s.windows[id]));
-    const tabIds = others.flatMap((id) => s.windows[id]!.tabIds);
-    if (!tabIds.length) return;
-    let next = moveTabsInto(s, tabIds, target);
-    const groups = { ...s.groups };
-    for (const g of Object.values(s.groups)) if (others.includes(g.windowId)) groups[g.id] = { ...g, windowId: target };
-    next = { ...next, groups };
-    set(next);
+    if (!others.length) return;
+    const tabs = { ...s.tabs };
+    for (const t of Object.values(s.tabs)) if (others.includes(t.windowId)) tabs[t.id] = pageTo(t, target);
+    set(withoutWindows({ ...s, tabs }, others));
   },
 
   reopenClosed(windowId) {
@@ -389,19 +350,12 @@ function canRestoreTabInto(s: BrowserState, c: ClosedTab, windowId: string | und
   return !w?.incognito;
 }
 
+function restoreGroup(groups: Record<string, TabGroup>, g: Omit<TabGroup, "tabIds">, tabIds: string[]) {
+  const id = groups[g.id] ? newId("g") : g.id;
+  return { ...groups, [id]: { ...g, id, tabIds } };
+}
+
 function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null): BrowserState {
-  const owner = entry.tab.spaceId;
-  if (entry.pinnedTile && entry.tabId && !s.tabs[entry.tabId] && s.parkedPins[owner]?.tabs.some((p) => p.id === entry.tabId)) {
-    const target = resolveWindowId(s, requested);
-    let windowId = target && !s.windows[target]!.incognito && s.windows[target]!.spaceId === owner ? target : undefined;
-    let next = s;
-    if (!windowId) {
-      windowId = newId("w");
-      next = withWindow(next, emptyWindow(windowId, owner, false));
-    }
-    next = adoptParkedPins(next, windowId, owner);
-    if (next.tabs[entry.tabId]) return restoreTab(next, entry, windowId);
-  }
   const closedTabs = s.closedTabs.filter((c) => c.id !== entry.id);
   if (entry.small && !isIncognitoSpace(entry.tab.spaceId)) {
     const id = newId("w");
@@ -414,6 +368,7 @@ function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null
       adoptId: entry.tabId && entry.tab.url ? restoreId(entry.tabId) : undefined,
     })[0];
   }
+  // A pinned tab closed (unloaded) comes back where it is, with its page.
   const tile = entry.pinnedTile && entry.tabId ? s.tabs[entry.tabId] : undefined;
   if (tile) {
     const unloaded = !tile.navigation && !tile.adoptId;
@@ -421,7 +376,7 @@ function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null
       ? { ...s.tabs, [tile.id]: { ...tile, url: entry.tab.url, title: entry.tab.title, favicon: entry.tab.favicon, muted: entry.tab.muted, adoptId: restoreId(tile.id) } }
       : s.tabs;
     const next: BrowserState = { ...s, closedTabs, tabs };
-    return apply(next, activated(next, tile.id));
+    return apply(next, activated(next, tile.id, resolveWindowId(next, requested)));
   }
   const original = s.windows[entry.windowId];
   let windowId = original && canRestoreTabInto(s, entry, original.id) ? original.id : resolveWindowId(s, requested);
@@ -437,47 +392,54 @@ function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null
     url: entry.tab.url || undefined,
     spaceId,
     snapshot: entry.tab,
-    index: w.id === entry.windowId ? entry.index : undefined,
+    // Where it was in its list, if it's back in it.
+    index: spaceId === entry.tab.spaceId ? entry.index : undefined,
     adoptId: entry.tabId && entry.tab.url ? restoreId(entry.tabId) : undefined,
   });
   next = withTab;
   const g = entry.group;
   if (g) {
     const existing = next.groups[g.id];
-    if (existing && existing.windowId === windowId && existing.spaceId === spaceId) {
+    if (existing && existing.spaceId === spaceId) {
       next = { ...next, groups: { ...next.groups, [g.id]: { ...existing, tabIds: [...existing.tabIds, tabId] } } };
     } else if (!existing) {
-      next = { ...next, groups: restoreGroup(next.groups, { ...g, windowId, spaceId, collapsed: false, pinned: false, createdAt: Date.now() }, [tabId]) };
+      next = { ...next, groups: restoreGroup(next.groups, { ...g, spaceId, collapsed: false, pinned: false, createdAt: Date.now() }, [tabId]) };
     }
+    const list = { key: tabListKey(next, next.tabs[tabId]!), tabIds: listIds(next, tabListKey(next, next.tabs[tabId]!)) };
+    next = { ...next, groups: syncGroupOrder(next.groups, list) };
   }
   return next;
 }
 
+// A closed window comes back where it was, on its space. One a launch closed (settings.restoreSession) brings its tabs.
 function restoreWindow(s: BrowserState, entry: ClosedWindow): BrowserState {
   const id = newId("w");
-  const profileOk = (p: string) => (s.spaces[p] ? p : s.settings.defaultSpaceId);
-  const w = emptyWindow(id, profileOk(entry.window.spaceId), false, entry.window.frame);
+  const spaceOk = (p: string) => (s.spaces[p] ? p : s.settings.defaultSpaceId);
+  const w = emptyWindow(id, spaceOk(entry.window.spaceId), false, entry.window.frame);
   w.sidebarOpen = entry.window.sidebarOpen;
   const tabs = { ...s.tabs };
   const live = { ...s.live };
+  const added: Record<string, string[]> = {};
   const ids: string[] = [];
   for (const { active, tabId, ...snap } of entry.tabs) {
-    const t = makeTab(id, profileOk(snap.spaceId), "", { ...snap, spaceId: profileOk(snap.spaceId) });
+    const t = makeTab(id, spaceOk(snap.spaceId), "", { ...snap, spaceId: spaceOk(snap.spaceId) });
     if (tabId && snap.url) t.wakeAdoptId = restoreId(tabId);
     tabs[t.id] = t;
     live[t.id] = IDLE_LIVE;
     ids.push(t.id);
+    const key = spaceListKey(s, t.spaceId);
+    (added[key] ??= []).push(t.id);
     if (active || !w.activeTabIds[t.spaceId]) w.activeTabIds[t.spaceId] = t.id;
   }
-  w.tabIds = pinnedFirst(ids, tabs);
-  let groups = s.groups;
+  let next = withWindow({ ...s, tabs, live, closedWindows: s.closedWindows.filter((c) => c.id !== entry.id) }, w);
+  for (const [key, list] of Object.entries(added)) next = withList(next, { key, tabIds: pinnedFirst([...listIds(next, key), ...list], tabs) });
+  let groups = next.groups;
   for (const { tabIndexes, ...g } of entry.groups) {
     const members = tabIndexes.map((i) => ids[i]).filter((t): t is string => !!t);
-    if (members.length) groups = restoreGroup(groups, { ...g, windowId: id }, members);
+    if (members.length) groups = restoreGroup(groups, g, members);
   }
-  let next = withWindow({ ...s, tabs, live, groups, closedWindows: s.closedWindows.filter((c) => c.id !== entry.id) }, w);
-  const shown = w.activeTabIds[w.spaceId] ?? w.tabIds[0]!;
-  next = adoptParkedPins(next, id, w.spaceId);
-  next = apply(next, activated(next, shown));
-  return next;
+  next = { ...next, groups };
+  // Its space's tabs are there already: it shows the most recent one no other window shows, else a new tab.
+  const shown = tabToShow(next, id, w.spaceId);
+  return shown ? apply(next, activated(next, shown, id)) : withNewTab(next, id)[0];
 }

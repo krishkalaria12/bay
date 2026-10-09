@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { focus, openWindow } from "../../lib/actions";
 import { folderLinks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../../store/model";
+import { activeTabId, bookmarkSpaceId, listIds, resolveWindowId, viewTabIds, windowListKey } from "../../store/model";
 
 export type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";
 
@@ -62,7 +62,9 @@ export async function openFolder(folderId: string, windowId: string | null | und
 // The folder's order, whatever the new-tab position setting.
 function openInOrder(windowId: string, links: { url: string }[], after: string | undefined) {
   for (const link of links) {
-    const tabIds = useBrowser.getState().windows[windowId]?.tabIds ?? [];
+    const s = useBrowser.getState();
+    const w = s.windows[windowId];
+    const tabIds = w ? listIds(s, windowListKey(s, w)) : [];
     const index = after && tabIds.includes(after) ? tabIds.indexOf(after) + 1 : undefined;
     after = useBrowser.getState().newTab(windowId, { url: link.url, background: true, index }) || after;
   }

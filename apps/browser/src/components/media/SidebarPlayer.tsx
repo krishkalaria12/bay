@@ -13,6 +13,7 @@ import { seekTo, SeekBar, skip } from "./MiniPlayer";
 import { hasTrackControls, hostOf, isPlaying, isTabShown, mediaCommand, playerTabFor, useMedia, useSession, useTicker } from "./state";
 import { SIDEBAR_PLAYER_HEIGHT, SKIP_SECONDS } from "./constants";
 import { useMediaTokens } from "./tokens";
+import { listIds, windowListKey } from "../../store/model";
 
 const NO_IDS: string[] = [];
 
@@ -26,7 +27,8 @@ export function useSidebarPlayerTab(windowId: string): string | undefined {
       if (!sessions.length || !w) return NO_IDS;
       const ids = sessions.filter((id) => s.tabs[id]?.windowId === windowId && s.tabs[id]!.spaceId === w.spaceId && !isTabShown(s, id));
       // In sidebar order, which breaks ties between equally recent sessions.
-      return ids.length > 1 ? ids.sort((a, b) => w.tabIds.indexOf(a) - w.tabIds.indexOf(b)) : ids;
+      const order = listIds(s, windowListKey(s, w));
+      return ids.length > 1 ? ids.sort((a, b) => order.indexOf(a) - order.indexOf(b)) : ids;
     }),
   );
   // The player keeps the tab it shows (playerTabFor): a pause, or a report that was already on its way, never swaps it.

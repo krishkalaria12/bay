@@ -4,7 +4,7 @@ import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, bookmarkSpaceId, inPinnedContainer, isIncognitoSpace, pinnedPage, plural, tabLabel, viewTabIds, windowTitle } from "../../store/model";
+import { activeTabId, bookmarkSpaceId, inPinnedContainer, isIncognitoSpace, listIds, pinnedPage, plural, spaceListKey, tabLabel, viewTabIds, windowTitle } from "../../store/model";
 import { awayFromPin, cleanedTabsFor, groupLabel, groupOf, keptDeletedGroups, selectedTabIds } from "../../store/organize";
 import { splitOf } from "../../store/splits";
 import type { GroupColor, Tab } from "../../store/types";
@@ -28,6 +28,7 @@ import { calendarMenuItem, newLiveFolderMenuItem, runCalendarMenu, runNewLiveFol
 import { openSyncedTab, syncedDevicesMenuItem } from "../../sync/menu";
 import { setSidebarUi } from "./state";
 import { GROUP_COLORS, nearestGroupColor } from "./tokens";
+import { folderTabIds } from "../../store/folders";
 
 const store = () => useBrowser.getState();
 const sep = { separator: true } as const;
@@ -62,7 +63,7 @@ function moveToWindowItems(windowId: string): MenuItem[] {
 function moveToGroupItems(windowId: string, exclude: string | undefined): MenuItem[] {
   const s = store();
   const w = s.windows[windowId];
-  const groups = Object.values(s.groups).filter((g) => g.windowId === windowId && g.spaceId === w?.spaceId && g.id !== exclude);
+  const groups = Object.values(s.groups).filter((g) => g.spaceId === w?.spaceId && g.id !== exclude);
   return groups.map((g) => ({ id: `group:${g.id}`, title: groupLabel(s, g), symbol: g.pinned ? "pin" : "square.on.square" }));
 }
 
@@ -70,7 +71,7 @@ function moveToGroupItems(windowId: string, exclude: string | undefined): MenuIt
 function moveToFolderItems(windowId: string, exclude: string | undefined): MenuItem[] {
   const s = store();
   const w = s.windows[windowId];
-  const folders = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.spaceId === w?.spaceId && f.id !== exclude);
+  const folders = Object.values(s.pinnedFolders).filter((f) => f.spaceId === w?.spaceId && f.id !== exclude);
   return [
     ...folders.map((f) => ({ id: `pfolder:${f.id}`, title: f.name || "New Folder", symbol: "folder" })),
     ...(folders.length ? [sep] : []),
@@ -321,7 +322,7 @@ export async function openGroupMenu(windowId: string, groupId: string) {
 function firstAfterFolder(folderId: string): string | null {
   const s = store();
   const f = s.pinnedFolders[folderId];
-  const ids = f ? (s.windows[f.windowId]?.tabIds ?? []) : [];
+  const ids = f ? listIds(s, spaceListKey(s, f.spaceId)) : [];
   const last = ids.reduce((at, id, i) => (s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId ? i : at), -1);
   return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
 }
@@ -330,7 +331,7 @@ export async function openFolderMenu(windowId: string, folderId: string) {
   const s = store();
   const f = s.pinnedFolders[folderId];
   if (!f) return;
-  const members = (s.windows[windowId]?.tabIds ?? []).filter((id) => s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId);
+  const members = folderTabIds(s, folderId);
   const choice = await showMenu([
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
     { id: "icon", title: f.icon ? "Change Icon…" : "Add Icon…", symbol: "face.smiling" },

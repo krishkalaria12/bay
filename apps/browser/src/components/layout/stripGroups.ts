@@ -133,7 +133,7 @@ const stripMemo = new Map<string, { inputs: unknown[]; result: string[] }>();
  */
 export function stripEntries(s: BrowserState, windowId: string, spaceId: string): string[] {
   const key = `${windowId}|${spaceId}`;
-  const inputs = [s.tabs, s.windows, s.groups, s.splits];
+  const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits];
   const cached = stripMemo.get(key);
   if (cached && cached.inputs.every((v, i) => v === inputs[i])) return cached.result;
   const groups = groupIndex(s.groups);

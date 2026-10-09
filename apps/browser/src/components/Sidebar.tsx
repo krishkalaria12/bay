@@ -7,7 +7,7 @@ import { layout } from "../lib/constants";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
-import { activeTabId } from "../store/model";
+import { activeTabId, listIds, windowListKey } from "../store/model";
 import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
@@ -428,14 +428,15 @@ function useRevealTabs(windowId: string, scroll: RefObject<ScrollView | null>, s
       if ((switched || opened) && !frame) frame = requestAnimationFrame(reveal);
     };
     const unsubscribe = useBrowser.subscribe((s, prev) => {
-      if (s.windows === prev.windows && s.tabs === prev.tabs) return;
+      if (s.windows === prev.windows && s.tabs === prev.tabs && s.tabLists === prev.tabLists) return;
       const active = activeTabId(s, windowId);
       if (active && active !== activeTabId(prev, windowId)) switched = active;
       const w = s.windows[windowId];
-      const before = prev.windows[windowId];
-      if (w && before && w.tabIds !== before.tabIds) {
-        const had = new Set(before.tabIds);
-        for (const id of w.tabIds) if (!had.has(id) && s.tabs[id]?.openerId && id !== active) opened = id;
+      const list = w ? listIds(s, windowListKey(s, w)) : undefined;
+      const before = w ? listIds(prev, windowListKey(prev, w)) : undefined;
+      if (list && before && list !== before) {
+        const had = new Set(before);
+        for (const id of list) if (!had.has(id) && s.tabs[id]?.openerId && id !== active) opened = id;
       }
       schedule();
     });

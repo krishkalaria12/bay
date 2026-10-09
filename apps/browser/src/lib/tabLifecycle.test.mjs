@@ -45,7 +45,7 @@ function fakePage() {
 test("a tab shown and typed in while it was being frozen doesn't sleep", async () => {
   S().hydrate({});
   const w = S().createWindow({ url: "https://a.com" });
-  const a = S().windows[w].tabIds[0];
+  const a = S().windows[w].activeTabIds[S().windows[w].spaceId];
   const b = S().newTab(w, { url: "https://b.com", background: true });
   const page = fakePage();
   webviews.set(b, page.handle);

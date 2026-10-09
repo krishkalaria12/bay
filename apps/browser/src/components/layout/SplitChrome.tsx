@@ -6,6 +6,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { withAlpha } from "../sidebar/tokens";
 import { useBrowser } from "../../store/browser";
+import { viewTabIds } from "../../store/model";
 import type { SplitView } from "../../store/types";
 import { resize, type Divider, type Rect } from "./geometry";
 import { useHover } from "../primitives";
@@ -104,7 +105,7 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   const fallback = useBrowser((s) => {
     if (!dragging || Object.keys(panes).length !== 1 || !panes[dragging]) return null;
     const tab = s.tabs[dragging];
-    const others = (s.windows[windowId]?.tabIds ?? []).map((id) => s.tabs[id]!).filter((t) => t && t.id !== dragging && t.spaceId === tab?.spaceId);
+    const others = (tab ? viewTabIds(s, windowId, tab.spaceId) : []).map((id) => s.tabs[id]!).filter((t) => t.id !== dragging);
     return others.sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]?.id ?? null;
   });
   // Memoized by hand: an effect keeps it (the zones mounted for their slide out), so a new one each render would loop.
