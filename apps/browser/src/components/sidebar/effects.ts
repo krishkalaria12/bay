@@ -27,10 +27,5 @@ export function startSidebarEffects() {
     if (e.type === "switcherKey" && e.key !== "escape") moveSwitcher(e.key === "next" ? 1 : -1);
   });
 
-  setInterval(() => {
-    const s = useBrowser.getState();
-    const hours = s.settings.cleanUpInactiveTabsAfterHours;
-    if (hours === null) return;
-    for (const id of s.windowOrder) s.cleanUpTabs(id, { inactiveForMs: hours * 3_600_000 });
-  }, AUTO_CLEAN_EVERY_MS);
+  setInterval(() => useBrowser.getState().cleanUpInactiveTabs(), AUTO_CLEAN_EVERY_MS);
 }

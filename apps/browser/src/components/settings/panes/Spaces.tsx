@@ -19,7 +19,7 @@ import { openThemeEditor } from "../../spaces/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { useSettingsNav } from "../windows";
-import { PROFILE_ROW_HEIGHT, SPACE_PANE_ICON_COLUMNS } from "../constants";
+import { CLEAN_UP_CHOICES, PROFILE_ROW_HEIGHT, SPACE_PANE_ICON_COLUMNS } from "../constants";
 
 const listOf = (names: string[]) => (names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`);
 
@@ -28,6 +28,21 @@ function useSharedWith(profileId: string): string[] {
   const profiles = useBrowser((s) => s.profiles);
   const others = sharingProfiles({ profiles, profileOrder: order }, profileId);
   return others.length ? order.filter((id) => id === profileId || others.includes(id)) : [profileId];
+}
+
+const cleanUpTitle = (hours: number) => CLEAN_UP_CHOICES.find((c) => c.value === String(hours))?.title ?? plural(hours, "hour");
+
+// A space's clean-up time as its menu has it: the app's setting ("app", unset), "never" (null), or hours.
+function cleanUpChoice(hours: number | null | undefined): string {
+  if (hours === undefined) return "app";
+  if (hours === null) return "never";
+  return String(hours);
+}
+
+function cleanUpHoursOf(choice: string): number | null | undefined {
+  if (choice === "app") return undefined;
+  if (choice === "never") return null;
+  return Number(choice);
 }
 
 function useProfileChoices(profileId: string) {
@@ -252,6 +267,7 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
   const only = useBrowser((s) => s.profileOrder.length <= 1);
   const shared = useSharedWith(profileId);
   const choices = useProfileChoices(profileId);
+  const appCleanUp = useBrowser((s) => s.settings.cleanUpInactiveTabsAfterHours);
   const sharedNames = useBrowser(useShallow((s) => shared.map((id) => s.profiles[id]?.name ?? "")));
   const sharedColors = useBrowser(useShallow((s) => shared.map((id) => PROFILE_COLORS[s.profiles[id]?.color ?? "plum"]?.swatch ?? "#888888")));
   const stats = useBrowser((s) => `${plural((s.history[profileId] ?? []).length, "page")} in history · ${plural(bookmarkCount(s, profileId), "bookmark")}`);
@@ -259,7 +275,7 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
   const [picking, setPicking] = useState(false);
   const colors = useFormColors();
   if (!profile) return null;
-  const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme">>) => useBrowser.getState().updateProfile(profileId, patch);
+  const update = (patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>) => useBrowser.getState().updateProfile(profileId, patch);
   // The editor shows in a browser window (settings is its own), on this space, so the window is its preview.
   const customize = () => {
     const windowId = resolveWindowId(useBrowser.getState());
@@ -326,6 +342,22 @@ export function SpaceDetailsPane({ profileId }: { profileId: string }) {
           ) : (
             <Button title="Customize…" onPress={customize} />
           )}
+        </Row>
+      </Group>
+
+      <SectionHeader title="Tabs" />
+      <Group>
+        <Row title="Clean up tabs I haven't used in" description="Pinned, kept, grouped and playing tabs stay. Cleaned tabs are listed under Recently Cleaned.">
+          <PopUp
+            value={cleanUpChoice(profile.cleanUpAfterHours)}
+            options={[
+              { value: "app", title: `Tabs setting (${appCleanUp === null ? "never" : cleanUpTitle(appCleanUp)})` },
+              ...CLEAN_UP_CHOICES.map((c, i) => (i === 0 ? { ...c, separatorBefore: true } : c)),
+              { value: "never", title: "Never", separatorBefore: true },
+            ]}
+            onChange={(v) => update({ cleanUpAfterHours: cleanUpHoursOf(v) })}
+            minWidth={180}
+          />
         </Row>
       </Group>
 

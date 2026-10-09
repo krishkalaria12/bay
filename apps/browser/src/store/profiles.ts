@@ -14,7 +14,7 @@ export type ProfilesSlice = {
   orphanedProfileData: string[];
 
   createProfile(options: { name: string; color?: ProfileColor; icon?: string | null; shareWith?: string | null }): string;
-  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme">>): void;
+  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>): void;
   /** The space takes another space's profile (`shareWith`'s), or a new one of its own (null). */
   changeProfileData(id: string, shareWith: string | null): void;
   deleteProfile(id: string): void;

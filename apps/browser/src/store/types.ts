@@ -15,6 +15,9 @@ export type Profile = {
   createdAt: number;
   dataId?: string;
   theme?: SpaceTheme | null;
+  // How long its tabs stay unused before they're cleaned up (Arc's archive, per profile there): hours, never (null),
+  // or the app's setting (unset).
+  cleanUpAfterHours?: number | null;
 };
 
 export type BrowserWindow = {

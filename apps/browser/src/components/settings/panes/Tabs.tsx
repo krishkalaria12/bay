@@ -3,13 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
-
-const CLEAN_UP = [
-  { value: "12", title: "12 hours" },
-  { value: "24", title: "24 hours" },
-  { value: "168", title: "7 days" },
-  { value: "720", title: "30 days" },
-];
+import { CLEAN_UP_CHOICES } from "../constants";
 
 export function TabsPane() {
   const settings = useBrowser((s) => s.settings);
@@ -45,13 +39,13 @@ export function TabsPane() {
 
       <SectionHeader
         title="Clean up"
-        description="Closes tabs you haven't used (and duplicates) automatically, like the tab menu's Clean Up Daily. Pinned, playing and selected tabs stay; cleaned tabs are listed under Recently Cleaned."
+        description="Closes tabs you haven't used (and duplicates) automatically, like the tab menu's Clean Up Daily. Pinned, playing and selected tabs stay; cleaned tabs are listed under Recently Cleaned. A space can have its own time, in its settings."
       />
       <Group>
         <Row title={<Checkbox value={settings.cleanUpInactiveTabsAfterHours !== null} onChange={(v) => update({ cleanUpInactiveTabsAfterHours: v ? 24 : null })} label="Clean up tabs I haven't used in:" />}>
           <PopUp
             value={String(settings.cleanUpInactiveTabsAfterHours ?? 24)}
-            options={CLEAN_UP}
+            options={CLEAN_UP_CHOICES}
             disabled={settings.cleanUpInactiveTabsAfterHours === null}
             onChange={(v) => update({ cleanUpInactiveTabsAfterHours: Number(v) })}
           />

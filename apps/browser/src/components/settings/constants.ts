@@ -10,6 +10,13 @@ export const SETTINGS_TAB_MIN_WIDTH = 62;
 // MARK: Panes
 
 export const PROFILE_ROW_HEIGHT = 46;
+// How long unused tabs stay before they're cleaned up (Arc's archive times).
+export const CLEAN_UP_CHOICES = [
+  { value: "12", title: "12 hours" },
+  { value: "24", title: "24 hours" },
+  { value: "168", title: "7 days" },
+  { value: "720", title: "30 days" },
+];
 // A space's icon grid, shown under its Icon row.
 export const SPACE_PANE_ICON_COLUMNS = 12;
 export const APP_ICON_CHOICE_SIZE = 56;

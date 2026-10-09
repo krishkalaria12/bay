@@ -88,7 +88,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cmdClickCreatesTabGroup: true,
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
-  cleanUpInactiveTabsAfterHours: null,
+  // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
+  cleanUpInactiveTabsAfterHours: 12,
   mutedSites: [],
   neverTranslateSites: {},
   developerSites: [],

@@ -43,7 +43,10 @@ export type OrganizeSlice = {
   newTabInGroup(groupId: string, url?: string): string;
   moveGroupToBookmarksBar(groupId: string): void;
 
-  cleanUpTabs(windowId: string, options?: { inactiveForMs?: number }): number;
+  /** Cleans up the window's tabs in its space on screen, or in `profileId`. */
+  cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; profileId?: string }): number;
+  /** The automatic clean up (Arc's archive): every window's spaces, each after its own time. */
+  cleanUpInactiveTabs(): number;
   restoreCleaned(entryId?: string, windowId?: string): void;
   closeAbandonedNewTabs(): void;
 };
@@ -299,9 +302,15 @@ export function restoringGroup(s: BrowserState, entry: ClosedGroup, requested?: 
   return ids[0] ? apply(next, activated(next, ids[0])) : next;
 }
 
-export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now()): string[] {
-  const view = viewTabIds(s, windowId);
-  const active = activeTabId(s, windowId);
+/** How long a space's tabs stay unused before they're cleaned up automatically, in hours: never if null. */
+export function cleanUpHours(s: Pick<BrowserState, "profiles" | "settings">, profileId: string): number | null {
+  const own = s.profiles[profileId]?.cleanUpAfterHours;
+  return own === undefined ? s.settings.cleanUpInactiveTabsAfterHours : own;
+}
+
+export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), profileId?: string): string[] {
+  const view = viewTabIds(s, windowId, profileId);
+  const active = activeTabId(s, windowId, profileId);
   const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
   const inSplit = new Set(Object.values(s.splits).flatMap((v) => v.tabIds));
   const keep = (t: Tab) => t.id === active || pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
@@ -579,8 +588,9 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
 
   cleanUpTabs(windowId, options = {}) {
     const s = get();
-    const hours = s.settings.cleanUpInactiveTabsAfterHours;
-    const ids = cleanUpCandidates(s, windowId, options.inactiveForMs ?? (hours ? hours * 3_600_000 : CLEAN_UP_AFTER_MS));
+    const profileId = options.profileId ?? s.windows[windowId]?.profileId ?? "";
+    const hours = cleanUpHours(s, profileId);
+    const ids = cleanUpCandidates(s, windowId, options.inactiveForMs ?? (hours ? hours * 3_600_000 : CLEAN_UP_AFTER_MS), Date.now(), profileId);
     if (!ids.length) return 0;
     const entries = closedEntries(s, ids);
     const next = closeQuietly(s, ids);
@@ -591,6 +601,20 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
       set({ ...next, cleanedTabs: [...next.cleanedTabs, ...entries].slice(-MAX_CLEANED) });
     }
     return ids.length;
+  },
+
+  cleanUpInactiveTabs() {
+    let count = 0;
+    for (const windowId of get().windowOrder) {
+      const s = get();
+      const w = s.windows[windowId];
+      if (!w || w.kind === "small") continue;
+      for (const profileId of new Set(w.tabIds.map((id) => s.tabs[id]!.profileId))) {
+        const hours = cleanUpHours(get(), profileId);
+        if (hours !== null) count += get().cleanUpTabs(windowId, { inactiveForMs: hours * 3_600_000, profileId });
+      }
+    }
+    return count;
   },
 
   restoreCleaned(entryId, fromWindowId) {
