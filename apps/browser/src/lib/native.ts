@@ -175,7 +175,7 @@ const PAGE_COMMANDS = [
 const INTERNAL_PAGE_COMMANDS = ["copyUrl", "copyUrlAsMarkdown", "bookmarkPage", "addBookmarkToFolder"];
 const WINDOW_COMMANDS = [
   ...PAGE_COMMANDS, "focusCommandBar", "closeTab", "closeAllTabs", "back", "forward", "nextTab", "previousTab", "togglePin",
-  "duplicateTab", "moveTabToProfile", "moveTabToWindow", "toggleSidebar", "downloads", "mergeAllWindows", "switchProfile",
+  "togglePinRow", "duplicateTab", "moveTabToProfile", "moveTabToWindow", "toggleSidebar", "downloads", "mergeAllWindows", "switchProfile",
   "nextProfile", "previousProfile", "openBookmark", "selectTab", "selectLastTab", "moveTabDown", "moveTabUp", "closeTabGroup",
   "openProfileMenu",
 ];
@@ -228,7 +228,7 @@ export function menuState(s: BrowserState): MenuState {
   const regularWindows = s.windowOrder.filter((id) => !s.windows[id]!.incognito && s.windows[id]!.kind !== "small");
 
   const disabled: string[] = [];
-  if (!tab || !splitOf(s, tab.id)) disabled.push("focusNextPane", "focusPreviousPane");
+  if (!tab || !splitOf(s, tab.id)) disabled.push("focusNextPane", "focusPreviousPane", "removeFromSplit");
   if (w && (w.tabLayout ?? s.settings.tabLayout) === "top") disabled.push("toggleAddressBar");
   if (!w) disabled.push(...WINDOW_COMMANDS, "toggleTabLayout", "openSplitPane");
   else {
@@ -253,7 +253,8 @@ export function menuState(s: BrowserState): MenuState {
   if (w && !w.sidebarOpen) checked.push("toggleSidebar");
 
   const titles: Record<string, string> = {};
-  if (tab?.pinned) titles.togglePin = "Unpin";
+  if (tab?.pinned) titles.togglePin = "Remove from Essentials";
+  if (tab?.pinnedRow) titles.togglePinRow = "Unpin Tab";
   if (tab?.muted) titles.toggleMute = "Unmute Site";
   if (tab?.url && isBookmarked(s.bookmarks, bookmarkProfile, tab.url)) {
     titles.bookmarkPage = "Edit Bookmark…";

@@ -135,7 +135,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
         ]
       : []),
     // Arc's and Zen's two kinds of pins: a row in the Pinned section, and an Essential (a tile above it).
-    { id: "pinRow", title: tab.pinnedRow ? "Unpin Tab" : "Pin Tab", symbol: tab.pinnedRow ? "pin.slash" : "pin" },
+    { id: "pinRow", title: tab.pinnedRow ? "Unpin Tab" : "Pin Tab", symbol: tab.pinnedRow ? "pin.slash" : "pin", ...hint("d", "shift", "command") },
     { id: "essential", title: tab.pinned ? "Remove from Essentials" : "Add to Essentials", symbol: "square.grid.2x2" },
     { id: "moveToFolder", title: "Move to Folder", symbol: "folder", children: moveToFolderItems(windowId, folder?.id) },
     ...(folder ? [{ id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" }] : []),
@@ -170,7 +170,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
           ...(groups.length ? [{ id: "moveToGroup", title: "Move to Group", symbol: "rectangle.stack", children: groups }] : []),
         ]),
     ...(windows.length && !incognito ? [{ id: "moveToWindow", title: "Move to Window", symbol: "macwindow", children: windows }] : []),
-    ...(split ? [{ id: "unsplit", title: "Remove from Split View", symbol: "rectangle.split.2x1.slash" }] : []),
+    ...(split ? [{ id: "unsplit", title: "Remove from Split View", symbol: "rectangle.split.2x1.slash", ...hint("-", "shift", "control") }] : []),
     sep,
     { id: "close", title: "Close Tab", symbol: "xmark", ...hint("w", "command") },
     { id: "closeOthers", title: "Close Other Tabs", symbol: "paintbrush", enabled: others.length > 0, ...hint("w", "option", "command") },

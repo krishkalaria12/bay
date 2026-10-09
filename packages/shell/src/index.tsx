@@ -11,6 +11,8 @@ export type BrowserCommand =
   | "newIncognitoWindow"
   | "newSmallYahu"
   | "toggleOpenLinksInSmallYahu"
+  | "removeFromSplit"
+  | "togglePinRow"
   | "reopenClosedTab"
   | "reopenClosedWindow"
   | "restoreClosed"

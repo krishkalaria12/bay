@@ -350,13 +350,14 @@ enum MainMenu {
       .separator(),
       cmd("Show Tabs in Sidebar", "toggleTabLayout", "s", [.command, .shift]),
       cmd("Auto-Hide Tabs", "toggleSidebar", "s"),
-      cmd("Auto-Hide Tabs", "toggleSidebar", "l", [.command, .shift]).hiddenShortcut(),
       cmd("Auto-Hide Tabs", "toggleSidebar", "f", [.command, .shift]).hiddenShortcut(),
       .separator(),
       cmd("Open Split Pane", "openSplitPane", "=", [.control, .shift]),
       cmd("Focus Next Split Pane", "focusNextPane", "]", [.control, .shift]),
       cmd("Focus Previous Split Pane", "focusPreviousPane", "[", [.control, .shift]),
+      cmd("Remove Pane from Split", "removeFromSplit", "-", [.control, .shift]),
       cmd("Open Split Pane", "openSplitPane", "+", .control).hiddenShortcut(),
+      cmd("Remove Pane from Split", "removeFromSplit", "_", .control).hiddenShortcut(),
       cmd("Focus Next Split Pane", "focusNextPane", "}", .control).hiddenShortcut(),
       cmd("Focus Previous Split Pane", "focusPreviousPane", "{", .control).hiddenShortcut(),
       .separator(),
@@ -402,8 +403,6 @@ enum MainMenu {
       cmd("Previous Tab", "previousTab", "[", [.command, .shift]),
       cmd("Next Tab", "nextTab", "}").hiddenShortcut(),
       cmd("Previous Tab", "previousTab", "{").hiddenShortcut(),
-      cmd("Next Tab", "nextTab", functionKey(NSRightArrowFunctionKey), [.command, .option]).hiddenShortcut(),
-      cmd("Previous Tab", "previousTab", functionKey(NSLeftArrowFunctionKey), [.command, .option]).hiddenShortcut(),
       cmd("Next Tab", "nextTab", functionKey(NSPageDownFunctionKey), .control).hiddenShortcut(),
       cmd("Previous Tab", "previousTab", functionKey(NSPageUpFunctionKey), .control).hiddenShortcut(),
       cmd("Next Tab", "nextTab", functionKey(NSDownArrowFunctionKey), [.command, .option]).hiddenShortcut(),
@@ -417,7 +416,8 @@ enum MainMenu {
     ] + selectTab + [
       cmd("Last Tab", "selectLastTab", "9").hiddenShortcut(),
       .separator(),
-      cmd("Pin", "togglePin"),
+      cmd("Pin Tab", "togglePinRow", "d", [.command, .shift]),
+      cmd("Add to Essentials", "togglePin"),
       cmd("Keep Tab", "keepTab"),
       cmd("Duplicate", "duplicateTab"),
       cmd("New Group with Tab", "newGroupWithTabs", "n", [.command, .control]),
@@ -439,7 +439,7 @@ enum MainMenu {
 
     bookmarks = top("Bookmarks", [
       cmd("Bookmark This Page", "bookmarkPage", "d"),
-      cmd("Bookmark All Tabs…", "bookmarkAllTabs", "d", [.command, .shift]),
+      cmd("Bookmark All Tabs…", "bookmarkAllTabs"),
       cmd("Manage Bookmarks", "manageBookmarks", "b", [.command, .option]),
     ])
     bookmarksFixedCount = bookmarks.items.count
@@ -463,6 +463,9 @@ enum MainMenu {
       .separator(),
       cmd("Downloads", "downloads", "j", [.command, .shift]),
       cmd("Downloads", "downloads", "l", [.command, .option]).hiddenShortcut(),
+      // Arc's and Zen's Library keys; Downloads is Bay's library.
+      cmd("Downloads", "downloads", "l", [.command, .shift]).hiddenShortcut(),
+      cmd("Downloads", "downloads", "l", [.option, .shift]).hiddenShortcut(),
       CommandItem("Task Manager", "taskManager", key: ""),
       cmd("Merge All Windows", "mergeAllWindows"),
       profilesSeparator,
@@ -571,8 +574,8 @@ enum MainMenu {
       profiles.addItem(item)
     }
     profiles.addItem(.separator())
-    profiles.addItem(CommandItem("Next Space", "nextProfile"))
-    profiles.addItem(CommandItem("Previous Space", "previousProfile"))
+    profiles.addItem(CommandItem("Next Space", "nextProfile", key: rightArrow, [.command, .option]))
+    profiles.addItem(CommandItem("Previous Space", "previousProfile", key: leftArrow, [.command, .option]))
     profiles.addItem(.separator())
     profiles.addItem(CommandItem("New Space…", "newProfile"))
   }

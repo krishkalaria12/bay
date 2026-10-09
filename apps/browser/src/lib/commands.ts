@@ -187,6 +187,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return s.focusPane(windowId, 1);
     case "focusPreviousPane":
       return s.focusPane(windowId, -1);
+    case "removeFromSplit":
+      return tab ? s.removeTabFromSplit(tab.id) : undefined;
     case "toggleSidebar":
       return s.toggleSidebar(windowId);
     case "zoomIn":
@@ -224,6 +226,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     }
     case "togglePin":
       return tab ? s.togglePin(tab.id) : undefined;
+    case "togglePinRow":
+      return tab ? s.pinRows([tab.id], !tab.pinnedRow) : undefined;
     case "moveTabDown":
     case "moveTabUp": {
       if (!tab) return;
