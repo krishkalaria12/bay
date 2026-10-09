@@ -1,6 +1,6 @@
 import { onWindowEvent } from "@bay/shell";
 import { useBrowser } from "../store/browser";
-import { activeTabId, viewTabIds } from "../store/model";
+import { activeTabId, pinnedPage, viewTabIds } from "../store/model";
 import { SOURCES } from "./sources";
 import { applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./store";
 import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
@@ -178,7 +178,8 @@ export function startLiveEngine() {
     if (s.tabs === prev.tabs) return;
     for (const id in s.tabs) {
       const t = s.tabs[id]!;
-      if (t.pinned && t.liveItem && !prev.tabs[id]?.pinned) useBrowser.getState().updateTab(id, { liveItem: undefined });
+      // Pinned (a tile or a row), it leaves its live folder.
+      if (t.liveItem && pinnedPage(t) && !(prev.tabs[id] && pinnedPage(prev.tabs[id]!))) useBrowser.getState().updateTab(id, { liveItem: undefined });
     }
   });
 

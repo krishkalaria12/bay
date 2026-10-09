@@ -2,13 +2,17 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { autoGroupName } from "./groupNames";
 import { leaveGroups, orderSections, placeBlock, syncGroupOrder } from "./groups";
-import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, newId, sharesProfile, snapshotTab, viewTabIds, without } from "./model";
+import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, newId, pinnedPage, sharesProfile, snapshotTab, viewTabIds, without } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
 import { CLEAN_UP_AFTER_MS, DELETED_GROUP_MS, MAX_CLEANED, MAX_CLOSED_GROUPS } from "./constants";
 
 export type TabPlacement = {
+  // An Essential (a pinned tile).
   pinned: boolean;
+  // A pinned row (in `folderId`'s folder, else loose); false unpins one; left out, a pinned row stays one.
+  row?: boolean;
+  folderId?: string | null;
   beforeId?: string | null;
   groupId?: string | null;
 };
@@ -27,6 +31,7 @@ export type OrganizeSlice = {
   setSelection(windowId: string, ids: string[]): void;
   placeTabs(ids: string[], placement: TabPlacement): void;
   pinTabs(ids: string[], pinned: boolean): void;
+  pinRows(ids: string[], pinned: boolean): void;
   returnToPinnedUrl(tabId: string): void;
   setPinnedUrl(tabId: string, url?: string): void;
   setMuted(ids: string[], muted: boolean): void;
@@ -69,8 +74,8 @@ export function samePage(a: string, b: string): boolean {
   return norm(a) === norm(b);
 }
 
-export const awayFromPin = (t: Pick<Tab, "pinned" | "url" | "pinnedUrl">) =>
-  t.pinned && !!t.pinnedUrl && !!t.url && !samePage(t.url, t.pinnedUrl);
+export const awayFromPin = (t: Pick<Tab, "pinned" | "pinnedRow" | "url" | "pinnedUrl">) =>
+  pinnedPage(t) && !!t.pinnedUrl && !!t.url && !samePage(t.url, t.pinnedUrl);
 
 // A name the user gave wins; otherwise one from the tabs' titles (store/groupNames.ts).
 const autoLabels = new WeakMap<TabGroup, { tabs: object; members: (Tab | undefined)[]; label: string }>();
@@ -106,7 +111,7 @@ export function onUrlChange(s: BrowserState, tab: Tab, url: string): Partial<Tab
     if (isSiteMuted(s, tab, after)) patch.muted = true;
     else if (isSiteMuted(s, tab, before)) patch.muted = false;
   }
-  if (tab.pinned && !tab.pinnedUrl && url) patch.pinnedUrl = url;
+  if (pinnedPage(tab) && !tab.pinnedUrl && url) patch.pinnedUrl = url;
   return patch;
 }
 
@@ -154,7 +159,7 @@ export function withGroup(
   ids: string[],
   o: { name?: string; pinned?: boolean; autoUngroup?: boolean; pinnedOpenerId?: string } = {},
 ): [BrowserState, string] {
-  const tabs = ids.map((id) => s.tabs[id]).filter((t): t is Tab => !!t && !t.pinned);
+  const tabs = ids.map((id) => s.tabs[id]).filter((t): t is Tab => !!t && !pinnedPage(t));
   const first = tabs[0];
   if (!first || tabs.some((t) => t.windowId !== first.windowId || t.profileId !== first.profileId)) return [s, ""];
   const w = s.windows[first.windowId]!;
@@ -299,7 +304,7 @@ export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveFor
   const active = activeTabId(s, windowId);
   const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
   const inSplit = new Set(Object.values(s.splits).flatMap((v) => v.tabIds));
-  const keep = (t: Tab) => t.id === active || t.pinned || t.kept || s.live[t.id]?.playingAudio;
+  const keep = (t: Tab) => t.id === active || pinnedPage(t) || t.kept || s.live[t.id]?.playingAudio;
   const out = new Set<string>();
   const byPage = new Map<string, Tab[]>();
   for (const id of view) {
@@ -310,7 +315,7 @@ export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveFor
   }
   for (const same of byPage.values()) {
     if (same.length < 2) continue;
-    const keeper = same.find((t) => t.pinned) ?? same.find((t) => t.id === active) ?? [...same].sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]!;
+    const keeper = same.find(pinnedPage) ?? same.find((t) => t.id === active) ?? [...same].sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]!;
     for (const t of same) if (t !== keeper && !keep(t) && !inSplit.has(t.id)) out.add(t.id);
   }
   for (const id of view) {
@@ -350,14 +355,22 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     .filter((id) => moves(s.tabs[id]))
     .sort((a, b) => order.get(a)! - order.get(b)!);
   if (!moving.length) return s;
-  const target = !p.pinned && p.groupId ? s.groups[p.groupId] : undefined;
+  const target = !p.pinned && !p.row && p.groupId ? s.groups[p.groupId] : undefined;
   if (target && (target.windowId !== w.id || target.profileId !== first.profileId)) return s;
+  const folder = !p.pinned && p.row && p.folderId ? s.pinnedFolders[p.folderId] : undefined;
+  if (p.folderId && p.row && (!folder || folder.windowId !== w.id || folder.profileId !== first.profileId)) return s;
   const movingSet = new Set(moving);
 
   const tabs = { ...s.tabs };
   for (const id of moving) {
     const t = tabs[id]!;
-    if (t.pinned !== p.pinned) tabs[id] = { ...t, pinned: p.pinned, pinnedUrl: p.pinned ? t.url || null : null };
+    // A tab into a group leaves the Pinned section; one placed with no word on it keeps its row.
+    const row = !p.pinned && !target && (p.row ?? !!t.pinnedRow);
+    const folderId = row ? (p.row ? (folder?.id ?? undefined) : t.folderId) : undefined;
+    if (t.pinned === p.pinned && !!t.pinnedRow === row && t.folderId === folderId) continue;
+    const pinnedUrl = p.pinned || row ? (pinnedPage(t) ? t.pinnedUrl : t.url || null) : null;
+    const { pinnedRow: _, folderId: _f, ...rest } = t;
+    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
   }
   const rest = w.tabIds.filter((id) => !movingSet.has(id));
   let at: number;
@@ -365,7 +378,10 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
   else if (target) {
     const kept = target.tabIds.filter((id) => !movingSet.has(id));
     at = kept.length ? rest.indexOf(kept.at(-1)!) + 1 : Math.min(order.get(target.tabIds[0]!)!, rest.length);
+  } else if (folder && rest.some((id) => tabs[id]?.pinnedRow && tabs[id]!.folderId === folder.id)) {
+    at = rest.reduce((last, id, i) => (tabs[id]?.pinnedRow && tabs[id]!.folderId === folder.id ? i + 1 : last), 0);
   } else if (p.pinned) at = rest.reduce((last, id, i) => (tabs[id]?.pinned ? i + 1 : last), 0);
+  else if (p.row) at = rest.reduce((last, id, i) => (pinnedPage(tabs[id] ?? { pinned: false }) ? i + 1 : last), 0);
   else at = rest.length;
   rest.splice(at, 0, ...moving);
 
@@ -416,9 +432,18 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     const first = s.tabs[ids[0] ?? ""];
     const w = first && s.windows[first.windowId];
     if (!w) return;
-    const pinnedGroupMembers = new Set(Object.values(s.groups).filter((g) => g.pinned).flatMap((g) => g.tabIds));
-    const beforeId = pinned ? null : w.tabIds.find((id) => !s.tabs[id]?.pinned && !pinnedGroupMembers.has(id) && !ids.includes(id));
+    const beforeId = pinned ? null : w.tabIds.find((id) => !inPinnedContainer(s, id) && !ids.includes(id));
     set(placing(s, ids, { pinned, beforeId }));
+  },
+
+  pinRows(ids, pinned) {
+    const s = get();
+    const first = s.tabs[ids[0] ?? ""];
+    const w = first && s.windows[first.windowId];
+    if (!w) return;
+    // Unpinned, they go to the top of the list, below anything pinned.
+    const beforeId = pinned ? null : w.tabIds.find((id) => !inPinnedContainer(s, id) && !ids.includes(id));
+    set(placing(s, ids, { pinned: false, row: pinned, beforeId }));
   },
 
   returnToPinnedUrl(tabId) {
@@ -430,7 +455,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
   setPinnedUrl(tabId, url) {
     const t = get().tabs[tabId];
     const next = url ?? t?.url;
-    if (!t?.pinned || !next) return;
+    if (!t || !pinnedPage(t) || !next) return;
     get().updateTab(tabId, { pinnedUrl: next });
     if (url && !samePage(t.url, url)) get().navigate(tabId, url);
   },

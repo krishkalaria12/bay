@@ -4,12 +4,12 @@ import { layout } from "../../lib/constants";
 import type { BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { GROUP_BORDER, GROUP_PAD } from "./constants";
-import { groupEntries, sidebarEntries } from "./entries";
+import { folderEntries, groupEntries, sidebarEntries } from "./entries";
 
 const ROW = layout.rowHeight;
 const GAP = layout.rowGap;
 
-export type Section = "pinnedGroups" | "list";
+export type Section = "pinned" | "pinnedGroups" | "list";
 
 // The entry of a group that holds the window's active tab: it stays out while the group is collapsed.
 export function keptEntry(s: BrowserState, windowId: string, profileId: string, entries: string[]): string | null {
@@ -25,8 +25,16 @@ function membersHeight(s: BrowserState, windowId: string, profileId: string, gro
   return keptEntry(s, windowId, profileId, entries) ? ROW + GROUP_PAD : 0;
 }
 
-/** A list entry's height: a tab or split row, or a group block (its border, header and members). */
+// A pinned folder's rows below its header: every row open, each after a gap; only the kept one collapsed.
+function folderMembersHeight(s: BrowserState, windowId: string, profileId: string, folderId: string): number {
+  const entries = folderEntries(s, folderId);
+  if (!s.pinnedFolders[folderId]?.collapsed) return entries.length * (ROW + GAP);
+  return keptEntry(s, windowId, profileId, entries) ? ROW + GAP : 0;
+}
+
+/** A list entry's height: a tab or split row, a pinned folder (its header and rows), or a group block (its border, header and members). */
 export function entryHeight(s: BrowserState, windowId: string, profileId: string, entry: string): number {
+  if (entry.startsWith("f:")) return ROW + folderMembersHeight(s, windowId, profileId, entry.slice(2));
   if (!entry.startsWith("g:")) return ROW;
   return GROUP_BORDER * 2 + ROW + membersHeight(s, windowId, profileId, entry.slice(2));
 }
@@ -47,8 +55,9 @@ export function rowSpan(
   tabId: string,
   newTabAtTop: boolean,
 ): { section: Section; top: number; height: number } | null {
-  const { pinnedGroups, list } = sidebarEntries(s, windowId, profileId);
+  const { pinned, pinnedGroups, list } = sidebarEntries(s, windowId, profileId);
   const sections: [Section, string[], number][] = [
+    ["pinned", pinned, 0],
     ["pinnedGroups", pinnedGroups.map((id) => `g:${id}`), 0],
     ["list", list, newTabAtTop ? ROW + GAP : 0],
   ];
@@ -57,6 +66,14 @@ export function rowSpan(
     for (const entry of entries) {
       const id = entry.slice(2);
       if (entry === `t:${tabId}` || (entry.startsWith("s:") && s.splits[id]?.tabIds.includes(tabId))) return { section, top, height: ROW };
+      if (entry.startsWith("f:") && s.tabs[tabId]?.pinnedRow && s.tabs[tabId]!.folderId === id) {
+        const members = folderEntries(s, id);
+        const at = members.indexOf(`t:${tabId}`);
+        if (at < 0) return null;
+        // A collapsed folder shows only the kept row; any other is behind its header.
+        if (s.pinnedFolders[id]!.collapsed) return keptEntry(s, windowId, profileId, members) === members[at] ? { section, top: top + ROW + GAP, height: ROW } : { section, top, height: ROW };
+        return { section, top: top + (at + 1) * (ROW + GAP), height: ROW };
+      }
       if (entry.startsWith("g:") && s.groups[id]?.tabIds.includes(tabId)) {
         const members = groupEntries(s, id);
         const at = members.findIndex((e) => e === `t:${tabId}` || (e.startsWith("s:") && !!s.splits[e.slice(2)]?.tabIds.includes(tabId)));

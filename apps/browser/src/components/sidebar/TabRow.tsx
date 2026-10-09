@@ -6,7 +6,7 @@ import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTabId } from "../../store/model";
+import { activeTabId, pinnedPage } from "../../store/model";
 import { useIsActiveTab, usePageProfileId, useTab, useWindowId } from "../../store/hooks";
 import { HoverSlot } from "../HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
@@ -36,7 +36,7 @@ export const TabRowItem = memo(function TabRowItem({
   parentGroup,
 }: {
   tabId: string;
-  section: "list" | "pinnedGroups";
+  section: "list" | "pinned" | "pinnedGroups";
   parentGroup?: string;
 }) {
   const windowId = useWindowId();
@@ -136,7 +136,14 @@ export function TabRow({ tabId }: { tabId: string }) {
                   <HoverSlot
                     hovered={hovered && !renaming}
                     width={22}
-                    hover={<IconButton icon="xmark" size={10} weight="semibold" box={22} radius={6} onPress={() => void closeTab(tab.id)} tooltip="Close Tab (⌘W)" />}
+                    hover={
+                      // A pinned row isn't closed, only unloaded (Arc's −): it stays, back at its pinned page.
+                      tab.pinnedRow ? (
+                        <IconButton icon="minus" size={10} weight="semibold" box={22} radius={6} onPress={() => void closeTab(tab.id)} tooltip="Unload Tab (⌘W)" />
+                      ) : (
+                        <IconButton icon="xmark" size={10} weight="semibold" box={22} radius={6} onPress={() => void closeTab(tab.id)} tooltip="Close Tab (⌘W)" />
+                      )
+                    }
                   >
                     {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
                   </HoverSlot>
@@ -209,11 +216,11 @@ export const SplitRowItem = memo(function SplitRowItem({
   parentGroup,
 }: {
   splitId: string;
-  section: "list" | "pinnedGroups";
+  section: "list" | "pinned" | "pinnedGroups";
   parentGroup?: string;
 }) {
   const windowId = useWindowId();
-  const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !s.tabs[id]!.pinned).join(",") ?? "").split(",").filter(Boolean);
+  const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).join(",") ?? "").split(",").filter(Boolean);
   const { ref, style, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });
   const theme = useTheme();
   const profileId = usePageProfileId();

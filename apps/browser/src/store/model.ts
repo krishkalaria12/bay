@@ -74,16 +74,27 @@ export const snapshotTab = (t: Tab): TabSnapshot => ({
   customIcon: t.customIcon,
   pinnedUrl: t.pinnedUrl,
   profileId: t.profileId,
+  ...(t.pinnedRow ? { pinnedRow: true } : {}),
 });
 
+/** A pinned page: an Essential (a pinned tile) or a pinned row. It keeps the page it was pinned at (`pinnedUrl`). */
+export const pinnedPage = (t: Pick<Tab, "pinned" | "pinnedRow">) => t.pinned || !!t.pinnedRow;
+
+/** The window's order keeps the Essentials first, then the pinned rows, then every other tab. */
 export function pinnedFirst(ids: string[], tabs: Record<string, Tab>): string[] {
-  return [...ids.filter((id) => tabs[id]?.pinned), ...ids.filter((id) => !tabs[id]?.pinned)];
+  const rank = (id: string) => {
+    if (tabs[id]?.pinned) return 0;
+    if (tabs[id]?.pinnedRow) return 1;
+    return 2;
+  };
+  const out = [0, 1, 2].flatMap((r) => ids.filter((id) => rank(id) === r));
+  return out.every((id, i) => id === ids[i]) ? ids : out;
 }
 
 export function inPinnedContainer(s: Pick<BrowserState, "tabs" | "groups">, id: string): boolean {
   const tab = s.tabs[id];
   if (!tab) return false;
-  if (tab.pinned) return true;
+  if (pinnedPage(tab)) return true;
   for (const g of Object.values(s.groups)) if (g.pinned && g.tabIds.includes(id)) return true;
   return false;
 }

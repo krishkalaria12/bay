@@ -24,6 +24,7 @@ import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
 import { DragProvider, DragScope, useDragController, useDragItem, type Ghost } from "./sidebar/dnd";
 import { sidebarEntries, useSidebarEntries } from "./sidebar/entries";
+import { FolderBlock } from "./sidebar/FolderBlock";
 import { GroupBlock } from "./sidebar/GroupBlock";
 import { dismissHover } from "./sidebar/hover";
 import { LiveFolders } from "./sidebar/LiveFolderBlock";
@@ -35,7 +36,7 @@ import { measureRow } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./sidebar/RowMotion";
 import { useSidebarTokens, useSidebarWidth } from "./sidebar/tokens";
-import { CLEAN_UP_UPSELL_MIN, DOCKED_BOTTOM, FIRST_PAINT_ROWS, GLOW_ROOM, NEW_TAB_DOCK, PIN_BAND, ROW_PITCH, ROWS_PER_FRAME } from "./sidebar/constants";
+import { CLEAN_UP_UPSELL_MIN, DOCKED_BOTTOM, FIRST_PAINT_ROWS, GLOW_ROOM, NEW_TAB_DOCK, PIN_BAND, PINNED_DIVIDER_PAD, ROW_PITCH, ROWS_PER_FRAME } from "./sidebar/constants";
 
 // The list's room and its height: the New Tab row docks below the list once the list leaves no room for it.
 type Room = { available: number; list: number };
@@ -58,7 +59,7 @@ export function Sidebar() {
   };
   const scroll = useRef<ScrollView>(null);
   const scrollY = useRef(0);
-  const geometry = useRef<SidebarGeometry>({ viewport: 0, regions: { pinnedGroups: 0, list: 0 }, newTabAtTop: false });
+  const geometry = useRef<SidebarGeometry>({ viewport: 0, regions: { pinned: 0, pinnedGroups: 0, list: 0 }, newTabAtTop: false });
   const playerTab = useSidebarPlayerTab(windowId);
   const playerHeight = playerTab ? SIDEBAR_PLAYER_HEIGHT : 0;
   const addressBar = useAddressBarInSidebar();
@@ -195,7 +196,7 @@ type PageProps = {
 
 function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoom, ghost, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
   const windowId = useWindowId();
-  const { tiles, pinnedGroups, list: all } = useSidebarEntries(windowId, profileId);
+  const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, profileId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
   // long sidebar neither holds up the window's first frame nor mounts in one long task after it.
   const [mountedRows, setMountedRows] = useState(FIRST_PAINT_ROWS);
@@ -284,12 +285,23 @@ function SidebarPage({ profileId, slot, width, current, resting, docked, glowRoo
                         }}
                       >
                         <PinnedGrid tabs={tiles} innerWidth={innerWidth} />
+                        {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
+                        <View
+                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y) : undefined}
+                          style={{ marginTop: tiles.length ? 6 : topGap, gap: layout.rowGap }}
+                        >
+                          {pinned.map((entry) => (
+                            <PinnedEntry key={entry} entry={entry} />
+                          ))}
+                          <Tail id="tail:pinned" section="pinned" />
+                        </View>
+                        <PinnedDivider />
                         <View
                           ref={(v) => {
                             controller?.regions.set("pinnedGroups", v);
                           }}
                           onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
-                          style={{ marginTop: tiles.length ? 6 : topGap, gap: layout.rowGap }}
+                          style={{ gap: layout.rowGap }}
                         >
                           {pinnedGroups.map((id) => (
                             <GroupBlock key={id} groupId={id} section="pinnedGroups" />
@@ -348,7 +360,28 @@ const ListEntry = memo(function ListEntry({ entry }: { entry: string }) {
   return <TabRowItem tabId={id} section="list" />;
 });
 
-const Tail = memo(function Tail({ id, section }: { id: string; section: "list" | "pinnedGroups" }) {
+const PinnedEntry = memo(function PinnedEntry({ entry }: { entry: string }) {
+  const id = entry.slice(2);
+  return entry.startsWith("f:") ? <FolderBlock folderId={id} /> : <TabRowItem tabId={id} section="pinned" />;
+});
+
+// The line under the Pinned section: dropping a tab above its middle pins it, so it's there with nothing pinned too.
+function PinnedDivider() {
+  const tokens = useSidebarTokens();
+  const controller = useDragController();
+  return (
+    <View
+      ref={(v) => {
+        controller?.regions.set("divider", v);
+      }}
+      style={{ paddingVertical: PINNED_DIVIDER_PAD, paddingHorizontal: 9 }}
+    >
+      <View style={{ height: 1, borderRadius: 0.5, backgroundColor: tokens.separator }} />
+    </View>
+  );
+}
+
+const Tail = memo(function Tail({ id, section }: { id: string; section: "list" | "pinned" | "pinnedGroups" }) {
   const { ref, style } = useDragItem(id, { kind: "tail", tabIds: [], section });
   return <Animated.View ref={ref} style={style} />;
 });

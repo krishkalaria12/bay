@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { newId } from "./model";
+import { newId, pinnedPage } from "./model";
 import { closingGroup } from "./organize";
 import type { BrowserWindow, GroupColor, Tab, TabGroup } from "./types";
 
@@ -31,11 +31,30 @@ export function syncGroupOrder(groups: Record<string, TabGroup>, window: Browser
   return changed ? next : groups;
 }
 
+// The Essentials, the pinned rows (each folder's together), the pinned groups, then the rest.
 export function orderSections(ids: string[], tabs: Record<string, Tab>, groups: Record<string, TabGroup>): string[] {
   const pinnedGroup = new Set(Object.values(groups).filter((g) => g.pinned).flatMap((g) => g.tabIds));
-  const rank = (id: string) => (tabs[id]?.pinned ? 0 : pinnedGroup.has(id) ? 1 : 2);
-  const out = [...ids.filter((id) => rank(id) === 0), ...ids.filter((id) => rank(id) === 1), ...ids.filter((id) => rank(id) === 2)];
+  const rank = (id: string) => {
+    if (tabs[id]?.pinned) return 0;
+    if (tabs[id]?.pinnedRow) return 1;
+    if (pinnedGroup.has(id)) return 2;
+    return 3;
+  };
+  const out = placeFolders([0, 1, 2, 3].flatMap((r) => ids.filter((id) => rank(id) === r)), tabs);
   return out.every((id, i) => id === ids[i]) ? ids : out;
+}
+
+/** Each pinned folder's rows together, where its first one is. */
+export function placeFolders(ids: string[], tabs: Record<string, Tab>): string[] {
+  let out = ids;
+  const done = new Set<string>();
+  for (const id of ids) {
+    const folderId = tabs[id]?.pinnedRow ? tabs[id]!.folderId : undefined;
+    if (!folderId || done.has(folderId)) continue;
+    done.add(folderId);
+    out = placeBlock(out, out.filter((t) => tabs[t]?.pinnedRow && tabs[t]!.folderId === folderId));
+  }
+  return out;
 }
 
 export function placeBlock(tabIds: string[], block: string[]): string[] {
@@ -63,7 +82,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
 
   createGroup(tabIds, options = {}) {
     const s = get();
-    const tabs = tabIds.map((id) => s.tabs[id]).filter((t) => t && !t.pinned);
+    const tabs = tabIds.map((id) => s.tabs[id]).filter((t) => t && !pinnedPage(t));
     const first = tabs[0];
     if (!first || tabs.some((t) => t!.windowId !== first.windowId || t!.profileId !== first.profileId)) return "";
     const w = s.windows[first.windowId]!;
@@ -103,7 +122,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       if (!group) return {};
       const adding = tabIds.filter((id) => {
         const t = s.tabs[id];
-        return t && !t.pinned && t.windowId === group.windowId && t.profileId === group.profileId && !group.tabIds.includes(id);
+        return t && !pinnedPage(t) && t.windowId === group.windowId && t.profileId === group.profileId && !group.tabIds.includes(id);
       });
       if (!adding.length) return {};
       const w = s.windows[group.windowId]!;

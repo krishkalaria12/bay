@@ -1,6 +1,6 @@
 import type { BrowserCommand, MenuEntry } from "@bay/shell";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTabId, plural } from "../../store/model";
+import { activeTabId, pinnedPage, plural } from "../../store/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../../store/organize";
 import { newGroupWithSelection, openIconPicker, startRename } from "./actions";
 import { closeAllTabs, tabsAround } from "./menus";
@@ -39,7 +39,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
       return true;
     case "keepTab": {
       const tab = tabId ? s.tabs[tabId] : undefined;
-      if (tab && !tab.pinned) s.updateTab(tab.id, { kept: !tab.kept });
+      if (tab && !pinnedPage(tab)) s.updateTab(tab.id, { kept: !tab.kept });
       return true;
     }
     case "closeOtherTabs": {
@@ -66,10 +66,10 @@ export function sidebarMenuState(s: BrowserState, windowId: string | undefined) 
   if (!windowId) disabled.push(...SIDEBAR_WINDOW_COMMANDS);
   else {
     if (!tab || !awayFromPin(tab)) disabled.push("returnToPinnedUrl");
-    if (!tab || tab.pinned) disabled.push("keepTab");
+    if (!tab || pinnedPage(tab)) disabled.push("keepTab");
     if (tab?.kept) titles.keepTab = "Don’t Keep Tab";
     if (!tab || !tabsAround(windowId, tab).others.length) disabled.push("closeOtherTabs");
-    const selected = selectedTabIds(s, windowId).filter((id) => !s.tabs[id]?.pinned);
+    const selected = selectedTabIds(s, windowId).filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!));
     if (!selected.length) disabled.push("newGroupWithTabs");
     if (selected.length > 1) titles.newGroupWithTabs = `New Group with ${plural(selected.length, "Tab")}`;
   }

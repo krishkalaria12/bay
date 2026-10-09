@@ -4,7 +4,7 @@ import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, bookmarkProfileId, isIncognitoProfile, plural, tabLabel, viewTabIds, windowTitle } from "../../store/model";
+import { activeTabId, bookmarkProfileId, inPinnedContainer, isIncognitoProfile, pinnedPage, plural, tabLabel, viewTabIds, windowTitle } from "../../store/model";
 import { awayFromPin, cleanedTabsFor, groupLabel, groupOf, keptDeletedGroups, selectedTabIds } from "../../store/organize";
 import { splitOf } from "../../store/splits";
 import type { GroupColor, Tab } from "../../store/types";
@@ -15,6 +15,7 @@ import {
   editPinnedPage,
   muteAll,
   newGroupWithSelection,
+  newPinnedFolderWith,
   openIconPicker,
   startRename,
   tabTitle,
@@ -65,14 +66,34 @@ function moveToGroupItems(windowId: string, exclude: string | undefined): MenuIt
   return groups.map((g) => ({ id: `group:${g.id}`, title: groupLabel(s, g), symbol: g.pinned ? "pin" : "square.on.square" }));
 }
 
+// The Pinned section's folders in the window's space: "pfolder:<id>", then a new one.
+function moveToFolderItems(windowId: string, exclude: string | undefined): MenuItem[] {
+  const s = store();
+  const w = s.windows[windowId];
+  const folders = Object.values(s.pinnedFolders).filter((f) => f.windowId === windowId && f.profileId === w?.profileId && f.id !== exclude);
+  return [
+    ...folders.map((f) => ({ id: `pfolder:${f.id}`, title: f.name || "New Folder", symbol: "folder" })),
+    ...(folders.length ? [sep] : []),
+    { id: "pfolder:new", title: "New Folder", symbol: "folder.badge.plus" },
+  ];
+}
+
+function runFolderChoice(windowId: string, ids: string[], choice: string): boolean {
+  if (!choice.startsWith("pfolder:")) return false;
+  const folderId = choice.slice(8);
+  if (folderId === "new") newPinnedFolderWith(windowId, ids);
+  else store().placeTabs(ids, { pinned: false, row: true, folderId });
+  return true;
+}
+
 /** The tabs a tab's Close Tabs Above, Below and Others close: its section's, never a pinned one. */
 export function tabsAround(windowId: string, tab: Tab) {
   const s = store();
-  const list = viewTabIds(s, windowId).filter((id) => !s.tabs[id]!.pinned);
+  const list = viewTabIds(s, windowId).filter((id) => !pinnedPage(s.tabs[id]!));
   const index = list.indexOf(tab.id);
   return {
-    above: tab.pinned ? [] : list.slice(0, index),
-    below: tab.pinned ? [] : list.slice(index + 1),
+    above: pinnedPage(tab) ? [] : list.slice(0, index),
+    below: pinnedPage(tab) ? [] : list.slice(index + 1),
     others: list.filter((id) => id !== tab.id),
   };
 }
@@ -98,12 +119,13 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "profile:new", title: "New Space…" },
   ];
   const groups = moveToGroupItems(windowId, group?.id);
+  const folder = tab.pinnedRow && tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
   const windows = moveToWindowItems(windowId).filter((item) => "id" in item && item.id !== "window:new");
   // Asleep, or never loaded: nothing to put to sleep.
   const awake = !!webviews.get(tab.id) && !useLifecycle.getState().discarded[tab.id];
 
   const choice = await showMenu([
-    ...(tab.pinned
+    ...(pinnedPage(tab)
       ? [
           { id: "backToPin", title: "Back to Pinned URL", symbol: "arrow.uturn.backward", enabled: away, ...hint("\r", "command") },
           { id: "replacePin", title: "Replace Pin with Current Page", symbol: "pin", enabled: away },
@@ -112,9 +134,13 @@ export async function openTabMenu(windowId: string, tab: Tab) {
           sep,
         ]
       : []),
-    { id: "pin", title: tab.pinned ? "Unpin" : "Pin", symbol: tab.pinned ? "pin.slash" : "pin" },
+    // Arc's and Zen's two kinds of pins: a row in the Pinned section, and an Essential (a tile above it).
+    { id: "pinRow", title: tab.pinnedRow ? "Unpin Tab" : "Pin Tab", symbol: tab.pinnedRow ? "pin.slash" : "pin" },
+    { id: "essential", title: tab.pinned ? "Remove from Essentials" : "Add to Essentials", symbol: "square.grid.2x2" },
+    { id: "moveToFolder", title: "Move to Folder", symbol: "folder", children: moveToFolderItems(windowId, folder?.id) },
+    ...(folder ? [{ id: "leaveFolder", title: "Remove from Folder", symbol: "folder.badge.minus" }] : []),
     // A pin stays anyway.
-    ...(tab.pinned ? [] : [{ id: "keep", title: tab.kept ? "Don’t Keep Tab" : "Keep Tab", symbol: "anchor" }]),
+    ...(pinnedPage(tab) ? [] : [{ id: "keep", title: tab.kept ? "Don’t Keep Tab" : "Keep Tab", symbol: "anchor" }]),
     { id: "rename", title: "Rename…", symbol: "pencil", ...hint("r", "control", "command") },
     ...(tab.customTitle ? [{ id: "resetName", title: "Reset Name", symbol: "arrow.counterclockwise" }] : []),
     sep,
@@ -135,7 +161,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
-    ...(tab.pinned
+    ...(pinnedPage(tab)
       ? []
       : [
           group
@@ -157,7 +183,10 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   if (choice === "backToPin") s.returnToPinnedUrl(tab.id);
   else if (choice === "replacePin") s.setPinnedUrl(tab.id);
   else if (choice === "editPin") void editPinnedPage(windowId, tab.id);
-  else if (choice === "pin") s.togglePin(tab.id);
+  else if (choice === "pinRow") s.pinRows([tab.id], !tab.pinnedRow);
+  else if (choice === "essential") s.togglePin(tab.id);
+  else if (runFolderChoice(windowId, [tab.id], choice)) return;
+  else if (choice === "leaveFolder") s.placeTabs([tab.id], { pinned: false, row: true, folderId: null, beforeId: firstAfterFolder(tab.folderId!) });
   else if (choice === "keep") s.updateTab(tab.id, { kept: !tab.kept });
   else if (choice === "rename") void startRename(windowId, t);
   else if (choice === "resetName") s.updateTab(tab.id, { customTitle: null });
@@ -193,12 +222,16 @@ async function openMultiMenu(windowId: string, ids: string[]) {
   const n = ids.length;
   const tabs = ids.map((id) => s.tabs[id]!);
   const allPinned = tabs.every((t) => t.pinned);
+  const allRows = tabs.every((t) => t.pinnedRow);
   const incognito = tabs.some((t) => isIncognitoProfile(t.profileId));
   const groups = moveToGroupItems(windowId, undefined);
   const choice = await showMenu([
-    { id: "pin", title: allPinned ? `Unpin ${n} Tabs` : `Pin ${n} Tabs`, symbol: allPinned ? "pin.slash" : "pin" },
+    { id: "pinRow", title: allRows ? `Unpin ${n} Tabs` : `Pin ${n} Tabs`, symbol: allRows ? "pin.slash" : "pin" },
+    { id: "essential", title: allPinned ? `Remove ${n} Tabs from Essentials` : `Add ${n} Tabs to Essentials`, symbol: "square.grid.2x2" },
+    { id: "moveToFolder", title: "Move to Folder", symbol: "folder", children: moveToFolderItems(windowId, undefined) },
+    sep,
     { id: "duplicate", title: `Duplicate ${n} Tabs`, symbol: "plus.square.on.square" },
-    { id: "newGroup", title: `New Group with ${n} Tabs`, symbol: "plus.rectangle.on.rectangle", enabled: !allPinned, ...hint("n", "control", "command") },
+    { id: "newGroup", title: `New Group with ${n} Tabs`, symbol: "plus.rectangle.on.rectangle", enabled: !tabs.every(pinnedPage), ...hint("n", "control", "command") },
     ...(groups.length ? [{ id: "moveToGroup", title: "Move to Group", symbol: "rectangle.stack", children: groups }] : []),
     ...(tabs.some((t) => groupOf(s, t.id)) ? [{ id: "ungroup", title: "Remove from Group", symbol: "folder.badge.minus" }] : []),
     sep,
@@ -212,7 +245,9 @@ async function openMultiMenu(windowId: string, ids: string[]) {
     { id: "close", title: `Close ${n} Tabs`, symbol: "xmark", ...hint("w", "command") },
   ]);
   if (!choice) return;
-  if (choice === "pin") s.pinTabs(ids, !allPinned);
+  if (choice === "pinRow") s.pinRows(ids, !allRows);
+  else if (choice === "essential") s.pinTabs(ids, !allPinned);
+  else if (runFolderChoice(windowId, ids, choice)) return;
   else if (choice === "duplicate") ids.forEach((id) => store().duplicateTab(id));
   else if (choice === "newGroup") newGroupWithSelection(windowId, ids);
   else if (choice.startsWith("group:")) s.placeTabs(ids, { pinned: false, groupId: choice.slice(6) });
@@ -282,6 +317,45 @@ export async function openGroupMenu(windowId: string, groupId: string) {
   else if (choice === "delete") s.deleteGroup(groupId);
 }
 
+// Out of its folder, a row goes just below it.
+function firstAfterFolder(folderId: string): string | null {
+  const s = store();
+  const f = s.pinnedFolders[folderId];
+  const ids = f ? (s.windows[f.windowId]?.tabIds ?? []) : [];
+  const last = ids.reduce((at, id, i) => (s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId ? i : at), -1);
+  return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
+}
+
+export async function openFolderMenu(windowId: string, folderId: string) {
+  const s = store();
+  const f = s.pinnedFolders[folderId];
+  if (!f) return;
+  const members = (s.windows[windowId]?.tabIds ?? []).filter((id) => s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId);
+  const choice = await showMenu([
+    { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
+    { id: "icon", title: f.icon ? "Change Icon…" : "Add Icon…", symbol: "face.smiling" },
+    ...(f.icon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
+    { id: "collapse", title: f.collapsed ? "Expand Folder" : "Collapse Folder", symbol: f.collapsed ? "chevron.down" : "chevron.up", enabled: members.length > 0 },
+    sep,
+    { id: "copy", title: "Copy All Links", symbol: "link", enabled: members.length > 0 },
+    { id: "copyMd", title: "Copy All Links as Markdown", symbol: "text.badge.checkmark", enabled: members.length > 0 },
+    sep,
+    { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
+    // Its tabs stay pinned, loose, where they were.
+    { id: "delete", title: "Delete Folder", symbol: "trash" },
+  ]);
+  if (!choice) return;
+  const target = { kind: "folder" as const, id: folderId };
+  if (choice === "rename") void startRename(windowId, target);
+  else if (choice === "icon") void openIconPicker(windowId, target);
+  else if (choice === "resetIcon") s.updatePinnedFolder(folderId, { icon: null });
+  else if (choice === "collapse") s.updatePinnedFolder(folderId, { collapsed: !f.collapsed });
+  else if (choice === "copy") copyUrls(members, false);
+  else if (choice === "copyMd") copyUrls(members, true);
+  else if (choice === "newFolder") newPinnedFolderWith(windowId);
+  else if (choice === "delete") s.deletePinnedFolder(folderId);
+}
+
 export async function openSidebarMenu(windowId: string) {
   const s = store();
   const muted = allMuted(windowId);
@@ -293,10 +367,12 @@ export async function openSidebarMenu(windowId: string) {
     { id: "mute", title: muted ? "Unmute All Tabs" : "Mute All Tabs", symbol: muted ? "speaker.wave.2" : "speaker.slash" },
     { id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...hint("k", "shift", "command") },
     sep,
+    { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
     newLiveFolderMenuItem(),
   ]);
   if (choice && runNewLiveFolder(windowId, choice)) return;
   if (choice === "newTab") store().openNewTabPanel(windowId);
+  else if (choice === "newFolder") newPinnedFolderWith(windowId);
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") s.cleanUpTabs(windowId);
   else if (choice === "mute") muteAll(windowId, !muted);
@@ -305,8 +381,7 @@ export async function openSidebarMenu(windowId: string) {
 
 export function closeAllTabs(windowId: string) {
   const s = store();
-  const pinnedGroup = new Set(Object.values(s.groups).filter((g) => g.pinned).flatMap((g) => g.tabIds));
-  s.closeTabs(viewTabIds(s, windowId).filter((id) => !s.tabs[id]!.pinned && !pinnedGroup.has(id)));
+  s.closeTabs(viewTabIds(s, windowId).filter((id) => !inPinnedContainer(s, id)));
 }
 
 export async function openOverflowMenu(windowId: string) {

@@ -2,7 +2,7 @@ import { FadeLabel, Surface } from "@bay/shell";
 import { Text, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
-import { layout } from "../../lib/constants";
+import { layout, SYMBOL_PREFIX } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { groupLabel } from "../../store/organize";
 import { tabTitle } from "./actions";
@@ -16,7 +16,13 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
   const tokens = useSidebarTokens();
   const { item, count, width, height, position } = ghost;
   const tab = useBrowser((s) => s.tabs[item.tabIds[0] ?? ""]);
-  const label = useBrowser((s) => (item.groupId && s.groups[item.groupId] ? groupLabel(s, s.groups[item.groupId]!) : tab ? tabTitle(tab) : ""));
+  const folder = useBrowser((s) => (item.folderId ? s.pinnedFolders[item.folderId] : undefined));
+  const label = useBrowser((s) => {
+    const group = item.groupId ? s.groups[item.groupId] : undefined;
+    if (group) return groupLabel(s, group);
+    if (folder) return folder.name || "New Folder";
+    return tab ? tabTitle(tab) : "";
+  });
   const tile = item.kind === "tile";
   // Over the page the tab shows as the page's own card (SplitChrome.tsx).
   const onPage = useTabDrag((d) => d.onPage);
@@ -43,8 +49,12 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
           opacity: 0.96,
         }}
       >
-        {tab ? <TabIcon url={tab.url} favicon={tab.favicon} icon={item.kind === "group" ? null : tab.customIcon} profileId={tab.profileId} /> : null}
-        {!tile ? <FadeLabel text={label} fontSize={13} weight={item.kind === "group" ? "medium" : "regular"} color={theme.textPrimary} style={{ flex: 1, height: 18, marginLeft: 7 }} /> : null}
+        {folder ? (
+          <TabIcon url="" icon={folder.icon ?? `${SYMBOL_PREFIX}folder`} color={theme.textTab} />
+        ) : tab ? (
+          <TabIcon url={tab.url} favicon={tab.favicon} icon={item.kind === "group" ? null : tab.customIcon} profileId={tab.profileId} />
+        ) : null}
+        {!tile ? <FadeLabel text={label} fontSize={13} weight={item.kind === "group" || folder ? "medium" : "regular"} color={theme.textPrimary} style={{ flex: 1, height: 18, marginLeft: 7 }} /> : null}
       </Surface>
       {count > 1 ? (
         <View style={{ position: "absolute", top: -6, right: -4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: theme.accent, alignItems: "center", justifyContent: "center" }}>

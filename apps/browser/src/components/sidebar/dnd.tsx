@@ -15,13 +15,15 @@ import { suppressHover } from "./hover";
 import { DRAG_SCROLL_EDGE, PINNED_TILE_GAP } from "./constants";
 
 type Frame = { x: number; y: number; w: number; h: number };
-type Section = "tiles" | "pinnedGroups" | "list";
+type Section = "tiles" | "pinned" | "pinnedGroups" | "list";
 
 export type ItemSpec = {
-  kind: "tile" | "row" | "group" | "split" | "tail";
+  kind: "tile" | "row" | "group" | "folder" | "split" | "tail";
   tabIds: string[];
   section: Section;
   groupId?: string;
+  folderId?: string;
+  // The group or pinned folder a row is in.
   parentGroup?: string;
   collapsed?: boolean;
 };
@@ -39,6 +41,7 @@ type Item = ItemSpec & {
 type Drop =
   | { type: "tabs"; placement: TabPlacement }
   | { type: "group"; placement: { pinned: boolean; beforeId?: string | null } }
+  | { type: "folder"; folderId: string; beforeId: string | null }
   | { type: "none" };
 
 // `landing`: let go, it settles into the item's place while the item stays hidden.
@@ -128,7 +131,7 @@ class DragController {
     const frame = item.frame ?? { x, y, w: 176, h: 33 };
     this.grab = { x: x - frame.x, y: y - frame.y };
     const count = new Set(this.sources.flatMap((s) => s.tabIds)).size;
-    const height = item.kind === "group" ? Math.min(frame.h, item.headerFrame?.h ?? 33) : frame.h;
+    const height = item.kind === "group" || item.kind === "folder" ? Math.min(frame.h, item.headerFrame?.h ?? 33) : frame.h;
     // Its picture, taken if it leaves the sidebar: the ghost, where it is by then.
     if (seq) setDragPicture(seq, () => [this.pointer.x - this.grab.x, this.pointer.y - this.grab.y, frame.w, height], [x, y]);
     this.ghost = {
@@ -199,6 +202,7 @@ class DragController {
       const ids = sources.flatMap((i) => i.tabIds);
       if (drop.type === "tabs") s.placeTabs(ids, drop.placement);
       else if (drop.type === "group" && sources[0]!.groupId) s.moveGroup(sources[0]!.groupId, drop.placement);
+      else if (drop.type === "folder") s.movePinnedFolder(drop.folderId, drop.beforeId);
     }
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
     for (const i of this.items.values()) {
@@ -315,7 +319,7 @@ class DragController {
     const dragged = new Set(this.sources.flatMap((s) => s.tabIds));
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
-    const rowPitch = (source.kind === "group" ? (source.frame?.h ?? layout.rowHeight) : layout.rowHeight * Math.max(1, this.ghost?.count ?? 1)) + ROW_GAP;
+    const rowPitch = (source.kind === "group" || source.kind === "folder" ? (source.frame?.h ?? layout.rowHeight) : layout.rowHeight * Math.max(1, this.ghost?.count ?? 1)) + ROW_GAP;
     let drop: Drop = { type: "none" };
     let gapKey: string | null = null;
     let pitch = rowPitch;
@@ -336,6 +340,17 @@ class DragController {
       gapKey = before?.key ?? "tail:tiles";
       pitch = (cells[0]?.frame?.w ?? source.frame?.w ?? 50) + PINNED_TILE_GAP;
     } else {
+      // Above the line under the Pinned section, a tab is pinned there.
+      const divider = this.at(this.regionFrames.get("divider") ?? null);
+      const pinning = tabsDrag && !!divider && y < divider.y + divider.h / 2;
+      // Onto a pinned folder's header (its middle third), or among its open rows.
+      const folder = tabsDrag
+        ? live.filter((i) => i.kind === "folder").find((f) => {
+            const header = this.at(f.headerFrame);
+            if (header && inside(header, x, y)) return Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
+            return !f.collapsed && inside(this.at(f.frame)!, x, y);
+          })
+        : undefined;
       const groups = live.filter((i) => i.kind === "group");
       const box = tabsDrag
         ? groups.find((g) => {
@@ -345,7 +360,18 @@ class DragController {
             return inside(f, x, y) && (!header || y > header.y + header.h * 0.75);
           })
         : undefined;
-      if (box?.collapsed) {
+      if (folder) {
+        const header = this.at(folder.headerFrame);
+        if (header && y <= header.y + header.h) {
+          drop = { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: null } };
+          into = folder.folderId!;
+        } else {
+          const members = live.filter((i) => i.kind === "row" && i.parentGroup === folder.folderId).sort(byY);
+          const before = members.find((m) => cy(m) > y);
+          drop = { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: firstTab(before) } };
+          gapKey = before?.key ?? `tail:folder:${folder.folderId}`;
+        }
+      } else if (box?.collapsed) {
         drop = { type: "tabs", placement: { pinned: false, groupId: box.groupId!, beforeId: null } };
         into = box.groupId!;
       } else if (box) {
@@ -355,19 +381,25 @@ class DragController {
         gapKey = before?.key ?? `tail:group:${box.groupId}`;
       } else {
         const list = this.at(this.regionFrames.get("list") ?? null);
+        // A folder stays in the Pinned section; a group goes among the pinned groups or the list.
         const pinned = source.kind === "group" && !!list && y < list.y;
-        const section: Section = pinned ? "pinnedGroups" : "list";
+        let section: Section = "list";
+        if (source.kind === "folder" || pinning) section = "pinned";
+        else if (pinned) section = "pinnedGroups";
         const blocks = live.filter((i) => i.section === section && !i.parentGroup && i.kind !== "tail" && i.kind !== "tile").sort(byY);
-        // A block holding nothing but what's dragged (a group's last member) isn't a place to land before.
-        const before = blocks.find((b) => cy(b) > y && firstTab(b) !== null);
+        // A block holding nothing but what's dragged (a group's last member) isn't a place to land before; an empty
+        // folder is (its rows would land before the folders that follow, as it shows after them).
+        const before = blocks.find((b) => cy(b) > y && (firstTab(b) !== null || (b.kind === "folder" && !b.tabIds.length)));
         gapKey = before?.key ?? `tail:${section}`;
         drop =
           source.kind === "group"
             ? { type: "group", placement: { pinned, beforeId: firstTab(before) } }
-            : { type: "tabs", placement: { pinned: false, beforeId: firstTab(before) } };
+            : source.kind === "folder"
+              ? { type: "folder", folderId: source.folderId!, beforeId: firstTab(before) }
+              : { type: "tabs", placement: { pinned: false, row: section === "pinned", folderId: null, beforeId: firstTab(before) } };
       }
     }
-    if (source.kind === "split" && drop.type === "tabs" && (drop.placement.pinned || drop.placement.groupId)) {
+    if (source.kind === "split" && drop.type === "tabs" && (drop.placement.pinned || drop.placement.groupId || drop.placement.row)) {
       drop = { type: "none" };
       gapKey = null;
       into = null;

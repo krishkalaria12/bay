@@ -2,12 +2,14 @@ import { cleanUrl, markdownLink } from "@bay/core";
 import { copyText, prompt } from "@bay/shell";
 import { updateFolder } from "../../live/store";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, bookmarkProfileId, viewTabIds } from "../../store/model";
+import { activeTabId, bookmarkProfileId, pinnedPage, viewTabIds } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
 
 const store = () => useBrowser.getState();
+// An Essential or a pinned row: never in a group.
+const inPinnedSection = (s: ReturnType<typeof store>, id: string) => !!s.tabs[id] && pinnedPage(s.tabs[id]!);
 
 const anchors = new Map<string, string>();
 
@@ -39,7 +41,7 @@ export function clickTab(windowId: string, tabId: string, mods: { metaKey?: bool
 function openInCurrentGroup(windowId: string, tabId: string) {
   const s = store();
   const active = activeTabId(s, windowId);
-  if (active && active !== tabId && !s.tabs[tabId]?.pinned && !s.tabs[active]?.pinned) {
+  if (active && active !== tabId && !inPinnedSection(s, tabId) && !inPinnedSection(s, active)) {
     const group = groupOf(s, active);
     if (group) s.addTabsToGroup(group.id, [tabId]);
     else s.groupTabs([active, tabId]);
@@ -54,6 +56,7 @@ export async function startRename(windowId: string, target: Target) {
   if (target.kind === "tab") {
     const tab = s.tabs[target.id];
     if (!tab) return;
+    // A tile has no title to edit in place.
     if (tab.pinned) {
       const name = await prompt({
         title: "Rename Tab",
@@ -67,6 +70,8 @@ export async function startRename(windowId: string, target: Target) {
     }
     const group = groupOf(s, tab.id);
     if (group?.collapsed && activeTabId(s, windowId) !== tab.id) s.updateGroup(group.id, { collapsed: false });
+    const folder = tab.pinnedRow && tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
+    if (folder?.collapsed && activeTabId(s, windowId) !== tab.id) s.updatePinnedFolder(folder.id, { collapsed: false });
   }
   setSidebarUi({ renaming: { windowId, ...target } });
 }
@@ -76,7 +81,8 @@ export function commitRename(target: Target, text: string) {
   if (target.kind === "tab") {
     const tab = store().tabs[target.id];
     if (tab) store().updateTab(tab.id, { customTitle: name && name !== tab.title ? name : null });
-  } else store().updateGroup(target.id, { name });
+  } else if (target.kind === "folder") store().updatePinnedFolder(target.id, { name });
+  else store().updateGroup(target.id, { name });
   endRename(target);
 }
 
@@ -94,11 +100,12 @@ export function setIcon(target: Target, icon: string | null) {
   if (target.kind === "tab") store().updateTab(target.id, { customIcon: icon });
   // A live folder's header row ("livefolder|<id>").
   else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
+  else if (target.kind === "folder") store().updatePinnedFolder(target.id, { icon });
   else store().updateGroup(target.id, { icon });
 }
 
 export function newGroupWithSelection(windowId: string, ids = selectedTabIds(store(), windowId)) {
-  const groupId = store().groupTabs(ids.filter((id) => !store().tabs[id]?.pinned));
+  const groupId = store().groupTabs(ids.filter((id) => !inPinnedSection(store(), id)));
   if (groupId) void startRename(windowId, { kind: "group", id: groupId });
   return groupId;
 }
@@ -129,9 +136,16 @@ export async function bookmarkTabs(windowId: string, ids: string[], folder: stri
   }
 }
 
+/** A new folder in the Pinned section, with `ids` pinned into it; its name is typed in place. */
+export function newPinnedFolderWith(windowId: string, ids: string[] = []) {
+  const folderId = store().newPinnedFolder(windowId, { tabIds: ids });
+  if (folderId) void startRename(windowId, { kind: "folder", id: folderId });
+  return folderId;
+}
+
 export async function editPinnedPage(windowId: string, tabId: string) {
   const tab = store().tabs[tabId];
-  if (!tab?.pinned) return;
+  if (!tab || !pinnedPage(tab)) return;
   const url = await prompt({
     title: "Edit Pinned Page",
     value: tab.pinnedUrl ?? tab.url,

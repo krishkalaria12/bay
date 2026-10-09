@@ -42,6 +42,13 @@ export const LIVE_FOLDER_PAD = 2;
 // The completion glyph pops in on Animated's old spring (speed 14, bounciness 14).
 export const LIVE_POP_SPRING = bouncySpring(14, 14);
 
+// MARK: Pinned rows and folders (Sidebar.tsx, FolderBlock.tsx)
+
+// A folder's rows sit this far in from its header, under its name.
+export const FOLDER_INDENT = 14;
+// The line under the Pinned section, with room above and below it; a tab dropped above its middle is pinned.
+export const PINNED_DIVIDER_PAD = 6;
+
 // MARK: Pinned tiles and dragging (PinnedGrid.tsx, dnd.tsx)
 
 export const PINNED_TILE_GAP = 6;

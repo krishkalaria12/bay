@@ -1,7 +1,7 @@
 import { resolveInput } from "@bay/core";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { leaveGroups, syncGroupOrder } from "./groups";
+import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import {
   activeTabId,
   closesWindow,
@@ -12,6 +12,7 @@ import {
   navigationTo,
   newId,
   pinnedFirst,
+  pinnedPage,
   sharesProfile,
   snapshotTab,
   viewTabIds,
@@ -156,6 +157,7 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
     windows,
     windowOrder: removedWindows.length ? s.windowOrder.filter((id) => !removedWindows.includes(id)) : s.windowOrder,
     windowUi: removedWindows.length ? without(s.windowUi, removedWindows) : s.windowUi,
+    pinnedFolders: removedWindows.length ? Object.fromEntries(Object.entries(s.pinnedFolders).filter(([, f]) => !removedWindows.includes(f.windowId))) : s.pinnedFolders,
     live: without(s.live, gone),
     find: without(s.find, gone),
     groups: leaveGroups(s.groups, gone),
@@ -262,7 +264,7 @@ export function withNewTab(s: BrowserState, windowId: string, o: NewTabOptions =
   const tab = makeTab(windowId, profileId, url, { ...o.snapshot, pinned: o.pinned ?? o.snapshot?.pinned ?? false });
   if (tab.navigation && !o.snapshot) tab.navigation = navigationTo(url, true);
   tab.openerId = o.openerId ?? null;
-  tab.pinnedUrl = tab.pinned ? tab.pinnedUrl || url || null : null;
+  tab.pinnedUrl = pinnedPage(tab) ? tab.pinnedUrl || url || null : null;
   if (o.adoptId) {
     // The adopted browser is already loading `url`; reloading drops POST data and opener state.
     tab.adoptId = o.adoptId;
@@ -422,7 +424,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const [next, copy] = withNewTab(s, w.id, {
       url: source.url || undefined,
       profileId: source.profileId,
-      snapshot: { ...snapshotTab(source), pinned: false },
+      snapshot: { ...snapshotTab(source), pinned: false, pinnedRow: undefined },
       index: w.tabIds.indexOf(id) + 1,
       adoptId: source.url ? `clone:${id}` : undefined,
     });
@@ -445,7 +447,8 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
       const moved = section.filter((t) => t !== id);
       moved.splice(Math.min(Math.max(toIndex, 0), moved.length), 0, id);
       let k = 0;
-      const tabIds = w.tabIds.map((t) => (inSection(t) ? moved[k++]! : t));
+      // The pinned rows share a section with the list here (both aren't Essentials): neither crosses into the other.
+      const tabIds = orderSections(w.tabIds.map((t) => (inSection(t) ? moved[k++]! : t)), s.tabs, s.groups);
       const window = { ...w, tabIds };
       return { windows: { ...s.windows, [w.id]: window }, groups: syncGroupOrder(s.groups, window) };
     });

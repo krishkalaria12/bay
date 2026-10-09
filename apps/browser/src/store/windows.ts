@@ -90,7 +90,9 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
   const activeTabIds = { ...w.activeTabIds };
   for (const { adoptId, ...t } of moving) {
     const loaded = !!t.url && (!!t.navigation || !!adoptId);
-    tabs[t.id] = { ...t, windowId: targetId, navigation: loaded ? navigationTo(t.url) : null };
+    // A pinned row stays one in its new window, out of its folder (the folder is the old window's).
+    const { folderId: _, ...rest } = t;
+    tabs[t.id] = { ...rest, windowId: targetId, navigation: loaded ? navigationTo(t.url) : null };
     live[t.id] = IDLE_LIVE;
     activeTabIds[t.profileId] ??= t.id;
   }

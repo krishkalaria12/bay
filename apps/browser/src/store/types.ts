@@ -39,6 +39,10 @@ export type Tab = {
   title: string;
   favicon: string | null;
   pinned: boolean;
+  // In the space's Pinned section (Arc's and Zen's pinned tabs): a full row below the Essentials (the pinned tiles),
+  // loose or in one of its folders (`folderId`). It stays when tabs are cleaned up, and closing it only unloads it.
+  pinnedRow?: boolean;
+  folderId?: string;
   // Kept (the tab menu's Keep Tab): as a pin does, it stays when tabs are cleaned up and awake when idle ones sleep.
   kept?: boolean;
   muted: boolean;
@@ -85,6 +89,18 @@ export type TabGroup = {
   pinnedOpenerId?: string;
 };
 
+// A folder of the Pinned section (Arc's and Zen's): it holds pinned rows, and stays when it's emptied. Its members
+// are the window's tabs with its id, in the window's order.
+export type PinnedFolder = {
+  id: string;
+  windowId: string;
+  profileId: string;
+  name: string;
+  icon: string | null;
+  collapsed: boolean;
+  createdAt: number;
+};
+
 export type SplitView = {
   id: string;
   windowId: string;
@@ -120,7 +136,7 @@ export type TabSnapshot = Pick<
   Tab,
   "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "profileId"
 > &
-  Partial<Pick<Tab, "pinnedUrl">>;
+  Partial<Pick<Tab, "pinnedUrl" | "pinnedRow">>;
 
 export type ClosedTab = {
   kind: "tab";
@@ -145,8 +161,9 @@ export type ClosedWindow = {
 };
 
 export type ParkedPins = {
-  tabs: (TabSnapshot & { id: string; groupId: string | null })[];
+  tabs: (TabSnapshot & { id: string; groupId: string | null; folderId?: string })[];
   groups: Pick<TabGroup, "id" | "name" | "icon" | "color" | "collapsed">[];
+  folders?: Pick<PinnedFolder, "id" | "name" | "icon" | "collapsed">[];
 };
 
 export type ClosedGroup = {

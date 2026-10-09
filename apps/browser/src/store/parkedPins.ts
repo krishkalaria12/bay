@@ -1,11 +1,12 @@
 import type { BrowserState } from "./browser";
 import { orderSections, syncGroupOrder } from "./groups";
+import { inFolder } from "./folders";
 import { favoriteTabIds, IDLE_LIVE, makeTab, newId, pinnedFirst, sharesProfile, snapshotTab, without } from "./model";
 import { samePage } from "./organize";
 import type { BrowserWindow, HistoryEntry, ParkedPins, Tab, TabGroup } from "./types";
 
 
-type PinSource = Pick<BrowserState, "tabs" | "groups" | "history">;
+type PinSource = Pick<BrowserState, "tabs" | "groups" | "pinnedFolders" | "history">;
 
 function atPin(t: Tab, history: HistoryEntry[]): Partial<Pick<Tab, "url" | "title" | "favicon">> {
   const home = t.pinnedUrl;
@@ -24,12 +25,18 @@ export function parkWindowPins(parked: Record<string, ParkedPins>, w: BrowserWin
   const profiles = new Set(w.tabIds.map((id) => s.tabs[id]?.profileId).filter((p): p is string => !!p));
   for (const profileId of profiles) {
     const own = w.tabIds.map((id) => s.tabs[id]).filter((t): t is Tab => !!t && t.profileId === profileId);
-    if (!own.some((t) => t.pinned || groupOf.has(t.id))) continue;
+    const folders = Object.values(s.pinnedFolders).filter((f) => f.windowId === w.id && f.profileId === profileId);
+    if (!own.some((t) => t.pinned || t.pinnedRow || groupOf.has(t.id)) && !folders.length) continue;
     const old = next[profileId] ?? { tabs: [], groups: [] };
     const ids = new Set(old.tabs.map((p) => p.id));
-    const homes = old.tabs.filter((p) => !p.groupId).map(homeOf);
+    // A page already parked as a tile isn't parked again as one, nor a loose pinned row's as a loose row.
+    const homes = old.tabs.filter((p) => !p.groupId && !p.pinnedRow).map(homeOf);
+    const rowHomes = old.tabs.filter((p) => p.pinnedRow && !p.folderId).map(homeOf);
     const groups = [...old.groups];
+    const parkedFolders = [...(old.folders ?? [])];
+    for (const f of folders) if (!parkedFolders.some((x) => x.id === f.id)) parkedFolders.push({ id: f.id, name: f.name, icon: f.icon, collapsed: f.collapsed });
     const tiles: ParkedPins["tabs"] = [];
+    const rows: ParkedPins["tabs"] = [];
     const members: ParkedPins["tabs"] = [];
     for (const t of own) {
       if (ids.has(t.id)) continue;
@@ -39,14 +46,22 @@ export function parkWindowPins(parked: Record<string, ParkedPins>, w: BrowserWin
         if (homes.some((h) => samePage(h, homeOf(tile)))) continue;
         homes.push(homeOf(tile));
         tiles.push(tile);
+      } else if (t.pinnedRow) {
+        const folder = folders.find((f) => inFolder(t, f));
+        const row = { ...snapshotTab(t), ...atPin(t, s.history[profileId] ?? []), id: t.id, groupId: null, ...(folder ? { folderId: folder.id } : {}) };
+        if (!folder && rowHomes.some((h) => samePage(h, homeOf(row)))) continue;
+        if (!folder) rowHomes.push(homeOf(row));
+        rows.push(row);
       } else if (g) {
         if (!groups.some((x) => x.id === g.id)) groups.push({ id: g.id, name: g.name, icon: g.icon, color: g.color, collapsed: g.collapsed });
         members.push({ ...snapshotTab(t), id: t.id, groupId: g.id });
       }
     }
-    const oldTiles = old.tabs.filter((p) => !p.groupId);
+    const oldTiles = old.tabs.filter((p) => !p.groupId && !p.pinnedRow);
+    const oldRows = old.tabs.filter((p) => p.pinnedRow);
     const oldMembers = old.tabs.filter((p) => p.groupId);
-    next = { ...next, [profileId]: { tabs: [...oldTiles, ...tiles, ...oldMembers, ...members], groups } };
+    const park: ParkedPins = { tabs: [...oldTiles, ...tiles, ...oldRows, ...rows, ...oldMembers, ...members], groups };
+    next = { ...next, [profileId]: parkedFolders.length ? { ...park, folders: parkedFolders } : park };
   }
   return next;
 }
@@ -61,14 +76,28 @@ function adoptOwnPins(s: BrowserState, windowId: string, profileId: string): Bro
   if (!park || !w || w.incognito || !s.profiles[profileId]) return s;
   const tabs = { ...s.tabs };
   const live = { ...s.live };
-  const homes = w.tabIds.map((id) => tabs[id]).filter((t): t is Tab => !!t?.pinned && t.profileId === profileId).map(homeOf);
+  const own = w.tabIds.map((id) => tabs[id]).filter((t): t is Tab => !!t && t.profileId === profileId);
+  const homes = own.filter((t) => t.pinned).map(homeOf);
+  const rowHomes = own.filter((t) => t.pinnedRow && !t.folderId).map(homeOf);
+  // The parked folders come back, empty ones too, under new ids if theirs are taken.
+  const pinnedFolders = { ...s.pinnedFolders };
+  const folderIds = new Map<string, string>();
+  for (const f of park.folders ?? []) {
+    const id = pinnedFolders[f.id] ? newId("pf") : f.id;
+    pinnedFolders[id] = { ...f, id, windowId, profileId, createdAt: Date.now() };
+    folderIds.set(f.id, id);
+  }
   const members = new Map<string, string[]>();
   const added: string[] = [];
-  for (const { id, groupId, ...snap } of park.tabs) {
+  for (const { id, groupId, folderId: parkedFolder, ...snap } of park.tabs) {
     const home = homeOf(snap);
-    if (!groupId && homes.some((h) => samePage(h, home))) continue;
+    const row = !groupId && !!snap.pinnedRow;
+    const folderId = row && parkedFolder ? folderIds.get(parkedFolder) : undefined;
+    if (!groupId && !row && homes.some((h) => samePage(h, home))) continue;
+    if (row && !folderId && rowHomes.some((h) => samePage(h, home))) continue;
     const tab: Tab = {
-      ...makeTab(windowId, profileId, snap.url, { ...snap, profileId, pinned: !groupId, pinnedUrl: groupId ? null : home || null }),
+      ...makeTab(windowId, profileId, snap.url, { ...snap, profileId, pinned: !groupId && !row, pinnedUrl: groupId ? null : home || null }),
+      ...(folderId ? { folderId } : {}),
       id: tabs[id] ? newId("tab") : id,
       navigation: null,
       unloaded: true,
@@ -87,11 +116,12 @@ function adoptOwnPins(s: BrowserState, windowId: string, profileId: string): Bro
   }
   const window = { ...w, tabIds: orderSections(pinnedFirst([...added, ...w.tabIds], tabs), tabs, groups) };
   groups = syncGroupOrder(groups, window);
-  return { ...s, tabs, live, groups, windows: { ...s.windows, [windowId]: window }, parkedPins: without(s.parkedPins, [profileId]) };
+  return { ...s, tabs, live, groups, pinnedFolders, windows: { ...s.windows, [windowId]: window }, parkedPins: without(s.parkedPins, [profileId]) };
 }
 
 // Favourites parked by another space with this profile come back with this one: they're its favourites too. Each stays
-// its own space's; a page the window's favourites already have isn't added twice. Pinned groups stay parked.
+// its own space's; a page the window's favourites already have isn't added twice. Pinned groups, pinned rows and
+// folders stay parked.
 function adoptSharedFavorites(s: BrowserState, windowId: string, profileId: string): BrowserState {
   const w = s.windows[windowId];
   if (!w || w.incognito || !s.profiles[profileId]) return s;
@@ -102,7 +132,7 @@ function adoptSharedFavorites(s: BrowserState, windowId: string, profileId: stri
   const added: string[] = [];
   for (const [other, park] of Object.entries(s.parkedPins)) {
     if (other === profileId || !sharesProfile(s, other, profileId)) continue;
-    const tiles = park.tabs.filter((p) => !p.groupId);
+    const tiles = park.tabs.filter((p) => !p.groupId && !p.pinnedRow);
     if (!tiles.length) continue;
     for (const { id, groupId: _, ...snap } of tiles) {
       const home = homeOf(snap);
@@ -118,8 +148,8 @@ function adoptSharedFavorites(s: BrowserState, windowId: string, profileId: stri
       live[tab.id] = IDLE_LIVE;
       added.push(tab.id);
     }
-    const members = park.tabs.filter((p) => p.groupId);
-    parkedPins = members.length ? { ...parkedPins, [other]: { tabs: members, groups: park.groups } } : without(parkedPins, [other]);
+    const kept = park.tabs.filter((p) => p.groupId || p.pinnedRow);
+    parkedPins = kept.length || park.folders?.length ? { ...parkedPins, [other]: { ...park, tabs: kept } } : without(parkedPins, [other]);
   }
   if (parkedPins === s.parkedPins) return s;
   const window = { ...w, tabIds: orderSections(pinnedFirst([...added, ...w.tabIds], tabs), tabs, s.groups) };

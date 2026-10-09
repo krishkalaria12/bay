@@ -61,7 +61,18 @@ function PickerPanel({ picker, sidebarWidth, windowWidth }: { picker: Picker; si
   const right = useSidebarOnRight();
   const tokens = useSidebarTokens();
   const liveIcon = useLive((s) => (picker.kind === "live" ? s.folders[picker.id.split("|")[1] ?? ""]?.icon : null));
-  const current = useBrowser((s) => (picker.kind === "tab" ? s.tabs[picker.id]?.customIcon : picker.kind === "live" ? liveIcon : s.groups[picker.id]?.icon) ?? null);
+  const current = useBrowser((s) => {
+    switch (picker.kind) {
+      case "tab":
+        return s.tabs[picker.id]?.customIcon ?? null;
+      case "live":
+        return liveIcon ?? null;
+      case "folder":
+        return s.pinnedFolders[picker.id]?.icon ?? null;
+      default:
+        return s.groups[picker.id]?.icon ?? null;
+    }
+  });
   const [tab, setTab] = useState<"emoji" | "symbols">(current?.startsWith(SYMBOL_PREFIX) ? "symbols" : "emoji");
   const [query, setQuery] = useState("");
   const items = pickerItems(tab, query.trim().toLowerCase());

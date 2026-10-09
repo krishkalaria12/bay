@@ -1,8 +1,9 @@
 import { create, type StateCreator } from "zustand";
 import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "./bookmarks";
-import { createGroupsSlice, type GroupsSlice } from "./groups";
+import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./folders";
+import { createGroupsSlice, placeFolders, type GroupsSlice } from "./groups";
 import { createHistorySlice, type HistorySlice } from "./history";
-import { IDLE_LIVE, isIncognitoProfile, pinnedFirst } from "./model";
+import { IDLE_LIVE, isIncognitoProfile, pinnedFirst, pinnedPage } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createProfilesSlice, DEFAULT_PROFILE, engineIdOf, type ProfilesSlice } from "./profiles";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
@@ -16,6 +17,7 @@ export type BrowserState = ProfilesSlice &
   WindowsSlice &
   TabsSlice &
   GroupsSlice &
+  FoldersSlice &
   OrganizeSlice &
   SplitsSlice &
   HistorySlice &
@@ -35,6 +37,7 @@ export type HydrateData = Partial<
     | "windowOrder"
     | "tabs"
     | "groups"
+    | "pinnedFolders"
     | "splits"
     | "closedTabs"
     | "closedWindows"
@@ -70,6 +73,7 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
   ...createWindowsSlice(...a),
   ...createTabsSlice(...a),
   ...createGroupsSlice(...a),
+  ...createFoldersSlice(...a),
   ...createOrganizeSlice(...a),
   ...createSplitsSlice(...a),
   ...createHistorySlice(...a),
@@ -94,11 +98,11 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
     for (const t of Object.values(data.tabs ?? {})) {
       if (!rawWindows[t.windowId] || !profileOk(t.profileId)) continue;
       const { adoptId: _, ...rest } = t;
-      tabs[t.id] = { ...rest, navigation: null, pinnedUrl: rest.pinnedUrl ?? (rest.pinned ? rest.url || null : null) };
+      tabs[t.id] = { ...rest, navigation: null, pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null) };
     }
     const windows: Record<string, BrowserWindow> = {};
     for (const w of Object.values(rawWindows)) {
-      const tabIds = pinnedFirst(w.tabIds.filter((id) => tabs[id]?.windowId === w.id), tabs);
+      const tabIds = placeFolders(pinnedFirst(w.tabIds.filter((id) => tabs[id]?.windowId === w.id), tabs), tabs);
       if (!tabIds.length) continue;
       const activeTabIds = Object.fromEntries(Object.entries(w.activeTabIds).filter(([p, id]) => tabs[id]?.profileId === p));
       const profileId = tabIds.some((id) => tabs[id]!.profileId === w.profileId) ? w.profileId : tabs[tabIds[0]!]!.profileId;
@@ -131,6 +135,7 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
       tabs,
       live: Object.fromEntries(Object.keys(tabs).map((id) => [id, IDLE_LIVE])),
       groups,
+      pinnedFolders: Object.fromEntries(Object.values(data.pinnedFolders ?? {}).filter((f) => windows[f.windowId]).map((f) => [f.id, f])),
       splits,
       closedTabs: data.closedTabs ?? [],
       closedWindows: data.closedWindows ?? [],
@@ -153,6 +158,7 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
       find: {},
       ui: { ...s.ui, focusedWindowId: focused, focusOrder: focused ? [focused, ...windowOrder.filter((id) => id !== focused).reverse()] : [] },
     };
+    next = prunePinnedFolders(next);
     for (const w of Object.values(windows)) next = apply(next, activated(next, w.activeTabIds[w.profileId]!));
     set(next);
   },
