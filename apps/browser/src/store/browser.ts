@@ -5,6 +5,7 @@ import { createGroupsSlice, placeFolders, type GroupsSlice } from "./groups";
 import { createHistorySlice, type HistorySlice } from "./history";
 import { IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage, spaceListKey, tabListKey, tabToShow, windowListKey } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
+import { createPeeksSlice, type PeeksSlice } from "./peeks";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, type SpacesSlice } from "./spaces";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
@@ -20,6 +21,7 @@ export type BrowserState = SpacesSlice &
   FoldersSlice &
   OrganizeSlice &
   SplitsSlice &
+  PeeksSlice &
   HistorySlice &
   BookmarksSlice &
   SettingsSlice &
@@ -79,6 +81,7 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
   ...createFoldersSlice(...a),
   ...createOrganizeSlice(...a),
   ...createSplitsSlice(...a),
+  ...createPeeksSlice(...a),
   ...createHistorySlice(...a),
   ...createBookmarksSlice(...a),
   ...createSettingsSlice(...a),
@@ -102,7 +105,8 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
     const tabs: Record<string, Tab> = {};
     for (const t of Object.values(data.tabs ?? {})) {
       const own = rawWindows[t.windowId];
-      if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own)) continue;
+      // A peek is thrown away with its window's session (store/peeks.ts).
+      if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own) || t.peekOf) continue;
       const { adoptId: _, ...rest } = t;
       tabs[t.id] = { ...rest, windowId: own ? t.windowId : "", navigation: null, pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null) };
     }
@@ -165,6 +169,8 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
       privateCleanedTabs: {},
       privateSiteMutes: {},
       selection: {},
+      peeks: {},
+      closedPeeks: {},
       history: Object.fromEntries(Object.entries(data.history ?? {}).filter(([p]) => spaces[p])),
       // A view handed in (tests) counts as read; the app's history and bookmarks come from Chrome later
       // (lib/history.ts, lib/bookmarks.ts).

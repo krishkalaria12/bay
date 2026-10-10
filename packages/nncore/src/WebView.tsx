@@ -156,6 +156,8 @@ export type WebViewProps = ViewProps & {
   warm?: boolean;
   pageBackgroundColor?: string;
   autoPictureInPicture?: boolean;
+  /** Arc's Peek: a link the user clicks to another site doesn't navigate the page; it comes to `onPeekLink`. */
+  peekLinks?: boolean;
   onNavigationChange?: (state: NavigationState) => void;
   onProgress?: (progress: number) => void;
   onFavicon?: (url: string, candidates: string[]) => void;
@@ -167,6 +169,7 @@ export type WebViewProps = ViewProps & {
   onFindResult?: (result: FindResult) => void;
   onFullscreen?: (fullscreen: boolean) => void;
   onStatus?: (text: string) => void;
+  onPeekLink?: (url: string) => void;
   onCrashed?: (info: CrashInfo) => void;
   onUnresponsive?: () => void;
   onResponsive?: () => void;
@@ -257,6 +260,7 @@ type NativeEvents = {
   onFindResult: FindResult;
   onFullscreen: { fullscreen: boolean };
   onStatus: { text: string };
+  onPeekLink: { url: string };
   onCrashed: CrashInfo;
   onUnresponsive: object;
   onResponsive: object;
@@ -295,6 +299,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onFindResult: (e) => [e],
   onFullscreen: (e) => [e.fullscreen],
   onStatus: (e) => [e.text],
+  onPeekLink: (e) => [e.url],
   onCrashed: (e) => [e],
   onUnresponsive: () => [],
   onResponsive: () => [],

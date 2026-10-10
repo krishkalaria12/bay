@@ -65,6 +65,8 @@ export type Settings = {
   shortcuts: Record<string, string[]>;
 
   openLinksInLittleBay: boolean;
+  // Arc's Peek: a link a pinned tab or a favourite opens in front shows over its page (store/peeks.ts).
+  peekLinksFromPinnedTabs: boolean;
   littleBaySize: [number, number];
 };
 
@@ -107,6 +109,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultSpaceId: DEFAULT_SPACE_ID,
   shortcuts: {},
   openLinksInLittleBay: true,
+  peekLinksFromPinnedTabs: true,
   littleBaySize: [900, 640],
 };
 

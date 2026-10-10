@@ -34,10 +34,10 @@ const DOCS: Doc[] = [
     name: "session.json",
     sources: (s) => [s.spaces, s.spaceOrder, s.orphanedProfileData, s.windows, s.windowOrder, s.tabs, s.tabLists, s.groups, s.pinnedFolders, s.splits, s.closedTabs, s.closedWindows, s.settings, s.ui.focusedWindowId, s.closedGroups, s.deletedGroups, s.cleanedTabs],
     json: serialized((s) => {
-      // Private windows and Little Bay aren't restored: closing (or quitting) throws their pages away.
+      // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
       const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
       const kept = new Set(windows.map((w) => w.id));
-      const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small";
+      const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
       const tabs = Object.values(s.tabs).filter(own);
       const saved = new Set(tabs.map((t) => t.id));
       return {

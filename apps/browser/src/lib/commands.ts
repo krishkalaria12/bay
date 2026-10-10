@@ -40,6 +40,7 @@ import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
 import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
+import { shownPeek } from "../store/peeks";
 import { isSmall, mainWindowFor } from "../store/small";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
 
@@ -51,6 +52,9 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     requested = null;
   }
   if (isSmall(s, requested) && runLittleBayCommand(command, requested!)) return;
+  // A peek on screen takes ⌘W and ⌘O first (⌘O is Open File… otherwise), unless the command bar is open over it.
+  const peekWindow = resolveWindowId(s, requested);
+  if (peekWindow && !s.windowUi[peekWindow]?.panel.open && runPeekCommand(command, peekWindow)) return;
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
   switch (command) {
@@ -128,6 +132,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "newTab":
       return openNewTabPanel(windowId);
     case "reopenClosedTab":
+      // A peek closed last comes back over its tab, as Arc's (store/peeks.ts).
+      if (s.reopenPeek(windowId)) return;
       return s.reopenClosed(windowId);
     case "restoreClosed":
       return arg ? s.restoreClosed(arg, windowId) : undefined;
@@ -317,6 +323,21 @@ function runLittleBayCommand(command: string, windowId: string): boolean {
       return true;
     case "openFile":
       openInMainWindow(windowId);
+      return true;
+  }
+  return false;
+}
+
+// A link's peek on screen (store/peeks.ts): ⌘W closes it and ⌘O keeps it as a tab, as Arc's; Little Bay's keys.
+function runPeekCommand(command: string, windowId: string): boolean {
+  const s = useBrowser.getState();
+  if (!shownPeek(s, windowId)) return false;
+  switch (command) {
+    case "closeTab":
+      s.closePeek(windowId);
+      return true;
+    case "openFile":
+      s.keepPeek(windowId);
       return true;
   }
   return false;

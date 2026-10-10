@@ -1844,6 +1844,16 @@ std::optional<bool> RunPageCommand(content::WebContents* contents, int command) 
   }
 }
 
+- (BOOL)peeksLinks {
+  return _contents && nncore::TabBridge::GetOrCreate(_contents)->peeks_links();
+}
+
+- (void)setPeeksLinks:(BOOL)peeksLinks {
+  if (_contents) {
+    nncore::TabBridge::GetOrCreate(_contents)->set_peeks_links(peeksLinks);
+  }
+}
+
 - (void)loadURL:(NSString*)url userInitiated:(BOOL)userInitiated {
   if (!_contents) {
     return;

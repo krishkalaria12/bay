@@ -24,6 +24,11 @@ export function LinksPane() {
 
       <SectionHeader title="Clicking links" />
       <Group>
+        <SettingToggle
+          setting="peekLinksFromPinnedTabs"
+          title="Open a Peek window when clicking links to other sites"
+          description="From pinned tabs and favorites, as Arc does. ⌘W or Esc closes it; ⌘O opens it as a tab."
+        />
         <SettingToggle setting="cmdClickCreatesTabGroup" title="⌘-clicking links creates tab groups" />
         <SettingToggle
           setting="optShiftClickOpensInGroup"

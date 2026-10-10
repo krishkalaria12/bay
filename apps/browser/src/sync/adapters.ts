@@ -323,8 +323,8 @@ export function deviceTabsAdapter(spaceId: string, deviceId: string, name: () =>
       if (retired) return { values: new Map(), ignore: (k) => k !== key };
       const s = store();
       const open = Object.values(s.tabs)
-        // Pinned tabs sync as pinned tabs; unloaded tiles aren't open.
-        .filter((t) => t.spaceId === spaceId && !t.pinned && !t.unloaded && /^(https?|file):/.test(t.url) && !s.windows[t.windowId]?.incognito)
+        // Pinned tabs sync as pinned tabs; unloaded tiles and peeks aren't open.
+        .filter((t) => t.spaceId === spaceId && !t.pinned && !t.unloaded && !t.peekOf && /^(https?|file):/.test(t.url) && !s.windows[t.windowId]?.incognito)
         .sort((a, z) => z.lastActiveAt - a.lastActiveAt)
         .slice(0, MAX_DEVICE_TABS)
         .map((t) => ({ u: t.url, t: t.customTitle || t.title }));

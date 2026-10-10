@@ -63,6 +63,8 @@ export type Tab = {
   // "restore:<closed tab>" (its back/forward list, from Chrome's TabRestoreService).
   wakeAdoptId?: string;
   liveItem?: { folderId: string; itemId: string };
+  // A peek's page (store/peeks.ts): shown over this tab, its opener, and in no list until it's kept.
+  peekOf?: string;
   unloaded?: boolean;
   createdAt: number;
   lastActiveAt: number;

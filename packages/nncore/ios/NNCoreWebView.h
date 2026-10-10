@@ -25,6 +25,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) BOOL visible;
 @property (nonatomic) BOOL warm;
 @property (nonatomic) BOOL autoPictureInPicture;
+// Arc's Peek: a link the user clicks to another site comes back as onPeekLink, the page staying (-[NNCoreTab peeksLinks]).
+@property (nonatomic) BOOL peekLinks;
 @property (nonatomic, readonly) BOOL discarded;
 @property (nonatomic) BOOL frozen;
 @property (nonatomic, readonly) int browserId;

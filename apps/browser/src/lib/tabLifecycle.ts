@@ -8,6 +8,7 @@ import { isInternalTab } from "../components/pages";
 import { openSettings } from "../components/settings/windows";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { activeTabId, engineProfile, isIncognitoSpace, wake } from "../store/model";
+import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
@@ -61,6 +62,9 @@ function shownTabIds(s: BrowserState): Set<string> {
     if (!id) continue;
     shown.add(id);
     for (const pane of splitOf(s, id)?.tabIds ?? []) shown.add(pane);
+    // A peek over the page is on screen too.
+    const peek = shownPeek(s, w.id);
+    if (peek) shown.add(peek.tabId);
   }
   return shown;
 }

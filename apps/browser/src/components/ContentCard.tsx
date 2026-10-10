@@ -17,6 +17,7 @@ import { useBrowser } from "../store/browser";
 import { useActiveTabId, useSidebarOpen, useWindowId } from "../store/hooks";
 import { activeTabId, engineProfile, viewTabIds, wake, windowTabIds } from "../store/model";
 import { removeTabs } from "../store/tabs";
+import { peeksLinks, shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
 import type { SplitView } from "../store/types";
 import { BookmarksBar, useBookmarksBarShown } from "./bookmarks/BookmarksBar";
@@ -28,6 +29,7 @@ import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
 import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
 import { OpenElsewhere, SadTab, StatusBubble } from "./layout/PaneOverlays";
+import { PeekLayer, startPeeks } from "./layout/PeekLayer";
 import { DropTargets, SplitDividers, SplitToast } from "./layout/SplitChrome";
 import { SplitEmptyState } from "./layout/SplitEmptyState";
 import { pagerFor } from "./layout/spacePager";
@@ -111,6 +113,7 @@ export function ContentCard() {
   useEffect(startMedia, []);
   useEffect(startSelectionTools, []);
   useEffect(startDeveloperMode, []);
+  useEffect(startPeeks, []);
 
   // The tabs whose page is in this window. Recomputed only when tabs change, not on every store update (page
   // progress, say).
@@ -189,6 +192,10 @@ export function ContentCard() {
     });
   };
 
+  // A link's peek over the pane of the tab it came from (layout/PeekLayer.tsx).
+  const peek = useBrowser(useShallow((s) => shownPeek(s, windowId)));
+  const peekRect = peek && !fullscreenTab ? panes[peek.fromId] : undefined;
+
   const focusedRect = activeId ? panes[activeId] : undefined;
   useEffect(() => {
     if (!origin || !focusedRect || addressInSidebar || small) return;
@@ -236,6 +243,11 @@ export function ContentCard() {
         })}
       {split && !fullscreenTab && <SplitDividers split={split} dividers={dividers} width={size.width} height={size.height} />}
       {!fullscreenTab && <DropTargets panes={panes} origin={origin} />}
+      {peek && peekRect && (
+        <PeekLayer windowId={windowId} peek={peek} rect={peekRect}>
+          <TabWebView key={peek.tabId} tabId={peek.tabId} visible warm={false} />
+        </PeekLayer>
+      )}
       <SplitToast windowId={windowId} />
     </View>
   );
@@ -410,6 +422,8 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
   // One for the view's life (its tab never changes): it keeps the handle it registered, to unregister only that.
   const [ref] = useState(() => webviewRef(tabId));
   const autoPictureInPicture = useAutoPictureInPicture(tabId, visible);
+  // A pinned tab's or a favourite's: a link the user clicks to another site comes back as onPeekLink (store/peeks.ts).
+  const peekLinks = useBrowser((s) => peeksLinks(s, tabId));
 
   const lastPage = useRef<string | null>(null);
   const pending = useRef<string | null>(navigation?.url ?? (adoptId ? (tab()?.url ?? null) : null));
@@ -451,6 +465,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       visible={visible}
       warm={warm}
       autoPictureInPicture={autoPictureInPicture}
+      peekLinks={peekLinks}
       // The card under the page (ContentCard's background) is drawn once, by the app: a page without a background of its
       // own shows it, as on CEF. The page drawing it again darkened every transparent page.
       pageBackgroundColor="transparent"
@@ -527,6 +542,13 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       onDisplayMediaRequest={(request) => requestDisplayMedia(tabId, request)}
       onOpenWindow={onOpenWindow}
       onStatus={(status) => patchPage(tabId, { status })}
+      onPeekLink={(url) => {
+        // The engine judged it another site (Chrome's own rule); the tab stayed. A tab that has just stopped peeking
+        // still gets its click: the link loads in it.
+        if (!/^https?:/i.test(url)) return;
+        if (peeksLinks(store(), tabId)) store().openPeek(tabId, url);
+        else store().navigate(tabId, url, { userInitiated: false });
+      }}
       onCrashed={(crashed) => {
         if (!isQuitting()) patchPage(tabId, { crashed, unresponsive: false, fullscreen: false, status: "" });
       }}
@@ -554,7 +576,12 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       onCommand={({ command, text, modifiers }) => {
         if (command === "search") searchSelection(tabId, text, modifiers);
         else if (command === "copyLinkToHighlight") void copyLinkToSelection(tabId);
-        else if (command === "escape") closeLittleBayOnEscape(tabId);
+        else if (command === "escape") {
+          // Esc in a peek's page closes the peek; in Little Bay's, Little Bay.
+          const t = tab();
+          if (t?.peekOf) store().closePeek(t.windowId);
+          else closeLittleBayOnEscape(tabId);
+        }
       }}
       onPageMessage={(kind, data) => {
         if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);

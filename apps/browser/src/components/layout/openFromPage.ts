@@ -2,6 +2,7 @@ import type { OpenWindowRequest } from "@bay/nncore";
 import { openWindow } from "../../lib/actions";
 import { useBrowser } from "../../store/browser";
 import { engineProfile } from "../../store/model";
+import { opensInPeek } from "../../store/peeks";
 import { isSmall } from "../../store/small";
 import { openLinkInSplit, openSplitPane } from "./splitActions";
 
@@ -33,6 +34,11 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
   // A private window's new window is private too: a session of its own, so the page loads afresh there.
   if (disposition === "window") {
     return void openWindow(w.incognito ? { incognito: true, url } : { spaceId: from.spaceId, url, adoptId });
+  }
+  // A link a pinned tab or a favourite opens in front: a peek over its page, as Arc's (store/peeks.ts).
+  if (disposition === "foreground" && from.tabId && opensInPeek(s, from.tabId, url)) {
+    s.openPeek(from.tabId, url, adoptId);
+    return;
   }
   const background = disposition === "background";
   s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background });

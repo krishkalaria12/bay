@@ -679,6 +679,8 @@ const char kPageReportsKey = 0;
   [self layoutPage];
   [self applyPainting];
   if (_muted && [tab respondsToSelector:@selector(setMuted:)]) tab.muted = YES;
+  // Always: a tab another view had may still peek its links.
+  if ([tab respondsToSelector:@selector(setPeeksLinks:)]) tab.peeksLinks = _peekLinks;
   if (_pageBackgroundColor && [tab respondsToSelector:@selector(setPageBackgroundColor:)]) tab.pageBackgroundColor = _pageBackgroundColor;
   if (_pendingURL) {
     [self loadNow:_pendingURL userInitiated:_pendingUserInitiated];
@@ -1407,6 +1409,10 @@ const char kPageReportsKey = 0;
   [self emit:@"status" payload:@{@"text" : text ?: @""}];
 }
 
+- (void)tab:(NNCoreTab *)tab wantsPeekOfURL:(NSString *)url {
+  [self emit:@"peekLink" payload:@{@"url" : url ?: @""}];
+}
+
 - (void)tabDidGainFocus:(NNCoreTab *)tab {
   [self emit:@"focus" payload:@{}];
 }
@@ -1506,6 +1512,11 @@ const char kPageReportsKey = 0;
 - (void)setMuted:(BOOL)muted {
   _muted = muted;
   if ([_tab respondsToSelector:@selector(setMuted:)]) _tab.muted = muted;
+}
+
+- (void)setPeekLinks:(BOOL)peekLinks {
+  _peekLinks = peekLinks;
+  if ([_tab respondsToSelector:@selector(setPeeksLinks:)]) _tab.peeksLinks = peekLinks;
 }
 
 - (void)setZoomFactor:(double)factor {

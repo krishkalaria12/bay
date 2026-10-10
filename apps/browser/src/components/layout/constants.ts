@@ -153,3 +153,14 @@ export const STRIP_TUCK_FADE_MS = 120;
 // Reordering's slide (stripReorder.ts): it comes to rest within a quarter point, so a settle that has nowhere to go
 // ends at once.
 export const STRIP_SLIDE = { stiffness: 8100, damping: 180, mass: 1, restDisplacementThreshold: 0.25, restSpeedThreshold: 2 } as const;
+
+// MARK: Link peeks (PeekLayer.tsx): Arc's Peek, a link's page in a card over the page it came from
+
+// The card's room on each side of the pane: a share of its width, at least this; the buttons sit in the right one,
+// with their labels once there's this much room.
+export const PEEK_INSET_SHARE = 0.09;
+export const PEEK_INSET_MIN = 48;
+export const PEEK_LABEL_ROOM = 84;
+export const PEEK_CARD_GAP = 8;
+export const PEEK_BUTTON = 26;
+export const PEEK_OPEN_MS = 240;

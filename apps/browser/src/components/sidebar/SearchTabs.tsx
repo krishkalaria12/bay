@@ -24,7 +24,7 @@ function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] 
   const spaceId = w.spaceId;
   const windowNumber = (id: string) => s.windowOrder.filter((x) => !s.windows[x]?.incognito || x === windowId).indexOf(id) + 1;
   const open: Row[] = Object.values(s.tabs)
-    .filter((t) => t.spaceId === spaceId)
+    .filter((t) => t.spaceId === spaceId && !t.peekOf)
     .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
     .map((t) => ({
       kind: "tab",
