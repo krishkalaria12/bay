@@ -69,7 +69,8 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
   const empty = useBrowser((s) => !folderTabIds(s, folderId).length);
   const renaming = useSidebarUi((u) => u.renaming?.kind === "folder" && u.renaming.id === folderId);
   const dropInto = useDropInto() === folderId;
-  const { hovered, hoverProps } = useRowHover(windowId, null);
+  // A closed folder peeks its tabs on hover (Arc's folder previews); an open one shows them already.
+  const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming && !empty ? { kind: "folder", id: folderId } : null);
   const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${(open.get() - 1) * 90}deg` }] }));
   if (!folder) return null;
   const target = { kind: "folder" as const, id: folderId };

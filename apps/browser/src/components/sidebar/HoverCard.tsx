@@ -1,5 +1,6 @@
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Image, Pressable, Text, View } from "react-native";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
@@ -17,18 +18,25 @@ import { dismissHover, hoverLeave, keepHover } from "./hover";
 import { useSidebarUi, type Anchor } from "./state";
 import { TabIcon } from "./TabIcon";
 import { HoverPlayer, useShowsMiniPlayer } from "../media/HoverPlayer";
+import { SitePreview, useSitePreview } from "../previews/SitePreview";
+import { folderTabIds } from "../../store/folders";
 import { HOVER_CARD_PAD, HOVER_CARD_PEEK_ROWS, HOVER_CARD_PREVIEW_HEIGHT, HOVER_CARD_WIDTH } from "./constants";
 
 export function HoverCard({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
   const hover = useSidebarUi((u) => (u.hover?.windowId === windowId ? u.hover : null));
   const player = useShowsMiniPlayer(hover?.kind === "tab" ? hover.id : undefined);
   const calendar = useIsCalendarTab(hover?.kind === "tab" ? hover.id : null);
+  const site = useSitePreview(hover?.kind === "tab" ? hover.id : undefined);
+  const folders = useBrowser((s) => s.settings.previewFolders);
   if (!hover) return null;
   if (hover.kind === "live") return <LiveItemCard id={hover.id} windowId={windowId} anchor={hover.anchor} />;
   if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} windowWidth={windowWidth} />;
   if (hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
-  return hover.kind === "tab" ? (
-    <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} />
+  if (hover.kind === "tab" && site) return <SitePreview key={hover.id} tabId={hover.id} site={site} anchor={hover.anchor} />;
+  if (hover.kind === "tab") return <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+  if (!folders) return null;
+  return hover.kind === "folder" ? (
+    <FolderPeek folderId={hover.id} windowId={windowId} anchor={hover.anchor} />
   ) : (
     <GroupPeek groupId={hover.id} windowId={windowId} anchor={hover.anchor} />
   );
@@ -131,17 +139,29 @@ function PagePreview({ tabId }: { tabId: string }) {
 }
 
 function GroupPeek({ groupId, windowId, anchor }: { groupId: string; windowId: string; anchor: Anchor }) {
-  const theme = useTheme();
   const group = useBrowser((s) => s.groups[groupId]);
   const label = useBrowser((s) => (s.groups[groupId] ? groupLabel(s, s.groups[groupId]!) : ""));
   if (!group) return null;
-  const more = group.tabIds.length - HOVER_CARD_PEEK_ROWS;
+  return <Peek label={label} tabIds={group.tabIds} windowId={windowId} anchor={anchor} />;
+}
+
+// A closed pinned folder's tabs, as Arc's folder previews show them.
+function FolderPeek({ folderId, windowId, anchor }: { folderId: string; windowId: string; anchor: Anchor }) {
+  const name = useBrowser((s) => s.pinnedFolders[folderId]?.name);
+  const tabIds = useBrowser(useShallow((s) => folderTabIds(s, folderId)));
+  if (name === undefined || !tabIds.length) return null;
+  return <Peek label={name || "New Folder"} tabIds={tabIds} windowId={windowId} anchor={anchor} />;
+}
+
+function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: string[]; windowId: string; anchor: Anchor }) {
+  const theme = useTheme();
+  const more = tabIds.length - HOVER_CARD_PEEK_ROWS;
   return (
     <Card anchor={anchor}>
       <Text style={{ fontSize: 12, fontWeight: "600", color: theme.textSecondary, marginBottom: 4, marginLeft: 4 }}>
-        {label} · {group.tabIds.length === 1 ? "1 tab" : `${group.tabIds.length} tabs`}
+        {label} · {tabIds.length === 1 ? "1 tab" : `${tabIds.length} tabs`}
       </Text>
-      {group.tabIds.slice(0, HOVER_CARD_PEEK_ROWS).map((id) => (
+      {tabIds.slice(0, HOVER_CARD_PEEK_ROWS).map((id) => (
         <PeekRow key={id} tabId={id} windowId={windowId} />
       ))}
       {more > 0 ? <Text style={{ fontSize: 11.5, color: theme.textTertiary, marginTop: 4, marginLeft: 4 }}>and {more} more</Text> : null}

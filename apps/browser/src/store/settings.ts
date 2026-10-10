@@ -46,6 +46,11 @@ export type Settings = {
   autoPictureInPicture: boolean;
   // Sites whose videos stay in their page when you leave them (Arc's per-site Picture-in-Picture switch), by host.
   noAutoPictureInPictureSites: string[];
+  // Arc's Previews on hover (components/previews): a folder's or group's tabs, Gmail's unread mail, GitHub's pull
+  // requests. The calendar's is the calendar's own setting (live/store.ts).
+  previewFolders: boolean;
+  previewGmail: boolean;
+  previewGithub: boolean;
   sidebarWidth: number;
   // Which side of the window the sidebar docks on; the page takes the other. The window buttons stay at the top left.
   sidebarPosition: "left" | "right";
@@ -100,6 +105,9 @@ export const DEFAULT_SETTINGS: Settings = {
   developerSites: [],
   autoPictureInPicture: true,
   noAutoPictureInPictureSites: [],
+  previewFolders: true,
+  previewGmail: true,
+  previewGithub: true,
   sidebarWidth: 190,
   sidebarPosition: "left",
   batterySaver: true,

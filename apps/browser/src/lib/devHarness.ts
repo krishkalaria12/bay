@@ -67,6 +67,10 @@ export function startDevHarness() {
     get sidebar(): typeof import("../components/sidebar/actions") {
       return require("../components/sidebar/actions");
     },
+    // Arc's previews: a test hands a site preview its data, as the signed-in site would.
+    get previews(): typeof import("../components/previews/SitePreview") {
+      return require("../components/previews/SitePreview");
+    },
     // The space theme editor, which only a menu opens.
     get themeEditor(): typeof import("../components/spaces/ThemeEditor") {
       return require("../components/spaces/ThemeEditor");

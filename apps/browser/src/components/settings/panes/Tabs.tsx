@@ -4,6 +4,7 @@ import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { CLEAN_UP_CHOICES } from "../constants";
+import { updateCalendarSettings, useLive } from "../../../live/store";
 
 export function TabsPane() {
   const settings = useBrowser((s) => s.settings);
@@ -43,6 +44,21 @@ export function TabsPane() {
       <SectionHeader title="Tab groups" />
       <Group>
         <SettingToggle setting="autoGroupMeetingTabs" title="Automatically group tabs for meetings" />
+      </Group>
+
+      <SectionHeader
+        title="Previews"
+        description="Hover a closed folder or group, or a pinned or favorite tab on one of these sites, to see what's there without opening it."
+      />
+      <Group>
+        <SettingToggle setting="previewFolders" title="Folders and groups" description="Their tabs." />
+        <CalendarPreviewToggle />
+        <SettingToggle setting="previewGmail" title="Gmail" description="Unread mail, and Compose." />
+        <SettingToggle
+          setting="previewGithub"
+          title="GitHub"
+          description="Your open pull requests and the ones waiting on your review, and whether they're approved."
+        />
       </Group>
 
       <SectionHeader
@@ -119,5 +135,15 @@ function LayoutChoice({ layout, title, selected }: { layout: "sidebar" | "top"; 
         <Text style={{ fontSize: 12, color: selected ? theme.textPrimary : theme.textSecondary }}>{title}</Text>
       </View>
     </Pressable>
+  );
+}
+
+// The calendar's own setting (Settings › Calendar), listed with the other previews.
+function CalendarPreviewToggle() {
+  const on = useLive((s) => s.calendar.showPreview);
+  return (
+    <Row title="Calendar" description="Today's events, with Join.">
+      <Toggle value={on} onChange={(v) => updateCalendarSettings({ showPreview: v })} />
+    </Row>
   );
 }
