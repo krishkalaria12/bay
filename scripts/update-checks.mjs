@@ -11,7 +11,7 @@
 
 import { clickhouse, hasTelemetryEnv } from "./telemetry-env.mjs";
 
-const REPO = "mantrakp04/bay";
+const REPO = "krishkalaria12/bay";
 const days = Math.max(1, Number(process.argv[2] ?? 14) || 14);
 const key = hasTelemetryEnv();
 

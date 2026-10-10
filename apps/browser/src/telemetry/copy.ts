@@ -3,7 +3,7 @@ export const SHARING_COPY = {
   summary: "Crashes, errors, rough feature counts and speed. Never the sites you visit, anything you type or search, or what's in your tabs.",
   whatsSent: "What's Sent",
   footnote:
-    "Sent to bay.com with a random ID made on this Mac, and kept on our own servers. No third parties. Turning this off stops it at once and deletes anything waiting to be sent. This setting doesn't sync.",
+    "Sent to bay.krishkalaria.in with a random ID made on this Mac, and kept on our own servers. No third parties. Turning this off stops it at once and deletes anything waiting to be sent. This setting doesn't sync.",
   ask: {
     title: "Help fix Bay?",
     body: "Share anonymous crash reports and usage stats. No sites, searches or typing. Ever.",
@@ -11,7 +11,7 @@ export const SHARING_COPY = {
     notNow: "Not now",
   },
   // Not opt-in: the update feed (infra/site/nginx.conf) counts every check, the one thing any copy sends.
-  updateChecks: "bay.com counts update checks by version and day, and whether it's this copy's first. Nothing else.",
+  updateChecks: "bay.krishkalaria.in counts update checks by version and day, and whether it's this copy's first. Nothing else.",
   onboarding: {
     title: "Help us fix what breaks",
     row: "Crashes, errors, feature counts and speed. Never your sites, typing or tabs.",

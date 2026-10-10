@@ -7,7 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { clickhouse, hasTelemetryEnv } from "./telemetry-env.mjs";
 
-const REPO = "mantrakp04/bay";
+const REPO = "krishkalaria12/bay";
 
 // The queries read the two tables under telemetry.events directly: the view casts every row's property
 // map and reads with FINAL, which a unique count doesn't need (a duplicate row doesn't change it). Both

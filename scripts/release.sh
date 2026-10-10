@@ -28,8 +28,8 @@ root="$(cd "$(dirname "$0")/.." && pwd -P)"
 app_dir="$root/apps/browser"
 macos="$app_dir/macos"
 nncore="$root/packages/nncore"
-repo="mantrakp04/bay"
-notes_page="https://bay.com/release-notes"
+repo="krishkalaria12/bay"
+notes_page="https://bay.krishkalaria.in/release-notes/"
 notary_profile="${NOTARY_PROFILE:-bay}"
 # App Store Connect API key for notarytool, when scripts/.notary.env (untracked) sets NOTARY_KEY (path to
 # AuthKey_<id>.p8), NOTARY_KEY_ID and NOTARY_ISSUER. Preferred over the keychain profile: notarytool keeps that
