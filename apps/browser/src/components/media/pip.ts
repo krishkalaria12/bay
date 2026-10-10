@@ -9,10 +9,11 @@ import { cancelDisplayMediaOnNavigation } from "./SharePicker";
 
 // Whether a tab's WebView pops its video out when the user leaves it. The native view decides when the user left
 // (NNCoreWebView seenByUser: a tab switch, or the window covered or left for another app, never the window's own
-// full-screen transition), opens Picture in Picture, and closes it, however it opened, when the user is back.
+// full-screen transition), opens Picture in Picture, and closes it, however it opened, when the user is back. A muted
+// tab's video stays in its page, as Arc's does (the engine still calls it playing audio); a call pops out regardless.
 export function useAutoPictureInPicture(tabId: string, visible: boolean): boolean {
   const enabled = useSettings((s) => s.autoPictureInPicture ?? true);
-  const audible = useBrowser((s) => !!s.live[tabId]?.playingAudio);
+  const audible = useBrowser((s) => !!s.live[tabId]?.playingAudio && !s.tabs[tabId]?.muted);
   const capturing = usePage(tabId, (p) => !!p.mediaAccess);
   // Decided while the tab is shown, and kept once it isn't (the native view acts on it then).
   const wants = enabled && (audible || capturing);
