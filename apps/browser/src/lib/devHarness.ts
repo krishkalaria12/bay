@@ -61,6 +61,10 @@ export function startDevHarness() {
     get sidebar(): typeof import("../components/sidebar/actions") {
       return require("../components/sidebar/actions");
     },
+    // The space theme editor, which only a menu opens.
+    get themeEditor(): typeof import("../components/spaces/ThemeEditor") {
+      return require("../components/spaces/ThemeEditor");
+    },
     get toolbarAutoHide(): typeof import("../components/layout/toolbarAutoHide") {
       return require("../components/layout/toolbarAutoHide");
     },

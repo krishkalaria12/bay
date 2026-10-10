@@ -1,15 +1,43 @@
 // The theme editor's colour field and a space's own theme as the window's.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-const { editableTheme, spectrumColor, spectrumPosition } = await import("./spaceTheme.ts");
+const { defaultHarmony, editableTheme, harmonize, harmonyAfterRemoving, nextHarmony, wheelColor, wheelPosition } = await import("./spaceTheme.ts");
+const { hslOf } = await import("./windowTint.ts");
 const { spaceThemeKey, themeFor } = await import("./theme.ts");
 
-test("a colour picked on the field puts its dot back where it was picked", () => {
-  for (const [x, y] of [[0.1, 0.2], [0.5, 0.5], [0.83, 0.9]]) {
-    const at = spectrumPosition(spectrumColor(x, y));
-    assert.ok(Math.abs(at.x - x) < 0.01 && Math.abs(at.y - y) < 0.01, `${x},${y} → ${at.x},${at.y}`);
+test("a colour picked on the wheel puts its dot back where it was picked", () => {
+  for (const [angle, distance] of [[0.1, 0.2], [0.5, 0.5], [0.83, 0.9]]) {
+    const at = wheelPosition(wheelColor(angle, distance));
+    assert.ok(Math.abs(at.angle - angle) < 0.01 && Math.abs(at.distance - distance) < 0.01, `${angle},${distance} → ${at.angle},${at.distance}`);
   }
-  assert.match(spectrumColor(2, -1), /^#[0-9A-F]{6}$/, "outside the field: clamped to its edge");
+  assert.match(wheelColor(-0.25, 2), /^#[0-9A-F]{6}$/, "past the edge, or a turn back: still a colour");
+  assert.ok(hslOf(wheelColor(0, 0))[2] < hslOf(wheelColor(0, 1))[2], "dark in the middle, light at the edge");
+});
+
+test("harmonies place the other colours round the wheel from the first, as light as it is", () => {
+  assert.equal(defaultHarmony(1), "floating");
+  assert.equal(defaultHarmony(2), "complementary");
+  assert.equal(defaultHarmony(3), "splitComplementary");
+  const first = wheelColor(0.1, 0.6);
+  const [a, b] = harmonize(first, "complementary");
+  assert.equal(a, first);
+  const hue = (c) => hslOf(c)[0];
+  assert.ok(Math.abs(((hue(b) - hue(a) + 1) % 1) - 0.5) < 0.01, "opposite");
+  assert.ok(Math.abs(hslOf(b)[2] - hslOf(a)[2]) < 0.01, "as light");
+  const triad = harmonize(first, "triadic").map(hue);
+  assert.ok(Math.abs(((triad[1] - triad[0] + 1) % 1) - 1 / 3) < 0.01 && Math.abs(((triad[2] - triad[0] + 1) % 1) - 2 / 3) < 0.01);
+  assert.deepEqual(harmonize(first, "floating"), [first]);
+});
+
+test("the harmony button goes round the ones for the colours there are; removing one keeps it near", () => {
+  assert.equal(nextHarmony("complementary", 2), "singleAnalogous");
+  assert.equal(nextHarmony("singleAnalogous", 2), "complementary");
+  assert.equal(nextHarmony("splitComplementary", 3), "analogous");
+  assert.equal(nextHarmony("analogous", 3), "triadic");
+  assert.equal(nextHarmony("triadic", 3), "splitComplementary");
+  assert.equal(harmonyAfterRemoving("analogous", 2), "singleAnalogous");
+  assert.equal(harmonyAfterRemoving("triadic", 2), "complementary");
+  assert.equal(harmonyAfterRemoving("complementary", 1), "floating");
 });
 
 test("a space without its own theme keeps its preset's key; one with a theme gets its own", () => {
@@ -30,8 +58,8 @@ test("a custom theme tints the window with its gradient, as strongly as its inte
 });
 
 test("dragging through many custom themes keeps only the latest few", () => {
-  for (let i = 0; i < 200; i++) themeFor(spaceThemeKey({ color: "plum", theme: { colors: [spectrumColor(i / 200, 0.5)], intensity: 0.5, grain: 0.3 } }, true));
-  const again = themeFor(spaceThemeKey({ color: "plum", theme: { colors: [spectrumColor(199 / 200, 0.5)], intensity: 0.5, grain: 0.3 } }, true));
+  for (let i = 0; i < 200; i++) themeFor(spaceThemeKey({ color: "plum", theme: { colors: [wheelColor(i / 200, 0.5)], intensity: 0.5, grain: 0.3 } }, true));
+  const again = themeFor(spaceThemeKey({ color: "plum", theme: { colors: [wheelColor(199 / 200, 0.5)], intensity: 0.5, grain: 0.3 } }, true));
   assert.ok(again.windowTint[0].startsWith("#"));
 });
 

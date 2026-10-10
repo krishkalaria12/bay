@@ -56,6 +56,7 @@ import "./layout/devExpose";
 import { closeWebNotification, showWebNotification } from "../lib/webNotifications";
 import { isSmallWindow } from "../store/small";
 import { closeLittleBayOnEscape } from "./littleBay/actions";
+import { closeThemeEditorOnEscape } from "./spaces/ThemeEditor";
 import { PageLoadGlow } from "./layout/PageLoadGlow";
 import { usePaneSwitch, type SwitchStyle } from "./layout/switchMotion";
 import { DevBar } from "./developer/DevBar";
@@ -577,8 +578,9 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         if (command === "search") searchSelection(tabId, text, modifiers);
         else if (command === "copyLinkToHighlight") void copyLinkToSelection(tabId);
         else if (command === "escape") {
-          // Esc in a peek's page closes the peek; in Little Bay's, Little Bay.
+          // Esc in a page closes the theme editor over it; in a peek's page, the peek; in Little Bay's, Little Bay.
           const t = tab();
+          if (t && closeThemeEditorOnEscape(t.windowId)) return;
           if (t?.peekOf) store().closePeek(t.windowId);
           else closeLittleBayOnEscape(tabId);
         }

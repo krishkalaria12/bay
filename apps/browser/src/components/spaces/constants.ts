@@ -38,7 +38,20 @@ export const CREATE_SPACE_ICON_COLUMNS = 12;
 
 // MARK: Theme editor (ThemeEditor.tsx)
 
+// Zen's gradient generator: a dotted field holding a colour wheel (unseen; its dots keep inside it), swatch pages,
+// then the wave (intensity) and the dial (grain).
 export const THEME_FIELD_WIDTH = 268;
-export const THEME_FIELD_HEIGHT = 132;
+export const THEME_FIELD_HEIGHT = 236;
 export const THEME_EDITOR_PAD = 14;
 export const THEME_DOT = 20;
+export const THEME_PRIMARY_DOT = 34;
+// The wheel's radius: the first colour's dot stays whole inside the field.
+export const THEME_WHEEL_RADIUS = Math.min(THEME_FIELD_WIDTH, THEME_FIELD_HEIGHT) / 2 - THEME_PRIMARY_DOT / 2 - 2;
+export const THEME_SWATCH = 18;
+export const THEME_SWATCHES_PER_PAGE = 9;
+export const THEME_WAVE_HEIGHT = 56;
+// The wave's half-height at full intensity, and the length of one of its waves.
+export const THEME_WAVE_AMPLITUDE = 9;
+export const THEME_WAVE_PERIOD = 22;
+export const THEME_DIAL = 64;
+export const THEME_DIAL_STEPS = 16;
