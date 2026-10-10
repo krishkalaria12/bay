@@ -89,7 +89,8 @@ export const DEFAULT_SETTINGS: Settings = {
   warnBeforeMovingTabsToSpace: true,
   tabReorderHaptics: true,
   extendWebsiteColor: true,
-  cmdClickCreatesTabGroup: true,
+  // Off: ⌘-click opens a plain background tab, as in Chrome and Arc; Settings › Links turns on Dia's grouping.
+  cmdClickCreatesTabGroup: false,
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
   // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
