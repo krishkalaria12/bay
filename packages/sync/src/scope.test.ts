@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Clock } from "./hlc.ts";
-import { compact, emptyScope, restoreJournal, syncScope, type Adapter, type Listing, type LogFile, type ScopeOptions, type ScopeState, type Transport } from "./scope.ts";
+import {
+  compact,
+  emptyScope,
+  restoreJournal,
+  syncScope,
+  type Adapter,
+  type Listing,
+  type LogFile,
+  type ScopeOptions,
+  type ScopeState,
+  type Transport,
+} from "./scope.ts";
 
 type Entry = { payload: string; hiddenFrom: Set<string>; partialFor: Set<string>; at: number };
 class Folder {
@@ -67,7 +78,10 @@ class Device {
         prefix: "x:",
         extract: () => ({ values: new Map(this.store) }),
         apply: (visible, changed) => {
-          for (const k of changed) visible.has(k) ? this.store.set(k, visible.get(k)) : this.store.delete(k);
+          for (const k of changed) {
+            if (visible.has(k)) this.store.set(k, visible.get(k));
+            else this.store.delete(k);
+          }
         },
       },
       {
@@ -139,7 +153,10 @@ async function syncAll(devices: Device[], rounds = 2) {
 }
 
 test("concurrent edits converge on the newest, whatever order devices sync in", async () => {
-  for (const order of [["devA", "devB"], ["devB", "devA"]]) {
+  for (const order of [
+    ["devA", "devB"],
+    ["devB", "devA"],
+  ]) {
     const folder = new Folder();
     const a = new Device("devA", folder);
     const b = new Device("devB", folder);
@@ -255,7 +272,7 @@ test("a local edit made while files are read isn't overwritten", async () => {
 
 test("three devices, random edits, sync orders and crashes, converge", async () => {
   let seed = 7;
-  const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+  const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
   let compactions = 0;
   for (let run = 0; run < 40; run++) {
     const folder = new Folder();

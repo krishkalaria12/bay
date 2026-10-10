@@ -35,14 +35,21 @@ export function syncGroupOrder(groups: Record<string, TabGroup>, list: TabList):
 
 // The Essentials, the pinned rows (each folder's together), the pinned groups, then the rest.
 export function orderSections(ids: string[], tabs: Record<string, Tab>, groups: Record<string, TabGroup>): string[] {
-  const pinnedGroup = new Set(Object.values(groups).filter((g) => g.pinned).flatMap((g) => g.tabIds));
+  const pinnedGroup = new Set(
+    Object.values(groups)
+      .filter((g) => g.pinned)
+      .flatMap((g) => g.tabIds),
+  );
   const rank = (id: string) => {
     if (tabs[id]?.pinned) return 0;
     if (tabs[id]?.pinnedRow) return 1;
     if (pinnedGroup.has(id)) return 2;
     return 3;
   };
-  const out = placeFolders([0, 1, 2, 3].flatMap((r) => ids.filter((id) => rank(id) === r)), tabs);
+  const out = placeFolders(
+    [0, 1, 2, 3].flatMap((r) => ids.filter((id) => rank(id) === r)),
+    tabs,
+  );
   return out.every((id, i) => id === ids[i]) ? ids : out;
 }
 
@@ -54,7 +61,10 @@ export function placeFolders(ids: string[], tabs: Record<string, Tab>): string[]
     const folderId = tabs[id]?.pinnedRow ? tabs[id]!.folderId : undefined;
     if (!folderId || done.has(folderId)) continue;
     done.add(folderId);
-    out = placeBlock(out, out.filter((t) => tabs[t]?.pinnedRow && tabs[t]!.folderId === folderId));
+    out = placeBlock(
+      out,
+      out.filter((t) => tabs[t]?.pinnedRow && tabs[t]!.folderId === folderId),
+    );
   }
   return out;
 }
@@ -89,7 +99,13 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
     const list = first && listOfTab(s, first.id);
     if (!first || !list || tabs.some((t) => t!.spaceId !== first.spaceId)) return "";
     const members = new Set(tabs.map((t) => t!.id));
-    const window = { key: list.key, tabIds: placeBlock(list.tabIds, list.tabIds.filter((id) => members.has(id))) };
+    const window = {
+      key: list.key,
+      tabIds: placeBlock(
+        list.tabIds,
+        list.tabIds.filter((id) => members.has(id)),
+      ),
+    };
     const group: TabGroup = {
       id: newId("g"),
       spaceId: first.spaceId,

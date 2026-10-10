@@ -52,13 +52,7 @@ export function IconButton({
               backgroundColor: disabled ? undefined : pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : undefined,
             }}
           >
-            <Symbol
-              name={icon}
-              size={size}
-              weight={weight}
-              color={color ?? (disabled ? theme.iconDisabled : theme.icon)}
-              style={{ width: box, height: box }}
-            />
+            <Symbol name={icon} size={size} weight={weight} color={color ?? (disabled ? theme.iconDisabled : theme.icon)} style={{ width: box, height: box }} />
           </View>
         )}
       </Pressable>

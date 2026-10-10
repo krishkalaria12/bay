@@ -31,9 +31,7 @@ export function addHistoryVisits(profile: string, pages: { url: string; title: s
   if (!pages.length) return Promise.resolve(0);
   const run = (adding.get(profile) ?? Promise.resolve())
     .catch(() => {})
-    .then(() =>
-      engineCall<{ added: number }>("nn_history_add", profile, { pages: pages.map((p) => ({ u: p.url, t: p.title, v: p.visitTimes })), toleranceMs }),
-    )
+    .then(() => engineCall<{ added: number }>("nn_history_add", profile, { pages: pages.map((p) => ({ u: p.url, t: p.title, v: p.visitTimes })), toleranceMs }))
     .then((r) => r.added);
   adding.set(profile, run);
   return run;
@@ -61,8 +59,7 @@ export const onHistoryChanged = (listener: (change: HistoryChange) => void) =>
     const profile = p.profile;
     const one = (c: RawChange) => {
       if (c.kind === "visit") listener({ kind: "visit", profile, url: c.u as string, title: c.t as string, visits: c.n as number, at: c.at as number });
-      else if (c.kind === "modified")
-        listener({ kind: "modified", profile, rows: (c.rows as Row[]).map((r) => ({ url: r.u, title: r.t, visits: r.n })) });
+      else if (c.kind === "modified") listener({ kind: "modified", profile, rows: (c.rows as Row[]).map((r) => ({ url: r.u, title: r.t, visits: r.n })) });
       else if (c.kind === "deleted") listener({ kind: "deleted", profile, all: !!c.all, urls: (c.urls as string[]) ?? [] });
     };
     if (p.kind === "batch") for (const c of (p.changes as RawChange[]) ?? []) one(c);

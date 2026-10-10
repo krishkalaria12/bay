@@ -8,15 +8,7 @@ export type SuggestFetcher = {
   cancel(): void;
 };
 
-export function createSuggestFetcher({
-  fetch,
-  delay = 120,
-  cacheSize = 64,
-}: {
-  fetch: FetchLike;
-  delay?: number;
-  cacheSize?: number;
-}): SuggestFetcher {
+export function createSuggestFetcher({ fetch, delay = 120, cacheSize = 64 }: { fetch: FetchLike; delay?: number; cacheSize?: number }): SuggestFetcher {
   const cache = new Map<string, string[]>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: AbortController | undefined;

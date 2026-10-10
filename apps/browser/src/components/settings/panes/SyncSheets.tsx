@@ -74,8 +74,8 @@ function RecoveryKitSheet() {
           >
             <Symbol name="exclamationmark.triangle.fill" size={12} color="#FF9500" style={{ width: 16, height: 16 }} />
             <Text style={{ flex: 1, fontSize: 12, lineHeight: 16, color: theme.textPrimary }}>
-              Save a copy of your Recovery Kit to{" "}
-              <Text style={{ textDecorationLine: "underline" }}>another</Text> device or to the cloud. You’ll need it if you lose access to this device.
+              Save a copy of your Recovery Kit to <Text style={{ textDecorationLine: "underline" }}>another</Text> device or to the cloud. You’ll need it if you
+              lose access to this device.
             </Text>
           </View>
           {saved ? <Body style={{ marginTop: 10 }}>Saved to {saved.replace(/^\/Users\/[^/]+/, "~")}.</Body> : null}
@@ -127,7 +127,10 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const count = text.toLowerCase().split(/[^a-z]+/).filter(Boolean).length;
+  const count = text
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter(Boolean).length;
   const submit = async () => {
     if (!folder || busy) return;
     setBusy(true);
@@ -209,8 +212,8 @@ function ConnectDeviceSheet() {
     <Sheet width={480} onClose={closeSettingsSheet}>
       <Title>Connect Another Device</Title>
       <Body>
-        On your other Mac, open Bay › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words
-        of your recovery phrase.
+        On your other Mac, open Bay › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words of your recovery
+        phrase.
       </Body>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginTop: 16 }}>
         <View style={{ width: 132, height: 132, borderRadius: 8, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}>
@@ -255,8 +258,8 @@ function StopSheet() {
     <Sheet width={420} onClose={closeSettingsSheet}>
       <Title>Stop Syncing This Device?</Title>
       <Body>
-        Syncing will stop on this device. To re-enable sync, you’ll need another device that is currently syncing, or the recovery phrase from your
-        Recovery Kit. Everything on this Mac stays as it is.
+        Syncing will stop on this device. To re-enable sync, you’ll need another device that is currently syncing, or the recovery phrase from your Recovery
+        Kit. Everything on this Mac stays as it is.
       </Body>
       <Buttons left={<Button title="Save Recovery Kit" onPress={() => showSettingsSheet(<RecoveryKitSheet />)} />}>
         <Button title="Cancel" onPress={closeSettingsSheet} />
@@ -278,8 +281,8 @@ function DeleteDataSheet() {
     <Sheet width={420} onClose={() => void finish(false)}>
       <Title>Delete Sync Data?</Title>
       <Body>
-        Would you also like to permanently delete your synced data from the sync folder? This will stop syncing on all your other devices too. To sync
-        again, you’ll need to set up each device from scratch. Your data on each Mac stays.
+        Would you also like to permanently delete your synced data from the sync folder? This will stop syncing on all your other devices too. To sync again,
+        you’ll need to set up each device from scratch. Your data on each Mac stays.
       </Body>
       <View style={{ marginTop: 12 }}>
         <Checkbox value={understood} onChange={setUnderstood} label="I understand this cannot be undone" />

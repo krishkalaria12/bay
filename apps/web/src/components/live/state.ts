@@ -7,8 +7,15 @@ export type SpaceIcon = "house" | "briefcase" | "leaf" | "sparkles";
 
 /** Bay's theme colours, as a space's menu offers them. */
 export const THEMES = [
-  ["Plum", "#C07A98"], ["Blue", "#4691C3"], ["Purple", "#7873AF"], ["Pink", "#D37B8B"], ["Red", "#C1575C"],
-  ["Orange", "#D87249"], ["Yellow", "#E3AC38"], ["Green", "#3EB489"], ["Neutral", "#8E8E93"],
+  ["Plum", "#C07A98"],
+  ["Blue", "#4691C3"],
+  ["Purple", "#7873AF"],
+  ["Pink", "#D37B8B"],
+  ["Red", "#C1575C"],
+  ["Orange", "#D87249"],
+  ["Yellow", "#E3AC38"],
+  ["Green", "#3EB489"],
+  ["Neutral", "#8E8E93"],
 ] as const;
 
 export type Space = {
@@ -96,12 +103,7 @@ const SIDE = (o: Partial<Space> = {}): Space => ({
   icon: "leaf",
   theme: "#3EB489",
   pins: ["local", "fonts", "mail", "music"],
-  items: [
-    { folder: "research", name: "Research", open: false, kids: ["frame", "palette"] },
-    { line: true },
-    { tab: "issues" },
-    { tab: "checklist" },
-  ],
+  items: [{ folder: "research", name: "Research", open: false, kids: ["frame", "palette"] }, { line: true }, { tab: "issues" }, { tab: "checklist" }],
   active: "local",
   keep: 24,
   ...o,
@@ -174,14 +176,19 @@ export const PRESETS = {
     ],
   },
   privacy: {
+    spaces: [PERSONAL({ items: [{ tab: "news" }, { tab: "soup" }, { tab: "garden" }, { line: true }, { tab: "bridges" }], active: "news" }), WORK(), SIDE()],
+  },
+  command: { spaces: [WORK({ active: "standup" }), PERSONAL(), SIDE()], omni: true, omniQuiet: true },
+  card: {
     spaces: [
-      PERSONAL({ items: [{ tab: "news" }, { tab: "soup" }, { tab: "garden" }, { line: true }, { tab: "bridges" }], active: "news" }),
+      PERSONAL({
+        items: [{ folder: "trip", name: "Lisbon trip", open: true, kids: ["flights", "hotels"] }, { line: true }, { tab: "soup" }, { tab: "bridges" }],
+        active: "flights",
+      }),
       WORK(),
       SIDE(),
     ],
   },
-  command: { spaces: [WORK({ active: "standup" }), PERSONAL(), SIDE()], omni: true, omniQuiet: true },
-  card: { spaces: [PERSONAL({ items: [{ folder: "trip", name: "Lisbon trip", open: true, kids: ["flights", "hotels"] }, { line: true }, { tab: "soup" }, { tab: "bridges" }], active: "flights" }), WORK(), SIDE()] },
 } satisfies Record<string, Preset>;
 
 export type PresetName = keyof typeof PRESETS;
@@ -251,12 +258,18 @@ export function useBay(name: PresetName) {
   const [touched, setTouched] = useState(false);
   const timers = useRef<number[]>([]);
 
-  const mut = useCallback((fn: (n: State) => void) => setS((prev) => {
-    const n = structuredClone(prev);
-    fn(n);
-    return n;
-  }), []);
-  const later = (ms: number, fn: () => void) => { timers.current.push(window.setTimeout(fn, ms)); };
+  const mut = useCallback(
+    (fn: (n: State) => void) =>
+      setS((prev) => {
+        const n = structuredClone(prev);
+        fn(n);
+        return n;
+      }),
+    [],
+  );
+  const later = (ms: number, fn: () => void) => {
+    timers.current.push(window.setTimeout(fn, ms));
+  };
 
   const actions = useMemo(() => {
     const where = (n: State): Loc => [n.space, n.spaces[n.space].active];
@@ -296,122 +309,184 @@ export function useBay(name: PresetName) {
       go: (id: string) => mut((n) => goIn(n, id)),
       toSpace: (to: number) => mut((n) => toSpaceIn(n, to)),
       step: (by: 1 | -1) => mut((n) => toSpaceIn(n, n.space + by)),
-      menu: (i: number | null) => mut((n) => { n.menu = i; }),
-      theme: (i: number, color: string) => mut((n) => { n.spaces[i].theme = color; n.menu = null; }),
+      menu: (i: number | null) =>
+        mut((n) => {
+          n.menu = i;
+        }),
+      theme: (i: number, color: string) =>
+        mut((n) => {
+          n.spaces[i].theme = color;
+          n.menu = null;
+        }),
       /** + in the switcher: a new space with one blank tab, shown at once. */
-      newSpace: () => mut((n) => {
-        const id = `n${++n.made}`;
-        n.sites[id] = { title: "New Tab", host: "", glyph: "globe", tint: "#8e8e93", body: { kind: "blank" } };
-        n.spaces.push({ name: `Space ${n.spaces.length + 1}`, icon: "sparkles", theme: "#7873AF", pins: [], items: [{ tab: id }], active: id, keep: 24 });
-        n.back.push(where(n));
-        n.dir = 1;
-        n.space = n.spaces.length - 1;
-        n.peek = null;
-        n.panel = false;
-        n.menu = null;
-      }),
-      deleteSpace: (i: number) => mut((n) => {
-        if (n.spaces.length < 2) return;
-        n.spaces.splice(i, 1);
-        n.back = [];
-        n.fwd = [];
-        n.dir = 0;
-        n.space = Math.min(n.space > i ? n.space - 1 : n.space, n.spaces.length - 1);
-        n.menu = null;
-      }),
-      fold: (id: string) => mut((n) => {
-        const it = n.spaces[n.space].items.find((x) => "folder" in x && x.folder === id);
-        if (it && "folder" in it) it.open = !it.open;
-      }),
-      close: (id: string) => mut((n) => {
-        const sp = n.spaces[n.space];
-        const order = tabsOf(sp);
-        const i = order.indexOf(id);
-        drop(sp, id);
-        if (sp.active === id) sp.active = tabsOf(sp)[Math.min(i, tabsOf(sp).length - 1)] ?? sp.pins[0];
-      }),
-      nav: (way: "back" | "fwd" | "reload") => mut((n) => {
-        if (way === "reload") { n.reloads++; return; }
-        const from = way === "back" ? n.back : n.fwd, to = way === "back" ? n.fwd : n.back;
-        const loc = from.pop();
-        if (!loc) return;
-        to.push(where(n));
-        n.dir = 0;
-        n.space = loc[0];
-        n.spaces[n.space].active = loc[1];
-        n.peek = null;
-      }),
+      newSpace: () =>
+        mut((n) => {
+          const id = `n${++n.made}`;
+          n.sites[id] = { title: "New Tab", host: "", glyph: "globe", tint: "#8e8e93", body: { kind: "blank" } };
+          n.spaces.push({ name: `Space ${n.spaces.length + 1}`, icon: "sparkles", theme: "#7873AF", pins: [], items: [{ tab: id }], active: id, keep: 24 });
+          n.back.push(where(n));
+          n.dir = 1;
+          n.space = n.spaces.length - 1;
+          n.peek = null;
+          n.panel = false;
+          n.menu = null;
+        }),
+      deleteSpace: (i: number) =>
+        mut((n) => {
+          if (n.spaces.length < 2) return;
+          n.spaces.splice(i, 1);
+          n.back = [];
+          n.fwd = [];
+          n.dir = 0;
+          n.space = Math.min(n.space > i ? n.space - 1 : n.space, n.spaces.length - 1);
+          n.menu = null;
+        }),
+      fold: (id: string) =>
+        mut((n) => {
+          const it = n.spaces[n.space].items.find((x) => "folder" in x && x.folder === id);
+          if (it && "folder" in it) it.open = !it.open;
+        }),
+      close: (id: string) =>
+        mut((n) => {
+          const sp = n.spaces[n.space];
+          const order = tabsOf(sp);
+          const i = order.indexOf(id);
+          drop(sp, id);
+          if (sp.active === id) sp.active = tabsOf(sp)[Math.min(i, tabsOf(sp).length - 1)] ?? sp.pins[0];
+        }),
+      nav: (way: "back" | "fwd" | "reload") =>
+        mut((n) => {
+          if (way === "reload") {
+            n.reloads++;
+            return;
+          }
+          const from = way === "back" ? n.back : n.fwd,
+            to = way === "back" ? n.fwd : n.back;
+          const loc = from.pop();
+          if (!loc) return;
+          to.push(where(n));
+          n.dir = 0;
+          n.space = loc[0];
+          n.spaces[n.space].active = loc[1];
+          n.peek = null;
+        }),
 
-      peek: (to: string) => mut((n) => { n.peek = to; n.peekQuiet = false; n.panel = false; }),
-      unpeek: () => mut((n) => { n.peek = null; }),
-      peekToTab: () => mut((n) => {
-        const to = n.peek;
-        if (!to) return;
-        const sp = n.spaces[n.space];
-        if (!has(sp, to)) after(sp, sp.active, to);
-        n.born = to;
-        goIn(n, to);
-      }),
-      peekToSplit: () => mut((n) => {
-        const to = n.peek;
-        if (!to) return;
-        const sp = n.spaces[n.space];
-        drop(sp, to);
-        sp.pair = { a: sp.active, b: to, front: to };
-        n.peek = null;
-      }),
-      front: (id: string) => mut((n) => {
-        const sp = n.spaces[n.space];
-        if (!sp.pair) return;
-        sp.pair.front = id;
-        sp.active = sp.pair.a;
-        n.peek = null;
-      }),
-      separate: (id: string) => mut((n) => {
-        const sp = n.spaces[n.space];
-        const p = sp.pair;
-        if (!p) return;
-        sp.pair = null;
-        if (!tabsOf(sp).includes(p.b)) after(sp, p.a, p.b);
-        sp.active = p.a === id ? p.b : p.a;
-      }),
+      peek: (to: string) =>
+        mut((n) => {
+          n.peek = to;
+          n.peekQuiet = false;
+          n.panel = false;
+        }),
+      unpeek: () =>
+        mut((n) => {
+          n.peek = null;
+        }),
+      peekToTab: () =>
+        mut((n) => {
+          const to = n.peek;
+          if (!to) return;
+          const sp = n.spaces[n.space];
+          if (!has(sp, to)) after(sp, sp.active, to);
+          n.born = to;
+          goIn(n, to);
+        }),
+      peekToSplit: () =>
+        mut((n) => {
+          const to = n.peek;
+          if (!to) return;
+          const sp = n.spaces[n.space];
+          drop(sp, to);
+          sp.pair = { a: sp.active, b: to, front: to };
+          n.peek = null;
+        }),
+      front: (id: string) =>
+        mut((n) => {
+          const sp = n.spaces[n.space];
+          if (!sp.pair) return;
+          sp.pair.front = id;
+          sp.active = sp.pair.a;
+          n.peek = null;
+        }),
+      separate: (id: string) =>
+        mut((n) => {
+          const sp = n.spaces[n.space];
+          const p = sp.pair;
+          if (!p) return;
+          sp.pair = null;
+          if (!tabsOf(sp).includes(p.b)) after(sp, p.a, p.b);
+          sp.active = p.a === id ? p.b : p.a;
+        }),
 
-      omni: (on: boolean) => mut((n) => { n.omni = on; n.omniQuiet = false; n.menu = null; n.panel = false; }),
+      omni: (on: boolean) =>
+        mut((n) => {
+          n.omni = on;
+          n.omniQuiet = false;
+          n.menu = null;
+          n.panel = false;
+        }),
       /** A new tab from the command bar: an address, or a search. */
-      open: (q: string, search: boolean) => mut((n) => {
-        const id = `n${++n.made}`;
-        const host = q.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
-        const word = host.split(".")[0];
-        n.sites[id] = search
-          ? { title: q, host: "search.example", glyph: "search", tint: "#8e8e93", body: { kind: "search", q } }
-          : { title: word.charAt(0).toUpperCase() + word.slice(1), host, glyph: "globe", tint: "#5b6b7f", body: { kind: "doc", kicker: host, title: `Welcome to ${host}` } };
-        n.spaces[n.space].items.push({ tab: id });
-        n.born = id;
-        n.omni = false;
-        goIn(n, id);
-      }),
-      openSite: (id: string) => mut((n) => {
-        const sp = n.spaces[n.space];
-        if (!has(sp, id)) { sp.items.push({ tab: id }); n.born = id; }
-        n.omni = false;
-        goIn(n, id);
-      }),
-      restore: (id: string) => mut((n) => {
-        const kept = n.putAway.find((p) => p.id === id);
-        n.putAway = n.putAway.filter((p) => p.id !== id);
-        const sp = n.spaces[kept?.space ?? n.space];
-        if (!tabsOf(sp).includes(id)) sp.items.push({ tab: id });
-        if (kept) n.space = kept.space;
-        n.born = id;
-        n.omni = false;
-        n.ages[id] = 0;
-        goIn(n, id);
-      }),
+      open: (q: string, search: boolean) =>
+        mut((n) => {
+          const id = `n${++n.made}`;
+          const host = q
+            .replace(/^https?:\/\//, "")
+            .replace(/\/.*$/, "")
+            .replace(/^www\./, "");
+          const word = host.split(".")[0];
+          n.sites[id] = search
+            ? { title: q, host: "search.example", glyph: "search", tint: "#8e8e93", body: { kind: "search", q } }
+            : {
+                title: word.charAt(0).toUpperCase() + word.slice(1),
+                host,
+                glyph: "globe",
+                tint: "#5b6b7f",
+                body: { kind: "doc", kicker: host, title: `Welcome to ${host}` },
+              };
+          n.spaces[n.space].items.push({ tab: id });
+          n.born = id;
+          n.omni = false;
+          goIn(n, id);
+        }),
+      openSite: (id: string) =>
+        mut((n) => {
+          const sp = n.spaces[n.space];
+          if (!has(sp, id)) {
+            sp.items.push({ tab: id });
+            n.born = id;
+          }
+          n.omni = false;
+          goIn(n, id);
+        }),
+      restore: (id: string) =>
+        mut((n) => {
+          const kept = n.putAway.find((p) => p.id === id);
+          n.putAway = n.putAway.filter((p) => p.id !== id);
+          const sp = n.spaces[kept?.space ?? n.space];
+          if (!tabsOf(sp).includes(id)) sp.items.push({ tab: id });
+          if (kept) n.space = kept.space;
+          n.born = id;
+          n.omni = false;
+          n.ages[id] = 0;
+          goIn(n, id);
+        }),
 
-      panel: (open?: boolean) => mut((n) => { n.panel = open ?? !n.panel; n.menu = null; }),
-      block: () => mut((n) => { n.blocking = !n.blocking; }),
-      pick: (i: number) => mut((n) => { n.picked = i; }),
-      hold: () => mut((n) => { n.held = true; }),
+      panel: (open?: boolean) =>
+        mut((n) => {
+          n.panel = open ?? !n.panel;
+          n.menu = null;
+        }),
+      block: () =>
+        mut((n) => {
+          n.blocking = !n.blocking;
+        }),
+      pick: (i: number) =>
+        mut((n) => {
+          n.picked = i;
+        }),
+      hold: () =>
+        mut((n) => {
+          n.held = true;
+        }),
 
       /** Tidy: time passes; tabs past their space's limit leave, then are put away. */
       skip: (hours: number) => {
@@ -423,18 +498,27 @@ export function useBay(name: PresetName) {
           }
           n.leaving = sp.items.flatMap((it) => ("tab" in it && it.tab !== sp.active && (n.ages[it.tab] ?? 0) >= sp.keep ? [it.tab] : []));
         });
-        later(420, () => mut((n) => {
-          const sp = n.spaces[n.space];
-          const leaving = n.leaving;
-          if (!leaving.length) return;
-          leaving.forEach((id) => drop(sp, id));
-          n.putAway.push(...leaving.map((id) => ({ id, space: n.space })));
-          n.toast = `${leaving.length} ${leaving.length === 1 ? "tab" : "tabs"} put away. New tab finds ${leaving.length === 1 ? "it" : "them"}.`;
-          n.leaving = [];
-        }));
-        later(3600, () => mut((n) => { n.toast = null; }));
+        later(420, () =>
+          mut((n) => {
+            const sp = n.spaces[n.space];
+            const leaving = n.leaving;
+            if (!leaving.length) return;
+            leaving.forEach((id) => drop(sp, id));
+            n.putAway.push(...leaving.map((id) => ({ id, space: n.space })));
+            n.toast = `${leaving.length} ${leaving.length === 1 ? "tab" : "tabs"} put away. New tab finds ${leaving.length === 1 ? "it" : "them"}.`;
+            n.leaving = [];
+          }),
+        );
+        later(3600, () =>
+          mut((n) => {
+            n.toast = null;
+          }),
+        );
       },
-      keep: (hours: number) => mut((n) => { n.spaces[n.space].keep = hours; }),
+      keep: (hours: number) =>
+        mut((n) => {
+          n.spaces[n.space].keep = hours;
+        }),
     };
   }, [mut, name]);
 

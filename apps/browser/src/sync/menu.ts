@@ -21,7 +21,12 @@ export function syncedDevicesMenuItem(spaceId: string): MenuItem | null {
   };
 }
 
-export const deviceKind = (name: string) => name.split(/[’']s /).slice(1).join("'s ").trim() || name;
+export const deviceKind = (name: string) =>
+  name
+    .split(/[’']s /)
+    .slice(1)
+    .join("'s ")
+    .trim() || name;
 
 export function openSyncedTab(choice: string, windowId: string, spaceId: string): boolean {
   const match = /^synced:(.+):(\d+)$/.exec(choice);

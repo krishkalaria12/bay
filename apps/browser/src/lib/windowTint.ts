@@ -37,7 +37,14 @@ export function tintForHue(swatch: string, grey = false): string {
 
 const rgb = (hex: string) => [0, 1, 2].map((i) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16));
 const hex = (c: number[]) =>
-  `#${c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  `#${c
+    .map((v) =>
+      Math.round(Math.min(255, Math.max(0, v)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase()}`;
 
 function luminance(color: string): number {
   const [r, g, b] = rgb(color).map((v) => {
@@ -60,7 +67,10 @@ export const hexFromHsl = (h: number, s: number, l: number) => hex(fromHsl(h, s,
 
 function hsl([r, g, b]: number[]): [number, number, number] {
   const [R, G, B] = [r! / 255, g! / 255, b! / 255];
-  const max = Math.max(R, G, B), min = Math.min(R, G, B), l = (max + min) / 2, d = max - min;
+  const max = Math.max(R, G, B),
+    min = Math.min(R, G, B),
+    l = (max + min) / 2,
+    d = max - min;
   if (d === 0) return [0, 0, l];
   const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
   const h = max === R ? (G - B) / d + (G < B ? 6 : 0) : max === G ? (B - R) / d + 2 : (R - G) / d + 4;
@@ -69,7 +79,8 @@ function hsl([r, g, b]: number[]): [number, number, number] {
 
 function fromHsl(h: number, s: number, l: number): number[] {
   if (s === 0) return [l * 255, l * 255, l * 255];
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s,
+    p = 2 * l - q;
   const ch = (t: number) => {
     t = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
     return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p;

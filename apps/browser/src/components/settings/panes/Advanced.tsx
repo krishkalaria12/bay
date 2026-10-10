@@ -13,7 +13,9 @@ export function AdvancedPane() {
   const [info, setInfo] = useState<EngineInfo | null>(null);
   const [widevine, setWidevine] = useState<EngineComponent | null | undefined>(undefined);
   useEffect(() => {
-    void engineInfo().then(setInfo).catch(() => {});
+    void engineInfo()
+      .then(setInfo)
+      .catch(() => {});
     void listComponents()
       .then((list) => setWidevine(list.find((c) => c.id === WIDEVINE_COMPONENT_ID) ?? null))
       .catch(() => setWidevine(null));

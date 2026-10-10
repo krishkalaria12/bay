@@ -1,11 +1,4 @@
-import {
-  cancelDeviceChooser,
-  onDeviceChooser,
-  openBluetoothSettings,
-  refreshDeviceChooser,
-  selectDevice,
-  type DeviceChooser as Chooser,
-} from "@bay/nncore";
+import { cancelDeviceChooser, onDeviceChooser, openBluetoothSettings, refreshDeviceChooser, selectDevice, type DeviceChooser as Chooser } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
@@ -59,7 +52,21 @@ function Signal({ level, color }: { level: number; color: string }) {
   );
 }
 
-function OptionRow({ name, detail, signal, selected, onSelect, onChoose }: { name: string; detail: string | null; signal: number; selected: boolean; onSelect(): void; onChoose(): void }) {
+function OptionRow({
+  name,
+  detail,
+  signal,
+  selected,
+  onSelect,
+  onChoose,
+}: {
+  name: string;
+  detail: string | null;
+  signal: number;
+  selected: boolean;
+  onSelect(): void;
+  onChoose(): void;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   return (
@@ -161,8 +168,22 @@ export function DeviceChooser({ tabId, left, top }: { tabId: string; left: numbe
         style={{ padding: 14, gap: 10 }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-          <View style={{ width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)" }}>
-            <Symbol name={chooser.showSignal || scanning ? "dot.radiowaves.left.and.right" : "cable.connector"} size={14} color={theme.icon} style={{ width: 20, height: 20 }} />
+          <View
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
+            }}
+          >
+            <Symbol
+              name={chooser.showSignal || scanning ? "dot.radiowaves.left.and.right" : "cable.connector"}
+              size={14}
+              color={theme.icon}
+              style={{ width: 20, height: 20 }}
+            />
           </View>
           <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{chooser.title}</Text>
         </View>

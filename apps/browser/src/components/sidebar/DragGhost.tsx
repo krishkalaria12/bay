@@ -54,10 +54,31 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
         ) : tab ? (
           <TabIcon url={tab.url} favicon={tab.favicon} icon={item.kind === "group" ? null : tab.customIcon} spaceId={tab.spaceId} />
         ) : null}
-        {!tile ? <FadeLabel text={label} fontSize={13} weight={item.kind === "group" || folder ? "medium" : "regular"} color={theme.textPrimary} style={{ flex: 1, height: 18, marginLeft: 7 }} /> : null}
+        {!tile ? (
+          <FadeLabel
+            text={label}
+            fontSize={13}
+            weight={item.kind === "group" || folder ? "medium" : "regular"}
+            color={theme.textPrimary}
+            style={{ flex: 1, height: 18, marginLeft: 7 }}
+          />
+        ) : null}
       </Surface>
       {count > 1 ? (
-        <View style={{ position: "absolute", top: -6, right: -4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: theme.accent, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{
+            position: "absolute",
+            top: -6,
+            right: -4,
+            minWidth: 18,
+            height: 18,
+            borderRadius: 9,
+            paddingHorizontal: 5,
+            backgroundColor: theme.accent,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <Text style={{ fontSize: 11, fontWeight: "700", color: "#FFFFFF" }}>{count}</Text>
         </View>
       ) : null}

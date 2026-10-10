@@ -49,10 +49,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
   },
   {
     title: "Speed",
-    items: [
-      "Time to the first window, profile switch time, and command bar speed (a sample of keystrokes)",
-      "Memory use and the number of tabs, once an hour",
-    ],
+    items: ["Time to the first window, profile switch time, and command bar speed (a sample of keystrokes)", "Memory use and the number of tabs, once an hour"],
   },
   {
     title: "Never",

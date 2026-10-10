@@ -25,7 +25,14 @@ export function AppearancePane() {
       <SectionHeader title="Appearance Theme" description="Also in View › Appearance. Incognito windows are always dark." />
       <View style={{ flexDirection: "row", gap: 14 }}>
         {MODES.map((m) => (
-          <ModeChoice key={m.value} mode={m.value} title={m.title} description={m.description} selected={appearance === m.value} onPress={() => choose(m.value)} />
+          <ModeChoice
+            key={m.value}
+            mode={m.value}
+            title={m.title}
+            description={m.description}
+            selected={appearance === m.value}
+            onPress={() => choose(m.value)}
+          />
         ))}
       </View>
       <MaterialPicker />
@@ -41,7 +48,10 @@ function MaterialPicker() {
   const choose = (value: Settings["windowMaterial"]) => useBrowser.getState().updateSettings({ windowMaterial: value });
   return (
     <>
-      <SectionHeader title="Window" description="Solid fills the window with the page’s colour, or your space’s when it has none. Glass lets the desktop show through it." />
+      <SectionHeader
+        title="Window"
+        description="Solid fills the window with the page’s colour, or your space’s when it has none. Glass lets the desktop show through it."
+      />
       <View style={{ flexDirection: "row", gap: 14 }}>
         <MaterialChoice value="solid" title="Solid" selected={material === "solid"} onPress={() => choose("solid")} />
         <MaterialChoice value="glass" title="Glass" selected={material === "glass"} onPress={() => choose("glass")} />
@@ -74,7 +84,16 @@ function MaterialChoice({ value, title, selected, onPress }: { value: Settings["
           <>
             <View style={{ position: "absolute", left: -18, top: -20, width: 90, height: 90, borderRadius: 45, backgroundColor: "#E58BB0", opacity: 0.45 }} />
             <View style={{ position: "absolute", left: 30, bottom: -36, width: 90, height: 90, borderRadius: 45, backgroundColor: "#6FA8F2", opacity: 0.4 }} />
-            <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: theme.dark ? "rgba(30,30,33,0.45)" : "rgba(235,235,237,0.45)" }} />
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                backgroundColor: theme.dark ? "rgba(30,30,33,0.45)" : "rgba(235,235,237,0.45)",
+              }}
+            />
           </>
         )}
         <View style={{ flex: 1, padding: 6, flexDirection: "row", gap: 5 }}>
@@ -116,7 +135,17 @@ function SidebarPositionPicker() {
   );
 }
 
-function SidebarPositionChoice({ value, title, selected, onPress }: { value: Settings["sidebarPosition"]; title: string; selected: boolean; onPress: () => void }) {
+function SidebarPositionChoice({
+  value,
+  title,
+  selected,
+  onPress,
+}: {
+  value: Settings["sidebarPosition"];
+  title: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   const theme = useTheme();
   const colors = useFormColors();
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
@@ -210,7 +239,9 @@ function AddressBarChoice({ value, title, selected, onPress }: { value: Settings
         </View>
         <View style={{ flex: 1, borderRadius: 4, backgroundColor: page, overflow: "hidden" }}>
           {!sidebar && (
-            <View style={{ height: 13, flexDirection: "row", alignItems: "center", paddingHorizontal: 5, gap: 5, borderBottomWidth: 1, borderBottomColor: field }}>
+            <View
+              style={{ height: 13, flexDirection: "row", alignItems: "center", paddingHorizontal: 5, gap: 5, borderBottomWidth: 1, borderBottomColor: field }}
+            >
               <View style={{ width: 14, height: 4, borderRadius: 2, backgroundColor: bar }} />
               <View style={{ flex: 1, height: 7, borderRadius: 2.5, backgroundColor: field, borderWidth: 1, borderColor: colors.accent }} />
             </View>

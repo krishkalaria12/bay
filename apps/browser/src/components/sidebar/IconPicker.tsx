@@ -12,16 +12,97 @@ import { useSidebarTokens } from "./tokens";
 import { ICON_PICKER_CELL, ICON_PICKER_COLUMNS, ICON_PICKER_WIDTH } from "./constants";
 
 const SYMBOLS: IconChoice[] = [
-  "star", "heart", "bookmark", "flag", "pin", "bolt", "flame", "leaf", "globe", "house", "briefcase", "cart", "bag", "creditcard",
-  "dollarsign.circle", "chart.bar", "chart.line.uptrend.xyaxis", "calendar", "clock", "alarm", "envelope", "bubble.left", "phone", "video",
-  "music.note", "headphones", "gamecontroller", "paintbrush", "camera", "film", "tv", "airplane", "map", "car", "fork.knife", "cup.and.saucer",
-  "figure.run", "sportscourt", "pawprint", "tree", "sun.max", "moon", "cloud", "snowflake", "sparkles", "gift", "trophy", "target", "brain",
-  "eye", "laptopcomputer", "desktopcomputer", "keyboard", "hammer", "wrench.and.screwdriver", "gearshape", "testtube.2", "ant", "lock",
-  "key", "puzzlepiece", "shippingbox", "folder", "archivebox", "newspaper", "link", "magnifyingglass", "safari", "tag", "lightbulb",
-  "questionmark.circle", "exclamationmark.triangle", "book", "graduationcap", "doc.text", "list.bullet", "checkmark.circle", "person.2",
+  "star",
+  "heart",
+  "bookmark",
+  "flag",
+  "pin",
+  "bolt",
+  "flame",
+  "leaf",
+  "globe",
+  "house",
+  "briefcase",
+  "cart",
+  "bag",
+  "creditcard",
+  "dollarsign.circle",
+  "chart.bar",
+  "chart.line.uptrend.xyaxis",
+  "calendar",
+  "clock",
+  "alarm",
+  "envelope",
+  "bubble.left",
+  "phone",
+  "video",
+  "music.note",
+  "headphones",
+  "gamecontroller",
+  "paintbrush",
+  "camera",
+  "film",
+  "tv",
+  "airplane",
+  "map",
+  "car",
+  "fork.knife",
+  "cup.and.saucer",
+  "figure.run",
+  "sportscourt",
+  "pawprint",
+  "tree",
+  "sun.max",
+  "moon",
+  "cloud",
+  "snowflake",
+  "sparkles",
+  "gift",
+  "trophy",
+  "target",
+  "brain",
+  "eye",
+  "laptopcomputer",
+  "desktopcomputer",
+  "keyboard",
+  "hammer",
+  "wrench.and.screwdriver",
+  "gearshape",
+  "testtube.2",
+  "ant",
+  "lock",
+  "key",
+  "puzzlepiece",
+  "shippingbox",
+  "folder",
+  "archivebox",
+  "newspaper",
+  "link",
+  "magnifyingglass",
+  "safari",
+  "tag",
+  "lightbulb",
+  "questionmark.circle",
+  "exclamationmark.triangle",
+  "book",
+  "graduationcap",
+  "doc.text",
+  "list.bullet",
+  "checkmark.circle",
+  "person.2",
 ].map((name) => ({ name, words: "" }));
 
-export function IconPicker({ windowId, sidebarWidth, windowWidth, windowHeight }: { windowId: string; sidebarWidth: number; windowWidth: number; windowHeight: number }) {
+export function IconPicker({
+  windowId,
+  sidebarWidth,
+  windowWidth,
+  windowHeight,
+}: {
+  windowId: string;
+  sidebarWidth: number;
+  windowWidth: number;
+  windowHeight: number;
+}) {
   const picker = useSidebarUi((u) => (u.iconPicker?.windowId === windowId ? u.iconPicker : null));
   return picker ? <PickerPanel key={picker.id} picker={picker} sidebarWidth={sidebarWidth} windowWidth={windowWidth} windowHeight={windowHeight} /> : null;
 }
@@ -63,7 +144,10 @@ function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { pick
   } else if (right) {
     // Beside the row it's for, toward the page, and no further into the page than the sidebar's edge.
     const edge = windowWidth - sidebarWidth - 6 - width;
-    place = { top: Math.max(8, (picker.anchor?.y ?? 60) - 8), left: picker.anchor ? Math.min(windowWidth - width - 8, Math.max(edge, picker.anchor.x - 6 - width)) : edge };
+    place = {
+      top: Math.max(8, (picker.anchor?.y ?? 60) - 8),
+      left: picker.anchor ? Math.min(windowWidth - width - 8, Math.max(edge, picker.anchor.x - 6 - width)) : edge,
+    };
   } else {
     place = {
       top: Math.max(8, (picker.anchor?.y ?? 60) - 8),
@@ -101,7 +185,15 @@ function PickerPanel({ picker, sidebarWidth, windowWidth, windowHeight }: { pick
         {current ? (
           <Pressable onPress={() => choose(null)}>
             {({ pressed }) => (
-              <View style={{ height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? tokens.pickerCellHover : theme.urlPill }}>
+              <View
+                style={{
+                  height: 26,
+                  borderRadius: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: pressed ? tokens.pickerCellHover : theme.urlPill,
+                }}
+              >
                 <Text style={{ fontSize: 12, color: theme.textPrimary }}>{space ? "Use Initial" : "Reset Icon"}</Text>
               </View>
             )}

@@ -6,7 +6,11 @@ const { hslOf } = await import("./windowTint.ts");
 const { spaceThemeKey, themeFor } = await import("./theme.ts");
 
 test("a colour picked on the wheel puts its dot back where it was picked", () => {
-  for (const [angle, distance] of [[0.1, 0.2], [0.5, 0.5], [0.83, 0.9]]) {
+  for (const [angle, distance] of [
+    [0.1, 0.2],
+    [0.5, 0.5],
+    [0.83, 0.9],
+  ]) {
     const at = wheelPosition(wheelColor(angle, distance));
     assert.ok(Math.abs(at.angle - angle) < 0.01 && Math.abs(at.distance - distance) < 0.01, `${angle},${distance} → ${at.angle},${at.distance}`);
   }
@@ -42,7 +46,10 @@ test("the harmony button goes round the ones for the colours there are; removing
 
 test("a space without its own theme keeps its preset's key; one with a theme gets its own", () => {
   assert.equal(spaceThemeKey({ color: "blue", theme: null }, true), "blue:dark");
-  assert.equal(spaceThemeKey({ color: "blue", theme: { colors: ["#FF7E5F", "#FEB47B"], intensity: 0.5, grain: 0.3 } }, false), "custom|#FF7E5F,#FEB47B|0.50|0.30:light");
+  assert.equal(
+    spaceThemeKey({ color: "blue", theme: { colors: ["#FF7E5F", "#FEB47B"], intensity: 0.5, grain: 0.3 } }, false),
+    "custom|#FF7E5F,#FEB47B|0.50|0.30:light",
+  );
   assert.deepEqual(editableTheme(null, "#4691c3"), { colors: ["#4691C3"], intensity: 0.5, grain: 0.3 });
 });
 

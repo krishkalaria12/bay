@@ -24,7 +24,6 @@ function privateWindowWith(...urls) {
   return { w, ids };
 }
 
-
 test("incognito window: own profile, closing records nothing, history ignored", () => {
   S().hydrate({});
   const w = S().createWindow({ incognito: true, url: "secret.com" });
@@ -49,7 +48,10 @@ test("cleaning up a private window keeps its tabs in memory, out of session.json
   S().hydrate({});
   const stop = startPersistence();
   const normal = S().createWindow({ url: "https://public.example/" });
-  const { w, ids: [, stale, dupe] } = privateWindowWith("https://secret.example/a", "https://secret.example/old", "https://secret.example/a");
+  const {
+    w,
+    ids: [, stale, dupe],
+  } = privateWindowWith("https://secret.example/a", "https://secret.example/old", "https://secret.example/a");
   S().activate(model.viewTabIds(S(), w)[0]);
   S().updateTab(stale, { lastActiveAt: OLD() });
   assert.equal(S().cleanUpTabs(w), 2);
@@ -85,19 +87,57 @@ test("cleaning up a private window keeps its tabs in memory, out of session.json
 test("private entries an older build saved are dropped when the session loads, and never written again", () => {
   stub.docs.clear();
   const privateEntry = {
-    kind: "tab", id: "ct-old", windowId: "w-private", index: 0, group: null, closedAt: 1,
-    tab: { url: "https://secret.example/", title: "Secret", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, spaceId: "incognito:w-private" },
+    kind: "tab",
+    id: "ct-old",
+    windowId: "w-private",
+    index: 0,
+    group: null,
+    closedAt: 1,
+    tab: {
+      url: "https://secret.example/",
+      title: "Secret",
+      favicon: null,
+      pinned: false,
+      muted: false,
+      zoom: 1,
+      customTitle: null,
+      customIcon: null,
+      spaceId: "incognito:w-private",
+    },
   };
   const publicEntry = { ...privateEntry, id: "ct-ok", tab: { ...privateEntry.tab, url: "https://public.example/", spaceId: "default" } };
-  stub.docs.set("session.json", JSON.stringify({ version: 2, profiles: {}, spaceOrder: [], settings: {}, windows: [], windowOrder: [], focusedWindowId: null, tabs: [], groups: [], splits: [], closedTabs: [], closedWindows: [], cleanedTabs: [privateEntry, publicEntry] }));
+  stub.docs.set(
+    "session.json",
+    JSON.stringify({
+      version: 2,
+      profiles: {},
+      spaceOrder: [],
+      settings: {},
+      windows: [],
+      windowOrder: [],
+      focusedWindowId: null,
+      tabs: [],
+      groups: [],
+      splits: [],
+      closedTabs: [],
+      closedWindows: [],
+      cleanedTabs: [privateEntry, publicEntry],
+    }),
+  );
   const stop = startPersistence();
-  assert.deepEqual(S().cleanedTabs.map((c) => c.id), ["ct-ok"]);
+  assert.deepEqual(
+    S().cleanedTabs.map((c) => c.id),
+    ["ct-ok"],
+  );
   S().createWindow({ url: "https://public.example/" });
   flushPersistence();
   assert.ok(!saved().includes("secret.example"));
   stop();
   const data = loadSession();
-  assert.deepEqual(data.cleanedTabs.map((c) => c.id), ["ct-ok"]);
+  assert.deepEqual(
+    data.cleanedTabs.map((c) => c.id),
+    ["ct-ok"],
+  );
 });
 
 test("session.json filters private tabs out of every closed and parked list", () => {
@@ -105,12 +145,43 @@ test("session.json filters private tabs out of every closed and parked list", ()
   S().hydrate({});
   const stop = startPersistence();
   S().createWindow({ url: "https://public.example/" });
-  const snap = { url: "https://secret.example/", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, spaceId: "incognito:w-x" };
+  const snap = {
+    url: "https://secret.example/",
+    title: "",
+    favicon: null,
+    pinned: false,
+    muted: false,
+    zoom: 1,
+    customTitle: null,
+    customIcon: null,
+    spaceId: "incognito:w-x",
+  };
   useBrowser.setState({
     closedTabs: [{ kind: "tab", id: "c1", tab: snap, windowId: "w-x", index: 0, group: null, closedAt: 1 }],
-    closedWindows: [{ kind: "window", id: "c2", window: { spaceId: "incognito:w-x", sidebarOpen: true, frame: null }, tabs: [{ ...snap, active: true }], groups: [], closedAt: 1 }],
-    closedGroups: [{ kind: "group", id: "c3", group: { id: "g", name: "", icon: null, color: null, pinned: false }, tabs: [snap], windowId: "w-x", index: 0, closedAt: 1 }],
-    deletedGroups: [{ kind: "group", id: "c4", group: { id: "g", name: "", icon: null, color: null, pinned: false }, tabs: [snap], windowId: "w-x", index: 0, closedAt: Date.now() }],
+    closedWindows: [
+      {
+        kind: "window",
+        id: "c2",
+        window: { spaceId: "incognito:w-x", sidebarOpen: true, frame: null },
+        tabs: [{ ...snap, active: true }],
+        groups: [],
+        closedAt: 1,
+      },
+    ],
+    closedGroups: [
+      { kind: "group", id: "c3", group: { id: "g", name: "", icon: null, color: null, pinned: false }, tabs: [snap], windowId: "w-x", index: 0, closedAt: 1 },
+    ],
+    deletedGroups: [
+      {
+        kind: "group",
+        id: "c4",
+        group: { id: "g", name: "", icon: null, color: null, pinned: false },
+        tabs: [snap],
+        windowId: "w-x",
+        index: 0,
+        closedAt: Date.now(),
+      },
+    ],
     parkedPins: { "incognito:w-x": { tabs: [{ ...snap, id: "t", groupId: null }], groups: [] } },
   });
   flushPersistence();
@@ -145,16 +216,28 @@ test("incognito downloads never reach downloads.json and leave with their window
   S().upsertDownload(download("2", privateProfile, "downloading"));
   flushPersistence();
   const savedDownloads = JSON.parse(stub.docs.get("downloads.json")).downloads;
-  assert.deepEqual(savedDownloads.map((d) => d.id), ["1"]);
+  assert.deepEqual(
+    savedDownloads.map((d) => d.id),
+    ["1"],
+  );
 
   S().closeWindow(incognito);
-  assert.deepEqual(S().downloads.map((d) => d.id), ["1"]);
+  assert.deepEqual(
+    S().downloads.map((d) => d.id),
+    ["1"],
+  );
   assert.ok(S().windows[normal]);
   S().upsertDownload(download("2", privateProfile, "cancelled"));
-  assert.deepEqual(S().downloads.map((d) => d.id), ["1"]);
+  assert.deepEqual(
+    S().downloads.map((d) => d.id),
+    ["1"],
+  );
 
   const data = loadSession();
-  assert.deepEqual(data.downloads.map((d) => d.id), ["saved-0"]);
+  assert.deepEqual(
+    data.downloads.map((d) => d.id),
+    ["saved-0"],
+  );
   stop();
 });
 
@@ -211,7 +294,13 @@ test("clearing a time range removes visits, not pages", () => {
   const t0 = 1_700_000_000_000;
   const entry = (url, times) => ({ url, title: url, favicon: null, visits: times.length, lastVisit: times.at(-1), visitTimes: times });
   S().hydrate({ history: { default: [entry("https://b.com/", [t0 - 5 * 60_000]), entry("https://a.com/", [t0 - 5 * HOUR, t0 - 10 * 60_000])] } });
-  assert.deepEqual(S().history.default.map((h) => [h.url, h.visits]), [["https://b.com/", 1], ["https://a.com/", 2]]);
+  assert.deepEqual(
+    S().history.default.map((h) => [h.url, h.visits]),
+    [
+      ["https://b.com/", 1],
+      ["https://a.com/", 2],
+    ],
+  );
 
   S().clearHistory("default", t0 - HOUR);
   const [a, ...rest] = S().history.default;
@@ -285,7 +374,10 @@ test("deleting a profile keeps the data others share", () => {
   assert.equal(S().spaces[a], undefined);
   assert.equal(model.engineProfile(b), a, "still on A's engine context");
   assert.ok(S().bookmarks.nodes[bookmark], "shared bookmarks stay");
-  assert.deepEqual(S().history[b].map((h) => h.url), ["https://a.com/"]);
+  assert.deepEqual(
+    S().history[b].map((h) => h.url),
+    ["https://a.com/"],
+  );
   S().importHistory(b, [{ url: "https://c.com/", title: "C", visits: 1, lastVisit: 3 }]);
   assert.equal(S().history[b].length, 2);
   S().deleteSpace(b);

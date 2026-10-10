@@ -159,7 +159,13 @@ class SpacePager {
   }
 
   debug() {
-    return { lastEvent: this.lastEvent, snapshot: cef.pagerState(this.windowId), ack: this.state.getState().ack, surfaces: this.surfaces, warm: this.state.getState().pages };
+    return {
+      lastEvent: this.lastEvent,
+      snapshot: cef.pagerState(this.windowId),
+      ack: this.state.getState().ack,
+      surfaces: this.surfaces,
+      warm: this.state.getState().pages,
+    };
   }
 }
 

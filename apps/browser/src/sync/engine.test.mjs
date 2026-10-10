@@ -78,7 +78,11 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
     batches.set(key, payload);
   }
   const three = [...folder.values()].map((f) => JSON.parse(f.payload)).find((f) => f.ops?.some((op) => op.v?.t === "Three"));
-  assert.deepEqual(three.ops.map((op) => op.v?.t), ["Three"], "only what's new");
+  assert.deepEqual(
+    three.ops.map((op) => op.v?.t),
+    ["Three"],
+    "only what's new",
+  );
   assert.equal(shell.docs.get("sync-journal.nns"), "", "the journal is emptied once the saved state has its batches");
 });
 

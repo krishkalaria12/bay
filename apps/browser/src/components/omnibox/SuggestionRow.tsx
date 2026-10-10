@@ -61,14 +61,7 @@ export function SuggestionList({
   return (
     <View style={{ paddingHorizontal: dropdown ? 6 : 9, paddingBottom: dropdown ? 6 : 2 }}>
       {items.map((s, i) => (
-        <SuggestionRow
-          key={i}
-          index={i}
-          suggestion={s}
-          selected={i === selectedIndex}
-          trailing={i === 0 ? trailing : null}
-          actions={actions}
-        />
+        <SuggestionRow key={i} index={i} suggestion={s} selected={i === selectedIndex} trailing={i === 0 ? trailing : null} actions={actions} />
       ))}
     </View>
   );
@@ -141,5 +134,6 @@ const SuggestionRow = memo(
       </View>
     );
   },
-  (a, b) => a.index === b.index && a.selected === b.selected && a.trailing === b.trailing && a.actions === b.actions && sameSuggestion(a.suggestion, b.suggestion),
+  (a, b) =>
+    a.index === b.index && a.selected === b.selected && a.trailing === b.trailing && a.actions === b.actions && sameSuggestion(a.suggestion, b.suggestion),
 );

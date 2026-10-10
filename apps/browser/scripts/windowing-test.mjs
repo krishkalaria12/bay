@@ -51,16 +51,23 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 const tab = (id, windowId, url, createdAt) => ({ id, windowId, url, title: url ? id : "", createdAt, lastActiveAt: createdAt });
 // Frames are AppKit's (from the bottom of the screen); w2 sits clear of w1, to the right.
-const fixture = () => session({
-  spaces: [{ id: "default", name: "Personal", color: "plum" }],
-  settings: { tabLayout: "sidebar" },
-  windows: [
-    { id: "w1", tabIds: ["n1", "g1", "b1", "n2"], activeTabIds: { default: "g1" }, frame: [40, 222, 1000, 700] },
-    { id: "w2", tabIds: ["m1"], activeTabIds: { default: "m1" }, frame: [1060, 332, 440, 500] },
-  ],
-  focusedWindowId: "w2",
-  tabs: [tab("n1", "w1", "", 1), tab("g1", "w1", `${base}/gazette`, 2), tab("b1", "w1", `${base}/blue`, 3), tab("n2", "w1", "", 4), tab("m1", "w2", `${base}/blue?moved`, 5)],
-});
+const fixture = () =>
+  session({
+    spaces: [{ id: "default", name: "Personal", color: "plum" }],
+    settings: { tabLayout: "sidebar" },
+    windows: [
+      { id: "w1", tabIds: ["n1", "g1", "b1", "n2"], activeTabIds: { default: "g1" }, frame: [40, 222, 1000, 700] },
+      { id: "w2", tabIds: ["m1"], activeTabIds: { default: "m1" }, frame: [1060, 332, 440, 500] },
+    ],
+    focusedWindowId: "w2",
+    tabs: [
+      tab("n1", "w1", "", 1),
+      tab("g1", "w1", `${base}/gazette`, 2),
+      tab("b1", "w1", `${base}/blue`, 3),
+      tab("n2", "w1", "", 4),
+      tab("m1", "w2", `${base}/blue?moved`, 5),
+    ],
+  });
 
 let app = null;
 const HELPERS = `
@@ -73,7 +80,9 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const run = (body) => app.eval(`${HELPERS}\n${body}`);
 // A check's own windows go even when it fails: one left open sat over w1's tab list and took the last check's drop.
 const closeWindowsBut = (ids) =>
-  run(`const keep = ${JSON.stringify(ids)}; Object.keys(st().windows).filter((id) => !keep.includes(id)).forEach((id) => st().closeWindow(id)); return settle(500);`);
+  run(
+    `const keep = ${JSON.stringify(ids)}; Object.keys(st().windows).filter((id) => !keep.includes(id)).forEach((id) => st().closeWindow(id)); return settle(500);`,
+  );
 
 // MARK: Frames
 
@@ -105,10 +114,13 @@ async function record(seconds, during) {
   const ended = await Promise.race([done, sleep((seconds + 10) * 1000).then(() => "timeout")]);
   if (ended === "timeout") child.kill("SIGKILL");
   if (!existsSync(file)) return null;
-  const frames = readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => {
-    const f = JSON.parse(l);
-    return { t: f.t, w: f.w, h: f.h, g: Buffer.from(f.g, "base64") };
-  });
+  const frames = readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => {
+      const f = JSON.parse(l);
+      return { t: f.t, w: f.w, h: f.h, g: Buffer.from(f.g, "base64") };
+    });
   return frames.length > 10 ? frames : null;
 }
 
@@ -124,14 +136,22 @@ const crop = (f, r) => {
   for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) out[y * r.w + x] = f.g[(r.y + y) * f.w + r.x + x] ?? 0;
   return out;
 };
-const diff = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; };
+const diff = (a, b) => {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
+  return s / a.length;
+};
 const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
 // How much a crop varies: a blank page doesn't.
-const sd = (c) => { const m = mean(c); return Math.sqrt(c.reduce((s, v) => s + (v - m) ** 2, 0) / c.length); };
+const sd = (c) => {
+  const m = mean(c);
+  return Math.sqrt(c.reduce((s, v) => s + (v - m) ** 2, 0) / c.length);
+};
 
 /** How far a crop is from the nearest mix of two others (t·a + (1 − t)·b): a crossfade's frame is near none. */
 function blendOff(c, a, b) {
-  let num = 0, den = 0;
+  let num = 0,
+    den = 0;
   for (let i = 0; i < c.length; i++) {
     const d = a[i] - b[i];
     num += (c[i] - b[i]) * d;
@@ -161,7 +181,10 @@ function glitches(frames, r, tolerance = 4) {
     const after = restingRuns.find((r) => r.at > run.at);
     return !before || !after || blendOff(crops[run.at], crops[before.at], crops[after.at]) > tolerance;
   });
-  return Object.assign(found.map((run) => ({ t: frames[run.at].t, frames: run.n })), { crops: [...resting, ...found.map((run) => crops[run.at])] });
+  return Object.assign(
+    found.map((run) => ({ t: frames[run.at].t, frames: run.n })),
+    { crops: [...resting, ...found.map((run) => crops[run.at])] },
+  );
 }
 
 /** Writes crops of one region side by side as a grey PGM beside the log, for a failed check (at most 48). */
@@ -169,7 +192,9 @@ function dump(name, crops, r) {
   const shown = crops.slice(0, 48);
   const width = shown.length * (r.w + 1);
   const out = Buffer.alloc(width * r.h, 255);
-  shown.forEach((c, i) => { for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) out[y * width + i * (r.w + 1) + x] = c[y * r.w + x]; });
+  shown.forEach((c, i) => {
+    for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) out[y * width + i * (r.w + 1) + x] = c[y * r.w + x];
+  });
   const file = join(scratch, `windowing-${name}.pgm`);
   writeFileSync(file, Buffer.concat([Buffer.from(`P5 ${width} ${r.h} 255\n`), out]));
   rep.log(`frames judged: ${file}`);
@@ -178,10 +203,13 @@ function dump(name, crops, r) {
 // An 8-bit RGB(A) PNG's pixels (what devSnapshotWindow writes): { width, height, channels, data }.
 function readPng(path) {
   const buf = readFileSync(path);
-  let width = 0, height = 0, channels = 4;
+  let width = 0,
+    height = 0,
+    channels = 4;
   const idat = [];
-  for (let at = 8; at < buf.length; ) {
-    const length = buf.readUInt32BE(at), type = buf.toString("ascii", at + 4, at + 8);
+  for (let at = 8; at < buf.length;) {
+    const length = buf.readUInt32BE(at),
+      type = buf.toString("ascii", at + 4, at + 8);
     if (type === "IHDR") {
       width = buf.readUInt32BE(at + 8);
       height = buf.readUInt32BE(at + 12);
@@ -200,7 +228,10 @@ function readPng(path) {
       const a = x >= channels ? out[y * stride + x - channels] : 0;
       const b = y ? out[(y - 1) * stride + x] : 0;
       const c = x >= channels && y ? out[(y - 1) * stride + x - channels] : 0;
-      const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      const p = a + b - c,
+        pa = Math.abs(p - a),
+        pb = Math.abs(p - b),
+        pc = Math.abs(p - c);
       const pred = [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][filter];
       out[y * stride + x] = (v + pred) & 255;
     }
@@ -284,7 +315,9 @@ try {
     await run(`nn.actions.switchToTab("b1"); return settle(1500).then(() => { nn.actions.switchToTab("g1"); return settle(1000); });`);
     // Switches 400 ms apart, recorded.
     const switches = (order) =>
-      record(order.length * 0.4 + 1.5, () => run(`${JSON.stringify(order)}.forEach((id, i) => setTimeout(() => nn.actions.switchToTab(id), i * 400)); return 1;`));
+      record(order.length * 0.4 + 1.5, () =>
+        run(`${JSON.stringify(order)}.forEach((id, i) => setTimeout(() => nn.actions.switchToTab(id), i * 400)); return 1;`),
+      );
     // The page area, clear of the sidebar and the toolbar.
     const region = regionOf(frame, H, { left: 200, top: 56, right: 16, bottom: 16 });
     // Web page to web page: every frame one page, the other, or a mix of the two (the switch's crossfade).
@@ -311,7 +344,9 @@ try {
       if (noScreen) return await newWindowInProcess(ids);
       let frames;
       let created;
-      frames = await record(2.5, async () => { created = await run(`return nn.actions.openWindow();`); });
+      frames = await record(2.5, async () => {
+        created = await run(`return nn.actions.openWindow();`);
+      });
       assert.ok(frames && created && !ids.includes(created), "a new window");
       const frame = await run(`return st().windows["${created}"].frame;`);
       // Its sidebar (the New Tab page's picture fades in on its own).
@@ -322,7 +357,12 @@ try {
       // Its first frame on screen is (nearly) what it settles on: not an empty window, nor one still drawing its sidebar.
       const off = diff(crops[first], crops.at(-1));
       if (off >= 6) {
-        rep.log(`frame ${first} of ${crops.length} first differs (${diff(crops[first], crops[0]).toFixed(1)} from the one before the window); then ${crops.slice(first, first + 8).map((c) => diff(c, crops.at(-1)).toFixed(1)).join(", ")} from the settled one`);
+        rep.log(
+          `frame ${first} of ${crops.length} first differs (${diff(crops[first], crops[0]).toFixed(1)} from the one before the window); then ${crops
+            .slice(first, first + 8)
+            .map((c) => diff(c, crops.at(-1)).toFixed(1))
+            .join(", ")} from the settled one`,
+        );
         dump("new-window", [crops[0], ...crops.slice(Math.max(1, first - 2), first + 8), crops.at(-1)], r);
       }
       assert.ok(off < 6, `first frame ${off.toFixed(1)} levels from the settled window`);
@@ -361,7 +401,12 @@ try {
     const crops = frames.map((f) => crop(f, page));
     const blank = crops.filter((c) => sd(c) < 3);
     rep.log(`${blank.length} frames of w1's page blank`);
-    if (blank.length > 5) dump("tear-off", crops.filter((c, i) => crops.slice(Math.max(0, i - 1), i + 2).some((n) => sd(n) < 3)), page);
+    if (blank.length > 5)
+      dump(
+        "tear-off",
+        crops.filter((c, i) => crops.slice(Math.max(0, i - 1), i + 2).some((n) => sd(n) < 3)),
+        page,
+      );
     // Not there yet: 1–4 frames blank (was 3–5). The next tab now paints through the drag and shows in the batch that
     // takes the torn tab away (it showed an empty card for 2 more frames). Left: the torn page draws only its
     // background in w1 for 1–3 frames before that batch lands, while the new window is built. This guards against it
@@ -379,13 +424,17 @@ try {
     const w1 = await run(`return st().windows.w1.frame;`);
     // From w2's tab row onto w1's tab list (the pointer in w2's coordinates). The row is the list's first, below the
     // sidebar's address field (its header is 80 pt, the list 6 pt under it, a row 31 pt).
-    const target = [w1[0] + 110 - w2[0], (w2[1] + w2[3]) - (w1[1] + w1[3] - 160)];
+    const target = [w1[0] + 110 - w2[0], w2[1] + w2[3] - (w1[1] + w1[3] - 160)];
     const path = `70,100;70,130;-300,150;${target[0] + 30},${target[1]};${target.join(",")};${target[0] + 2},${target[1] + 2};${target.join(",")}`;
     const go = () => run(`return act("w2", "drag:${path}").then(() => settle(${7 * 12 * 16 + 1200}));`);
     const frames = noScreen ? (await go(), null) : await record(4.5, go);
     drop = { frames, w1, w2 };
     const after = await run(`return Object.values(st().windows).map((w) => [w.id, w.tabIds]);`);
-    assert.deepEqual(after.find(([id]) => id === "w2"), undefined, `w2 closed: ${JSON.stringify(after)}`);
+    assert.deepEqual(
+      after.find(([id]) => id === "w2"),
+      undefined,
+      `w2 closed: ${JSON.stringify(after)}`,
+    );
     assert.ok(after.find(([id]) => id === "w1")[1].includes("m1"), `m1 in w1: ${JSON.stringify(after)}`);
     // 0.2.22 RC: the tab closed with its window and the page loaded afresh in a new one (blank, history gone).
     await sleep(800);
@@ -412,7 +461,12 @@ try {
     const page = regionOf(w1, H, { left: 200, top: 56, right: 16, bottom: 16 });
     const pages = frames.map((f) => crop(f, page));
     const blank = pages.filter((c) => sd(c) < 3);
-    if (blank.length > 1) dump("dropped-page", pages.filter((c, i) => pages.slice(Math.max(0, i - 1), i + 2).some((n) => sd(n) < 3)), page);
+    if (blank.length > 1)
+      dump(
+        "dropped-page",
+        pages.filter((c, i) => pages.slice(Math.max(0, i - 1), i + 2).some((n) => sd(n) < 3)),
+        page,
+      );
     assert.ok(blank.length <= 1, `${blank.length} frames of w1's page blank`);
   });
 } finally {

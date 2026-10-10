@@ -12,9 +12,11 @@ export function useSidebarDock(open: boolean) {
   const [mounted, setMounted] = useState(open);
   useEffect(() => {
     if (open) setMounted(true);
-    progress.set(withTiming(open ? 1 : 0, SLIDE, (finished) => {
-      if (finished && !open) runOnJS(setMounted)(false);
-    }));
+    progress.set(
+      withTiming(open ? 1 : 0, SLIDE, (finished) => {
+        if (finished && !open) runOnJS(setMounted)(false);
+      }),
+    );
   }, [open, progress]);
   return { progress, mounted: open || mounted };
 }

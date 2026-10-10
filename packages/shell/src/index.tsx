@@ -280,8 +280,7 @@ export const WindowProfile = requireNativeViewManager<WindowProfileProps>("BayWi
 export const closeWindow = (id: string) => Shell.closeWindow(id);
 export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
-export const setTrafficLightsCenter = (id: string, center: [number, number] | null) =>
-  Shell.setTrafficLightsCenter(id, center);
+export const setTrafficLightsCenter = (id: string, center: [number, number] | null) => Shell.setTrafficLightsCenter(id, center);
 /** The window's buttons shown only while the pointer is over the window's top (always in full screen). */
 export const setTrafficLightsOnHover = (id: string, on: boolean) => Shell.setTrafficLightsOnHover(id, on);
 type Rect4 = [number, number, number, number];
@@ -330,8 +329,7 @@ export const prompt = (options: PromptOptions) => Shell.prompt(options);
 export const onCommand = (listener: (e: CommandEvent) => void) => Shell.addListener("onCommand", listener);
 export const onWindowEvent = (listener: (e: WindowEvent) => void) => Shell.addListener("onWindowEvent", listener);
 export const onAppEvent = (listener: (e: AppEvent) => void) => Shell.addListener("onAppEvent", listener);
-export const onOpenURLs = (listener: (urls: string[]) => void) =>
-  Shell.addListener("onOpenURLs", ({ urls }) => listener(urls));
+export const onOpenURLs = (listener: (urls: string[]) => void) => Shell.addListener("onOpenURLs", ({ urls }) => listener(urls));
 
 export const WindowDragRegion = requireNativeViewManager<ViewProps>("BayShell");
 
@@ -363,9 +361,7 @@ export type ContextMenuAreaProps = ViewProps & {
   captureDescendants?: boolean;
 };
 
-const NativeContextMenuArea = requireNativeViewManager<Omit<ContextMenuAreaProps, "onContextMenu"> & { onContextMenu?: () => void }>(
-  "BayContextMenuArea",
-);
+const NativeContextMenuArea = requireNativeViewManager<Omit<ContextMenuAreaProps, "onContextMenu"> & { onContextMenu?: () => void }>("BayContextMenuArea");
 
 export function ContextMenuArea(props: ContextMenuAreaProps) {
   return <NativeContextMenuArea {...props} />;
@@ -455,8 +451,7 @@ const InlineCompletionModule = requireNativeModule<{
 
 export type InlineWrite = 0 | 1 | 2;
 
-export const completeInline = (tag: number, typed: string, completion: string) =>
-  InlineCompletionModule.complete(tag, typed, completion);
+export const completeInline = (tag: number, typed: string, completion: string) => InlineCompletionModule.complete(tag, typed, completion);
 
 type TranslationModule = {
   readonly available: boolean;

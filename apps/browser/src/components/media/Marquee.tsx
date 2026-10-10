@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
 import { Text, View, type TextStyle } from "react-native";
-import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 import { MARQUEE_FADE, MARQUEE_FADE_STEPS, MARQUEE_PAUSE_MS, MARQUEE_SPEED } from "./constants";
 
 export type MarqueeGroup = {
@@ -67,11 +79,24 @@ export function Marquee({
   );
 }
 
-function Fade({ side, opacity, background, height }: { side: "left" | "right"; opacity: ReturnType<typeof useAnimatedStyle>; background: [number, number, number]; height: number }) {
+function Fade({
+  side,
+  opacity,
+  background,
+  height,
+}: {
+  side: "left" | "right";
+  opacity: ReturnType<typeof useAnimatedStyle>;
+  background: [number, number, number];
+  height: number;
+}) {
   const [r, g, b] = background;
   const w = MARQUEE_FADE / MARQUEE_FADE_STEPS;
   return (
-    <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, [side]: 0, width: MARQUEE_FADE, height, flexDirection: side === "left" ? "row" : "row-reverse" }, opacity]}>
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: "absolute", top: 0, [side]: 0, width: MARQUEE_FADE, height, flexDirection: side === "left" ? "row" : "row-reverse" }, opacity]}
+    >
       {Array.from({ length: MARQUEE_FADE_STEPS }, (_, i) => (
         <View key={i} style={{ width: w, height, backgroundColor: `rgba(${r},${g},${b},${1 - (i + 0.5) / MARQUEE_FADE_STEPS})` }} />
       ))}

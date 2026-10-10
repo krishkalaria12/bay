@@ -139,13 +139,27 @@ function EventRow({ event, now, windowId, tabId }: { event: CalendarEvent; now: 
           useBrowser.getState().activate(tabId);
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8, backgroundColor: hovered ? theme.rowHover : undefined, opacity: past ? 0.5 : 1 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            paddingVertical: 6,
+            paddingHorizontal: 4,
+            borderRadius: 8,
+            backgroundColor: hovered ? theme.rowHover : undefined,
+            opacity: past ? 0.5 : 1,
+          }}
+        >
           <View style={{ width: 3, alignSelf: "stretch", borderRadius: 1.5, backgroundColor: event.color }} />
           <View style={{ flex: 1, gap: 2 }}>
             <FadeLabel text={event.title || "Untitled event"} fontSize={13} weight="medium" color={theme.textPrimary} style={{ height: 17 }} />
             <Text numberOfLines={1} style={{ fontSize: 11.5, color: theme.textSecondary }}>
               {timeRange(event)}
-              <Text style={{ fontWeight: "500", color: running ? colors.now : theme.textSecondary }}> · {running ? "Now" : relativeTime(event.start, now)}</Text>
+              <Text style={{ fontWeight: "500", color: running ? colors.now : theme.textSecondary }}>
+                {" "}
+                · {running ? "Now" : relativeTime(event.start, now)}
+              </Text>
             </Text>
           </View>
           {others.length && !joinable ? <OverlappingAvatars people={others} /> : null}
@@ -175,4 +189,3 @@ export function OverlappingAvatars({ people, size = 18 }: { people: CalendarEven
     </View>
   );
 }
-

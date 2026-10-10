@@ -42,8 +42,8 @@ export function SyncPane() {
   return (
     <View>
       <Text style={{ marginTop: 20, fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
-        Sync your profiles, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your Macs. It all goes through a folder
-        you choose, like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
+        Sync your profiles, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your Macs. It all goes through a folder you
+        choose, like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
       </Text>
       {enabled ? <SyncOn info={info} /> : <SyncOff info={info} />}
     </View>
@@ -54,7 +54,18 @@ function SyncIcon({ on }: { on: boolean }) {
   const colors = useFormColors();
   const theme = useTheme();
   return (
-    <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: on ? colors.accent : colors.control, borderWidth: on ? 0 : 1, borderColor: colors.controlBorder }}>
+    <View
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: on ? colors.accent : colors.control,
+        borderWidth: on ? 0 : 1,
+        borderColor: colors.controlBorder,
+      }}
+    >
       <Symbol name="arrow.triangle.2.circlepath" size={13} weight="semibold" color={on ? "#FFFFFF" : theme.icon} style={{ width: 28, height: 28 }} />
     </View>
   );
@@ -132,8 +143,8 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
       </Group>
       {failure ? <Text style={{ marginTop: 8, fontSize: 12, color: colors.destructive }}>{failure}</Text> : null}
       <Text style={{ marginTop: 12, fontSize: 11.5, lineHeight: 15, color: theme.textTertiary }}>
-        No server and no account: your Macs meet in the sync folder. Your recovery phrase never leaves your devices, and without it the folder is
-        unreadable, file names included.
+        No server and no account: your Macs meet in the sync folder. Your recovery phrase never leaves your devices, and without it the folder is unreadable,
+        file names included.
       </Text>
     </>
   );
@@ -238,7 +249,12 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
           );
         })}
         {remoteProfiles.map((p) => (
-          <Row key={p.syncId} icon={<SpaceBadge profile={{ name: p.name, color: p.color, icon: p.icon }} size={24} />} title={p.name} description="On your other devices">
+          <Row
+            key={p.syncId}
+            icon={<SpaceBadge profile={{ name: p.name, color: p.color, icon: p.icon }} size={24} />}
+            title={p.name}
+            description="On your other devices"
+          >
             <Button title="Add to This Mac" onPress={() => addRemoteProfile(p.syncId)} />
           </Row>
         ))}

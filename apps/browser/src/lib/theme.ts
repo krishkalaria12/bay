@@ -6,14 +6,15 @@ import { activeTabId } from "../store/model";
 import type { Space, SpaceColor } from "../store/types";
 import { backdropTint, isLightColor, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
 
-export type Theme = typeof dark & ProfileTheme & {
-  backdrop: BackdropTint;
-  // The window's colours: what a solid window shows, or a glass one when inactive.
-  windowTint: [string, string];
-  // Glass (Appearance › Window): the desktop shows through the window.
-  glass: boolean;
-  powerUpColor: string | null;
-};
+export type Theme = typeof dark &
+  ProfileTheme & {
+    backdrop: BackdropTint;
+    // The window's colours: what a solid window shows, or a glass one when inactive.
+    windowTint: [string, string];
+    // Glass (Appearance › Window): the desktop shows through the window.
+    glass: boolean;
+    powerUpColor: string | null;
+  };
 
 const dark = {
   dark: true,
@@ -125,7 +126,11 @@ export function hex(color: string): string {
   const m = color.match(/rgba?\(([^)]+)\)/);
   if (!m) return color;
   const [r, g, b, a = "1"] = m[1]!.split(",").map((v) => v.trim());
-  const h = (n: number) => Math.round(Math.min(255, Math.max(0, n))).toString(16).padStart(2, "0").toUpperCase();
+  const h = (n: number) =>
+    Math.round(Math.min(255, Math.max(0, n)))
+      .toString(16)
+      .padStart(2, "0")
+      .toUpperCase();
   return `#${h(+r!)}${h(+g!)}${h(+b!)}${h(+a * 255)}`;
 }
 
@@ -187,7 +192,10 @@ export function profileNameColor(color: SpaceColor, dark: boolean): string {
 function mix(a: string, b: string, t: number): string {
   const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
   const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
-  return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  return `#${out
+    .map((v) => v.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase()}`;
 }
 
 function profileTheme(color: SpaceColor, isDark: boolean): ProfileTheme {
@@ -319,4 +327,3 @@ export function useTheme(): Theme {
   if (__DEV__) console.warn("useTheme outside a ThemeScope");
   return unscopedTheme();
 }
-

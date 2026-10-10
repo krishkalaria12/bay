@@ -26,9 +26,7 @@ export function insertionIndex(s: BrowserState, w: TabList, tab: Tab, background
   } else if (opener && inList && opener.spaceId === tab.spaceId) {
     // From a pinned tab: just below the pinned tabs, after the links it opened before (Dia gathers them there).
     const gathered = pinnedChildGroup(s, opener.id, tab.spaceId);
-    index = gathered
-      ? Math.max(...gathered.tabIds.map((id) => w.tabIds.indexOf(id))) + 1
-      : afterFamily(s, w, tab, firstRegular(s, w, tab), opener.id);
+    index = gathered ? Math.max(...gathered.tabIds.map((id) => w.tabIds.indexOf(id))) + 1 : afterFamily(s, w, tab, firstRegular(s, w, tab), opener.id);
   } else {
     index = listStart(s, w, tab);
     // An opener in another list (Little Bay) still keeps its tabs in order.
@@ -42,8 +40,7 @@ function firstRegular(s: BrowserState, w: TabList, tab: Tab): number {
   return first >= 0 ? first : w.tabIds.length;
 }
 
-const listStart = (s: BrowserState, w: TabList, tab: Tab) =>
-  s.settings.newTabPosition === "top" ? firstRegular(s, w, tab) : w.tabIds.length;
+const listStart = (s: BrowserState, w: TabList, tab: Tab) => (s.settings.newTabPosition === "top" ? firstRegular(s, w, tab) : w.tabIds.length);
 
 // Past the tabs the opener opened, and the tabs those opened, that follow `from` in the same group.
 function afterFamily(s: BrowserState, w: TabList, tab: Tab, from: number, openerId: string): number {
@@ -62,7 +59,8 @@ function afterFamily(s: BrowserState, w: TabList, tab: Tab, from: number, opener
 
 // A split's panes stay next to each other in the list.
 function outsideSplit(s: BrowserState, w: TabList, index: number): number {
-  const before = w.tabIds[index - 1], after = w.tabIds[index];
+  const before = w.tabIds[index - 1],
+    after = w.tabIds[index];
   const split = before && after ? splitOf(s, before) : undefined;
   if (!split?.tabIds.includes(after!)) return index;
   return Math.max(...split.tabIds.map((id) => w.tabIds.indexOf(id))) + 1;
@@ -80,7 +78,8 @@ export function forgetOpeners(s: BrowserState, listKey: string, keep?: string): 
 // Chrome keeps the openers when the user moves between a tab and a tab it opened, or between two tabs that
 // share an opener (TabStripModel::SetSelection).
 export function switchKeepsOpeners(s: BrowserState, from: string, to: string): boolean {
-  const a = s.tabs[from]?.openerId ?? null, b = s.tabs[to]?.openerId ?? null;
+  const a = s.tabs[from]?.openerId ?? null,
+    b = s.tabs[to]?.openerId ?? null;
   return a === b || b === from || a === to;
 }
 

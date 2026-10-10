@@ -61,11 +61,19 @@ export function ChooseStep({ flow }: StepProps) {
           <Spacer />
           <TargetPicker value={flow.target} onChange={flow.setTarget} />
           <Button title="Cancel" onPress={flow.close} />
-          <Button title="Continue" kind="primary" disabled={!source || (!source.requiresExport && !source.needsFullDiskAccess && flow.kinds.size === 0)} onPress={flow.next} />
+          <Button
+            title="Continue"
+            kind="primary"
+            disabled={!source || (!source.requiresExport && !source.needsFullDiskAccess && flow.kinds.size === 0)}
+            onPress={flow.next}
+          />
         </>
       }
     >
-      <Title title="Import from Another Browser" subtitle="Import once and stay in your flow. Your tabs, passwords, bookmarks and history come with you, and you stay signed in." />
+      <Title
+        title="Import from Another Browser"
+        subtitle="Import once and stay in your flow. Your tabs, passwords, bookmarks and history come with you, and you stay signed in."
+      />
       {!flow.available ? (
         <Note text={`Importing isn't available in this build of ${APP_NAME}.`} />
       ) : flow.browsers.length === 0 ? (
@@ -121,7 +129,9 @@ export function SpacesStep({ flow }: StepProps) {
       {isArc ? (
         <>
           <Title title="Select spaces to import" subtitle={`We'll import your Arc spaces, tabs, and folders to ${APP_NAME}.`} />
-          <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}>{`Customize which spaces to bring over to ${APP_NAME}. Each space becomes a space in ${APP_NAME}.`}</Text>
+          <Text
+            style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}
+          >{`Customize which spaces to bring over to ${APP_NAME}. Each space becomes a space in ${APP_NAME}.`}</Text>
           <View style={{ gap: 6 }}>
             {flow.allSpaces.map((s) => (
               <SelectRow
@@ -142,14 +152,22 @@ export function SpacesStep({ flow }: StepProps) {
           ) : (
             <Title title="Unlock your data for import" subtitle="Select the profiles you want to import." />
           )}
-          <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}>{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected profile; the others become new profiles.`}</Text>
+          <Text
+            style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}
+          >{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected profile; the others become new profiles.`}</Text>
           <View style={{ gap: 6 }}>
             {source.profiles.map((p) => (
               <SelectRow
                 key={p.id}
                 selected={flow.sourceProfiles.includes(p.id)}
                 onToggle={(on) => flow.setSourceProfiles((prev) => toggle(prev, p.id, on))}
-                icon={p.avatarPath ? <Image source={{ uri: `file://${p.avatarPath}` }} style={{ width: 28, height: 28, borderRadius: 14 }} /> : <Monogram name={p.name} color={p.color} />}
+                icon={
+                  p.avatarPath ? (
+                    <Image source={{ uri: `file://${p.avatarPath}` }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                  ) : (
+                    <Monogram name={p.name} color={p.color} />
+                  )
+                }
                 title={p.name}
                 subtitle={isDiaTabs ? diaProfileSummary(flow.dia, p.id) : (p.email ?? (p.isDefault ? "Default profile" : undefined))}
               />
@@ -213,7 +231,10 @@ export function SafariStep({ flow }: StepProps) {
     >
       {flow.fullDiskAccess ? (
         <>
-          <Title title="Import from Safari" subtitle={`${APP_NAME} can read Safari directly. Bring your bookmarks, history, Reading List, open tabs and sign-ins into ${APP_NAME}.`} />
+          <Title
+            title="Import from Safari"
+            subtitle={`${APP_NAME} can read Safari directly. Bring your bookmarks, history, Reading List, open tabs and sign-ins into ${APP_NAME}.`}
+          />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 }}>
             {flow.source?.iconPath ? <Image source={{ uri: `file://${flow.source.iconPath}` }} style={{ width: 40, height: 40 }} /> : null}
             <View style={{ flex: 1 }}>
@@ -232,7 +253,10 @@ export function SafariStep({ flow }: StepProps) {
         </>
       ) : (
         <>
-          <Title title={`Give ${APP_NAME} access to Safari`} subtitle={`To import Safari's bookmarks, history and tabs directly, ${APP_NAME} needs Full Disk Access.`} />
+          <Title
+            title={`Give ${APP_NAME} access to Safari`}
+            subtitle={`To import Safari's bookmarks, history and tabs directly, ${APP_NAME} needs Full Disk Access.`}
+          />
           <FullDiskAccessSteps onOpen={flow.openFullDiskAccessSettings} onRecheck={() => void flow.recheckAccess()} />
           <Text style={{ fontSize: 12, fontWeight: "600", color: theme.textSecondary, marginBottom: 8 }}>
             Or import everything (including passwords) from an export file:
@@ -308,7 +332,10 @@ function DiaStatus({ flow }: StepProps) {
     case "notRunning":
       return (
         <>
-          <Title title="Open Dia to import its tabs" subtitle={`${APP_NAME} asks Dia for its tabs, so Dia has to be running. Open it and this continues on its own.`} />
+          <Title
+            title="Open Dia to import its tabs"
+            subtitle={`${APP_NAME} asks Dia for its tabs, so Dia has to be running. Open it and this continues on its own.`}
+          />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Button title="Open Dia" kind="primary" onPress={() => void flow.openDia()} />
             <Button title="Check Again" onPress={recheck} />
@@ -318,7 +345,10 @@ function DiaStatus({ flow }: StepProps) {
     case "notDetermined":
       return (
         <>
-          <Title title={`Allow ${APP_NAME} to read Dia's tabs`} subtitle="Dia shares its tabs through AppleScript, and macOS asks you before an app can use it." />
+          <Title
+            title={`Allow ${APP_NAME} to read Dia's tabs`}
+            subtitle="Dia shares its tabs through AppleScript, and macOS asks you before an app can use it."
+          />
           <View style={{ alignItems: "center", marginTop: 10, gap: 14 }}>
             <Handoff iconPath={flow.source?.iconPath} symbol="square.on.square" />
             <Text style={{ fontSize: 13, lineHeight: 18, textAlign: "center", color: theme.textPrimary, maxWidth: 440 }}>
@@ -331,7 +361,10 @@ function DiaStatus({ flow }: StepProps) {
     case "denied":
       return (
         <>
-          <Title title={`${APP_NAME} can't read Dia's tabs`} subtitle={`macOS doesn't allow ${APP_NAME} to control Dia. You can allow it in System Settings › Privacy & Security › Automation.`} />
+          <Title
+            title={`${APP_NAME} can't read Dia's tabs`}
+            subtitle={`macOS doesn't allow ${APP_NAME} to control Dia. You can allow it in System Settings › Privacy & Security › Automation.`}
+          />
           <SettingsSteps
             steps={["Click “Open Automation Settings” below", `Under ${APP_NAME}, turn on Dia`, "Come back here: we'll continue automatically"]}
             openTitle="Open Automation Settings"
@@ -434,7 +467,9 @@ export function DoneStep({ flow }: StepProps) {
         <View style={{ alignItems: "center", marginTop: 40, gap: 12 }}>
           <SuccessMark />
           <Text style={{ fontSize: 20, fontWeight: "600", color: theme.textPrimary }}>You're all set</Text>
-          <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center" }}>{summary.length ? `Imported ${summary.join(", ")}.` : "There was nothing new to import."}</Text>
+          <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center" }}>
+            {summary.length ? `Imported ${summary.join(", ")}.` : "There was nothing new to import."}
+          </Text>
           {leftBehind}
           {extensionList}
         </View>

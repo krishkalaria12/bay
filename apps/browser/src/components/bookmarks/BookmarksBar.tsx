@@ -128,12 +128,7 @@ function Bar({ windowId }: { windowId: string }) {
         )}
       </View>
       {hidden.length > 0 && (
-        <BarButton
-          icon="chevron.right.2"
-          tooltip="More bookmarks"
-          onPress={(e) => void openFolderMenu(windowId, hidden, e)}
-          width={BOOKMARKS_OVERFLOW_WIDTH}
-        />
+        <BarButton icon="chevron.right.2" tooltip="More bookmarks" onPress={(e) => void openFolderMenu(windowId, hidden, e)} width={BOOKMARKS_OVERFLOW_WIDTH} />
       )}
       {hasOther && otherId && (
         <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -141,7 +136,14 @@ function Bar({ windowId }: { windowId: string }) {
           <BarButton
             icon="folder"
             title="Other Bookmarks"
-            onPress={(e) => void openFolderMenu(windowId, folderChildren(useBrowser.getState().bookmarks, otherId).map((n) => n.id), e, otherId)}
+            onPress={(e) =>
+              void openFolderMenu(
+                windowId,
+                folderChildren(useBrowser.getState().bookmarks, otherId).map((n) => n.id),
+                e,
+                otherId,
+              )
+            }
           />
         </View>
       )}
@@ -398,7 +400,7 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
   }
   if (choice === "delete" && node) useBrowser.getState().removeBookmark(node.id);
   const parentId = node?.parentId ?? bar;
-  const index = node && parentId ? (folderChildren(useBrowser.getState().bookmarks, parentId).findIndex((n) => n.id === node.id) + 1) : undefined;
+  const index = node && parentId ? folderChildren(useBrowser.getState().bookmarks, parentId).findIndex((n) => n.id === node.id) + 1 : undefined;
   if (choice === "addPage") void editBookmark(null, windowId, { spaceId, parentId: parentId ?? undefined, index });
   if (choice === "addFolder") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });

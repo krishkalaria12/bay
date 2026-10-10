@@ -1,4 +1,3 @@
-
 export type Frame = [number, number, number, number];
 
 export type SpaceColor = "plum" | "blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "neutral";
@@ -137,10 +136,7 @@ export type Bookmarks = {
   roots: Record<string, { bar: string; other: string }>;
 };
 
-export type TabSnapshot = Pick<
-  Tab,
-  "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "spaceId"
-> &
+export type TabSnapshot = Pick<Tab, "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "spaceId"> &
   Partial<Pick<Tab, "pinnedUrl" | "pinnedRow">>;
 
 export type ClosedTab = {

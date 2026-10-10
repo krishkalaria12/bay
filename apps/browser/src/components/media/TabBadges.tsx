@@ -25,7 +25,17 @@ function PipBadge({ tabId, size }: { tabId: string; size: number }) {
   return (
     <View
       pointerEvents="none"
-      style={{ position: "absolute", right: -d / 3, top: -d / 3, width: d, height: d, borderRadius: d / 2, backgroundColor: tokens.badge, alignItems: "center", justifyContent: "center" }}
+      style={{
+        position: "absolute",
+        right: -d / 3,
+        top: -d / 3,
+        width: d,
+        height: d,
+        borderRadius: d / 2,
+        backgroundColor: tokens.badge,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
       <Symbol name="pip.fill" size={d * 0.55} weight="bold" color={hex(tokens.badgeGlyph)} style={{ width: d, height: d }} />
     </View>
@@ -40,7 +50,17 @@ function CaptureBadge({ tabId, size }: { tabId: string; size: number }) {
     return (
       <View
         pointerEvents="none"
-        style={{ position: "absolute", right: -d / 3, bottom: -d / 3, width: d, height: d, borderRadius: d / 2, backgroundColor: CAPTURE_RED, alignItems: "center", justifyContent: "center" }}
+        style={{
+          position: "absolute",
+          right: -d / 3,
+          bottom: -d / 3,
+          width: d,
+          height: d,
+          borderRadius: d / 2,
+          backgroundColor: CAPTURE_RED,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
         <Symbol name="rectangle.inset.filled" size={d * 0.5} weight="bold" color="#FFFFFF" style={{ width: d, height: d }} />
       </View>
@@ -50,7 +70,17 @@ function CaptureBadge({ tabId, size }: { tabId: string; size: number }) {
   return (
     <View
       pointerEvents="none"
-      style={{ position: "absolute", right: -d / 4, bottom: -d / 4, width: d, height: d, borderRadius: d / 2, backgroundColor: CAPTURE_RED, borderWidth: 1, borderColor: "rgba(0,0,0,0.25)" }}
+      style={{
+        position: "absolute",
+        right: -d / 4,
+        bottom: -d / 4,
+        width: d,
+        height: d,
+        borderRadius: d / 2,
+        backgroundColor: CAPTURE_RED,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.25)",
+      }}
     />
   );
 }

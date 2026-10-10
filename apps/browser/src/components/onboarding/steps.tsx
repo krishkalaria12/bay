@@ -1,14 +1,4 @@
-import {
-  addToDock,
-  fileExists,
-  fileIcon,
-  isDefaultBrowser,
-  isInDock,
-  launchAtLoginStatus,
-  setAsDefaultBrowser,
-  setLaunchAtLogin,
-  Symbol,
-} from "@bay/shell";
+import { addToDock, fileExists, fileIcon, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { SPACE_COLORS, themeFor, useTheme } from "../../lib/theme";
@@ -20,7 +10,6 @@ import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, recordDefaultBrowserTrial, useOnboarding } from "./state";
 import { CheckMark, CheckRow, PrimaryButton, Reveal, SecondaryButton, StepProgress, StepTitle, useOnboardingColors } from "./ui";
 import { APP_ICON } from "../../lib/assets";
-
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
@@ -398,7 +387,17 @@ function PinnedPreview({ selected }: { selected: string[] }) {
   const sites = PINNABLE_SITES.filter((s) => selected.includes(s.id));
   const slots = Math.max(6, Math.ceil(sites.length / 3) * 3);
   return (
-    <View style={{ width: 236, padding: 14, borderRadius: 14, backgroundColor: colors.row, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.rowBorder, gap: 12 }}>
+    <View
+      style={{
+        width: 236,
+        padding: 14,
+        borderRadius: 14,
+        backgroundColor: colors.row,
+        borderWidth: StyleSheet.hairlineWidth * 2,
+        borderColor: colors.rowBorder,
+        gap: 12,
+      }}
+    >
       <View style={{ flexDirection: "row", gap: 6 }}>
         {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
           <View key={c} style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: c }} />
@@ -462,7 +461,17 @@ export function OutroStep() {
           ["⌘S", "Hide the sidebar for more room"],
         ].map(([keys, label]) => (
           <View key={keys} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <View style={{ minWidth: 38, height: 24, paddingHorizontal: 7, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: colors.button }}>
+            <View
+              style={{
+                minWidth: 38,
+                height: 24,
+                paddingHorizontal: 7,
+                borderRadius: 6,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: colors.button,
+              }}
+            >
               <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{keys}</Text>
             </View>
             <Text style={{ fontSize: 13, color: colors.subtitle }}>{label}</Text>

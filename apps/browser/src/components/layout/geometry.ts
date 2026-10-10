@@ -94,9 +94,24 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
   const offset = o.clearTrafficLights ? TRAFFIC_LIGHTS_OFFSET : 0;
   const end = !!o.sidebarButtonEnd;
   const [c0, c1, c2, c3] = layout.toolbarIconCenters;
-  if (o.sidebarButton) return { sidebarButton: offset + c0, sidebarButtonEnd: end, back: offset + c1, forward: offset + c2, reload: offset + c3, urlLeft: offset + layout.breadcrumbX - 8 };
+  if (o.sidebarButton)
+    return {
+      sidebarButton: offset + c0,
+      sidebarButtonEnd: end,
+      back: offset + c1,
+      forward: offset + c2,
+      reload: offset + c3,
+      urlLeft: offset + layout.breadcrumbX - 8,
+    };
   const shift = c1 - c0;
-  return { sidebarButton: null, sidebarButtonEnd: end, back: offset + c1 - shift, forward: offset + c2 - shift, reload: offset + c3 - shift, urlLeft: offset + layout.breadcrumbX - 8 - shift };
+  return {
+    sidebarButton: null,
+    sidebarButtonEnd: end,
+    back: offset + c1 - shift,
+    forward: offset + c2 - shift,
+    reload: offset + c3 - shift,
+    urlLeft: offset + layout.breadcrumbX - 8 - shift,
+  };
 }
 
 export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, sidebarButtonEnd: false, back: 21, forward: 21, reload: 21, urlLeft: 8 };

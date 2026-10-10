@@ -132,7 +132,8 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   const ready = !!dragging && !!origin && !full && candidates.length > 0 && grown && lifted !== false;
   const resolve = useEffectEvent((x: number, y: number, current: Parameters<typeof zoneHit>[3], outside: boolean) => {
     if (!ready || outside || !origin) return null;
-    const px = x - origin.x, py = y - origin.y;
+    const px = x - origin.x,
+      py = y - origin.y;
     if (!Object.values(panes).some((r) => px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height)) return null;
     return zoneHit(candidates, px, py, current);
   });
@@ -176,7 +177,21 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   );
 }
 
-function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect; side: "left" | "right"; shown: boolean; stage: ZoneStage; pointerX: number; onHidden(): void }) {
+function DropZone({
+  pane,
+  side,
+  shown,
+  stage,
+  pointerX,
+  onHidden,
+}: {
+  pane: Rect;
+  side: "left" | "right";
+  shown: boolean;
+  stage: ZoneStage;
+  pointerX: number;
+  onHidden(): void;
+}) {
   const theme = useTheme();
   const rect = zoneRect(pane, side, stage, pointerX);
   const x = useSharedValue(rect.x);
@@ -249,8 +264,15 @@ function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect
           borderColor: active ? theme.accent : dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
         }}
       />
-      <Symbol name={side === "left" ? "rectangle.lefthalf.filled" : "rectangle.righthalf.filled"} size={18} color={active ? theme.accent : rest} style={{ width: 24, height: 20 }} />
-      <Text style={{ marginTop: 11, fontSize: 13, fontWeight: "600", color: active ? theme.accent : rest }}>{side === "left" ? "Add left split" : "Add right split"}</Text>
+      <Symbol
+        name={side === "left" ? "rectangle.lefthalf.filled" : "rectangle.righthalf.filled"}
+        size={18}
+        color={active ? theme.accent : rest}
+        style={{ width: 24, height: 20 }}
+      />
+      <Text style={{ marginTop: 11, fontSize: 13, fontWeight: "600", color: active ? theme.accent : rest }}>
+        {side === "left" ? "Add left split" : "Add right split"}
+      </Text>
     </Animated.View>
   );
 }
@@ -275,14 +297,17 @@ export function SplitToast({ windowId }: { windowId: string }) {
     appear.set(0);
     appear.set(withSpring(1, SPLIT_TOAST_SPRING));
     if (toast.sticky) return;
-    const timer = setTimeout(() => {
-      appear.set(
-        fadeOut(() => {
-          setShown(null);
-          hideToast(windowId, toast.id);
-        }),
-      );
-    }, toast.action ? 4000 : 2600);
+    const timer = setTimeout(
+      () => {
+        appear.set(
+          fadeOut(() => {
+            setShown(null);
+            hideToast(windowId, toast.id);
+          }),
+        );
+      },
+      toast.action ? 4000 : 2600,
+    );
     return () => clearTimeout(timer);
   }, [toast?.id]);
   const appearStyle = useAnimatedStyle(() => ({
@@ -332,7 +357,15 @@ function ToastAction({ title, onPress }: { title: string; onPress(): void }) {
   return (
     <Pressable {...hoverProps} onPress={onPress}>
       {({ pressed }) => (
-        <View style={{ height: 24, paddingHorizontal: 10, borderRadius: 7, justifyContent: "center", backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.urlPill }}>
+        <View
+          style={{
+            height: 24,
+            paddingHorizontal: 10,
+            borderRadius: 7,
+            justifyContent: "center",
+            backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.urlPill,
+          }}
+        >
           <Text style={{ fontSize: 12, fontWeight: "500", color: theme.textPrimary }}>{title}</Text>
         </View>
       )}

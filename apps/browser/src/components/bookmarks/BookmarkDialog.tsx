@@ -89,7 +89,15 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
       >
         <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{heading}</Text>
         <Text style={{ fontSize: 11.5, marginTop: 12, marginBottom: 5, color: theme.textSecondary }}>{state.kind === "allTabs" ? "Folder name" : "Name"}</Text>
-        <TextField value={name} onChangeText={setName} autoFocus selectOnFocus placeholder={state.kind === "allTabs" ? "Tabs" : "Name"} onSubmit={done} onEscape={done} />
+        <TextField
+          value={name}
+          onChangeText={setName}
+          autoFocus
+          selectOnFocus
+          placeholder={state.kind === "allTabs" ? "Tabs" : "Name"}
+          onSubmit={done}
+          onEscape={done}
+        />
         <Text style={{ fontSize: 11.5, marginTop: 12, marginBottom: 5, color: theme.textSecondary }}>Folder</Text>
         <View
           style={{

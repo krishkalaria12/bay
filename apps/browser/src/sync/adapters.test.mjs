@@ -155,12 +155,24 @@ test("pinned tabs stay their space's when a window closes: not deleted elsewhere
   });
   b.with(() => S().createWindow({ url: "https://b-home.example/" }));
   await syncAll([a, b]);
-  const pins = (d) => d.with(() => [...new Set(Object.values(S().tabs).filter((t) => t.pinned).map((t) => t.pinnedUrl))].sort());
+  const pins = (d) =>
+    d.with(() =>
+      [
+        ...new Set(
+          Object.values(S().tabs)
+            .filter((t) => t.pinned)
+            .map((t) => t.pinnedUrl),
+        ),
+      ].sort(),
+    );
   assert.deepEqual(pins(b), ["https://cal.example/", "https://mail.example/"]);
 
   // They're the space's: one tab each, whatever window is open, so one record each stays.
   a.with(() => S().closeWindow(aHome));
-  assert.equal(a.with(() => Object.values(S().tabs).filter((t) => t.pinned).length), 2);
+  assert.equal(
+    a.with(() => Object.values(S().tabs).filter((t) => t.pinned).length),
+    2,
+  );
   await syncAll([a, b]);
   assert.deepEqual(pins(b), ["https://cal.example/", "https://mail.example/"], "still pinned on B");
 
@@ -170,7 +182,13 @@ test("pinned tabs stay their space's when a window closes: not deleted elsewhere
     S().pinTabs([cal], false);
   });
   await syncAll([b, a]);
-  const tiles = (w) => a.with(() => model.viewTabIds(S(), w).filter((id) => S().tabs[id].pinned).map((id) => `${S().tabs[id].pinnedUrl} ${S().tabs[id].customTitle}`));
+  const tiles = (w) =>
+    a.with(() =>
+      model
+        .viewTabIds(S(), w)
+        .filter((id) => S().tabs[id].pinned)
+        .map((id) => `${S().tabs[id].pinnedUrl} ${S().tabs[id].customTitle}`),
+    );
   assert.deepEqual(tiles(aWork), ["https://mail.example/ Inbox"]);
   assert.equal((await a.sync()).published, 0, "settled");
 
@@ -190,12 +208,30 @@ test("pinned tabs sync with no window open, and show in the next window", async 
   b.with(() => S().createWindow({ url: "https://b-home.example/" }));
   await syncAll([a, b]);
   a.with(() => S().closeWindow(S().windowOrder[0]));
-  assert.equal(a.with(() => S().windowOrder.length), 0);
+  assert.equal(
+    a.with(() => S().windowOrder.length),
+    0,
+  );
   b.with(() => S().updateTab(Object.values(S().tabs).find((t) => t.pinned).id, { customTitle: "Inbox" }));
   await syncAll([b, a]);
-  assert.deepEqual(a.with(() => Object.values(S().tabs).filter((t) => t.pinned).map((t) => t.customTitle)), ["Inbox"]);
+  assert.deepEqual(
+    a.with(() =>
+      Object.values(S().tabs)
+        .filter((t) => t.pinned)
+        .map((t) => t.customTitle),
+    ),
+    ["Inbox"],
+  );
   const n = a.with(() => S().createWindow());
-  assert.deepEqual(a.with(() => model.viewTabIds(S(), n).filter((id) => S().tabs[id].pinned).map((id) => S().tabs[id].customTitle)), ["Inbox"]);
+  assert.deepEqual(
+    a.with(() =>
+      model
+        .viewTabIds(S(), n)
+        .filter((id) => S().tabs[id].pinned)
+        .map((id) => S().tabs[id].customTitle),
+    ),
+    ["Inbox"],
+  );
   assert.equal((await a.sync()).published, 0);
 });
 
@@ -320,8 +356,16 @@ test("bookmarks: a Mac on old ids and one on Chrome's UUIDs keep one tree", asyn
   });
   await syncAll([now, old]);
   assert.deepEqual(tree(now), tree(old));
-  assert.equal(now.with(() => Object.keys(S().bookmarks.nodes).length), 5, "no duplicates on the updated Mac");
-  assert.equal(old.with(() => Object.keys(S().bookmarks.nodes).length), 5, "nor on the old one");
+  assert.equal(
+    now.with(() => Object.keys(S().bookmarks.nodes).length),
+    5,
+    "no duplicates on the updated Mac",
+  );
+  assert.equal(
+    old.with(() => Object.keys(S().bookmarks.nodes).length),
+    5,
+    "nor on the old one",
+  );
   assert.equal((await now.sync()).published, 0, "the updated Mac republishes nothing");
 
   // Edits both ways: the old Mac's reach the UUID node; the updated Mac's new bookmark is one node on the old Mac.
@@ -332,10 +376,17 @@ test("bookmarks: a Mac on old ids and one on Chrome's UUIDs keep one tree", asyn
   await syncAll([old, now]);
   assert.deepEqual(tree(now), tree(old));
   assert.deepEqual(tree(now).bar, { "Bookmarks Bar": [{ F: ["A, renamed=https://a.example/", "B=https://b.example/", "C=https://c.example/"] }] });
-  assert.equal(now.with(() => S().bookmarks.nodes[bookmarkUuidFor("bm-a")]?.title), "A, renamed");
+  assert.equal(
+    now.with(() => S().bookmarks.nodes[bookmarkUuidFor("bm-a")]?.title),
+    "A, renamed",
+  );
   old.with(() => S().removeBookmark(onOld("bm-b")));
   await syncAll([old, now]);
-  assert.equal(now.with(() => S().bookmarks.nodes[bookmarkUuidFor("bm-b")]), undefined, "a deletion on the old Mac reaches the UUID node");
+  assert.equal(
+    now.with(() => S().bookmarks.nodes[bookmarkUuidFor("bm-b")]),
+    undefined,
+    "a deletion on the old Mac reaches the UUID node",
+  );
   assertTreeWhole(now);
   assertTreeWhole(old);
 });

@@ -87,7 +87,7 @@ export function startNativeSync() {
   };
 
   const syncWindows = (s: BrowserState, prev?: BrowserState) => {
-// Open the focused window last so it comes to front.
+    // Open the focused window last so it comes to front.
     const focused = s.ui.focusedWindowId;
     const order = s.windowOrder.filter((id) => id !== focused);
     if (focused && s.windows[focused]) order.push(focused);
@@ -101,7 +101,7 @@ export function startNativeSync() {
         void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus: id === s.ui.focusedWindowId, profile, ...small });
       }
     }
-    for (const id of [...open]) {
+    for (const id of Array.from(open)) {
       if (s.windows[id]) continue;
       open.delete(id);
       titles.delete(id);
@@ -167,17 +167,62 @@ export function startNativeSync() {
 }
 
 const PAGE_COMMANDS = [
-  "reload", "forceReload", "zoomIn", "zoomOut", "zoomReset", "print", "devTools", "toggleDevTools", "findInPage", "findNext",
-  "findPrevious", "useSelectionForFind", "copyUrl", "copyUrlAsMarkdown", "bookmarkPage", "addBookmarkToFolder", "toggleMute",
-  "findAndReplace", "jumpToSelection", "viewSource", "javaScriptConsole", "inspectElements", "savePage", "emailPageLocation",
-  "printWithSystemDialog", "stop", "caretBrowsing",
+  "reload",
+  "forceReload",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
+  "print",
+  "devTools",
+  "toggleDevTools",
+  "findInPage",
+  "findNext",
+  "findPrevious",
+  "useSelectionForFind",
+  "copyUrl",
+  "copyUrlAsMarkdown",
+  "bookmarkPage",
+  "addBookmarkToFolder",
+  "toggleMute",
+  "findAndReplace",
+  "jumpToSelection",
+  "viewSource",
+  "javaScriptConsole",
+  "inspectElements",
+  "savePage",
+  "emailPageLocation",
+  "printWithSystemDialog",
+  "stop",
+  "caretBrowsing",
 ];
 const INTERNAL_PAGE_COMMANDS = ["copyUrl", "copyUrlAsMarkdown", "bookmarkPage", "addBookmarkToFolder"];
 const WINDOW_COMMANDS = [
-  ...PAGE_COMMANDS, "focusCommandBar", "closeTab", "closeAllTabs", "back", "forward", "nextTab", "previousTab", "togglePin",
-  "togglePinRow", "duplicateTab", "moveTabToSpace", "moveTabToWindow", "toggleSidebar", "downloads", "mergeAllWindows",
-  "switchSpace", "nextSpace", "previousSpace", "openBookmark", "selectTab", "selectLastTab", "moveTabDown", "moveTabUp",
-  "closeTabGroup", "openSpaceMenu",
+  ...PAGE_COMMANDS,
+  "focusCommandBar",
+  "closeTab",
+  "closeAllTabs",
+  "back",
+  "forward",
+  "nextTab",
+  "previousTab",
+  "togglePin",
+  "togglePinRow",
+  "duplicateTab",
+  "moveTabToSpace",
+  "moveTabToWindow",
+  "toggleSidebar",
+  "downloads",
+  "mergeAllWindows",
+  "switchSpace",
+  "nextSpace",
+  "previousSpace",
+  "openBookmark",
+  "selectTab",
+  "selectLastTab",
+  "moveTabDown",
+  "moveTabUp",
+  "closeTabGroup",
+  "openSpaceMenu",
 ];
 
 function menuBookmarks(b: Bookmarks, folderId: string, depth = 0): MenuBookmark[] {
@@ -202,9 +247,7 @@ function bookmarkMenus(b: Bookmarks, spaceId: string): BookmarkMenus {
         bookmarkFolders: [
           { id: roots.bar, title: "Bookmarks Bar" },
           { id: roots.other, title: "Other Bookmarks" },
-          ...[...folderChildren(b, roots.bar), ...folderChildren(b, roots.other)]
-            .filter((n) => n.kind === "folder")
-            .map((n) => ({ id: n.id, title: n.title })),
+          ...[...folderChildren(b, roots.bar), ...folderChildren(b, roots.other)].filter((n) => n.kind === "folder").map((n) => ({ id: n.id, title: n.title })),
         ],
         recentBookmarks: Object.values(b.nodes)
           .filter((n): n is Extract<BookmarkNode, { kind: "url" }> => n.kind === "url" && isInTree(b, n.id, [roots.bar, roots.other]))

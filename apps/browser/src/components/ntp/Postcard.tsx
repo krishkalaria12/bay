@@ -11,7 +11,6 @@ import type { ReleaseNotes } from "./releaseNotes";
 import { APP_ICON } from "../../lib/assets";
 import { POSTCARD, POSTCARD_HOVER_SLOP, POSTCARD_INK, POSTCARD_PAGE_SPRING, POSTCARD_PAPER, POSTCARD_TOOLTIP } from "./constants";
 
-
 const cardFrame = (size: { width: number }) => ({
   x: size.width + POSTCARD.overhangRight - POSTCARD.width,
   y: -POSTCARD.overhangTop,
@@ -28,10 +27,26 @@ function useArtworkColors(): [string, string] {
 
 function mix(a: string, b: string, t: number) {
   const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
-  return `#${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, "0")).join("")}`;
+  return `#${[0, 1, 2]
+    .map((i) =>
+      Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
-export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes: ReleaseNotes; size: { width: number; height: number }; onOpen: () => void; onDismiss: () => void }) {
+export function ReleaseNotesPostcard({
+  notes,
+  size,
+  onOpen,
+  onDismiss,
+}: {
+  notes: ReleaseNotes;
+  size: { width: number; height: number };
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
   const { hovered, hoverProps } = useHover();
   const drop = useSharedValue(1);
   const opacity = useSharedValue(0);
@@ -43,8 +58,8 @@ export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes
     let cancelled = false;
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (cancelled) return;
-      if (reduce) return drop.set(0), opacity.set(1);
-      const stiffness = (2 * Math.PI / 0.65) ** 2;
+      if (reduce) return (drop.set(0), opacity.set(1));
+      const stiffness = ((2 * Math.PI) / 0.65) ** 2;
       drop.set(withSpring(0, { stiffness, damping: 2 * Math.sqrt(stiffness), mass: 1 }));
       opacity.set(withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) }));
     });
@@ -106,7 +121,10 @@ export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes
         </Animated.View>
         <Animated.View
           pointerEvents={hovered ? "box-none" : "none"}
-          style={[{ position: "absolute", left: 0, right: 0, top: POSTCARD_HOVER_SLOP + card.height + POSTCARD_TOOLTIP.gap, alignItems: "center" }, tooltipStyle]}
+          style={[
+            { position: "absolute", left: 0, right: 0, top: POSTCARD_HOVER_SLOP + card.height + POSTCARD_TOOLTIP.gap, alignItems: "center" },
+            tooltipStyle,
+          ]}
         >
           <Tooltip text="Latest Release Notes" onOpen={onOpen} onClose={dismiss} />
         </Animated.View>
@@ -119,7 +137,17 @@ function Tooltip({ text, onOpen, onClose }: { text: string; onOpen: () => void; 
   const theme = useTheme();
   return (
     <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={text}>
-      <View style={{ height: POSTCARD_TOOLTIP.height, borderRadius: 6, overflow: "hidden", flexDirection: "row", alignItems: "center", paddingLeft: 8, paddingRight: 3 }}>
+      <View
+        style={{
+          height: POSTCARD_TOOLTIP.height,
+          borderRadius: 6,
+          overflow: "hidden",
+          flexDirection: "row",
+          alignItems: "center",
+          paddingLeft: 8,
+          paddingRight: 3,
+        }}
+      >
         <VisualEffect material="contentBackground" blendingMode="withinWindow" cornerRadius={6} style={StyleSheet.absoluteFill} />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.8)" }]} />
         <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "500", color: "rgba(255,255,255,0.85)", marginRight: 9 }}>
@@ -233,12 +261,17 @@ export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes
             </View>
             <View style={{ flex: 1, paddingTop: 10, paddingRight: 8 }}>
               <Stamp />
-              <Text style={{ fontSize: 11, fontWeight: "600", letterSpacing: 1.2, color: `${POSTCARD_INK}80`, marginRight: 116 }}>{notes.date.toUpperCase()}</Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", letterSpacing: 1.2, color: `${POSTCARD_INK}80`, marginRight: 116 }}>
+                {notes.date.toUpperCase()}
+              </Text>
               <Text style={{ fontSize: 26, fontWeight: "300", letterSpacing: -0.5, color: POSTCARD_INK, marginTop: 6, marginRight: 116 }}>{notes.title}</Text>
               <Text style={{ fontSize: 13, lineHeight: 19, color: `${POSTCARD_INK}B3`, marginTop: 8, marginRight: 116 }}>{notes.summary}</Text>
               <ScrollView style={{ flex: 1, marginTop: 14 }} contentContainerStyle={{ gap: 12, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
                 {notes.items.map((item) => (
-                  <View key={item.title} style={{ gap: 2, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth * 2, borderBottomColor: `${POSTCARD_INK}14` }}>
+                  <View
+                    key={item.title}
+                    style={{ gap: 2, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth * 2, borderBottomColor: `${POSTCARD_INK}14` }}
+                  >
                     <Text style={{ fontSize: 13, fontWeight: "600", color: POSTCARD_INK }}>{item.title}</Text>
                     <Text style={{ fontSize: 12.5, lineHeight: 18, color: `${POSTCARD_INK}99` }}>{item.body}</Text>
                   </View>
@@ -285,7 +318,19 @@ function PageCloseButton({ onPress }: { onPress: () => void }) {
 function Stamp() {
   return (
     <View style={{ position: "absolute", right: 0, top: 0, width: 110, height: 86 }} pointerEvents="none">
-      <View style={{ position: "absolute", right: 0, top: 0, padding: 4, borderWidth: 1.5, borderStyle: "dashed", borderColor: `${POSTCARD_INK}33`, borderRadius: 3, backgroundColor: "#FFFFFF" }}>
+      <View
+        style={{
+          position: "absolute",
+          right: 0,
+          top: 0,
+          padding: 4,
+          borderWidth: 1.5,
+          borderStyle: "dashed",
+          borderColor: `${POSTCARD_INK}33`,
+          borderRadius: 3,
+          backgroundColor: "#FFFFFF",
+        }}
+      >
         <Image source={APP_ICON} style={{ width: 54, height: 54 }} />
       </View>
       <View

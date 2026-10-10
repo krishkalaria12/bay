@@ -42,7 +42,13 @@ const DEFS: ActionDef[] = [
   { command: "newGroupWithTabs", title: "New Group with Tab", icon: "folder.badge.plus", hint: "⌃⌘N", keywords: ["tab group"], needs: "tab" },
   { command: "reload", title: "Reload Page", icon: "arrow.clockwise", hint: "⌘R", keywords: ["refresh"], needs: page },
   { command: "forceReload", title: "Force Reload Page", icon: "arrow.clockwise", hint: "⇧⌘R", keywords: ["hard reload", "hard refresh"], needs: page },
-  { command: "toggleMute", title: ({ tab }) => (tab?.muted ? "Unmute Site" : "Mute Site"), icon: "speaker.slash", keywords: ["mute", "unmute", "silence"], needs: page },
+  {
+    command: "toggleMute",
+    title: ({ tab }) => (tab?.muted ? "Unmute Site" : "Mute Site"),
+    icon: "speaker.slash",
+    keywords: ["mute", "unmute", "silence"],
+    needs: page,
+  },
   { command: "copyUrl", title: "Copy URL", icon: "link", hint: "⇧⌘C", keywords: ["copy link"], needs: page },
   { command: "copyUrlAsMarkdown", title: "Copy URL as Markdown", icon: "link", hint: "⌥⇧⌘C", keywords: ["markdown link"], needs: page },
   { command: "findInPage", title: "Find in Page", icon: "text.magnifyingglass", hint: "⌘F", needs: page },
@@ -75,7 +81,13 @@ const DEFS: ActionDef[] = [
     keywords: ["sidebar position", "sidebar side", "right sidebar", "left sidebar", "flip sidebar"],
   },
   { command: "toggleFullUrl", title: ({ s }) => (s.settings.showFullUrl ? "Hide Full URL" : "Show Full URL"), icon: "text.alignleft" },
-  { command: "toggleSidebar", title: "Auto-Hide Tabs", icon: "sidebar.left", hint: "⌘S", keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"] },
+  {
+    command: "toggleSidebar",
+    title: "Auto-Hide Tabs",
+    icon: "sidebar.left",
+    hint: "⌘S",
+    keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"],
+  },
   { command: "toggleBookmarksBar", title: "Toggle Bookmarks Bar", icon: "menubar.rectangle", hint: "⇧⌘B", keywords: ["bookmarks bar"] },
   { command: "downloads", title: "Downloads", icon: "arrow.down.circle", hint: "⇧⌘J", keywords: ["show downloads", "dl"] },
   { command: "showHistory", title: "History", icon: "clock", hint: "⌘Y", keywords: ["show history"] },
@@ -115,7 +127,13 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     s.spaceOrder.forEach((id, i) => {
       if (id === w.spaceId) return;
       const name = s.spaces[id]?.name ?? "";
-      out.push({ id: `switchSpace:${id}`, title: `Switch to ${name}`, icon: "person.crop.circle", hint: i < 9 ? `⌃${i + 1}` : undefined, keywords: [name, "profile"] });
+      out.push({
+        id: `switchSpace:${id}`,
+        title: `Switch to ${name}`,
+        icon: "person.crop.circle",
+        hint: i < 9 ? `⌃${i + 1}` : undefined,
+        keywords: [name, "profile"],
+      });
     });
   }
   return out;

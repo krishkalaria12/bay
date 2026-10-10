@@ -6,7 +6,16 @@ import { useTheme } from "../../../lib/theme";
 import { deleteLiveFolder, refreshFolder, statusText } from "../../../live/engine";
 import { connectGoogleDrive } from "../../../live/googleAuth";
 import { isMocked } from "../../../live/net";
-import { connectBitbucket, connectConfluence, connectGithub, connectNotion, disconnect, SOURCES, startGithubDeviceFlow, type DeviceFlow } from "../../../live/sources";
+import {
+  connectBitbucket,
+  connectConfluence,
+  connectGithub,
+  connectNotion,
+  disconnect,
+  SOURCES,
+  startGithubDeviceFlow,
+  type DeviceFlow,
+} from "../../../live/sources";
 import { live, updateConfig, useLive } from "../../../live/store";
 import type { LiveAccount, LiveSourceId } from "../../../live/types";
 import { useBrowser } from "../../../store/browser";
@@ -36,7 +45,11 @@ export function LiveFoldersPane() {
       {folders.length ? (
         <Group>
           {folders.map((f) => (
-            <Row key={f.id} title={f.name} description={`${profiles[f.spaceId]?.name ?? "Profile"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}>
+            <Row
+              key={f.id}
+              title={f.name}
+              description={`${profiles[f.spaceId]?.name ?? "Profile"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
+            >
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <Button title="Refresh" onPress={() => void refreshFolder(f.id)} />
                 <Button title="Delete" kind="destructive" onPress={() => deleteLiveFolder(f.id)} />
@@ -193,7 +206,10 @@ function GithubConnect({ busy, run }: ConnectProps) {
     return (
       <View>
         <Help>Enter this code on GitHub (it's on your clipboard), then approve Bay. This sheet closes when you're signed in.</Help>
-        <Text selectable style={{ fontSize: 26, fontWeight: "600", letterSpacing: 3, fontFamily: MONO_FONT, color: theme.textPrimary, textAlign: "center", marginVertical: 8 }}>
+        <Text
+          selectable
+          style={{ fontSize: 26, fontWeight: "600", letterSpacing: 3, fontFamily: MONO_FONT, color: theme.textPrimary, textAlign: "center", marginVertical: 8 }}
+        >
           {flow.userCode}
         </Text>
         <Actions>
@@ -205,9 +221,7 @@ function GithubConnect({ busy, run }: ConnectProps) {
   }
   return (
     <View>
-      <Help>
-        Paste a personal access token (classic: "repo" and "read:org" scopes; fine-grained: read access to pull requests, checks and metadata).
-      </Help>
+      <Help>Paste a personal access token (classic: "repo" and "read:org" scopes; fine-grained: read access to pull requests, checks and metadata).</Help>
       <Field label="Personal access token">
         <TextField value={token} onChangeText={setToken} placeholder="ghp_…" secure onSubmit={() => token && void run(() => connectGithub(token))} />
       </Field>
@@ -233,7 +247,10 @@ function BitbucketConnect({ busy, run }: ConnectProps) {
   const go = () => void run(() => connectBitbucket(user, token));
   return (
     <View>
-      <Help>Create an API token (bitbucket.org › Personal settings › API tokens, with read access to pull requests and repositories), then enter your Atlassian account email with it. Bitbucket can't search review requests across repositories, so the folder lists your own pull requests.</Help>
+      <Help>
+        Create an API token (bitbucket.org › Personal settings › API tokens, with read access to pull requests and repositories), then enter your Atlassian
+        account email with it. Bitbucket can't search review requests across repositories, so the folder lists your own pull requests.
+      </Help>
       <Field label="Email or username">
         <TextField value={user} onChangeText={setUser} placeholder="you@example.com" />
       </Field>
@@ -253,7 +270,10 @@ function NotionConnect({ busy, run }: ConnectProps) {
   const go = () => void run(() => connectNotion(token));
   return (
     <View>
-      <Help>Create an internal integration at notion.so/my-integrations (read content; read user information for editor names), copy its secret, and share the pages or teamspaces you want with it (••• › Connections).</Help>
+      <Help>
+        Create an internal integration at notion.so/my-integrations (read content; read user information for editor names), copy its secret, and share the pages
+        or teamspaces you want with it (••• › Connections).
+      </Help>
       <Field label="Internal integration secret">
         <TextField value={token} onChangeText={setToken} placeholder="ntn_…" secure onSubmit={go} />
       </Field>
@@ -304,7 +324,8 @@ function GoogleConnect({ busy, run }: ConnectProps) {
   return (
     <View>
       <Help>
-        In Google Cloud Console, enable the Drive API and create an OAuth client of type "Desktop app" (add yourself as a test user). Bay opens Google's consent page in a tab and reads the result from its redirect; it asks only to see your files' names and dates.
+        In Google Cloud Console, enable the Drive API and create an OAuth client of type "Desktop app" (add yourself as a test user). Bay opens Google's consent
+        page in a tab and reads the result from its redirect; it asks only to see your files' names and dates.
       </Help>
       <Field label="Client ID">
         <TextField value={clientId} onChangeText={setClientId} placeholder="…apps.googleusercontent.com" />
@@ -314,7 +335,12 @@ function GoogleConnect({ busy, run }: ConnectProps) {
       </Field>
       <Actions>
         <Button title="Cancel" onPress={closeSettingsSheet} />
-        <Button title={busy ? "Waiting for Google…" : "Sign In with Google…"} kind="primary" disabled={!clientId.trim() || !secret.trim() || busy} onPress={go} />
+        <Button
+          title={busy ? "Waiting for Google…" : "Sign In with Google…"}
+          kind="primary"
+          disabled={!clientId.trim() || !secret.trim() || busy}
+          onPress={go}
+        />
       </Actions>
     </View>
   );

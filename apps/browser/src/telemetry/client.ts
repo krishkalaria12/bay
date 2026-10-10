@@ -77,8 +77,7 @@ let app: SystemInfo | null = null;
 export const appInfo = () => (app ??= systemInfo());
 let engineVersion: string | null = null;
 
-export const environment = (): "dev" | "test" | "production" =>
-  __DEV__ ? "dev" : appInfo().isolatedInstance ? "test" : "production";
+export const environment = (): "dev" | "test" | "production" => (__DEV__ ? "dev" : appInfo().isolatedInstance ? "test" : "production");
 
 const devSendAllowed = () => launchEnvironment(DEV_SEND_ENV) === "1";
 const canSend = () => !__DEV__ || devSendAllowed();
@@ -248,7 +247,9 @@ const eventsBody = (batch: QueuedEvent[]) =>
   logsRequest(
     resource(),
     EVENTS_SCOPE,
-    batch.map((e) => eventRecord(e.properties.engine_version == null && engineVersion ? { ...e, properties: { ...e.properties, engine_version: engineVersion } } : e)),
+    batch.map((e) =>
+      eventRecord(e.properties.engine_version == null && engineVersion ? { ...e, properties: { ...e.properties, engine_version: engineVersion } } : e),
+    ),
   );
 
 const logsBody = (batch: OtlpLogRecord[]) => logsRequest(resource(), LOGS_SCOPE, batch);
@@ -287,8 +288,21 @@ export async function flush() {
   const gen = generation;
   let result: DrainResult;
   try {
-    result = await drain("events", () => queue.events, eventsBody, (batch) => (queue.events = queue.events.filter((e) => !batch.includes(e))), gen);
-    if (result === "done") result = await drain("logs", () => queue.logs, logsBody, (batch) => (queue.logs = queue.logs.filter((l) => !batch.includes(l))), gen);
+    result = await drain(
+      "events",
+      () => queue.events,
+      eventsBody,
+      (batch) => (queue.events = queue.events.filter((e) => !batch.includes(e))),
+      gen,
+    );
+    if (result === "done")
+      result = await drain(
+        "logs",
+        () => queue.logs,
+        logsBody,
+        (batch) => (queue.logs = queue.logs.filter((l) => !batch.includes(l))),
+        gen,
+      );
   } finally {
     flushing = false;
   }

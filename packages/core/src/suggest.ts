@@ -219,14 +219,16 @@ function tabsOver(pool: Pool, tabs: readonly TabRow[], cleaned: readonly Cleaned
     const text = pageText(t);
     if (tabIds.has(text.key)) continue;
     tabIds.set(text.key, t.id);
-    if (!pool.byKey.has(text.key)) extra.push({ url: t.url, title: t.title, favicon: t.favicon, visits: 0, lastVisit: now, bookmarked: false, tabId: t.id, text });
+    if (!pool.byKey.has(text.key))
+      extra.push({ url: t.url, title: t.title, favicon: t.favicon, visits: 0, lastVisit: now, bookmarked: false, tabId: t.id, text });
   }
   for (const c of cleaned) {
     if (!c.url) continue;
     const text = pageText(c);
     if (tabIds.has(text.key) || cleanedIds.has(text.key)) continue;
     cleanedIds.set(text.key, c.id);
-    if (!pool.byKey.has(text.key)) extra.push({ url: c.url, title: c.title, favicon: c.favicon, visits: 0, lastVisit: c.closedAt, bookmarked: false, cleanedId: c.id, text });
+    if (!pool.byKey.has(text.key))
+      extra.push({ url: c.url, title: c.title, favicon: c.favicon, visits: 0, lastVisit: c.closedAt, bookmarked: false, cleanedId: c.id, text });
   }
   return { tabIds, cleanedIds, extra };
 }
@@ -351,7 +353,11 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
     if (!text) return { items: [], completion: "" };
     const out = new Output(limit);
     out.push({ kind: "search", query: text, url: searchUrl(engine, text), engine: engine.name });
-    out.push(...dedupeSuggestions(remote, text).slice(0, remoteLimit).map((t): Suggestion => ({ kind: "search", query: t, url: searchUrl(engine, t), engine: engine.name, suggested: true })));
+    out.push(
+      ...dedupeSuggestions(remote, text)
+        .slice(0, remoteLimit)
+        .map((t): Suggestion => ({ kind: "search", query: t, url: searchUrl(engine, t), engine: engine.name, suggested: true })),
+    );
     return { items: out.items, completion: "" };
   }
 
@@ -469,7 +475,13 @@ class Output {
   }
 }
 
-const createRow = (c: { id: string; title: string; url: string; site: string }): Suggestion => ({ kind: "create", id: c.id, title: c.title, url: c.url, site: c.site });
+const createRow = (c: { id: string; title: string; url: string; site: string }): Suggestion => ({
+  kind: "create",
+  id: c.id,
+  title: c.title,
+  url: c.url,
+  site: c.site,
+});
 
 const actionRow = (a: CommandAction): Suggestion => ({
   kind: "action",

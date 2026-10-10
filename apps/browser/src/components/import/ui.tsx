@@ -169,7 +169,19 @@ function Radio({ on }: { on: boolean }) {
   );
 }
 
-export function SelectRow({ selected, onToggle, icon, title, subtitle }: { selected: boolean; onToggle: (v: boolean) => void; icon: ReactNode; title: string; subtitle?: string }) {
+export function SelectRow({
+  selected,
+  onToggle,
+  icon,
+  title,
+  subtitle,
+}: {
+  selected: boolean;
+  onToggle: (v: boolean) => void;
+  icon: ReactNode;
+  title: string;
+  subtitle?: string;
+}) {
   const theme = useTheme();
   const colors = useFormColors();
   return (
@@ -209,7 +221,11 @@ export function Monogram({ name, color }: { name: string; color?: string }) {
 export function SpaceIcon({ space }: { space: SpaceSummary }) {
   return (
     <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: space.color ?? "#8E8E93", alignItems: "center", justifyContent: "center" }}>
-      {space.emoji ? <Text style={{ fontSize: 15 }}>{space.emoji}</Text> : <Symbol name="square.stack" size={12} color="#FFFFFF" style={{ width: 16, height: 16 }} />}
+      {space.emoji ? (
+        <Text style={{ fontSize: 15 }}>{space.emoji}</Text>
+      ) : (
+        <Symbol name="square.stack" size={12} color="#FFFFFF" style={{ width: 16, height: 16 }} />
+      )}
     </View>
   );
 }

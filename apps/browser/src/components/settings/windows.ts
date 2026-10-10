@@ -5,8 +5,7 @@ import { TASK_MANAGER_WINDOW_ID } from "../taskManager/window";
 export const SETTINGS_WINDOW_ID = "settings";
 export const IMPORT_WINDOW_ID = "import";
 
-export const isUtilityWindowId = (id: string | null | undefined) =>
-  id === SETTINGS_WINDOW_ID || id === IMPORT_WINDOW_ID || id === TASK_MANAGER_WINDOW_ID;
+export const isUtilityWindowId = (id: string | null | undefined) => id === SETTINGS_WINDOW_ID || id === IMPORT_WINDOW_ID || id === TASK_MANAGER_WINDOW_ID;
 
 export type SettingsPane =
   | "general"

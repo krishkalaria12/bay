@@ -69,7 +69,18 @@ if (!last || last.w !== now.w || last.h !== now.h) {
   if (document.body) ro.observe(document.body);
 }`;
 
-function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string; pageProfile: string; extensionId: string; url: string; anchor: { x: number; y: number; width: number; height: number } }) {
+function ActionPopup({
+  windowId,
+  pageProfile,
+  url,
+  anchor,
+}: {
+  windowId: string;
+  pageProfile: string;
+  extensionId: string;
+  url: string;
+  anchor: { x: number; y: number; width: number; height: number };
+}) {
   const theme = useTheme();
   const web = useRef<WebViewHandle>(null);
   const window = useWindowDimensions();

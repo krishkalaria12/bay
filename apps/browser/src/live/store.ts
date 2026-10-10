@@ -59,7 +59,20 @@ export const DEFAULT_CALENDAR: CalendarSettings = {
   prompted: false,
 };
 
-const PERSISTED = ["folders", "folderOrder", "items", "known", "unread", "completed", "expandedStacks", "accounts", "config", "calendar", "meetingGroups", "dismissedAlerts"] as const;
+const PERSISTED = [
+  "folders",
+  "folderOrder",
+  "items",
+  "known",
+  "unread",
+  "completed",
+  "expandedStacks",
+  "accounts",
+  "config",
+  "calendar",
+  "meetingGroups",
+  "dismissedAlerts",
+] as const;
 
 function load(): Partial<LiveState> {
   try {
@@ -181,7 +194,8 @@ export function applyFetch(folderId: string, next: LiveItem[], gone: Record<stri
     const animating = new Set(s.completing[folderId] ?? []);
     const leaving = prev.filter((it) => !ids.has(it.id) && gone[it.id] && !animating.has(it.id));
     const merged = [...next];
-    for (const it of prev) if (!ids.has(it.id) && (animating.has(it.id) || leaving.includes(it))) merged.splice(Math.min(prev.indexOf(it), merged.length), 0, it);
+    for (const it of prev)
+      if (!ids.has(it.id) && (animating.has(it.id) || leaving.includes(it))) merged.splice(Math.min(prev.indexOf(it), merged.length), 0, it);
     const completed = [
       ...leaving.map((item) => ({ item, state: gone[item.id]!, at: now })),
       ...(s.completed[folderId] ?? []).filter((c) => !ids.has(c.item.id) && !leaving.some((l) => l.id === c.item.id)),

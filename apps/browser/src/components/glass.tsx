@@ -52,4 +52,12 @@ function rgba(color: string): [number, number, number, number] {
   return [ch(0), ch(1), ch(2), h.length >= 8 ? ch(3) / 255 : 1];
 }
 
-const toHex = (c: number[]) => `#${c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+const toHex = (c: number[]) =>
+  `#${c
+    .map((v) =>
+      Math.round(Math.min(255, Math.max(0, v)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase()}`;

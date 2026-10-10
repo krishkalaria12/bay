@@ -13,7 +13,19 @@ import {
   type NotionSearch,
   type NotionUsers,
 } from "./documents";
-import { detailIds, detailNodes, GITHUB_DETAILS_QUERY, GITHUB_QUERY, GITHUB_STATE_QUERY, GITHUB_VARIABLES, mapGithub, VIEWER_QUERY, withDetails, type DetailsResponse, type GithubResponse } from "./github";
+import {
+  detailIds,
+  detailNodes,
+  GITHUB_DETAILS_QUERY,
+  GITHUB_QUERY,
+  GITHUB_STATE_QUERY,
+  GITHUB_VARIABLES,
+  mapGithub,
+  VIEWER_QUERY,
+  withDetails,
+  type DetailsResponse,
+  type GithubResponse,
+} from "./github";
 import { DETAILS_PAGE } from "./constants";
 import { basic, deleteSecret, endpoints, form, getSecret, request, setSecret } from "./net";
 import { live, setAccount, updateConfig } from "./store";
@@ -158,7 +170,12 @@ async function googleAccessToken(): Promise<string> {
   const json = await request<{ access_token: string; expires_in: number }>(endpoints.googleToken, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form({ client_id: live().config.googleClientId, client_secret: stored.client_secret, refresh_token: stored.refresh_token, grant_type: "refresh_token" }),
+    body: form({
+      client_id: live().config.googleClientId,
+      client_secret: stored.client_secret,
+      refresh_token: stored.refresh_token,
+      grant_type: "refresh_token",
+    }),
   });
   await setSecret("gdrive", JSON.stringify({ ...stored, access_token: json.access_token, expires_at: Date.now() + json.expires_in * 1000 }));
   return json.access_token;
@@ -213,7 +230,8 @@ export async function startGithubDeviceFlow(clientId: string): Promise<DeviceFlo
       });
       if (json.access_token) return connectGithub(json.access_token);
       if (json.error === "slow_down") interval = (json.interval ?? interval / 1000 + 5) * 1000;
-      else if (json.error && json.error !== "authorization_pending") throw new LiveError("signedOut", json.error === "access_denied" ? "Access was denied" : json.error);
+      else if (json.error && json.error !== "authorization_pending")
+        throw new LiveError("signedOut", json.error === "access_denied" ? "Access was denied" : json.error);
     }
     throw new LiveError("signedOut", cancelled ? "Cancelled" : "The code expired");
   })();
@@ -236,7 +254,10 @@ export async function connectNotion(token: string) {
 }
 
 export async function connectConfluence(site: string, email: string, token: string) {
-  const base = site.trim().replace(/\/+$/, "").replace(/^(?!https?:\/\/)/, "https://");
+  const base = site
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/^(?!https?:\/\/)/, "https://");
   const me = await request<{ accountId: string; displayName: string }>(`${endpoints.confluence(base)}/wiki/rest/api/user/current`, {
     headers: { Authorization: basic(email.trim(), token.trim()) },
   });
@@ -249,10 +270,22 @@ export async function connectGoogle(clientId: string, clientSecret: string, code
   const json = await request<{ access_token: string; refresh_token?: string; expires_in: number }>(endpoints.googleToken, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form({ client_id: clientId, client_secret: clientSecret, code, code_verifier: verifier, grant_type: "authorization_code", redirect_uri: redirectUri }),
+    body: form({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      code_verifier: verifier,
+      grant_type: "authorization_code",
+      redirect_uri: redirectUri,
+    }),
   });
   if (!json.refresh_token) throw new LiveError("signedOut", "Google didn't return a refresh token");
-  const tokens: GoogleTokens = { access_token: json.access_token, refresh_token: json.refresh_token, expires_at: Date.now() + json.expires_in * 1000, client_secret: clientSecret };
+  const tokens: GoogleTokens = {
+    access_token: json.access_token,
+    refresh_token: json.refresh_token,
+    expires_at: Date.now() + json.expires_in * 1000,
+    client_secret: clientSecret,
+  };
   await setSecret("gdrive", JSON.stringify(tokens));
   const about = await request<{ user?: { displayName: string; emailAddress: string; photoLink?: string } }>(`${endpoints.drive}/about?fields=user`, {
     headers: { Authorization: `Bearer ${json.access_token}` },

@@ -1,7 +1,17 @@
 import { hapticTick } from "@bay/shell";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { PanResponder, type ScrollView, type View } from "react-native";
-import Animated, { cancelAnimation, Easing, makeMutable, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  makeMutable,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 import { create, useStore } from "zustand";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
@@ -45,7 +55,14 @@ type Drop =
   | { type: "none" };
 
 // `landing`: let go, it settles into the item's place while the item stays hidden.
-export type Ghost = { item: Item; count: number; width: number; height: number; position: { x: SharedValue<number>; y: SharedValue<number> }; landing?: boolean };
+export type Ghost = {
+  item: Item;
+  count: number;
+  width: number;
+  height: number;
+  position: { x: SharedValue<number>; y: SharedValue<number> };
+  landing?: boolean;
+};
 
 // The list stacks rows with `gap`; a zero-height tail cancels its gap with this negative margin.
 const ROW_GAP = layout.rowGap;
@@ -54,9 +71,7 @@ const spring = (value: SharedValue<number>, toValue: number) => value.set(withSp
 
 const inside = (f: Frame, x: number, y: number, slop = 0) => x >= f.x - slop && x <= f.x + f.w + slop && y >= f.y - slop && y <= f.y + f.h + slop;
 const measure = (view: View | null): Promise<Frame | null> =>
-  view
-    ? new Promise((resolve) => view.measureInWindow((x, y, w, h) => resolve(w || h ? { x, y, w, h } : null)))
-    : Promise.resolve(null);
+  view ? new Promise((resolve) => view.measureInWindow((x, y, w, h) => resolve(w || h ? { x, y, w, h } : null))) : Promise.resolve(null);
 
 type Marks = { sources: Set<string>; dropInto: string | null; landing: string | null; pins: boolean };
 const NO_MARKS: Marks = { sources: new Set(), dropInto: null, landing: null, pins: false };
@@ -96,7 +111,18 @@ class DragController {
   constructor(private setGhost: (ghost: Ghost | null) => void) {}
 
   create(key: string): Item {
-    return { key, kind: "row", tabIds: [], section: "list", view: null, header: null, gap: makeMutable(0), size: makeMutable(0), frame: null, headerFrame: null };
+    return {
+      key,
+      kind: "row",
+      tabIds: [],
+      section: "list",
+      view: null,
+      header: null,
+      gap: makeMutable(0),
+      size: makeMutable(0),
+      frame: null,
+      headerFrame: null,
+    };
   }
 
   /** The views an item's frames are measured from. */
@@ -276,7 +302,10 @@ class DragController {
     if (!emptied && source !== ref && source.frame && source.frame.y < top)
       closing += source.parentGroup ? Math.max(0, now(source.size) - ROW_GAP) + ROW_GAP : now(source.size);
     // A tail is a zero-height mark after its section's or group's last item: its x is the container's.
-    const container = ref.kind === "tail" ? [...this.items.values()].find((i) => i !== source && i.kind !== "tail" && i.frame && i.section === ref.section && i.parentGroup === ref.parentGroup) : ref;
+    const container =
+      ref.kind === "tail"
+        ? [...this.items.values()].find((i) => i !== source && i.kind !== "tail" && i.frame && i.section === ref.section && i.parentGroup === ref.parentGroup)
+        : ref;
     // Dropped nowhere, the list goes back to how it was when the drag began: its place then.
     const home = target ? null : this.at(source.frame);
     if (home) return Promise.resolve({ x: home.x, y: home.y });
@@ -288,7 +317,13 @@ class DragController {
 
   private autoScroll(y: number) {
     const v = this.viewport;
-    const speed = !v ? 0 : y < v.y + DRAG_SCROLL_EDGE ? -Math.ceil((v.y + DRAG_SCROLL_EDGE - y) / 4) : y > v.y + v.h - DRAG_SCROLL_EDGE ? Math.ceil((y - (v.y + v.h - DRAG_SCROLL_EDGE)) / 4) : 0;
+    const speed = !v
+      ? 0
+      : y < v.y + DRAG_SCROLL_EDGE
+        ? -Math.ceil((v.y + DRAG_SCROLL_EDGE - y) / 4)
+        : y > v.y + v.h - DRAG_SCROLL_EDGE
+          ? Math.ceil((y - (v.y + v.h - DRAG_SCROLL_EDGE)) / 4)
+          : 0;
     clearInterval(this.scrollTimer);
     this.scrollTimer = undefined;
     if (!speed || !this.scroll) return;
@@ -319,7 +354,9 @@ class DragController {
     const dragged = new Set(this.sources.flatMap((s) => s.tabIds));
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
-    const rowPitch = (source.kind === "group" || source.kind === "folder" ? (source.frame?.h ?? layout.rowHeight) : layout.rowHeight * Math.max(1, this.ghost?.count ?? 1)) + ROW_GAP;
+    const rowPitch =
+      (source.kind === "group" || source.kind === "folder" ? (source.frame?.h ?? layout.rowHeight) : layout.rowHeight * Math.max(1, this.ghost?.count ?? 1)) +
+      ROW_GAP;
     let drop: Drop = { type: "none" };
     let gapKey: string | null = null;
     let pitch = rowPitch;
@@ -345,11 +382,13 @@ class DragController {
       const pinning = tabsDrag && !!divider && y < divider.y + divider.h / 2;
       // Onto a pinned folder's header (its middle third), or among its open rows.
       const folder = tabsDrag
-        ? live.filter((i) => i.kind === "folder").find((f) => {
-            const header = this.at(f.headerFrame);
-            if (header && inside(header, x, y)) return Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
-            return !f.collapsed && inside(this.at(f.frame)!, x, y);
-          })
+        ? live
+            .filter((i) => i.kind === "folder")
+            .find((f) => {
+              const header = this.at(f.headerFrame);
+              if (header && inside(header, x, y)) return Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
+              return !f.collapsed && inside(this.at(f.frame)!, x, y);
+            })
         : undefined;
       const groups = live.filter((i) => i.kind === "group");
       const box = tabsDrag
@@ -453,17 +492,20 @@ function WindowDropHighlight() {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[{
-        position: "absolute",
-        left: 5,
-        right: 5,
-        top: 44,
-        bottom: 6,
-        borderRadius: 10,
-        borderWidth: 1.5,
-        borderColor: theme.accent,
-        backgroundColor: theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-      }, glowStyle]}
+      style={[
+        {
+          position: "absolute",
+          left: 5,
+          right: 5,
+          top: 44,
+          bottom: 6,
+          borderRadius: 10,
+          borderWidth: 1.5,
+          borderColor: theme.accent,
+          backgroundColor: theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+        },
+        glowStyle,
+      ]}
     />
   );
 }

@@ -141,7 +141,10 @@ export function folderEntries(s: BrowserState, folderId: string): string[] {
   const cached = folderMemo.get(folderId);
   const folder = s.pinnedFolders[folderId];
   if (cached && cached.tabs === s.tabs && cached.windows === s.windows && cached.folder === folder) return cached.result;
-  const result = stableList(cached?.result, folderTabIds(s, folderId).map((id) => `t:${id}`));
+  const result = stableList(
+    cached?.result,
+    folderTabIds(s, folderId).map((id) => `t:${id}`),
+  );
   if (folder) folderMemo.set(folderId, { tabs: s.tabs, windows: s.windows, folder, result });
   else folderMemo.delete(folderId);
   return result;

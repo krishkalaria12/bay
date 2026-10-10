@@ -199,9 +199,7 @@ export function useSwitchSlide(windowId: string, tabIds: string[], on: boolean, 
   const style = useAnimatedStyle(() => {
     const p = progress.get();
     const d = distance.get();
-    return coming.get()
-      ? { opacity: p, ...shiftStyle(p, d, 0, horizontal.get()) }
-      : { opacity: 1 - p, ...shiftStyle(p, 0, -d, horizontal.get()) };
+    return coming.get() ? { opacity: p, ...shiftStyle(p, d, 0, horizontal.get()) } : { opacity: 1 - p, ...shiftStyle(p, 0, -d, horizontal.get()) };
   });
   const [was, setWas] = useState(() => on && !recentSwitch(windowId, "to", tabIds));
   // The slide playing: its first frame (in the commit that turns it) and where it goes from there.

@@ -133,7 +133,7 @@ const scenarios = {
     for (let i = 0; i < count; i++) {
       let id;
       open.push(timed(() => (id = S().newTab(w, { url: `${origin}/p/new-${i}-${Date.now()}` }))));
-      ids.push(typeof id === "string" ? id : id?.id ?? activeId());
+      ids.push(typeof id === "string" ? id : (id?.id ?? activeId()));
       await sleep(150);
     }
     await quiet();
@@ -322,7 +322,16 @@ const scenarios = {
     return {
       history: time({ version: 2, history: s.history }),
       bookmarks: time({ version: 2, bookmarks: s.bookmarks }),
-      session: time({ version: 2, spaces: s.spaces, settings: s.settings, windows: Object.values(s.windows), tabs, groups: Object.values(s.groups), closedTabs: s.closedTabs, closedWindows: s.closedWindows }),
+      session: time({
+        version: 2,
+        spaces: s.spaces,
+        settings: s.settings,
+        windows: Object.values(s.windows),
+        tabs,
+        groups: Object.values(s.groups),
+        closedTabs: s.closedTabs,
+        closedWindows: s.closedWindows,
+      }),
       counts: { tabs: tabs.length, history: Object.values(s.history).reduce((n, h) => n + h.length, 0), bookmarks: Object.keys(s.bookmarks.nodes).length },
     };
   },
@@ -367,7 +376,9 @@ function renderScenarios() {
     },
     async tabSwitch({ count = 10, gapMs = 300 } = {}) {
       const s = S();
-      const ids = tabsInView().filter((id) => !s.tabs[id].pinned).slice(0, count);
+      const ids = tabsInView()
+        .filter((id) => !s.tabs[id].pinned)
+        .slice(0, count);
       const start = activeId();
       await quiet(800);
       P.reset();
@@ -486,7 +497,19 @@ function renderScenarios() {
     // A download's progress as the engine reports it (onDownload → upsertDownload), ten updates a second.
     async downloads({ updates = 40, gapMs = 100 } = {}) {
       const total = 50_000_000;
-      const d = { id: `bench-${Date.now()}`, url: "http://127.0.0.1/file.zip", filename: "file.zip", path: "", state: "downloading", paused: false, received: 0, total, speed: 0, mimeType: "application/zip", profile: S().windows[windowId()].spaceId };
+      const d = {
+        id: `bench-${Date.now()}`,
+        url: "http://127.0.0.1/file.zip",
+        filename: "file.zip",
+        path: "",
+        state: "downloading",
+        paused: false,
+        received: 0,
+        total,
+        speed: 0,
+        mimeType: "application/zip",
+        profile: S().windows[windowId()].spaceId,
+      };
       await quiet(800);
       P.reset();
       const steps = [];

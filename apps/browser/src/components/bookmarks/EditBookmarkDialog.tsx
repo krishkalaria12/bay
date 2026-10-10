@@ -75,7 +75,13 @@ function Sheet({ state }: { state: EditorState }) {
           <>
             <Label text="Folder" />
             <View
-              style={{ height: 180, borderRadius: 7, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.fieldBorder, backgroundColor: colors.field }}
+              style={{
+                height: 180,
+                borderRadius: 7,
+                borderWidth: StyleSheet.hairlineWidth * 2,
+                borderColor: colors.fieldBorder,
+                backgroundColor: colors.field,
+              }}
             >
               <ScrollView contentContainerStyle={{ padding: 4 }}>
                 <FolderTree spaceId={state.spaceId} selectedId={parentId} onSelect={setParentId} rowHeight={24} />

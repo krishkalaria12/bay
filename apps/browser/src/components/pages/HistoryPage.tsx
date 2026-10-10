@@ -127,7 +127,9 @@ export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; s
           contentContainerStyle={{ paddingBottom: 40, alignItems: "center" }}
           renderItem={({ item }) =>
             item.type === "day" ? (
-              <View style={{ width: PAGE_WIDTH, maxWidth: "100%", height: HISTORY_HEADER, justifyContent: "flex-end", paddingBottom: 8, paddingHorizontal: 30 }}>
+              <View
+                style={{ width: PAGE_WIDTH, maxWidth: "100%", height: HISTORY_HEADER, justifyContent: "flex-end", paddingBottom: 8, paddingHorizontal: 30 }}
+              >
                 <Text style={{ fontSize: 12.5, fontWeight: "600", color: theme.textSecondary }}>{item.label}</Text>
               </View>
             ) : (
@@ -249,7 +251,11 @@ function HistoryRow({
           </View>
         </View>
       </ContextMenuArea>
-      {!last && <View style={{ position: "absolute", left: 16 + 12, right: 16 + 12, bottom: 0, height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />}
+      {!last && (
+        <View
+          style={{ position: "absolute", left: 16 + 12, right: 16 + 12, bottom: 0, height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }}
+        />
+      )}
     </View>
   );
 }

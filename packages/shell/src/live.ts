@@ -42,8 +42,7 @@ const Calendar = requireNativeModule<{
 export const calendarAuthorization = (): CalendarAuthorization => Calendar.authorizationStatus();
 export const requestCalendarAccess = () => Calendar.requestAccess();
 export const systemCalendars = () => Calendar.calendars();
-export const systemCalendarEvents = (start: number, end: number, calendarIds: string[] = []) =>
-  Calendar.events(start, end, calendarIds);
+export const systemCalendarEvents = (start: number, end: number, calendarIds: string[] = []) => Calendar.events(start, end, calendarIds);
 export const onCalendarChanged = (listener: () => void) => Calendar.addListener("onCalendarChanged", listener);
 
 const Keychain = requireNativeModule<{

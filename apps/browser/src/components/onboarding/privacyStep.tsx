@@ -60,16 +60,22 @@ function Receipt({ on }: { on: boolean }) {
         transform: [{ rotate: "2deg" }],
       }}
     >
-      <Text style={{ fontFamily: MONO_FONT, fontSize: 11, fontWeight: "700", letterSpacing: 1, textAlign: "center", color: colors.title }}>
-        BAY
-      </Text>
+      <Text style={{ fontFamily: MONO_FONT, fontSize: 11, fontWeight: "700", letterSpacing: 1, textAlign: "center", color: colors.title }}>BAY</Text>
       <Text style={{ fontFamily: MONO_FONT, fontSize: 9.5, letterSpacing: 0.6, textAlign: "center", marginTop: 3, color: colors.subtitle }}>
         ITEMIZED. UNLIKE SOME EXPENSES.
       </Text>
       {rule}
-      <View style={{ gap: 6 }}>{SENT.map((label) => <ReceiptLine key={label} label={label} mark={on ? "SENT" : "—"} dim={!on} />)}</View>
+      <View style={{ gap: 6 }}>
+        {SENT.map((label) => (
+          <ReceiptLine key={label} label={label} mark={on ? "SENT" : "—"} dim={!on} />
+        ))}
+      </View>
       {rule}
-      <View style={{ gap: 6 }}>{NEVER.map((label) => <ReceiptLine key={label} label={label} mark="NEVER" dim={false} />)}</View>
+      <View style={{ gap: 6 }}>
+        {NEVER.map((label) => (
+          <ReceiptLine key={label} label={label} mark="NEVER" dim={false} />
+        ))}
+      </View>
       {rule}
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <Text style={{ fontFamily: MONO_FONT, fontSize: 11, fontWeight: "700", color: colors.title }}>PERSONAL DATA</Text>

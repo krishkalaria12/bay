@@ -19,7 +19,6 @@ import { Button, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from 
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
-
 export function GeneralPane() {
   const settings = useBrowser((s) => s.settings);
   const update = useBrowser((s) => s.updateSettings);
@@ -40,7 +39,11 @@ export function GeneralPane() {
         >
           <Toggle
             value={loginStatus === "enabled" || loginStatus === "requiresApproval"}
-            onChange={(on) => void setLaunchAtLogin(on).catch(() => {}).finally(refreshLogin)}
+            onChange={(on) =>
+              void setLaunchAtLogin(on)
+                .catch(() => {})
+                .finally(refreshLogin)
+            }
           />
         </Row>
         <Row title="Warn before quitting" description={`Asks before ${APP_NAME} quits with ⌘Q.`}>
@@ -158,12 +161,7 @@ function DefaultBrowserBanner() {
         borderColor: colors.groupBorder,
       }}
     >
-      <Symbol
-        name={isDefault ? "checkmark.seal.fill" : "safari"}
-        size={20}
-        color={isDefault ? "#34C759" : theme.icon}
-        style={{ width: 28, height: 28 }}
-      />
+      <Symbol name={isDefault ? "checkmark.seal.fill" : "safari"} size={20} color={isDefault ? "#34C759" : theme.icon} style={{ width: 28, height: 28 }} />
       <Text style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
         {isDefault ? `${APP_NAME} is your default browser` : `${APP_NAME} works best as your default browser`}
       </Text>

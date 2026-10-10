@@ -159,7 +159,10 @@ export function DownloadMagnet() {
   const sidebar = !topStrip && sidebarOpen ? sidebarWidth : 0;
   // The sidebar's left edge: the window's, or the page's right one with the sidebar on the right.
   const sidebarLeft = right ? size.width - sidebar : 0;
-  const footer = { x: sidebarLeft + layout.sidebarInset + SIDEBAR_FOOTER_DOWNLOADS.size / 2, y: size.height - SIDEBAR_FOOTER_DOWNLOADS.bottom - SIDEBAR_FOOTER_DOWNLOADS.size / 2 };
+  const footer = {
+    x: sidebarLeft + layout.sidebarInset + SIDEBAR_FOOTER_DOWNLOADS.size / 2,
+    y: size.height - SIDEBAR_FOOTER_DOWNLOADS.bottom - SIDEBAR_FOOTER_DOWNLOADS.size / 2,
+  };
   const target = topStrip ? { x: size.width - 25, y: 21 } : sidebarOpen ? footer : { x: 24, y: 24 };
   const start = { x: (right ? 0 : sidebar) + (size.width - sidebar) / 2, y: size.height * 0.45 };
   const icon = 44;
@@ -170,7 +173,11 @@ export function DownloadMagnet() {
     const p = t.get();
     return {
       opacity: interpolate(p, [0, 0.1, 0.8, 1], [0, 1, 1, 0]),
-      transform: [{ translateX: interpolate(p, steps, xs) }, { translateY: interpolate(p, steps, ys) }, { scale: interpolate(p, [0, 0.15, 1], [0.6, 1.1, 0.3]) }],
+      transform: [
+        { translateX: interpolate(p, steps, xs) },
+        { translateY: interpolate(p, steps, ys) },
+        { scale: interpolate(p, [0, 0.15, 1], [0.6, 1.1, 0.3]) },
+      ],
     };
   }, [xs.join(), ys.join()]);
 

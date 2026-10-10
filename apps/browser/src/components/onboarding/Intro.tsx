@@ -2,7 +2,18 @@ import { DIA_SPECTRUM, PowerUp } from "@bay/shaders";
 import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
 import { introMusicMuted, saveIntroMusicMuted } from "./state";
@@ -73,13 +84,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <Animated.View
-      style={[
-        StyleSheet.absoluteFill,
-        { backgroundColor: colors.background, alignItems: "center", justifyContent: "center" },
-        screen,
-      ]}
-    >
+    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }, screen]}>
       <PowerUp palette={DIA_SPECTRUM} speed={0.8} origin={0.5} style={[StyleSheet.absoluteFill, { opacity: dark ? 0.9 : 0.6 }]} />
       <Animated.View style={[{ alignItems: "center", gap: 18 }, zoom]}>
         <Animated.View style={iconStyle}>

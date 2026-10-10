@@ -52,13 +52,19 @@ export function Toggle({ value, onChange, disabled }: { value: boolean; onChange
   useEffect(() => {
     t.set(withTiming(value ? 1 : 0, { duration: 160, easing: Easing.out(Easing.cubic) }));
   }, [value]);
-  const track = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(t.get(), [0, 1], [colors.switchOff, colors.accent]) }), [colors.switchOff, colors.accent]);
+  const track = useAnimatedStyle(
+    () => ({ backgroundColor: interpolateColor(t.get(), [0, 1], [colors.switchOff, colors.accent]) }),
+    [colors.switchOff, colors.accent],
+  );
   const knob = useAnimatedStyle(() => ({ transform: [{ translateX: t.get() * 14 }] }));
   return (
     <Pressable disabled={disabled} onPress={() => onChange(!value)} style={{ opacity: disabled ? 0.45 : 1 }}>
       <Animated.View style={[{ width: 32, height: 18, borderRadius: 9, padding: 1.5 }, track]}>
         <Animated.View
-          style={[{ width: 15, height: 15, borderRadius: 7.5, backgroundColor: "#FFFFFF", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.12)" }, knob]}
+          style={[
+            { width: 15, height: 15, borderRadius: 7.5, backgroundColor: "#FFFFFF", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.12)" },
+            knob,
+          ]}
         />
       </Animated.View>
     </Pressable>
@@ -82,7 +88,11 @@ export function Checkbox({
   const colors = useFormColors();
   const on = value || mixed;
   return (
-    <Pressable disabled={disabled} onPress={() => onChange(!value)} style={{ flexDirection: "row", alignItems: "center", gap: 7, opacity: disabled ? 0.45 : 1 }}>
+    <Pressable
+      disabled={disabled}
+      onPress={() => onChange(!value)}
+      style={{ flexDirection: "row", alignItems: "center", gap: 7, opacity: disabled ? 0.45 : 1 }}
+    >
       <View
         style={{
           width: 14,
@@ -236,7 +246,6 @@ export function SearchField({
   style?: StyleProp<ViewStyle>;
   onSubmit?: () => void;
 }) {
-
   const theme = useTheme();
   const colors = useFormColors();
   return (

@@ -16,7 +16,11 @@ const REPO = "mantrakp04/bay";
 // event, {d} the distinct id, and {site}, {app}, {mac} the usual filters.
 const OTEL = {
   table: "telemetry.otel_logs",
-  p: "LogAttributes", ts: "Timestamp", t: "toDateTime64(Timestamp, 6, 'UTC')", e: "Event", d: "DistinctId",
+  p: "LogAttributes",
+  ts: "Timestamp",
+  t: "toDateTime64(Timestamp, 6, 'UTC')",
+  e: "Event",
+  d: "DistinctId",
   site: "ServiceName = 'bay-site' AND {p}['$lib'] IN ('web', 'bay-web') AND {p}['$host'] IN ('bay.com', 'www.bay.com')",
   app: "ServiceName = 'bay-app' AND {p}['$lib'] = 'bay-telemetry'",
   // What the view leaves out: the endpoints' self-tests.
@@ -24,19 +28,22 @@ const OTEL = {
 };
 const POSTHOG = {
   table: "telemetry.posthog_events",
-  p: "properties", ts: "timestamp", t: "timestamp", e: "event", d: "distinct_id",
+  p: "properties",
+  ts: "timestamp",
+  t: "timestamp",
+  e: "event",
+  d: "distinct_id",
   site: "{p}['$lib'] IN ('web', 'bay-web') AND {p}['$host'] IN ('bay.com', 'www.bay.com')",
   app: "{p}['$lib'] = 'bay-telemetry'",
   base: "1",
 };
 const fill = (sql, t) =>
-  sql.replace(/\{(site|app)\}/g, (_, k) => `(${t[k]})`)
+  sql
+    .replace(/\{(site|app)\}/g, (_, k) => `(${t[k]})`)
     .replaceAll("{mac}", "({p}['$os'] = 'Mac OS X' AND {p}['$device_type'] = 'Desktop')")
     .replace(/\{(p|ts|t|e|d)\}/g, (_, k) => t[k]);
 const both = (select, where, { final = false } = {}) =>
-  [OTEL, POSTHOG]
-    .map((t) => `SELECT ${fill(select, t)} FROM ${t.table}${final ? " FINAL" : ""} WHERE ${fill(where, t)} AND ${t.base}`)
-    .join(" UNION ALL ");
+  [OTEL, POSTHOG].map((t) => `SELECT ${fill(select, t)} FROM ${t.table}${final ? " FINAL" : ""} WHERE ${fill(where, t)} AND ${t.base}`).join(" UNION ALL ");
 const VERSION = "'^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$'";
 
 const gh = async (path) => JSON.parse((await promisify(execFile)("gh", ["api", path])).stdout);
@@ -45,7 +52,11 @@ const attempt = async (name, fn) => {
   try {
     return await fn();
   } catch (error) {
-    problems.push(`${name}: ${String(error.message ?? error).split("\n")[0].slice(0, 160)}`);
+    problems.push(
+      `${name}: ${String(error.message ?? error)
+        .split("\n")[0]
+        .slice(0, 160)}`,
+    );
     return null;
   }
 };
@@ -116,7 +127,12 @@ if (hasTelemetryEnv()) {
     };
     telemetry.appUsers = { today: app[0], week: app[1] };
     telemetry.exceptions = exceptions.map(([where, type, message, version, count, last]) => ({
-      where, type, message, version, count, last: last * 1000,
+      where,
+      type,
+      message,
+      version,
+      count,
+      last: last * 1000,
     }));
   });
 } else {

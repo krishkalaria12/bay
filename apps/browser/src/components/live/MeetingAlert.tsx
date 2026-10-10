@@ -6,7 +6,17 @@ import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { dismiss, joinEvent, useMeetingAlert } from "../../live/alerts";
 import { useCalendar, useNow } from "../../live/calendar";
-import { attendeesLabel, guestsLabel, isCalendarUrl, joinLink, joinTitle, relatedLinks, relativeTime, timeRange, type CalendarEvent } from "../../live/meetings";
+import {
+  attendeesLabel,
+  guestsLabel,
+  isCalendarUrl,
+  joinLink,
+  joinTitle,
+  relatedLinks,
+  relativeTime,
+  timeRange,
+  type CalendarEvent,
+} from "../../live/meetings";
 import { useBrowser } from "../../store/browser";
 import { viewTabIds } from "../../store/model";
 import { IconButton } from "../primitives";
@@ -59,7 +69,9 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
   const who = attendeesLabel(event);
   // No calendar row to come out of: the page's top right corner, left of a sidebar docked on the right.
   const pageRight = windowWidth - (right && sidebarShown ? sidebarWidth : 0);
-  const position = anchor ? { left: besideRow(anchor, MEETING_ALERT_WIDTH, right), top: Math.max(8, anchor.y - 4) } : { left: Math.max(8, pageRight - MEETING_ALERT_WIDTH - 14), top: 52 };
+  const position = anchor
+    ? { left: besideRow(anchor, MEETING_ALERT_WIDTH, right), top: Math.max(8, anchor.y - 4) }
+    : { left: Math.max(8, pageRight - MEETING_ALERT_WIDTH - 14), top: 52 };
 
   return (
     <Animated.View style={[{ position: "absolute", ...position, width: MEETING_ALERT_WIDTH }, appearStyle]}>
@@ -80,7 +92,16 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
             {running ? "Now" : relativeTime(event.start, now)}
             {calendarName ? <Text style={{ fontWeight: "400", color: theme.textSecondary }}> · {calendarName}</Text> : null}
           </Text>
-          <IconButton icon="xmark" size={9} weight="semibold" box={20} radius={6} onPress={() => dismiss(event)} tooltip="Ignore" style={{ marginRight: -4, marginTop: -2 }} />
+          <IconButton
+            icon="xmark"
+            size={9}
+            weight="semibold"
+            box={20}
+            radius={6}
+            onPress={() => dismiss(event)}
+            tooltip="Ignore"
+            style={{ marginRight: -4, marginTop: -2 }}
+          />
         </View>
         <View style={{ gap: 2 }}>
           <Text numberOfLines={2} style={{ fontSize: 14, lineHeight: 18, fontWeight: "600", color: theme.textPrimary }}>
@@ -120,4 +141,3 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
     </Animated.View>
   );
 }
-

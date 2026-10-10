@@ -119,10 +119,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
 const NO_EXTENSION_ENGINES: ExtensionSearchEngine[] = [];
-const engineCache = new WeakMap<
-  CustomSearchEngine[],
-  { legacyUrl: string; extension: ExtensionSearchEngine[]; engines: SearchEngine[] }
->();
+const engineCache = new WeakMap<CustomSearchEngine[], { legacyUrl: string; extension: ExtensionSearchEngine[]; engines: SearchEngine[] }>();
 
 export function searchEngines(settings: Settings): SearchEngine[] {
   const custom = settings.customSearchEngines ?? NO_CUSTOM_ENGINES;

@@ -41,7 +41,8 @@ export function nextHarmony(type: Harmony, count: number): Harmony {
 }
 
 /** The harmony after a colour goes: three analogous colours leave two analogous ones. */
-export const harmonyAfterRemoving = (type: Harmony, count: number): Harmony => (type === "analogous" && count === 2 ? "singleAnalogous" : defaultHarmony(count));
+export const harmonyAfterRemoving = (type: Harmony, count: number): Harmony =>
+  type === "analogous" && count === 2 ? "singleAnalogous" : defaultHarmony(count);
 
 /** The first colour, then the others its harmony places round the wheel from it, as light as it is. */
 export function harmonize(first: string, type: Harmony): string[] {

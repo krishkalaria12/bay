@@ -23,7 +23,11 @@ const hostOf = (origin: string) => {
 
 function useShareFor(tabId: string): [string, TabShare] | null {
   const shares = useMedia((m) => m.tabShares);
-  const capturing = usePages((p) => Object.keys(shares).filter((id) => p.pages[id]?.mediaAccess?.screen).join(","));
+  const capturing = usePages((p) =>
+    Object.keys(shares)
+      .filter((id) => p.pages[id]?.mediaAccess?.screen)
+      .join(","),
+  );
   // The capturing tabs in this tab's engine profile, in order; null for a tab no page can share to.
   const capturers = useBrowser((s) => {
     const tab = s.tabs[tabId];

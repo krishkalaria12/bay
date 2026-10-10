@@ -71,7 +71,8 @@ export function rowSpan(
         const at = members.indexOf(`t:${tabId}`);
         if (at < 0) return null;
         // A collapsed folder shows only the kept row; any other is behind its header.
-        if (s.pinnedFolders[id]!.collapsed) return keptEntry(s, windowId, spaceId, members) === members[at] ? { section, top: top + ROW + GAP, height: ROW } : { section, top, height: ROW };
+        if (s.pinnedFolders[id]!.collapsed)
+          return keptEntry(s, windowId, spaceId, members) === members[at] ? { section, top: top + ROW + GAP, height: ROW } : { section, top, height: ROW };
         return { section, top: top + (at + 1) * (ROW + GAP), height: ROW };
       }
       if (entry.startsWith("g:") && s.groups[id]?.tabIds.includes(tabId)) {

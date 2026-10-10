@@ -59,8 +59,8 @@ export function SpacesPane() {
   return (
     <View>
       <Text style={{ marginTop: 20, fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
-        Spaces keep your browsing organized: each has its own tabs, pinned tabs, icon and theme. A space's profile holds its history, logins,
-        cookies and extensions; spaces can share a profile or keep their own.
+        Spaces keep your browsing organized: each has its own tabs, pinned tabs, icon and theme. A space's profile holds its history, logins, cookies and
+        extensions; spaces can share a profile or keep their own.
       </Text>
 
       <SectionHeader title="New windows open with" />
@@ -208,13 +208,16 @@ function SpaceRow({
   return (
     <Animated.View
       {...pan.panHandlers}
-      style={[{
-        zIndex: lifted ? 1 : 0,
-        borderRadius: lifted ? 8 : 0,
-        backgroundColor: lifted ? hex(theme.panel) : undefined,
-        borderWidth: lifted ? StyleSheet.hairlineWidth * 2 : 0,
-        borderColor: colors.groupBorder,
-      }, offsetStyle]}
+      style={[
+        {
+          zIndex: lifted ? 1 : 0,
+          borderRadius: lifted ? 8 : 0,
+          backgroundColor: lifted ? hex(theme.panel) : undefined,
+          borderWidth: lifted ? StyleSheet.hairlineWidth * 2 : 0,
+          borderColor: colors.groupBorder,
+        },
+        offsetStyle,
+      ]}
     >
       {!first && !lifted && <View style={{ height: StyleSheet.hairlineWidth * 2, marginHorizontal: 12, backgroundColor: colors.separator }} />}
       <ContextMenuArea onContextMenu={() => void openMenu()}>
@@ -284,7 +287,6 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
   const commitName = () => (name.trim() ? update({ name: name.trim() }) : setName(profile.name));
   const sharing = shared.length > 1;
 
-
   return (
     <View>
       <View style={{ alignItems: "center", marginTop: 24, gap: 10 }}>
@@ -307,7 +309,16 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
         </Row>
         {picking ? (
           <View style={{ padding: 12, alignItems: "center" }}>
-            <IconGrid symbols={SPACE_SYMBOLS} current={profile.icon} onChoose={(icon) => update({ icon })} columns={SPACE_PANE_ICON_COLUMNS} cell={30} rows={4} highlight={colors.selected} bold />
+            <IconGrid
+              symbols={SPACE_SYMBOLS}
+              current={profile.icon}
+              onChoose={(icon) => update({ icon })}
+              columns={SPACE_PANE_ICON_COLUMNS}
+              cell={30}
+              rows={4}
+              highlight={colors.selected}
+              bold
+            />
           </View>
         ) : null}
         <Row title="Theme colour" description="Tints this space's windows and New Tab page.">
@@ -332,7 +343,11 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
         </Row>
         <Row
           title="Custom theme"
-          description={profile.theme ? `${plural(profile.theme.colors.length, "colour")}, its own intensity and grain.` : "Your own colours, intensity and grain, as Arc's theme editor."}
+          description={
+            profile.theme
+              ? `${plural(profile.theme.colors.length, "colour")}, its own intensity and grain.`
+              : "Your own colours, intensity and grain, as Arc's theme editor."
+          }
         >
           {profile.theme ? (
             <View style={{ flexDirection: "row", gap: 8 }}>
@@ -383,13 +398,23 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
         </Row>
         <Row
           title="Clear Browsing Data"
-          description={sharing ? "History, cookies, site data and cached files, for every space that shares this profile." : "History, cookies, site data and cached files for this space's profile."}
+          description={
+            sharing
+              ? "History, cookies, site data and cached files, for every space that shares this profile."
+              : "History, cookies, site data and cached files for this space's profile."
+          }
         >
           <Button title="Clear…" onPress={() => showSettingsSheet(<ClearDataDialog spaceId={spaceId} onClose={closeSettingsSheet} />)} />
         </Row>
         <Row
           title="Delete Selected Space"
-          description={only ? "You can't delete your only space." : sharing ? "Removes its tabs. The profile it shares stays." : "Removes its tabs and its profile's history, bookmarks and site data."}
+          description={
+            only
+              ? "You can't delete your only space."
+              : sharing
+                ? "Removes its tabs. The profile it shares stays."
+                : "Removes its tabs and its profile's history, bookmarks and site data."
+          }
         >
           <Button
             title="Delete…"

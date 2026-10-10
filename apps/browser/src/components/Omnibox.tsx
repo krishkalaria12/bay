@@ -92,9 +92,7 @@ export function Omnibox({
   const [selected, setSelected] = useState(palette && !newTab && !!currentUrl && initialText === currentUrl ? -1 : 0);
   const [scope, setScope] = useState<SearchScope | null>(null);
   const scopeFrom = useRef("");
-  const [pendingSelection, setPendingSelection] = useState<Selection | null>(
-    initial ? { start: 0, end: initial.length } : null,
-  );
+  const [pendingSelection, setPendingSelection] = useState<Selection | null>(initial ? { start: 0, end: initial.length } : null);
   const selection = useRef<Selection>({ start: 0, end: typed.length });
   const input = useRef<TextInput>(null);
   const root = useRef<View>(null);
@@ -223,7 +221,14 @@ export function Omnibox({
 
   const openRowMenu = (target = current) => {
     if (!target) return;
-    const title = target.kind === "page" ? target.title || displayUrl(target.url) : target.kind === "search" ? target.query : target.kind === "calc" ? target.value : target.title;
+    const title =
+      target.kind === "page"
+        ? target.title || displayUrl(target.url)
+        : target.kind === "search"
+          ? target.query
+          : target.kind === "calc"
+            ? target.value
+            : target.title;
     const actions = rowMenuActions(target, newTab, searchTemplates, {
       choose,
       openInBackground: (url) => openInBackground(url, tabId),
@@ -266,8 +271,7 @@ export function Omnibox({
     if (key === "Backspace" && scope && !typed) return leaveScope(true);
     if (key === "Enter") {
       if (metaKey && shiftKey) return forceSearch();
-      if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim())
-        return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
+      if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim()) return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
       if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return openInBackground(current.url, tabId);
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor({ metaKey, altKey, shiftKey }));
@@ -333,7 +337,18 @@ export function Omnibox({
     key: (key, mods) => onKeyDown({ nativeEvent: { key, ...mods } }),
     submit: () => choose(current),
     measure: () => new Promise((resolve) => root.current?.measureInWindow((x, y, width, height) => resolve({ x, y, width, height }))),
-    state: () => ({ typed, value, selection: selection.current, completion: shownCompletion, suggested: completion, selected: selectedIndex, scope, scopeFrom: scopeFrom.current, tabScope, items }),
+    state: () => ({
+      typed,
+      value,
+      selection: selection.current,
+      completion: shownCompletion,
+      suggested: completion,
+      selected: selectedIndex,
+      scope,
+      scopeFrom: scopeFrom.current,
+      tabScope,
+      items,
+    }),
   });
 
   const leadingIcon =
@@ -403,7 +418,14 @@ export function Omnibox({
         <PaletteContent
           pageContext={pageContext}
           leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} spaceId={spaceId} /> : undefined}
-          field={<ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}><View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>{scope ? <ScopeChip scope={scope} large /> : null}{field}</View></ContextMenuArea>}
+          field={
+            <ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}>
+              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                {scope ? <ScopeChip scope={scope} large /> : null}
+                {field}
+              </View>
+            </ContextMenuArea>
+          }
           sections={sections}
           selectedIndex={selectedIndex}
           current={current}

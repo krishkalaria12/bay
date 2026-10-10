@@ -42,17 +42,43 @@ rmSync(join(scratch, "media-app"), { recursive: true, force: true });
 mkdirSync(join(scratch, "media-app"), { recursive: true });
 execFileSync("cp", ["-cR", resolve(appArg), app]);
 const entitlements = join(scratch, "media-app", "entitlements.plist");
-writeFileSync(entitlements, `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.cs.disable-library-validation</key><true/></dict></plist>`);
+writeFileSync(
+  entitlements,
+  `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.cs.disable-library-validation</key><true/></dict></plist>`,
+);
 execFileSync("codesign", ["-f", "-s", "-", "--options", "runtime", "--entitlements", entitlements, app], { stdio: "ignore" });
-if (/device\.(camera|audio-input)/.test(execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { stdio: ["ignore", "pipe", "ignore"] }).toString()))
+if (
+  /device\.(camera|audio-input)/.test(execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { stdio: ["ignore", "pipe", "ignore"] }).toString())
+)
   throw new Error("the media copy kept a device entitlement");
 
 // MARK: Fixtures (HTTPS)
 
 const certDir = join(scratch, "cert");
 mkdirSync(certDir, { recursive: true });
-writeFileSync(join(certDir, "openssl.cnf"), `[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=localhost\n[ext]\nsubjectAltName=DNS:localhost,DNS:*.localhost,IP:127.0.0.1\n`);
-execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-keyout", join(certDir, "key.pem"), "-out", join(certDir, "cert.pem"), "-config", join(certDir, "openssl.cnf")], { stdio: "ignore" });
+writeFileSync(
+  join(certDir, "openssl.cnf"),
+  `[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=localhost\n[ext]\nsubjectAltName=DNS:localhost,DNS:*.localhost,IP:127.0.0.1\n`,
+);
+execFileSync(
+  "openssl",
+  [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-days",
+    "2",
+    "-keyout",
+    join(certDir, "key.pem"),
+    "-out",
+    join(certDir, "cert.pem"),
+    "-config",
+    join(certDir, "openssl.cnf"),
+  ],
+  { stdio: "ignore" },
+);
 
 const page = (title, body, script = "") =>
   `<!doctype html><html><head><title>${title}</title><link rel="icon" href="data:,"></head><body style="font: 20px sans-serif">${body}<script>${script}</script></body></html>`;
@@ -102,7 +128,10 @@ let instance = null;
 // checked against the bundle's binary (scripts/lib/instance.mjs): never another run's instance.
 async function launch(logName = "app.out.log") {
   instance = await launchInstance(app, {
-    data, port: devtoolsPort, log: join(scratch, logName), ready: false,
+    data,
+    port: devtoolsPort,
+    log: join(scratch, logName),
+    ready: false,
     switches: "--ignore-certificate-errors --bay-test-system-media-permission=ask",
   });
   pid = instance.pid;
@@ -139,10 +168,13 @@ const targets = async () => (await fetch(`http://127.0.0.1:${devtoolsPort}/json/
 async function cdp(target, method, params = {}) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = () => j(new Error(`DevTools connection to ${target.url} failed`)))));
-  const reply = new Promise((r) => (ws.onmessage = (m) => {
-    const msg = JSON.parse(m.data);
-    if (msg.id === 1) r(msg);
-  }));
+  const reply = new Promise(
+    (r) =>
+      (ws.onmessage = (m) => {
+        const msg = JSON.parse(m.data);
+        if (msg.id === 1) r(msg);
+      }),
+  );
   ws.send(JSON.stringify({ id: 1, method, params }));
   const msg = await Promise.race([reply, sleep(10000).then(() => ({ error: "cdp timeout" }))]);
   ws.close();
@@ -159,7 +191,8 @@ const cef = (call) => evalApp(`return globalThis.expo.modules.BayCEF.${call}`);
 const browserOf = (tabId) => evalApp(`return Object.entries(nn.pageState.getState().browsers ?? {}).find(([, t]) => t === "${tabId}")?.[0] ?? null`);
 
 // The app's side: each window's shown tab and panes, and the focused window.
-const appState = () => evalApp(`const s = nn.store.getState();
+const appState = () =>
+  evalApp(`const s = nn.store.getState();
   return { focused: s.ui.focusedWindowId, windows: Object.fromEntries(Object.values(s.windows).map((w) => {
     const shown = w.activeTabIds[w.profileId] ?? null;
     const split = Object.values(s.splits ?? {}).find((x) => x.tabIds.includes(shown));
@@ -168,7 +201,11 @@ const appState = () => evalApp(`const s = nn.store.getState();
 // Native focus: what the app asked AppKit to make key, and its windows (the key flag, through the app-active seam).
 const activationLog = () => (existsSync(join(data, "activation.log")) ? readFileSync(join(data, "activation.log"), "utf8") : "");
 const focusRequests = (from = 0) =>
-  [...activationLog().slice(from).matchAll(/(makeKeyAndOrderFront:|makeKeyWindow) on \S+ #(\d+)/g)].map((m) => Number(m[2]));
+  [
+    ...activationLog()
+      .slice(from)
+      .matchAll(/(makeKeyAndOrderFront:|makeKeyWindow) on \S+ #(\d+)/g),
+  ].map((m) => Number(m[2]));
 const nativeWindows = () => cef("chromeWindows()");
 const neverFront = () => {
   const front = execFileSync("lsappinfo", ["front"]).toString().trim();
@@ -181,10 +218,19 @@ const neverFront = () => {
 const extDir = join(scratch, "watch-ext");
 rmSync(extDir, { recursive: true, force: true });
 mkdirSync(extDir, { recursive: true });
-writeFileSync(join(extDir, "manifest.json"), JSON.stringify({
-  manifest_version: 3, name: "Activation watch", version: "1.0", permissions: ["tabs", "storage"], background: { service_worker: "worker.js" },
-}));
-writeFileSync(join(extDir, "worker.js"), `
+writeFileSync(
+  join(extDir, "manifest.json"),
+  JSON.stringify({
+    manifest_version: 3,
+    name: "Activation watch",
+    version: "1.0",
+    permissions: ["tabs", "storage"],
+    background: { service_worker: "worker.js" },
+  }),
+);
+writeFileSync(
+  join(extDir, "worker.js"),
+  `
   let chain = Promise.resolve();
   const note = (e) => (chain = chain.then(async () => {
     const { events = [] } = await chrome.storage.local.get("events");
@@ -200,7 +246,8 @@ writeFileSync(join(extDir, "worker.js"), `
     const last = await chrome.windows.getLastFocused().catch(() => null);
     return { lastFocused: last?.id ?? null,
       windows: windows.map((w) => ({ id: w.id, focused: w.focused, active: w.tabs.find((t) => t.active)?.url ?? null, tabs: w.tabs.map((t) => t.url) })) };
-  };`);
+  };`,
+);
 let worker = null;
 const ext = async (expression) => {
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -210,19 +257,24 @@ const ext = async (expression) => {
       return r.result.value;
     } catch (e) {
       if (attempt) throw e;
-      worker = await findWorker();  // a stopped worker comes back as a new target
+      worker = await findWorker(); // a stopped worker comes back as a new target
     }
   }
 };
 let extId = null;
-const findWorker = () => until("the extension's worker", async () => {
-  await evalApp(`return globalThis.expo.modules.BayExtensions.list("")`).catch(() => null);
-  for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(extId))) {
-    const r = await cdp(t, "Runtime.evaluate", { expression: "typeof self.chromeState", returnByValue: true }).catch(() => null);
-    if (r?.result?.value === "function") return t;
-  }
-  return null;
-}, 15000);
+const findWorker = () =>
+  until(
+    "the extension's worker",
+    async () => {
+      await evalApp(`return globalThis.expo.modules.BayExtensions.list("")`).catch(() => null);
+      for (const t of (await targets()).filter((t) => t.type === "service_worker" && t.url.includes(extId))) {
+        const r = await cdp(t, "Runtime.evaluate", { expression: "typeof self.chromeState", returnByValue: true }).catch(() => null);
+        if (r?.result?.value === "function") return t;
+      }
+      return null;
+    },
+    15000,
+  );
 // Chrome's window of an app tab (by the tab's URL).
 const chromeWindowOf = (state, urlPart) => state.windows.find((w) => w.tabs.some((u) => u?.includes(urlPart)))?.id ?? null;
 
@@ -230,21 +282,25 @@ async function check(name, fn) {
   // Every check needs boot's setup.
   if (only.length && !only.includes(name) && name !== "boot") return;
   const started = Date.now();
-  await report.check(name, async () => {
-    const evidence = await fn();
-    neverFront();
-    results.push({ name, ok: true, evidence, ms: Date.now() - started });
-    return evidence;
-  }, {
-    async onFail(e) {
-      let snapshot = null;
-      try {
-        snapshot = { app: await appState(), chrome: worker ? await ext("chromeState()") : null };
-      } catch {}
-      results.push({ name, ok: false, error: String(e?.message ?? e), snapshot, ms: Date.now() - started });
-      log(`state: ${JSON.stringify(snapshot)}`);
+  await report.check(
+    name,
+    async () => {
+      const evidence = await fn();
+      neverFront();
+      results.push({ name, ok: true, evidence, ms: Date.now() - started });
+      return evidence;
     },
-  });
+    {
+      async onFail(e) {
+        let snapshot = null;
+        try {
+          snapshot = { app: await appState(), chrome: worker ? await ext("chromeState()") : null };
+        } catch {}
+        results.push({ name, ok: false, error: String(e?.message ?? e), snapshot, ms: Date.now() - started });
+        log(`state: ${JSON.stringify(snapshot)}`);
+      },
+    },
+  );
 }
 
 // MARK: Checks
@@ -253,16 +309,26 @@ let mainWindow;
 const openTab = async (url, title, windowId = mainWindow) => {
   const before = new Set(Object.keys(await evalApp(`return nn.store.getState().tabs`)));
   await evalApp(`nn.actions.openUrls([${JSON.stringify(url)}], ${JSON.stringify(windowId)}); return true`);
-  return until(`a tab for ${url}`, () => evalApp(`const s = nn.store.getState();
-    return Object.values(s.tabs).find((t) => !${JSON.stringify([...before])}.includes(t.id) && t.title === ${JSON.stringify(title)} && !s.live[t.id]?.isLoading)?.id ?? null`), 20000);
+  return until(
+    `a tab for ${url}`,
+    () =>
+      evalApp(`const s = nn.store.getState();
+    return Object.values(s.tabs).find((t) => !${JSON.stringify([...before])}.includes(t.id) && t.title === ${JSON.stringify(title)} && !s.live[t.id]?.isLoading)?.id ?? null`),
+    20000,
+  );
 };
 const show = async (tabId) => {
   await evalApp(`nn.actions.switchToTab(${JSON.stringify(tabId)}); return true`);
-  await until(`${tabId} shown`, async () => Object.values((await appState()).windows).some((w) => w.panes.includes(tabId)) && evalApp(`return !!nn.webviews.get(${JSON.stringify(tabId)})`), 10000);
+  await until(
+    `${tabId} shown`,
+    async () => Object.values((await appState()).windows).some((w) => w.panes.includes(tabId)) && evalApp(`return !!nn.webviews.get(${JSON.stringify(tabId)})`),
+    10000,
+  );
 };
 const closeTab = (id) => evalApp(`nn.store.getState().closeTab(${JSON.stringify(id)}); return true`).catch(() => null);
 const prompt = (tabId) => evalApp(`return nn.pageState.getState().pages[${JSON.stringify(tabId)}]?.permission ?? null`);
-const answer = (tabId, id, result) => evalApp(`nn.permissions.answerPermission(${JSON.stringify(tabId)}, ${JSON.stringify(id)}, ${JSON.stringify(result)}); return true`);
+const answer = (tabId, id, result) =>
+  evalApp(`nn.permissions.answerPermission(${JSON.stringify(tabId)}, ${JSON.stringify(id)}, ${JSON.stringify(result)}); return true`);
 // A conference tab in the call (camera live), and its page.
 async function joinedCall(windowId = mainWindow) {
   const url = `${origin()}/conf`;
@@ -277,14 +343,19 @@ async function joinedCall(windowId = mainWindow) {
   return { tab, t, url };
 }
 const pipState = (t) => js(t, "state()");
-const booted = () => until("the dev harness", async () => {
-  try {
-    return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
-  } catch (e) {
-    if (!alive()) throw e;
-    return null;
-  }
-}, 90000);
+const booted = () =>
+  until(
+    "the dev harness",
+    async () => {
+      try {
+        return await evalApp(`return globalThis.expo.modules.BayCEF.engineInfo()`, 3000);
+      } catch (e) {
+        if (!alive()) throw e;
+        return null;
+      }
+    },
+    90000,
+  );
 // The app-active seam of a test instance (NNCoreActivation.mm): the user in another app, or back.
 const setAppActive = async (active) => {
   const n = (await nativeWindows())[0]?.window;
@@ -323,12 +394,22 @@ try {
       await sleep(800);
       const base = (await pipState(call.t)).pip;
       const focusSteps = [];
-      for (const [pane, url] of [[notes, "/notes"], [call.tab, "/conf"], [notes, "/notes"], [call.tab, "/conf"], [notes, "/notes"]]) {
+      for (const [pane, url] of [
+        [notes, "/notes"],
+        [call.tab, "/conf"],
+        [notes, "/notes"],
+        [call.tab, "/conf"],
+        [notes, "/notes"],
+      ]) {
         await cef(`devFocusPage(${await browserOf(pane)})`);
-        const chrome = await until(`Chrome selects the ${url} pane`, async () => {
-          const c = await ext("chromeState()");
-          return c.windows.some((w) => w.active?.includes(url)) ? c : null;
-        }, 8000);
+        await until(
+          `Chrome selects the ${url} pane`,
+          async () => {
+            const c = await ext("chromeState()");
+            return c.windows.some((w) => w.active?.includes(url)) ? c : null;
+          },
+          8000,
+        );
         await sleep(900);
         const p = await pipState(call.t);
         focusSteps.push({ chromeActive: url, pip: p.pip - base, open: p.open });
@@ -337,20 +418,28 @@ try {
       // Leaving the split (another tab of the window).
       const other = await openTab(`${origin()}/other?t=Other`, "Other");
       await show(other);
-      await until("the call popped out", async () => {
-        const p = await pipState(call.t);
-        return p.pip > base && p.open ? p : null;
-      }, 8000);
+      await until(
+        "the call popped out",
+        async () => {
+          const p = await pipState(call.t);
+          return p.pip > base && p.open ? p : null;
+        },
+        8000,
+      );
       await sleep(1500);
       const settled = await pipState(call.t);
       if (settled.pip !== base + 1) throw new Error(`the handler ran ${settled.pip - base} times leaving the split`);
       const chromeAway = await ext("chromeState()");
       // Back to the split: the window closes, and nothing pops out again.
       await show(call.tab);
-      const back = await until("the call's window closed", async () => {
-        const p = await pipState(call.t);
-        return !p.open ? p : null;
-      }, 8000);
+      const back = await until(
+        "the call's window closed",
+        async () => {
+          const p = await pipState(call.t);
+          return !p.open ? p : null;
+        },
+        8000,
+      );
       await sleep(1000);
       const after = await pipState(call.t);
       if (after.pip !== base + 1 || after.open) throw new Error(`after coming back: ${JSON.stringify(after)}`);
@@ -370,10 +459,14 @@ try {
     try {
       const ntp = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)})`);
       await until("the New Tab page shown", async () => (await appState()).windows[mainWindow].shown === ntp);
-      const out = await until("the call popped out (New Tab)", async () => {
-        const p = await pipState(call.t);
-        return p.pip >= 1 && p.open ? p : null;
-      }, 8000);
+      await until(
+        "the call popped out (New Tab)",
+        async () => {
+          const p = await pipState(call.t);
+          return p.pip >= 1 && p.open ? p : null;
+        },
+        8000,
+      );
       await sleep(1200);
       const chrome = await ext("chromeState()");
       steps.newTab = { pip: (await pipState(call.t)).pip, chromeActive: chrome.windows.find((w) => w.tabs.some((u) => u?.includes("/conf")))?.active };
@@ -386,10 +479,14 @@ try {
       const work = await evalApp(`return nn.store.getState().createProfile({ name: "Work" })`);
       await evalApp(`nn.actions.switchProfile(${JSON.stringify(mainWindow)}, ${JSON.stringify(work)}); return true`);
       await until("the Work Space shown", async () => (await appState()).windows[mainWindow].profile === work, 10000);
-      await until("the call popped out (Space)", async () => {
-        const p = await pipState(call.t);
-        return p.pip >= 2 && p.open ? p : null;
-      }, 8000);
+      await until(
+        "the call popped out (Space)",
+        async () => {
+          const p = await pipState(call.t);
+          return p.pip >= 2 && p.open ? p : null;
+        },
+        8000,
+      );
       await sleep(1200);
       steps.space = { pip: (await pipState(call.t)).pip };
       if (steps.space.pip !== 2) throw new Error(`Space: the handler ran ${steps.space.pip - 1} times`);
@@ -415,10 +512,14 @@ try {
       await sleep(600);
       const base = (await pipState(call.t)).pip;
       await win("fakeOcclusion:occluded");
-      await until("the call popped out (covered)", async () => {
-        const p = await pipState(call.t);
-        return p.pip > base && p.open ? p : null;
-      }, 8000);
+      await until(
+        "the call popped out (covered)",
+        async () => {
+          const p = await pipState(call.t);
+          return p.pip > base && p.open ? p : null;
+        },
+        8000,
+      );
       await sleep(1200);
       out.covered = (await pipState(call.t)).pip - base;
       if (out.covered !== 1) throw new Error(`covered: the handler ran ${out.covered} times`);
@@ -429,12 +530,19 @@ try {
       for (const gap of [-150, 40, 120, 300, 40]) {
         await win(`fakeFullScreenOcclusionMs:${gap}`);
         for (const want of [true, false]) {
-          const r = await js(call.t, want ? "document.documentElement.requestFullscreen().then(() => 'ok', (e) => e.name)" : "document.exitFullscreen().then(() => 'ok', (e) => e.name)");
+          const r = await js(
+            call.t,
+            want ? "document.documentElement.requestFullscreen().then(() => 'ok', (e) => e.name)" : "document.exitFullscreen().then(() => 'ok', (e) => e.name)",
+          );
           if (r !== "ok") throw new Error(`full screen ${want}: ${r}`);
-          await until(`the window ${want ? "in" : "out of"} full screen`, async () => {
-            const w = JSON.parse(await win("fullScreen"));
-            return w.fullScreen === want && !w.pageFullScreen?.transitioning ? w : null;
-          }, 6000);
+          await until(
+            `the window ${want ? "in" : "out of"} full screen`,
+            async () => {
+              const w = JSON.parse(await win("fullScreen"));
+              return w.fullScreen === want && !w.pageFullScreen?.transitioning ? w : null;
+            },
+            6000,
+          );
         }
         await sleep(Math.max(0, gap) + 600);
         const p = await pipState(call.t);
@@ -513,8 +621,13 @@ try {
     const logFrom = activationLog().length;
     const numbersBefore = new Set((await nativeWindows()).map((w) => w.window));
     const behind = await evalApp(`return nn.actions.openWindow({ url: "${origin()}/behind?t=Behind", background: true })`);
-    const first = await until("its tab loaded", () => evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(behind)}];
-      const t = w && s.tabs[w.activeTabIds[w.profileId]]; return t?.title === "Behind" && !s.live[t.id]?.isLoading ? t.id : null`), 20000);
+    const first = await until(
+      "its tab loaded",
+      () =>
+        evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(behind)}];
+      const t = w && s.tabs[w.activeTabIds[w.profileId]]; return t?.title === "Behind" && !s.live[t.id]?.isLoading ? t.id : null`),
+      20000,
+    );
     const second = await openTab(`${origin()}/behind2?t=Behind2`, "Behind2", behind);
     const behindNumber = await until("its native window", async () => (await nativeWindows()).find((w) => !numbersBefore.has(w.window))?.window ?? null);
     const steps = [];
@@ -524,19 +637,29 @@ try {
       const a = await appState();
       const lastUsed = (await cef("engineInfo()")).lastUsedProfile;
       const focusedBehind = focusRequests(logFrom).includes(behindNumber);
-      steps.push({ step, lastFocused: c.lastFocused === homeChrome ? "user's" : c.lastFocused, lastUsed, appFocused: a.focused === mainWindow ? "user's" : a.focused });
+      steps.push({
+        step,
+        lastFocused: c.lastFocused === homeChrome ? "user's" : c.lastFocused,
+        lastUsed,
+        appFocused: a.focused === mainWindow ? "user's" : a.focused,
+      });
       if (c.lastFocused !== homeChrome) throw new Error(`${step}: Chrome's last focused window is ${c.lastFocused}, not the user's ${homeChrome}`);
       if (lastUsed !== profileBefore) throw new Error(`${step}: last used profile ${lastUsed}, was ${profileBefore}`);
       if (focusedBehind) throw new Error(`${step}: the app asked AppKit to focus the window behind`);
-      if (c.windows.find((w) => w.id === homeChrome)?.active?.includes("/home") !== true) throw new Error(`${step}: Chrome's selected tab in the user's window moved`);
+      if (c.windows.find((w) => w.id === homeChrome)?.active?.includes("/home") !== true)
+        throw new Error(`${step}: Chrome's selected tab in the user's window moved`);
     };
     try {
       await verify("made behind");
-      const work = await evalApp(`return Object.keys(nn.store.getState().profiles).find((p) => p !== nn.store.getState().windows[${JSON.stringify(mainWindow)}].profileId) ?? nn.store.getState().createProfile({ name: "Work2" })`);
+      const work = await evalApp(
+        `return Object.keys(nn.store.getState().profiles).find((p) => p !== nn.store.getState().windows[${JSON.stringify(mainWindow)}].profileId) ?? nn.store.getState().createProfile({ name: "Work2" })`,
+      );
       await evalApp(`nn.store.getState().switchProfile(${JSON.stringify(behind)}, ${JSON.stringify(work)}); return true`);
       await until("its Space changed", async () => (await appState()).windows[behind]?.profile === work, 10000);
       await verify("Space changed");
-      await evalApp(`nn.store.getState().switchProfile(${JSON.stringify(behind)}, nn.store.getState().windows[${JSON.stringify(mainWindow)}].profileId); return true`);
+      await evalApp(
+        `nn.store.getState().switchProfile(${JSON.stringify(behind)}, nn.store.getState().windows[${JSON.stringify(mainWindow)}].profileId); return true`,
+      );
       await sleep(500);
       await closeTab(second);
       await verify("shown tab closed");
@@ -555,26 +678,40 @@ try {
     await show(home);
     const numbersBefore = new Set((await nativeWindows()).map((w) => w.window));
     const other = await evalApp(`return nn.actions.openWindow({ url: "${origin()}/b-window?t=BWindow", background: true })`);
-    await until("B's tab", () => evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "BWindow" ? true : null`), 20000);
+    await until(
+      "B's tab",
+      () =>
+        evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
+      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "BWindow" ? true : null`),
+      20000,
+    );
     const bNumber = await until("B's native window", async () => (await nativeWindows()).find((w) => !numbersBefore.has(w.window))?.window ?? null);
     const aNumber = (await nativeWindows()).find((w) => w.window !== bNumber && numbersBefore.has(w.window))?.window;
     try {
       // A is the user's window (the app focuses it: its request stands for the key window here).
       await evalApp(`nn.actions.focus(${JSON.stringify(mainWindow)}); return true`);
       const s0 = await ext("chromeState()");
-      const a = chromeWindowOf(s0, "/home2"), b = chromeWindowOf(s0, "/b-window");
-      await until("A Chrome's last focused", async () => ((await ext("chromeState()")).lastFocused === a ? true : null), 5000)
-        .catch(async () => { throw new Error(`before: last focused ${(await ext("chromeState()")).lastFocused}, A is ${a}`); });
+      const a = chromeWindowOf(s0, "/home2"),
+        b = chromeWindowOf(s0, "/b-window");
+      await until("A Chrome's last focused", async () => ((await ext("chromeState()")).lastFocused === a ? true : null), 5000).catch(async () => {
+        throw new Error(`before: last focused ${(await ext("chromeState()")).lastFocused}, A is ${a}`);
+      });
       const steps = [];
-      for (const [target, number, name] of [[b, bNumber, "B"], [a, aNumber, "A"]]) {
+      for (const [target, number, name] of [
+        [b, bNumber, "B"],
+        [a, aNumber, "A"],
+      ]) {
         const logFrom = activationLog().length;
         await ext(`chrome.windows.update(${target}, { focused: true }).then(() => true)`);
         const asked = await until(`AppKit asked to focus ${name}`, async () => (focusRequests(logFrom).includes(number) ? true : null), 5000);
-        const c = await until(`Chrome's last focused is ${name}`, async () => {
-          const c = await ext("chromeState()");
-          return c.lastFocused === target ? c : null;
-        }, 5000);
+        await until(
+          `Chrome's last focused is ${name}`,
+          async () => {
+            const c = await ext("chromeState()");
+            return c.lastFocused === target ? c : null;
+          },
+          5000,
+        );
         steps.push({ window: name, askedAppKit: asked, lastFocused: name });
       }
       const logFrom = activationLog().length;
@@ -620,7 +757,11 @@ try {
       await sleep(1200);
       const p = await pipState(call.t);
       if (p.pip !== base || p.open) throw new Error(`the call popped out: ${JSON.stringify(p)}`);
-      return { savePage: { saved, activated: 0 }, devTools: { opened: devtools.url.slice(0, 30), chromeSelections: (await activations(eventsBefore)).length }, pip: p.pip - base };
+      return {
+        savePage: { saved, activated: 0 },
+        devTools: { opened: devtools.url.slice(0, 30), chromeSelections: (await activations(eventsBefore)).length },
+        pip: p.pip - base,
+      };
     } finally {
       await evalApp(`return nn.webviews.get(${JSON.stringify(call.tab)})?.closeDevTools?.()`).catch(() => null);
       await closeTab(notes);
@@ -668,11 +809,19 @@ try {
     let made = null;
     try {
       made = await typeIntoNewWindow(text);
-      const field = await until("the new window's field to hold the text", async () => {
-        const fields = await evalApp(`return nn.omnibox.ids().filter((id) => id.startsWith(${JSON.stringify(made + ":")})).map((id) => nn.omnibox.get(id).state().typed)`);
-        return fields.find((v) => v === text) ?? null;
-      }, 5000).catch(async (e) => {
-        throw new Error(`${e.message}: fields ${JSON.stringify(await evalApp(`return nn.omnibox.ids().map((id) => [id, nn.omnibox.get(id).state().typed])`))}, old page got ${JSON.stringify(await js(t, "__keys"))}`);
+      const field = await until(
+        "the new window's field to hold the text",
+        async () => {
+          const fields = await evalApp(
+            `return nn.omnibox.ids().filter((id) => id.startsWith(${JSON.stringify(made + ":")})).map((id) => nn.omnibox.get(id).state().typed)`,
+          );
+          return fields.find((v) => v === text) ?? null;
+        },
+        5000,
+      ).catch(async (e) => {
+        throw new Error(
+          `${e.message}: fields ${JSON.stringify(await evalApp(`return nn.omnibox.ids().map((id) => [id, nn.omnibox.get(id).state().typed])`))}, old page got ${JSON.stringify(await js(t, "__keys"))}`,
+        );
       });
       const oldPage = await js(t, "__keys");
       if (oldPage) throw new Error(`the old window's page got keys: ${JSON.stringify(oldPage)}`);
@@ -691,11 +840,17 @@ try {
     let made = null;
     try {
       made = await typeIntoNewWindow(`${url}\r`);
-      const opened = await until("the typed address in the new window", () => evalApp(`const s = nn.store.getState();
-        return Object.values(s.tabs).find((x) => x.windowId === ${JSON.stringify(made)} && x.url?.includes("/typed"))?.url ?? null`), 10000)
-        .catch(async (e) => {
-          throw new Error(`${e.message}: its tabs ${JSON.stringify(await evalApp(`const s = nn.store.getState(); return Object.values(s.tabs).filter((x) => x.windowId === ${JSON.stringify(made)}).map((x) => x.url)`))}`);
-        });
+      const opened = await until(
+        "the typed address in the new window",
+        () =>
+          evalApp(`const s = nn.store.getState();
+        return Object.values(s.tabs).find((x) => x.windowId === ${JSON.stringify(made)} && x.url?.includes("/typed"))?.url ?? null`),
+        10000,
+      ).catch(async (e) => {
+        throw new Error(
+          `${e.message}: its tabs ${JSON.stringify(await evalApp(`const s = nn.store.getState(); return Object.values(s.tabs).filter((x) => x.windowId === ${JSON.stringify(made)}).map((x) => x.url)`))}`,
+        );
+      });
       const oldPage = await js(t, "__keys");
       if (oldPage) throw new Error(`the old window's page got keys: ${JSON.stringify(oldPage)}`);
       return { opened: new URL(opened).pathname };
@@ -733,18 +888,33 @@ try {
     const home = await openTab(`${origin()}/front-a?t=FrontA`, "FrontA");
     await show(home);
     const other = await evalApp(`return nn.actions.openWindow({ url: "${origin()}/front-b?t=FrontB", background: true })`);
-    await until("B's tab", () => evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "FrontB" ? true : null`), 20000);
+    await until(
+      "B's tab",
+      () =>
+        evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
+      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "FrontB" ? true : null`),
+      20000,
+    );
     const steps = [];
     try {
-      for (const [win, name] of [[other, "B"], [mainWindow, "A"], [other, "B"]]) {
+      for (const [win, name] of [
+        [other, "B"],
+        [mainWindow, "A"],
+        [other, "B"],
+      ]) {
         await evalApp(`nn.actions.focus(${JSON.stringify(win)}); return true`);
         await sleep(300);
         const path = `/made-${steps.length}`;
         await ext(`chrome.windows.create({ url: "${origin()}${path}?t=Made" }).then(() => true)`);
-        const placed = await until(`the made tab in the app`, () => evalApp(`return Object.values(nn.store.getState().tabs).find((t) => t.url?.includes(${JSON.stringify(path)}))?.windowId ?? null`), 15000);
+        const placed = await until(
+          `the made tab in the app`,
+          () => evalApp(`return Object.values(nn.store.getState().tabs).find((t) => t.url?.includes(${JSON.stringify(path)}))?.windowId ?? null`),
+          15000,
+        );
         steps.push({ front: name, landed: placed === mainWindow ? "A" : placed === other ? "B" : placed });
-        await evalApp(`const t = Object.values(nn.store.getState().tabs).find((t) => t.url?.includes(${JSON.stringify(path)})); if (t) nn.store.getState().closeTab(t.id); return true`);
+        await evalApp(
+          `const t = Object.values(nn.store.getState().tabs).find((t) => t.url?.includes(${JSON.stringify(path)})); if (t) nn.store.getState().closeTab(t.id); return true`,
+        );
         if (placed !== win) throw new Error(`front ${name}, the tab went to ${placed}: ${JSON.stringify(steps)}`);
       }
       return steps;
@@ -774,8 +944,11 @@ try {
           return new Promise((r) => setTimeout(() => { nn.actions.switchToTab(${JSON.stringify(a)}); r(true); }, 40))`);
         await sleep(50);
         await cef(`devFocusPage(${bBrowser})`);
-        const shown = await until("B active after the click", async () => ((await appState()).windows[mainWindow].shown === b ? b : null), 3000)
-          .catch(async () => { throw new Error(`round ${i}: the click into B was dropped (shown ${(await appState()).windows[mainWindow].shown === a ? "A" : "?"})`); });
+        const shown = await until("B active after the click", async () => ((await appState()).windows[mainWindow].shown === b ? b : null), 3000).catch(
+          async () => {
+            throw new Error(`round ${i}: the click into B was dropped (shown ${(await appState()).windows[mainWindow].shown === a ? "A" : "?"})`);
+          },
+        );
         rounds.push(shown === b ? "B" : shown);
         await sleep(400);
       }
@@ -793,13 +966,19 @@ try {
     await show(home);
     const numbersBefore = new Set((await nativeWindows()).map((w) => w.window));
     const other = await evalApp(`return nn.actions.openWindow({ url: "${origin()}/inactive-b?t=InactiveB", background: true })`);
-    await until("B's tab", () => evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "InactiveB" ? true : null`), 20000);
+    await until(
+      "B's tab",
+      () =>
+        evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
+      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "InactiveB" ? true : null`),
+      20000,
+    );
     const bNumber = await until("B's native window", async () => (await nativeWindows()).find((w) => !numbersBefore.has(w.window))?.window ?? null);
     try {
       await evalApp(`nn.actions.focus(${JSON.stringify(mainWindow)}); return true`);
       const s0 = await ext("chromeState()");
-      const a = chromeWindowOf(s0, "/inactive-a"), b = chromeWindowOf(s0, "/inactive-b");
+      const a = chromeWindowOf(s0, "/inactive-a"),
+        b = chromeWindowOf(s0, "/inactive-b");
       await until("A Chrome's last focused", async () => ((await ext("chromeState()")).lastFocused === a ? true : null), 5000);
       const aNumber = await keyWindow();
       await setAppActive(false);
@@ -834,8 +1013,13 @@ try {
     await evalApp(`return nn.store.getState().createSplit(["${ra}", "${rb}"])`);
     await show(ra);
     const other = await evalApp(`return nn.actions.openWindow({ url: "${origin()}/restore-c?t=RestoreC", background: true })`);
-    await until("C's tab", () => evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
-      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "RestoreC" ? true : null`), 20000);
+    await until(
+      "C's tab",
+      () =>
+        evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(other)}];
+      return s.tabs[w?.activeTabIds[w?.profileId]]?.title === "RestoreC" ? true : null`),
+      20000,
+    );
     const rd = await openTab(`${origin()}/restore-d?t=RestoreD`, "RestoreD", other);
     await evalApp(`nn.actions.switchToTab(${JSON.stringify(rd)}); return true`);
     await until("D shown", async () => (await appState()).windows[other]?.shown === rd);
@@ -845,16 +1029,23 @@ try {
     const before = await appState();
     // A window by a tab it has, and the tab it should select.
     const want = { "/restore-a": pathOf(before.windows[mainWindow].url), "/restore-d": pathOf(before.windows[other].url) };
-    await evalApp(`return nn.shell.devKeyEquivalent(${JSON.stringify(mainWindow)}, { key: "q", keyCode: 12, modifiers: ["command"], focus: "window" })`, 5000).catch(() => null);
+    await evalApp(
+      `return nn.shell.devKeyEquivalent(${JSON.stringify(mainWindow)}, { key: "q", keyCode: 12, modifiers: ["command"], focus: "window" })`,
+      5000,
+    ).catch(() => null);
     await until("the app to exit", async () => !alive(), 30000);
     const relaunched = Date.now();
     await launch("app-restored.out.log");
     await booted();
     worker = await findWorker();
-    await until("the restored windows' selected tabs", async () => {
-      const c = await ext("chromeState()");
-      return Object.keys(want).every((p) => c.windows.some((w) => w.active && w.tabs.some((u) => u?.includes(p)))) ? c : null;
-    }, 30000);
+    await until(
+      "the restored windows' selected tabs",
+      async () => {
+        const c = await ext("chromeState()");
+        return Object.keys(want).every((p) => c.windows.some((w) => w.active && w.tabs.some((u) => u?.includes(p)))) ? c : null;
+      },
+      30000,
+    );
     await sleep(2500);
     const final = await ext("chromeState()");
     const events = (await ext("events()")).filter((e) => e.at >= relaunched && e.name === "activated");

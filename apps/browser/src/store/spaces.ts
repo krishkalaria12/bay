@@ -28,8 +28,7 @@ export const DEFAULT_SPACE: Space = { id: DEFAULT_SPACE_ID, name: "Personal", co
 
 const COLORS: SpaceColor[] = ["blue", "green", "orange", "purple", "red", "yellow", "pink"];
 
-export const unusedSpaceColor = (spaces: Record<string, Space>): SpaceColor =>
-  COLORS.find((c) => !Object.values(spaces).some((p) => p.color === c)) ?? "blue";
+export const unusedSpaceColor = (spaces: Record<string, Space>): SpaceColor => COLORS.find((c) => !Object.values(spaces).some((p) => p.color === c)) ?? "blue";
 
 // MARK: Shared data
 
@@ -66,7 +65,13 @@ export function sharingSpaces(s: Pick<BrowserState, "spaces" | "spaceOrder">, id
 
 function syncSharedData(s: BrowserState, prev: BrowserState): Partial<BrowserState> | null {
   if (s.spaces !== prev.spaces) {
-    setSpaceProfiles(Object.fromEntries(Object.values(s.spaces).filter((p) => p.profileId).map((p) => [p.id, p.profileId!])));
+    setSpaceProfiles(
+      Object.fromEntries(
+        Object.values(s.spaces)
+          .filter((p) => p.profileId)
+          .map((p) => [p.id, p.profileId!]),
+      ),
+    );
   }
   if (s.spaces === prev.spaces && s.history === prev.history && s.bookmarks.roots === prev.bookmarks.roots) return null;
   let history = s.history;
@@ -135,7 +140,8 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
       } else {
         if (!sharingSpaces(s, id).length) return;
         // Its own id names its new profile, unless other spaces' profile has it (or that data is still going).
-        const free = !Object.values(s.spaces).some((o) => o.id !== id && profileIdOf(o) === id) && !s.orphanedProfileData.includes(engineIdOf({ ...p, profileId: id }));
+        const free =
+          !Object.values(s.spaces).some((o) => o.id !== id && profileIdOf(o) === id) && !s.orphanedProfileData.includes(engineIdOf({ ...p, profileId: id }));
         profileId = free ? id : newId("d");
       }
       const { profileId: _, ...rest } = p;
@@ -196,9 +202,10 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
       };
       const shared = sharingSpaces(s, id).length > 0;
       const engine = engineIdOf(s.spaces[id]!);
-      const orphaned = spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine) || s.orphanedProfileData.includes(engine)
-        ? s.orphanedProfileData
-        : [...s.orphanedProfileData, engine];
+      const orphaned =
+        spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine) || s.orphanedProfileData.includes(engine)
+          ? s.orphanedProfileData
+          : [...s.orphanedProfileData, engine];
 
       // Its windows show the fallback space: the tab each showed there, else its most recent one, else a new one.
       for (const w of Object.values(s.windows)) {
@@ -210,7 +217,9 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
       }
       s = removeTabs(
         s,
-        Object.values(s.tabs).filter((t) => t.spaceId === id).map((t) => t.id),
+        Object.values(s.tabs)
+          .filter((t) => t.spaceId === id)
+          .map((t) => t.id),
         false,
       );
       const windows = { ...s.windows };
@@ -226,15 +235,14 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         orphanedProfileData: orphaned,
         settings,
         history: without(s.history, [id]),
-        bookmarks: roots && !shared ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
+        bookmarks:
+          roots && !shared ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
         groups: Object.fromEntries(Object.entries(s.groups).filter(([, g]) => g.spaceId !== id)),
         closedTabs: s.closedTabs.filter((c) => c.tab.spaceId !== id),
         cleanedTabs: s.cleanedTabs.filter((c) => c.tab.spaceId !== id),
         closedGroups: s.closedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
         deletedGroups: s.deletedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
-        closedWindows: s.closedWindows
-          .filter((c) => c.window.spaceId !== id)
-          .map((c) => ({ ...c, tabs: c.tabs.filter((t) => t.spaceId !== id) })),
+        closedWindows: s.closedWindows.filter((c) => c.window.spaceId !== id).map((c) => ({ ...c, tabs: c.tabs.filter((t) => t.spaceId !== id) })),
         pinnedFolders: Object.fromEntries(Object.entries(s.pinnedFolders).filter(([, f]) => f.spaceId !== id)),
       });
       for (const w of Object.values(get().windows)) {

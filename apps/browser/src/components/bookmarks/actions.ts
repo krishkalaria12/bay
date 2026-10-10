@@ -93,11 +93,8 @@ export function bookmarkTab(windowId: string, tabId: string) {
   if (!s.windows[id] || !tab?.url) return;
   const spaceId = bookmarkSpaceId(s, s.windows[id]);
   const roots = s.bookmarks.roots[spaceId];
-  const existing = Object.values(s.bookmarks.nodes).find(
-    (n) => n.kind === "url" && n.url === tab.url && roots && isUnder(n.id, [roots.bar, roots.other]),
-  );
-  const bookmarkId =
-    existing?.id ?? s.addBookmark({ spaceId, url: tab.url, title: tab.customTitle || tab.title || tab.url, favicon: tab.favicon });
+  const existing = Object.values(s.bookmarks.nodes).find((n) => n.kind === "url" && n.url === tab.url && roots && isUnder(n.id, [roots.bar, roots.other]));
+  const bookmarkId = existing?.id ?? s.addBookmark({ spaceId, url: tab.url, title: tab.customTitle || tab.title || tab.url, favicon: tab.favicon });
   useBookmarkDialog.getState().set({ kind: "page", windowId: id, bookmarkId });
 }
 

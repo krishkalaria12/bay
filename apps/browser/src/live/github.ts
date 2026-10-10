@@ -113,7 +113,14 @@ function mapPR(raw: RawPR, section: PullRequestSection): LiveItem {
     draft: raw.isDraft,
     headRef: raw.headRefName,
     baseRef: raw.baseRefName,
-    review: raw.reviewDecision === "APPROVED" ? "approved" : raw.reviewDecision === "CHANGES_REQUESTED" ? "changesRequested" : raw.reviewDecision === "REVIEW_REQUIRED" ? "required" : null,
+    review:
+      raw.reviewDecision === "APPROVED"
+        ? "approved"
+        : raw.reviewDecision === "CHANGES_REQUESTED"
+          ? "changesRequested"
+          : raw.reviewDecision === "REVIEW_REQUIRED"
+            ? "required"
+            : null,
     mergeable: raw.mergeable === "CONFLICTING" ? "conflicting" : raw.mergeable === "MERGEABLE" ? "mergeable" : "unknown",
     checks,
     comments: raw.comments.totalCount,
@@ -174,8 +181,7 @@ export function withDetails(json: GithubResponse, details: (RawPR | null)[]): Gi
   const data = json.data;
   if (!data) return json;
   const byId = new Map(details.filter((d): d is RawPR => !!d && isPR(d) && d.state === "OPEN").map((d) => [d.id, d]));
-  const fill = (nodes: (RawPR | { id: string } | Record<string, never>)[]) =>
-    nodes.flatMap((n) => ("id" in n && byId.has(n.id) ? [byId.get(n.id)!] : []));
+  const fill = (nodes: (RawPR | { id: string } | Record<string, never>)[]) => nodes.flatMap((n) => ("id" in n && byId.has(n.id) ? [byId.get(n.id)!] : []));
   return { ...json, data: { ...data, authored: { nodes: fill(data.authored.nodes) }, review: { nodes: fill(data.review.nodes) } } };
 }
 
@@ -186,10 +192,18 @@ export function mapGithub(json: GithubResponse, filters: { authored: boolean; re
   const out: LiveItem[] = [];
   const seen = new Set<string>();
   if (filters.authored) {
-    for (const n of data.authored.nodes) if (isPR(n) && !seen.has(n.id)) (seen.add(n.id), out.push(mapPR(n, "authored")));
+    for (const n of data.authored.nodes) {
+      if (!isPR(n) || seen.has(n.id)) continue;
+      seen.add(n.id);
+      out.push(mapPR(n, "authored"));
+    }
   }
   if (filters.reviewRequests) {
-    for (const n of data.review.nodes) if (isPR(n) && !seen.has(n.id)) (seen.add(n.id), out.push(mapPR(n, direct.has(n.id) ? "review" : "team")));
+    for (const n of data.review.nodes) {
+      if (!isPR(n) || seen.has(n.id)) continue;
+      seen.add(n.id);
+      out.push(mapPR(n, direct.has(n.id) ? "review" : "team"));
+    }
   }
   return withStacks(out);
 }

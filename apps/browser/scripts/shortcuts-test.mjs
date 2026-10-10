@@ -47,9 +47,13 @@ process.on("unhandledRejection", (error) => {
   finish(1);
 });
 app = await launch(appPath, {
-  data, port,
+  data,
+  port,
   session: session({
-    spaces: [{ id: "default", name: "Personal", color: "plum" }, { id: "p-work", name: "Work", color: "blue" }],
+    spaces: [
+      { id: "default", name: "Personal", color: "plum" },
+      { id: "p-work", name: "Work", color: "blue" },
+    ],
     windows: [{ id: "w1", tabIds: ids, activeTabIds: { default: "t3" } }],
     tabs: ids.map((id) => tab(id, id.startsWith("pin"))),
   }),
@@ -61,10 +65,11 @@ rep.log(`instance: pid ${app.pid}, DevTools port ${app.port}, data ${data}`);
 await app.eval(`nn.developer.setDeveloperMode(${JSON.stringify(pages)}, false); return 1;`);
 await sleep(3000);
 
-const nn = (body, timeout = 60000) => app.eval(body, { timeout }).catch((error) => {
-  error.message += `\n${body}`;
-  throw error;
-});
+const nn = (body, timeout = 60000) =>
+  app.eval(body, { timeout }).catch((error) => {
+    error.message += `\n${body}`;
+    throw error;
+  });
 // The expression's value in the first page whose URL holds urlPart (undefined without one, or on an exception).
 async function cdp(urlPart, expression) {
   if (!(await app.pageTarget(urlPart))) return undefined;
@@ -78,10 +83,12 @@ async function cdp(urlPart, expression) {
   }
 }
 
-const state = () => nn(`const s = nn.store.getState(), w = s.windows.w1;
+const state = () =>
+  nn(`const s = nn.store.getState(), w = s.windows.w1;
   return { profile: w.spaceId, active: w.activeTabIds[w.spaceId], tabs: w.tabIds.length,
     panel: !!s.windowUi.w1?.panel.open, panelMode: s.windowUi.w1?.panel.mode };`);
-const activeUrl = async () => (await nn(`const s = nn.store.getState(), w = s.windows.w1; return w ? s.tabs[w.activeTabIds[w.spaceId]]?.url ?? "" : "no window w1";`));
+const activeUrl = async () =>
+  await nn(`const s = nn.store.getState(), w = s.windows.w1; return w ? s.tabs[w.activeTabIds[w.spaceId]]?.url ?? "" : "no window w1";`);
 const press = (key, options) => nn(`return nn.shell.devKeyEquivalent("w1", ${JSON.stringify({ ...key, ...options })});`);
 
 const F = (code) => String.fromCharCode(code);
@@ -166,7 +173,12 @@ const shortcuts = [
   ["⌃Tab", K("\t", 48, "control"), { command: "tabSwitcher", arg: "forward" }, "⌃Tab"],
   ["⌃⇧Tab", K("\u0019", 48, "control", "shift"), { command: "tabSwitcher", arg: "backward" }, "⌃⇧Tab"],
   ["⌘↩", cmd("\r", 36), { command: "returnToPinnedUrl" }, "⌘↩", "not-field"],
-  ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [`⌘${n}`, cmd(`${n}`, [18, 19, 20, 21, 23, 22, 26, 28][n - 1]), { command: "selectTab", arg: `${n}` }, `⌘${n} (Chromium)`]),
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [
+    `⌘${n}`,
+    cmd(`${n}`, [18, 19, 20, 21, 23, 22, 26, 28][n - 1]),
+    { command: "selectTab", arg: `${n}` },
+    `⌘${n} (Chromium)`,
+  ]),
   ["⌘9", cmd("9", 25), { command: "selectLastTab" }, "⌘9 (Chromium)"],
   ["⌃⌘N", cmd("n", 45, "control"), { command: "newGroupWithTabs" }, "⌃⌘N"],
   ["⌃⌘P", cmd("p", 35, "control"), { command: "newGroupWithTabs" }, "(Chrome's)"],
@@ -190,10 +202,13 @@ const shortcuts = [
 const same = (f, expect) =>
   expect.command
     ? f.command === expect.command && (expect.arg === undefined || f.arg === expect.arg)
-    : expect.title instanceof RegExp ? expect.title.test(f.title) : f.title === expect.title;
+    : expect.title instanceof RegExp
+      ? expect.title.test(f.title)
+      : f.title === expect.title;
 function verdict(r, expect) {
   if (r.error) return "FAIL";
-  const fired = r.fired ?? [], matched = r.matched ?? [];
+  const fired = r.fired ?? [],
+    matched = r.matched ?? [];
   if (expect === null) return fired.length ? "FAIL" : "ok";
   if (fired.some((f) => same(f, expect))) return "ok";
   if (!fired.length && matched.some((m) => same(m, expect) && !m.enabled)) return "off";
@@ -262,7 +277,8 @@ for (const [focusName, focus] of Object.entries(focuses)) {
     // Text fields consume ⌘↩, ⌘←/→, and ⇧⌘⌫.
     // DevTools' own ⇧⌘D (its dock side) wins while it has the focus, as in Chrome.
     const inField =
-      (only === "not-field" && (focusName === "field" || focusName === "commandBar")) || (only === "page-field" && focusName === "field") ||
+      (only === "not-field" && (focusName === "field" || focusName === "commandBar")) ||
+      (only === "page-field" && focusName === "field") ||
       (only === "devtools-own" && focusName === "devTools");
     await focus.before?.();
     const r = await press(key, { ...focus.press, dry: true });
@@ -330,15 +346,23 @@ let s = await state();
 await press(cmd("t", 17), sidebar);
 await sleep(400);
 let after = await state();
-check("⌘T opens the new tab palette", after.panel && after.panelMode === "newTab" && after.tabs === s.tabs && after.active === s.active,
-  `${s.tabs} → ${after.tabs} tabs; active ${after.active}; panel ${after.panelMode}`);
-await nn(`const driver = nn.omnibox.get("w1:palette"); if (!driver) throw new Error("palette driver missing"); driver.type(${JSON.stringify(`${pages}/?closed`)});`);
+check(
+  "⌘T opens the new tab palette",
+  after.panel && after.panelMode === "newTab" && after.tabs === s.tabs && after.active === s.active,
+  `${s.tabs} → ${after.tabs} tabs; active ${after.active}; panel ${after.panelMode}`,
+);
+await nn(
+  `const driver = nn.omnibox.get("w1:palette"); if (!driver) throw new Error("palette driver missing"); driver.type(${JSON.stringify(`${pages}/?closed`)});`,
+);
 await sleep(100);
 await nn(`nn.omnibox.get("w1:palette").submit();`);
 await sleep(1500);
 after = await state();
-check("submitting the palette opens a tab and selects it", after.tabs === s.tabs + 1 && after.active !== s.active && !after.panel && (await activeUrl()).endsWith("?closed"),
-  `${s.tabs} → ${after.tabs} tabs; active ${after.active}; palette ${after.panel ? "open" : "closed"}`);
+check(
+  "submitting the palette opens a tab and selects it",
+  after.tabs === s.tabs + 1 && after.active !== s.active && !after.panel && (await activeUrl()).endsWith("?closed"),
+  `${s.tabs} → ${after.tabs} tabs; active ${after.active}; palette ${after.panel ? "open" : "closed"}`,
+);
 await press(cmd("w", 13), sidebar);
 await sleep(400);
 check("⌘W closes it", (await state()).tabs === s.tabs, `${(await state()).tabs} tabs`);

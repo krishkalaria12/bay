@@ -99,7 +99,11 @@ const SPACE_SET: [string, string, string][] = [
   ["globe", "Web", "internet browse"],
 ];
 
-export const SPACE_SYMBOLS: (IconChoice & { title: string })[] = SPACE_SET.map(([name, title, words]) => ({ name, title, words: `${title.toLowerCase()} ${words}` }));
+export const SPACE_SYMBOLS: (IconChoice & { title: string })[] = SPACE_SET.map(([name, title, words]) => ({
+  name,
+  title,
+  words: `${title.toLowerCase()} ${words}`,
+}));
 
 export const profileSymbol = (icon: string | null) => (icon?.startsWith(SYMBOL_PREFIX) ? icon.slice(SYMBOL_PREFIX.length) : null);
 

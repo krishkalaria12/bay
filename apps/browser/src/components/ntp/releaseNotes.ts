@@ -102,4 +102,10 @@ export function queueReleaseNotes(version = systemInfo().appVersion) {
   save({ lastVersion: systemInfo().appVersion, pending });
 }
 
-if (__DEV__) (globalThis as { nnReleaseNotes?: unknown }).nnReleaseNotes = { store: useReleaseNotes, queue: queueReleaseNotes, retire: retireReleaseNotes, open: openReleaseNotes };
+if (__DEV__)
+  (globalThis as { nnReleaseNotes?: unknown }).nnReleaseNotes = {
+    store: useReleaseNotes,
+    queue: queueReleaseNotes,
+    retire: retireReleaseNotes,
+    open: openReleaseNotes,
+  };

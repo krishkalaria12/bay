@@ -12,9 +12,7 @@ const fetchedSources = new Map<string, Set<LiveSourceId>>();
 const SECTION_ORDER: Record<PullRequestSection, number> = { authored: 0, review: 1, team: 2 };
 
 function order(items: LiveItem[]): LiveItem[] {
-  return [...items].sort(
-    (a, b) => (SECTION_ORDER[a.section ?? "authored"] ?? 0) - (SECTION_ORDER[b.section ?? "authored"] ?? 0) || b.updatedAt - a.updatedAt,
-  );
+  return [...items].sort((a, b) => (SECTION_ORDER[a.section ?? "authored"] ?? 0) - (SECTION_ORDER[b.section ?? "authored"] ?? 0) || b.updatedAt - a.updatedAt);
 }
 
 export function refreshFolder(folderId: string): Promise<void> {
@@ -132,7 +130,9 @@ export function openLiveItem(windowId: string, folderId: string, item: LiveItem,
 
 export function deleteLiveFolder(folderId: string) {
   const s = useBrowser.getState();
-  const tabs = Object.values(s.tabs).filter((t) => t.liveItem?.folderId === folderId).map((t) => t.id);
+  const tabs = Object.values(s.tabs)
+    .filter((t) => t.liveItem?.folderId === folderId)
+    .map((t) => t.id);
   if (tabs.length) s.closeTabs(tabs);
   removeFolder(folderId);
 }

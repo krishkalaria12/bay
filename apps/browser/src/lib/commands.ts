@@ -1,27 +1,8 @@
-import {
-  closeWindow as closeNativeWindow,
-  copyText,
-  openExternalURL,
-  pickFiles,
-  prompt,
-  setAppearance,
-  sharePage,
-  type CommandEvent,
-} from "@bay/shell";
+import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/shell";
 import { markdownLink } from "@bay/core";
 import { useBrowser } from "../store/browser";
 import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
-import {
-  closeTab,
-  createSpace,
-  cycleSpace,
-  focus,
-  moveTabToSpace,
-  moveTabToWindow,
-  openWindow,
-  switchSpace,
-  toggleMute,
-} from "./actions";
+import { closeTab, createSpace, cycleSpace, focus, moveTabToSpace, moveTabToWindow, openWindow, switchSpace, toggleMute } from "./actions";
 import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/actions";
 import { useClearDataRequest } from "../components/pages/ClearDataDialog";
 import { openInternalPage } from "../components/pages/urls";
@@ -154,9 +135,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void web?.runPageCommand("caretBrowsing");
     case "emailPageLocation":
       if (!page || !/^https?:/i.test(page.url)) return;
-      return void openExternalURL(
-        `mailto:?subject=${encodeURIComponent(page.customTitle || page.title || page.url)}&body=${encodeURIComponent(page.url)}`,
-      );
+      return void openExternalURL(`mailto:?subject=${encodeURIComponent(page.customTitle || page.title || page.url)}&body=${encodeURIComponent(page.url)}`);
     case "stop":
       return void web?.stopLoading();
     case "share":
@@ -300,11 +279,44 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
 // What Little Bay runs on its own page; everything else goes to the main window (menuState disables the tab and
 // sidebar commands that make no sense from there).
 const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
-  "print", "printWithSystemDialog", "savePage", "caretBrowsing", "emailPageLocation", "stop", "share", "copyUrl",
-  "copyUrlAsMarkdown", "findInPage", "findAndReplace", "jumpToSelection", "useSelectionForFind", "findNext", "findPrevious",
-  "reload", "forceReload", "zoomIn", "zoomOut", "zoomReset", "devTools", "toggleDevTools", "inspectElements",
-  "javaScriptConsole", "viewSource", "back", "forward", "bookmarkPage", "addBookmarkToFolder", "openBookmark", "toggleMute",
-  "cast", "openExtension", "addExtension", "autofill", "reopenClosedTab", "restoreClosed", "downloads",
+  "print",
+  "printWithSystemDialog",
+  "savePage",
+  "caretBrowsing",
+  "emailPageLocation",
+  "stop",
+  "share",
+  "copyUrl",
+  "copyUrlAsMarkdown",
+  "findInPage",
+  "findAndReplace",
+  "jumpToSelection",
+  "useSelectionForFind",
+  "findNext",
+  "findPrevious",
+  "reload",
+  "forceReload",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
+  "devTools",
+  "toggleDevTools",
+  "inspectElements",
+  "javaScriptConsole",
+  "viewSource",
+  "back",
+  "forward",
+  "bookmarkPage",
+  "addBookmarkToFolder",
+  "openBookmark",
+  "toggleMute",
+  "cast",
+  "openExtension",
+  "addExtension",
+  "autofill",
+  "reopenClosedTab",
+  "restoreClosed",
+  "downloads",
 ]);
 
 function runLittleBayCommand(command: string, windowId: string): boolean {

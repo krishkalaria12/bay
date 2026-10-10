@@ -26,7 +26,10 @@ export function reorderOffsets({ slots: row, lefts }: DragGeometry, from: number
   const gap = row.length > 1 ? lefts[1]! - lefts[0]! - row[0]!.width - (row[0]!.marginRight ?? 0) - (row[1]!.marginLeft ?? 0) : 0;
   const order = row.map((_, i) => i).filter((i) => i !== from);
   order.splice(to, 0, from);
-  const moved = dragGeometry(order.map((i) => row[i]!), gap);
+  const moved = dragGeometry(
+    order.map((i) => row[i]!),
+    gap,
+  );
   const out: number[] = [];
   order.forEach((i, k) => (out[i] = moved.lefts[k]! - lefts[i]!));
   return out;

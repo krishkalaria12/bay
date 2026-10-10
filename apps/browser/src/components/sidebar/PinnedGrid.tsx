@@ -93,7 +93,11 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const selected = useBrowser((s) => (s.selection[windowId] ?? []).includes(tabId));
   const playing = useTabLive(tabId, (l) => l.playingAudio);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
-  const { ref, style, handle } = useDragItem(`t:${tabId}`, { kind: "tile", tabIds: [tabId], section: "tiles" }, () => useBrowser.getState().selection[windowId] ?? []);
+  const { ref, style, handle } = useDragItem(
+    `t:${tabId}`,
+    { kind: "tile", tabIds: [tabId], section: "tiles" },
+    () => useBrowser.getState().selection[windowId] ?? [],
+  );
   const away = !!tab && awayFromPin(tab);
   const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.spaceId ?? "");
   const badge = useSharedValue(away ? 1 : 0);
@@ -106,11 +110,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
 
   return (
     <Animated.View ref={ref} style={style} {...handle}>
-      <View
-        ref={(v) => registerRow(windowId, tabId, v)}
-        {...hoverProps}
-        onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
-      >
+      <View ref={(v) => registerRow(windowId, tabId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}>
         <MouseArea onMiddleClick={() => void closeTab(tabId)}>
           <ContextMenuArea
             onContextMenu={() => {
@@ -198,10 +198,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
             </Pressable>
           </ContextMenuArea>
         </MouseArea>
-        <Animated.View
-          pointerEvents={away ? "auto" : "none"}
-          style={[{ position: "absolute", top: 3, right: 3 }, badgeStyle]}
-        >
+        <Animated.View pointerEvents={away ? "auto" : "none"} style={[{ position: "absolute", top: 3, right: 3 }, badgeStyle]}>
           <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tabId)} tooltip="Back to Pinned URL (⌘↩)">
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: tokens.badge, alignItems: "center", justifyContent: "center" }}>
               <Symbol name="arrow.uturn.backward" size={7} weight="bold" color={tokens.badgeGlyph} style={{ width: 10, height: 10 }} />

@@ -37,7 +37,17 @@ import { openFromPage } from "./layout/openFromPage";
 import { setUrlAnchor, useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
 import { BlankTabSurface } from "./BlankTabSurface";
 import { InternalPage } from "./pages";
-import { AutofillPrompt, BlockedPopupsPrompt, ExternalAppPrompt, PasswordPrompt, PermissionPrompt, answerExternalApp, shouldPromptForPopups, showAutofillPrompt, showPasswordPrompt } from "./site/Prompts";
+import {
+  AutofillPrompt,
+  BlockedPopupsPrompt,
+  ExternalAppPrompt,
+  PasswordPrompt,
+  PermissionPrompt,
+  answerExternalApp,
+  shouldPromptForPopups,
+  showAutofillPrompt,
+  showPasswordPrompt,
+} from "./site/Prompts";
 import { SiteControls } from "./site/SiteControls";
 import { ZoomPopover } from "./site/ZoomControls";
 import { SelectionPopover } from "./site/SelectionPopover";
@@ -156,7 +166,10 @@ export function ContentCard() {
       const w = s.windows[windowId];
       const shown = w?.activeTabIds[w.spaceId];
       // Two spaces with one profile can remember the same favourite: its page is on screen once, in the shown one.
-      const ids = !w || !pagerPages ? [] : [...new Set(pagerPages.map((p) => (p.id === w.spaceId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id && id !== shown))];
+      const ids =
+        !w || !pagerPages
+          ? []
+          : [...new Set(pagerPages.map((p) => (p.id === w.spaceId ? undefined : w.activeTabIds[p.id])).filter((id): id is string => !!id && id !== shown))];
       return successor && s.tabs[successor]?.windowId === windowId && !ids.includes(successor) ? [...ids, successor] : ids;
     }),
   );
@@ -375,7 +388,10 @@ const TabPane = memo(function TabPane({
             {mounted && <TabWebView tabId={tabId} visible={visible && !newTabShown && !isNewTab} warm={!!warm && !newTabShown && !isNewTab} />}
             {/* No toolbar to carry the load (the address in the sidebar, or full screen): the page's top shows it. */}
             {visible && (!toolbar || fullscreen) && !devBar && !small && !isNewTab && !newTabShown && <PageLoadGlow tabId={tabId} />}
-            {visible && isNewTab && !small && (inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : <BlankTabSurface key={tabId} tabId={tabId} focused={focused && !covered} />)}
+            {visible &&
+              isNewTab &&
+              !small &&
+              (inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : <BlankTabSurface key={tabId} tabId={tabId} focused={focused && !covered} />)}
             {visible && <InternalPage tabId={tabId} />}
             {visible && (
               <>
@@ -405,7 +421,9 @@ const TabPane = memo(function TabPane({
           </Animated.View>
         </View>
       </Animated.View>
-      {hideBar && <AutoHideToolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused || !inSplit} mode={mode} motion={motion} />}
+      {hideBar && (
+        <AutoHideToolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused || !inSplit} mode={mode} motion={motion} />
+      )}
     </Animated.View>
   );
 });
@@ -556,7 +574,9 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       onUnresponsive={() => patchPage(tabId, { unresponsive: true })}
       onResponsive={() => patchPage(tabId, { unresponsive: false })}
       onFullscreen={(fullscreen) => patchPage(tabId, { fullscreen })}
-      onMediaAccess={(mediaAccess) => patchPage(tabId, { mediaAccess: mediaAccess.camera || mediaAccess.microphone || mediaAccess.screen ? mediaAccess : null })}
+      onMediaAccess={(mediaAccess) =>
+        patchPage(tabId, { mediaAccess: mediaAccess.camera || mediaAccess.microphone || mediaAccess.screen ? mediaAccess : null })
+      }
       onSecurity={(security) => patchPage(tabId, { security })}
       onContentBlocked={({ count }) => patchPage(tabId, { blocked: count })}
       onPopupBlocked={(popup) => {

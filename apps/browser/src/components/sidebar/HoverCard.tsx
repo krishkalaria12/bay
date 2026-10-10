@@ -27,7 +27,11 @@ export function HoverCard({ windowId, windowWidth }: { windowId: string; windowW
   if (hover.kind === "live") return <LiveItemCard id={hover.id} windowId={windowId} anchor={hover.anchor} />;
   if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} windowWidth={windowWidth} />;
   if (hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
-  return hover.kind === "tab" ? <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} /> : <GroupPeek groupId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+  return hover.kind === "tab" ? (
+    <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} />
+  ) : (
+    <GroupPeek groupId={hover.id} windowId={windowId} anchor={hover.anchor} />
+  );
 }
 
 function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode }) {
@@ -45,7 +49,13 @@ function Card({ anchor, children }: { anchor: Anchor; children: React.ReactNode 
       shadowOpacity={theme.panelShadowOpacity * 0.8}
       shadowRadius={16}
       shadowOffset={[0, 6]}
-      style={{ position: "absolute", left: besideRow(anchor, HOVER_CARD_WIDTH, right), top: Math.max(8, anchor.y - 6), width: HOVER_CARD_WIDTH, padding: HOVER_CARD_PAD }}
+      style={{
+        position: "absolute",
+        left: besideRow(anchor, HOVER_CARD_WIDTH, right),
+        top: Math.max(8, anchor.y - 6),
+        width: HOVER_CARD_WIDTH,
+        padding: HOVER_CARD_PAD,
+      }}
     >
       {children}
     </Surface>
@@ -72,7 +82,9 @@ function TabCard({ tabId, windowId, anchor }: { tabId: string; windowId: string;
       {tab.url ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 }}>
           <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
-          <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>{hostOf(tab.url) || displayUrl(tab.url)}</Text>
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>
+            {hostOf(tab.url) || displayUrl(tab.url)}
+          </Text>
         </View>
       ) : null}
       {!onScreen && sleeping ? (
@@ -152,7 +164,14 @@ function PeekRow({ tabId, windowId }: { tabId: string; windowId: string }) {
       <View
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{ height: 28, borderRadius: 7, flexDirection: "row", alignItems: "center", paddingHorizontal: 5, backgroundColor: hovered ? theme.rowHover : undefined }}
+        style={{
+          height: 28,
+          borderRadius: 7,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 5,
+          backgroundColor: hovered ? theme.rowHover : undefined,
+        }}
       >
         <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} spaceId={tab.spaceId} />
         <FadeLabel text={tabTitle(tab)} fontSize={12.5} color={theme.textTab} style={{ flex: 1, height: 17, marginLeft: 7 }} />

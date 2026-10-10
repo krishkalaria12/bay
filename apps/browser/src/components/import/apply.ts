@@ -1,5 +1,14 @@
 import { savePassword } from "@bay/nncore";
-import type { BookmarkNode as ImportedNode, Credential, DiaTabsProfile, ImportedTab, ImportKind, ImportResult, SafariExport, SpaceSuggestion } from "@bay/import";
+import type {
+  BookmarkNode as ImportedNode,
+  Credential,
+  DiaTabsProfile,
+  ImportedTab,
+  ImportKind,
+  ImportResult,
+  SafariExport,
+  SpaceSuggestion,
+} from "@bay/import";
 import type { BookmarkDraft } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
 import { engineProfile, isIncognitoSpace, listIds, tabListKey } from "../../store/model";
@@ -140,7 +149,10 @@ export function importArcSpace(spaceId: string, space: SpaceSuggestion): number 
   const links = (n: ImportedNode): ImportedNode[] => (n.type === "url" ? (n.url ? [n] : []) : (n.children ?? []).flatMap(links));
   const asTab = (n: ImportedNode): TabDraft => ({ url: n.url!, title: n.pageTitle ?? n.title, pinned: false, customTitle: n.pageTitle ? n.title : undefined });
   const entries = space.pinned.map((n) => ({ folder: n.type === "folder" ? n.title : null, tabs: links(n).map(asTab).filter(usable) }));
-  const ids = openTabs(spaceId, entries.flatMap((e) => e.tabs));
+  const ids = openTabs(
+    spaceId,
+    entries.flatMap((e) => e.tabs),
+  );
   const rows = ids.filter((id): id is string => !!id);
   if (rows.length) useBrowser.getState().pinRows(rows, true);
   const windowId = rows.length ? useBrowser.getState().tabs[rows[0]!]!.windowId : windowFor(spaceId);
@@ -149,7 +161,14 @@ export function importArcSpace(spaceId: string, space: SpaceSuggestion): number 
     const members = ids.slice(at, (at += e.tabs.length)).filter((id): id is string => !!id);
     if (e.folder !== null) useBrowser.getState().newPinnedFolder(windowId, { tabIds: members, name: e.folder });
   }
-  return rows.length + importTabs(spaceId, space.tabs.map((t) => ({ ...t, pinned: false })), "Imported");
+  return (
+    rows.length +
+    importTabs(
+      spaceId,
+      space.tabs.map((t) => ({ ...t, pinned: false })),
+      "Imported",
+    )
+  );
 }
 
 function pageKey(url: string): string {
@@ -167,23 +186,28 @@ export function importDiaProfile(spaceId: string, profile: DiaTabsProfile, what:
   );
   const fresh = (tabs: ImportedTab[]) => tabs.filter((t) => !have.has(pageKey(t.url)));
   let n = what.pinned ? importTabs(spaceId, fresh(profile.pinned), null) : 0;
-  if (what.open) n += importTabs(spaceId, fresh(profile.tabs).map((t) => ({ ...t, pinned: false })), "Imported");
+  if (what.open)
+    n += importTabs(
+      spaceId,
+      fresh(profile.tabs).map((t) => ({ ...t, pinned: false })),
+      "Imported",
+    );
   return n;
 }
 
-export async function applyResult(
-  spaceId: string,
-  result: ImportResult,
-  browserName: string,
-  onFailed?: (kind: ImportKind) => void,
-): Promise<ImportCounts> {
+export async function applyResult(spaceId: string, result: ImportResult, browserName: string, onFailed?: (kind: ImportKind) => void): Promise<ImportCounts> {
   const counts = emptyCounts();
   counts.bookmarks += importBookmarks(spaceId, result.bookmarks, browserName);
   if (result.history.length) counts.history += importHistory(spaceId, result.history);
   // Sign-ins first, so the imported tabs load signed in.
   Object.assign(counts, await importNative(spaceId, result.vaultToken, ["cookies", "autofill"], onFailed));
   if (result.tabs.length && !result.spaces.length) counts.tabs += importTabs(spaceId, result.tabs, "Imported");
-  if (result.favorites.length) counts.tabs += importTabs(spaceId, result.favorites.map((t) => ({ ...t, pinned: true })), null);
+  if (result.favorites.length)
+    counts.tabs += importTabs(
+      spaceId,
+      result.favorites.map((t) => ({ ...t, pinned: true })),
+      null,
+    );
   if (result.credentials.length) counts.passwords += await importPasswords(spaceId, result.credentials);
   return counts;
 }

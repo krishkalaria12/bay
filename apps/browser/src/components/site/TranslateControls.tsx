@@ -53,7 +53,9 @@ async function showTranslateMenu(tabId: string) {
   if (!tab) return;
   const translated = translateStateOf(tabId).status !== "idle";
   const items: MenuItem[] = [
-    translated ? { id: "original", title: "Show Original", symbol: "arrow.uturn.backward" } : { id: "translate", title: `Translate to ${languageName(defaultTarget())}`, symbol: "translate" },
+    translated
+      ? { id: "original", title: "Show Original", symbol: "arrow.uturn.backward" }
+      : { id: "translate", title: `Translate to ${languageName(defaultTarget())}`, symbol: "translate" },
     { id: "choose", title: "Choose Another Language…", symbol: "globe" },
   ];
   if (!isIncognitoSpace(tab.spaceId)) {

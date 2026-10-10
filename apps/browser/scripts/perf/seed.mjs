@@ -8,18 +8,66 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 let seed = 42;
-const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+const rand = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 const pick = (list) => list[Math.floor(rand() * list.length)];
 
 const HOSTS = [
-  "github.com", "en.wikipedia.org", "news.ycombinator.com", "developer.apple.com", "stackoverflow.com", "www.youtube.com",
-  "docs.google.com", "mail.google.com", "www.nytimes.com", "www.theverge.com", "react.dev", "reactnative.dev", "nodejs.org",
-  "developer.mozilla.org", "www.figma.com", "linear.app", "www.notion.so", "twitter.com", "www.reddit.com", "arstechnica.com",
+  "github.com",
+  "en.wikipedia.org",
+  "news.ycombinator.com",
+  "developer.apple.com",
+  "stackoverflow.com",
+  "www.youtube.com",
+  "docs.google.com",
+  "mail.google.com",
+  "www.nytimes.com",
+  "www.theverge.com",
+  "react.dev",
+  "reactnative.dev",
+  "nodejs.org",
+  "developer.mozilla.org",
+  "www.figma.com",
+  "linear.app",
+  "www.notion.so",
+  "twitter.com",
+  "www.reddit.com",
+  "arstechnica.com",
 ];
 const WORDS = [
-  "performance", "react", "native", "hermes", "macos", "browser", "sidebar", "profile", "history", "bookmark", "render",
-  "commit", "memo", "selector", "store", "zustand", "layout", "animation", "timing", "chromium", "engine", "window", "tab",
-  "split", "group", "pinned", "search", "suggestion", "omnibox", "keyboard", "shortcut", "theme", "color", "download",
+  "performance",
+  "react",
+  "native",
+  "hermes",
+  "macos",
+  "browser",
+  "sidebar",
+  "profile",
+  "history",
+  "bookmark",
+  "render",
+  "commit",
+  "memo",
+  "selector",
+  "store",
+  "zustand",
+  "layout",
+  "animation",
+  "timing",
+  "chromium",
+  "engine",
+  "window",
+  "tab",
+  "split",
+  "group",
+  "pinned",
+  "search",
+  "suggestion",
+  "omnibox",
+  "keyboard",
+  "shortcut",
+  "theme",
+  "color",
+  "download",
 ];
 const words = (n) => Array.from({ length: n }, () => pick(WORDS)).join(" ");
 const title = (n) => words(n).replace(/^\w/, (c) => c.toUpperCase());
@@ -63,8 +111,16 @@ export function buildSeed(origin, appVersion = "") {
       const members = [];
       for (let k = 0; k < size; k++, i++) members.push(tab(spaceId, i).id);
       groups.push({
-        id: `g-${spaceId}-${g}`, windowId, spaceId, name: title(2), icon: null, color: pick(["blue", "green", "orange"]),
-        collapsed: false, pinned: false, tabIds: members, createdAt: now,
+        id: `g-${spaceId}-${g}`,
+        windowId,
+        spaceId,
+        name: title(2),
+        icon: null,
+        color: pick(["blue", "green", "orange"]),
+        collapsed: false,
+        pinned: false,
+        tabIds: members,
+        createdAt: now,
       });
       ids.push(...members);
     }
@@ -84,8 +140,14 @@ export function buildSeed(origin, appVersion = "") {
     settings: { searchSuggestions: false, warnBeforeClosingLastTab: false, warnBeforeClosingWindow: false },
     windows: [
       {
-        id: windowId, spaceId: "default", incognito: false, tabIds: [...personal, ...work], activeTabIds: active,
-        sidebarOpen: true, frame: [80, 80, 1440, 900], createdAt: now,
+        id: windowId,
+        spaceId: "default",
+        incognito: false,
+        tabIds: [...personal, ...work],
+        activeTabIds: active,
+        sidebarOpen: true,
+        frame: [80, 80, 1440, 900],
+        createdAt: now,
       },
     ],
     windowOrder: [windowId],
@@ -101,9 +163,10 @@ export function buildSeed(origin, appVersion = "") {
   const seen = new Set();
   while (entries.length < 5000) {
     const host = pick(HOSTS);
-    const path = host === "github.com"
-      ? `/${pick(["facebook", "microsoft", "expo", "nodejs"])}/${pick(["react", "react-native", "hermes", "node"])}/${pick(["pull", "issues"])}/${Math.floor(rand() * 40000)}`
-      : `/${words(2).replace(/ /g, "/")}/${Math.floor(rand() * 10000)}`;
+    const path =
+      host === "github.com"
+        ? `/${pick(["facebook", "microsoft", "expo", "nodejs"])}/${pick(["react", "react-native", "hermes", "node"])}/${pick(["pull", "issues"])}/${Math.floor(rand() * 40000)}`
+        : `/${words(2).replace(/ /g, "/")}/${Math.floor(rand() * 10000)}`;
     const url = `https://${host}${path}`;
     if (seen.has(url)) continue;
     seen.add(url);

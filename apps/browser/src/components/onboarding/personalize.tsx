@@ -48,21 +48,27 @@ function ColorButton({ color, size, selected, onPress }: { color: SpaceColor; si
         {({ pressed }) => (
           <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", transform: [{ scale: pressed ? 0.94 : 1 }] }}>
             <Animated.View
-              style={[{
-                position: "absolute",
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                borderWidth: 2,
-                borderColor: swatch,
-              }, ring]}
+              style={[
+                {
+                  position: "absolute",
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  borderWidth: 2,
+                  borderColor: swatch,
+                },
+                ring,
+              ]}
             />
             <Animated.View
-              style={[{
-                borderRadius: size / 2,
-                backgroundColor: swatch,
-                opacity: hovered || selected ? 1 : 0.85,
-              }, dot]}
+              style={[
+                {
+                  borderRadius: size / 2,
+                  backgroundColor: swatch,
+                  opacity: hovered || selected ? 1 : 0.85,
+                },
+                dot,
+              ]}
             />
           </View>
         )}
@@ -84,7 +90,19 @@ export function TabLayoutPicker({ windowId }: { windowId: string }) {
   );
 }
 
-function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sidebar" | "top"; title: string; subtitle: string; selected: boolean; onPress: () => void }) {
+function LayoutButton({
+  kind,
+  title,
+  subtitle,
+  selected,
+  onPress,
+}: {
+  kind: "sidebar" | "top";
+  title: string;
+  subtitle: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
   const bar = { backgroundColor: colors.progressTrack, borderRadius: 2 };
@@ -103,7 +121,18 @@ function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sid
               transform: [{ scale: pressed ? 0.98 : 1 }],
             }}
           >
-            <View style={{ height: 64, borderRadius: 7, padding: 5, gap: 4, backgroundColor: colors.preview, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.previewBorder, flexDirection: kind === "sidebar" ? "row" : "column" }}>
+            <View
+              style={{
+                height: 64,
+                borderRadius: 7,
+                padding: 5,
+                gap: 4,
+                backgroundColor: colors.preview,
+                borderWidth: StyleSheet.hairlineWidth * 2,
+                borderColor: colors.previewBorder,
+                flexDirection: kind === "sidebar" ? "row" : "column",
+              }}
+            >
               {kind === "sidebar" ? (
                 <View style={{ width: "26%", gap: 3, paddingTop: 7 }}>
                   {[1, 0.8, 0.9].map((w, i) => (
@@ -117,7 +146,9 @@ function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sid
                   ))}
                 </View>
               )}
-              <View style={{ flex: 1, borderRadius: 4, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.previewBorder }} />
+              <View
+                style={{ flex: 1, borderRadius: 4, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.previewBorder }}
+              />
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Radio on={selected} />
@@ -136,6 +167,15 @@ function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sid
 function Radio({ on }: { on: boolean }) {
   const colors = useOnboardingColors();
   return (
-    <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: on ? 5 : 1.5, borderColor: on ? colors.checkboxOn : colors.checkboxBorder, backgroundColor: colors.checkbox }} />
+    <View
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        borderWidth: on ? 5 : 1.5,
+        borderColor: on ? colors.checkboxOn : colors.checkboxBorder,
+        backgroundColor: colors.checkbox,
+      }}
+    />
   );
 }

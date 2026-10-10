@@ -33,7 +33,9 @@ const KEY_NAMES: Record<string, string> = {
 
 export function formatShortcut({ key, modifiers }: Combo): string {
   if (!key) return "";
-  const mods = MOD_ORDER.filter((m) => modifiers.includes(m)).map((m) => MOD_GLYPH[m]).join("");
+  const mods = MOD_ORDER.filter((m) => modifiers.includes(m))
+    .map((m) => MOD_GLYPH[m])
+    .join("");
   const code = key.charCodeAt(0);
   const name = KEY_NAMES[key] ?? (code >= 0xf704 && code <= 0xf717 ? `F${code - 0xf703}` : key.toUpperCase());
   return mods + name;
@@ -136,7 +138,14 @@ export function ShortcutsPane() {
                     }
                   >
                     {overrides[item.id] && (
-                      <IconButton icon="arrow.uturn.backward" size={11} box={24} radius={6} onPress={() => setShortcut(item.id, null)} tooltip="Reset to Default" />
+                      <IconButton
+                        icon="arrow.uturn.backward"
+                        size={11}
+                        box={24}
+                        radius={6}
+                        onPress={() => setShortcut(item.id, null)}
+                        tooltip="Reset to Default"
+                      />
                     )}
                     <ShortcutField
                       combo={effective(item)}

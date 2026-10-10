@@ -69,6 +69,13 @@ export const useUrlAnchors = create<Record<string, UrlAnchor>>()(() => ({}));
 
 export function setUrlAnchor(windowId: string, anchor: UrlAnchor) {
   const current = useUrlAnchors.getState()[windowId];
-  if (current && current.left === anchor.left && current.top === anchor.top && current.width === anchor.width && current.sidebar?.height === anchor.sidebar?.height) return;
+  if (
+    current &&
+    current.left === anchor.left &&
+    current.top === anchor.top &&
+    current.width === anchor.width &&
+    current.sidebar?.height === anchor.sidebar?.height
+  )
+    return;
   useUrlAnchors.setState({ [windowId]: anchor });
 }

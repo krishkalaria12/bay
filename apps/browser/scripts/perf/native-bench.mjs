@@ -116,8 +116,18 @@ const { values: opt } = parseArgs({
 });
 if (opt.help) {
   // The header above is the usage.
-  const lines = readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1);
-  console.log(lines.slice(0, lines.findIndex((l) => !l.startsWith("//"))).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  const lines = readFileSync(fileURLToPath(import.meta.url), "utf8")
+    .split("\n")
+    .slice(1);
+  console.log(
+    lines
+      .slice(
+        0,
+        lines.findIndex((l) => !l.startsWith("//")),
+      )
+      .map((l) => l.replace(/^\/\/ ?/, ""))
+      .join("\n"),
+  );
   process.exit(0);
 }
 
@@ -151,7 +161,9 @@ function markerLibrary() {
   const src = join(here, "nnmark.m");
   if (!existsSync(lib) || readFileSync(src, "utf8") !== (existsSync(lib + ".src") ? readFileSync(lib + ".src", "utf8") : "")) {
     mkdirSync(toolDir, { recursive: true });
-    execFileSync("clang", ["-dynamiclib", "-fobjc-arc", "-framework", "AppKit", "-framework", "QuartzCore", "-arch", "arm64", src, "-o", lib], { stdio: "inherit" });
+    execFileSync("clang", ["-dynamiclib", "-fobjc-arc", "-framework", "AppKit", "-framework", "QuartzCore", "-arch", "arm64", src, "-o", lib], {
+      stdio: "inherit",
+    });
     execFileSync("codesign", ["--force", "--sign", "-", lib]);
     writeFileSync(lib + ".src", readFileSync(src, "utf8"));
   }
@@ -166,7 +178,11 @@ function processTree(root) {
     .map(([, pid, ppid, command]) => ({ pid: +pid, ppid: +ppid, command }));
   const tree = [];
   const walk = (pid) => {
-    for (const row of rows) if (row.ppid === pid) tree.push(row), walk(row.pid);
+    for (const row of rows) {
+      if (row.ppid !== pid) continue;
+      tree.push(row);
+      walk(row.pid);
+    }
   };
   const self = rows.find((r) => r.pid === root);
   if (!self) return [];
@@ -186,7 +202,11 @@ function kindOf(command) {
 function usage(root) {
   const procs = processTree(root);
   const byPid = new Map(procs.map((p) => [p.pid, p.kind]));
-  const lines = procs.length ? nnperf("rusage", ...procs.map((p) => String(p.pid))).out.split("\n").filter(Boolean) : [];
+  const lines = procs.length
+    ? nnperf("rusage", ...procs.map((p) => String(p.pid)))
+        .out.split("\n")
+        .filter(Boolean)
+    : [];
   return lines.map((l) => JSON.parse(l)).map((u) => ({ ...u, kind: byPid.get(u.pid) }));
 }
 
@@ -241,11 +261,16 @@ setInterval(() => __nn.ticks++, 1000);
 `;
 
 function staticPage(id) {
-  const paras = Array.from({ length: 120 }, (_, i) =>
-    `<p>Paragraph ${i} of page ${id}. The quick brown fox jumps over the lazy dog; pack my box with five dozen liquor jugs. ` +
-    `Sphinx of black quartz, judge my vow. <a href="#p${i}">anchor ${i}</a></p>`).join("");
-  const boxes = Array.from({ length: 60 }, (_, i) =>
-    `<div class=b style="background:hsl(${(i * 37 + Number(id.replace(/\D/g, "") || 0) * 11) % 360} 60% 70%)">${i}</div>`).join("");
+  const paras = Array.from(
+    { length: 120 },
+    (_, i) =>
+      `<p>Paragraph ${i} of page ${id}. The quick brown fox jumps over the lazy dog; pack my box with five dozen liquor jugs. ` +
+      `Sphinx of black quartz, judge my vow. <a href="#p${i}">anchor ${i}</a></p>`,
+  ).join("");
+  const boxes = Array.from(
+    { length: 60 },
+    (_, i) => `<div class=b style="background:hsl(${(i * 37 + Number(id.replace(/\D/g, "") || 0) * 11) % 360} 60% 70%)">${i}</div>`,
+  ).join("");
   return `<!doctype html><meta charset=utf-8><title>Bench ${id}</title>
 <style>body{font:15px/1.5 -apple-system,sans-serif;margin:0;padding:24px 48px;background:#fbfaf8;color:#222}
 .g{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;margin:16px 0}.b{height:48px;border-radius:10px;display:grid;place-items:center}
@@ -347,11 +372,15 @@ function prepareApp(app, out, bundle) {
   // The copy loads the content marker (nnmark.m): DYLD_INSERT_LIBRARIES, an ad-hoc signed library.
   const granted = execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { encoding: "utf8" });
   const marker = ["com.apple.security.cs.allow-dyld-environment-variables", "com.apple.security.cs.disable-library-validation"]
-    .filter((key) => !granted.includes(`<key>${key}</key>`)).map((key) => `<key>${key}</key><true/>`).join("");
+    .filter((key) => !granted.includes(`<key>${key}</key>`))
+    .map((key) => `<key>${key}</key><true/>`)
+    .join("");
   writeFileSync(entitlements, granted.replace(/<\/dict>\s*<\/plist>\s*$/, `${marker}</dict></plist>`));
   // No secure timestamp: both apps' copies are signed the same way, and Apple's timestamp server sometimes doesn't
   // answer ("A timestamp was expected but was not found"), which used to abort the whole run.
-  execFileSync("codesign", ["--force", "--sign", identity, "--timestamp=none", "--options", "runtime", "--entitlements", entitlements, copy], { stdio: "inherit" });
+  execFileSync("codesign", ["--force", "--sign", identity, "--timestamp=none", "--options", "runtime", "--entitlements", entitlements, copy], {
+    stdio: "inherit",
+  });
   writeFileSync(join(out, "prepared.json"), JSON.stringify({ app, bundle, date: new Date().toISOString() }));
   return copy;
 }
@@ -370,12 +399,32 @@ function checkPrepared(copy) {
 }
 
 function buildBundle(out) {
-  const js = join(out, "bench.js"), hbc = join(out, "main.jsbundle");
+  const js = join(out, "bench.js"),
+    hbc = join(out, "main.jsbundle");
   const node = process.execPath;
   log("bundling scripts/perf/bench-entry.js (production)");
-  execFileSync(node, [join(repoRoot, "node_modules/react-native-macos/scripts/bundle.js"), "bundle", "--entry-file", "scripts/perf/bench-entry.js",
-    "--platform", "macos", "--dev", "false", "--minify", "false", "--bundle-output", js, "--assets-dest", join(out, "assets"),
-    "--config-cmd", `'${node}' '${join(repoRoot, "node_modules/react-native-macos/cli.js")}' config`], { cwd: appRoot, stdio: "inherit" });
+  execFileSync(
+    node,
+    [
+      join(repoRoot, "node_modules/react-native-macos/scripts/bundle.js"),
+      "bundle",
+      "--entry-file",
+      "scripts/perf/bench-entry.js",
+      "--platform",
+      "macos",
+      "--dev",
+      "false",
+      "--minify",
+      "false",
+      "--bundle-output",
+      js,
+      "--assets-dest",
+      join(out, "assets"),
+      "--config-cmd",
+      `'${node}' '${join(repoRoot, "node_modules/react-native-macos/cli.js")}' config`,
+    ],
+    { cwd: appRoot, stdio: "inherit" },
+  );
   execFileSync(join(appRoot, "macos/Pods/hermes-engine/destroot/bin/hermesc"), ["-emit-binary", "-O", "-out", hbc, js], { stdio: "inherit" });
   return hbc;
 }
@@ -395,20 +444,39 @@ class Instance {
     this.seq = 0;
   }
   async launch() {
-    const exe = join(this.app, "Contents/MacOS", execFileSync("defaults", ["read", join(this.app, "Contents/Info.plist"), "CFBundleExecutable"], { encoding: "utf8" }).trim());
+    const exe = join(
+      this.app,
+      "Contents/MacOS",
+      execFileSync("defaults", ["read", join(this.app, "Contents/Info.plist"), "CFBundleExecutable"], { encoding: "utf8" }).trim(),
+    );
     const main = `^${exe.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`;
     if (spawnSync("pgrep", ["-f", main]).status === 0) throw new Error("a bench instance is still running");
     // --env K=V; an extra DYLD_INSERT_LIBRARIES loads after the marker.
     const extra = opt.env.filter((e) => !e.startsWith("DYLD_INSERT_LIBRARIES="));
     const dyld = [markerLibrary(), ...opt.env.filter((e) => e.startsWith("DYLD_INSERT_LIBRARIES=")).map((e) => e.slice(22))].join(":");
     this.t0 = Date.now();
-    execFileSync("open", ["-g", "-n", "--env", "BAY_BACKGROUND=1", "--env", `BAY_DATA_DIR=${this.dataDir}`,
-      "--env", `BAY_REMOTE_DEBUGGING_PORT=${this.port}`, "--env", `BAY_UPDATE_FEED_URL=${this.feed}`,
-      "--env", `DYLD_INSERT_LIBRARIES=${dyld}`, ...extra.flatMap((e) => ["--env", e]), this.app,
+    execFileSync("open", [
+      "-g",
+      "-n",
+      "--env",
+      "BAY_BACKGROUND=1",
+      "--env",
+      `BAY_DATA_DIR=${this.dataDir}`,
+      "--env",
+      `BAY_REMOTE_DEBUGGING_PORT=${this.port}`,
+      "--env",
+      `BAY_UPDATE_FEED_URL=${this.feed}`,
+      "--env",
+      `DYLD_INSERT_LIBRARIES=${dyld}`,
+      ...extra.flatMap((e) => ["--env", e]),
+      this.app,
       // App Nap would stretch the hidden instance's timers (a tab switch after a quiet minute took seconds).
       // BENCH_ALLOW_APP_NAP=1 leaves it on: the control for the App Nap check in the table. --mute-audio: builds
       // before b7899c26 (0.2.21, whose CEF takes its switches from the command line) aren't muted on their own.
-      "--args", "--mute-audio", ...(process.env.BENCH_ALLOW_APP_NAP ? [] : ["-NSAppSleepDisabled", "YES"])]);
+      "--args",
+      "--mute-audio",
+      ...(process.env.BENCH_ALLOW_APP_NAP ? [] : ["-NSAppSleepDisabled", "YES"]),
+    ]);
     for (let i = 0; i < 400 && !this.pid; i++) {
       const r = spawnSync("pgrep", ["-f", main], { encoding: "utf8" });
       if (r.status === 0) this.pid = +r.stdout.trim().split("\n")[0];
@@ -425,7 +493,10 @@ class Instance {
   // The content marker's marks (nnmark.m): {content|committed: epoch ms, window}.
   marks() {
     try {
-      return readFileSync(join(this.dataDir, "bench-marks.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+      return readFileSync(join(this.dataDir, "bench-marks.jsonl"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l));
     } catch {
       return [];
     }
@@ -474,8 +545,10 @@ class Instance {
   async done() {
     const secs = +opt.hold;
     if (secs > 0 && this.pid && this.alive()) {
-      log(`holding ${this.side.label} pid ${this.pid} for ${secs} s (data ${this.dataDir}): lldb -p ${this.pid}, heap ${this.pid}, vmmap --summary ${this.pid}`);
-      for (const end = Date.now() + secs * 1000; Date.now() < end && this.alive(); ) await sleep(200);
+      log(
+        `holding ${this.side.label} pid ${this.pid} for ${secs} s (data ${this.dataDir}): lldb -p ${this.pid}, heap ${this.pid}, vmmap --summary ${this.pid}`,
+      );
+      for (const end = Date.now() + secs * 1000; Date.now() < end && this.alive();) await sleep(200);
     }
     await this.quit();
   }
@@ -573,11 +646,19 @@ async function idleWindow(app, secs) {
 // whatever the app does, so a sample taken then measures that, not the app: it's counted and left out of the medians.
 async function throttled(app) {
   for (const t of await app.cdp.targets()) {
-    const r = await app.cdp.send(t, "Runtime.evaluate", {
-      expression: `document.visibilityState !== "visible" ? -1 : new Promise((done) => { let n = 0; const t0 = performance.now();
+    const r = await app.cdp
+      .send(
+        t,
+        "Runtime.evaluate",
+        {
+          expression: `document.visibilityState !== "visible" ? -1 : new Promise((done) => { let n = 0; const t0 = performance.now();
         (function f() { n++; if (performance.now() - t0 < 250) requestAnimationFrame(f); else done(n); })(); })`,
-      awaitPromise: true, returnByValue: true,
-    }, 3000).catch(() => null);
+          awaitPromise: true,
+          returnByValue: true,
+        },
+        3000,
+      )
+      .catch(() => null);
     const frames = r?.result?.value;
     if (typeof frames === "number" && frames >= 0) return frames < 5;
   }
@@ -603,7 +684,7 @@ async function newWindow(app, id) {
   let said = "";
   watcher.stdout.on("data", (d) => (said += d));
   const exited = new Promise((done) => watcher.on("exit", done));
-  for (const end = Date.now() + 10_000; !said.includes("ready") && Date.now() < end; ) await Promise.race([exited, sleep(5)]);
+  for (const end = Date.now() + 10_000; !said.includes("ready") && Date.now() < end;) await Promise.race([exited, sleep(5)]);
   const at = await app.run(`const t = nn.now(); nn.actions.openWindow({ url: "${base()}/static?id=${id}" }); return t;`);
   await exited;
   const shown = JSON.parse(said.split("\n").find((l) => l.startsWith("{")) ?? "null");
@@ -675,7 +756,8 @@ async function sessionRun(side, i, parts) {
       const shown = s?.shown.at(-1);
       if (hidden) r.throttled.tabSwitch++;
       r.tabSwitch.push(shown && !hidden ? shown[1] - at : NaN);
-      if (process.env.BENCH_DEBUG) log("switch", marker, "before", before, "at", at - Date.now(), "state", JSON.stringify((await app.cdp.state(target)) ?? null)?.slice(0, 300));
+      if (process.env.BENCH_DEBUG)
+        log("switch", marker, "before", before, "at", at - Date.now(), "state", JSON.stringify((await app.cdp.state(target)) ?? null)?.slice(0, 300));
       await sleep(400);
     }
 
@@ -690,7 +772,9 @@ async function sessionRun(side, i, parts) {
       await sleep(800);
     }
     if (has("newtab"))
-      await app.run(`const s = nn.store.getState(); for (const id of Object.keys(s.tabs)) if (s.tabs[id].url.includes("id=n")) nn.store.getState().closeTab(id); return true;`);
+      await app.run(
+        `const s = nn.store.getState(); for (const id of Object.keys(s.tabs)) if (s.tabs[id].url.includes("id=n")) nn.store.getState().closeTab(id); return true;`,
+      );
 
     for (let k = 0; k < (has("newwindow") ? 3 : 0); k++) r.newWindow.push(await newWindow(app, `w${k}`));
 
@@ -706,7 +790,16 @@ async function sessionRun(side, i, parts) {
   } finally {
     await app.done();
   }
-  log(`${side.tag}session ${i}:`, JSON.stringify({ idle: r.idle, mem: Object.fromEntries(Object.entries(r.memory).map(([k, v]) => [k, Math.round(v.totalMB)])), sw: r.tabSwitch, nt: r.newTab, nw: r.newWindow }));
+  log(
+    `${side.tag}session ${i}:`,
+    JSON.stringify({
+      idle: r.idle,
+      mem: Object.fromEntries(Object.entries(r.memory).map(([k, v]) => [k, Math.round(v.totalMB)])),
+      sw: r.tabSwitch,
+      nt: r.newTab,
+      nw: r.newWindow,
+    }),
+  );
   side.results.session.push(r);
 }
 
@@ -717,11 +810,14 @@ async function throttleRun(side) {
     await app.launch();
     await app.pageState("id=seed", 30_000, (s) => s.fcp);
     await openTabs(app, 0, 4, "anim");
-    await app.run(`const s = nn.store.getState(); const w = ${WINDOW}; nn.store.getState().activate(s.windows[w].tabIds.find((id) => s.tabs[id].url.includes("id=seed"))); return true;`);
+    await app.run(
+      `const s = nn.store.getState(); const w = ${WINDOW}; nn.store.getState().activate(s.windows[w].tabIds.find((id) => s.tabs[id].url.includes("id=seed"))); return true;`,
+    );
     await sleep(12_000);
     const read = async () => {
       const out = {};
-      for (const t of await app.cdp.targets()) if (t.url.includes("/anim?") || t.url.includes("id=seed")) out[t.url.match(/id=(\w+)/)[1]] = await app.cdp.state(t);
+      for (const t of await app.cdp.targets())
+        if (t.url.includes("/anim?") || t.url.includes("id=seed")) out[t.url.match(/id=(\w+)/)[1]] = await app.cdp.state(t);
       return out;
     };
     const a = await read();
@@ -733,7 +829,12 @@ async function throttleRun(side) {
     for (const [id, s] of Object.entries(b)) {
       const p = a[id];
       if (!s || !p) continue;
-      tabs[id] = { visibility: s.visibility, rafPerSec: (s.raf - p.raf) / secs, fastTimerPerSec: (s.fast - p.fast) / secs, secondTimerPerSec: (s.ticks - p.ticks) / secs };
+      tabs[id] = {
+        visibility: s.visibility,
+        rafPerSec: (s.raf - p.raf) / secs,
+        fastTimerPerSec: (s.fast - p.fast) / secs,
+        secondTimerPerSec: (s.ticks - p.ticks) / secs,
+      };
     }
     const idle = await idleWindow(app, 20);
     side.results.throttle.push({ tabs, idle });
@@ -789,7 +890,8 @@ async function sampleRun(side) {
       const [id, url] = tabs[(k * 7 + 3) % tabs.length];
       await app.run(`nn.actions.switchToTab(${JSON.stringify(id)}); return true;`);
       const target = await app.cdp.find(url.match(/id=\w+/)[0]);
-      if (target) for (let n = 0; n < 6; n++) await app.cdp.send(target, "Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 300, deltaX: 0, deltaY: 120 });
+      if (target)
+        for (let n = 0; n < 6; n++) await app.cdp.send(target, "Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 300, deltaX: 0, deltaY: 120 });
       await sleep(150);
     }
     await new Promise((ok) => sampler.on("exit", ok));
@@ -828,43 +930,147 @@ function summary(res) {
     const v = xs.filter(Number.isFinite);
     rows.push({ name, median: median(v), min: Math.min(...v), max: Math.max(...v), n: v.length, unit, digits });
   };
-  add("launch → window shown", res.launch.map((r) => r.window), "ms");
-  add("launch → window shown with its content", res.launch.map((r) => r.withContent), "ms");
-  add("launch → JS running", res.launch.map((r) => r.js), "ms");
-  add("launch → first page painted", res.launch.map((r) => r.firstPaint), "ms");
-  add("launch → first page's first frame", res.launch.map((r) => r.firstFrame), "ms");
+  add(
+    "launch → window shown",
+    res.launch.map((r) => r.window),
+    "ms",
+  );
+  add(
+    "launch → window shown with its content",
+    res.launch.map((r) => r.withContent),
+    "ms",
+  );
+  add(
+    "launch → JS running",
+    res.launch.map((r) => r.js),
+    "ms",
+  );
+  add(
+    "launch → first page painted",
+    res.launch.map((r) => r.firstPaint),
+    "ms",
+  );
+  add(
+    "launch → first page's first frame",
+    res.launch.map((r) => r.firstFrame),
+    "ms",
+  );
   const S = res.session;
   for (const t of ["tabs1", "tabs20"]) {
-    add(`idle CPU, ${t.slice(4)} tab(s) (all processes)`, S.map((r) => r.idle[t]?.total.cpu), "%", 2);
-    add(`idle wakeups/s, ${t.slice(4)} tab(s) (all processes)`, S.map((r) => r.idle[t]?.total.wakeups), "/s", 1);
-    add(`idle CPU, ${t.slice(4)} tab(s) (browser process)`, S.map((r) => r.idle[t]?.kinds.browser?.cpu), "%", 2);
-    add(`idle wakeups/s, ${t.slice(4)} tab(s) (browser process)`, S.map((r) => r.idle[t]?.kinds.browser?.wakeups), "/s", 1);
-    add(`idle wakeups/s, ${t.slice(4)} tab(s) (GPU process)`, S.map((r) => r.idle[t]?.kinds["gpu-process"]?.wakeups), "/s", 1);
-    add(`idle wakeups/s, ${t.slice(4)} tab(s) (renderers)`, S.map((r) => r.idle[t]?.kinds.renderer?.wakeups), "/s", 1);
+    add(
+      `idle CPU, ${t.slice(4)} tab(s) (all processes)`,
+      S.map((r) => r.idle[t]?.total.cpu),
+      "%",
+      2,
+    );
+    add(
+      `idle wakeups/s, ${t.slice(4)} tab(s) (all processes)`,
+      S.map((r) => r.idle[t]?.total.wakeups),
+      "/s",
+      1,
+    );
+    add(
+      `idle CPU, ${t.slice(4)} tab(s) (browser process)`,
+      S.map((r) => r.idle[t]?.kinds.browser?.cpu),
+      "%",
+      2,
+    );
+    add(
+      `idle wakeups/s, ${t.slice(4)} tab(s) (browser process)`,
+      S.map((r) => r.idle[t]?.kinds.browser?.wakeups),
+      "/s",
+      1,
+    );
+    add(
+      `idle wakeups/s, ${t.slice(4)} tab(s) (GPU process)`,
+      S.map((r) => r.idle[t]?.kinds["gpu-process"]?.wakeups),
+      "/s",
+      1,
+    );
+    add(
+      `idle wakeups/s, ${t.slice(4)} tab(s) (renderers)`,
+      S.map((r) => r.idle[t]?.kinds.renderer?.wakeups),
+      "/s",
+      1,
+    );
   }
-  for (const m of ["tabs1", "tabs10", "tabs20", "closed"]) add(`memory (phys_footprint), ${m === "closed" ? "after closing back to 1 tab" : m.slice(4) + " tab(s)"}`, S.map((r) => r.memory[m]?.totalMB), "MB");
-  add("memory, browser process, 20 tabs", S.map((r) => r.memory.tabs20?.kinds.browser), "MB");
-  add("memory, browser process, after closing", S.map((r) => r.memory.closed?.kinds.browser), "MB");
-  add("after an idle minute: command answered (App Nap check)", S.map((r) => r.idle.tabs1?.afterIdle?.commandMs), "ms");
+  for (const m of ["tabs1", "tabs10", "tabs20", "closed"])
+    add(
+      `memory (phys_footprint), ${m === "closed" ? "after closing back to 1 tab" : m.slice(4) + " tab(s)"}`,
+      S.map((r) => r.memory[m]?.totalMB),
+      "MB",
+    );
+  add(
+    "memory, browser process, 20 tabs",
+    S.map((r) => r.memory.tabs20?.kinds.browser),
+    "MB",
+  );
+  add(
+    "memory, browser process, after closing",
+    S.map((r) => r.memory.closed?.kinds.browser),
+    "MB",
+  );
+  add(
+    "after an idle minute: command answered (App Nap check)",
+    S.map((r) => r.idle.tabs1?.afterIdle?.commandMs),
+    "ms",
+  );
   const timedSwitches = (r) => !r.parts || r.parts.includes("switch") || r.parts.includes("newtab");
-  add("samples left out: page couldn't paint (switch + new tab, per run)", S.map((r) => r.throttled && timedSwitches(r) ? r.throttled.tabSwitch + r.throttled.newTab : NaN), "");
-  add("tab switch → shown (median of 16 per run)", S.map((r) => median(r.tabSwitch)), "ms");
-  add("new tab → first paint (median of 5 per run)", S.map((r) => median(r.newTab)), "ms");
-  add("new tab → its page's first frame (median of 5 per run)", S.map((r) => median(r.newTabFrame ?? [])), "ms");
+  add(
+    "samples left out: page couldn't paint (switch + new tab, per run)",
+    S.map((r) => (r.throttled && timedSwitches(r) ? r.throttled.tabSwitch + r.throttled.newTab : NaN)),
+    "",
+  );
+  add(
+    "tab switch → shown (median of 16 per run)",
+    S.map((r) => median(r.tabSwitch)),
+    "ms",
+  );
+  add(
+    "new tab → first paint (median of 5 per run)",
+    S.map((r) => median(r.newTab)),
+    "ms",
+  );
+  add(
+    "new tab → its page's first frame (median of 5 per run)",
+    S.map((r) => median(r.newTabFrame ?? [])),
+    "ms",
+  );
   // The window phase's runs too (8 windows each).
   const W = [...S, ...(res.windows ?? [])];
-  add("new window → on screen (median per run)", W.map((r) => median(r.newWindow.map((w) => w.window))), "ms");
-  add("new window → on screen with its content (median per run)", W.map((r) => median(r.newWindow.map((w) => w.withContent))), "ms");
-  add("new window → first paint (median per run)", W.map((r) => median(r.newWindow.map((w) => w.firstPaint))), "ms");
-  add("new window → its page's first frame (median per run)", W.map((r) => median(r.newWindow.map((w) => w.firstFrame))), "ms");
+  add(
+    "new window → on screen (median per run)",
+    W.map((r) => median(r.newWindow.map((w) => w.window))),
+    "ms",
+  );
+  add(
+    "new window → on screen with its content (median per run)",
+    W.map((r) => median(r.newWindow.map((w) => w.withContent))),
+    "ms",
+  );
+  add(
+    "new window → first paint (median per run)",
+    W.map((r) => median(r.newWindow.map((w) => w.firstPaint))),
+    "ms",
+  );
+  add(
+    "new window → its page's first frame (median per run)",
+    W.map((r) => median(r.newWindow.map((w) => w.firstFrame))),
+    "ms",
+  );
   return rows;
 }
 
 // `other` is the before column; `names` the two columns' headings.
 function printTable(rows, other, names = ["Before", "After"]) {
-  const fmt = (r) => (Number.isFinite(r?.median) ? `${r.median.toFixed(r.digits)} ${r.unit} (${r.min.toFixed(r.digits)}–${r.max.toFixed(r.digits)}, n=${r.n})` : "—");
+  const fmt = (r) =>
+    Number.isFinite(r?.median) ? `${r.median.toFixed(r.digits)} ${r.unit} (${r.min.toFixed(r.digits)}–${r.max.toFixed(r.digits)}, n=${r.n})` : "—";
   const lines = other
-    ? [`| Metric | ${names[0]} | ${names[1]} |`, "|---|---|---|", ...rows.map((r) => `| ${r.name} | ${fmt(other.find((o) => o.name === r.name))} | ${fmt(r)} |`)]
+    ? [
+        `| Metric | ${names[0]} | ${names[1]} |`,
+        "|---|---|---|",
+        ...rows.map((r) => `| ${r.name} | ${fmt(other.find((o) => o.name === r.name))} | ${fmt(r)} |`),
+      ]
     : ["| Metric | Median (min–max, runs) |", "|---|---|", ...rows.map((r) => `| ${r.name} | ${fmt(r)} |`)];
   console.log(lines.join("\n"));
 }
@@ -882,7 +1088,12 @@ const fail = (message) => {
 };
 if (!opt.app) fail("usage: native-bench.mjs --app <Bay.app> [--control <app>] [--out dir] [--only phases] … (--help)");
 const PHASES = ["launch", "session", ...SESSION_PARTS, "windows", "throttle", "churn", "sample", "prepare"];
-const only = new Set(opt.only.split(",").map((p) => p.trim()).filter(Boolean));
+const only = new Set(
+  opt.only
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean),
+);
 for (const p of only) if (!PHASES.includes(p)) fail(`--only: no phase "${p}"; phases: ${PHASES.join(", ")}`);
 for (const e of opt.env) if (!/^[A-Za-z_]\w*=/.test(e)) fail(`--env wants K=V, got "${e}"`);
 if (!(+opt.hold >= 0)) fail(`--hold wants seconds, got "${opt.hold}"`);
@@ -894,8 +1105,17 @@ const labelOf = (app) => basename(dirname(dirname(resolve(app))));
 function makeSide(app, label, role) {
   const dir = join(opt.out, label);
   mkdirSync(dir, { recursive: true });
-  return { role, label, tag: "", src: resolve(app), dir, template: join(dir, "template"), app: null, bundle: null,
-    results: { meta: {}, launch: [], session: [], windows: [], throttle: [], sample: [] } };
+  return {
+    role,
+    label,
+    tag: "",
+    src: resolve(app),
+    dir,
+    template: join(dir, "template"),
+    app: null,
+    bundle: null,
+    results: { meta: {}, launch: [], session: [], windows: [], throttle: [], sample: [] },
+  };
 }
 const candidate = makeSide(opt.app, opt.label ?? labelOf(opt.app), "candidate");
 let control = null;
@@ -914,7 +1134,7 @@ async function interleaved(n, fn) {
 }
 
 const cleanup = async () => {
-  for (const app of [...live]) await app.quit().catch(() => {});
+  for (const app of Array.from(live)) await app.quit().catch(() => {});
   server?.close();
 };
 process.on("SIGINT", async () => {
@@ -938,8 +1158,17 @@ try {
       side.app = prepareApp(side.src, join(side.dir, "app"), side.bundle);
     }
     const other = sides.find((s) => s !== side);
-    Object.assign(side.results.meta, { app: side.src, bundle: side.bundle, label: side.label, date: new Date().toISOString(),
-      runs: +opt.runs, idleSecs: +opt.idle, only: [...only], env: opt.env, ...(other ? { role: side.role, interleavedWith: other.label } : {}) });
+    Object.assign(side.results.meta, {
+      app: side.src,
+      bundle: side.bundle,
+      label: side.label,
+      date: new Date().toISOString(),
+      runs: +opt.runs,
+      idleSecs: +opt.idle,
+      only: [...only],
+      env: opt.env,
+      ...(other ? { role: side.role, interleavedWith: other.label } : {}),
+    });
   }
   if (only.has("prepare")) {
     for (const side of sides) console.log(`prepared ${side.app} (rerun with --app ${side.app} --prepared)`);
@@ -959,7 +1188,8 @@ try {
   else printTable(rows, opt.compare ? summary(JSON.parse(readFileSync(opt.compare, "utf8"))) : null);
   for (const { results, tag } of sides) {
     if (results.throttle.length) console.log(`\n${tag}Hidden tabs:`, JSON.stringify(results.throttle[0].tabs));
-    if (results.churn) console.log(`\n${tag}Browser process after each open/close-10-tabs round (MB):`, results.churn.map((r) => Math.round(r.browserMB)).join(" → "));
+    if (results.churn)
+      console.log(`\n${tag}Browser process after each open/close-10-tabs round (MB):`, results.churn.map((r) => Math.round(r.browserMB)).join(" → "));
     if (results.sample.length) console.log(`${tag}Main thread samples:`, JSON.stringify(results.sample[0]));
   }
   if (control) console.log(`\nresults: ${join(candidate.dir, "results.json")}, ${join(control.dir, "results.json")}`);

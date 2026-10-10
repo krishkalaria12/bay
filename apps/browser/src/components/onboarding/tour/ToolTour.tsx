@@ -122,7 +122,11 @@ function Tour({ windowId }: { windowId: string }) {
   const scrim = theme.dark ? "#00000080" : "#0000004D";
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="box-none"
+      onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+    >
       <Animated.View pointerEvents="none" style={[{ position: "absolute", borderWidth: TOUR_SCRIM_REACH, borderColor: scrim, overflow: "hidden" }, frame]} />
       <Animated.View style={[{ position: "absolute", left: 0, right: 0, top: 0 }, above]} />
       <Animated.View style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, below]} />
@@ -182,9 +186,7 @@ function CoachMark({ stop, index, count, windowId }: { stop: TourStop; index: nu
       shadowOffset={[0, 10]}
     >
       <View style={{ paddingHorizontal: 18, paddingTop: 15, paddingBottom: 14, gap: 7 }} accessibilityRole="none">
-        <Text style={{ fontSize: 10.5, fontWeight: "600", letterSpacing: 0.4, color: theme.textTertiary }}>
-          {`${index + 1} OF ${count}`}
-        </Text>
+        <Text style={{ fontSize: 10.5, fontWeight: "600", letterSpacing: 0.4, color: theme.textTertiary }}>{`${index + 1} OF ${count}`}</Text>
         <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.1, color: theme.textPrimary }}>{stop.title}</Text>
         <Text style={{ fontSize: 12.5, lineHeight: 18, color: theme.textSecondary }}>{stop.body}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 7, gap: 6 }}>
@@ -244,7 +246,13 @@ const sameRect = (a: Rect | null, b: Rect | null) =>
 function spotlight(stop: TourStop | undefined, target: Rect | null, size: { width: number; height: number }): Hole {
   if (!stop?.anchor || !target) return { x: size.width / 2, y: size.height / 2, width: 0, height: 0, radius: 0 };
   const pad = stop.pad ?? 4;
-  return { x: target.x - pad, y: target.y - pad, width: target.width + pad * 2, height: target.height + pad * 2, radius: (stop.radius ?? 8) + Math.max(0, pad) };
+  return {
+    x: target.x - pad,
+    y: target.y - pad,
+    width: target.width + pad * 2,
+    height: target.height + pad * 2,
+    radius: (stop.radius ?? 8) + Math.max(0, pad),
+  };
 }
 
 function placeCard(stop: TourStop | undefined, spot: Hole, size: { width: number; height: number }, height: number) {

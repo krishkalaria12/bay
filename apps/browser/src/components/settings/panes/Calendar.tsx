@@ -37,7 +37,10 @@ export function CalendarPane() {
           }
         >
           {denied ? (
-            <Button title="Open System Settings" onPress={() => void Linking.openURL("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")} />
+            <Button
+              title="Open System Settings"
+              onPress={() => void Linking.openURL("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")}
+            />
           ) : !connected ? (
             <Button title="Connect Calendar…" kind="primary" onPress={() => void connectCalendar()} />
           ) : null}
@@ -47,7 +50,12 @@ export function CalendarPane() {
       <SectionHeader title="Meeting alerts" />
       <Group>
         <Row title="Show next meeting alert">
-          <PopUp value={settings.alertLead} options={ALERT_LEADS.map((l) => ({ value: l.value, title: l.title, separatorBefore: l.value === "start" }))} onChange={(v) => updateCalendarSettings({ alertLead: v })} minWidth={170} />
+          <PopUp
+            value={settings.alertLead}
+            options={ALERT_LEADS.map((l) => ({ value: l.value, title: l.title, separatorBefore: l.value === "start" }))}
+            onChange={(v) => updateCalendarSettings({ alertLead: v })}
+            minWidth={170}
+          />
         </Row>
         <Row title="Show alerts" description="With Always, alerts also appear in Notification Center while you're in another app.">
           <PopUp
@@ -75,7 +83,10 @@ export function CalendarPane() {
 
       <SectionHeader title="Meetings" />
       <Group>
-        <Row title="Automatically group tabs for meetings" description="Joining a call makes a tab group for it; links you open from the meeting join the group.">
+        <Row
+          title="Automatically group tabs for meetings"
+          description="Joining a call makes a tab group for it; links you open from the meeting join the group."
+        >
           <Toggle value={autoGroup} onChange={(v) => useBrowser.getState().updateSettings({ autoGroupMeetingTabs: v })} />
         </Row>
       </Group>

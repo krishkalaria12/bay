@@ -68,12 +68,7 @@ export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose
         </View>
         <View style={{ marginTop: 16, gap: 12 }}>
           <Option value={history} onChange={setHistory} title="Browsing history" subtitle="Clears the pages you visited from History and the command bar." />
-          <Option
-            value={siteData}
-            onChange={setSiteData}
-            title="Cookies, site data and cached files"
-            subtitle="Signs you out of most sites."
-          />
+          <Option value={siteData} onChange={setSiteData} title="Cookies, site data and cached files" subtitle="Signs you out of most sites." />
         </View>
         <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 22 }}>
           <Button title="Cancel" onPress={onClose} />

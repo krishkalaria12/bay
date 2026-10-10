@@ -130,7 +130,16 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
     <Popover key={request.id} width={width} top={4} left={(paneWidth - width) / 2} onDismiss={cancel}>
       <View style={{ paddingTop: 16, paddingBottom: 12 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16 }}>
-          <View style={{ width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}>
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+            }}
+          >
             <Symbol name="rectangle.inset.filled.and.person.filled" size={15} color={theme.icon} style={{ width: 22, height: 22 }} />
           </View>
           <View style={{ flex: 1 }}>
@@ -177,7 +186,14 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
               <SectionTitle title={screens.length === 1 ? "Screen" : "Screens"} />
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 6 }}>
                 {screens.map((s) => (
-                  <ScreenTile key={s.id} source={s} width={(width - 20 - 12 - 8) / 2} selected={s.id === selected} onSelect={() => setSelected(s.id)} onShare={() => share(s.id)} />
+                  <ScreenTile
+                    key={s.id}
+                    source={s}
+                    width={(width - 20 - 12 - 8) / 2}
+                    selected={s.id === selected}
+                    onSelect={() => setSelected(s.id)}
+                    onShare={() => share(s.id)}
+                  />
                 ))}
               </View>
             </>
@@ -186,11 +202,20 @@ export function SharePicker({ tabId, paneWidth }: { tabId: string; paneWidth: nu
             <>
               <SectionTitle title="Windows" />
               {windows.map((s) => (
-                <WindowRow key={s.id} source={s} icon={s.pid !== undefined ? icons[s.pid] : null} selected={s.id === selected} onSelect={() => setSelected(s.id)} onShare={() => share(s.id)} />
+                <WindowRow
+                  key={s.id}
+                  source={s}
+                  icon={s.pid !== undefined ? icons[s.pid] : null}
+                  selected={s.id === selected}
+                  onSelect={() => setSelected(s.id)}
+                  onShare={() => share(s.id)}
+                />
               ))}
             </>
           ) : null}
-          {!sources.length && !tabs.length ? <Text style={{ fontSize: 12, color: theme.textSecondary, padding: 12, textAlign: "center" }}>Nothing can be shared right now.</Text> : null}
+          {!sources.length && !tabs.length ? (
+            <Text style={{ fontSize: 12, color: theme.textSecondary, padding: 12, textAlign: "center" }}>Nothing can be shared right now.</Text>
+          ) : null}
         </ScrollView>
 
         <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, paddingHorizontal: 16, marginTop: 12 }}>
@@ -211,7 +236,19 @@ function SectionTitle({ title }: { title: string }) {
 
 const selectedFill = (dark: boolean) => (dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.08)");
 
-function ScreenTile({ source, width, selected, onSelect, onShare }: { source: DisplayMediaSource; width: number; selected: boolean; onSelect(): void; onShare(): void }) {
+function ScreenTile({
+  source,
+  width,
+  selected,
+  onSelect,
+  onShare,
+}: {
+  source: DisplayMediaSource;
+  width: number;
+  selected: boolean;
+  onSelect(): void;
+  onShare(): void;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const aspect = source.width && source.height ? source.height / source.width : 10 / 16;
@@ -219,7 +256,15 @@ function ScreenTile({ source, width, selected, onSelect, onShare }: { source: Di
   return (
     <View {...hoverProps} onDoubleClick={onShare}>
       <Pressable onPress={onSelect}>
-        <View style={{ width, padding: 8, borderRadius: 10, alignItems: "center", backgroundColor: selected ? selectedFill(theme.dark) : hovered ? theme.rowHover : undefined }}>
+        <View
+          style={{
+            width,
+            padding: 8,
+            borderRadius: 10,
+            alignItems: "center",
+            backgroundColor: selected ? selectedFill(theme.dark) : hovered ? theme.rowHover : undefined,
+          }}
+        >
           <View
             style={{
               width: previewWidth,
@@ -248,13 +293,37 @@ function ScreenTile({ source, width, selected, onSelect, onShare }: { source: Di
   );
 }
 
-function TabRow({ title, url, current, selected, onSelect, onShare }: { title: string; url: string; current: boolean; selected: boolean; onSelect(): void; onShare(): void }) {
+function TabRow({
+  title,
+  url,
+  current,
+  selected,
+  onSelect,
+  onShare,
+}: {
+  title: string;
+  url: string;
+  current: boolean;
+  selected: boolean;
+  onSelect(): void;
+  onShare(): void;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   return (
     <View {...hoverProps} onDoubleClick={onShare}>
       <Pressable onPress={onSelect}>
-        <View style={{ height: 34, borderRadius: 7, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 8, backgroundColor: selected ? selectedFill(theme.dark) : hovered ? theme.rowHover : undefined }}>
+        <View
+          style={{
+            height: 34,
+            borderRadius: 7,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 9,
+            paddingHorizontal: 8,
+            backgroundColor: selected ? selectedFill(theme.dark) : hovered ? theme.rowHover : undefined,
+          }}
+        >
           <Favicon url={url} />
           <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, color: theme.textPrimary }}>
             {title}
@@ -272,7 +341,19 @@ function TabRow({ title, url, current, selected, onSelect, onShare }: { title: s
   );
 }
 
-function WindowRow({ source, icon, selected, onSelect, onShare }: { source: DisplayMediaSource; icon: string | null | undefined; selected: boolean; onSelect(): void; onShare(): void }) {
+function WindowRow({
+  source,
+  icon,
+  selected,
+  onSelect,
+  onShare,
+}: {
+  source: DisplayMediaSource;
+  icon: string | null | undefined;
+  selected: boolean;
+  onSelect(): void;
+  onShare(): void;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const title = source.name || source.app || "Window";
@@ -280,8 +361,22 @@ function WindowRow({ source, icon, selected, onSelect, onShare }: { source: Disp
   return (
     <View {...hoverProps} onDoubleClick={onShare}>
       <Pressable onPress={onSelect}>
-        <View style={{ height: 34, borderRadius: 7, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 8, backgroundColor: selected ? selectedFill(theme.dark) : hovered ? theme.rowHover : undefined }}>
-          {icon ? <Image source={{ uri: icon }} style={{ width: 20, height: 20 }} /> : <Symbol name="macwindow" size={14} color={theme.textSecondary} style={{ width: 20, height: 20 }} />}
+        <View
+          style={{
+            height: 34,
+            borderRadius: 7,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 9,
+            paddingHorizontal: 8,
+            backgroundColor: selected ? selectedFill(theme.dark) : hovered ? theme.rowHover : undefined,
+          }}
+        >
+          {icon ? (
+            <Image source={{ uri: icon }} style={{ width: 20, height: 20 }} />
+          ) : (
+            <Symbol name="macwindow" size={14} color={theme.textSecondary} style={{ width: 20, height: 20 }} />
+          )}
           <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, color: theme.textPrimary }}>
             {title}
           </Text>

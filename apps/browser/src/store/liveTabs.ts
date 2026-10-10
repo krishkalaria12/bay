@@ -44,8 +44,7 @@ export function chromeChanged(
   const firstFromChrome = (t: Keyed) => !stayed(t) && !seen.has(t.key) && madeByChrome(s, t.key);
   // An extension moving a tab to another window: it arrives in a strip of another app window.
   const home = homeWindow(s, after, siblings, stayed);
-  const movedIn = (t: Keyed) =>
-    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.spaceId) === after.profile;
+  const movedIn = (t: Keyed) => !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.spaceId) === after.profile;
   const taken = new Set(now.filter((t) => firstFromChrome(t) || movedIn(t)).map((t) => t.key));
 
   for (const t of now) if (movedIn(t)) s = intoWindow(s, t.key, home!);
@@ -93,8 +92,7 @@ export function chromeChanged(
     // successor rule (store/openers.ts) picks the one the app shows. A tab activated explicitly (an extension's
     // tabs.update, even in the same task as the close) is a switch. Engines that don't say which it was: any
     // activation that comes with the active tab leaving is taken as the pick.
-    const left =
-      after.activePickedOnClose ?? (!!previous && !after.tabs.some((t) => t.browser === previous.browser));
+    const left = after.activePickedOnClose ?? (!!previous && !after.tabs.some((t) => t.browser === previous.browser));
     if (known(s, active) && taken.has(active.key)) s = show(s, active.key);
     else if (known(s, active) && stayed(active) && active.browser !== previous?.browser && !left) s = show(s, active.key);
     else if (known(s, active)) {
@@ -265,7 +263,10 @@ function placeLike(
   const i = strip.findIndex((t) => t.key === key);
   const other = (t: Keyed) => !!s.tabs[t.key] && !panes.includes(t.key) && w.tabIds.includes(t.key);
   const next = strip.slice(i + 1).find((t) => other(t) && settled.has(t.key))?.key;
-  const prior = strip.slice(0, i).reverse().find((t) => other(t) && kept.has(t.key))?.key;
+  const prior = strip
+    .slice(0, i)
+    .reverse()
+    .find((t) => other(t) && kept.has(t.key))?.key;
   const rowStart = (id: string) => w.tabIds.find((t) => splitOf(s, id)?.tabIds.includes(t)) ?? id;
   const rowAfter = (id: string) => {
     const row = splitOf(s, id)?.tabIds ?? [id];
@@ -288,7 +289,8 @@ function intoWindow(s: BrowserState, key: string, to: string): BrowserState {
   const tab = s.tabs[key]!;
   if (!s.windows[to] || tab.windowId === to) return s;
   const windows = { ...s.windows };
-  for (const w of Object.values(s.windows)) if (w.id !== to && w.activeTabIds[tab.spaceId] === key) windows[w.id] = { ...w, activeTabIds: successors(s, w, new Set([key])) };
+  for (const w of Object.values(s.windows))
+    if (w.id !== to && w.activeTabIds[tab.spaceId] === key) windows[w.id] = { ...w, activeTabIds: successors(s, w, new Set([key])) };
   return { ...s, windows, tabs: { ...s.tabs, [key]: { ...tab, windowId: to } } };
 }
 

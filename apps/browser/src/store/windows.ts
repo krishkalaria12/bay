@@ -92,7 +92,8 @@ function withoutWindows(s: BrowserState, ids: string[]): BrowserState {
     ui: {
       ...s.ui,
       focusOrder: s.ui.focusOrder.filter((f) => !ids.includes(f)),
-      focusedWindowId: s.ui.focusedWindowId && ids.includes(s.ui.focusedWindowId) ? (s.ui.focusOrder.find((f) => !ids.includes(f)) ?? null) : s.ui.focusedWindowId,
+      focusedWindowId:
+        s.ui.focusedWindowId && ids.includes(s.ui.focusedWindowId) ? (s.ui.focusOrder.find((f) => !ids.includes(f)) ?? null) : s.ui.focusedWindowId,
     },
   };
 }
@@ -114,7 +115,10 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
   if (!target || isSmallWindow(target)) return s;
   const moving = ids
     .map((id) => s.tabs[id])
-    .filter((t): t is Tab => !!t && t.windowId !== targetId && isIncognitoSpace(t.spaceId) === target.incognito && (!target.incognito || t.spaceId === target.spaceId));
+    .filter(
+      (t): t is Tab =>
+        !!t && t.windowId !== targetId && isIncognitoSpace(t.spaceId) === target.incognito && (!target.incognito || t.spaceId === target.spaceId),
+    );
   if (!moving.length) return s;
   const movingIds = new Set(moving.map((t) => t.id));
 
@@ -129,7 +133,10 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
       tabIds: pinnedFirst([...listIds(next, key), t.id], tabs),
     });
   }
-  next = withoutWindows(next, littles.map((t) => t.windowId).filter((w) => !next.tabLists[w]));
+  next = withoutWindows(
+    next,
+    littles.map((t) => t.windowId).filter((w) => !next.tabLists[w]),
+  );
 
   const tabs = { ...next.tabs };
   for (const t of moving) tabs[t.id] = pageTo(next.tabs[t.id]!, targetId);
@@ -160,13 +167,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const s = get();
     const id = newId("w");
     const small = !!o.small && !o.incognito;
-    const spaceId = o.incognito
-      ? incognitoSpaceId(id)
-      : o.spaceId && s.spaces[o.spaceId]
-        ? o.spaceId
-        : small
-          ? littleBayProfile(s)
-          : s.settings.defaultSpaceId;
+    const spaceId = o.incognito ? incognitoSpaceId(id) : o.spaceId && s.spaces[o.spaceId] ? o.spaceId : small ? littleBayProfile(s) : s.settings.defaultSpaceId;
     let next = withWindow(s, small ? smallWindow(id, spaceId) : emptyWindow(id, spaceId, !!o.incognito, o.frame ?? null));
     if (o.tabIds?.length && !small) next = moveTabsInto(next, o.tabIds, id);
     const shown = o.tabIds?.length && !small ? findLast(o.tabIds, (t) => next.tabs[t]?.windowId === id) : undefined;
@@ -280,7 +281,8 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       : { ...fresh, spaceId, navigation: loaded ? navigationTo(tab.url) : null, lastActiveAt: Date.now() };
     const tabs = { ...s.tabs, [tabId]: moved };
     const windows = { ...s.windows };
-    for (const w of Object.values(s.windows)) if (w.activeTabIds[tab.spaceId] === tabId) windows[w.id] = { ...w, activeTabIds: successors(s, w, new Set([tabId])) };
+    for (const w of Object.values(s.windows))
+      if (w.activeTabIds[tab.spaceId] === tabId) windows[w.id] = { ...w, activeTabIds: successors(s, w, new Set([tabId])) };
     let next: BrowserState = {
       ...s,
       tabs,
@@ -373,7 +375,10 @@ function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null
   if (tile) {
     const unloaded = !tile.navigation && !tile.adoptId;
     const tabs = unloaded
-      ? { ...s.tabs, [tile.id]: { ...tile, url: entry.tab.url, title: entry.tab.title, favicon: entry.tab.favicon, muted: entry.tab.muted, adoptId: restoreId(tile.id) } }
+      ? {
+          ...s.tabs,
+          [tile.id]: { ...tile, url: entry.tab.url, title: entry.tab.title, favicon: entry.tab.favicon, muted: entry.tab.muted, adoptId: restoreId(tile.id) },
+        }
       : s.tabs;
     const next: BrowserState = { ...s, closedTabs, tabs };
     return apply(next, activated(next, tile.id, resolveWindowId(next, requested)));

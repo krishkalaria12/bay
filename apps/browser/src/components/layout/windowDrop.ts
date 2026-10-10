@@ -2,7 +2,6 @@ import { useBrowser, type BrowserState } from "../../store/browser";
 import type { Frame } from "../../store/types";
 import { viewTabIds } from "../../store/model";
 
-
 // `live`: the window's frame now, when the store's isn't (it keeps the restored frame in full screen).
 export function screenPoint(s: BrowserState, windowId: string, x: number, y: number, live?: Frame | null): [number, number] | null {
   const frame = live ?? s.windows[windowId]?.frame;

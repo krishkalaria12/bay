@@ -81,7 +81,13 @@ export function DevBar({
       <Hatch width={width} height={height} color={theme.dark ? "rgba(255,255,255,0.055)" : "rgba(0,0,0,0.05)"} />
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       {navigation && geometry.sidebarButton !== null ? (
-        <ToolbarButton style={at(geometry.sidebarButton)} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
+        <ToolbarButton
+          style={at(geometry.sidebarButton)}
+          palette={palette}
+          icon={sidebarSymbol}
+          onPress={() => useBrowser.getState().toggleSidebar(windowId)}
+          tooltip="Auto-Hide Tabs (⌘S)"
+        />
       ) : null}
       {navigation ? (
         <>
@@ -90,7 +96,19 @@ export function DevBar({
           <ReloadButton style={at(geometry.reload)} tab={tab} loading={loading} palette={palette} onFocus={focus} />
         </>
       ) : null}
-      <View pointerEvents="box-none" style={{ position: "absolute", left: navigation ? geometry.urlLeft : geometry.urlLeft - 2, right: 6, top: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 2 }}>
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: "absolute",
+          left: navigation ? geometry.urlLeft : geometry.urlLeft - 2,
+          right: 6,
+          top: 0,
+          bottom: 0,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 2,
+        }}
+      >
         <Address url={tab.url} tabId={tabId} windowId={windowId} onFocus={focus} />
         {button("ruler", inspecting ? "Stop Inspecting (esc)" : "Inspect Elements", () => toggleInspecting(tabId), inspecting)}
         {button("chevron.left.forwardslash.chevron.right", "Developer Tools (⌥⌘I)", () => void webviews.get(tabId)?.showDevTools("toggle"))}
@@ -120,16 +138,27 @@ function Address({ url, tabId, windowId, onFocus }: { url: string; tabId: string
   const secure = url.startsWith("https:") || isLocalDevSite(url);
   return (
     <View {...hoverProps} style={{ flex: 1, height: 28 }}>
-      <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => {
-        const tab = useBrowser.getState().tabs[tabId];
-        if (tab) void showUrlBarMenu(tab);
-      }}>
+      <ContextMenuArea
+        style={{ flex: 1 }}
+        onContextMenu={() => {
+          const tab = useBrowser.getState().tabs[tabId];
+          if (tab) void showUrlBarMenu(tab);
+        }}
+      >
         <Pressable
           onPress={() => {
             onFocus();
             useBrowser.getState().openPanel(windowId, url);
           }}
-          style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8, borderRadius: 7, backgroundColor: hovered ? theme.toolbarHover : undefined }}
+          style={{
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            paddingHorizontal: 8,
+            borderRadius: 7,
+            backgroundColor: hovered ? theme.toolbarHover : undefined,
+          }}
         >
           <Symbol name={secure ? "lock" : "lock.open"} size={11} color={theme.textSecondary} style={{ width: 14, height: 16 }} />
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, fontFamily: MONO_FONT, color: theme.textPrimary }}>

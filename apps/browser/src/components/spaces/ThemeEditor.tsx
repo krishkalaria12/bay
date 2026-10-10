@@ -146,7 +146,8 @@ function ThemeEditor({ request }: { request: Request }) {
     if (swatch.color) useBrowser.getState().updateSpace(request.spaceId, { color: swatch.color, theme: null });
     else useBrowser.getState().updateSpace(request.spaceId, { theme: { ...current, colors: swatch.colors } });
   };
-  const chosen = (swatch: Swatch) => (swatch.color ? !space.theme && space.color === swatch.color : !!space.theme && space.theme.colors.join() === swatch.colors.join());
+  const chosen = (swatch: Swatch) =>
+    swatch.color ? !space.theme && space.color === swatch.color : !!space.theme && space.theme.colors.join() === swatch.colors.join();
 
   return (
     <>
@@ -168,10 +169,19 @@ function ThemeEditor({ request }: { request: Request }) {
             {/* Over the field: light, dark or automatic at the top; at the bottom −, + and the next harmony. */}
             <View pointerEvents="box-none" style={{ position: "absolute", top: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 }}>
               {SCHEMES.map((s) => (
-                <IconButton key={s.mode} icon={s.icon} tooltip={s.tooltip} on={appearance === s.mode} onPress={() => useBrowser.getState().updateSettings({ appearance: s.mode })} />
+                <IconButton
+                  key={s.mode}
+                  icon={s.icon}
+                  tooltip={s.tooltip}
+                  on={appearance === s.mode}
+                  onPress={() => useBrowser.getState().updateSettings({ appearance: s.mode })}
+                />
               ))}
             </View>
-            <View pointerEvents="box-none" style={{ position: "absolute", bottom: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 }}>
+            <View
+              pointerEvents="box-none"
+              style={{ position: "absolute", bottom: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 }}
+            >
               <IconButton icon="minus" tooltip="Remove Colour" disabled={current.colors.length <= 1} onPress={removeColor} />
               <IconButton icon="plus" tooltip="Add Colour" disabled={current.colors.length >= MAX_THEME_COLORS} onPress={addColor} />
               <IconButton icon="dice" tooltip="Change Harmony" disabled={current.colors.length < 2} onPress={cycleHarmony} />
@@ -232,7 +242,13 @@ function ColorField({ colors, onMoveFirst }: { colors: string[]; onMoveFirst(col
       ref={field}
       {...pan.panHandlers}
       onLayout={() => field.current?.measureInWindow((x, y) => (origin.current = { x, y }))}
-      style={{ width: THEME_FIELD_WIDTH, height: THEME_FIELD_HEIGHT, borderRadius: 10, overflow: "hidden", backgroundColor: theme.dark ? "#FFFFFF08" : "#0000000D" }}
+      style={{
+        width: THEME_FIELD_WIDTH,
+        height: THEME_FIELD_HEIGHT,
+        borderRadius: 10,
+        overflow: "hidden",
+        backgroundColor: theme.dark ? "#FFFFFF08" : "#0000000D",
+      }}
     >
       <View pointerEvents="none">
         <Image source={theme.dark ? DOTS.dark : DOTS.light} style={{ width: THEME_FIELD_WIDTH, height: THEME_FIELD_HEIGHT }} />
@@ -310,7 +326,18 @@ function WaveSlider({ value, colors, onChange }: { value: number; colors: string
       }}
       style={{ flex: 1, height: THEME_WAVE_HEIGHT }}
     >
-      <View pointerEvents="none" style={{ position: "absolute", left: 4, right: 4, top: THEME_WAVE_HEIGHT / 2 - 13, height: 26, borderRadius: 13, backgroundColor: theme.dark ? "#FFFFFF0F" : "#00000009" }} />
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: 4,
+          right: 4,
+          top: THEME_WAVE_HEIGHT / 2 - 13,
+          height: 26,
+          borderRadius: 13,
+          backgroundColor: theme.dark ? "#FFFFFF0F" : "#00000009",
+        }}
+      />
       {points.slice(1).map((p, i) => {
         const s = segment(points[i]!, p);
         const lit = s.x <= thumbX;
@@ -397,13 +424,30 @@ function GrainDial({ value, onChange }: { value: number; onChange(v: number): vo
           <View
             key={i}
             pointerEvents="none"
-            style={{ position: "absolute", left: r + p.x - 2, top: r + p.y - 2, width: 4, height: 4, borderRadius: 2, backgroundColor: mark, opacity: i <= steps && steps > 0 ? 0.45 : 0.15 }}
+            style={{
+              position: "absolute",
+              left: r + p.x - 2,
+              top: r + p.y - 2,
+              width: 4,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: mark,
+              opacity: i <= steps && steps > 0 ? 0.45 : 0.15,
+            }}
           />
         );
       })}
       {/* The grain itself, as the window shows it, in the middle. */}
-      <View pointerEvents="none" style={{ position: "absolute", left: r - inner / 2, top: r - inner / 2, width: inner, height: inner, borderRadius: inner / 2, overflow: "hidden" }}>
-        <WindowBackdrop colors={theme.dark ? ["#5A5A5E", "#2C2C2E"] : ["#E4E4E7", "#B9B9BE"]} angle={135} grainOpacity={value * 0.45} style={StyleSheet.absoluteFill} />
+      <View
+        pointerEvents="none"
+        style={{ position: "absolute", left: r - inner / 2, top: r - inner / 2, width: inner, height: inner, borderRadius: inner / 2, overflow: "hidden" }}
+      >
+        <WindowBackdrop
+          colors={theme.dark ? ["#5A5A5E", "#2C2C2E"] : ["#E4E4E7", "#B9B9BE"]}
+          angle={135}
+          grainOpacity={value * 0.45}
+          style={StyleSheet.absoluteFill}
+        />
       </View>
       <View
         pointerEvents="none"
@@ -426,7 +470,16 @@ function SwatchButton({ swatch, on, onPress }: { swatch: Swatch; on: boolean; on
   const theme = useTheme();
   return (
     <Pressable onPress={onPress} tooltip={swatch.name}>
-      <View style={{ width: THEME_SWATCH + 4, height: THEME_SWATCH + 4, borderRadius: THEME_SWATCH / 2 + 2, padding: 2, borderWidth: 1.5, borderColor: on ? theme.textPrimary : "transparent" }}>
+      <View
+        style={{
+          width: THEME_SWATCH + 4,
+          height: THEME_SWATCH + 4,
+          borderRadius: THEME_SWATCH / 2 + 2,
+          padding: 2,
+          borderWidth: 1.5,
+          borderColor: on ? theme.textPrimary : "transparent",
+        }}
+      >
         <View style={{ flex: 1, borderRadius: THEME_SWATCH / 2, overflow: "hidden", flexDirection: "row" }}>
           {swatch.colors.map((c) => (
             <View key={c} style={{ flex: 1, backgroundColor: c }} />
@@ -437,14 +490,38 @@ function SwatchButton({ swatch, on, onPress }: { swatch: Swatch; on: boolean; on
   );
 }
 
-function IconButton({ icon, tooltip, on, narrow, disabled, onPress }: { icon: string; tooltip: string; on?: boolean; narrow?: boolean; disabled?: boolean; onPress(): void }) {
+function IconButton({
+  icon,
+  tooltip,
+  on,
+  narrow,
+  disabled,
+  onPress,
+}: {
+  icon: string;
+  tooltip: string;
+  on?: boolean;
+  narrow?: boolean;
+  disabled?: boolean;
+  onPress(): void;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const fill = on ? (theme.dark ? "#FFFFFF1F" : "#0000001A") : hovered && !disabled ? theme.rowHover : undefined;
   return (
     <View {...hoverProps} tooltip={tooltip}>
       <Pressable disabled={disabled} accessibilityLabel={tooltip} accessibilityState={{ selected: on, disabled }} onPress={onPress}>
-        <View style={{ width: narrow ? 16 : 26, height: 26, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: fill, opacity: disabled ? 0.3 : on || hovered ? 1 : 0.6 }}>
+        <View
+          style={{
+            width: narrow ? 16 : 26,
+            height: 26,
+            borderRadius: 7,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: fill,
+            opacity: disabled ? 0.3 : on || hovered ? 1 : 0.6,
+          }}
+        >
           <Symbol name={icon} size={12} weight="semibold" color={theme.textPrimary} style={{ width: 15, height: 15 }} />
         </View>
       </Pressable>

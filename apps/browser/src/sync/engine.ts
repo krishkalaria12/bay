@@ -367,9 +367,7 @@ function linkProfiles(app: ScopeState) {
   for (const id of s.spaceOrder) {
     const profile = s.spaces[id];
     if (!profile || isIncognitoSpace(id) || doc.profiles[id]) continue;
-    const match = doc.joining
-      ? remote.find(([syncId, r]) => !taken.has(syncId) && (id === DEFAULT_SPACE_ID ? r.d : r.n === profile.name))?.[0]
-      : undefined;
+    const match = doc.joining ? remote.find(([syncId, r]) => !taken.has(syncId) && (id === DEFAULT_SPACE_ID ? r.d : r.n === profile.name))?.[0] : undefined;
     const syncId = match ?? SyncNative!.newDeviceId();
     doc.profiles[id] = { syncId, enabled: true };
     taken.add(syncId);
@@ -405,7 +403,11 @@ function summarize(): Pick<SyncUi, "devices" | "remoteTabs" | "remoteProfiles"> 
       .map(([k, v]) => ({ deviceId: k.slice(5), value: v as DeviceTabs }))
       // A device that stopped syncing took its record away; one without a name record is on its way out.
       .filter(({ deviceId, value }) => deviceId !== doc.deviceId && names.has(deviceId) && value.tabs.length > 0)
-      .map(({ deviceId, value }) => ({ deviceId, name: names.get(deviceId) || value.n || "Unknown Device", tabs: value.tabs.map((t) => ({ url: t.u, title: t.t })) }));
+      .map(({ deviceId, value }) => ({
+        deviceId,
+        name: names.get(deviceId) || value.n || "Unknown Device",
+        tabs: value.tabs.map((t) => ({ url: t.u, title: t.t })),
+      }));
   }
   const linked = new Set(Object.values(doc.profiles).map((l) => l.syncId));
   const remoteProfiles = [...visible(app, "prof:")]
@@ -547,7 +549,16 @@ export function startSync() {
   });
   if (__DEV__) {
     (globalThis as { nnSync?: object }).nnSync = {
-      useSync, syncNow, turnOnSync, enterRecoveryPhrase, stopSync, setTypeSynced, setProfileSynced, addRemoteProfile, setSyncFolder, folderInfo,
+      useSync,
+      syncNow,
+      turnOnSync,
+      enterRecoveryPhrase,
+      stopSync,
+      setTypeSynced,
+      setProfileSynced,
+      addRemoteProfile,
+      setSyncFolder,
+      folderInfo,
       doc: () => doc,
       native: SyncNative,
       get menu(): typeof import("./menu") {

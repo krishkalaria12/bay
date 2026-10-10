@@ -47,11 +47,7 @@ function taskRows(tasks: EngineTask[], tabs: Record<string, Tab>, browsers: Reco
     const tabIds = task.browserIds.map((id) => browsers[id]).filter((id): id is string => !!id && !!tabs[id]);
     const first = tabIds[0] ? tabs[tabIds[0]] : undefined;
     const name = first ? first.customTitle || first.title || first.url || "New Tab" : "";
-    const label = first
-      ? `Tab: ${name}${tabIds.length > 1 ? ` (and ${tabIds.length - 1} more)` : ""}`
-      : task.type === "browser"
-        ? APP_NAME
-        : task.title;
+    const label = first ? `Tab: ${name}${tabIds.length > 1 ? ` (and ${tabIds.length - 1} more)` : ""}` : task.type === "browser" ? APP_NAME : task.title;
     return { ...task, label, tabIds, favicon: first ? { url: first.url, favicon: first.favicon, spaceId: first.spaceId } : null };
   });
   const value = (r: Row) => (sort.key === "memory" ? r.memory : sort.key === "cpu" ? r.cpu : sort.key === "gpu" ? r.gpuMemory : 0);
@@ -72,7 +68,11 @@ export function TaskManagerWindow() {
 
   useEffect(() => {
     let live = true;
-    const poll = () => void listTasks().then((list) => live && setTasks(list), () => {});
+    const poll = () =>
+      void listTasks().then(
+        (list) => live && setTasks(list),
+        () => {},
+      );
     poll();
     const timer = setInterval(poll, TASK_POLL_MS);
     return () => {
@@ -192,7 +192,13 @@ function HeaderCell({
             {column.title}
           </Text>
           {active ? (
-            <Symbol name={descending ? "chevron.down" : "chevron.up"} size={8} weight="semibold" color={theme.textSecondary} style={{ width: 10, height: 10 }} />
+            <Symbol
+              name={descending ? "chevron.down" : "chevron.up"}
+              size={8}
+              weight="semibold"
+              color={theme.textSecondary}
+              style={{ width: 10, height: 10 }}
+            />
           ) : null}
         </View>
       </Pressable>

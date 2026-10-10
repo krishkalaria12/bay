@@ -46,7 +46,18 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
           Add a tab to this Split View
         </Text>
         {typing ? (
-          <View style={{ height: 36, marginHorizontal: 6, paddingHorizontal: 10, borderRadius: 9, flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: theme.rowHover }}>
+          <View
+            style={{
+              height: 36,
+              marginHorizontal: 6,
+              paddingHorizontal: 10,
+              borderRadius: 9,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 9,
+              backgroundColor: theme.rowHover,
+            }}
+          >
             <Symbol name="magnifyingglass" size={13} color={theme.textSecondary} style={{ width: 16, height: 16 }} />
             <TextInput
               autoFocus
@@ -66,7 +77,12 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
             />
           </View>
         ) : (
-          <Row icon={<Symbol name="magnifyingglass" size={13} color={theme.textSecondary} style={{ width: 16, height: 16 }} />} label="Search or Ask a Question" secondary onPress={() => setTyping(true)} />
+          <Row
+            icon={<Symbol name="magnifyingglass" size={13} color={theme.textSecondary} style={{ width: 16, height: 16 }} />}
+            label="Search or Ask a Question"
+            secondary
+            onPress={() => setTyping(true)}
+          />
         )}
         {suggestions.length > 0 && <View style={{ height: 6 }} />}
         {suggestions.map((id) => (

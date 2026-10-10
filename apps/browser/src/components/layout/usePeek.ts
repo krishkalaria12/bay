@@ -14,9 +14,11 @@ export function usePeek(enabled: boolean) {
   const [live, setLive] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const slideOut = () => {
-    slide.set(withTiming(0, SLIDE, (finished) => {
-      if (finished) runOnJS(setLive)(false);
-    }));
+    slide.set(
+      withTiming(0, SLIDE, (finished) => {
+        if (finished) runOnJS(setLive)(false);
+      }),
+    );
   };
   const show = () => {
     clearTimeout(hideTimer.current);

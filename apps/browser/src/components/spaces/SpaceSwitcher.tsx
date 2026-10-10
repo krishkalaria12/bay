@@ -18,7 +18,16 @@ import { profileChoices } from "./CreateSpace";
 import { profileSymbol } from "./icons";
 import { openThemeEditor } from "./ThemeEditor";
 import { SpaceDots } from "./SpaceDots";
-import { PROFILE_DOTS_HEIGHT, SPACE_CELL, SPACE_GLYPH, SPACE_HOVERED_OPACITY, SPACE_IDLE_OPACITY, SPACE_PLUS, SPACE_SELECTED_OPACITY, SPACE_SIDE } from "./constants";
+import {
+  PROFILE_DOTS_HEIGHT,
+  SPACE_CELL,
+  SPACE_GLYPH,
+  SPACE_HOVERED_OPACITY,
+  SPACE_IDLE_OPACITY,
+  SPACE_PLUS,
+  SPACE_SELECTED_OPACITY,
+  SPACE_SIDE,
+} from "./constants";
 
 // Arc's space switcher, at the foot of the sidebar: a space's icon each (Bay's profiles are Arc's spaces), the shown
 // one at full strength as the pager moves, and + for a new space. Dots once the icons don't fit.
@@ -69,7 +78,9 @@ function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page:
                 style={{ width: SPACE_GLYPH + 2, height: SPACE_GLYPH + 2 }}
               />
             ) : (
-              <Text style={{ fontSize: profile.icon ? SPACE_GLYPH : 12, fontWeight: "700", color: ink }}>{profile.icon ?? (profile.name.trim()[0] ?? "?").toUpperCase()}</Text>
+              <Text style={{ fontSize: profile.icon ? SPACE_GLYPH : 12, fontWeight: "700", color: ink }}>
+                {profile.icon ?? (profile.name.trim()[0] ?? "?").toUpperCase()}
+              </Text>
             )}
           </Animated.View>
         </Pressable>
@@ -97,7 +108,12 @@ export async function openSpaceMenu(windowId: string, id: string) {
       title: "Theme",
       symbol: "paintpalette",
       children: [
-        ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ id: `theme:${c}`, title: SPACE_COLORS[c].name, swatch: SPACE_COLORS[c].swatch, checked: !space.theme && c === space.color })),
+        ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({
+          id: `theme:${c}`,
+          title: SPACE_COLORS[c].name,
+          swatch: SPACE_COLORS[c].swatch,
+          checked: !space.theme && c === space.color,
+        })),
         { separator: true as const },
         { id: "editTheme", title: "Edit Theme…", symbol: "slider.horizontal.3", checked: !!space.theme },
       ],

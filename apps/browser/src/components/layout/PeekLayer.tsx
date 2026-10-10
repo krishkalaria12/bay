@@ -83,7 +83,12 @@ export function PeekLayer({ windowId, peek, rect, children }: { windowId: string
 
       <Animated.View style={[{ position: "absolute", top: PEEK_CARD_GAP, left: rect.width - inset + 10, right: 6, gap: 10 }, card]}>
         <PeekButton icon="xmark" label="Close" tooltip="Close Peek (⌘W)" onPress={close} />
-        <PeekButton icon="arrow.up.left.and.arrow.down.right" label="Open as Tab" tooltip="Open as Tab (⌘O)" onPress={() => useBrowser.getState().keepPeek(windowId)} />
+        <PeekButton
+          icon="arrow.up.left.and.arrow.down.right"
+          label="Open as Tab"
+          tooltip="Open as Tab (⌘O)"
+          onPress={() => useBrowser.getState().keepPeek(windowId)}
+        />
         <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" onPress={() => useBrowser.getState().splitPeek(windowId)} />
       </Animated.View>
     </View>

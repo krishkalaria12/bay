@@ -42,27 +42,64 @@ function bigSession(count, bigGroup = 0) {
     const id = `t${i}`;
     const host = ["github.com", "x.com", "news.ycombinator.com", "en.wikipedia.org"][i % 4];
     tabs[id] = {
-      id, windowId: "w", spaceId: "default", url: `https://${host}/page/${i}`, title: `Page ${i} - ${host.split(".")[0]}`,
-      favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, pinnedUrl: null, openerId: null,
-      createdAt: t0 + i, lastActiveAt: t0 + i,
+      id,
+      windowId: "w",
+      spaceId: "default",
+      url: `https://${host}/page/${i}`,
+      title: `Page ${i} - ${host.split(".")[0]}`,
+      favicon: null,
+      pinned: false,
+      muted: false,
+      zoom: 1,
+      customTitle: null,
+      customIcon: null,
+      pinnedUrl: null,
+      openerId: null,
+      createdAt: t0 + i,
+      lastActiveAt: t0 + i,
     };
     ids.push(id);
   }
   const groups = {};
   let at = 0;
   if (bigGroup) {
-    groups.big = { id: "big", windowId: "w", spaceId: "default", name: "", icon: null, color: null, collapsed: false, pinned: false, tabIds: ids.slice(0, bigGroup), createdAt: t0 };
+    groups.big = {
+      id: "big",
+      windowId: "w",
+      spaceId: "default",
+      name: "",
+      icon: null,
+      color: null,
+      collapsed: false,
+      pinned: false,
+      tabIds: ids.slice(0, bigGroup),
+      createdAt: t0,
+    };
     at = bigGroup;
   }
   for (let g = 0; at + 20 <= count && g < count / 40; g++, at += 40) {
-    groups[`g${g}`] = { id: `g${g}`, windowId: "w", spaceId: "default", name: "", icon: null, color: null, collapsed: g % 2 === 0, pinned: false, tabIds: ids.slice(at, at + 20), createdAt: t0 };
+    groups[`g${g}`] = {
+      id: `g${g}`,
+      windowId: "w",
+      spaceId: "default",
+      name: "",
+      icon: null,
+      color: null,
+      collapsed: g % 2 === 0,
+      pinned: false,
+      tabIds: ids.slice(at, at + 20),
+      createdAt: t0,
+    };
   }
   const splits = {};
-  for (let i = 0; i + 1 < count; i += 10) splits[`s${i}`] = { id: `s${i}`, windowId: "w", tabIds: [ids[i], ids[i + 1]], orientation: "horizontal", sizes: [0.5, 0.5] };
+  for (let i = 0; i + 1 < count; i += 10)
+    splits[`s${i}`] = { id: `s${i}`, windowId: "w", tabIds: [ids[i], ids[i + 1]], orientation: "horizontal", sizes: [0.5, 0.5] };
   S().hydrate({
     spaces: { default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 } },
     spaceOrder: ["default"],
-    windows: { w: { id: "w", spaceId: "default", incognito: false, tabIds: ids, activeTabIds: { default: ids[5] }, sidebarOpen: true, frame: null, createdAt: t0 } },
+    windows: {
+      w: { id: "w", spaceId: "default", incognito: false, tabIds: ids, activeTabIds: { default: ids[5] }, sidebarOpen: true, frame: null, createdAt: t0 },
+    },
     windowOrder: ["w"],
     tabs,
     groups,
@@ -76,54 +113,79 @@ const benches = {
     for (const count of [500, 1000]) {
       const ids = bigSession(count);
       let i = 0;
-      report(`sidebar entries, ${count} tabs, after a title change`, time(() => {
-        S().updateTab(ids[i++ % count], { title: `T${i}` });
-        sidebarEntries(S(), "w");
-      }));
-      report(`sidebar entries, ${count} tabs, after a progress update`, time(() => {
-        S().updateLive(ids[i++ % count], { progress: (i % 10) / 10 });
-        sidebarEntries(S(), "w");
-      }));
-      report(`strip entries, ${count} tabs, after a title change`, time(() => {
-        S().updateTab(ids[i++ % count], { title: `T${i}` });
-        strip.stripEntries(S(), "w", "default");
-      }));
-      report(`strip entries, ${count} tabs, after a progress update`, time(() => {
-        S().updateLive(ids[i++ % count], { progress: (i % 10) / 10 });
-        strip.stripEntries(S(), "w", "default");
-      }));
+      report(
+        `sidebar entries, ${count} tabs, after a title change`,
+        time(() => {
+          S().updateTab(ids[i++ % count], { title: `T${i}` });
+          sidebarEntries(S(), "w");
+        }),
+      );
+      report(
+        `sidebar entries, ${count} tabs, after a progress update`,
+        time(() => {
+          S().updateLive(ids[i++ % count], { progress: (i % 10) / 10 });
+          sidebarEntries(S(), "w");
+        }),
+      );
+      report(
+        `strip entries, ${count} tabs, after a title change`,
+        time(() => {
+          S().updateTab(ids[i++ % count], { title: `T${i}` });
+          strip.stripEntries(S(), "w", "default");
+        }),
+      );
+      report(
+        `strip entries, ${count} tabs, after a progress update`,
+        time(() => {
+          S().updateLive(ids[i++ % count], { progress: (i % 10) / 10 });
+          strip.stripEntries(S(), "w", "default");
+        }),
+      );
     }
     const ids = bigSession(1000, 500);
     let i = 0;
-    report("group entries, 500 members, after a title change", time(() => {
-      S().updateTab(ids[600 + (i++ % 300)], { title: `T${i}` });
-      groupEntries(S(), "big");
-    }));
+    report(
+      "group entries, 500 members, after a title change",
+      time(() => {
+        S().updateTab(ids[600 + (i++ % 300)], { title: `T${i}` });
+        groupEntries(S(), "big");
+      }),
+    );
   },
 
   groupNames() {
     for (const members of [500, 1000]) {
       const ids = bigSession(members + 100, members);
       let i = 0;
-      report(`auto group name, ${members} members, after a progress update`, time(() => {
-        S().updateLive(ids[i++ % members], { progress: (i % 10) / 10 });
-        groupLabel(S(), S().groups.big);
-      }));
-      report(`auto group name, ${members} members, after an outside title change`, time(() => {
-        S().updateTab(ids[members + (i++ % 100)], { title: `T${i}` });
-        groupLabel(S(), S().groups.big);
-      }));
-      report(`auto group name, ${members} members, after a member title change`, time(() => {
-        S().updateTab(ids[i++ % members], { title: `Page ${i} - github` });
-        groupLabel(S(), S().groups.big);
-      }));
+      report(
+        `auto group name, ${members} members, after a progress update`,
+        time(() => {
+          S().updateLive(ids[i++ % members], { progress: (i % 10) / 10 });
+          groupLabel(S(), S().groups.big);
+        }),
+      );
+      report(
+        `auto group name, ${members} members, after an outside title change`,
+        time(() => {
+          S().updateTab(ids[members + (i++ % 100)], { title: `T${i}` });
+          groupLabel(S(), S().groups.big);
+        }),
+      );
+      report(
+        `auto group name, ${members} members, after a member title change`,
+        time(() => {
+          S().updateTab(ids[i++ % members], { title: `Page ${i} - github` });
+          groupLabel(S(), S().groups.big);
+        }),
+      );
     }
   },
 
   suggest() {
     const history = [];
     const t0 = Date.now();
-    for (let i = 0; i < 5000; i++) history.push({ url: `https://h${i % 300}.com/page/${i}`, title: `History ${i}`, favicon: null, visits: 1 + (i % 7), lastVisit: t0 - i * 1000 });
+    for (let i = 0; i < 5000; i++)
+      history.push({ url: `https://h${i % 300}.com/page/${i}`, title: `History ${i}`, favicon: null, visits: 1 + (i % 7), lastVisit: t0 - i * 1000 });
     for (const count of [25_000, 50_000]) {
       const bookmarks = [];
       for (let i = 0; i < count; i++) bookmarks.push({ url: `https://b${i % 900}.com/bm/${i}`, title: `Bookmark ${i}`, favicon: null });
@@ -172,7 +234,10 @@ const benches = {
     const perKey = rounds.slice(5).flat();
     report(`suggestions on the seed profile: keystroke median (${query.length} keys × 15 warm rounds)`, median(perKey));
     report("suggestions on the seed profile: slowest warm keystroke", Math.max(...perKey));
-    report("suggestions on the seed profile: first round, all keys", rounds[0].reduce((a, b) => a + b, 0));
+    report(
+      "suggestions on the seed profile: first round, all keys",
+      rounds[0].reduce((a, b) => a + b, 0),
+    );
   },
 };
 
@@ -180,4 +245,3 @@ const benches = {
 const wanted = new Map(process.argv.slice(2).map((a) => [a.split("=")[0], a.includes("=") ? a.slice(a.indexOf("=") + 1) : undefined]));
 for (const name of wanted.keys()) if (!(name in benches)) throw new Error(`no case ${name}; cases: ${Object.keys(benches).join(", ")}`);
 for (const [name, run] of Object.entries(benches)) if (!wanted.size || wanted.has(name)) await run(wanted.get(name));
-

@@ -93,14 +93,14 @@ export function Toolbar({
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       <Animated.View style={[StyleSheet.absoluteFill, dimStyle]} pointerEvents="box-none">
         {geometry.sidebarButton !== null && <SidebarToggle style={at.sidebarButton} palette={palette} windowId={windowId} />}
-        {geometry.sidebarButtonEnd && <SidebarToggle style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: 8 }} palette={palette} windowId={windowId} />}
+        {geometry.sidebarButtonEnd && (
+          <SidebarToggle style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: 8 }} palette={palette} windowId={windowId} />
+        )}
         <HistoryButton style={at.back} tab={tab} direction={-1} disabled={!history.back} palette={palette} onFocus={focus} />
         <HistoryButton style={at.forward} tab={tab} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
         <ReloadButton style={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} />
         <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={TOOLBAR_BUTTON_MID - 14} right={(inSplit ? 8 + 60 : 8) + end} />
-        {tab.url ? (
-          <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} />
-        ) : null}
+        {tab.url ? <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} /> : null}
         {inSplit && (
           <View style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: 8 + end, flexDirection: "row", gap: -2 }}>
             <ToolbarButton palette={palette} icon="rectangle.split.2x1" size={14} box={30} onPress={() => showSplitMenu(tab.id)} tooltip="Split View" />
@@ -109,7 +109,9 @@ export function Toolbar({
         )}
       </Animated.View>
 
-      {tab.url && !bare ? <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} /> : null}
+      {tab.url && !bare ? (
+        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} />
+      ) : null}
       {isLoading && <TabProgressBar tabId={tabId} color={palette.background ? palette.icon : theme.accent} />}
     </View>
   );
@@ -117,7 +119,9 @@ export function Toolbar({
 
 function SidebarToggle({ style, palette, windowId }: { style: ViewStyle; palette: ToolbarPalette; windowId: string }) {
   const icon = useSidebarSymbol();
-  return <ToolbarButton style={style} palette={palette} icon={icon} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />;
+  return (
+    <ToolbarButton style={style} palette={palette} icon={icon} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
+  );
 }
 
 export function ReloadButton({
@@ -237,7 +241,9 @@ export function UrlField({
   const theme = useTheme();
   const showFullUrl = useSettings((s) => s.showFullUrl);
   const bookmarked = useIsBookmarked(tab.url);
-  const insecure = usePage(tab.id, (p) => (p.security && (p.security.level === "insecure" || p.security.level === "certificateError") ? p.security.level : null));
+  const insecure = usePage(tab.id, (p) =>
+    p.security && (p.security.level === "insecure" || p.security.level === "certificateError") ? p.security.level : null,
+  );
   const popups = usePage(tab.id, (p) => p.popups.length);
   const capture = usePage(tab.id, (p) => p.mediaAccess);
   const controlsOpen = usePages((s) => s.popover[tab.id] === "siteControls");
@@ -299,7 +305,10 @@ export function UrlField({
         </Pressable>
       )}
       <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => void showUrlBarMenu(tab)}>
-        <Pressable onPress={() => openPanel(tab.url)} style={{ flex: 1, height: sidebar?.height ?? 30, justifyContent: "center", paddingLeft: insecure ? 3 : sidebar ? 10 : 8 }}>
+        <Pressable
+          onPress={() => openPanel(tab.url)}
+          style={{ flex: 1, height: sidebar?.height ?? 30, justifyContent: "center", paddingLeft: insecure ? 3 : sidebar ? 10 : 8 }}
+        >
           {sidebar ? (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, fontWeight: "500", color: palette.text }}>
@@ -335,7 +344,15 @@ export function UrlField({
         )}
         {hovered && !sidebar && (
           <>
-            <ToolbarButton palette={palette} icon={bookmarked ? "bookmark.fill" : "bookmark"} size={13} box={24} radius={6} onPress={toggleBookmark} tooltip={bookmarked ? "Remove Bookmark" : "Bookmark This Page (⌘D)"} />
+            <ToolbarButton
+              palette={palette}
+              icon={bookmarked ? "bookmark.fill" : "bookmark"}
+              size={13}
+              box={24}
+              radius={6}
+              onPress={toggleBookmark}
+              tooltip={bookmarked ? "Remove Bookmark" : "Bookmark This Page (⌘D)"}
+            />
             {!inSplit && (
               <ToolbarButton
                 palette={palette}
@@ -353,7 +370,16 @@ export function UrlField({
         {sidebar ? (
           <>
             <ToolbarButton palette={palette} icon="link" size={14} box={26} radius={6} onPress={() => void copyPageUrl(tab.id)} tooltip="Copy Link" />
-            <ToolbarButton palette={palette} icon="slider.horizontal.3" size={15} box={28} radius={7} style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : undefined }} onPress={toggleSiteControls} tooltip="Site Controls" />
+            <ToolbarButton
+              palette={palette}
+              icon="slider.horizontal.3"
+              size={15}
+              box={28}
+              radius={7}
+              style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : undefined }}
+              onPress={toggleSiteControls}
+              tooltip="Site Controls"
+            />
           </>
         ) : null}
       </View>

@@ -67,7 +67,10 @@ function flatFromEngine(tree: { bar: EngineBookmark; other: EngineBookmark }, en
       ...(node.key ? { key: node.key } : {}),
     });
     if (node.k === "f") {
-      flat.children.set(id, (node.c ?? []).map((c) => c.id));
+      flat.children.set(
+        id,
+        (node.c ?? []).map((c) => c.id),
+      );
       for (const c of node.c ?? []) walk(c, c.id, id);
     }
   };
@@ -179,7 +182,11 @@ export function applyOps(tree: Flat, ops: BookmarkOp[], engine: string): Flat {
     }
     if (op.op === "update") {
       if (!node || node.parent === null) break;
-      flat.nodes.set(op.id, { ...node, ...(op.t !== undefined ? { title: op.t } : {}), ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}) });
+      flat.nodes.set(op.id, {
+        ...node,
+        ...(op.t !== undefined ? { title: op.t } : {}),
+        ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}),
+      });
       continue;
     }
     const parent = flatParent(engine, op.parent);
@@ -189,7 +196,8 @@ export function applyOps(tree: Flat, ops: BookmarkOp[], engine: string): Flat {
       if (!node || node.parent === null || inside(op.id, parent)) break;
       detach(op.id);
       attach(op.id, parent, op.index);
-      if (op.op === "add") flat.nodes.set(op.id, { ...flat.nodes.get(op.id)!, title: op.t, ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}) });
+      if (op.op === "add")
+        flat.nodes.set(op.id, { ...flat.nodes.get(op.id)!, title: op.t, ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}) });
       continue;
     }
     // Chrome drops an add whose URL it can't keep, and goes on.
@@ -230,8 +238,13 @@ const stateOf = (engine: string) => {
 // Sync may use a tree only once bookmarks.json is in Chrome: before, its bookmarks would read as deleted.
 let legacyMoved = false;
 
-const engineProfiles = (s: Pick<BrowserState, "spaces">) =>
-  [...new Set(Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id)).map(engineProfile))];
+const engineProfiles = (s: Pick<BrowserState, "spaces">) => [
+  ...new Set(
+    Object.keys(s.spaces)
+      .filter((id) => !isIncognitoSpace(id))
+      .map(engineProfile),
+  ),
+];
 const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
   Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfile(id) === engine);
 
@@ -247,8 +260,25 @@ function adopt(engine: string, flat: Flat, { ready = legacyMoved } = {}) {
       const key = n.key ? { syncKey: n.key } : {};
       nodes[id] =
         n.kind === "url"
-          ? { kind: "url", id, parentId: n.parent!, title: n.title, url: n.url ?? "", favicon: was?.kind === "url" ? was.favicon : null, addedAt: n.addedAt, ...key }
-          : ({ kind: "folder", id, parentId: n.parent, title: n.title, children: flat.children.get(id) ?? [], addedAt: n.addedAt, ...key } satisfies BookmarkFolder);
+          ? {
+              kind: "url",
+              id,
+              parentId: n.parent!,
+              title: n.title,
+              url: n.url ?? "",
+              favicon: was?.kind === "url" ? was.favicon : null,
+              addedAt: n.addedAt,
+              ...key,
+            }
+          : ({
+              kind: "folder",
+              id,
+              parentId: n.parent,
+              title: n.title,
+              children: flat.children.get(id) ?? [],
+              addedAt: n.addedAt,
+              ...key,
+            } satisfies BookmarkFolder);
     }
     nodes[roots.bar] = { ...(nodes[roots.bar] as BookmarkFolder), title: "Bookmarks Bar" };
     nodes[roots.other] = { ...(nodes[roots.other] as BookmarkFolder), title: "Other Bookmarks" };

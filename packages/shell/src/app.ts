@@ -138,7 +138,6 @@ type AppModule = {
   devCrash(kind?: "exception"): Promise<void>;
 };
 
-
 const App = requireNativeModule<AppModule>("BayApp");
 
 export const updaterState = () => App.updaterState();
@@ -146,11 +145,9 @@ export const checkForUpdates = () => App.checkForUpdates();
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);
 
-export const setWindowActivity = (windowId: string, url: string | null, title: string | null) =>
-  App.setWindowActivity(windowId, url, title);
+export const setWindowActivity = (windowId: string, url: string | null, title: string | null) => App.setWindowActivity(windowId, url, title);
 
-export const sharePage = (url: string, title?: string | null, windowId?: string | null) =>
-  App.share(url, title ?? null, windowId ?? null);
+export const sharePage = (url: string, title?: string | null, windowId?: string | null) => App.share(url, title ?? null, windowId ?? null);
 
 export const isInDock = () => App.isInDock();
 export const addToDock = () => App.addToDock();
@@ -170,8 +167,7 @@ export const openNotificationSettings = () => App.openNotificationSettings();
 export const onNotificationResponse = (listener: (e: NotificationResponse) => void) => App.addListener("onNotificationResponse", listener);
 
 export const setScriptState = (state: ScriptState) => App.setScriptState(state);
-export const replyToScript = (id: string, result: Record<string, unknown> | null, error: string | null = null) =>
-  App.replyToScript(id, result, error);
+export const replyToScript = (id: string, result: Record<string, unknown> | null, error: string | null = null) => App.replyToScript(id, result, error);
 export const onScriptCommand = (listener: (e: ScriptCommand) => void) => App.addListener("onScriptCommand", listener);
 
 export const systemInfo = () => App.systemInfo();
@@ -213,6 +209,5 @@ export type KeyPressResult = {
   matched?: { title: string; action: string; command?: string; arg?: string; enabled: boolean }[];
   error?: string;
 };
-export const devKeyEquivalent = (windowId: string, press: KeyPress): Promise<KeyPressResult> =>
-  App.devKeyEquivalent(windowId, press);
+export const devKeyEquivalent = (windowId: string, press: KeyPress): Promise<KeyPressResult> => App.devKeyEquivalent(windowId, press);
 export const devMenuCommand = (command: string, arg: string | null = null) => App.devMenuCommand(command, arg);

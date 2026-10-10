@@ -27,7 +27,9 @@ export function DownloadsPage({ tabId }: { tabId: string }) {
         query={query}
         onQuery={setQuery}
         placeholder="Search downloads"
-        actions={downloads.some((d) => d.state !== "downloading") ? <Button title="Clear All" onPress={() => useBrowser.getState().clearDownloads(windowId)} /> : null}
+        actions={
+          downloads.some((d) => d.state !== "downloading") ? <Button title="Clear All" onPress={() => useBrowser.getState().clearDownloads(windowId)} /> : null
+        }
       />
       {shown.length === 0 ? (
         <EmptyState
@@ -75,7 +77,12 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
             <Pressable disabled={!done} onPress={() => void openFile(d.path)}>
               <Text
                 numberOfLines={1}
-                style={{ fontSize: 13.5, fontWeight: "500", color: exists ? theme.textPrimary : theme.textSecondary, textDecorationLine: exists ? "none" : "line-through" }}
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: "500",
+                  color: exists ? theme.textPrimary : theme.textSecondary,
+                  textDecorationLine: exists ? "none" : "line-through",
+                }}
               >
                 {d.filename || "Preparing…"}
               </Text>
@@ -87,7 +94,14 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
             </Pressable>
             {d.state === "downloading" && (
               <View style={{ height: 3, borderRadius: 1.5, marginTop: 3, backgroundColor: theme.rowHover }}>
-                <View style={{ width: `${Math.max(progress, 0.03) * 100}%`, height: 3, borderRadius: 1.5, backgroundColor: d.paused ? theme.textTertiary : theme.accent }} />
+                <View
+                  style={{
+                    width: `${Math.max(progress, 0.03) * 100}%`,
+                    height: 3,
+                    borderRadius: 1.5,
+                    backgroundColor: d.paused ? theme.textTertiary : theme.accent,
+                  }}
+                />
               </View>
             )}
             <Text numberOfLines={1} style={{ fontSize: 12, color: theme.textSecondary }}>

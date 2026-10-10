@@ -55,8 +55,16 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
 }
 
 export const SIDEBAR_WINDOW_COMMANDS = [
-  "newTabInGroup", "newGroupWithTabs", "cleanUpTabs", "searchTabs", "renameTab", "changeTabIcon", "returnToPinnedUrl", "tabSwitcher",
-  "keepTab", "closeOtherTabs",
+  "newTabInGroup",
+  "newGroupWithTabs",
+  "cleanUpTabs",
+  "searchTabs",
+  "renameTab",
+  "changeTabIcon",
+  "returnToPinnedUrl",
+  "tabSwitcher",
+  "keepTab",
+  "closeOtherTabs",
 ];
 
 export function sidebarMenuState(s: BrowserState, windowId: string | undefined) {

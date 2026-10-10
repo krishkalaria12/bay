@@ -9,7 +9,6 @@ import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./spacePager";
 
-
 export function SpaceSwipe({ children }: { children: ReactNode }) {
   return (
     <View style={{ height: "100%" }}>

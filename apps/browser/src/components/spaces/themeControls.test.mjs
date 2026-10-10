@@ -10,7 +10,10 @@ test("the wave is a flat line at no intensity and swings its full height at full
   const ys = full.map((p) => p.y);
   assert.ok(Math.max(...ys) > 27.5 && Math.min(...ys) < 12.5);
   assert.equal(full.at(-1).x, 100, "it reaches the end");
-  assert.ok(wavePoints(0, 100, 40, 2, 8, 20).every((p) => Math.abs(p.y - 20) <= 8), "clamped to 1");
+  assert.ok(
+    wavePoints(0, 100, 40, 2, 8, 20).every((p) => Math.abs(p.y - 20) <= 8),
+    "clamped to 1",
+  );
 });
 
 test("a segment is a bar centred between its points, at their angle", () => {

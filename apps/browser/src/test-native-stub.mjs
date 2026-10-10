@@ -133,7 +133,13 @@ export const chromeBookmarks = (profile = "", device = current.device) => {
   const dbs = bookmarkDbs.get(device);
   if (!dbs.has(profile)) {
     const folder = (id, t) => ({ id, k: "f", t, a: 0, parent: null, children: [] });
-    dbs.set(profile, new Map([["bar", folder("bar", "Bookmarks Bar")], ["other", folder("other", "Other Bookmarks")]]));
+    dbs.set(
+      profile,
+      new Map([
+        ["bar", folder("bar", "Bookmarks Bar")],
+        ["other", folder("other", "Other Bookmarks")],
+      ]),
+    );
   }
   return dbs.get(profile);
 };
@@ -143,7 +149,9 @@ export const watchBookmarks = async () => ({ ok: true });
 const treeOf = (db, id) => {
   const n = db.get(id);
   const key = n.key ? { key: n.key } : {};
-  return n.k === "u" ? { id: n.id, k: "u", t: n.t, u: n.u, a: n.a, ...key } : { id: n.id, k: "f", t: n.t, a: n.a, ...key, c: n.children.map((c) => treeOf(db, c)) };
+  return n.k === "u"
+    ? { id: n.id, k: "u", t: n.t, u: n.u, a: n.a, ...key }
+    : { id: n.id, k: "f", t: n.t, a: n.a, ...key, c: n.children.map((c) => treeOf(db, c)) };
 };
 export const bookmarkTree = async (profile) => {
   const db = chromeBookmarks(profile);

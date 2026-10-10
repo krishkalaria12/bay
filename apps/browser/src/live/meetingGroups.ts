@@ -21,7 +21,12 @@ export function groupCall(tabId: string, event?: CalendarEvent | null): string {
   const same = Object.values(live().meetingGroups).find((m) => {
     const g = s.groups[m.groupId];
     const callTab = s.tabs[m.callTabId];
-    return g && g.spaceId === tab.spaceId && !m.endedAt && ((!!m.occurrence && m.occurrence === match?.occurrence) || (!!callTab && meetingOf(callTab.url)?.key === call.key));
+    return (
+      g &&
+      g.spaceId === tab.spaceId &&
+      !m.endedAt &&
+      ((!!m.occurrence && m.occurrence === match?.occurrence) || (!!callTab && meetingOf(callTab.url)?.key === call.key))
+    );
   });
   if (same) {
     s.addTabsToGroup(same.groupId, [tabId]);
@@ -30,7 +35,15 @@ export function groupCall(tabId: string, event?: CalendarEvent | null): string {
   const title = match?.title || MEETING_FALLBACK_TITLE;
   const groupId = s.createGroup([tabId], { name: title });
   if (!groupId) return "";
-  setMeetingGroup({ groupId, callTabId: tabId, occurrence: match?.occurrence ?? null, title, start: match?.start ?? null, end: match?.end ?? null, endedAt: null });
+  setMeetingGroup({
+    groupId,
+    callTabId: tabId,
+    occurrence: match?.occurrence ?? null,
+    title,
+    start: match?.start ?? null,
+    end: match?.end ?? null,
+    endedAt: null,
+  });
   return groupId;
 }
 

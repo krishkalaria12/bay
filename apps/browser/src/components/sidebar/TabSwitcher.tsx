@@ -28,11 +28,24 @@ export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId:
       shadowOpacity={theme.panelShadowOpacity}
       shadowRadius={28}
       shadowOffset={[0, 12]}
-      style={{ position: "absolute", left: (windowWidth - SWITCHER_WIDTH) / 2, top: Math.max(40, (windowHeight - height) / 2 - 40), width: SWITCHER_WIDTH, padding: 8 }}
+      style={{
+        position: "absolute",
+        left: (windowWidth - SWITCHER_WIDTH) / 2,
+        top: Math.max(40, (windowHeight - height) / 2 - 40),
+        width: SWITCHER_WIDTH,
+        padding: 8,
+      }}
     >
       <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 8, paddingBottom: 6, paddingTop: 2 }}>Recent Tabs</Text>
       {shown.map((id, i) => (
-        <SwitcherRow key={id} tabId={id} focused={start + i === switcher.index} index={start + i} focusFill={tokens.switcherFocus} outline={tokens.switcherOutline} />
+        <SwitcherRow
+          key={id}
+          tabId={id}
+          focused={start + i === switcher.index}
+          index={start + i}
+          focusFill={tokens.switcherFocus}
+          outline={tokens.switcherOutline}
+        />
       ))}
     </Surface>
   );

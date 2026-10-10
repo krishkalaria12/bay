@@ -25,8 +25,13 @@ const toEntry = (e: EngineHistoryEntry): HistoryEntry => ({
   visitTimes: e.visitTimes,
 });
 
-const engineProfiles = (s: Pick<BrowserState, "spaces">) =>
-  [...new Set(Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id)).map(engineProfile))];
+const engineProfiles = (s: Pick<BrowserState, "spaces">) => [
+  ...new Set(
+    Object.keys(s.spaces)
+      .filter((id) => !isIncognitoSpace(id))
+      .map(engineProfile),
+  ),
+];
 
 const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
   Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfile(id) === engine);
@@ -127,7 +132,10 @@ function load(engine: string): Promise<void> {
         const read = await queryHistory(engine, MAX_HISTORY, MAX_VISIT_TIMES);
         // Chrome had more URLs than the view reads: the older ones may be missing (shown or not).
         const floor = read.length >= MAX_HISTORY ? Math.min(...read.map((e) => e.visitTimes.at(-1) ?? 0)) : -Infinity;
-        let list = read.filter((e) => shownInHistory(e.url)).map(toEntry).sort(byLastVisit);
+        let list = read
+          .filter((e) => shownInHistory(e.url))
+          .map(toEntry)
+          .sort(byLastVisit);
         for (const change of state.queued) if (!(change.kind === "deleted" && change.all)) list = applyHistoryChange(list, change);
         if (state.queued.some((c) => c.kind === "deleted" && c.all)) state.again = true;
         setView(engine, list, floor);

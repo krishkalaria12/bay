@@ -7,8 +7,7 @@ import type { BrowserWindow } from "./types";
 
 export const isSmallWindow = (w: BrowserWindow | undefined): boolean => w?.kind === "small";
 
-export const isSmall = (s: Pick<BrowserState, "windows">, windowId?: string | null): boolean =>
-  !!windowId && s.windows[windowId]?.kind === "small";
+export const isSmall = (s: Pick<BrowserState, "windows">, windowId?: string | null): boolean => !!windowId && s.windows[windowId]?.kind === "small";
 
 const isMain = (w: BrowserWindow | undefined): w is BrowserWindow => !!w && !w.incognito && w.kind !== "small";
 

@@ -127,9 +127,7 @@ export function webStoreExtensionId(urlOrId: string): string | null {
   if (isExtensionId(s)) return s;
   try {
     const url = new URL(s);
-    const store =
-      url.hostname === "chromewebstore.google.com" ||
-      (url.hostname === "chrome.google.com" && url.pathname.startsWith("/webstore/"));
+    const store = url.hostname === "chromewebstore.google.com" || (url.hostname === "chrome.google.com" && url.pathname.startsWith("/webstore/"));
     if (!store) return null;
     const id = url.pathname.split("/").find(isExtensionId);
     return id ?? null;
@@ -211,8 +209,7 @@ export function permissionWarnings(pkg: Pick<ExtensionPackage, "permissions" | "
     if (clipboard && permission.startsWith("clipboard")) continue;
     if (perms.has(permission)) warnings.push(message);
   }
-  if (perms.has("declarativeNetRequest") && !allHosts && !perms.has("declarativeNetRequestWithHostAccess"))
-    warnings.push("Block content on any page");
+  if (perms.has("declarativeNetRequest") && !allHosts && !perms.has("declarativeNetRequestWithHostAccess")) warnings.push("Block content on any page");
   const browsing = perms.has("history") ? "Read and change your browsing history on all your signed-in devices" : null;
   if (!browsing && (perms.has("tabs") || perms.has("webNavigation")) && !allHosts) warnings.push("Read your browsing history");
   if (browsing) warnings.push(browsing);
@@ -229,7 +226,10 @@ const PERMISSION_WARNINGS: [string, string][] = [
   ["bookmarks", "Read and change your bookmarks"],
   ["clipboardRead", "Read data you copy and paste"],
   ["clipboardWrite", "Modify data you copy and paste"],
-  ["contentSettings", "Change your settings that control websites' access to features such as cookies, JavaScript, plugins, geolocation, microphone, camera etc."],
+  [
+    "contentSettings",
+    "Change your settings that control websites' access to features such as cookies, JavaScript, plugins, geolocation, microphone, camera etc.",
+  ],
   ["desktopCapture", "Capture content of your screen"],
   ["downloads", "Manage your downloads"],
   ["downloads.open", "Open downloaded files"],

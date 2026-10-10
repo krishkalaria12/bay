@@ -110,11 +110,15 @@ for (let i = 0; !unsaved && i < frames.length; i++) {
 }
 post("result", JSON.stringify(unsaved));`;
 
-const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T) =>
+const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T) =>
   Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
 
 async function hasUnsavedInput(handle: WebViewHandle): Promise<boolean | null> {
-  const result = await withTimeout(handle.evaluate<boolean>(UNSAVED_INPUT_CHECK).catch(() => null), LIFECYCLE_EVAL_TIMEOUT_MS, null);
+  const result = await withTimeout(
+    handle.evaluate<boolean>(UNSAVED_INPUT_CHECK).catch(() => null),
+    LIFECYCLE_EVAL_TIMEOUT_MS,
+    null,
+  );
   return typeof result === "boolean" ? result : null;
 }
 
@@ -226,7 +230,7 @@ function releaseUnusedProfiles() {
     const tab = s.tabs[id];
     if (tab) inUse.add(engineProfile(tab.spaceId));
   }
-  for (const profile of [...loadedProfiles]) {
+  for (const profile of Array.from(loadedProfiles)) {
     if (!profile || isIncognitoSpace(profile) || inUse.has(profile)) continue;
     loadedProfiles.delete(profile);
     void releaseProfile(profile);
@@ -322,10 +326,13 @@ export function reloadRecentTabs(sys: SystemState) {
     .slice(0, count)
     .map((t) => t.id);
   ids.forEach((id, i) =>
-    setTimeout(() => {
-      const t = store().tabs[id];
-      if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
-    }, 2000 * (i + 1)),
+    setTimeout(
+      () => {
+        const t = store().tabs[id];
+        if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
+      },
+      2000 * (i + 1),
+    ),
   );
   return ids;
 }
@@ -417,7 +424,11 @@ export function startTabLifecycle() {
               byType[t.type] = (byType[t.type] ?? 0) + t.memory / 2 ** 20;
             }
             const total = Object.values(byType).reduce((a, b) => a + b, 0);
-            return { totalMB: Math.round(total), byTypeMB: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, Math.round(v)])), tasks: tasks.length };
+            return {
+              totalMB: Math.round(total),
+              byTypeMB: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, Math.round(v)])),
+              tasks: tasks.length,
+            };
           }),
       simulate: (patch: Partial<SystemState> | null) => {
         systemOverride = patch;

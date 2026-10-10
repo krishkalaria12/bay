@@ -29,8 +29,14 @@ const args = process.argv.slice(2);
 const keep = args.includes("--keep");
 const [appArg, scratchArg, phaseArg = "all"] = args.filter((a) => !a.startsWith("--"));
 if (args.includes("--help") || args.includes("-h") || !appArg || !scratchArg || !["import", "restart", "all"].includes(phaseArg)) {
-  const lines = fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(1);
-  const header = lines.slice(0, lines.findIndex((l) => !l.startsWith("//")));
+  const lines = fs
+    .readFileSync(new URL(import.meta.url), "utf8")
+    .split("\n")
+    .slice(1);
+  const header = lines.slice(
+    0,
+    lines.findIndex((l) => !l.startsWith("//")),
+  );
   console.log(header.map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(args.includes("--help") || args.includes("-h") ? 0 : 64);
 }
@@ -144,11 +150,16 @@ async function importPhase(ok) {
   ok(done.counts.cookies === 5, `5 cookies imported (got ${done.counts.cookies})`);
   ok(done.counts.addresses === 1 && done.counts.cards === 1, "1 address and 1 card imported");
   ok(done.failures.length === 0, "no failures");
-  ok(done.notes?.some((n) => n.includes("1 cookie couldn't be decrypted")), `undecryptable note shown: ${JSON.stringify(done.notes)}`);
+  ok(
+    done.notes?.some((n) => n.includes("1 cookie couldn't be decrypted")),
+    `undecryptable note shown: ${JSON.stringify(done.notes)}`,
+  );
 
   const by = Object.fromEntries((await fixtureCookies()).map((c) => [c.name, c]));
-  ok(by.nn_sid?.value === "s3ss10n-e2e" && by.nn_sid.secure && by.nn_sid.httpOnly && by.nn_sid.sameSite === "Lax" && by.nn_sid.priority === "High",
-    "nn_sid: host-hashed v10 value, Secure, HttpOnly, Lax, High");
+  ok(
+    by.nn_sid?.value === "s3ss10n-e2e" && by.nn_sid.secure && by.nn_sid.httpOnly && by.nn_sid.sameSite === "Lax" && by.nn_sid.priority === "High",
+    "nn_sid: host-hashed v10 value, Secure, HttpOnly, Lax, High",
+  );
   ok(!by.nn_legacy, "a v24 row without its host hash is refused, as Chrome refuses it");
   ok(by.nn_session?.session === true && by.nn_session.value === "until-quit", "session cookie stays a session cookie");
   ok(!by.nn_expired, "expired cookie skipped");
@@ -163,7 +174,7 @@ async function importPhase(ok) {
 
   // The site sees the cookies on its next request.
   await evaluate(`nn.actions.openUrls(["http://localhost:${SERVER_PORT}/"]); return true`);
-  for (const deadline = Date.now() + 20_000; !seen.length && Date.now() < deadline; ) await sleep(250);
+  for (const deadline = Date.now() + 20_000; !seen.length && Date.now() < deadline;) await sleep(250);
   const header = seen[0]?.cookie ?? "";
   note("server saw:", JSON.stringify(seen));
   ok(header.includes("nn_session=until-quit"), "fixture server got the imported session cookie");

@@ -1,15 +1,6 @@
 import { requireNativeModule, type EventSubscription } from "expo-modules-core";
 
-export type ImportKind =
-  | "bookmarks"
-  | "history"
-  | "tabs"
-  | "passwords"
-  | "cookies"
-  | "autofill"
-  | "spaces"
-  | "pinnedTabs"
-  | "favorites";
+export type ImportKind = "bookmarks" | "history" | "tabs" | "passwords" | "cookies" | "autofill" | "spaces" | "pinnedTabs" | "favorites";
 
 export type BrowserFamily = "chromium" | "firefox" | "safari" | "arc" | "automation";
 
@@ -201,9 +192,7 @@ export class ImportError extends Error {
   }
 }
 
-type ImportEvent =
-  | ({ jobId: string; type: "progress" } & ImportProgress)
-  | { jobId: string; type: "history"; entries: string };
+type ImportEvent = ({ jobId: string; type: "progress" } & ImportProgress) | { jobId: string; type: "history"; entries: string };
 
 const Native = requireNativeModule<{
   addListener(name: "onImportEvent", listener: (e: ImportEvent) => void): EventSubscription;
@@ -297,8 +286,7 @@ export const safariHasFullDiskAccess = () => Native.safariHasFullDiskAccess();
 
 export const openFullDiskAccessSettings = () => call<void>(Native.openFullDiskAccessSettings());
 
-export const importSafariDirect = (options: Pick<ImportOptions, "signal"> = {}) =>
-  job<SafariExport>(options, (jobId) => Native.importSafariDirect(jobId));
+export const importSafariDirect = (options: Pick<ImportOptions, "signal"> = {}) => job<SafariExport>(options, (jobId) => Native.importSafariDirect(jobId));
 
 export const importBookmarksHTML = (path: string) => call<BookmarkNode>(Native.importBookmarksHTML(path));
 

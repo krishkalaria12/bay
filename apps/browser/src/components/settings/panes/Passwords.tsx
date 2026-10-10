@@ -53,13 +53,23 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
   const unlocked = isUnlocked(profile);
 
   const load = () => {
-    void listPasswords(profile).then(setList).catch(() => setList([]));
-    void getNeverSavePasswordOrigins(profile).then(setNever).catch(() => {});
+    void listPasswords(profile)
+      .then(setList)
+      .catch(() => setList([]));
+    void getNeverSavePasswordOrigins(profile)
+      .then(setNever)
+      .catch(() => {});
   };
   useEffect(() => {
     if (unlocked) load();
   }, [unlocked, spaceId]);
-  useEffect(() => void getPasswordAutofill(profile).then(setAutofill).catch(() => {}), [profile]);
+  useEffect(
+    () =>
+      void getPasswordAutofill(profile)
+        .then(setAutofill)
+        .catch(() => {}),
+    [profile],
+  );
 
   const unlock = async () => {
     if (!(await unlockPasswords(profile))) return;
@@ -98,13 +108,14 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         title="Passwords"
         description="Saved on this Mac, separately for each profile, and encrypted with a key in your Keychain."
         action={
-          profiles.length > 1 ? (
-            <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} />
-          ) : undefined
+          profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
-        <Row title="Offer to save and fill passwords" description="Offers to save a login after you sign in, and suggests saved ones when you click a login field.">
+        <Row
+          title="Offer to save and fill passwords"
+          description="Offers to save a login after you sign in, and suggests saved ones when you click a login field."
+        >
           <Toggle value={autofill} onChange={(v) => void setPasswordAutofill(v, profile).then(() => setAutofill(v))} />
         </Row>
         <Row title="Import passwords" description={importStatus || "From a CSV exported by Chrome, Safari, Firefox, 1Password, Bitwarden…"}>
@@ -125,7 +136,10 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         </View>
       ) : (
         <>
-          <SectionHeader title={list ? plural(list.length, "Saved Password") : "Saved Passwords"} action={<SearchField value={query} onChangeText={setQuery} placeholder="Search" width={200} />} />
+          <SectionHeader
+            title={list ? plural(list.length, "Saved Password") : "Saved Passwords"}
+            action={<SearchField value={query} onChangeText={setQuery} placeholder="Search" width={200} />}
+          />
           <Group>
             {list && shown.length === 0 ? (
               <Row title={query ? "No passwords match" : "No saved passwords"} />
@@ -229,7 +243,14 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
                 <Text selectable style={{ fontSize: 13, color: theme.textPrimary, fontFamily: revealed ? MONO_FONT : undefined }}>
                   {password === null ? "…" : revealed ? password : "•".repeat(Math.min(password.length, 12))}
                 </Text>
-                <IconButton icon={revealed ? "eye.slash" : "eye"} size={11} box={24} radius={6} onPress={() => setRevealed(!revealed)} tooltip={revealed ? "Hide" : "Show"} />
+                <IconButton
+                  icon={revealed ? "eye.slash" : "eye"}
+                  size={11}
+                  box={24}
+                  radius={6}
+                  onPress={() => setRevealed(!revealed)}
+                  tooltip={revealed ? "Hide" : "Show"}
+                />
                 <IconButton icon="doc.on.doc" size={11} box={24} radius={6} onPress={() => password && copyText(password)} tooltip="Copy Password" />
               </View>
             )}

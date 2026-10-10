@@ -6,7 +6,17 @@ import { APP_NAME } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID } from "../settings/windows";
-import { applyResult, applySafari, emptyCounts, importArcSpace, importBookmarks, importDiaProfile, openInWebStore, profileColorFor, type ImportCounts } from "./apply";
+import {
+  applyResult,
+  applySafari,
+  emptyCounts,
+  importArcSpace,
+  importBookmarks,
+  importDiaProfile,
+  openInWebStore,
+  profileColorFor,
+  type ImportCounts,
+} from "./apply";
 import { DIA_LAUNCH_MS, DIA_POLL_MS, DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
 import { importModule } from "./module";
 
@@ -335,11 +345,20 @@ export function useImportFlow() {
       const code = errorCode(e);
       if (code === "cancelled") return;
       setStep("safari");
-      setError(code === "locked" ? `${APP_NAME} still doesn't have Full Disk Access. Grant it above, or use the export file below.` : "Couldn't read Safari's data. Try the export file below.");
+      setError(
+        code === "locked"
+          ? `${APP_NAME} still doesn't have Full Disk Access. Grant it above, or use the export file below.`
+          : "Couldn't read Safari's data. Try the export file below.",
+      );
       setFullDiskAccess(api.safariHasFullDiskAccess());
       return;
     }
-    setStatus({ bookmarks: "done", history: "done", tabs: "done", ...(safariCookies ? { cookies: failed.includes("cookies") ? "failed" : ("done" as const) } : {}) });
+    setStatus({
+      bookmarks: "done",
+      history: "done",
+      tabs: "done",
+      ...(safariCookies ? { cookies: failed.includes("cookies") ? "failed" : ("done" as const) } : {}),
+    });
     setCounts(counts);
     setFailures(failed.map((kind) => ({ kind, profiles: [] })));
     finish();
@@ -365,7 +384,10 @@ export function useImportFlow() {
   };
 
   const openExtensions = () => {
-    openInWebStore(extensions.spaceId || target, extensions.list.map((e) => e.webStoreUrl));
+    openInWebStore(
+      extensions.spaceId || target,
+      extensions.list.map((e) => e.webStoreUrl),
+    );
     setExtensions({ spaceId: "", list: [] });
   };
 

@@ -48,7 +48,9 @@ function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageS
     };
   }, [measured, above]);
   if (bottom < 0 || top > area.height) return null;
-  const y = above ? top - SELECTION_POPOVER_GAP - SELECTION_POPOVER_HEIGHT : Math.min(bottom + SELECTION_POPOVER_GAP, area.height - SELECTION_POPOVER_HEIGHT - 4);
+  const y = above
+    ? top - SELECTION_POPOVER_GAP - SELECTION_POPOVER_HEIGHT
+    : Math.min(bottom + SELECTION_POPOVER_GAP, area.height - SELECTION_POPOVER_HEIGHT - 4);
   const center = (r.x + r.width / 2) * zoom;
   const x = Math.max(8, Math.min(center - width / 2, area.width - width - 8));
 
@@ -83,7 +85,11 @@ function SearchButton({ tabId, text }: { tabId: string; text: string }) {
   const quoted = text.length > 40 ? `${text.slice(0, 40).trimEnd()}…` : text;
   return (
     <View {...hoverProps} tooltip={`Search ${engine} for “${quoted.replace(/\s+/g, " ")}”`}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Search ${engine}`} onPress={(e) => searchSelection(tabId, text, e.nativeEvent as unknown as ClickModifiers)}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Search ${engine}`}
+        onPress={(e) => searchSelection(tabId, text, e.nativeEvent as unknown as ClickModifiers)}
+      >
         {({ pressed }) => (
           <View
             style={{
@@ -94,7 +100,8 @@ function SearchButton({ tabId, text }: { tabId: string; text: string }) {
               flexDirection: "row",
               alignItems: "center",
               gap: 5,
-              backgroundColor: pressed || hovered ? (theme.dark ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})` : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`) : undefined,
+              backgroundColor:
+                pressed || hovered ? (theme.dark ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})` : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`) : undefined,
             }}
           >
             <Symbol name="magnifyingglass" size={12} weight="medium" color={theme.icon} style={{ width: 16, height: 16 }} />

@@ -90,12 +90,13 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
   }
   // Made once: every row gets them, and a new function would re-render them all.
   const [gone] = useState(() => (tabId: string) => setGhosts((all) => all.filter((g) => g.tab.id !== tabId)));
-  const [opened] = useState(() => (entry: string) =>
-    setOpening((all) => {
-      if (!all.has(entry)) return all;
-      const rest = [...all].filter((e) => e !== entry);
-      return rest.length ? new Set(rest) : NONE;
-    }),
+  const [opened] = useState(
+    () => (entry: string) =>
+      setOpening((all) => {
+        if (!all.has(entry)) return all;
+        const rest = [...all].filter((e) => e !== entry);
+        return rest.length ? new Set(rest) : NONE;
+      }),
   );
   if (!ghosts.length) return { rows: entries, opening, gone, opened };
   const rows: (string | ClosingTab)[] = ghosts.filter((g) => g.after === null);
@@ -110,7 +111,17 @@ const play = (onDone: () => void) =>
   });
 
 /** Wraps a list entry: while its tab has just opened, it grows from nothing (its gap included) and fades in. */
-export function OpeningRow({ entry, opening, onOpened, children }: { entry: string; opening: boolean; onOpened: (entry: string) => void; children: ReactNode }) {
+export function OpeningRow({
+  entry,
+  opening,
+  onOpened,
+  children,
+}: {
+  entry: string;
+  opening: boolean;
+  onOpened: (entry: string) => void;
+  children: ReactNode;
+}) {
   const [grows] = useState(opening);
   const progress = useSharedValue(grows ? 0 : 1);
   useEffect(() => {

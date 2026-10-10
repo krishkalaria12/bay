@@ -9,7 +9,6 @@ import { SYMBOL_PREFIX } from "../../lib/constants";
 import { iconColor } from "../symbolColors";
 import { SLEEPING_OPACITY } from "./constants";
 
-
 // Memoized: rows re-render on hover and selection, and the icon's props rarely change.
 export const TabIcon = memo(function TabIcon({
   tabId,

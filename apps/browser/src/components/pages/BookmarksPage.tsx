@@ -177,9 +177,7 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
               {searching ? `Results for “${query.trim()}”` : folderTitle}
             </Text>
-            {!searching && folderId && (
-              <Button title="Open All" onPress={() => void openFolder(folderId, windowId)} disabled={!ids.length} />
-            )}
+            {!searching && folderId && <Button title="Open All" onPress={() => void openFolder(folderId, windowId)} disabled={!ids.length} />}
           </View>
           <View style={{ height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />
           {ids.length === 0 ? (
@@ -251,7 +249,6 @@ function DropLine({ color }: { color: string }) {
 
 function BookmarkRow({
   id,
-  index,
   windowId,
   spaceId,
   showPath,
@@ -283,7 +280,14 @@ function BookmarkRow({
   const theme = useTheme();
   const colors = useFormColors();
   const node = useBrowser((s) => s.bookmarks.nodes[id]);
-  const path = useBrowser((s) => (showPath ? bookmarkAncestors(s.bookmarks, id).map((a) => a.title).reverse().join(" › ") : ""));
+  const path = useBrowser((s) =>
+    showPath
+      ? bookmarkAncestors(s.bookmarks, id)
+          .map((a) => a.title)
+          .reverse()
+          .join(" › ")
+      : "",
+  );
   const { hovered, hoverProps } = useHover();
   const dy = useSharedValue(0);
   const dyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dy.get() }] }));
@@ -371,7 +375,13 @@ function BookmarkRow({
                 alignItems: "center",
                 paddingHorizontal: 10,
                 gap: 10,
-                backgroundColor: selected ? `${colors.accent}${theme.dark ? "59" : "33"}` : highlighted ? `${colors.accent}40` : hovered ? theme.rowHover : undefined,
+                backgroundColor: selected
+                  ? `${colors.accent}${theme.dark ? "59" : "33"}`
+                  : highlighted
+                    ? `${colors.accent}40`
+                    : hovered
+                      ? theme.rowHover
+                      : undefined,
               }}
             >
               {node.kind === "url" ? (

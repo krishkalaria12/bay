@@ -56,8 +56,24 @@ export const findExtension = (profile: string, id: string) => useExtensions.getS
 export function addFromWebStore(windowId: string, urlOrId: string, profile = extensionProfile(useBrowser.getState(), windowId)) {
   const id = webStoreExtensionId(urlOrId);
   if (!id) {
-    const pkg = { name: "Extension", version: "", description: "", manifestVersion: 3, icon: null, permissions: [], optionalPermissions: [], hostPermissions: [], hasAction: false, popup: null, optionsPage: null, sidePanel: null, path: "" };
-    useExtensions.setState({ install: { windowId, profile, source: "webStore", status: "error", pkg, error: "That isn't a link to an extension in the Chrome Web Store." } });
+    const pkg = {
+      name: "Extension",
+      version: "",
+      description: "",
+      manifestVersion: 3,
+      icon: null,
+      permissions: [],
+      optionalPermissions: [],
+      hostPermissions: [],
+      hasAction: false,
+      popup: null,
+      optionsPage: null,
+      sidePanel: null,
+      path: "",
+    };
+    useExtensions.setState({
+      install: { windowId, profile, source: "webStore", status: "error", pkg, error: "That isn't a link to an extension in the Chrome Web Store." },
+    });
     return;
   }
   const url = `https://chromewebstore.google.com/detail/${id}`;
@@ -185,8 +201,7 @@ export function openOptions(windowId: string, ext: InstalledExtension) {
 
 export const openManageExtensions = () => openSettings("extensions");
 export const openPinDialog = (windowId: string) => useExtensions.setState({ pinDialog: { windowId } });
-export const openWebStore = (windowId: string) =>
-  useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
+export const openWebStore = (windowId: string) => useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
 
 // MARK: Action popups
 

@@ -211,7 +211,15 @@ test("an extension that took the default search engine controls it until it goes
     url: "https://duckduckgo.com/?q=%s&t=nnfixture",
     isDefault: true,
   };
-  const wiki = { ...ddg, extensionId: "lfkochledepkdapbginilfnephdpkfjc", extensionName: "Search Fixture Extra", name: "Wikipedia Fixture", keyword: "wfix", url: "https://en.wikipedia.org/w/index.php?search=%s", isDefault: false };
+  const wiki = {
+    ...ddg,
+    extensionId: "lfkochledepkdapbginilfnephdpkfjc",
+    extensionName: "Search Fixture Extra",
+    name: "Wikipedia Fixture",
+    keyword: "wfix",
+    url: "https://en.wikipedia.org/w/index.php?search=%s",
+    isDefault: false,
+  };
   S().updateSettings({ searchEngine: "bing", extensionSearchEngines: [ddg, wiki] });
   assert.equal(controllingSearchExtension(S().settings)?.extensionId, ddg.extensionId);
   assert.equal(defaultSearchEngine(S().settings).id, `extension:${ddg.extensionId}`);
@@ -231,8 +239,18 @@ test("an extension that took the default search engine controls it until it goes
 test("closing the mini player lasts until its tab plays again", async () => {
   const M = () => media.useMedia.getState();
   const report = (overrides = {}) => ({
-    title: "Song", artist: "Band", album: "", artwork: null, playbackState: "playing", position: 10, duration: 200,
-    playbackRate: 1, timestamp: Date.now(), hasVideo: false, actions: ["play", "pause"], ...overrides,
+    title: "Song",
+    artist: "Band",
+    album: "",
+    artwork: null,
+    playbackState: "playing",
+    position: 10,
+    duration: 200,
+    playbackRate: 1,
+    timestamp: Date.now(),
+    hasVideo: false,
+    actions: ["play", "pause"],
+    ...overrides,
   });
   reset();
   const w = S().createWindow({ url: "a.com" });

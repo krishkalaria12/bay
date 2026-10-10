@@ -15,7 +15,7 @@
 
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate, launch, quit, startServer } from "./js-bench.mjs";
 import { buildSeed } from "./seed.mjs";
@@ -64,7 +64,20 @@ function writeRenderSeed(dir, origin, version, count) {
   active.lastActiveAt = now;
   session.tabs = tabs;
   session.groups = grouped
-    ? [{ id: "g-0", windowId: w.id, spaceId: "default", name: "Reading", icon: null, color: "blue", collapsed: false, pinned: false, tabIds: tabs.slice(pinned, pinned + grouped).map((t) => t.id), createdAt: now }]
+    ? [
+        {
+          id: "g-0",
+          windowId: w.id,
+          spaceId: "default",
+          name: "Reading",
+          icon: null,
+          color: "blue",
+          collapsed: false,
+          pinned: false,
+          tabIds: tabs.slice(pinned, pinned + grouped).map((t) => t.id),
+          createdAt: now,
+        },
+      ]
     : [];
   w.tabIds = tabs.map((t) => t.id);
   w.activeTabIds = { default: active.id };
@@ -99,7 +112,8 @@ async function cdp(port, urlPart, calls) {
       const timer = setTimeout(() => rej(new Error(`CDP ${method} timed out`)), 10_000);
       pending.set(id, (msg) => {
         clearTimeout(timer);
-        msg.error ? rej(new Error(`${method}: ${msg.error.message}`)) : res(msg.result);
+        if (msg.error) rej(new Error(`${method}: ${msg.error.message}`));
+        else res(msg.result);
       });
       ws.send(JSON.stringify({ id, method, params }));
     });
@@ -112,16 +126,39 @@ async function cdp(port, urlPart, calls) {
 
 // MARK: Run
 
-const INTERACTIONS = ["idle1", "tabSwitch", "idle20", "openTab", "closeTab", "typeCommandBar", "typeOmnibox", "hover", "ticker", "bgLoad", "media", "pageScroll", "split", "unsplit", "sidebarCollapse", "sidebarExpand", "downloads"];
+const INTERACTIONS = [
+  "idle1",
+  "tabSwitch",
+  "idle20",
+  "openTab",
+  "closeTab",
+  "typeCommandBar",
+  "typeOmnibox",
+  "hover",
+  "ticker",
+  "bgLoad",
+  "media",
+  "pageScroll",
+  "split",
+  "unsplit",
+  "sidebarCollapse",
+  "sidebarExpand",
+  "downloads",
+];
 
 async function session(clone, dataDir, port, lib, body) {
   const { pid } = await launch(clone, dataDir, port);
   try {
     let ready = false;
-    for (let i = 0; i < 40 && !ready; i++) ready = await evaluate(dataDir, pid, "return 1;", 2000).then(() => true, (e) => (String(e).includes("exited") ? Promise.reject(e) : false));
+    for (let i = 0; i < 40 && !ready; i++)
+      ready = await evaluate(dataDir, pid, "return 1;", 2000).then(
+        () => true,
+        (e) => (String(e).includes("exited") ? Promise.reject(e) : false),
+      );
     if (!ready) throw new Error("dev harness never answered");
     await evaluate(dataDir, pid, lib, 60_000);
-    const call = (name, options = {}, timeoutMs = 180_000) => evaluate(dataDir, pid, `return nnBench.run(${JSON.stringify(name)}, ${JSON.stringify(options)});`, timeoutMs);
+    const call = (name, options = {}, timeoutMs = 180_000) =>
+      evaluate(dataDir, pid, `return nnBench.run(${JSON.stringify(name)}, ${JSON.stringify(options)});`, timeoutMs);
     return await body(call);
   } finally {
     await quit(pid);
@@ -138,7 +175,9 @@ async function run() {
   mkdirSync(dirname(clone), { recursive: true });
   execFileSync("cp", ["-cR", app, clone]);
   cpSync(jsbundle, join(clone, "Contents/Resources/main.jsbundle"));
-  const version = execFileSync("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleShortVersionString", join(clone, "Contents/Info.plist")], { encoding: "utf8" }).trim();
+  const version = execFileSync("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleShortVersionString", join(clone, "Contents/Info.plist")], {
+    encoding: "utf8",
+  }).trim();
   const origin = `http://127.0.0.1:${port}`;
   const server = await startServer(Number(port));
   const lib = readFileSync(join(here, "bench-app.js"), "utf8");
@@ -264,7 +303,8 @@ async function run() {
 // MARK: Summary
 
 // Host wrappers render whenever their parent does; offenders lists the app's own components.
-const HOST = /^(View|Text|Pressable|Image|ScrollView|TextInput|InternalTextInput|Animated\(.*\)|Bay.*|Surface|Symbol|MouseArea|ContextMenuArea|FadeLabel|VirtualizedList.*|CellRenderer.*|ScrollViewBase|TouchableOpacity|AnimatedComponent.*)$/;
+const HOST =
+  /^(View|Text|Pressable|Image|ScrollView|TextInput|InternalTextInput|Animated\(.*\)|Bay.*|Surface|Symbol|MouseArea|ContextMenuArea|FadeLabel|VirtualizedList.*|CellRenderer.*|ScrollViewBase|TouchableOpacity|AnimatedComponent.*)$/;
 
 function line(stats) {
   if (!stats) return null;
@@ -294,9 +334,13 @@ function summarize(results) {
 const fmt = (v) => (v === null || v === undefined ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
 
 function printTable(summary) {
-  console.log("| interaction | commits | renders | wasted | unstable props | render ms | wasted ms | JS ms | n |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+  console.log(
+    "| interaction | commits | renders | wasted | unstable props | render ms | wasted ms | JS ms | n |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+  );
   for (const [name, l] of Object.entries(summary))
-    console.log(`| ${name} | ${fmt(l.commits)} | ${fmt(l.renders)} | ${fmt(l.wasted)} | ${fmt(l.unstable)} | ${fmt(l.renderMs)} | ${fmt(l.wastedMs)} | ${fmt(l.jsMs)} | ${l.n} |`);
+    console.log(
+      `| ${name} | ${fmt(l.commits)} | ${fmt(l.renders)} | ${fmt(l.wasted)} | ${fmt(l.unstable)} | ${fmt(l.renderMs)} | ${fmt(l.wastedMs)} | ${fmt(l.jsMs)} | ${l.n} |`,
+    );
 }
 
 function compare(a, b) {
@@ -308,7 +352,9 @@ function compare(a, b) {
     const x = A[name];
     const y = B[name];
     if (!x || !y) continue;
-    console.log(`| ${name} | ${cell(x.commits, y.commits)} | ${cell(x.renders, y.renders)} | ${cell(x.wasted, y.wasted)} | ${cell(x.unstable, y.unstable)} | ${cell(x.renderMs, y.renderMs)} | ${cell(x.jsMs, y.jsMs)} |`);
+    console.log(
+      `| ${name} | ${cell(x.commits, y.commits)} | ${cell(x.renders, y.renders)} | ${cell(x.wasted, y.wasted)} | ${cell(x.unstable, y.unstable)} | ${cell(x.renderMs, y.renderMs)} | ${cell(x.jsMs, y.jsMs)} |`,
+    );
   }
 }
 
@@ -320,21 +366,48 @@ function top(file, only) {
     const stats = last[name];
     if (!stats) continue;
     const l = line(stats);
-    console.log(`\n## ${name}: ${l.commits} commits, ${l.renders} renders (${l.wasted} wasted, ${l.unstable} unstable props), ${fmt(l.renderMs)} ms rendering, ${fmt(l.jsMs)} ms JS`);
+    console.log(
+      `\n## ${name}: ${l.commits} commits, ${l.renders} renders (${l.wasted} wasted, ${l.unstable} unstable props), ${fmt(l.renderMs)} ms rendering, ${fmt(l.jsMs)} ms JS`,
+    );
     const rows = Object.keys(stats.renders)
       .filter((k) => !HOST.test(k))
-      .map((k) => ({ k, n: stats.renders[k], w: stats.wasted?.[k] ?? 0, u: stats.unstable?.[k] ?? 0, ms: stats.renderMs?.[k] ?? 0, causes: stats.causes?.[k] ?? {} }))
+      .map((k) => ({
+        k,
+        n: stats.renders[k],
+        w: stats.wasted?.[k] ?? 0,
+        u: stats.unstable?.[k] ?? 0,
+        ms: stats.renderMs?.[k] ?? 0,
+        causes: stats.causes?.[k] ?? {},
+      }))
       .sort((x, y) => y.n - x.n || y.ms - x.ms)
       .slice(0, 15);
     for (const row of rows) {
-      const causes = Object.entries(row.causes).sort((x, y) => y[1] - x[1]).slice(0, 4).map(([c, n]) => `${c} ${n}`).join(", ");
-      console.log(`  ${String(row.n).padStart(5)} renders ${String(row.w).padStart(5)} wasted ${String(row.u).padStart(5)} unstable ${fmt(row.ms).padStart(7)} ms  ${row.k}  (${causes})`);
+      const causes = Object.entries(row.causes)
+        .sort((x, y) => y[1] - x[1])
+        .slice(0, 4)
+        .map(([c, n]) => `${c} ${n}`)
+        .join(", ");
+      console.log(
+        `  ${String(row.n).padStart(5)} renders ${String(row.w).padStart(5)} wasted ${String(row.u).padStart(5)} unstable ${fmt(row.ms).padStart(7)} ms  ${row.k}  (${causes})`,
+      );
     }
-    const origins = Object.entries(stats.origins ?? {}).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, n]) => `${k} ${n}`).join(", ");
+    const origins = Object.entries(stats.origins ?? {})
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 8)
+      .map(([k, n]) => `${k} ${n}`)
+      .join(", ");
     if (origins) console.log(`  updates start in: ${origins}`);
-    const tasks = Object.entries(stats.commitTasks ?? {}).sort((x, y) => y[1] - x[1]).slice(0, 10).map(([k, n]) => `${k} ${n}`).join(", ");
+    const tasks = Object.entries(stats.commitTasks ?? {})
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 10)
+      .map(([k, n]) => `${k} ${n}`)
+      .join(", ");
     if (tasks) console.log(`  commits happen in: ${tasks}`);
-    const keys = Object.entries(stats.storeKeys ?? {}).sort((x, y) => y[1] - x[1]).slice(0, 6).map(([k, n]) => `${k} ${n}`).join(", ");
+    const keys = Object.entries(stats.storeKeys ?? {})
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 6)
+      .map(([k, n]) => `${k} ${n}`)
+      .join(", ");
     if (keys) console.log(`  store keys: ${keys}`);
   }
 }

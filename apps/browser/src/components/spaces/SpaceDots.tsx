@@ -32,7 +32,9 @@ function Dot({ id, windowId, page }: { id: string; windowId: string; page: Pager
     <View {...hoverProps} tooltip={name}>
       <Pressable accessibilityRole="button" accessibilityLabel={name} onPress={() => switchSpace(windowId, id, true)}>
         <View style={{ width: DOTS_CELL, height: DOTS_BAND, alignItems: "center", justifyContent: "center" }}>
-          <Animated.View style={[{ width: DOTS_DOT, height: DOTS_DOT, borderRadius: DOTS_DOT / 2, backgroundColor: theme.dark ? "#FFFFFF" : "#000000" }, opacity]} />
+          <Animated.View
+            style={[{ width: DOTS_DOT, height: DOTS_DOT, borderRadius: DOTS_DOT / 2, backgroundColor: theme.dark ? "#FFFFFF" : "#000000" }, opacity]}
+          />
         </View>
       </Pressable>
     </View>

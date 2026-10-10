@@ -106,7 +106,11 @@ async function translatePassages(source: string, target: string, passages: Passa
     else loose.push(...pieces);
   });
   if (loose.length) {
-    const texts = await translation!.translate(source, target, loose.map(([, text]) => text));
+    const texts = await translation!.translate(
+      source,
+      target,
+      loose.map(([, text]) => text),
+    );
     loose.forEach(([id], i) => out.push([id, texts[i] ?? ""]));
   }
   return out;

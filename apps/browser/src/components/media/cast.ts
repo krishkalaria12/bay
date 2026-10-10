@@ -1,12 +1,4 @@
-import {
-  closeCastDialog,
-  onCastDialog,
-  onCastRoutes,
-  showCastDialog,
-  watchCastRoutes,
-  type CastDialog,
-  type CastRoute,
-} from "@bay/nncore";
+import { closeCastDialog, onCastDialog, onCastRoutes, showCastDialog, watchCastRoutes, type CastDialog, type CastRoute } from "@bay/nncore";
 import { create } from "zustand";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId, engineProfile, incognitoSpaceId } from "../../store/model";

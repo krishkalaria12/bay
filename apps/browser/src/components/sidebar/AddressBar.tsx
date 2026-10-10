@@ -82,16 +82,7 @@ export function SidebarAddressRow() {
 function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
   const palette = toolbarPalette(useTheme(), null);
   const inSplit = useBrowser((s) => !!splitOf(s, tab.id));
-  return (
-    <UrlField
-      tab={tab}
-      palette={palette}
-      windowId={windowId}
-      inSplit={inSplit}
-      onFocus={alreadyFocused}
-      sidebar={{ height: SIDEBAR_FIELD.height }}
-    />
-  );
+  return <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={alreadyFocused} sidebar={{ height: SIDEBAR_FIELD.height }} />;
 }
 
 function EmptyField({ windowId }: { windowId: string }) {
@@ -114,7 +105,9 @@ function EmptyField({ windowId }: { windowId: string }) {
             paddingLeft: 10,
           }}
         >
-          {liquidGlass ? <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} /> : null}
+          {liquidGlass ? (
+            <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} />
+          ) : null}
           <FadeLabel text="Search or enter address" fontSize={13} color={theme.placeholder} fadeWidth={14} style={{ height: 18, marginLeft: -2 }} />
         </View>
       </Pressable>

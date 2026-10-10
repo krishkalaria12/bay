@@ -9,9 +9,21 @@ export type QuickCreate = {
 export const QUICK_CREATE: readonly QuickCreate[] = [
   { id: "doc", title: "New Google Doc", url: "https://docs.new", aliases: ["doc", "docs", "document", "google doc", "gdoc"], site: "docs.google.com" },
   { id: "sheet", title: "New Google Sheet", url: "https://sheets.new", aliases: ["sheet", "sheets", "spreadsheet", "google sheet"], site: "sheets.google.com" },
-  { id: "slides", title: "New Google Slides", url: "https://slides.new", aliases: ["slides", "slide", "presentation", "deck", "google slides"], site: "slides.google.com" },
+  {
+    id: "slides",
+    title: "New Google Slides",
+    url: "https://slides.new",
+    aliases: ["slides", "slide", "presentation", "deck", "google slides"],
+    site: "slides.google.com",
+  },
   { id: "form", title: "New Google Form", url: "https://forms.new", aliases: ["form", "forms", "survey", "google form"], site: "forms.google.com" },
-  { id: "meeting", title: "New Google Calendar Event", url: "https://meeting.new", aliases: ["meeting", "event", "calendar", "invite"], site: "calendar.google.com" },
+  {
+    id: "meeting",
+    title: "New Google Calendar Event",
+    url: "https://meeting.new",
+    aliases: ["meeting", "event", "calendar", "invite"],
+    site: "calendar.google.com",
+  },
   { id: "meet", title: "New Google Meet", url: "https://meet.new", aliases: ["meet", "call", "video call", "google meet"], site: "meet.google.com" },
   { id: "notion", title: "New Notion Page", url: "https://notion.new", aliases: ["notion", "note", "page", "notion page"], site: "notion.so" },
   { id: "linear", title: "New Linear Issue", url: "https://linear.new", aliases: ["linear", "issue", "ticket", "linear issue"], site: "linear.app" },

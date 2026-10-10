@@ -37,5 +37,9 @@ export function useMeetingCountdown(groupId: string) {
 export function MeetingTimeLabel({ label, urgent }: { label: string; urgent: boolean }) {
   const theme = useTheme();
   const colors = useLiveColors();
-  return <Text style={{ fontSize: 11, fontWeight: "600", fontVariant: ["tabular-nums"], color: urgent ? colors.now : theme.textSecondary, marginRight: 4 }}>{label}</Text>;
+  return (
+    <Text style={{ fontSize: 11, fontWeight: "600", fontVariant: ["tabular-nums"], color: urgent ? colors.now : theme.textSecondary, marginRight: 4 }}>
+      {label}
+    </Text>
+  );
 }

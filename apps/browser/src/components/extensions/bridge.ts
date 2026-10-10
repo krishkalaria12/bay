@@ -69,7 +69,9 @@ function openRequestedTab(request: TabsRequest) {
   // A live tab Chrome made keeps its profile's cookies and storage: adopted only under an app profile on that profile,
   // in a window showing it, else in a new window of it. Without one, the URL opens afresh (and Chrome's tab goes).
   const spaceId = request.adoptId
-    ? windowId && ofProfile(windowId) ? s.windows[windowId]!.spaceId : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
+    ? windowId && ofProfile(windowId)
+      ? s.windows[windowId]!.spaceId
+      : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
     : undefined;
   if (request.adoptId && spaceId) {
     if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
@@ -104,7 +106,13 @@ function startActionStates() {
   useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows || s.ui.focusedWindowId !== prev.ui.focusedWindowId) return void refreshActionStates();
     if (s.tabs === prev.tabs) return;
-    if (s.windowOrder.some((id) => { const active = activeTabId(s, id); return !!active && s.tabs[active] !== prev.tabs[active]; })) void refreshActionStates();
+    if (
+      s.windowOrder.some((id) => {
+        const active = activeTabId(s, id);
+        return !!active && s.tabs[active] !== prev.tabs[active];
+      })
+    )
+      void refreshActionStates();
   });
   useExtensions.subscribe((e, prev) => {
     if (e.lists !== prev.lists || e.popup !== prev.popup) void refreshActionStates();
@@ -187,7 +195,7 @@ if (store.queued.length) post("result", JSON.stringify(store.queued.shift()));
 else store.waiting = (id) => post("result", JSON.stringify(id));
 `;
 
-const isStorePage = (url: string | undefined) => !!url && /^https:\/\/chromewebstore\.google\.com\//.test(url);
+const isStorePage = (url: string | undefined) => !!url && url.startsWith("https://chromewebstore.google.com/");
 
 function startWebStoreIntegration() {
   onExtensionInstallPrompt((prompt) => {

@@ -168,7 +168,13 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
       if (!t || tabId === anchor.id || t.spaceId !== anchor.spaceId) return { ok: false, reason: "invalid" };
       s = { ...s, splits: removeFromSplits(s.splits, new Set([tabId])) };
     } else {
-      [s, tabId] = withNewTab(s, windowId, { url: o.url, adoptId: o.url ? o.adoptId : undefined, spaceId: anchor.spaceId, openerId: o.url ? anchor.id : undefined, background: true });
+      [s, tabId] = withNewTab(s, windowId, {
+        url: o.url,
+        adoptId: o.url ? o.adoptId : undefined,
+        spaceId: anchor.spaceId,
+        openerId: o.url ? anchor.id : undefined,
+        background: true,
+      });
     }
     const current = existing && s.splits[existing.id];
     const split = withPane(current, anchor.id, tabId, o.side ?? "right");

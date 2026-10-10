@@ -8,8 +8,18 @@ const media = await import("./state.ts");
 const S = () => useBrowser.getState();
 const M = () => media.useMedia.getState();
 const report = (overrides = {}) => ({
-  title: "Song", artist: "Band", album: "", artwork: null, playbackState: "playing", position: 10, duration: 200,
-  playbackRate: 1, timestamp: Date.now(), hasVideo: false, actions: ["play", "pause"], ...overrides,
+  title: "Song",
+  artist: "Band",
+  album: "",
+  artwork: null,
+  playbackState: "playing",
+  position: 10,
+  duration: 200,
+  playbackRate: 1,
+  timestamp: Date.now(),
+  hasVideo: false,
+  actions: ["play", "pause"],
+  ...overrides,
 });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 3));
 
@@ -77,10 +87,16 @@ test("a skip goes to the time itself on a site that can seek to one, since its o
   const sent = [];
   webviews.set(tab, { mediaCommand: async (action, seconds) => void sent.push([action, seconds]) });
   const now = Date.now();
-  media.setNowPlaying(tab, report({ playbackState: "paused", position: 80, timestamp: now, actions: ["play", "pause", "seekbackward", "seekforward", "seekto"] }));
+  media.setNowPlaying(
+    tab,
+    report({ playbackState: "paused", position: 80, timestamp: now, actions: ["play", "pause", "seekbackward", "seekforward", "seekto"] }),
+  );
   media.skip(tab, M().sessions[tab], 15);
   media.skip(tab, M().sessions[tab], -15);
-  assert.deepEqual(sent, [["seekTo", 95], ["seekTo", 80]]);
+  assert.deepEqual(sent, [
+    ["seekTo", 95],
+    ["seekTo", 80],
+  ]);
   // Without seekto, the page skips by the seconds asked.
   media.setNowPlaying(tab, report({ playbackState: "paused", position: 5, timestamp: now, actions: ["play", "pause"] }));
   media.skip(tab, M().sessions[tab], -15);

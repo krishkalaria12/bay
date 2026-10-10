@@ -28,7 +28,16 @@ export function LittleBayWindow() {
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
-      <View style={{ flex: 1, flexDirection: "row", paddingTop: SMALL_BAR_HEIGHT, paddingLeft: SMALL_BAR_INSET, paddingRight: SMALL_BAR_INSET, paddingBottom: SMALL_BAR_INSET }}>
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          paddingTop: SMALL_BAR_HEIGHT,
+          paddingLeft: SMALL_BAR_INSET,
+          paddingRight: SMALL_BAR_INSET,
+          paddingBottom: SMALL_BAR_INSET,
+        }}
+      >
         <ContentCard />
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
@@ -62,12 +71,35 @@ function LittleBayBar() {
   return (
     <View style={{ height: SMALL_BAR_HEIGHT }}>
       <WindowDragRegion style={StyleSheet.absoluteFill} />
-      <View style={{ position: "absolute", left: SMALL_FIELD_LEFT, right: SMALL_BAR_INSET + 2 * SMALL_BUTTON + 8, top: SMALL_BAR_MID - SMALL_FIELD_HEIGHT / 2, height: SMALL_FIELD_HEIGHT }}>
+      <View
+        style={{
+          position: "absolute",
+          left: SMALL_FIELD_LEFT,
+          right: SMALL_BAR_INSET + 2 * SMALL_BUTTON + 8,
+          top: SMALL_BAR_MID - SMALL_FIELD_HEIGHT / 2,
+          height: SMALL_FIELD_HEIGHT,
+        }}
+      >
         {tab ? <PageField tab={tab} windowId={windowId} hidden={panelOpen} /> : null}
       </View>
       <View style={{ position: "absolute", right: SMALL_BAR_INSET, top: SMALL_BAR_MID - SMALL_BUTTON / 2, flexDirection: "row", gap: 2 }}>
-        <IconButton icon={copied ? "checkmark" : "link"} size={14} box={SMALL_BUTTON} radius={7} disabled={!tab?.url} tooltip="Copy Link (⇧⌘C)" onPress={copy} />
-        <IconButton icon="arrow.up.left.and.arrow.down.right" size={13} box={SMALL_BUTTON} radius={7} tooltip="Open in Bay (⌘O)" onPress={() => openInMainWindow(windowId)} />
+        <IconButton
+          icon={copied ? "checkmark" : "link"}
+          size={14}
+          box={SMALL_BUTTON}
+          radius={7}
+          disabled={!tab?.url}
+          tooltip="Copy Link (⇧⌘C)"
+          onPress={copy}
+        />
+        <IconButton
+          icon="arrow.up.left.and.arrow.down.right"
+          size={13}
+          box={SMALL_BUTTON}
+          radius={7}
+          tooltip="Open in Bay (⌘O)"
+          onPress={() => openInMainWindow(windowId)}
+        />
       </View>
     </View>
   );
@@ -138,5 +170,7 @@ function Progress({ progress, color }: { progress: number; color: string }) {
     width.set(withTiming(Math.max(progress, 0.08), { duration: 200, easing: Easing.out(Easing.quad) }));
   }, [progress]);
   const widthStyle = useAnimatedStyle(() => ({ width: `${width.get() * 96}%` }));
-  return <Animated.View style={[{ position: "absolute", left: 8, bottom: 0, height: 1.5, borderRadius: 1, backgroundColor: color, opacity: 0.85 }, widthStyle]} />;
+  return (
+    <Animated.View style={[{ position: "absolute", left: 8, bottom: 0, height: 1.5, borderRadius: 1, backgroundColor: color, opacity: 0.85 }, widthStyle]} />
+  );
 }

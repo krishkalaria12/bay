@@ -30,24 +30,60 @@ const data = join(scratch, "data");
 const rep = reporter(join(scratch, "tab-drag-test.log"), { name: "tab-drag-test" });
 
 // Each tab on a page of its own: a blank tab shown opens the window's palette, whose dismiss layer covers the strip.
-const tab = (id, windowId, pinned = false) => ({ id, windowId, pinned, url: `data:text/html,<title>${id}</title>`, title: id, lastActiveAt: id === "t1" ? 2 : 1 });
-const fixture = () => session({
-  spaces: [{ id: "default", name: "Personal", color: "plum" }],
-  settings: { tabLayout: "top" },
-  windows: [
-    // Low enough to leave room above it on a laptop's screen for the card of a tab dragged out over its top (a card
-    // can't go past the menu bar, so above an 880 pt top it never got clear of the window).
-    { id: "w1", tabIds: ["p1", "p2", "t1", "t2", "t3", "t4"], activeTabIds: { default: "t1" }, frame: [80, 20, 1280, 800], createdAt: 1 },
-    { id: "w2", tabIds: ["l1"], activeTabIds: { default: "l1" }, frame: [200, 120, 1100, 700], createdAt: 2 },
-    { id: "w3", tabIds: ["g1", "g2", "x1"], activeTabIds: { default: "x1" }, frame: [140, 100, 1200, 760], createdAt: 3 },
-    // Side by side, the same height: a tab dragged from one onto the other's strip.
-    { id: "w5", tabIds: ["a1", "a2"], activeTabIds: { default: "a2" }, frame: [100, 60, 560, 420], createdAt: 5 },
-    { id: "w6", tabIds: ["b1", "b2", "b3"], activeTabIds: { default: "b1" }, frame: [700, 60, 560, 420], createdAt: 6 },
-  ],
-  tabs: [tab("p1", "w1", true), tab("p2", "w1", true), tab("t1", "w1"), tab("t2", "w1"), tab("t3", "w1"), tab("t4", "w1"), tab("l1", "w2"),
-    tab("g1", "w3"), tab("g2", "w3"), tab("x1", "w3"), tab("a1", "w5"), tab("a2", "w5"), tab("b1", "w6"), tab("b2", "w6"), tab("b3", "w6")],
-  groups: [{ id: "grp", windowId: "w3", spaceId: "default", name: "Group", icon: null, color: null, collapsed: false, pinned: false, tabIds: ["g1", "g2"], createdAt: 1 }],
+const tab = (id, windowId, pinned = false) => ({
+  id,
+  windowId,
+  pinned,
+  url: `data:text/html,<title>${id}</title>`,
+  title: id,
+  lastActiveAt: id === "t1" ? 2 : 1,
 });
+const fixture = () =>
+  session({
+    spaces: [{ id: "default", name: "Personal", color: "plum" }],
+    settings: { tabLayout: "top" },
+    windows: [
+      // Low enough to leave room above it on a laptop's screen for the card of a tab dragged out over its top (a card
+      // can't go past the menu bar, so above an 880 pt top it never got clear of the window).
+      { id: "w1", tabIds: ["p1", "p2", "t1", "t2", "t3", "t4"], activeTabIds: { default: "t1" }, frame: [80, 20, 1280, 800], createdAt: 1 },
+      { id: "w2", tabIds: ["l1"], activeTabIds: { default: "l1" }, frame: [200, 120, 1100, 700], createdAt: 2 },
+      { id: "w3", tabIds: ["g1", "g2", "x1"], activeTabIds: { default: "x1" }, frame: [140, 100, 1200, 760], createdAt: 3 },
+      // Side by side, the same height: a tab dragged from one onto the other's strip.
+      { id: "w5", tabIds: ["a1", "a2"], activeTabIds: { default: "a2" }, frame: [100, 60, 560, 420], createdAt: 5 },
+      { id: "w6", tabIds: ["b1", "b2", "b3"], activeTabIds: { default: "b1" }, frame: [700, 60, 560, 420], createdAt: 6 },
+    ],
+    tabs: [
+      tab("p1", "w1", true),
+      tab("p2", "w1", true),
+      tab("t1", "w1"),
+      tab("t2", "w1"),
+      tab("t3", "w1"),
+      tab("t4", "w1"),
+      tab("l1", "w2"),
+      tab("g1", "w3"),
+      tab("g2", "w3"),
+      tab("x1", "w3"),
+      tab("a1", "w5"),
+      tab("a2", "w5"),
+      tab("b1", "w6"),
+      tab("b2", "w6"),
+      tab("b3", "w6"),
+    ],
+    groups: [
+      {
+        id: "grp",
+        windowId: "w3",
+        spaceId: "default",
+        name: "Group",
+        icon: null,
+        color: null,
+        collapsed: false,
+        pinned: false,
+        tabIds: ["g1", "g2"],
+        createdAt: 1,
+      },
+    ],
+  });
 
 let app = null;
 
@@ -66,15 +102,21 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 `;
 const run = (body) => app.eval(`${HELPERS}\n${body}`);
 const order = (w) => run(`return st().windows.${w}.tabIds;`);
-const drag = (w, points) => run(`return act("${w}", "windowDrags").then(() => act("${w}", "drag:${points.map((p) => p.join(",")).join(";")}")).then(() => settle(${points.length * 12 * 16 + 700})).then(() => act("${w}", "windowDrags")).then((t) => Number(t.split("\\n")[0]));`);
+const drag = (w, points) =>
+  run(
+    `return act("${w}", "windowDrags").then(() => act("${w}", "drag:${points.map((p) => p.join(",")).join(";")}")).then(() => settle(${points.length * 12 * 16 + 700})).then(() => act("${w}", "windowDrags")).then((t) => Number(t.split("\\n")[0]));`,
+  );
 
 // An 8-bit RGB(A) PNG's pixels (what devSnapshotWindow writes): { width, height, channels, data }.
 function readPng(path) {
   const buf = readFileSync(path);
-  let width = 0, height = 0, channels = 4;
+  let width = 0,
+    height = 0,
+    channels = 4;
   const idat = [];
-  for (let at = 8; at < buf.length; ) {
-    const length = buf.readUInt32BE(at), type = buf.toString("ascii", at + 4, at + 8);
+  for (let at = 8; at < buf.length;) {
+    const length = buf.readUInt32BE(at),
+      type = buf.toString("ascii", at + 4, at + 8);
     if (type === "IHDR") {
       width = buf.readUInt32BE(at + 8);
       height = buf.readUInt32BE(at + 12);
@@ -93,7 +135,10 @@ function readPng(path) {
       const a = x >= channels ? data[y * stride + x - channels] : 0;
       const b = y ? data[(y - 1) * stride + x] : 0;
       const c = x >= channels && y ? data[(y - 1) * stride + x - channels] : 0;
-      const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      const p = a + b - c,
+        pa = Math.abs(p - a),
+        pb = Math.abs(p - b),
+        pc = Math.abs(p - c);
       const pred = [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][filter];
       data[y * stride + x] = (v + pred) & 255;
     }
@@ -128,7 +173,8 @@ try {
 
   // The dragged tab's picture: a native panel that never takes the mouse or activates the app.
   const PREVIEW = `const preview = () => globalThis.expo.modules.BayShell.devDragPreviewState();`;
-  const watch = (w, path, ms) => run(`${PREVIEW}
+  const watch = (w, path, ms) =>
+    run(`${PREVIEW}
     const seen = [];
     const iv = setInterval(() => preview().then((p) => seen.push(p)), 30);
     return act("${w}", "drag:${path}").then(() => settle(${ms})).then(() => { clearInterval(iv); return seen; });`);
@@ -136,7 +182,11 @@ try {
   await check("a tab dragged along the strip reorders and doesn't move the window", async () => {
     const frame = await run(`return st().windows.w1.frame;`);
     // The tab follows from where the drag started (a few points past the press), so go a little past t3's centre.
-    const drags = await drag("w1", [[mid(2), 21], [mid(3), 21], [mid(4) + 30, 21]]);
+    const drags = await drag("w1", [
+      [mid(2), 21],
+      [mid(3), 21],
+      [mid(4) + 30, 21],
+    ]);
     assert.equal(drags, 0, "window drags");
     assert.deepEqual(await order("w1"), ["p1", "p2", "t2", "t3", "t1", "t4"]);
     assert.deepEqual(await run(`return st().windows.w1.frame;`), frame);
@@ -153,7 +203,12 @@ try {
       const wait = (n) => (ready() || !n ? Promise.resolve(ready()) : settle(100).then(() => wait(n - 1)));
       return wait(100);`);
     // The third item (a tab) right past the fourth's middle, with plenty of moves on the way.
-    const path = [[at(2), 21], [at(2) + 20, 21], [at(3), 21], [at(3) + 40, 21]];
+    const path = [
+      [at(2), 21],
+      [at(2) + 20, 21],
+      [at(3), 21],
+      [at(3) + 40, 21],
+    ];
     const seen = await run(`
       const cef = globalThis.expo.modules.BayCEF;
       const send = cef.tabStripCommand;
@@ -172,8 +227,16 @@ try {
     const start = seen.drag.find(([on]) => on)?.[1];
     const drop = seen.drag.find(([on]) => !on)?.[1];
     assert.ok(start !== undefined && drop !== undefined, JSON.stringify(seen.drag));
-    assert.deepEqual(seen.commands.filter((t) => t < drop), [], "no strip command while dragging");
-    assert.deepEqual(seen.windows.filter((t) => t < drop), [], "no store update while dragging");
+    assert.deepEqual(
+      seen.commands.filter((t) => t < drop),
+      [],
+      "no strip command while dragging",
+    );
+    assert.deepEqual(
+      seen.windows.filter((t) => t < drop),
+      [],
+      "no store update while dragging",
+    );
     assert.equal(seen.windows.length, 1, `one store update on drop: ${JSON.stringify(seen.windows)}`);
     assert.equal(seen.commands.length, 1, `one strip command on drop: ${JSON.stringify(seen.commands)}`);
     // A reorder never takes the window's picture (it stalls the main thread): only leaving the strip does.
@@ -181,7 +244,9 @@ try {
     const after = await order("w1");
     assert.notDeepEqual(after, before, "it moved");
     // Back where it was, for the cases after this one.
-    await run(`const id = ${JSON.stringify(before[2])}; const ids = ${JSON.stringify(before)}.filter((t) => !st().tabs[t].pinned); st().moveTab(id, ids.indexOf(id)); return settle(300);`);
+    await run(
+      `const id = ${JSON.stringify(before[2])}; const ids = ${JSON.stringify(before)}.filter((t) => !st().tabs[t].pinned); st().moveTab(id, ids.indexOf(id)); return settle(300);`,
+    );
     assert.deepEqual(await order("w1"), before);
   });
 
@@ -189,7 +254,7 @@ try {
     const now = await run(`return items("w1");`);
     const before = await order("w1");
     // The third item (a tab) held over the left part of the fourth, short of trading places with it.
-    const [a, b] = [now[2], now[3]];
+    const a = now[2];
     const x0 = Math.round((a[0] + a[1]) / 2);
     const x1 = x0 + Math.round((a[1] - a[0]) * 0.4);
     // Selected, so it has its card. Under the empty end of the dragged tab (its close button's slot, past its title),
@@ -214,19 +279,30 @@ try {
   await check("a lone tab dragged doesn't move its window", async () => {
     const lone = await run(`return items("w2");`);
     const x = Math.round((lone[0][0] + lone[0][1]) / 2);
-    const drags = await drag("w2", [[x, 21], [x + 60, 24], [x + 140, 26]]);
+    const drags = await drag("w2", [
+      [x, 21],
+      [x + 60, 24],
+      [x + 140, 26],
+    ]);
     assert.equal(drags, 0, "window drags");
     assert.deepEqual(await order("w2"), ["l1"]);
   });
 
   await check("a pinned tile trades places with the other pinned tile", async () => {
-    const drags = await drag("w1", [[mid(0), 21], [mid(1), 21], [mid(1) + 24, 21]]);
+    const drags = await drag("w1", [
+      [mid(0), 21],
+      [mid(1), 21],
+      [mid(1) + 24, 21],
+    ]);
     assert.equal(drags, 0, "window drags");
     assert.deepEqual((await order("w1")).slice(0, 2), ["p2", "p1"]);
   });
 
   await check("the empty strip still moves the window", async () => {
-    const drags = await drag("w1", [[strip[5][1] + 120, 21], [strip[5][1] + 200, 21]]);
+    const drags = await drag("w1", [
+      [strip[5][1] + 120, 21],
+      [strip[5][1] + 200, 21],
+    ]);
     assert.equal(drags, 1, "window drags");
   });
 
@@ -249,7 +325,9 @@ try {
     assert.equal(result.drags, 2, "a press at the strip's top and one near its bottom each drag the window");
     // System Settings › Desktop & Dock › "Double-click a window's title bar to": Fill and Zoom change the frame.
     let action = null;
-    try { action = execFileSync("defaults", ["read", "-g", "AppleActionOnDoubleClick"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch {}
+    try {
+      action = execFileSync("defaults", ["read", "-g", "AppleActionOnDoubleClick"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {}
     if (action === "None" || action === "Minimize") return;
     assert.notEqual(result.zoomed, result.before, "a double-click zooms (the title-bar action)");
     assert.equal(result.back, result.before, "a second double-click puts it back");
@@ -260,23 +338,54 @@ try {
     // The group's chip, its two members, then x1.
     assert.equal(items.length, 4, JSON.stringify(items));
     const at = (i) => Math.round((items[i][0] + items[i][1]) / 2);
-    assert.equal(await drag("w3", [[at(2), 21], [at(1), 21], [at(1) - 40, 21]]), 0, "window drags");
-    assert.deepEqual(await run(`return [st().windows.w3.tabIds, st().groups.grp.tabIds];`), [["g2", "g1", "x1"], ["g2", "g1"]]);
-    await drag("w3", [[at(3), 21], [at(1), 21], [at(0) - 30, 21]]);
-    assert.deepEqual(await run(`return [st().windows.w3.tabIds, st().groups.grp.tabIds];`), [["x1", "g2", "g1"], ["g2", "g1"]]);
+    assert.equal(
+      await drag("w3", [
+        [at(2), 21],
+        [at(1), 21],
+        [at(1) - 40, 21],
+      ]),
+      0,
+      "window drags",
+    );
+    assert.deepEqual(await run(`return [st().windows.w3.tabIds, st().groups.grp.tabIds];`), [
+      ["g2", "g1", "x1"],
+      ["g2", "g1"],
+    ]);
+    await drag("w3", [
+      [at(3), 21],
+      [at(1), 21],
+      [at(0) - 30, 21],
+    ]);
+    assert.deepEqual(await run(`return [st().windows.w3.tabIds, st().groups.grp.tabIds];`), [
+      ["x1", "g2", "g1"],
+      ["g2", "g1"],
+    ]);
   });
 
   await check("a group dragged by its chip moves along the strip as one", async () => {
     // x1, the group's chip, g2, g1.
     const items = await run(`return items("w3");`);
     const at = (i) => Math.round((items[i][0] + items[i][1]) / 2);
-    assert.equal(await drag("w3", [[Math.round(items[1][0] + 15), 21], [at(0), 21], [items[0][0] - 20, 21]]), 0, "window drags");
-    assert.deepEqual(await run(`return [st().windows.w3.tabIds, st().groups.grp.tabIds];`), [["g2", "g1", "x1"], ["g2", "g1"]]);
+    assert.equal(
+      await drag("w3", [
+        [Math.round(items[1][0] + 15), 21],
+        [at(0), 21],
+        [items[0][0] - 20, 21],
+      ]),
+      0,
+      "window drags",
+    );
+    assert.deepEqual(await run(`return [st().windows.w3.tabIds, st().groups.grp.tabIds];`), [
+      ["g2", "g1", "x1"],
+      ["g2", "g1"],
+    ]);
   });
 
   await check("a tab dragged onto another window's tabs: the strip makes room at the pointer, and it lands there", async () => {
     // w6 in front of the others under the pointer.
-    await run(`nn.store.setState((s) => ({ ui: { ...s.ui, focusOrder: ["w6", "w5", ...s.ui.focusOrder.filter((id) => id !== "w6" && id !== "w5")] } })); return 1;`);
+    await run(
+      `nn.store.setState((s) => ({ ui: { ...s.ui, focusOrder: ["w6", "w5", ...s.ui.focusOrder.filter((id) => id !== "w6" && id !== "w5")] } })); return 1;`,
+    );
     const from = await run(`return items("w5");`);
     const into = await run(`return items("w6");`);
     const dx = 600; // w6's left edge in w5's coordinates
@@ -287,8 +396,14 @@ try {
       const seen = [];
       const iv = setInterval(() => preview().then((p) => { const d = globalThis.nnTabDrag.getState(); seen.push({ shape: p.shape, insert: d.insert, over: d.overWindow }); }), 30);
       return act("w5", "drag:${a1},21;${a1},-20;${dx - 30},-20;${between},21;${between + 2},22;${between + 3},21").then(() => settle(1400)).then(() => { clearInterval(iv); return seen; });`);
-    assert.ok(seen.some((s) => s.over === "w6" && s.insert?.windowId === "w6" && s.insert.beforeId === "b2"), JSON.stringify(seen.slice(-4)));
-    assert.ok(seen.some((s) => s.insert && s.shape === "pill"), "the pill over the strip");
+    assert.ok(
+      seen.some((s) => s.over === "w6" && s.insert?.windowId === "w6" && s.insert.beforeId === "b2"),
+      JSON.stringify(seen.slice(-4)),
+    );
+    assert.ok(
+      seen.some((s) => s.insert && s.shape === "pill"),
+      "the pill over the strip",
+    );
     assert.deepEqual(await order("w6"), ["b1", "a1", "b2", "b3"]);
     assert.deepEqual(await order("w5"), ["a2"]);
   });
@@ -311,7 +426,9 @@ try {
     assert.equal(never?.shape, "card", JSON.stringify(never));
     assert.ok(never.page && never.placeholder, `placeholder ${JSON.stringify(never)}`);
     // t2 with a page, shown for a moment, then left: its picture from then. (A New Tab page isn't a web page.)
-    await run(`st().activate("t2"); st().navigate("t2", "data:text/html,<body style='background:%2366aaff'><h1>t2</h1>"); return settle(3200).then(() => { st().activate("t1"); return settle(600); });`);
+    await run(
+      `st().activate("t2"); st().navigate("t2", "data:text/html,<body style='background:%2366aaff'><h1>t2</h1>"); return settle(3200).then(() => { st().activate("t1"); return settle(600); });`,
+    );
     const shown = await cardOf("t2");
     assert.ok(shown?.page && !shown.placeholder, `its picture ${JSON.stringify(shown)}`);
     assert.deepEqual(await order("w1"), before);
@@ -327,8 +444,14 @@ try {
       const seen = [];
       const iv = setInterval(() => { const d = globalThis.nnTabDrag.getState(); seen.push({ lifted: d.lifted, onPage: d.onPage, target: d.target }); }, 60);
       return act("w1", "drag:${x},21;${x},120;${width - 260},380;${width - 255},390;${width - 250},400;${width - 250},402").then(() => settle(1700)).then(() => { clearInterval(iv); return seen; });`);
-    assert.ok(state.some((s) => s.lifted && s.onPage), "lifted onto the page");
-    assert.ok(state.some((s) => s.target?.side === "right"), `right target ${JSON.stringify(state.slice(-6))}`);
+    assert.ok(
+      state.some((s) => s.lifted && s.onPage),
+      "lifted onto the page",
+    );
+    assert.ok(
+      state.some((s) => s.target?.side === "right"),
+      `right target ${JSON.stringify(state.slice(-6))}`,
+    );
     const splits = await run(`return Object.values(st().splits).map((v) => v.tabIds);`);
     assert.equal(splits.length, 1);
     assert.equal(splits[0].at(-1), "t3", `split ${JSON.stringify(splits)}`);
@@ -346,12 +469,21 @@ try {
     // Every shape it took since the drag began (the pill shows for only 30 ms).
     const shapes = seen.at(-1).shapes;
     assert.deepEqual(shapes.slice(0, 2), ["pill", "card"], `pill, then card: ${shapes}`);
-    assert.ok(seen.every((p) => !p.key && !p.activeApp && (p.shape === "hidden" || p.ignoresMouse)), "never key or active, takes no mouse");
-    assert.ok(seen.some((p) => p.shape === "card" && p.frame[2] === 209 && p.frame[3] === 110), "a 209 × 110 card");
+    assert.ok(
+      seen.every((p) => !p.key && !p.activeApp && (p.shape === "hidden" || p.ignoresMouse)),
+      "never key or active, takes no mouse",
+    );
+    assert.ok(
+      seen.some((p) => p.shape === "card" && p.frame[2] === 209 && p.frame[3] === 110),
+      "a 209 × 110 card",
+    );
     assert.equal(seen.at(-1).visible, false, "gone after the drop");
     const after = await run(`return Object.values(st().windows).map((w) => w.tabIds);`);
     assert.equal(after.length, windows + 1, JSON.stringify(after));
-    assert.ok(after.some((ids) => ids.length === 1 && ids[0] === id), JSON.stringify(after));
+    assert.ok(
+      after.some((ids) => ids.length === 1 && ids[0] === id),
+      JSON.stringify(after),
+    );
     assert.deepEqual(await run(`return Object.values(st().splits).map((v) => v.tabIds);`), splits);
   });
 
@@ -365,12 +497,21 @@ try {
     const outside = seen.filter((p) => p.shape === "card");
     assert.ok(outside.length, "a card outside the window");
     // Centred on the pointer, above the window.
-    assert.ok(outside.some((p) => p.frame[1] + p.frame[3] / 2 > frame[1] + frame[3]), JSON.stringify(outside.at(-1)));
+    assert.ok(
+      outside.some((p) => p.frame[1] + p.frame[3] / 2 > frame[1] + frame[3]),
+      JSON.stringify(outside.at(-1)),
+    );
     // It grows into the new window before it fades.
-    assert.ok(seen.some((p) => p.visible && p.frame[2] === frame[2] && p.frame[3] === frame[3]), "grew to the new window");
+    assert.ok(
+      seen.some((p) => p.visible && p.frame[2] === frame[2] && p.frame[3] === frame[3]),
+      "grew to the new window",
+    );
     const after = await run(`return Object.values(st().windows).map((w) => w.tabIds);`);
     assert.equal(after.length, windows + 1, JSON.stringify(after));
-    assert.ok(after.some((ids) => ids.length === 1 && ids[0] === id), JSON.stringify(after));
+    assert.ok(
+      after.some((ids) => ids.length === 1 && ids[0] === id),
+      JSON.stringify(after),
+    );
   });
 
   await check("a split moves along the strip as one, and a pane pulled out of the window leaves it", async () => {
@@ -380,15 +521,27 @@ try {
     // p2, p1, the split (t1 | t3), a new tab.
     assert.deepEqual(ids.slice(0, 4), ["p2", "p1", "t1", "t3"]);
     const now = await run(`return items("w1");`);
-    const split = now[2], last = now[3];
+    const split = now[2],
+      last = now[3];
     const y = 21;
-    await drag("w1", [[Math.round(split[0] + 30), y], [Math.round(last[0]), y], [Math.round(last[1]) + 20, y]]);
+    await drag("w1", [
+      [Math.round(split[0] + 30), y],
+      [Math.round(last[0]), y],
+      [Math.round(last[1]) + 20, y],
+    ]);
     assert.deepEqual(await order("w1"), ["p2", "p1", fresh, "t1", "t3"]);
     const moved = await run(`return items("w1");`);
     const pane = Math.round(moved[3][0] + (moved[3][1] - moved[3][0]) * 0.75);
-    await drag("w1", [[pane, y], [pane, -40], [pane + 40, -90]]);
+    await drag("w1", [
+      [pane, y],
+      [pane, -40],
+      [pane + 40, -90],
+    ]);
     const state = await run(`return { windows: Object.values(st().windows).map((w) => w.tabIds), splits: Object.values(st().splits).map((v) => v.tabIds) };`);
-    assert.ok(state.windows.some((w) => w.length === 1 && w[0] === "t3"), JSON.stringify(state));
+    assert.ok(
+      state.windows.some((w) => w.length === 1 && w[0] === "t3"),
+      JSON.stringify(state),
+    );
     assert.ok(!state.splits.some((v) => v.includes("t3")), JSON.stringify(state));
   });
 
@@ -398,41 +551,68 @@ try {
     let now = await run(`return items("w1");`);
     const x = Math.round((now[2][0] + now[2][1]) / 2);
     // Onto the first pinned tab's left half.
-    assert.equal(await drag("w1", [[x, 21], [now[1][0], 21], [now[0][0] + 6, 21]]), 0, "window drags");
+    assert.equal(
+      await drag("w1", [
+        [x, 21],
+        [now[1][0], 21],
+        [now[0][0] + 6, 21],
+      ]),
+      0,
+      "window drags",
+    );
     assert.deepEqual(await run(`return [st().windows.w1.tabIds, st().tabs["${fresh}"].pinned];`), [[fresh, "p2", "p1", "t1"], true]);
     now = await run(`return items("w1");`);
     const cell = Math.round((now[0][0] + now[0][1]) / 2);
     // Out past t1's middle.
-    await drag("w1", [[cell, 21], [now[3][0], 21], [now[3][1] - 20, 21]]);
+    await drag("w1", [
+      [cell, 21],
+      [now[3][0], 21],
+      [now[3][1] - 20, 21],
+    ]);
     assert.deepEqual(await run(`return [st().windows.w1.tabIds, st().tabs["${fresh}"].pinned];`), [["p2", "p1", "t1", fresh], false]);
   });
 
   await check("sidebar: a row dragged onto the page's left target splits", async () => {
     // The DEV sidebar controller is the last window's to render: leave w1 alone.
-    await run(`for (const id of Object.keys(st().windows)) if (id !== "w1") st().closeWindow(id); st().updateSettings({ tabLayout: "sidebar" }); return settle(1500);`);
+    await run(
+      `for (const id of Object.keys(st().windows)) if (id !== "w1") st().closeWindow(id); st().updateSettings({ tabLayout: "sidebar" }); return settle(1500);`,
+    );
     const rows = await run(`const c = globalThis.sidebarDrag; const out = [];
       return Promise.all([...c.items.values()].filter((i) => i.kind === "row" && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r({ id: i.tabIds[0], x, y, w, h })))));`);
     const row = rows.find((r) => r.id === "t2") ?? rows[0];
     assert.ok(row, "a sidebar row");
-    const sx = Math.round(row.x + row.w / 2), sy = Math.round(row.y + row.h / 2);
+    const sx = Math.round(row.x + row.w / 2),
+      sy = Math.round(row.y + row.h / 2);
     const left = Math.round(row.x + row.w + 140);
     const state = await run(`
       const seen = [];
       const iv = setInterval(() => { const d = globalThis.nnTabDrag.getState(); seen.push(d.target); }, 60);
       return act("w1", "drag:${sx},${sy};${sx + 40},${sy + 20};${left},380;${left + 4},390;${left + 6},396;${left + 6},398").then(() => settle(1700)).then(() => { clearInterval(iv); return seen; });`);
-    assert.ok(state.some((t) => t?.side === "left"), `left target ${JSON.stringify(state.slice(-5))}`);
+    assert.ok(
+      state.some((t) => t?.side === "left"),
+      `left target ${JSON.stringify(state.slice(-5))}`,
+    );
     const splits = await run(`return Object.values(st().splits).map((v) => v.tabIds);`);
-    assert.ok(splits.some((ids) => ids[0] === row.id), JSON.stringify(splits));
+    assert.ok(
+      splits.some((ids) => ids[0] === row.id),
+      JSON.stringify(splits),
+    );
   });
   await check("sidebar: nothing moves as a drag starts or ends (the pin target takes no room)", async () => {
-    const rows = () => run(`return Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => (i.kind === "row" || i.kind === "group") && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r([i.key, x, y, w, h])))));`);
+    const rows = () =>
+      run(
+        `return Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => (i.kind === "row" || i.kind === "group") && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r([i.key, x, y, w, h])))));`,
+      );
     // Nothing pinned: the case whose pin target used to push the list down.
-    await run(`const pinned = st().windows.w1.tabIds.filter((id) => st().tabs[id].pinned); if (pinned.length) st().placeTabs(pinned, { pinned: false, beforeId: null }); return settle(800);`);
+    await run(
+      `const pinned = st().windows.w1.tabIds.filter((id) => st().tabs[id].pinned); if (pinned.length) st().placeTabs(pinned, { pinned: false, beforeId: null }); return settle(800);`,
+    );
     const start = (await rows()).sort((a, b) => a[2] - b[2]);
     const top = start.find(([key]) => key.startsWith("t:"));
     assert.ok(top, JSON.stringify(start));
     const [key, x, y, w, h] = top;
-    const sx = Math.round(x + w / 2), sy = Math.round(y + h / 2);
+    const sx = Math.round(x + w / 2),
+      sy = Math.round(y + h / 2);
     // Pressed, moved a little within its own place, held, let go: the drag shows its pin target meanwhile.
     const during = await run(`act("w1", "drag:${sx},${sy};${sx},${sy + 8};${sx},${sy + 8};${sx},${sy + 8};${sx},${sy + 8}");
       return settle(150 + 12 * 16 * 2 + 150).then(() => Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => (i.kind === "row" || i.kind === "group") && i.view && i.key !== ${JSON.stringify(key)}).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r([i.key, x, y, w, h]))))))
@@ -453,11 +633,14 @@ try {
 
   await check("sidebar: a row let go between two others settles into its place, where the row then is", async () => {
     await run(`for (const n of [1, 2, 3]) st().newTab("w1", { url: "data:text/html,<title>new " + n + "</title>" }); return settle(1200);`);
-    const rows = await run(`return Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => i.kind === "row" && !i.parentGroup && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r({ id: i.tabIds[0], x, y, w, h })))));`);
+    const rows = await run(
+      `return Promise.all([...globalThis.sidebarDrag.items.values()].filter((i) => i.kind === "row" && !i.parentGroup && i.view).map((i) => new Promise((r) => i.view.measureInWindow((x, y, w, h) => r({ id: i.tabIds[0], x, y, w, h })))));`,
+    );
     rows.sort((a, b) => a.y - b.y);
     assert.ok(rows.length >= 3, JSON.stringify(rows));
     const row = rows[0];
-    const sx = Math.round(row.x + row.w / 2), sy = Math.round(row.y + row.h / 2);
+    const sx = Math.round(row.x + row.w / 2),
+      sy = Math.round(row.y + row.h / 2);
     // Down past the next row's middle, short of the one after.
     const to = Math.round(rows[1].y + rows[1].h * 0.8);
     const out = await run(`const c = globalThis.sidebarDrag; c.landed = null;

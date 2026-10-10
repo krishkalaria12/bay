@@ -13,24 +13,114 @@ import { symbolColor } from "./symbolColors";
 export type IconChoice = { name: string; words: string };
 
 export const EMOJI: [string, string][] = [
-  ["⭐️", "star favorite"], ["🔥", "fire hot"], ["❤️", "heart love"], ["✅", "check done"], ["📌", "pin"], ["🚀", "rocket launch ship"],
-  ["💡", "idea bulb"], ["📝", "note memo write"], ["📚", "books read study"], ["📖", "book read"], ["🎓", "school graduate"], ["💼", "work briefcase"],
-  ["🏠", "home house"], ["🛒", "shopping cart"], ["💰", "money"], ["💳", "card pay"], ["📈", "chart growth stocks"], ["📊", "chart data"],
-  ["🗓️", "calendar date"], ["⏰", "alarm time"], ["📧", "email mail"], ["💬", "chat message"], ["📞", "phone call"], ["🎥", "video camera"],
-  ["🎵", "music song"], ["🎧", "headphones music"], ["🎮", "game play"], ["🎨", "art design paint"], ["📷", "photo camera"], ["🎬", "movie film"],
-  ["📺", "tv watch"], ["🍿", "popcorn movie"], ["✈️", "travel plane"], ["🗺️", "map travel"], ["🏖️", "beach holiday"], ["🌍", "world earth globe"],
-  ["🍕", "pizza food"], ["🍔", "burger food"], ["☕️", "coffee"], ["🍷", "wine"], ["🍎", "apple fruit"], ["🥗", "salad food healthy"],
-  ["🏋️", "gym fitness"], ["⚽️", "football soccer sport"], ["🏀", "basketball sport"], ["🚴", "bike cycling"], ["🧘", "yoga calm"], ["💊", "health pill"],
-  ["🐶", "dog pet"], ["🐱", "cat pet"], ["🦊", "fox"], ["🐼", "panda"], ["🦄", "unicorn"], ["🐙", "octopus github"],
-  ["🌱", "plant grow"], ["🌸", "flower blossom"], ["🌈", "rainbow"], ["☀️", "sun"], ["🌙", "moon night"], ["❄️", "snow cold"],
-  ["⚡️", "lightning fast"], ["💎", "gem diamond"], ["🎁", "gift present"], ["🎉", "party celebrate"], ["🏆", "trophy win"], ["🎯", "target goal"],
-  ["🧠", "brain think"], ["👀", "eyes look"], ["🤖", "robot ai bot"], ["👾", "alien game"], ["💻", "laptop computer code"], ["🖥️", "desktop computer"],
-  ["⌨️", "keyboard type"], ["🛠️", "tools build"], ["⚙️", "settings gear"], ["🔧", "wrench fix"], ["🧪", "test lab science"], ["🔬", "science research"],
-  ["🐛", "bug"], ["🔒", "lock secure"], ["🔑", "key"], ["🧩", "puzzle extension"], ["📦", "package box"], ["🗂️", "folder files"],
-  ["📁", "folder"], ["🗃️", "archive"], ["📰", "news paper"], ["🔗", "link"], ["🔍", "search find"], ["🧭", "compass explore"],
-  ["🏷️", "tag label"], ["💭", "thought"], ["❓", "question"], ["❗️", "important"], ["⚠️", "warning"], ["🚧", "construction wip"],
-  ["🟥", "red square"], ["🟧", "orange square"], ["🟨", "yellow square"], ["🟩", "green square"], ["🟦", "blue square"], ["🟪", "purple square"],
-  ["🔴", "red circle"], ["🟠", "orange circle"], ["🟡", "yellow circle"], ["🟢", "green circle"], ["🔵", "blue circle"], ["🟣", "purple circle"],
+  ["⭐️", "star favorite"],
+  ["🔥", "fire hot"],
+  ["❤️", "heart love"],
+  ["✅", "check done"],
+  ["📌", "pin"],
+  ["🚀", "rocket launch ship"],
+  ["💡", "idea bulb"],
+  ["📝", "note memo write"],
+  ["📚", "books read study"],
+  ["📖", "book read"],
+  ["🎓", "school graduate"],
+  ["💼", "work briefcase"],
+  ["🏠", "home house"],
+  ["🛒", "shopping cart"],
+  ["💰", "money"],
+  ["💳", "card pay"],
+  ["📈", "chart growth stocks"],
+  ["📊", "chart data"],
+  ["🗓️", "calendar date"],
+  ["⏰", "alarm time"],
+  ["📧", "email mail"],
+  ["💬", "chat message"],
+  ["📞", "phone call"],
+  ["🎥", "video camera"],
+  ["🎵", "music song"],
+  ["🎧", "headphones music"],
+  ["🎮", "game play"],
+  ["🎨", "art design paint"],
+  ["📷", "photo camera"],
+  ["🎬", "movie film"],
+  ["📺", "tv watch"],
+  ["🍿", "popcorn movie"],
+  ["✈️", "travel plane"],
+  ["🗺️", "map travel"],
+  ["🏖️", "beach holiday"],
+  ["🌍", "world earth globe"],
+  ["🍕", "pizza food"],
+  ["🍔", "burger food"],
+  ["☕️", "coffee"],
+  ["🍷", "wine"],
+  ["🍎", "apple fruit"],
+  ["🥗", "salad food healthy"],
+  ["🏋️", "gym fitness"],
+  ["⚽️", "football soccer sport"],
+  ["🏀", "basketball sport"],
+  ["🚴", "bike cycling"],
+  ["🧘", "yoga calm"],
+  ["💊", "health pill"],
+  ["🐶", "dog pet"],
+  ["🐱", "cat pet"],
+  ["🦊", "fox"],
+  ["🐼", "panda"],
+  ["🦄", "unicorn"],
+  ["🐙", "octopus github"],
+  ["🌱", "plant grow"],
+  ["🌸", "flower blossom"],
+  ["🌈", "rainbow"],
+  ["☀️", "sun"],
+  ["🌙", "moon night"],
+  ["❄️", "snow cold"],
+  ["⚡️", "lightning fast"],
+  ["💎", "gem diamond"],
+  ["🎁", "gift present"],
+  ["🎉", "party celebrate"],
+  ["🏆", "trophy win"],
+  ["🎯", "target goal"],
+  ["🧠", "brain think"],
+  ["👀", "eyes look"],
+  ["🤖", "robot ai bot"],
+  ["👾", "alien game"],
+  ["💻", "laptop computer code"],
+  ["🖥️", "desktop computer"],
+  ["⌨️", "keyboard type"],
+  ["🛠️", "tools build"],
+  ["⚙️", "settings gear"],
+  ["🔧", "wrench fix"],
+  ["🧪", "test lab science"],
+  ["🔬", "science research"],
+  ["🐛", "bug"],
+  ["🔒", "lock secure"],
+  ["🔑", "key"],
+  ["🧩", "puzzle extension"],
+  ["📦", "package box"],
+  ["🗂️", "folder files"],
+  ["📁", "folder"],
+  ["🗃️", "archive"],
+  ["📰", "news paper"],
+  ["🔗", "link"],
+  ["🔍", "search find"],
+  ["🧭", "compass explore"],
+  ["🏷️", "tag label"],
+  ["💭", "thought"],
+  ["❓", "question"],
+  ["❗️", "important"],
+  ["⚠️", "warning"],
+  ["🚧", "construction wip"],
+  ["🟥", "red square"],
+  ["🟧", "orange square"],
+  ["🟨", "yellow square"],
+  ["🟩", "green square"],
+  ["🟦", "blue square"],
+  ["🟪", "purple square"],
+  ["🔴", "red circle"],
+  ["🟠", "orange circle"],
+  ["🟡", "yellow circle"],
+  ["🟢", "green circle"],
+  ["🔵", "blue circle"],
+  ["🟣", "purple circle"],
 ];
 
 type GridProps = {
@@ -68,7 +158,9 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
   return (
     <View style={{ width: columns * cell, gap: 8 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <View style={{ flex: 1, height: 26, borderRadius: 8, backgroundColor: theme.urlPill, flexDirection: "row", alignItems: "center", paddingHorizontal: 7 }}>
+        <View
+          style={{ flex: 1, height: 26, borderRadius: 8, backgroundColor: theme.urlPill, flexDirection: "row", alignItems: "center", paddingHorizontal: 7 }}
+        >
           <Symbol name="magnifyingglass" size={11} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
           <TextInput
             autoFocus={autoFocus}
@@ -85,7 +177,16 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
         </View>
         {tabs.map((t) => (
           <Pressable key={t} onPress={() => setTab(t)} tooltip={t === "emoji" ? "Emoji" : "Icons"}>
-            <View style={{ width: 28, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: tab === t ? highlight : undefined }}>
+            <View
+              style={{
+                width: 28,
+                height: 26,
+                borderRadius: 8,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: tab === t ? highlight : undefined,
+              }}
+            >
               <Symbol name={t === "emoji" ? "face.smiling" : "star.square.on.square"} size={13} color={theme.icon} style={{ width: 16, height: 16 }} />
             </View>
           </Pressable>
@@ -103,7 +204,21 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
   );
 }
 
-function Cell({ icon, size, bold, highlight, selected, onPress }: { icon: string; size: number; bold?: boolean; highlight: string; selected: boolean; onPress(): void }) {
+function Cell({
+  icon,
+  size,
+  bold,
+  highlight,
+  selected,
+  onPress,
+}: {
+  icon: string;
+  size: number;
+  bold?: boolean;
+  highlight: string;
+  selected: boolean;
+  onPress(): void;
+}) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
   return (
@@ -111,7 +226,14 @@ function Cell({ icon, size, bold, highlight, selected, onPress }: { icon: string
       <View
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{ width: size, height: size, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: hovered || selected ? highlight : undefined }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 8,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: hovered || selected ? highlight : undefined,
+        }}
       >
         {icon.startsWith(SYMBOL_PREFIX) ? (
           <Symbol

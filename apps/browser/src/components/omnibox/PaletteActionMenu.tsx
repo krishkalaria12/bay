@@ -19,10 +19,19 @@ export type PaletteMenuAction = {
 };
 
 const MENU_KEYS = [
-  { key: "Escape" }, { key: "Enter" }, { key: "ArrowUp" }, { key: "ArrowDown" }, { key: "Tab" }, { key: "Tab", shiftKey: true },
-  { key: "c", metaKey: true, shiftKey: true }, { key: ",", metaKey: true },
-  { key: "C", metaKey: true, shiftKey: true }, { key: "k", metaKey: true }, { key: "K", metaKey: true },
-  { key: "Enter", metaKey: true }, { key: "/", metaKey: true },
+  { key: "Escape" },
+  { key: "Enter" },
+  { key: "ArrowUp" },
+  { key: "ArrowDown" },
+  { key: "Tab" },
+  { key: "Tab", shiftKey: true },
+  { key: "c", metaKey: true, shiftKey: true },
+  { key: ",", metaKey: true },
+  { key: "C", metaKey: true, shiftKey: true },
+  { key: "k", metaKey: true },
+  { key: "K", metaKey: true },
+  { key: "Enter", metaKey: true },
+  { key: "/", metaKey: true },
 ];
 // ⇧⌫ is claimed only while the search field is empty, so it still deletes text.
 const EMPTY_MENU_KEYS = [...MENU_KEYS, { key: "Backspace", shiftKey: true }];
@@ -117,12 +126,21 @@ export function PaletteActionMenu({
     <Animated.View
       pointerEvents={closing ? "none" : "auto"}
       style={[
-        { position: "absolute", ...(top === undefined ? { bottom: 8 } : { top }), [side]: 8, width, zIndex: 2, transformOrigin: `${side === "left" ? "0%" : "100%"} ${top === undefined ? "100%" : "0%"}` },
+        {
+          position: "absolute",
+          ...(top === undefined ? { bottom: 8 } : { top }),
+          [side]: 8,
+          width,
+          zIndex: 2,
+          transformOrigin: `${side === "left" ? "0%" : "100%"} ${top === undefined ? "100%" : "0%"}`,
+        },
         growStyle,
       ]}
     >
       <PaletteSurface raised radius={18}>
-        <Text numberOfLines={1} style={{ fontSize: 12, color: theme.textSecondary, paddingHorizontal: 15, paddingTop: 11, paddingBottom: 4 }}>{title}</Text>
+        <Text numberOfLines={1} style={{ fontSize: 12, color: theme.textSecondary, paddingHorizontal: 15, paddingTop: 11, paddingBottom: 4 }}>
+          {title}
+        </Text>
         <ScrollView
           ref={scroller}
           style={{ maxHeight: Math.max(36, maxHeight - 84 - (error ? 32 : 0)), flexGrow: 0 }}
@@ -131,7 +149,9 @@ export function PaletteActionMenu({
             viewport.current.height = event.nativeEvent.layout.height;
             keepSelectedVisible();
           }}
-          onScroll={(event) => { viewport.current.y = event.nativeEvent.contentOffset.y; }}
+          onScroll={(event) => {
+            viewport.current.y = event.nativeEvent.contentOffset.y;
+          }}
           scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
         >
@@ -151,18 +171,39 @@ export function PaletteActionMenu({
                 accessibilityState={{ selected: index === selectedIndex, disabled: busy, checked: action.checked }}
                 disabled={busy}
                 onPress={() => void run(action)}
-                style={{ minHeight: 34, borderRadius: 9, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: index === selectedIndex ? theme.rowSelected : undefined, opacity: busy ? 0.65 : 1 }}
+                style={{
+                  minHeight: 34,
+                  borderRadius: 9,
+                  paddingHorizontal: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: index === selectedIndex ? theme.rowSelected : undefined,
+                  opacity: busy ? 0.65 : 1,
+                }}
               >
                 <Symbol name={action.icon} size={14} color={theme.textPrimary} style={{ width: 17, height: 17 }} />
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary, paddingVertical: 8 }}>{action.title}</Text>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary, paddingVertical: 8 }}>
+                  {action.title}
+                </Text>
                 {action.hint ? <Keycaps hint={action.hint} /> : null}
                 {action.checked ? <Symbol name="checkmark" size={12} weight="semibold" color={theme.textPrimary} style={{ width: 16, height: 16 }} /> : null}
               </Pressable>
             </View>
           ))}
-          {!filtered.length ? <Text style={{ fontSize: 13, color: theme.textSecondary, paddingHorizontal: 9, paddingVertical: 10 }}>No matching actions</Text> : null}
+          {!filtered.length ? (
+            <Text style={{ fontSize: 13, color: theme.textSecondary, paddingHorizontal: 9, paddingVertical: 10 }}>No matching actions</Text>
+          ) : null}
         </ScrollView>
-        {error ? <Text accessibilityRole="alert" numberOfLines={2} style={{ color: theme.dark ? "#FF9C94" : "#B63228", fontSize: 12, paddingHorizontal: 15, paddingBottom: 7 }}>{error}</Text> : null}
+        {error ? (
+          <Text
+            accessibilityRole="alert"
+            numberOfLines={2}
+            style={{ color: theme.dark ? "#FF9C94" : "#B63228", fontSize: 12, paddingHorizontal: 15, paddingBottom: 7 }}
+          >
+            {error}
+          </Text>
+        ) : null}
         <View style={{ borderTopWidth: 1, borderTopColor: theme.divider, minHeight: 42, justifyContent: "center", paddingHorizontal: 15 }}>
           <TextInput
             ref={input}
@@ -187,7 +228,10 @@ export function PaletteActionMenu({
             onKeyPress={onEscapeKey(onClose)}
             onKeyDown={(event) => {
               const { key, shiftKey, metaKey } = event.nativeEvent;
-              if (key === "Escape" || (metaKey && (key.toLowerCase() === "k" || key === "/"))) { onClose(); return; }
+              if (key === "Escape" || (metaKey && (key.toLowerCase() === "k" || key === "/"))) {
+                onClose();
+                return;
+              }
               // ⌘ shortcuts always reach their action; ⇧⌫ only once the search field is empty.
               if (metaKey || (shiftKey && key === "Backspace" && !query)) {
                 const action = actions.find((item) => item.hint === hintOf(event.nativeEvent));

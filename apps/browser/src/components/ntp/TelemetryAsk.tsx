@@ -120,7 +120,13 @@ function AskButton({ title, onPress }: { title: string; onPress: () => void }) {
   const fill = theme.dark ? (pressed ? "#FFFFFF2E" : hovered ? "#FFFFFF24" : "#FFFFFF17") : pressed ? "#0000001F" : hovered ? "#00000017" : "#0000000D";
   return (
     <View {...hoverProps} style={{ flex: 1 }}>
-      <Pressable onPress={onPress} onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)} accessibilityRole="button" accessibilityLabel={title}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+      >
         <View style={{ height: 26, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: fill }}>
           <Text style={{ fontSize: 12, fontWeight: "500", color: theme.dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)" }}>{title}</Text>
         </View>

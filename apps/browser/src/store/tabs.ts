@@ -102,9 +102,7 @@ export function windowFor(s: BrowserState, tab: Tab, requested?: string | null):
   if (canShow(s, asked, tab)) return asked;
   const key = tabListKey(s, tab);
   const order = [...new Set([...s.ui.focusOrder, tab.windowId, ...s.windowOrder])].map((id) => s.windows[id]).filter((w) => canShow(s, w, tab));
-  return order.find((w) => windowListKey(s, w!) === key && w!.id === s.ui.focusedWindowId)
-    ?? order.find((w) => windowListKey(s, w!) === key)
-    ?? order[0];
+  return order.find((w) => windowListKey(s, w!) === key && w!.id === s.ui.focusedWindowId) ?? order.find((w) => windowListKey(s, w!) === key) ?? order[0];
 }
 
 /** Shows the tab in a window (`windowId`, else windowFor's): its page moves there, as Arc's, from a window that showed
@@ -248,7 +246,17 @@ export function unloadPinnedTabs(s: BrowserState, ids: string[]): BrowserState {
     const t = s.tabs[id]!;
     const loaded = !!(t.navigation || t.adoptId);
     if (loaded && t.url) {
-      closed.push({ kind: "tab", id: newId("ct"), tab: snapshotTab(t), tabId: id, windowId: t.windowId, index: Math.max(listIds(s, tabListKey(s, t)).indexOf(id), 0), group: null, closedAt: now, pinnedTile: true });
+      closed.push({
+        kind: "tab",
+        id: newId("ct"),
+        tab: snapshotTab(t),
+        tabId: id,
+        windowId: t.windowId,
+        index: Math.max(listIds(s, tabListKey(s, t)).indexOf(id), 0),
+        group: null,
+        closedAt: now,
+        pinnedTile: true,
+      });
     }
     tabs[id] = { ...t, ...backToPin(s, t), navigation: null, adoptId: undefined, wakeAdoptId: undefined, unloaded: true };
     live[id] = IDLE_LIVE;
@@ -428,7 +436,11 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const { unloaded: _, wakeAdoptId: _kept, ...rest } = tab;
     // Typing an address starts a new task (a New Tab page gets one lookup first, as in Chrome).
     const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;
-    set(apply(base, { tabs: { ...base.tabs, [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation: navigationTo(url, userInitiated), url: tab.url || url } } }));
+    set(
+      apply(base, {
+        tabs: { ...base.tabs, [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation: navigationTo(url, userInitiated), url: tab.url || url } },
+      }),
+    );
     const ui = get().windowUi[tab.windowId];
     if (ui?.panel.open) get().closePanel(tab.windowId);
   },
@@ -499,7 +511,11 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
       moved.splice(Math.min(Math.max(toIndex, 0), moved.length), 0, id);
       let k = 0;
       // The pinned rows share a section with the list here (both aren't Essentials): neither crosses into the other.
-      const tabIds = orderSections(list.tabIds.map((t) => (inSection(t) ? moved[k++]! : t)), s.tabs, s.groups);
+      const tabIds = orderSections(
+        list.tabIds.map((t) => (inSection(t) ? moved[k++]! : t)),
+        s.tabs,
+        s.groups,
+      );
       const next = { key: list.key, tabIds };
       return { tabLists: withList(s, next).tabLists, groups: syncGroupOrder(s.groups, next) };
     });

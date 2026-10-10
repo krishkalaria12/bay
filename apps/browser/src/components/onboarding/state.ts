@@ -106,7 +106,8 @@ export function maybeStartOnboarding() {
   startOnboarding();
 }
 
-if (__DEV__) (globalThis as { nnOnboarding?: unknown }).nnOnboarding = {
+if (__DEV__)
+  (globalThis as { nnOnboarding?: unknown }).nnOnboarding = {
     store: useOnboarding,
     start: startOnboarding,
     finish: finishOnboarding,

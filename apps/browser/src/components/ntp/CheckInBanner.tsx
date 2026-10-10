@@ -9,7 +9,6 @@ import { useHover } from "../primitives";
 import { APP_ICON } from "../../lib/assets";
 import { CHECK_IN_FRAME } from "./constants";
 
-
 export function CheckInBanner({ windowId }: { windowId: string }) {
   const checkIn = useDefaultBrowserCheckIn(windowId);
   const [leaving, setLeaving] = useState<null | (() => void)>(null);
@@ -38,7 +37,7 @@ function Card({ leaving, onFeedback, onClose }: { leaving: null | (() => void); 
   }, []);
   useEffect(() => {
     if (leaving) return;
-    const stiffness = (2 * Math.PI / 0.2) ** 2;
+    const stiffness = ((2 * Math.PI) / 0.2) ** 2;
     scale.set(withSpring(pressed ? 0.98 : hovered ? 1.02 : 1, { stiffness, damping: 2 * 0.5 * Math.sqrt(stiffness), mass: 1 }));
   }, [hovered, pressed, !!leaving]);
   useEffect(() => {

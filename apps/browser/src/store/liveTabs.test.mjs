@@ -126,10 +126,18 @@ class FakeChrome {
     s.tabs.splice(Math.min(at, s.tabs.length), 0, ...moving);
   }
   collapse(id, collapsed) {
-    for (const [sid, s] of this.strips) if (s.groups.has(id)) { s.groups.get(id).collapsed = collapsed; this.emit(sid, null); }
+    for (const [sid, s] of this.strips)
+      if (s.groups.has(id)) {
+        s.groups.get(id).collapsed = collapsed;
+        this.emit(sid, null);
+      }
   }
   retitle(id, title) {
-    for (const [sid, s] of this.strips) if (s.groups.has(id)) { s.groups.get(id).title = title; this.emit(sid, null); }
+    for (const [sid, s] of this.strips)
+      if (s.groups.has(id)) {
+        s.groups.get(id).title = title;
+        this.emit(sid, null);
+      }
   }
   pin(key, pinned) {
     const f = this.find(key);
@@ -223,7 +231,7 @@ function mountViews({ w, strip }) {
     const t = S().tabs[id];
     if ((t.navigation || t.adoptId) && !chrome.find(id)) chrome.create(strip, id);
   }
-  for (const s of chrome.strips.values()) for (const t of [...s.tabs]) if (!S().tabs[t.key]) chrome.remove(t.key);
+  for (const s of chrome.strips.values()) for (const t of Array.from(s.tabs)) if (!S().tabs[t.key]) chrome.remove(t.key);
 }
 // Lets every message cross until nothing moves; returns how many transactions crossed.
 async function settle(win) {
@@ -420,7 +428,10 @@ test("as in Dia: an extension pinning one pane of a split leaves the split; coll
   chrome.pin(b, true);
   await settle(win);
   assert.equal(S().tabs[b].pinned, false, "the pane isn't pinned");
-  assert.ok(Object.values(S().splits).some((v) => v.tabIds.includes(a) && v.tabIds.includes(b)), "the split stays");
+  assert.ok(
+    Object.values(S().splits).some((v) => v.tabIds.includes(a) && v.tabIds.includes(b)),
+    "the split stays",
+  );
   assert.equal(chrome.find(b).tab.pinned, false, "Chrome is put back");
   // A group collapsed in the sidebar is collapsed for extensions, and the other way; the shown tab stays.
   S().activate(c);

@@ -95,9 +95,24 @@ export function bundle(outDir, { profiling = false } = {}) {
   execFileSync(
     process.execPath,
     [
-      join(rn, "scripts/bundle.js"), "bundle", "--entry-file", "index.js", "--platform", "macos", "--dev", "false",
-      "--minify", "false", "--bundle-output", js, "--sourcemap-output", `${js}.map`, "--assets-dest", join(outDir, "assets"),
-      "--config-cmd", `'${process.execPath}' '${join(rn, "cli.js")}' config`,
+      join(rn, "scripts/bundle.js"),
+      "bundle",
+      "--entry-file",
+      "index.js",
+      "--platform",
+      "macos",
+      "--dev",
+      "false",
+      "--minify",
+      "false",
+      "--bundle-output",
+      js,
+      "--sourcemap-output",
+      `${js}.map`,
+      "--assets-dest",
+      join(outDir, "assets"),
+      "--config-cmd",
+      `'${process.execPath}' '${join(rn, "cli.js")}' config`,
     ],
     { cwd: appDir, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, ...(profiling ? { NN_REACT_PROFILING: "1" } : {}) } },
   );
@@ -131,7 +146,7 @@ function packageSizes(js) {
     }
     return out;
   };
-  const bytes = new Array(map.sources.length).fill(0);
+  const bytes = Array.from({ length: map.sources.length }, () => 0);
   let source = 0;
   map.mappings.split(";").forEach((line, row) => {
     let col = 0;
@@ -147,7 +162,7 @@ function packageSizes(js) {
   const byPackage = {};
   map.sources.forEach((src, i) => {
     const m = /node_modules\/((?:@[^/]+\/)?[^/]+)/.exec(src);
-    const key = m ? m[1] : /(apps\/browser\/src|packages\/[^/]+)/.exec(src)?.[1] ?? "other";
+    const key = m ? m[1] : (/(apps\/browser\/src|packages\/[^/]+)/.exec(src)?.[1] ?? "other");
     byPackage[key] = (byPackage[key] ?? 0) + bytes[i];
   });
   return Object.fromEntries(Object.entries(byPackage).sort((a, b) => b[1] - a[1]));
@@ -249,10 +264,7 @@ export async function launch(app, dataDir, port) {
   const binary = join(app, "Contents/MacOS/Bay");
   if (pidsOf(binary).length) throw new Error(`an instance of ${app} is already running`);
   const launchedAt = Date.now();
-  execFileSync("open", [
-    "-g", "-n", "--env", "BAY_BACKGROUND=1", "--env", `BAY_DATA_DIR=${dataDir}`,
-    "--env", `BAY_REMOTE_DEBUGGING_PORT=${port}`, app,
-  ]);
+  execFileSync("open", ["-g", "-n", "--env", "BAY_BACKGROUND=1", "--env", `BAY_DATA_DIR=${dataDir}`, "--env", `BAY_REMOTE_DEBUGGING_PORT=${port}`, app]);
   for (let i = 0; i < 200; i++) {
     const [pid] = pidsOf(binary);
     if (pid) return { pid, launchedAt };
@@ -305,7 +317,9 @@ async function run() {
   mkdirSync(dirname(clone), { recursive: true });
   execFileSync("cp", ["-cR", app, clone]);
   cpSync(jsbundle, join(clone, "Contents/Resources/main.jsbundle"));
-  const version = execFileSync("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleShortVersionString", join(clone, "Contents/Info.plist")], { encoding: "utf8" }).trim();
+  const version = execFileSync("/usr/libexec/PlistBuddy", ["-c", "Print CFBundleShortVersionString", join(clone, "Contents/Info.plist")], {
+    encoding: "utf8",
+  }).trim();
   const origin = `http://127.0.0.1:${port}`;
   const server = await startServer(Number(port));
   const lib = readFileSync(join(here, "bench-app.js"), "utf8");
@@ -322,7 +336,11 @@ async function run() {
       try {
         // The harness ignores a script that was already there when it started; ping until it answers.
         let ready = false;
-        for (let i = 0; i < 30 && !ready; i++) ready = await evaluate(dataDir, pid, "return 1;", 2000).then(() => true, (e) => (String(e).includes("exited") ? Promise.reject(e) : false));
+        for (let i = 0; i < 30 && !ready; i++)
+          ready = await evaluate(dataDir, pid, "return 1;", 2000).then(
+            () => true,
+            (e) => (String(e).includes("exited") ? Promise.reject(e) : false),
+          );
         if (!ready) throw new Error("dev harness never answered");
         await evaluate(dataDir, pid, lib, 60_000);
         for (const name of scenarios) {
@@ -351,9 +369,15 @@ async function run() {
   const revisions = [...new Set(results.map(runRevision))];
   if (revisions.length > 1) console.log(`WARNING: these runs mix probe revisions ${revisions.join(", ")}; their numbers don't compare`);
   const report = {
-    label, version, bundle: jsbundle, bundleSize, when: new Date().toISOString(),
-    probeRevision: revisions.length > 1 ? revisions : revisions[0], benchRevision: BENCH_REVISION,
-    results, summary: summarize(results, bundleSize),
+    label,
+    version,
+    bundle: jsbundle,
+    bundleSize,
+    when: new Date().toISOString(),
+    probeRevision: revisions.length > 1 ? revisions : revisions[0],
+    benchRevision: BENCH_REVISION,
+    results,
+    summary: summarize(results, bundleSize),
   };
   writeFileSync(file, JSON.stringify(report, null, 2));
   printSummary(report.summary);
@@ -363,7 +387,8 @@ async function run() {
 // MARK: Summary
 
 // Host wrappers render whenever their parent does; the detail lists the app's own components.
-const HOST = /^(View|Text|Pressable|Image|ScrollView|TextInput|InternalTextInput|Animated\(.*\)|Bay.*|Surface|Symbol|MouseArea|ContextMenuArea|FadeLabel|VirtualizedList.*|CellRenderer.*)$/;
+const HOST =
+  /^(View|Text|Pressable|Image|ScrollView|TextInput|InternalTextInput|Animated\(.*\)|Bay.*|Surface|Symbol|MouseArea|ContextMenuArea|FadeLabel|VirtualizedList.*|CellRenderer.*)$/;
 const appOnly = (counter) => Object.fromEntries(Object.entries(counter ?? {}).filter(([k]) => !HOST.test(k)));
 
 const top = (counter, n = 6) =>
@@ -393,13 +418,14 @@ function statLine(stats) {
 }
 
 function summarize(results, bundleSize) {
-  const pick = (fn) => results.map((r) => {
-    try {
-      return fn(r);
-    } catch {
-      return null;
-    }
-  });
+  const pick = (fn) =>
+    results.map((r) => {
+      try {
+        return fn(r);
+      } catch {
+        return null;
+      }
+    });
   const m = (fn) => {
     const xs = pick(fn).filter((x) => x !== null && x !== undefined);
     return { median: median(xs), min: xs.length ? Math.min(...xs) : null, max: xs.length ? Math.max(...xs) : null, n: xs.length };
@@ -407,7 +433,8 @@ function summarize(results, bundleSize) {
   const lines = {};
   const add = (key, fn) => (lines[key] = m(fn));
   const statKeys = (key, fn) => {
-    for (const k of ["commits", "renders", "hostUpdates", "storeUpdates", "listenerMs", "taskMs", "writes", "writeKB"]) add(`${key}.${k}`, (r) => statLine(fn(r))[k]);
+    for (const k of ["commits", "renders", "hostUpdates", "storeUpdates", "listenerMs", "taskMs", "writes", "writeKB"])
+      add(`${key}.${k}`, (r) => statLine(fn(r))[k]);
   };
   lines["bundle.hbcKB"] = { median: bundleSize / 1024, min: bundleSize / 1024, max: bundleSize / 1024, n: 1 };
   add("startup.launchToBundleMs", (r) => r.startup.marks.bundleStart - r.launchedAt);
@@ -462,7 +489,17 @@ function summarize(results, bundleSize) {
   // What renders most, from the last run, for reading.
   const last = results.at(-1) ?? {};
   const detail = {};
-  const put = (key, stats) => stats && (detail[key] = { renders: top(appOnly(stats.renders), 12), storeKeys: top(stats.storeKeys, 8), tasks: top(stats.tasks, 8), taskMs: top(stats.taskMs, 6), timers: top(stats.timers, 8), timerMs: top(stats.timerMs, 8), writes: top(stats.writeBytes, 5) });
+  const put = (key, stats) =>
+    stats &&
+    (detail[key] = {
+      renders: top(appOnly(stats.renders), 12),
+      storeKeys: top(stats.storeKeys, 8),
+      tasks: top(stats.tasks, 8),
+      taskMs: top(stats.taskMs, 6),
+      timers: top(stats.timers, 8),
+      timerMs: top(stats.timerMs, 8),
+      writes: top(stats.writeBytes, 5),
+    });
   put("idle", last.idle?.stats);
   put("typing", last.typing?.stats);
   put("switchTabs", last.switchTabs?.stats);
@@ -504,9 +541,13 @@ function compare(a, b) {
   const [ra, rb] = reports.map(reportRevisions);
   const strip = (v) => String(v).replace(/ \(.*\)$/, "");
   if (strip(ra.probe) !== strip(rb.probe))
-    console.log(`WARNING: probe revisions differ (before ${ra.probe}, after ${rb.probe}): taskMs, otherJsMs and the other probe counts measure different things; compare builds on the same bundle or on bundles of one revision (perfProbe.ts PERF_PROBE_REVISION).\n`);
+    console.log(
+      `WARNING: probe revisions differ (before ${ra.probe}, after ${rb.probe}): taskMs, otherJsMs and the other probe counts measure different things; compare builds on the same bundle or on bundles of one revision (perfProbe.ts PERF_PROBE_REVISION).\n`,
+    );
   if (strip(ra.bench) !== strip(rb.bench))
-    console.log(`WARNING: bench revisions differ (before ${ra.bench}, after ${rb.bench}): the seed or scenarios changed between the two runs; rerun both with one js-bench.\n`);
+    console.log(
+      `WARNING: bench revisions differ (before ${ra.bench}, after ${rb.bench}): the seed or scenarios changed between the two runs; rerun both with one js-bench.\n`,
+    );
   const [A, B] = reports.map((report) => summarize(report.results, report.bundleSize).lines);
   console.log(`| metric | before | after | change |\n|---|---:|---:|---:|`);
   for (const key of Object.keys(A)) {
@@ -520,8 +561,18 @@ function compare(a, b) {
 // render-bench.mjs imports the launcher and server from here; the commands run only from the command line.
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (command === "help" || command === "--help" || command === "-h" || "help" in flags) {
-    const lines = readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1);
-    console.log(lines.slice(0, lines.findIndex((l) => !l.startsWith("//"))).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+    const lines = readFileSync(fileURLToPath(import.meta.url), "utf8")
+      .split("\n")
+      .slice(1);
+    console.log(
+      lines
+        .slice(
+          0,
+          lines.findIndex((l) => !l.startsWith("//")),
+        )
+        .map((l) => l.replace(/^\/\/ ?/, ""))
+        .join("\n"),
+    );
   } else if (command === "bundle") bundle(positional[0] ?? join(defaultOut, "bundle"), { profiling: !!flags.profiling });
   else if (command === "run") await run();
   else if (command === "compare") compare(positional[0], positional[1]);
@@ -532,7 +583,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     writeFileSync(positional[0], JSON.stringify(report, null, 2));
     printSummary(report.summary);
   } else {
-    console.error("usage: js-bench.mjs bundle <outDir> [--profiling 1] | run --app … --bundle … --label … | compare <a.json> <b.json> | summary <a.json> (--help)");
+    console.error(
+      "usage: js-bench.mjs bundle <outDir> [--profiling 1] | run --app … --bundle … --label … | compare <a.json> <b.json> | summary <a.json> (--help)",
+    );
     process.exit(64);
   }
 }

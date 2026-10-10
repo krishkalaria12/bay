@@ -12,7 +12,15 @@ import { toolbarPalette, useEasedColor, useEasedColorStyle } from "./layout/tool
 import { useHistoryMenu } from "./layout/history";
 import { usePages } from "./layout/pageState";
 import { needsBar, revealToolbar, setToolbarPeek, toolbarMode, useToolbarAutoHide, type ToolbarMode } from "./layout/toolbarAutoHide";
-import { AUTO_HIDE_STRIP_HEIGHT, TOOLBAR_BAR_ROOM, TOOLBAR_HIDE_MS, TOOLBAR_PEEK_DELAY_MS, TOOLBAR_PEEK_SHRINK, TOOLBAR_SHOW_MS, TOOLBAR_UNPEEK_DELAY_MS } from "./layout/constants";
+import {
+  AUTO_HIDE_STRIP_HEIGHT,
+  TOOLBAR_BAR_ROOM,
+  TOOLBAR_HIDE_MS,
+  TOOLBAR_PEEK_DELAY_MS,
+  TOOLBAR_PEEK_SHRINK,
+  TOOLBAR_SHOW_MS,
+  TOOLBAR_UNPEEK_DELAY_MS,
+} from "./layout/constants";
 import { Toolbar } from "./Toolbar";
 
 // The toolbar that hides while scrolling (layout/toolbarAutoHide.ts), drawn over the top of its pane, with the page
@@ -100,7 +108,8 @@ export function useToolbarMotion({
     const before = was.current;
     was.current = { collapsed, hidden };
     if (before.collapsed === collapsed && before.hidden === hidden) return;
-    const glide = (value: number, show: boolean) => withTiming(value, { duration: show ? TOOLBAR_SHOW_MS : TOOLBAR_HIDE_MS, easing: show ? SHOW_EASING : HIDE_EASING });
+    const glide = (value: number, show: boolean) =>
+      withTiming(value, { duration: show ? TOOLBAR_SHOW_MS : TOOLBAR_HIDE_MS, easing: show ? SHOW_EASING : HIDE_EASING });
     if (before.collapsed !== collapsed) {
       const to = collapsed ? 1 : 0;
       const barTo = hidden ? 1 : 0;
@@ -173,13 +182,19 @@ export function AutoHideToolbar({
   const H = layout.toolbarHeight;
   // The band: the bar's height down to the strip's, its top edge fixed (scaled about its middle, then lifted).
   const bandStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -TOOLBAR_BAR_ROOM / 2]) }, { scaleY: interpolate(bar.get(), [0, 1], [1, AUTO_HIDE_STRIP_HEIGHT / H]) }],
+    transform: [
+      { translateY: interpolate(bar.get(), [0, 1], [0, -TOOLBAR_BAR_ROOM / 2]) },
+      { scaleY: interpolate(bar.get(), [0, 1], [1, AUTO_HIDE_STRIP_HEIGHT / H]) },
+    ],
   }));
   const dividerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -TOOLBAR_BAR_ROOM]) }] }));
   const controlsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(fade.get(), [0, 0.2, 0.4, 0.6, 1], [1, 0.45, 0.15, 0, 0]),
     // Toward the top centre: scaled about its middle, then lifted so its top edge stays put, and a little more.
-    transform: [{ translateY: interpolate(bar.get(), [0, 1], [0, -((1 - TOOLBAR_PEEK_SHRINK) * H) / 2 - 3]) }, { scale: interpolate(bar.get(), [0, 1], [1, TOOLBAR_PEEK_SHRINK]) }],
+    transform: [
+      { translateY: interpolate(bar.get(), [0, 1], [0, -((1 - TOOLBAR_PEEK_SHRINK) * H) / 2 - 3]) },
+      { scale: interpolate(bar.get(), [0, 1], [1, TOOLBAR_PEEK_SHRINK]) },
+    ],
   }));
   const labelStyle = useAnimatedStyle(() => ({ opacity: interpolate(fade.get(), [0, 0.5, 1], [0, 0, 1]) }));
   const host = url.startsWith("file:") ? "File" : breadcrumb(url).host;
@@ -193,7 +208,10 @@ export function AutoHideToolbar({
       {url ? (
         <Animated.View
           pointerEvents="none"
-          style={[{ position: "absolute", left: 0, right: 0, top: H - StyleSheet.hairlineWidth, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }, dividerStyle]}
+          style={[
+            { position: "absolute", left: 0, right: 0, top: H - StyleSheet.hairlineWidth, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider },
+            dividerStyle,
+          ]}
         />
       ) : null}
       <Animated.View
@@ -204,7 +222,10 @@ export function AutoHideToolbar({
       >
         <Toolbar tabId={tabId} geometry={geometry} windowId={windowId} inSplit={inSplit} focused={focused} bare />
       </Animated.View>
-      <Animated.View pointerEvents={collapsed ? "auto" : "none"} style={[{ position: "absolute", left: 0, right: 0, top: 0, height: AUTO_HIDE_STRIP_HEIGHT }, labelStyle]}>
+      <Animated.View
+        pointerEvents={collapsed ? "auto" : "none"}
+        style={[{ position: "absolute", left: 0, right: 0, top: 0, height: AUTO_HIDE_STRIP_HEIGHT }, labelStyle]}
+      >
         <Pressable
           onPress={() => {
             clearTimeout(peekTimer.current);

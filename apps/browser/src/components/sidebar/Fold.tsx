@@ -84,12 +84,24 @@ export function Fold({
     <Animated.View style={outer} pointerEvents={collapsed ? "box-none" : "auto"}>
       {/* Measured entries lay out at their own height while the block is closed: a view in a clipped, zero-height
           parent reports a height of 0. */}
-      <View style={[{ gap, paddingTop: padTop, paddingBottom: padBottom }, measuring && outerMode === "closed" ? { position: "absolute", left: 0, right: 0, top: 0 } : null]}>
+      <View
+        style={[
+          { gap, paddingTop: padTop, paddingBottom: padBottom },
+          measuring && outerMode === "closed" ? { position: "absolute", left: 0, right: 0, top: 0 } : null,
+        ]}
+      >
         {entries.map(({ key, node }) => {
           const stays = key === kept;
           if (!stays && !mountAll) return null;
           return (
-            <FoldItem key={key} open={open} mode={folding && !stays ? (moving ? "moving" : "closed") : "free"} height={heightOf(key)} gap={gap} pointerEvents={collapsed && !stays ? "none" : "auto"}>
+            <FoldItem
+              key={key}
+              open={open}
+              mode={folding && !stays ? (moving ? "moving" : "closed") : "free"}
+              height={heightOf(key)}
+              gap={gap}
+              pointerEvents={collapsed && !stays ? "none" : "auto"}
+            >
               {measuring ? (
                 <View
                   onLayout={(e) => {
@@ -132,7 +144,21 @@ function useFoldStyle(open: SharedValue<number>, mode: FoldMode, height: number,
 }
 
 // An entry, folding with the block: shrinking to nothing, the gap after it cancelled.
-function FoldItem({ open, mode, height, gap, pointerEvents, children }: { open: SharedValue<number>; mode: FoldMode; height: number; gap: number; pointerEvents: "none" | "auto"; children: ReactNode }) {
+function FoldItem({
+  open,
+  mode,
+  height,
+  gap,
+  pointerEvents,
+  children,
+}: {
+  open: SharedValue<number>;
+  mode: FoldMode;
+  height: number;
+  gap: number;
+  pointerEvents: "none" | "auto";
+  children: ReactNode;
+}) {
   const style = useFoldStyle(open, mode, height, gap);
   return (
     <Animated.View style={style} pointerEvents={pointerEvents}>

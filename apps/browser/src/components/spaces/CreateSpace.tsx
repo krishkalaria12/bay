@@ -96,7 +96,15 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
         Spaces keep their own tabs, pinned tabs and theme. Each uses a profile for its logins, cookies, passwords, extensions, bookmarks and history.
       </Text>
 
-      <TextField value={name} onChangeText={setName} placeholder="Space name" autoFocus onSubmit={submit} onEscape={() => onDone(null)} style={{ marginTop: 16 }} />
+      <TextField
+        value={name}
+        onChangeText={setName}
+        placeholder="Space name"
+        autoFocus
+        onSubmit={submit}
+        onEscape={() => onDone(null)}
+        style={{ marginTop: 16 }}
+      />
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Label>Icon</Label>
@@ -104,13 +112,24 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
           <Text style={{ fontSize: 12, marginTop: 16, marginBottom: 7, color: icon ? colors.accent : theme.textTertiary }}>Use Initial</Text>
         </Pressable>
       </View>
-      <IconGrid symbols={SPACE_SYMBOLS} current={icon} onChoose={setIcon} columns={CREATE_SPACE_ICON_COLUMNS} cell={30} rows={3} highlight={colors.selected} bold />
+      <IconGrid
+        symbols={SPACE_SYMBOLS}
+        current={icon}
+        onChoose={setIcon}
+        columns={CREATE_SPACE_ICON_COLUMNS}
+        cell={30}
+        rows={3}
+        highlight={colors.selected}
+        bold
+      />
 
       <Label>Theme</Label>
       <View style={{ flexDirection: "row", gap: 7 }}>
         {(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => (
           <Pressable key={c} onPress={() => setColor(c)} tooltip={SPACE_COLORS[c].name}>
-            <View style={{ width: 22, height: 22, borderRadius: 11, padding: 2, borderWidth: 2, borderColor: color === c ? SPACE_COLORS[c].swatch : "transparent" }}>
+            <View
+              style={{ width: 22, height: 22, borderRadius: 11, padding: 2, borderWidth: 2, borderColor: color === c ? SPACE_COLORS[c].swatch : "transparent" }}
+            >
               <View style={{ flex: 1, borderRadius: 9, backgroundColor: SPACE_COLORS[c].swatch }} />
             </View>
           </Pressable>
@@ -121,7 +140,17 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
       <View style={{ borderRadius: 8, backgroundColor: colors.field, borderWidth: 1, borderColor: colors.fieldBorder, overflow: "hidden" }}>
         {groups.map((g, i) => (
           <Pressable key={g.profileId} onPress={() => setShareWith(g.spaceIds[0]!)}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 32, paddingHorizontal: 10, borderTopWidth: i ? 1 : 0, borderColor: colors.separator }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                height: 32,
+                paddingHorizontal: 10,
+                borderTopWidth: i ? 1 : 0,
+                borderColor: colors.separator,
+              }}
+            >
               <RadioDot on={g === selectedGroup} />
               <ColorStack colors={g.spaceIds.map((id) => SPACE_COLORS[spaces[id]!.color]?.swatch ?? "#888888")} />
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
@@ -131,10 +160,14 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
           </Pressable>
         ))}
         <Pressable onPress={() => setShareWith(null)}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 32, paddingHorizontal: 10, borderTopWidth: 1, borderColor: colors.separator }}>
+          <View
+            style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 32, paddingHorizontal: 10, borderTopWidth: 1, borderColor: colors.separator }}
+          >
             <RadioDot on={!selectedGroup} />
             <Symbol name="person.crop.circle.badge.plus" size={12} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>New profile</Text>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
+              New profile
+            </Text>
           </View>
         </Pressable>
       </View>

@@ -87,11 +87,7 @@ export function TabRow({ tabId }: { tabId: string }) {
   const border = selected && !active ? 0.5 : 0;
 
   return (
-    <View
-      ref={(v) => registerRow(windowId, tabId, v)}
-      {...hoverProps}
-      onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
-    >
+    <View ref={(v) => registerRow(windowId, tabId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}>
       <MouseArea onMiddleClick={() => void closeTab(tabId)}>
         <ContextMenuArea
           onContextMenu={() => {
@@ -132,7 +128,12 @@ export function TabRow({ tabId }: { tabId: string }) {
                       onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
                     />
                   ) : (
-                    <FadeLabel text={title} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
+                    <FadeLabel
+                      text={title}
+                      fontSize={13}
+                      color={active ? theme.tabSelectedText : theme.textTab}
+                      style={{ flex: 1, height: 18, marginLeft: 5 }}
+                    />
                   )}
                   <HoverSlot
                     hovered={hovered && !renaming}
@@ -140,9 +141,25 @@ export function TabRow({ tabId }: { tabId: string }) {
                     hover={
                       // A pinned row isn't closed, only unloaded (Arc's −): it stays, back at its pinned page.
                       tab.pinnedRow ? (
-                        <IconButton icon="minus" size={10} weight="semibold" box={22} radius={6} onPress={() => void closeTab(tab.id)} tooltip="Unload Tab (⌘W)" />
+                        <IconButton
+                          icon="minus"
+                          size={10}
+                          weight="semibold"
+                          box={22}
+                          radius={6}
+                          onPress={() => void closeTab(tab.id)}
+                          tooltip="Unload Tab (⌘W)"
+                        />
                       ) : (
-                        <IconButton icon="xmark" size={10} weight="semibold" box={22} radius={6} onPress={() => void closeTab(tab.id)} tooltip="Close Tab (⌘W)" />
+                        <IconButton
+                          icon="xmark"
+                          size={10}
+                          weight="semibold"
+                          box={22}
+                          radius={6}
+                          onPress={() => void closeTab(tab.id)}
+                          tooltip="Close Tab (⌘W)"
+                        />
                       )
                     }
                   >
@@ -152,7 +169,17 @@ export function TabRow({ tabId }: { tabId: string }) {
                 {developer ? (
                   <View
                     pointerEvents="none"
-                    style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 10, borderWidth: 1.5, borderStyle: "dashed", borderColor: DEVELOPER_YELLOW }}
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      borderRadius: 10,
+                      borderWidth: 1.5,
+                      borderStyle: "dashed",
+                      borderColor: DEVELOPER_YELLOW,
+                    }}
                   />
                 ) : null}
               </View>
@@ -221,7 +248,9 @@ export const SplitRowItem = memo(function SplitRowItem({
   parentGroup?: string;
 }) {
   const windowId = useWindowId();
-  const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).join(",") ?? "").split(",").filter(Boolean);
+  const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).join(",") ?? "")
+    .split(",")
+    .filter(Boolean);
   const { ref, style, handle } = useDragItem(`s:${splitId}`, { kind: "split", tabIds, section, parentGroup });
   const theme = useTheme();
   const spaceId = usePageSpaceId();
@@ -270,7 +299,12 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
             }}
           >
             <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
-            <FadeLabel text={tabTitle(tab)} fontSize={12} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 16, marginLeft: 5 }} />
+            <FadeLabel
+              text={tabTitle(tab)}
+              fontSize={12}
+              color={active ? theme.tabSelectedText : theme.textTab}
+              style={{ flex: 1, height: 16, marginLeft: 5 }}
+            />
           </View>
         </Pressable>
       </ContextMenuArea>

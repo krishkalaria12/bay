@@ -18,7 +18,11 @@ export function TabsPane() {
         <LayoutChoice layout="top" title="Tab layout across the top of the window" selected={top} />
       </View>
       <Group style={{ marginTop: 14 }}>
-        <SettingToggle setting="hideToolbarWhileScrolling" title="Hide toolbar while scrolling" description="With tabs across the top, scrolling down tucks the toolbar into a thin strip with the site's name. Scroll up, or click the strip, to bring it back." />
+        <SettingToggle
+          setting="hideToolbarWhileScrolling"
+          title="Hide toolbar while scrolling"
+          description="With tabs across the top, scrolling down tucks the toolbar into a thin strip with the site's name. Scroll up, or click the strip, to bring it back."
+        />
       </Group>
 
       <SectionHeader title="General" />
@@ -29,7 +33,11 @@ export function TabsPane() {
         <SettingToggle setting="warnBeforeClosingLastTab" title="Warn before closing last tab in a Space" />
         <SettingToggle setting="tabReorderHaptics" title="Haptic feedback when reordering tabs" />
         <SettingToggle setting="extendWebsiteColor" title="Extend website color into tab bar" />
-        <SettingToggle setting="autoPictureInPicture" title="Automatic Picture in Picture" description="A video or call you're watching pops out when you switch tabs or leave the window, and returns when you come back." />
+        <SettingToggle
+          setting="autoPictureInPicture"
+          title="Automatic Picture in Picture"
+          description="A video or call you're watching pops out when you switch tabs or leave the window, and returns when you come back."
+        />
       </Group>
 
       <SectionHeader title="Tab groups" />
@@ -42,7 +50,15 @@ export function TabsPane() {
         description="Closes tabs you haven't used (and duplicates) automatically, like the tab menu's Clean Up Daily. Pinned, playing and selected tabs stay; cleaned tabs are listed under Recently Cleaned. A space can have its own time, in its settings."
       />
       <Group>
-        <Row title={<Checkbox value={settings.cleanUpInactiveTabsAfterHours !== null} onChange={(v) => update({ cleanUpInactiveTabsAfterHours: v ? 24 : null })} label="Clean up tabs I haven't used in:" />}>
+        <Row
+          title={
+            <Checkbox
+              value={settings.cleanUpInactiveTabsAfterHours !== null}
+              onChange={(v) => update({ cleanUpInactiveTabsAfterHours: v ? 24 : null })}
+              label="Clean up tabs I haven't used in:"
+            />
+          }
+        >
           <PopUp
             value={String(settings.cleanUpInactiveTabsAfterHours ?? 24)}
             options={CLEAN_UP_CHOICES}

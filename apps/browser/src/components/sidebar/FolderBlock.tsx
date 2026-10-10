@@ -111,7 +111,13 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
                     <Text numberOfLines={1} style={{ opacity: 0, fontSize: 13, fontWeight: "500" }}>
                       {label}
                     </Text>
-                    <FadeLabel text={label} fontSize={13} weight="medium" color={theme.textTab} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 18 }} />
+                    <FadeLabel
+                      text={label}
+                      fontSize={13}
+                      weight="medium"
+                      color={theme.textTab}
+                      style={{ position: "absolute", left: 0, right: 0, top: 0, height: 18 }}
+                    />
                   </View>
                   {empty ? null : (
                     <Animated.View style={[{ width: 10, height: 10, alignItems: "center", justifyContent: "center" }, chevron]}>

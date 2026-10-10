@@ -85,9 +85,7 @@ function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngin
       : engine.keyword;
   return (
     <Row icon={<Favicon url={`https://${engineHost(engine)}`} />} title={engine.name} description={description}>
-      {editable && (
-        <IconButton icon="pencil" size={11} box={24} radius={6} onPress={() => showSettingsSheet(<EngineSheet engine={engine} />)} tooltip="Edit" />
-      )}
+      {editable && <IconButton icon="pencil" size={11} box={24} radius={6} onPress={() => showSettingsSheet(<EngineSheet engine={engine} />)} tooltip="Edit" />}
       {selected ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 5, minWidth: 92, justifyContent: "flex-end" }}>
           <Symbol name="checkmark" size={11} weight="semibold" color={colors.accent} style={{ width: 14, height: 14 }} />

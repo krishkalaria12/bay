@@ -1,4 +1,3 @@
-
 export type Inline = { typed: string; completion: string };
 
 export type PendingInline = Inline & { orphaned?: boolean };

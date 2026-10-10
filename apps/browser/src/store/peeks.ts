@@ -37,7 +37,29 @@ export const isPeek = (t: { peekOf?: string } | undefined) => !!t?.peekOf;
 
 // Second-level suffixes under which a site is three labels (bbc.co.uk), for the common country domains. A link the
 // engine catches is judged there, by Chrome's own rule (nn_peek_links.mm); this is for the links that open a tab.
-const SECOND_LEVEL = ["co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.nz", "co.jp", "ne.jp", "or.jp", "co.in", "com.br", "com.mx", "com.ar", "com.tr", "com.cn", "com.hk", "com.sg", "co.za", "co.kr"];
+const SECOND_LEVEL = [
+  "co.uk",
+  "org.uk",
+  "ac.uk",
+  "gov.uk",
+  "com.au",
+  "net.au",
+  "org.au",
+  "co.nz",
+  "co.jp",
+  "ne.jp",
+  "or.jp",
+  "co.in",
+  "com.br",
+  "com.mx",
+  "com.ar",
+  "com.tr",
+  "com.cn",
+  "com.hk",
+  "com.sg",
+  "co.za",
+  "co.kr",
+];
 
 /** A host's site: its last two labels, or three under a SECOND_LEVEL suffix. Close enough to Chrome's for "another site". */
 export function siteOf(host: string): string {

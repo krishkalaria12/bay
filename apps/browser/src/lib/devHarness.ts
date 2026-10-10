@@ -30,7 +30,13 @@ export function startDevHarness() {
   }
 
   const nn = {
-    store: useBrowser, actions, runCommand, webviews, shell, omnibox: omniboxDrivers, pages: pagesDrivers,
+    store: useBrowser,
+    actions,
+    runCommand,
+    webviews,
+    shell,
+    omnibox: omniboxDrivers,
+    pages: pagesDrivers,
     pageState: usePages,
     openSettings,
     favicons,
@@ -85,21 +91,24 @@ export function startDevHarness() {
   (globalThis as { nn?: typeof nn }).nn = nn;
   const scriptId = (source: string | null) => source?.match(/^\/\/ *(\S+)/)?.[1];
   let lastId = scriptId(readDocument("dev-eval.js")) ?? "";
-  setInterval(function pollDevEval() {
-    const source = readDocument("dev-eval.js");
-    const id = scriptId(source);
-    if (!source || !id || id === lastId) return;
-    lastId = id;
-    const done = (body: object) => writeDocument("dev-eval-result.json", JSON.stringify({ id, ...body }));
-    try {
-      const fn = new Function("nn", source) as (n: typeof nn) => unknown;
-      Promise.resolve(fn(nn)).then(
-        (result) => done({ result: result ?? null }),
-        (error: unknown) => done({ error: String(error) }),
-      );
-    } catch (error) {
-      done({ error: String(error) });
-    }
-    // Test scripts wait on every answer (scripts/lib/instance.mjs); a Release build's perf probe keeps the slow poll.
-  }, __DEV__ ? 50 : 250);
+  setInterval(
+    function pollDevEval() {
+      const source = readDocument("dev-eval.js");
+      const id = scriptId(source);
+      if (!source || !id || id === lastId) return;
+      lastId = id;
+      const done = (body: object) => writeDocument("dev-eval-result.json", JSON.stringify({ id, ...body }));
+      try {
+        const fn = new Function("nn", source) as (n: typeof nn) => unknown;
+        Promise.resolve(fn(nn)).then(
+          (result) => done({ result: result ?? null }),
+          (error: unknown) => done({ error: String(error) }),
+        );
+      } catch (error) {
+        done({ error: String(error) });
+      }
+      // Test scripts wait on every answer (scripts/lib/instance.mjs); a Release build's perf probe keeps the slow poll.
+    },
+    __DEV__ ? 50 : 250,
+  );
 }

@@ -36,7 +36,17 @@ import { measureRow } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./sidebar/RowMotion";
 import { useSidebarTokens, useSidebarWidth } from "./sidebar/tokens";
-import { CLEAN_UP_UPSELL_MIN, DOCKED_BOTTOM, FIRST_PAINT_ROWS, GLOW_ROOM, NEW_TAB_DOCK, PIN_BAND, PINNED_DIVIDER_PAD, ROW_PITCH, ROWS_PER_FRAME } from "./sidebar/constants";
+import {
+  CLEAN_UP_UPSELL_MIN,
+  DOCKED_BOTTOM,
+  FIRST_PAINT_ROWS,
+  GLOW_ROOM,
+  NEW_TAB_DOCK,
+  PIN_BAND,
+  PINNED_DIVIDER_PAD,
+  ROW_PITCH,
+  ROWS_PER_FRAME,
+} from "./sidebar/constants";
 
 // The list's room and its height: the New Tab row docks below the list once the list leaves no room for it.
 type Room = { available: number; list: number };
@@ -154,7 +164,17 @@ export function Sidebar() {
               </>
             ) : (
               // Box-none: the header's empty space is the drag region's (it moves the window), not the row's.
-              <View pointerEvents="box-none" style={{ height: layout.sidebarHeader, flexDirection: "row", alignItems: "flex-start", paddingLeft: profileX, paddingRight: 7, paddingTop: 27 - 17 }}>
+              <View
+                pointerEvents="box-none"
+                style={{
+                  height: layout.sidebarHeader,
+                  flexDirection: "row",
+                  alignItems: "flex-start",
+                  paddingLeft: profileX,
+                  paddingRight: 7,
+                  paddingTop: 27 - 17,
+                }}
+              >
                 <SpaceIndicator room={width - profileX - 7} />
                 <View pointerEvents="none" style={{ flex: 1 }} />
               </View>
@@ -194,7 +214,7 @@ type PageProps = {
   onScrollY: (y: number) => void;
 };
 
-function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom, ghost, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
+function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
   const windowId = useWindowId();
   const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, spaceId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
@@ -391,7 +411,13 @@ type SidebarGeometry = { viewport: number; regions: Record<Section, number>; new
 
 // Keeps the tab just switched to, or else the last tab opened from another in the background, in view: one scroll a
 // frame, to the row's place worked out from the store (rows are fixed-height), mounted or not.
-function useRevealTabs(windowId: string, scroll: RefObject<ScrollView | null>, scrollY: RefObject<number>, geometryRef: RefObject<SidebarGeometry>, glowRoom: number) {
+function useRevealTabs(
+  windowId: string,
+  scroll: RefObject<ScrollView | null>,
+  scrollY: RefObject<number>,
+  geometryRef: RefObject<SidebarGeometry>,
+  glowRoom: number,
+) {
   useEffect(() => {
     let switched: string | null = null;
     let opened: string | null = null;
@@ -497,7 +523,11 @@ function NewTabRow({ windowId }: { windowId: string }) {
         )}
       </Pressable>
       <View style={{ position: "absolute", right: 6, flexDirection: "row", alignItems: "center" }}>
-        <HoverSlot hovered={hovered && cleaned > 0} width={0} hover={<Text style={{ fontSize: 11, color: theme.textTertiary, marginRight: 2 }}>{cleaned} cleaned</Text>} />
+        <HoverSlot
+          hovered={hovered && cleaned > 0}
+          width={0}
+          hover={<Text style={{ fontSize: 11, color: theme.textTertiary, marginRight: 2 }}>{cleaned} cleaned</Text>}
+        />
         <IconButton
           icon="chevron.down"
           size={10}
@@ -537,7 +567,9 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
     setHidden(true);
   };
   return (
-    <View style={{ marginTop: 10, borderRadius: 12, padding: 10, backgroundColor: tokens.groupFill, borderWidth: 0.5, borderColor: tokens.groupStroke, gap: 8 }}>
+    <View
+      style={{ marginTop: 10, borderRadius: 12, padding: 10, backgroundColor: tokens.groupFill, borderWidth: 0.5, borderColor: tokens.groupStroke, gap: 8 }}
+    >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Symbol name="wand.and.stars" size={12} color={theme.icon} style={{ width: 16, height: 16 }} />
         <Text style={{ flex: 1, fontSize: 12, fontWeight: "600", color: theme.textPrimary }}>{count} tabs haven’t been touched in a while</Text>

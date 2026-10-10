@@ -121,7 +121,9 @@ test("a session keeps each space's tabs in order, and none of a private window's
   flushPersistence();
   stop();
   S().hydrate(loadSession());
-  const urls = Object.values(S().tabs).map((t) => short(t.id)).sort();
+  const urls = Object.values(S().tabs)
+    .map((t) => short(t.id))
+    .sort();
   assert.deepEqual(urls, ["a", "b", "c"]);
   assert.deepEqual(model.spaceTabIds(S(), "default").map(short), ["a", "b", "c"]);
   assert.equal(S().windowOrder.length, 2);

@@ -21,7 +21,9 @@ if (args.includes("--self-test")) {
 }
 const appArg = args.find((a) => !a.startsWith("--"));
 if (!appArg) {
-  console.error("usage: node space-swipe-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data] [--stale-window] [--only=<case name substring>] [--bundle-port=<Metro port>] | --self-test");
+  console.error(
+    "usage: node space-swipe-test.mjs <Debug Bay.app> [--port=<DevTools port>] [--keep-data] [--stale-window] [--only=<case name substring>] [--bundle-port=<Metro port>] | --self-test",
+  );
   process.exit(2);
 }
 const app = resolve(appArg);
@@ -29,13 +31,18 @@ const bundlePort = args.find((a) => a.startsWith("--bundle-port="))?.split("=")[
 if (bundlePort) assert.match(bundlePort, /^\d{2,5}$/);
 const portArg = args.find((a) => a.startsWith("--port="))?.slice("--port=".length);
 let port;
-try { port = portArg && parsePort(portArg); } catch (error) {
+try {
+  port = portArg && parsePort(portArg);
+} catch (error) {
   console.error(`--port: ${error.message}`);
   process.exit(2);
 }
 const keep = args.includes("--keep-data");
 const stale = args.includes("--stale-window");
-const only = args.find((a) => a.startsWith("--only="))?.slice("--only=".length).toLowerCase();
+const only = args
+  .find((a) => a.startsWith("--only="))
+  ?.slice("--only=".length)
+  .toLowerCase();
 let matched = 0;
 const scratch = mkdtempSync(join(tmpdir(), "nn-space-swipe-"));
 const data = join(scratch, "data");
@@ -46,8 +53,18 @@ let owned;
 // An Error when the owned app has died (recorded once in evidence.death), else null.
 function ownedDeath() {
   if (!owned || !owned.exited) return null;
-  evidence.death ??= { pid: owned.pid, detectedAt: new Date().toISOString(), alive: false,
-    portListeners: (() => { try { return listenerPids(owned.port); } catch (e) { return String(e); } })() };
+  evidence.death ??= {
+    pid: owned.pid,
+    detectedAt: new Date().toISOString(),
+    alive: false,
+    portListeners: (() => {
+      try {
+        return listenerPids(owned.port);
+      } catch (e) {
+        return String(e);
+      }
+    })(),
+  };
   return Object.assign(new Error(`owned app pid ${owned.pid} died`), { appDied: true });
 }
 function assertOwnedAlive() {
@@ -57,17 +74,19 @@ function assertOwnedAlive() {
 const server = createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html" });
   if (req.url.startsWith("/history")) return res.end(`<!doctype html><title>${req.url}</title><h1>${req.url}</h1>`);
-  res.end('<!doctype html><title>Swipe scroll fixture</title><body style="margin:0"><div style="width:2600px;height:4000px;background:linear-gradient(120deg,#ffd9dd,#addbff)">Native scroll fixture</div>');
+  res.end(
+    '<!doctype html><title>Swipe scroll fixture</title><body style="margin:0"><div style="width:2600px;height:4000px;background:linear-gradient(120deg,#ffd9dd,#addbff)">Native scroll fixture</div>',
+  );
 });
 
 const tab = (id, spaceId) => ({ id, spaceId, url: "bay://newtab", title: "New Tab" });
 const fixture = session({ spaces: ["Personal", "Work"], tabs: [tab("t1", "default"), tab("t2", "work")] });
 
 const nn = (body, timeout = 15000) => owned.eval(body, { timeout });
-const profile = () => nn('return nn.store.getState().windows.w1.spaceId;');
+const profile = () => nn("return nn.store.getState().windows.w1.spaceId;");
 async function waitProfile(expected) {
   for (let start = Date.now(); Date.now() - start < 1800;) {
-    if (await profile() === expected) return;
+    if ((await profile()) === expected) return;
     await sleep(25);
   }
   assert.equal(await profile(), expected, "profile should switch within 1.8s");
@@ -77,27 +96,33 @@ async function reset() {
   await waitProfile("default");
   await sleep(250);
 }
-const windows = () => nn('return globalThis.expo.modules.BayCEF.chromeWindows();');
+const windows = () => nn("return globalThis.expo.modules.BayCEF.chromeWindows();");
 async function nativeWindow() {
   const all = await windows();
   return all.find((w) => w.hasRoot && w.profile === "" && w.group) ?? all.find((w) => w.hasRoot);
 }
 const action = (window, act) => nn(`return globalThis.expo.modules.BayCEF.devWindow(${window}, ${JSON.stringify(act)});`);
-const gesture = (sign, wobble = false, drift = false) => [
-  { phase: "began", dx: wobble ? sign : 0, dy: wobble ? 5 : 0 },
-  { phase: "changed", dx: 18 * sign, dy: 1 },
-  ...(drift ? [{ phase: "changed", dx: 0, dy: 50 }] : []),
-  { phase: "changed", dx: 22 * sign, dy: 0 },
-  { phase: "changed", dx: 22 * sign, dy: 0 },
-  { phase: "ended", dx: 0, dy: 0 },
-// Hardware-like 16ms event timestamps, whenever the main thread gets to each step.
-].map((step, index) => ({ ...step, atMs: index * 16, timestampMs: index * 16 }));
+const gesture = (sign, wobble = false, drift = false) =>
+  [
+    { phase: "began", dx: wobble ? sign : 0, dy: wobble ? 5 : 0 },
+    { phase: "changed", dx: 18 * sign, dy: 1 },
+    ...(drift ? [{ phase: "changed", dx: 0, dy: 50 }] : []),
+    { phase: "changed", dx: 22 * sign, dy: 0 },
+    { phase: "changed", dx: 22 * sign, dy: 0 },
+    { phase: "ended", dx: 0, dy: 0 },
+    // Hardware-like 16ms event timestamps, whenever the main thread gets to each step.
+  ].map((step, index) => ({ ...step, atMs: index * 16, timestampMs: index * 16 }));
 // A flick as a trackpad sends it, through AppKit's dispatch: the swipe, then the momentum macOS adds after the lift.
 function flick(sign) {
   const swipe = gesture(sign);
   const end = swipe.at(-1).atMs;
-  const momentum = [["momentumBegan", 20], ["momentum", 14], ["momentum", 8], ["momentum", 3], ["momentumEnded", 0]]
-    .map(([phase, dx], i) => ({ phase, dx: dx * sign, dy: 0, atMs: end + 8 * (i + 1), timestampMs: end + 8 * (i + 1) }));
+  const momentum = [
+    ["momentumBegan", 20],
+    ["momentum", 14],
+    ["momentum", 8],
+    ["momentum", 3],
+    ["momentumEnded", 0],
+  ].map(([phase, dx], i) => ({ phase, dx: dx * sign, dy: 0, atMs: end + 8 * (i + 1), timestampMs: end + 8 * (i + 1) }));
   return [...swipe, ...momentum].map((step) => ({ ...step, dispatch: "app" }));
 }
 // Decoded NSEvent timestamps against the requested ones, and the native release velocity.
@@ -114,19 +139,26 @@ function fixtureFidelity(steps, result) {
   });
   if (!ended) errors.push("no ended emit");
   else if (!(Math.abs(ended.velocity) >= 5)) errors.push(`ended velocity ${ended.velocity}`);
-  return { intendedMs, decodedMs, endedVelocity: ended?.velocity ?? null,
-    maxLateMs: Math.max(0, ...events.map((e) => e.lateMs ?? 0)), errors };
+  return { intendedMs, decodedMs, endedVelocity: ended?.velocity ?? null, maxLateMs: Math.max(0, ...events.map((e) => e.lateMs ?? 0)), errors };
 }
-const simulate = (steps, source) => nn(source
-  ? `return globalThis.expo.modules.BaySwipe.devSimulate(120, 400, ${source}, ${JSON.stringify(steps)}, true);`
-  : `return globalThis.nnSwipe.sidebar("w1").devSimulate(${JSON.stringify(steps)}, {ignorePreference:true});`);
+const simulate = (steps, source) =>
+  nn(
+    source
+      ? `return globalThis.expo.modules.BaySwipe.devSimulate(120, 400, ${source}, ${JSON.stringify(steps)}, true);`
+      : `return globalThis.nnSwipe.sidebar("w1").devSimulate(${JSON.stringify(steps)}, {ignorePreference:true});`,
+  );
 function alternatingGestures(count, gapMs = 112) {
-  return Array.from({ length: count }, (_, n) => gesture(n % 2 ? 1 : -1).map((step) => ({
-    ...step, atMs: step.atMs + n * gapMs, timestampMs: step.timestampMs + n * gapMs,
-  }))).flat();
+  return Array.from({ length: count }, (_, n) =>
+    gesture(n % 2 ? 1 : -1).map((step) => ({
+      ...step,
+      atMs: step.atMs + n * gapMs,
+      timestampMs: step.timestampMs + n * gapMs,
+    })),
+  ).flat();
 }
 async function nativeBatch(steps, blockedMs = 0) {
-  return nn(`
+  return nn(
+    `
     const simulation=globalThis.nnSwipe.sidebar("w1").devSimulate(${JSON.stringify(steps)}, {ignorePreference:true});
     if (${blockedMs}) setTimeout(()=>{
       const until=performance.now()+${blockedMs}; while(performance.now()<until){}
@@ -135,27 +167,33 @@ async function nativeBatch(steps, blockedMs = 0) {
       globalThis.expo.modules.BaySwipe.devPagerState("w1").then(state=>resolve({result,state,
         profile:nn.store.getState().windows.w1.spaceId,pager:globalThis.nnPager("w1").debug()}));
     },650)));
-  `, 15000);
+  `,
+    15000,
+  );
 }
 async function test(name, fn) {
   if (only && !name.toLowerCase().includes(only)) return;
   matched++;
   let fatal = null;
-  await rep.check(name, async () => {
-    const result = await fn();
-    evidence.cases.push({ name, passed: true, result });
-  }, {
-    async onFail(error) {
-      const death = error.appDied ? error : ownedDeath();
-      const failed = { name, passed: false, error: String(error), ...(error.evidence ? { evidence: error.evidence } : {}) };
-      evidence.cases.push(failed);
-      if (!death) failed.windows = await windows().catch((e) => ({ error: String(e) }));
-      if (error.evidence) rep.log("evidence:", JSON.stringify(error.evidence));
-      // A dead app fails this case with its traces kept, then stops the run.
-      fatal = death ?? ownedDeath();
-      if (fatal) failed.appDeath = evidence.death;
+  await rep.check(
+    name,
+    async () => {
+      const result = await fn();
+      evidence.cases.push({ name, passed: true, result });
     },
-  });
+    {
+      async onFail(error) {
+        const death = error.appDied ? error : ownedDeath();
+        const failed = { name, passed: false, error: String(error), ...(error.evidence ? { evidence: error.evidence } : {}) };
+        evidence.cases.push(failed);
+        if (!death) failed.windows = await windows().catch((e) => ({ error: String(e) }));
+        if (error.evidence) rep.log("evidence:", JSON.stringify(error.evidence));
+        // A dead app fails this case with its traces kept, then stops the run.
+        fatal = death ?? ownedDeath();
+        if (fatal) failed.appDeath = evidence.death;
+      },
+    },
+  );
   if (fatal) throw Object.assign(fatal, { reported: true });
 }
 
@@ -164,14 +202,18 @@ async function pageEval(expression) {
   assert.ok(page, "scroll fixture should have a CDP target");
   try {
     return await page.eval(expression, { timeout: 3000 });
-  } finally { page.close(); }
+  } finally {
+    page.close();
+  }
 }
 
 let stage = "launch";
 try {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   owned = await launch(app, {
-    data, port, session: fixture,
+    data,
+    port,
+    session: fixture,
     switches: "--disable-backgrounding-occluded-windows",
     // The app's Metro for this launch: pinned (the module's proxy, which refuses reloads and hot updates) unless
     // --bundle-port names another one.
@@ -210,9 +252,14 @@ try {
         await waitProfile(expected);
       } catch (error) {
         // Keep every completed native trace and the state at the failure; a dead app yields null, not a new error.
-        error.evidence = { iteration: i, expected, results, fidelity,
+        error.evidence = {
+          iteration: i,
+          expected,
+          results,
+          fidelity,
           profile: await profile().catch(() => null),
-          pager: await nn('return globalThis.nnPager("w1").debug();').catch(() => null) };
+          pager: await nn('return globalThis.nnPager("w1").debug();').catch(() => null),
+        };
         throw error;
       }
     }
@@ -232,10 +279,12 @@ try {
   });
   await test("vertical sidebar scrolling stays native", async () => {
     await reset();
-    const result = await simulate([{ phase: "began", dy: 5 }, { phase: "changed", dy: 16 },
-      { phase: "changed", dy: 20 }, { phase: "ended" }]);
+    const result = await simulate([{ phase: "began", dy: 5 }, { phase: "changed", dy: 16 }, { phase: "changed", dy: 20 }, { phase: "ended" }]);
     assert.equal(await profile(), "default");
-    assert.ok(result.events.every((e) => !e.swallowed), "vertical events must reach the scroll view");
+    assert.ok(
+      result.events.every((e) => !e.swallowed),
+      "vertical events must reach the scroll view",
+    );
     return result;
   });
   await test("cancelled swipe and momentum do not switch profiles", async () => {
@@ -279,7 +328,9 @@ try {
   });
   await test("rapid profile shortcuts count every queued press", async () => {
     await reset();
-    await nn('nn.runCommand({command:"nextSpace",windowId:"w1"}); nn.runCommand({command:"nextSpace",windowId:"w1"}); nn.runCommand({command:"nextSpace",windowId:"w1"}); return true;');
+    await nn(
+      'nn.runCommand({command:"nextSpace",windowId:"w1"}); nn.runCommand({command:"nextSpace",windowId:"w1"}); nn.runCommand({command:"nextSpace",windowId:"w1"}); return true;',
+    );
     await waitProfile("work");
     await sleep(450);
     const result = await nn('return globalThis.expo.modules.BaySwipe.devPagerState("w1");');
@@ -290,7 +341,7 @@ try {
   });
   await test("external profile selection interrupts a native drag without a late rewind", async () => {
     await reset();
-    const steps=gesture(-1).map((s)=>({...s, atMs:s.atMs*3, timestampMs:s.timestampMs*3}));
+    const steps = gesture(-1).map((s) => ({ ...s, atMs: s.atMs * 3, timestampMs: s.timestampMs * 3 }));
     const result = await nn(`
       const simulation=globalThis.nnSwipe.sidebar("w1").devSimulate(${JSON.stringify(steps)},{ignorePreference:true});
       setTimeout(()=>nn.store.getState().switchSpace("w1","work"),40);
@@ -300,9 +351,9 @@ try {
           profile:nn.store.getState().windows.w1.spaceId}));
       },650)));
     `);
-    assert.equal(result.profile,"default");
-    assert.equal(result.state.profileId,"default");
-    assert.equal(result.state.phase,"idle");
+    assert.equal(result.profile, "default");
+    assert.equal(result.state.profileId, "default");
+    assert.equal(result.state.phase, "idle");
     return result;
   });
   await test("latest profile dot cancels an in-flight native selection", async () => {
@@ -335,7 +386,11 @@ try {
         for (let start = Date.now(); Date.now() - start < 3000 && !(await nn(`return !!globalThis.nnSwipe.${surface}("w1");`));) await sleep(50);
         await sleep(250);
         const results = [];
-        for (const [sign, expected] of [[-1, "work"], [1, "default"], [-1, "work"]]) {
+        for (const [sign, expected] of [
+          [-1, "work"],
+          [1, "default"],
+          [-1, "work"],
+        ]) {
           const result = await nn(`return globalThis.nnSwipe.${surface}("w1").devSimulate(${JSON.stringify(flick(sign))}, {ignorePreference:true});`, 15000);
           results.push(result);
           const leaked = (result.events ?? []).filter((e) => e.phase.startsWith("momentum") && e.monitorSwallowed !== true);
@@ -412,10 +467,17 @@ try {
     try {
       assert.equal(fixtureState.spaceId, "default", "the fixture's profile must be active");
       assert.equal(fixtureState.activeTabId, "t1", "the fixture tab must own the visible pane");
-    } catch (error) { error.evidence = { fixtureState }; throw error; }
+    } catch (error) {
+      error.evidence = { fixtureState };
+      throw error;
+    }
     let loaded = false;
     for (let i = 0; i < 30 && !loaded; i++) {
-      try { loaded = await pageEval('document.readyState === "complete"'); } catch { assertOwnedAlive(); }
+      try {
+        loaded = await pageEval('document.readyState === "complete"');
+      } catch {
+        assertOwnedAlive();
+      }
       if (!loaded) await sleep(100);
     }
     assert.ok(loaded, "local scroll fixture must load");
@@ -438,7 +500,9 @@ try {
     const afterHorizontal = await pageEval("({x:scrollX,y:scrollY,url:location.href})");
     assert.ok(afterHorizontal.x > before.x, "horizontal page scroll must still move web content");
     assert.equal(afterHorizontal.url, before.url, "horizontal scrolling must not navigate history");
-    const vertical = await nn('return globalThis.nnSwipe.pane("t1").devSimulate([{phase:"began"},{phase:"changed",dy:-18},{phase:"changed",dy:-24},{phase:"ended"}], {ignorePreference:true});');
+    const vertical = await nn(
+      'return globalThis.nnSwipe.pane("t1").devSimulate([{phase:"began"},{phase:"changed",dy:-18},{phase:"changed",dy:-24},{phase:"ended"}], {ignorePreference:true});',
+    );
     await sleep(250);
     const afterVertical = await pageEval("({x:scrollX,y:scrollY,url:location.href})");
     assert.ok(afterVertical.y > afterHorizontal.y, "vertical page scroll must still move web content");
@@ -455,15 +519,22 @@ try {
     await sleep(600);
     const legacyProfile = await profile();
     const legacyBegin = legacy.acks.find((a) => a.diag === "begin");
-    evidence.baselineRendererHit = { profile: legacyProfile, raw: routing(legacy)?.raw?.[0]?.class,
-      misses: legacyBegin?.targets?.map((t) => t.miss), reject: legacy.acks.find((a) => a.diag === "reject")?.reason };
+    evidence.baselineRendererHit = {
+      profile: legacyProfile,
+      raw: routing(legacy)?.raw?.[0]?.class,
+      misses: legacyBegin?.targets?.map((t) => t.miss),
+      reject: legacy.acks.find((a) => a.diag === "reject")?.reason,
+    };
     assert.equal(routing(legacy)?.raw?.[0]?.class, "RenderWidgetHostViewCocoa", "injection should hit the real renderer");
     assert.equal(legacyProfile, "default", "legacy hit routing should reject the misrouted renderer hit");
     const fixed = await simulate(flagged(gesture(-1), { wrongRendererHit: true }));
     await waitProfile("work");
     assert.equal(routing(fixed)?.fallback, true, "the pager should take the gesture through the fallback");
     const begin = fixed.acks.find((a) => a.diag === "begin");
-    assert.ok(begin.hit.every((h) => h.class !== "RenderWidgetHostViewCocoa"), "the effective hit must not be the renderer");
+    assert.ok(
+      begin.hit.every((h) => h.class !== "RenderWidgetHostViewCocoa"),
+      "the effective hit must not be the renderer",
+    );
     return { legacy, fixed };
   });
   await test("a real web hit inside the renderer keeps page ownership", async () => {
@@ -488,7 +559,7 @@ try {
   await test("a tracked swipe right after a discrete swipe goes back too", async () => {
     await reset();
     const base = `http://127.0.0.1:${server.address().port}/history`;
-    const url = () => nn('return nn.store.getState().tabs.t1.url;');
+    const url = () => nn("return nn.store.getState().tabs.t1.url;");
     async function waitUrl(expected, ms) {
       for (let start = Date.now(); Date.now() - start < ms && (await url()) !== expected;) await sleep(50);
       return url();
@@ -500,7 +571,10 @@ try {
     }
     await sleep(500);
     // The tracked one starts 50 ms after the discrete one and lasts a quarter second, as a hand's does.
-    const steps = [{ phase: "swipe", dx: 3, atMs: 0 }, { phase: "began", dx: 0, dy: 0, atMs: 50, timestampMs: 50 }];
+    const steps = [
+      { phase: "swipe", dx: 3, atMs: 0 },
+      { phase: "began", dx: 0, dy: 0, atMs: 50, timestampMs: 50 },
+    ];
     for (let at = 66; at <= 258; at += 16) steps.push({ phase: "changed", dx: 10, dy: 0, atMs: at, timestampMs: at });
     steps.push({ phase: "ended", dx: 0, dy: 0, atMs: 274, timestampMs: 274 });
     const result = await nn(`return globalThis.nnSwipe.pane("t1").devSimulate(${JSON.stringify(steps)}, {ignorePreference:true});`);
@@ -546,8 +620,10 @@ try {
     return result;
   });
   stage = "the snapshot";
-  evidence.snapshot = { path: join(data, "space-swipe.png"),
-    saved: await nn(`return nn.shell.devSnapshotWindow("w1", ${JSON.stringify(join(data, "space-swipe.png"))});`) };
+  evidence.snapshot = {
+    path: join(data, "space-swipe.png"),
+    saved: await nn(`return nn.shell.devSnapshotWindow("w1", ${JSON.stringify(join(data, "space-swipe.png"))});`),
+  };
 } catch (error) {
   evidence.error = String(error);
   if (!error.reported) rep.record(`stopped at ${stage}`, { error });
@@ -557,7 +633,11 @@ try {
     rep.record(`--only=${only}`, { error: "matched no test" });
   }
   if (owned) {
-    try { evidence.cleanup = await owned.quit(); } catch (error) { evidence.cleanup = { error: String(error) }; }
+    try {
+      evidence.cleanup = await owned.quit();
+    } catch (error) {
+      evidence.cleanup = { error: String(error) };
+    }
   }
   writeFileSync(join(scratch, "space-swipe-results.json"), JSON.stringify(evidence, null, 2));
   server.close();

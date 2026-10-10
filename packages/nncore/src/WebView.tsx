@@ -324,10 +324,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onExternalApp: (e) => [e],
 };
 
-type NativeHandle = Omit<
-  WebViewHandle,
-  "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"
-> & {
+type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"> & {
   evaluate(code: string): Promise<string | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
   loadUrl(url: string, userInitiated?: boolean): Promise<void>;
@@ -364,8 +361,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
   useImperativeHandle(ref, () => {
     const call = <T,>(fallback: T, fn: (view: NativeHandle) => Promise<T>) => callView(native, fallback, fn);
     return {
-      loadUrl: (url, options) =>
-        call(undefined, (n) => n.loadUrl(toEngineUrl(url), options?.userInitiated ?? false)),
+      loadUrl: (url, options) => call(undefined, (n) => n.loadUrl(toEngineUrl(url), options?.userInitiated ?? false)),
       goBack: () => call(undefined, (n) => n.goBack()),
       goForward: () => call(undefined, (n) => n.goForward()),
       goToOffset: (offset) => call(undefined, (n) => n.goToOffset(offset)),
@@ -401,8 +397,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       getSecurityInfo: () => call(null, (n) => n.getSecurityInfo()),
       openBlockedPopup: (id, always) => call(undefined, (n) => n.openBlockedPopup(id, always)),
       clearSiteData: () => call({ cookies: false, storage: false }, (n) => n.clearSiteData()),
-      resolvePasswordPrompt: (answer, edits) =>
-        call(undefined, (n) => n.resolvePasswordPrompt(answer, edits?.username ?? null, edits?.password ?? null)),
+      resolvePasswordPrompt: (answer, edits) => call(undefined, (n) => n.resolvePasswordPrompt(answer, edits?.username ?? null, edits?.password ?? null)),
       resolveAutofillPrompt: (id, answer) => call(undefined, (n) => n.resolveAutofillPrompt(id, answer)),
       executeExtensionAction: (extensionId) => call(null, (n) => n.executeExtensionAction(extensionId)),
       resolveDisplayMedia: (id, sourceId) => call(undefined, (n) => n.resolveDisplayMedia(id, sourceId)),
@@ -422,9 +417,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
     }
     const map = unwrap[key as Handlers] as ((e: unknown) => unknown[]) | undefined;
     nativeProps[key] =
-      map && typeof value === "function"
-        ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent))
-        : value;
+      map && typeof value === "function" ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent)) : value;
   }
 
   return (

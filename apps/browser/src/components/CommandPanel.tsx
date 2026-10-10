@@ -12,7 +12,16 @@ import { useUrlAnchors } from "./layout/windowLayout";
 import { Omnibox } from "./Omnibox";
 import { PaletteSurface } from "./omnibox/PaletteSurface";
 import { webviews } from "../lib/webviews";
-import { DROPDOWN_MIN_WIDTH, DROPDOWN_PAST_FIELD, DROPDOWN_RADIUS, PANEL_ABOVE_PANE, PANEL_LEFT_OF_URL, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, PANEL_WINDOW_MARGIN } from "./omnibox/constants";
+import {
+  DROPDOWN_MIN_WIDTH,
+  DROPDOWN_PAST_FIELD,
+  DROPDOWN_RADIUS,
+  PANEL_ABOVE_PANE,
+  PANEL_LEFT_OF_URL,
+  PANEL_MAX_WIDTH,
+  PANEL_MIN_WIDTH,
+  PANEL_WINDOW_MARGIN,
+} from "./omnibox/constants";
 
 export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth: number; windowHeight?: number }) {
   const theme = useTheme();
@@ -87,8 +96,15 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
   );
 }
 
-
-function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHeight, initialText, closing, onClosed }: {
+function CenteredPalette({
+  windowId,
+  tabId,
+  width: windowWidth,
+  height: windowHeight,
+  initialText,
+  closing,
+  onClosed,
+}: {
   windowId: string;
   tabId: string;
   width: number;
@@ -130,7 +146,11 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={closing ? "none" : "box-none"} accessibilityViewIsModal={!closing}>
       <Animated.View style={[StyleSheet.absoluteFill, dimStyle]}>
-        <Pressable accessibilityLabel="Dismiss search" onPress={dismiss} style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]} />
+        <Pressable
+          accessibilityLabel="Dismiss search"
+          onPress={dismiss}
+          style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]}
+        />
       </Animated.View>
       <Animated.View style={[{ position: "absolute", width, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2) }, appearStyle]}>
         <PaletteSurface>

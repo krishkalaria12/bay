@@ -91,11 +91,9 @@ export const swipeHaptic = (pattern: "levelChange" | "alignment" | "generic") =>
 // order: the caller's profile ids joined with newlines, so the index means what the caller meant.
 export const switchPager = (key: string, index: number, order?: string): Promise<boolean> => Module.switchPager(key, index, order);
 // False when the window has no native pager; the caller falls back to the store.
-export const stepPager = (key: string, delta: -1 | 1, wrap = false, order?: string): Promise<boolean> =>
-  Module.stepPager(key, delta, wrap, order);
+export const stepPager = (key: string, delta: -1 | 1, wrap = false, order?: string): Promise<boolean> => Module.stepPager(key, delta, wrap, order);
 // Order is the profile ids joined with newlines, as in NativePagerConfig.order.
-export const selectPager = (key: string, profileId: string, order: string): Promise<boolean> =>
-  Module.selectPager(key, profileId, order);
+export const selectPager = (key: string, profileId: string, order: string): Promise<boolean> => Module.selectPager(key, profileId, order);
 export const pagerState = (key: string): PagerSnapshot | null => Module.pagerState(key);
 export const devPagerState = (key: string): Promise<unknown> => Module.devPagerState(key);
 

@@ -7,11 +7,16 @@ export type PaletteSection = { id: string; title?: string; items: PaletteSuggest
 
 export function currentPageActions(tab: Pick<Tab, "url" | "title" | "customTitle">): PaletteSection[] {
   const title = tab.customTitle || tab.title || displayUrl(tab.url);
-  return [{ id: "page", items: [
-    { kind: "action", id: "copyUrl", title: "Copy Link", icon: "link", hint: "⇧⌘C", detail: displayUrl(tab.url) },
-    { kind: "action", id: "copyUrlAsMarkdown", title: "Copy Markdown Link", icon: "doc.plaintext", hint: "⌥⇧⌘C", detail: `[${title}]` },
-    { kind: "action", id: "duplicateTab", title: "Duplicate Tab", icon: "square.on.square" },
-  ] }];
+  return [
+    {
+      id: "page",
+      items: [
+        { kind: "action", id: "copyUrl", title: "Copy Link", icon: "link", hint: "⇧⌘C", detail: displayUrl(tab.url) },
+        { kind: "action", id: "copyUrlAsMarkdown", title: "Copy Markdown Link", icon: "doc.plaintext", hint: "⌥⇧⌘C", detail: `[${title}]` },
+        { kind: "action", id: "duplicateTab", title: "Duplicate Tab", icon: "square.on.square" },
+      ],
+    },
+  ];
 }
 
 export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId: string): PaletteSection[] {
@@ -30,7 +35,10 @@ export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId:
     if (!site) sites.set(host, { visits: page.visits, lastVisit: page.lastVisit, page });
     else {
       site.visits += page.visits;
-      if (page.lastVisit > site.lastVisit) { site.lastVisit = page.lastVisit; site.page = page; }
+      if (page.lastVisit > site.lastVisit) {
+        site.lastVisit = page.lastVisit;
+        site.page = page;
+      }
     }
   }
   const frequent: PaletteSuggestion[] = [...sites.entries()]

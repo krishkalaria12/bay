@@ -8,9 +8,6 @@ const { flushPersistence, loadSession, startPersistence } = await import("../lib
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
-const tabLists = await import("./model.ts");
-// A window's list: its space's tabs, in sidebar order (store/model.ts).
-const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const reset = () => S().hydrate({});
 const view = (w) => model.viewTabIds(S(), w).map((id) => S().tabs[id].url);
 const active = (w) => model.activeTabId(S(), w);
@@ -38,14 +35,57 @@ test("hydrate repairs dangling references", () => {
   S().hydrate({
     spaces: { default: { id: "default", name: "Personal", color: "plum", icon: null, createdAt: 0 } },
     windows: {
-      w1: { id: "w1", spaceId: "gone", incognito: false, tabIds: ["t1", "missing"], activeTabIds: { gone: "missing" }, sidebarOpen: true, frame: null, createdAt: 0 },
+      w1: {
+        id: "w1",
+        spaceId: "gone",
+        incognito: false,
+        tabIds: ["t1", "missing"],
+        activeTabIds: { gone: "missing" },
+        sidebarOpen: true,
+        frame: null,
+        createdAt: 0,
+      },
       w2: { id: "w2", spaceId: "default", incognito: false, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame: null, createdAt: 0 },
     },
     tabs: {
-      t1: { id: "t1", windowId: "w1", spaceId: "default", url: "https://a.com", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, navigation: null, openerId: null, createdAt: 0, lastActiveAt: 0 },
-      t2: { id: "t2", windowId: "nowhere", spaceId: "default", url: "https://b.com", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, navigation: null, openerId: null, createdAt: 0, lastActiveAt: 0 },
+      t1: {
+        id: "t1",
+        windowId: "w1",
+        spaceId: "default",
+        url: "https://a.com",
+        title: "",
+        favicon: null,
+        pinned: false,
+        muted: false,
+        zoom: 1,
+        customTitle: null,
+        customIcon: null,
+        navigation: null,
+        openerId: null,
+        createdAt: 0,
+        lastActiveAt: 0,
+      },
+      t2: {
+        id: "t2",
+        windowId: "nowhere",
+        spaceId: "default",
+        url: "https://b.com",
+        title: "",
+        favicon: null,
+        pinned: false,
+        muted: false,
+        zoom: 1,
+        customTitle: null,
+        customIcon: null,
+        navigation: null,
+        openerId: null,
+        createdAt: 0,
+        lastActiveAt: 0,
+      },
     },
-    groups: { g: { id: "g", windowId: "w1", spaceId: "default", name: "", icon: null, color: null, collapsed: false, pinned: false, tabIds: ["missing"], createdAt: 0 } },
+    groups: {
+      g: { id: "g", windowId: "w1", spaceId: "default", name: "", icon: null, color: null, collapsed: false, pinned: false, tabIds: ["missing"], createdAt: 0 },
+    },
   });
   assert.deepEqual(S().windowOrder, ["w1", "w2"], "a window with no tabs of its own still shows its space");
   assert.equal(S().windows.w1.spaceId, "default");
@@ -117,7 +157,10 @@ test("history.json moves into Chrome once: Chrome's own visits aren't doubled, a
     entry("https://old.com/", [now - 200 * DAY]),
   ];
   const workList = [entry("https://c.com/", [now - DAY])];
-  stub.docs.set("history.json", JSON.stringify({ version: 2, history: { default: list, [work]: workList, [shared]: workList, gone: [entry("https://x.com/", [now])] } }));
+  stub.docs.set(
+    "history.json",
+    JSON.stringify({ version: 2, history: { default: list, [work]: workList, [shared]: workList, gone: [entry("https://x.com/", [now])] } }),
+  );
 
   assert.equal(await migrateHistoryFile(now, { keepMs: 0 }), "moved");
   const visits = (profile, url) => stub.chromeHistory(profile).get(url)?.visits.length ?? 0;
@@ -186,7 +229,10 @@ test("history is a view of Chrome's: visits, deletions and a relaunch all read b
 
 test("⌘W on a pinned tab unloads its page; the tile stays with its title, icon and pinned URL", () => {
   reset();
-  const { w, ids: [p, a] } = windowWith("mail", "a");
+  const {
+    w,
+    ids: [p, a],
+  } = windowWith("mail", "a");
   S().togglePin(p);
   S().updateTab(p, { title: "Inbox", favicon: "data:mail" });
   select(p);
@@ -207,7 +253,10 @@ test("⌘W on a pinned tab unloads its page; the tile stays with its title, icon
 // 0.2.8: with a pinned tab open, holding ⌘W alternated forever between a New Tab page and the pinned site.
 test("holding ⌘W over pinned tiles ends by closing the window: no unloaded page wakes", () => {
   reset();
-  const { w, ids: [x] } = windowWith("x", "a");
+  const {
+    w,
+    ids: [x],
+  } = windowWith("x", "a");
   S().togglePin(x);
   select(x);
   const wakes = [];
@@ -222,14 +271,20 @@ test("holding ⌘W over pinned tiles ends by closing the window: no unloaded pag
 });
 
 const sidebar = (w) =>
-  model.viewTabIds(S(), w).filter((id) => model.inPinnedContainer(S(), id)).map((id) => {
-    const t = S().tabs[id];
-    const g = Object.values(S().groups).find((g) => g.tabIds.includes(id));
-    return `${g ? `${g.name}/` : ""}${t.url}${t.navigation || t.adoptId ? " (loaded)" : ""}`;
-  });
+  model
+    .viewTabIds(S(), w)
+    .filter((id) => model.inPinnedContainer(S(), id))
+    .map((id) => {
+      const t = S().tabs[id];
+      const g = Object.values(S().groups).find((g) => g.tabIds.includes(id));
+      return `${g ? `${g.name}/` : ""}${t.url}${t.navigation || t.adoptId ? " (loaded)" : ""}`;
+    });
 
 function pinnedWindow() {
-  const { w, ids: [mail, docs, jira, wiki, a] } = windowWith("mail", "docs", "jira", "wiki", "a");
+  const {
+    w,
+    ids: [mail, docs, jira, wiki, a],
+  } = windowWith("mail", "docs", "jira", "wiki", "a");
   S().togglePin(mail);
   S().togglePin(docs);
   const work = S().groupTabs([jira, wiki], { pinned: true });
@@ -265,7 +320,13 @@ test("⇧⌘T after the close, then ⌘N: one set of pinned tabs", () => {
   const restored = S().ui.focusedWindowId;
   assert.notEqual(restored, w);
   assert.deepEqual(sidebar(restored), ["https://mail.com (loaded)", ...PINS.slice(1)], "the reopened window shows what it showed");
-  assert.deepEqual(model.viewTabIds(S(), restored).filter((id) => !model.inPinnedContainer(S(), id)).map((id) => S().tabs[id].url), ["https://a.com"]);
+  assert.deepEqual(
+    model
+      .viewTabIds(S(), restored)
+      .filter((id) => !model.inPinnedContainer(S(), id))
+      .map((id) => S().tabs[id].url),
+    ["https://a.com"],
+  );
   const n = S().createWindow();
   assert.deepEqual(sidebar(n), ["https://mail.com (loaded)", ...PINS.slice(1)], "⌘N lists the same tabs (mail's page is in the other window)");
   assert.equal(Object.values(S().tabs).filter((t) => t.url === "https://mail.com").length, 1, "one tab");

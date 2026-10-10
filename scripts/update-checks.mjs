@@ -40,20 +40,26 @@ if (key) {
   firstByVersion = new Map(
     (await clickhouse(`SELECT properties['version'] AS v, countIf(${FIRST}) FROM telemetry.events WHERE ${WHERE} GROUP BY v`)).map(([v, n]) => [v, Number(n)]),
   );
-  daily = (await clickhouse(
-    `SELECT toString(toDate(timestamp)) AS day, properties['version'] AS v, count(), countIf(${FIRST})
+  daily = (
+    await clickhouse(
+      `SELECT toString(toDate(timestamp)) AS day, properties['version'] AS v, count(), countIf(${FIRST})
      FROM telemetry.events WHERE ${WHERE} AND timestamp >= today() - ${days} GROUP BY day, v ORDER BY day, v`,
-  )).map(([day, v, checks, first]) => [day, v, Number(checks), Number(first)]);
+    )
+  ).map(([day, v, checks, first]) => [day, v, Number(checks), Number(first)]);
 }
 
 const pad = (s, n) => String(s).padEnd(n);
 const num = (s, n) => String(s).padStart(n);
 console.log("Per version (all time)");
-console.log(`${pad("version", 9)}${pad("published", 12)}${num("DMG", 7)}${num("first", 8)}${num("first/DMG", 11)}${num("updates", 9)}${num("GitHub feed", 13)}`);
+console.log(
+  `${pad("version", 9)}${pad("published", 12)}${num("DMG", 7)}${num("first", 8)}${num("first/DMG", 11)}${num("updates", 9)}${num("GitHub feed", 13)}`,
+);
 for (const [version, r] of [...releases].sort((a, b) => b[1].published.localeCompare(a[1].published))) {
   const first = firstByVersion.get(version);
   const rate = first !== undefined && r.dmg ? `${Math.round((100 * first) / r.dmg)}%` : "";
-  console.log(`${pad(version, 9)}${pad(r.published.slice(0, 10), 12)}${num(r.dmg, 7)}${num(first ?? "–", 8)}${num(rate, 11)}${num(r.zip, 9)}${num(r.feed, 13)}`);
+  console.log(
+    `${pad(version, 9)}${pad(r.published.slice(0, 10), 12)}${num(r.dmg, 7)}${num(first ?? "–", 8)}${num(rate, 11)}${num(r.zip, 9)}${num(r.feed, 13)}`,
+  );
 }
 console.log("\nDMG: downloads from GitHub. first: copies of that version that launched and checked for updates the");
 console.log("first time (installs; – = built before the counted feed). updates: Sparkle update downloads (the zip).");

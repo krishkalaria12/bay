@@ -42,13 +42,16 @@ export function NextMeetingBadge({ tabId }: { tabId: string }) {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[{
-        position: "absolute",
-        bottom: -5,
-        left: 0,
-        right: 0,
-        alignItems: "center",
-      }, shownStyle]}
+      style={[
+        {
+          position: "absolute",
+          bottom: -5,
+          left: 0,
+          right: 0,
+          alignItems: "center",
+        },
+        shownStyle,
+      ]}
     >
       <View
         style={{

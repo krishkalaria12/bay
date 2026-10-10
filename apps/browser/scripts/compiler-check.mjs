@@ -10,7 +10,20 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const compiler = require.resolve("babel-plugin-react-compiler");
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
-const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "apps/browser/src/**/*.ts", "apps/browser/src/**/*.tsx", "packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"], { cwd: repo, encoding: "utf8" })
+const files = execFileSync(
+  "git",
+  [
+    "ls-files",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+    "apps/browser/src/**/*.ts",
+    "apps/browser/src/**/*.tsx",
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+  ],
+  { cwd: repo, encoding: "utf8" },
+)
   .split("\n")
   .filter((f) => f && !f.endsWith(".d.ts"));
 

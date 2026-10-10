@@ -8,20 +8,17 @@ import { useTab } from "../../store/hooks";
 import { Favicon, useHover } from "../primitives";
 import { useArtwork } from "./artwork";
 import { useMarqueeGroup, Marquee } from "./Marquee";
+import { formatTime, hasTrackControls, hostOf, isPlaying, mediaCommand, positionOf, seekTo, skip, useSession, useTicker, type Session } from "./state";
 import {
-  formatTime,
-  hasTrackControls,
-  hostOf,
-  isPlaying,
-  mediaCommand,
-  positionOf,
-  seekTo,
-  skip,
-  useSession,
-  useTicker,
-  type Session,
-} from "./state";
-import { MINI_PLAYER_ART, MINI_PLAYER_CONTROLS_WIDTH, MINI_PLAYER_HEIGHT, MINI_PLAYER_INSET, MINI_PLAYER_TEXT_X, MINI_PLAYER_WIDTH, SEEK_HOVER_SEGMENTS, SKIP_SECONDS } from "./constants";
+  MINI_PLAYER_ART,
+  MINI_PLAYER_CONTROLS_WIDTH,
+  MINI_PLAYER_HEIGHT,
+  MINI_PLAYER_INSET,
+  MINI_PLAYER_TEXT_X,
+  MINI_PLAYER_WIDTH,
+  SEEK_HOVER_SEGMENTS,
+  SKIP_SECONDS,
+} from "./constants";
 import { useMediaTokens, type MediaTokens } from "./tokens";
 
 export function MiniPlayer({ tabId, onBackToTab }: { tabId: string; onBackToTab: () => void }) {
@@ -41,9 +38,26 @@ export function MiniPlayer({ tabId, onBackToTab }: { tabId: string; onBackToTab:
 
   return (
     <View style={{ width, height: MINI_PLAYER_HEIGHT }}>
-      <AlbumArt tabId={tabId} spaceId={tab.spaceId} session={session} url={tab.url} favicon={tab.favicon} tokens={tokens} muted={tab.muted} onPress={onBackToTab} onUnmute={() => toggleMute(tabId)} />
+      <AlbumArt
+        tabId={tabId}
+        spaceId={tab.spaceId}
+        session={session}
+        url={tab.url}
+        favicon={tab.favicon}
+        tokens={tokens}
+        muted={tab.muted}
+        onPress={onBackToTab}
+        onUnmute={() => toggleMute(tabId)}
+      />
       <View style={{ position: "absolute", left: MINI_PLAYER_TEXT_X, top: 10, width: textWidth }}>
-        <Marquee id="title" text={title} group={group} height={18} background={tokens.backgroundRgb} style={{ fontSize: 13, fontWeight: "600", color: tokens.label }} />
+        <Marquee
+          id="title"
+          text={title}
+          group={group}
+          height={18}
+          background={tokens.backgroundRgb}
+          style={{ fontSize: 13, fontWeight: "600", color: tokens.label }}
+        />
       </View>
       <View style={{ position: "absolute", left: MINI_PLAYER_TEXT_X, top: 30, width: textWidth }}>
         <Marquee id="artist" text={artist} group={group} height={16} background={tokens.backgroundRgb} style={{ fontSize: 11, color: tokens.secondary }} />
@@ -147,7 +161,17 @@ function AlbumArt({
   return (
     <View {...hoverProps} style={{ position: "absolute", left: MINI_PLAYER_INSET, top: MINI_PLAYER_INSET, width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }}>
       <Pressable onPress={onPress} tooltip="Back to Tab">
-        <View style={{ width: MINI_PLAYER_ART, height: MINI_PLAYER_ART, borderRadius: 6, overflow: "hidden", backgroundColor: tokens.artPlaceholder, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{
+            width: MINI_PLAYER_ART,
+            height: MINI_PLAYER_ART,
+            borderRadius: 6,
+            overflow: "hidden",
+            backgroundColor: tokens.artPlaceholder,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           {art ? (
             <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }, fadeStyle]}>
               <Image
@@ -165,7 +189,18 @@ function AlbumArt({
             </View>
           )}
           {hovered ? (
-            <View style={{ position: "absolute", left: 0, top: 0, width: MINI_PLAYER_ART, height: MINI_PLAYER_ART, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" }}>
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: MINI_PLAYER_ART,
+                height: MINI_PLAYER_ART,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <Symbol name="arrow.up.left" size={16} weight="semibold" color="#FFFFFF" style={{ width: 22, height: 22 }} />
             </View>
           ) : null}
@@ -258,10 +293,14 @@ export function SeekBar({
       }}
       onResponderTerminate={() => update(null)}
     >
-      <View style={{ position: "absolute", left: 0, right: 0, top, height: barHeight, borderRadius: radius, backgroundColor: tokens.track, overflow: "hidden" }}>
+      <View
+        style={{ position: "absolute", left: 0, right: 0, top, height: barHeight, borderRadius: radius, backgroundColor: tokens.track, overflow: "hidden" }}
+      >
         <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${progress * 100}%`, borderRadius: radius, backgroundColor: tokens.fill }} />
         {hover !== null && drag === null ? (
-          <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${hover * 100}%`, borderRadius: radius, backgroundColor: tokens.hoverFill }} />
+          <View
+            style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${hover * 100}%`, borderRadius: radius, backgroundColor: tokens.hoverFill }}
+          />
         ) : null}
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, flexDirection: "row" }}>

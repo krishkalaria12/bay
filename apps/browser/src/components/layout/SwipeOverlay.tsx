@@ -2,19 +2,35 @@ import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon, NewTabIcon } from "../primitives";
 import { HistoryPopover } from "./HistoryPopover";
-import { goBack, goForward, goToHistoryItem, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryFavicons, useHistoryMenu, type HistoryItem } from "./history";
-import type { ToolbarGeometry } from "./geometry";
 import {
-  capsuleOffset,
-  listSelection,
-  springParams,
-  swipeProgress,
-} from "./swipeMotion";
+  goBack,
+  goForward,
+  goToHistoryItem,
+  historyItems,
+  openHistoryMenu,
+  useHistoryAvailability,
+  useHistoryFavicons,
+  useHistoryMenu,
+  type HistoryItem,
+} from "./history";
+import type { ToolbarGeometry } from "./geometry";
+import { capsuleOffset, listSelection, springParams, swipeProgress } from "./swipeMotion";
 import {
   CAPSULE_ICON,
   CAPSULE_ICON_CONFIRMED,
@@ -27,7 +43,6 @@ import {
   SWIPE_LIST_ROW,
   SWIPE_LIST_WIDTH,
 } from "./constants";
-
 
 const EASE = Easing.bezier(0.25, 0.46, 0.45, 0.94);
 
@@ -134,7 +149,14 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
     g.selected = 0;
     g.listY = lastDy.current;
     swipeHaptic("generic");
-    layoutTo(SWIPE_LIST_WIDTH, list.length * SWIPE_LIST_ROW + SWIPE_LIST_PAD * 2, height / 2 - SWIPE_LIST_PAD - SWIPE_LIST_ROW / 2, SWIPE_LIST_RADIUS, 0.22, 0.77);
+    layoutTo(
+      SWIPE_LIST_WIDTH,
+      list.length * SWIPE_LIST_ROW + SWIPE_LIST_PAD * 2,
+      height / 2 - SWIPE_LIST_PAD - SWIPE_LIST_ROW / 2,
+      SWIPE_LIST_RADIUS,
+      0.22,
+      0.77,
+    );
     v.list.set(withTiming(1, { duration: 220, easing: EASE }));
     setShown((s) => (s ? { ...s, list, selected: 0 } : s));
   };
@@ -246,12 +268,20 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
               {!theme.dark && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(255,255,255,0.4)" }, confirmStyle]} />}
               <Animated.View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }, iconOpacity]}>
                 <Animated.View style={iconScale}>
-                  <Symbol name={back ? "chevron.left" : "chevron.right"} size={CAPSULE_ICON} weight="bold" color={theme.dark ? "#FFFFFFD9" : "#000000D9"} style={{ width: CAPSULE_ICON + 6, height: CAPSULE_ICON + 6 }} />
+                  <Symbol
+                    name={back ? "chevron.left" : "chevron.right"}
+                    size={CAPSULE_ICON}
+                    weight="bold"
+                    color={theme.dark ? "#FFFFFFD9" : "#000000D9"}
+                    style={{ width: CAPSULE_ICON + 6, height: CAPSULE_ICON + 6 }}
+                  />
                 </Animated.View>
               </Animated.View>
               {shown.list && <DestinationList tabId={tabId} items={shown.list} selected={shown.selected} appear={v.list} pill={v.pill} />}
             </Animated.View>
-            <Animated.View style={[StyleSheet.absoluteFill, { borderWidth: 1, borderColor: theme.dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.125)" }, radiusStyle]} />
+            <Animated.View
+              style={[StyleSheet.absoluteFill, { borderWidth: 1, borderColor: theme.dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.125)" }, radiusStyle]}
+            />
           </Animated.View>
         </Animated.View>
       )}
@@ -259,7 +289,19 @@ export function SwipeOverlay({ tabId }: { tabId: string }) {
   );
 }
 
-function DestinationList({ tabId, items, selected, appear, pill }: { tabId: string; items: HistoryItem[]; selected: number; appear: SharedValue<number>; pill: SharedValue<number> }) {
+function DestinationList({
+  tabId,
+  items,
+  selected,
+  appear,
+  pill,
+}: {
+  tabId: string;
+  items: HistoryItem[];
+  selected: number;
+  appear: SharedValue<number>;
+  pill: SharedValue<number>;
+}) {
   const theme = useTheme();
   const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
   const favicons = useHistoryFavicons(spaceId, items);
@@ -269,7 +311,15 @@ function DestinationList({ tabId, items, selected, appear, pill }: { tabId: stri
     <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: SWIPE_LIST_WIDTH, paddingVertical: SWIPE_LIST_PAD }, appearStyle]}>
       <Animated.View
         style={[
-          { position: "absolute", left: 8, right: 8, top: SWIPE_LIST_PAD, height: SWIPE_LIST_ROW, borderRadius: 10, backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
+          {
+            position: "absolute",
+            left: 8,
+            right: 8,
+            top: SWIPE_LIST_PAD,
+            height: SWIPE_LIST_ROW,
+            borderRadius: 10,
+            backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+          },
           pillStyle,
         ]}
       />
@@ -297,5 +347,9 @@ function useSwipeDevHandle(tabId: string, area: React.RefObject<SwipeAreaHandle 
 }
 if (__DEV__) {
   const g = globalThis as { nnSwipe?: Record<string, unknown> };
-  g.nnSwipe = { ...g.nnSwipe, pane: (tabId: string) => devPanes.get(tabId)?.current ?? null, history: { items: historyItems, open: openHistoryMenu, menu: useHistoryMenu, go: goToHistoryItem } };
+  g.nnSwipe = {
+    ...g.nnSwipe,
+    pane: (tabId: string) => devPanes.get(tabId)?.current ?? null,
+    history: { items: historyItems, open: openHistoryMenu, menu: useHistoryMenu, go: goToHistoryItem },
+  };
 }

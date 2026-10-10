@@ -180,7 +180,10 @@ export function bookmarksAdapter(spaceId: string): Adapter {
           seen.add(at);
         }
       }
-      const children = new Map<string, string[]>([[roots.bar, []], [roots.other, []]]);
+      const children = new Map<string, string[]>([
+        [roots.bar, []],
+        [roots.other, []],
+      ]);
       for (const id of values.keys()) children.set(parentOf.get(id)!, [...(children.get(parentOf.get(id)!) ?? []), id]);
       const byPosition = (a: string, z: string) => {
         const pa = values.get(a)!.pos;
@@ -203,7 +206,16 @@ export function bookmarksAdapter(spaceId: string): Adapter {
         const syncKey = isBookmarkUuid(key) ? {} : { syncKey: key };
         nodes[id] =
           v.k === "u"
-            ? { kind: "url", id, parentId: parentOf.get(id)!, title: v.t, url: v.u ?? "", favicon: old?.kind === "url" ? old.favicon : null, addedAt: v.a, ...syncKey }
+            ? {
+                kind: "url",
+                id,
+                parentId: parentOf.get(id)!,
+                title: v.t,
+                url: v.u ?? "",
+                favicon: old?.kind === "url" ? old.favicon : null,
+                addedAt: v.a,
+                ...syncKey,
+              }
             : { kind: "folder", id, parentId: parentOf.get(id)!, title: v.t, children: [], addedAt: v.a, ...syncKey };
       }
       for (const [parent, ids] of children) {
@@ -365,9 +377,20 @@ export function pinnedAdapter(spaceId: string): Adapter {
       }
       const values = new Map<string, unknown>();
       const place = (tabs: Pin[], group: string | null) => {
-        const positions = assignPositions(tabs.map((t) => ((base(`pin:t:${t.id}`) as PinValue | undefined)?.g ?? null) === group ? (base(`pin:t:${t.id}`) as PinValue | undefined)?.pos : undefined));
+        const positions = assignPositions(
+          tabs.map((t) =>
+            ((base(`pin:t:${t.id}`) as PinValue | undefined)?.g ?? null) === group ? (base(`pin:t:${t.id}`) as PinValue | undefined)?.pos : undefined,
+          ),
+        );
         tabs.forEach((t, i) =>
-          values.set(`pin:t:${t.id}`, { g: group, u: (group ? t.url : t.pinnedUrl || t.url) || "", t: t.customTitle, i: t.customIcon, ti: t.title, pos: positions[i]! } satisfies PinValue),
+          values.set(`pin:t:${t.id}`, {
+            g: group,
+            u: (group ? t.url : t.pinnedUrl || t.url) || "",
+            t: t.customTitle,
+            i: t.customIcon,
+            ti: t.title,
+            pos: positions[i]!,
+          } satisfies PinValue),
         );
       };
       place(tiles, null);
@@ -388,16 +411,30 @@ export function pinnedAdapter(spaceId: string): Adapter {
         if (k.startsWith("pin:t:")) pins.set(k.slice(6), v as PinValue);
         else if (k.startsWith("pin:g:")) groupValues.set(k.slice(6), v as PinGroupValue);
       }
-      const byPos = <T extends { pos: string }>(m: Map<string, T>) => (a: string, z: string) =>
-        m.get(a)!.pos < m.get(z)!.pos ? -1 : m.get(a)!.pos > m.get(z)!.pos ? 1 : a < z ? -1 : 1;
+      const byPos =
+        <T extends { pos: string }>(m: Map<string, T>) =>
+        (a: string, z: string) =>
+          m.get(a)!.pos < m.get(z)!.pos ? -1 : m.get(a)!.pos > m.get(z)!.pos ? 1 : a < z ? -1 : 1;
       const groupOrder = [...groupValues.keys()].sort(byPos(groupValues));
-      const tileOrder = [...pins.keys()].filter((id) => { const g = pins.get(id)!.g; return !g || !groupValues.has(g); }).sort(byPos(pins));
+      const tileOrder = [...pins.keys()]
+        .filter((id) => {
+          const g = pins.get(id)!.g;
+          return !g || !groupValues.has(g);
+        })
+        .sort(byPos(pins));
       const memberOrder = new Map(groupOrder.map((g) => [g, [...pins.keys()].filter((id) => pins.get(id)!.g === g).sort(byPos(pins))]));
 
       // A pin removed elsewhere goes; one whose page is open here stays, as a page.
-      const goneTabs = [...changed].filter((k) => k.startsWith("pin:t:") && !visible.has(k)).map((k) => k.slice(6)).filter((id) => s.tabs[id]);
+      const goneTabs = [...changed]
+        .filter((k) => k.startsWith("pin:t:") && !visible.has(k))
+        .map((k) => k.slice(6))
+        .filter((id) => s.tabs[id]);
       const open = (id: string) => !!s.tabs[id]!.navigation || !!s.tabs[id]!.adoptId;
-      s = removeTabs(s, goneTabs.filter((id) => !open(id)), false);
+      s = removeTabs(
+        s,
+        goneTabs.filter((id) => !open(id)),
+        false,
+      );
       const tabs = { ...s.tabs };
       for (const id of goneTabs) if (tabs[id]) tabs[id] = { ...tabs[id]!, pinned: false, pinnedUrl: null };
       let groups = { ...s.groups };

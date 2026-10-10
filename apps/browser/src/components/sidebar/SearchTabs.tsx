@@ -39,7 +39,16 @@ function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] 
   const closed: Row[] = [
     ...s.closedTabs
       .filter((c) => c.tab.spaceId === spaceId)
-      .map((c) => ({ kind: "closed" as const, id: c.id, title: c.tab.customTitle || c.tab.title || tabLabel(c.tab), url: c.tab.url, favicon: c.tab.favicon, icon: c.tab.customIcon, detail: "", at: c.closedAt })),
+      .map((c) => ({
+        kind: "closed" as const,
+        id: c.id,
+        title: c.tab.customTitle || c.tab.title || tabLabel(c.tab),
+        url: c.tab.url,
+        favicon: c.tab.favicon,
+        icon: c.tab.customIcon,
+        detail: "",
+        at: c.closedAt,
+      })),
     ...s.closedGroups.map((c) => ({
       kind: "closed" as const,
       id: c.id,
@@ -52,7 +61,7 @@ function candidates(s: Sources, windowId: string): { open: Row[]; closed: Row[] 
     })),
   ]
     .sort((a, b) => b.at - a.at)
-    .map(({ at: _, ...row }) => row);
+    .map((row) => ({ kind: row.kind, id: row.id, title: row.title, url: row.url, favicon: row.favicon, icon: row.icon, detail: row.detail }));
   return { open, closed };
 }
 
@@ -65,14 +74,21 @@ const host = (url: string) => {
 };
 
 function rankedSections({ open, closed }: { open: Row[]; closed: Row[] }, q: string): { title: string; rows: Row[] }[] {
-  if (!q) return [{ title: "Open Tabs", rows: open }, { title: "Recently Closed", rows: closed.slice(0, 8) }];
+  if (!q)
+    return [
+      { title: "Open Tabs", rows: open },
+      { title: "Recently Closed", rows: closed.slice(0, 8) },
+    ];
   const rank = (rows: Row[]) =>
     rows
       .map((r) => ({ r, score: Math.max(fuzzyScore(q, r.title), fuzzyScore(q, host(r.url)) * 0.9, fuzzyScore(q, r.url) * 0.6) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((x) => x.r);
-  return [{ title: "Open Tabs", rows: rank(open) }, { title: "Recently Closed", rows: rank(closed).slice(0, 8) }];
+  return [
+    { title: "Open Tabs", rows: rank(open) },
+    { title: "Recently Closed", rows: rank(closed).slice(0, 8) },
+  ];
 }
 
 export function SearchTabs({ windowId, windowWidth }: { windowId: string; windowWidth: number }) {
@@ -119,7 +135,13 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
         shadowOpacity={theme.panelShadowOpacity}
         shadowRadius={24}
         shadowOffset={[0, 10]}
-        style={{ position: "absolute", top: 56, left: Math.max(12, (windowWidth - SEARCH_TABS_WIDTH) / 2), width: Math.min(SEARCH_TABS_WIDTH, windowWidth - 24), paddingBottom: 6 }}
+        style={{
+          position: "absolute",
+          top: 56,
+          left: Math.max(12, (windowWidth - SEARCH_TABS_WIDTH) / 2),
+          width: Math.min(SEARCH_TABS_WIDTH, windowWidth - 24),
+          paddingBottom: 6,
+        }}
       >
         <View style={{ height: 50, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, gap: 10 }}>
           <Symbol name="magnifyingglass" size={15} weight="medium" color={theme.textPrimary} style={{ width: 18, height: 18 }} />
@@ -158,7 +180,9 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
                 <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 10, paddingVertical: 4 }}>{section.title}</Text>
                 {section.rows.map((row, j) => {
                   const i = starts[k]! + j;
-                  return <ResultRow key={`${row.kind}:${row.id}`} row={row} selected={i === selected} onHover={() => setSelected(i)} onPress={() => choose(row)} />;
+                  return (
+                    <ResultRow key={`${row.kind}:${row.id}`} row={row} selected={i === selected} onHover={() => setSelected(i)} onPress={() => choose(row)} />
+                  );
                 })}
               </View>
             ) : null,
@@ -176,12 +200,22 @@ function ResultRow({ row, selected, onHover, onPress }: { row: Row; selected: bo
     <Pressable onPress={onPress}>
       <View
         onMouseEnter={onHover}
-        style={{ height: SEARCH_TABS_ROW, borderRadius: 10, flexDirection: "row", alignItems: "center", paddingHorizontal: 10, gap: 10, backgroundColor: selected ? theme.rowSelected : undefined }}
+        style={{
+          height: SEARCH_TABS_ROW,
+          borderRadius: 10,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 10,
+          gap: 10,
+          backgroundColor: selected ? theme.rowSelected : undefined,
+        }}
       >
         <TabIcon url={row.url} favicon={row.favicon} icon={row.icon} />
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 }}>
           <FadeLabel text={row.title} fontSize={14} color={theme.textPrimary} style={{ flex: 3, height: 19 }} />
-          {row.url ? <FadeLabel text={`— ${displayUrl(row.url)}`} fontSize={14} color={theme.textSecondary} style={{ flex: 2, height: 19, marginLeft: 5 }} /> : null}
+          {row.url ? (
+            <FadeLabel text={`— ${displayUrl(row.url)}`} fontSize={14} color={theme.textSecondary} style={{ flex: 2, height: 19, marginLeft: 5 }} />
+          ) : null}
         </View>
         {detail ? <Text style={{ fontSize: 12, color: theme.textTertiary }}>{detail}</Text> : null}
         {row.kind === "closed" ? <Symbol name="clock.arrow.circlepath" size={12} color={theme.textTertiary} style={{ width: 16, height: 16 }} /> : null}

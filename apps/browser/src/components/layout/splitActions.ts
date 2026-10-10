@@ -26,8 +26,7 @@ export function hideKeyedToast(windowId: string, key: string) {
   useToasts.setState((s) => (s.toasts[windowId]?.key === key ? { toasts: { ...s.toasts, [windowId]: null } } : s));
 }
 
-const maxedOut = (windowId: string) =>
-  showToast(windowId, "Cannot Add New Pane", `Split View can show up to ${MAX_SPLIT_PANES} tabs at once.`);
+const maxedOut = (windowId: string) => showToast(windowId, "Cannot Add New Pane", `Split View can show up to ${MAX_SPLIT_PANES} tabs at once.`);
 
 export function openSplitPane(windowId: string, options: OpenPaneOptions = {}): string | null {
   const result = store().openSplitPane(windowId, options);
@@ -82,13 +81,34 @@ export async function showSplitMenu(tabId: string) {
   const full = split.tabIds.length >= MAX_SPLIT_PANES;
   const stacked = slotsOf(split).some((slot) => slot.length === 2 && slot.includes(tabId));
   const items: MenuItem[] = [
-    { id: "add", title: horizontal ? "Add Vertical Split View" : "Add Horizontal Split View", symbol: horizontal ? "rectangle.split.2x1" : "rectangle.split.1x2", enabled: !full, key: "=", modifiers: ["control", "shift"] },
-    { id: "bottom", title: horizontal ? "Add Bottom Split" : "Add Right Split", symbol: horizontal ? "rectangle.bottomhalf.inset.filled" : "rectangle.righthalf.inset.filled", enabled: !full && !stacked },
+    {
+      id: "add",
+      title: horizontal ? "Add Vertical Split View" : "Add Horizontal Split View",
+      symbol: horizontal ? "rectangle.split.2x1" : "rectangle.split.1x2",
+      enabled: !full,
+      key: "=",
+      modifiers: ["control", "shift"],
+    },
+    {
+      id: "bottom",
+      title: horizontal ? "Add Bottom Split" : "Add Right Split",
+      symbol: horizontal ? "rectangle.bottomhalf.inset.filled" : "rectangle.righthalf.inset.filled",
+      enabled: !full && !stacked,
+    },
     { separator: true },
     { id: "left", title: horizontal ? "Move Pane Left" : "Move Pane Up", symbol: "rectangle.lefthalf.inset.filled.arrow.left", enabled: index > 0 },
-    { id: "right", title: horizontal ? "Move Pane Right" : "Move Pane Down", symbol: "rectangle.righthalf.inset.filled.arrow.right", enabled: index < split.tabIds.length - 1 },
+    {
+      id: "right",
+      title: horizontal ? "Move Pane Right" : "Move Pane Down",
+      symbol: "rectangle.righthalf.inset.filled.arrow.right",
+      enabled: index < split.tabIds.length - 1,
+    },
     { id: "flip", title: "Flip Split View", symbol: horizontal ? "arrow.left.arrow.right" : "arrow.up.arrow.down" },
-    { id: "convert", title: horizontal ? "Convert to Vertical Split View" : "Convert to Horizontal Split View", symbol: horizontal ? "rectangle.split.1x2" : "rectangle.split.2x1" },
+    {
+      id: "convert",
+      title: horizontal ? "Convert to Vertical Split View" : "Convert to Horizontal Split View",
+      symbol: horizontal ? "rectangle.split.1x2" : "rectangle.split.2x1",
+    },
     { separator: true },
     { id: "remove", title: "Remove from Split View", symbol: "rectangle.portrait.and.arrow.right" },
     { id: "separate", title: "Separate All Tabs", symbol: "rectangle.split.3x1" },

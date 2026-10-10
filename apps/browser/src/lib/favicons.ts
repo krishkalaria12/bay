@@ -70,7 +70,7 @@ function update(key: string, change: (icons: Icons) => Icons, now = false) {
 }
 
 // Bounded: past MAX_ICONS a map starts over (Chrome still has every icon; pages ask again).
-const capped = <T,>(map: Record<string, T>, key: string, value: T): Record<string, T> =>
+const capped = <T>(map: Record<string, T>, key: string, value: T): Record<string, T> =>
   Object.keys(map).length >= MAX_FAVICONS ? { [key]: value } : { ...map, [key]: value };
 
 // The pages whose answer the queued changes may change, for the icons waiting on one (onFavicons); null: any page.
@@ -106,18 +106,22 @@ function lookUp() {
 function lookUpPages(key: string, list: string[]) {
   void faviconsFor(key, list)
     .then((found) =>
-      update(key, (icons) => {
-        let next: Record<string, string | null> | undefined;
-        for (const page of list) {
-          const uri = found.pages.get(page)?.uri ?? null;
-          if (icons.pages[page] === uri) continue;
-          next ??= { ...icons.pages };
-          next[page] = uri;
-          touch(page);
-        }
-        return next ? { ...icons, pages: next } : icons;
-        // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
-      }, true),
+      update(
+        key,
+        (icons) => {
+          let next: Record<string, string | null> | undefined;
+          for (const page of list) {
+            const uri = found.pages.get(page)?.uri ?? null;
+            if (icons.pages[page] === uri) continue;
+            next ??= { ...icons.pages };
+            next[page] = uri;
+            touch(page);
+          }
+          return next ? { ...icons, pages: next } : icons;
+          // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
+        },
+        true,
+      ),
     )
     .catch((error) => {
       // Asked again next time it's shown.
@@ -262,7 +266,7 @@ function onFavicons(f: Favicons, prev: Favicons) {
   const pages = touched;
   touched = new Set();
   if (f.profiles === prev.profiles) return;
-  for (const page of pages ?? [...watchers.keys()]) for (const w of [...(watchers.get(page) ?? [])]) check(w);
+  for (const page of pages ?? Array.from(watchers.keys())) for (const w of Array.from(watchers.get(page) ?? [])) check(w);
 }
 
 function watch(w: Watcher) {
@@ -318,7 +322,7 @@ export function useFaviconTheme(url: string, src?: string | null, spaceId?: stri
 // MARK: Housekeeping
 
 function forget(key: string) {
-  for (const id of [...asked]) if (id.startsWith(`${key}|`)) asked.delete(id);
+  for (const id of Array.from(asked)) if (id.startsWith(`${key}|`)) asked.delete(id);
   touchAll();
   update(key, () => EMPTY, true);
 }

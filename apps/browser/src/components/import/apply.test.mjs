@@ -21,7 +21,11 @@ test("an Arc space's pinned tabs become pinned rows and its folders pinned folde
     spaceId: "Default",
     pinned: [
       link("a"),
-      { type: "folder", title: "Work", children: [link("b"), { type: "folder", title: "Inner", children: [link("c")] }, { type: "url", url: "chrome://x", title: "x" }] },
+      {
+        type: "folder",
+        title: "Work",
+        children: [link("b"), { type: "folder", title: "Inner", children: [link("c")] }, { type: "url", url: "chrome://x", title: "x" }],
+      },
       link("d"),
       { type: "folder", title: "Empty", children: [] },
     ],

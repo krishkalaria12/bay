@@ -4,7 +4,19 @@ import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
-import { activeTabId, bookmarkSpaceId, inPinnedContainer, isIncognitoSpace, listIds, pinnedPage, plural, spaceListKey, tabLabel, viewTabIds, windowTitle } from "../../store/model";
+import {
+  activeTabId,
+  bookmarkSpaceId,
+  inPinnedContainer,
+  isIncognitoSpace,
+  listIds,
+  pinnedPage,
+  plural,
+  spaceListKey,
+  tabLabel,
+  viewTabIds,
+  windowTitle,
+} from "../../store/model";
 import { awayFromPin, cleanedTabsFor, groupLabel, groupOf, keptDeletedGroups, selectedTabIds } from "../../store/organize";
 import { splitOf } from "../../store/splits";
 import type { GroupColor, Tab } from "../../store/types";
@@ -38,9 +50,7 @@ const hint = (key: string, ...modifiers: Mods) => ({ key, modifiers });
 function bookmarkFolderItems(windowId: string, prefix: string): MenuItem[] {
   const s = store();
   const roots = s.bookmarks.roots[bookmarkSpaceId(s, s.windows[windowId])];
-  const folders = roots
-    ? [...folderChildren(s.bookmarks, roots.bar), ...folderChildren(s.bookmarks, roots.other)].filter((n) => n.kind === "folder")
-    : [];
+  const folders = roots ? [...folderChildren(s.bookmarks, roots.bar), ...folderChildren(s.bookmarks, roots.other)].filter((n) => n.kind === "folder") : [];
   return [
     { id: `${prefix}bar`, title: "Bookmarks Bar", symbol: "menubar.rectangle" },
     ...(roots ? [{ id: `${prefix}${roots.other}`, title: "Other Bookmarks", symbol: "folder" }] : []),
@@ -176,7 +186,12 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "close", title: "Close Tab", symbol: "xmark", ...hint("w", "command") },
     { id: "closeOthers", title: "Close Other Tabs", symbol: "paintbrush", enabled: others.length > 0, ...hint("w", "option", "command") },
     { id: "closeAbove", title: across ? "Close Tabs to the Left" : "Close Tabs Above", symbol: across ? "arrow.left" : "arrow.up", enabled: above.length > 0 },
-    { id: "closeBelow", title: across ? "Close Tabs to the Right" : "Close Tabs Below", symbol: across ? "arrow.right" : "arrow.down", enabled: below.length > 0 },
+    {
+      id: "closeBelow",
+      title: across ? "Close Tabs to the Right" : "Close Tabs Below",
+      symbol: across ? "arrow.right" : "arrow.down",
+      enabled: below.length > 0,
+    },
   ]);
   if (!choice) return;
   const t = { kind: "tab" as const, id: tab.id };
@@ -232,7 +247,13 @@ async function openMultiMenu(windowId: string, ids: string[]) {
     { id: "moveToFolder", title: "Move to Folder", symbol: "folder", children: moveToFolderItems(windowId, undefined) },
     sep,
     { id: "duplicate", title: `Duplicate ${n} Tabs`, symbol: "plus.square.on.square" },
-    { id: "newGroup", title: `New Group with ${n} Tabs`, symbol: "plus.rectangle.on.rectangle", enabled: !tabs.every(pinnedPage), ...hint("n", "control", "command") },
+    {
+      id: "newGroup",
+      title: `New Group with ${n} Tabs`,
+      symbol: "plus.rectangle.on.rectangle",
+      enabled: !tabs.every(pinnedPage),
+      ...hint("n", "control", "command"),
+    },
     ...(groups.length ? [{ id: "moveToGroup", title: "Move to Group", symbol: "rectangle.stack", children: groups }] : []),
     ...(tabs.some((t) => groupOf(s, t.id)) ? [{ id: "ungroup", title: "Remove from Group", symbol: "folder.badge.minus" }] : []),
     sep,
@@ -306,8 +327,7 @@ export async function openGroupMenu(windowId: string, groupId: string) {
   else if (choice.startsWith("color:")) s.updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null });
   else if (choice === "newTab") {
     store().openNewTabPanel(windowId, groupId);
-  }
-  else if (choice === "pin") s.moveGroup(groupId, { pinned: !g.pinned });
+  } else if (choice === "pin") s.moveGroup(groupId, { pinned: !g.pinned });
   else if (choice === "duplicate") s.duplicateGroup(groupId);
   else if (choice === "collapse") s.updateGroup(groupId, { collapsed: !g.collapsed });
   else if (choice === "copy") copyUrls(g.tabIds, false);
@@ -336,7 +356,12 @@ export async function openFolderMenu(windowId: string, folderId: string) {
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
     { id: "icon", title: f.icon ? "Change Icon…" : "Add Icon…", symbol: "face.smiling" },
     ...(f.icon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
-    { id: "collapse", title: f.collapsed ? "Expand Folder" : "Collapse Folder", symbol: f.collapsed ? "chevron.down" : "chevron.up", enabled: members.length > 0 },
+    {
+      id: "collapse",
+      title: f.collapsed ? "Expand Folder" : "Collapse Folder",
+      symbol: f.collapsed ? "chevron.down" : "chevron.up",
+      enabled: members.length > 0,
+    },
     sep,
     { id: "copy", title: "Copy All Links", symbol: "link", enabled: members.length > 0 },
     { id: "copyMd", title: "Copy All Links as Markdown", symbol: "text.badge.checkmark", enabled: members.length > 0 },
@@ -395,11 +420,16 @@ export async function openOverflowMenu(windowId: string) {
     ...s.closedTabs
       .filter((c) => c.tab.spaceId === w.spaceId)
       .map((c) => ({ id: `restore:${c.id}`, title: c.tab.customTitle || c.tab.title || tabLabel(c.tab), symbol: "clock.arrow.circlepath", at: c.closedAt })),
-    ...s.closedGroups.map((c) => ({ id: `restore:${c.id}`, title: `${c.group.name} (${plural(c.tabs.length, "Tab")})`, symbol: "rectangle.stack", at: c.closedAt })),
+    ...s.closedGroups.map((c) => ({
+      id: `restore:${c.id}`,
+      title: `${c.group.name} (${plural(c.tabs.length, "Tab")})`,
+      symbol: "rectangle.stack",
+      at: c.closedAt,
+    })),
   ]
     .sort((a, b) => b.at - a.at)
     .slice(0, 15)
-    .map(({ at: _, ...item }) => item);
+    .map((item) => ({ id: item.id, title: item.title, symbol: item.symbol }));
   const allCleaned = cleanedTabsFor(s, windowId);
   const cleaned = [...allCleaned].reverse().slice(0, 20);
   const deleted = keptDeletedGroups(s.deletedGroups)
@@ -418,7 +448,13 @@ export async function openOverflowMenu(windowId: string) {
       children: open.map((t) => ({ id: `tab:${t.id}`, title: tabTitle(t), checked: w.activeTabIds[w.spaceId] === t.id })),
     },
     ...(synced ? [synced] : []),
-    { id: "closed", title: "Recently Closed", symbol: "clock.arrow.circlepath", enabled: closed.length > 0, children: closed.length ? closed : [{ id: "none", title: "Empty", enabled: false }] },
+    {
+      id: "closed",
+      title: "Recently Closed",
+      symbol: "clock.arrow.circlepath",
+      enabled: closed.length > 0,
+      children: closed.length ? closed : [{ id: "none", title: "Empty", enabled: false }],
+    },
     {
       id: "cleaned",
       title: "Recently Cleaned",

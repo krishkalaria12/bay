@@ -1,7 +1,6 @@
-
 type Token = { type: "num"; value: number } | { type: "op"; value: string } | { type: "id"; value: string };
 
-const CONSTANTS: Record<string, number> = { pi: Math.PI, "π": Math.PI, e: Math.E, tau: 2 * Math.PI, "τ": 2 * Math.PI };
+const CONSTANTS: Record<string, number> = { pi: Math.PI, π: Math.PI, e: Math.E, tau: 2 * Math.PI, τ: 2 * Math.PI };
 
 const FUNCTIONS: Record<string, (...args: number[]) => number> = {
   sqrt: Math.sqrt,
@@ -274,7 +273,14 @@ units("speed", 1609.344 / 3600, "mph");
 units("speed", 1852 / 3600, "knots", "knot", "kn");
 
 const TEMPERATURES: Record<string, "C" | "F" | "K"> = {
-  c: "C", "°c": "C", celsius: "C", f: "F", "°f": "F", fahrenheit: "F", k: "K", kelvin: "K",
+  c: "C",
+  "°c": "C",
+  celsius: "C",
+  f: "F",
+  "°f": "F",
+  fahrenheit: "F",
+  k: "K",
+  kelvin: "K",
 };
 const toCelsius = { C: (v: number) => v, F: (v: number) => ((v - 32) * 5) / 9, K: (v: number) => v - 273.15 };
 const fromCelsius = { C: (v: number) => v, F: (v: number) => (v * 9) / 5 + 32, K: (v: number) => v + 273.15 };
@@ -304,7 +310,10 @@ function convert(input: string): { value: number; unit: string } | null {
 export type Calculation = { expression: string; value: number; display: string };
 
 export function calculate(raw: string): Calculation | null {
-  const expression = raw.trim().replace(/^=\s*/, "").replace(/\s*=\s*\??$/, "");
+  const expression = raw
+    .trim()
+    .replace(/^=\s*/, "")
+    .replace(/\s*=\s*\??$/, "");
   if (!expression || expression.length > 200 || !/[\dπτ]|\b(pi|e|tau)\b/i.test(expression)) return null;
   if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(expression) || /^\d+(\.\d+){2,}$/.test(expression)) return null;
 

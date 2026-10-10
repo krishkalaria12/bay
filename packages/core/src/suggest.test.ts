@@ -35,7 +35,13 @@ test("inline completion never takes a long query URL: 'm' completes to the host"
   const signIn =
     "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fmail.google.com%2Fmail%2Fu%2F0%2F&service=mail&flowName=GlifWebSignIn&flowEntry=AccountChooser&ec=asw-gmail-globalnav-signin#inbox";
   const hist = [
-    { url: "https://mail.google.com/mail/u/0/?service=mail&continue=" + encodeURIComponent(signIn) + "#inbox", title: "Inbox - me@gmail.com - Gmail", favicon: "gmail.ico", visits: 50, lastVisit: now - 1000 },
+    {
+      url: "https://mail.google.com/mail/u/0/?service=mail&continue=" + encodeURIComponent(signIn) + "#inbox",
+      title: "Inbox - me@gmail.com - Gmail",
+      favicon: "gmail.ico",
+      visits: 50,
+      lastVisit: now - 1000,
+    },
     { url: signIn, title: "Sign in - Google Accounts", favicon: null, visits: 3, lastVisit: now - 2000 },
   ];
   const m = buildSuggestions("m", { tabs: [], history: hist }, { now });
@@ -68,7 +74,11 @@ test("cleaned up tabs are found and marked so the bar can restore them", () => {
   const row = items.find((i) => i.kind === "page" && i.url === cleaned[0]!.url);
   assert.equal(row?.kind === "page" && row.cleanedId, "c1");
   // Its page in history is the same row, restored rather than opened.
-  const visited = buildSuggestions("notif", { tabs: [], history, cleaned: [{ id: "c2", url: "https://x.com/notifications", title: "Notifications / X", favicon: null, closedAt: now }] }, { now });
+  const visited = buildSuggestions(
+    "notif",
+    { tabs: [], history, cleaned: [{ id: "c2", url: "https://x.com/notifications", title: "Notifications / X", favicon: null, closedAt: now }] },
+    { now },
+  );
   const rowsFor = visited.items.filter((i) => i.kind === "page" && i.url === "https://x.com/notifications");
   assert.equal(rowsFor.length, 1);
   assert.equal(rowsFor[0]?.kind === "page" && rowsFor[0].cleanedId, "c2");
@@ -85,7 +95,10 @@ test("an open tab wins over a cleaned up copy of its page, and the newest cleane
   assert.equal(gh?.kind === "page" && gh.tabId, "t1");
   assert.equal(gh?.kind === "page" && gh.cleanedId, undefined);
   const docs = buildSuggestions("docs", { tabs, history, cleaned }, { now }).items.filter((i) => i.kind === "page" && i.url === "https://docs.rs/");
-  assert.deepEqual(docs.map((i) => i.kind === "page" && i.cleanedId), ["docs-new"]);
+  assert.deepEqual(
+    docs.map((i) => i.kind === "page" && i.cleanedId),
+    ["docs-new"],
+  );
   // The bar's own tab isn't offered, so its page's cleaned copy is.
   const own = buildSuggestions("gith", { tabs, history, cleaned }, { now, currentTabId: "t1" }).items[0];
   assert.equal(own?.kind === "page" && own.cleanedId, "new");
@@ -133,7 +146,6 @@ test("a newer request aborts the one in flight, which never answers", async () =
     mock.timers.reset();
   }
 });
-
 
 test("remoteFirst lists the engine's suggestions before matching pages, the best one aside", () => {
   const remote = Array.from({ length: 10 }, (_, i) => `what is the best ${i}`);
