@@ -69,3 +69,22 @@ test("closing the sidebar player hands it to the next tab", async () => {
   assert.equal(player(), b);
   for (const id of [b, c]) webviews.delete(id);
 });
+
+test("a skip goes to the time itself on a site that can seek to one, since its own skip takes its own step", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "a.com" });
+  const tab = S().newTab(w, { url: "https://www.youtube.com/watch?v=x", background: true });
+  const sent = [];
+  webviews.set(tab, { mediaCommand: async (action, seconds) => void sent.push([action, seconds]) });
+  const now = Date.now();
+  media.setNowPlaying(tab, report({ playbackState: "paused", position: 80, timestamp: now, actions: ["play", "pause", "seekbackward", "seekforward", "seekto"] }));
+  media.skip(tab, M().sessions[tab], 15);
+  media.skip(tab, M().sessions[tab], -15);
+  assert.deepEqual(sent, [["seekTo", 95], ["seekTo", 80]]);
+  // Without seekto, the page skips by the seconds asked.
+  media.setNowPlaying(tab, report({ playbackState: "paused", position: 5, timestamp: now, actions: ["play", "pause"] }));
+  media.skip(tab, M().sessions[tab], -15);
+  assert.deepEqual(sent.at(-1), ["seekBy", -15]);
+  assert.equal(M().sessions[tab].position, 0, "never before the start");
+  webviews.delete(tab);
+});

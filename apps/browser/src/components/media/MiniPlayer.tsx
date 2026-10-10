@@ -15,7 +15,8 @@ import {
   isPlaying,
   mediaCommand,
   positionOf,
-  setNowPlaying,
+  seekTo,
+  skip,
   useSession,
   useTicker,
   type Session,
@@ -81,18 +82,6 @@ export function MiniPlayer({ tabId, onBackToTab }: { tabId: string; onBackToTab:
       </View>
     </View>
   );
-}
-
-export function skip(tabId: string, session: Session, seconds: number) {
-  const now = Date.now();
-  const position = Math.max(0, Math.min(session.duration ?? Infinity, positionOf(session, now) + seconds));
-  setNowPlaying(tabId, { ...session, position, timestamp: now });
-  mediaCommand(tabId, "seekBy", seconds);
-}
-
-export function seekTo(tabId: string, session: Session, seconds: number) {
-  setNowPlaying(tabId, { ...session, position: seconds, timestamp: Date.now() });
-  mediaCommand(tabId, "seekTo", seconds);
 }
 
 function TransportButton({

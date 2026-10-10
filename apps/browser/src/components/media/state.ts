@@ -90,6 +90,23 @@ export function mediaCommand(tabId: string, action: MediaCommand, seconds?: numb
   void webviews.get(tabId)?.mediaCommand(action, seconds);
 }
 
+/**
+ * Skips `seconds` on or back. A site's own skip handlers take their own step whatever we ask (YouTube's is five
+ * seconds), so a site that can seek to a time is sent the time; the rest skip by the seconds asked.
+ */
+export function skip(tabId: string, session: Session, seconds: number) {
+  const now = Date.now();
+  const position = Math.max(0, Math.min(session.duration ?? Infinity, positionOf(session, now) + seconds));
+  setNowPlaying(tabId, { ...session, position, timestamp: now });
+  if (session.actions.includes("seekto")) mediaCommand(tabId, "seekTo", position);
+  else mediaCommand(tabId, "seekBy", seconds);
+}
+
+export function seekTo(tabId: string, session: Session, seconds: number) {
+  setNowPlaying(tabId, { ...session, position: seconds, timestamp: Date.now() });
+  mediaCommand(tabId, "seekTo", seconds);
+}
+
 export function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
