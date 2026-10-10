@@ -72,7 +72,7 @@ export function PaletteContent({ field, leadingIcon, pageContext = false, sectio
   useEffect(keepSelectedVisible, [selectedIndex, sections]);
   // Each section's first row's index among all the rows.
   const firsts = sections.map((_, i) => sections.slice(0, i).reduce((count, s) => count + s.items.length, 0));
-  const label = current?.kind === "page" && current.tabId ? "Switch to Tab" : current?.kind === "action" ? current.title : current?.kind === "calc" ? "Copy Answer" : "Open";
+  const label = current?.kind === "page" && current.tabId ? "Switch to Tab" : current?.kind === "page" && current.cleanedId ? "Restore Tab" : current?.kind === "action" ? current.title : current?.kind === "calc" ? "Copy Answer" : "Open";
 
   return (
     <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={{ height: Math.min(PALETTE_HEIGHT, maxHeight) }}>
@@ -145,7 +145,7 @@ function PaletteResultRow({ suggestion: s, pageContext, selected, onHover, onCho
   return (
     <View onMouseEnter={onHover}>
       <ContextMenuArea onContextMenu={onMenu}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${title}${s.kind === "page" && s.tabId ? ", switch to tab" : ""}`} accessibilityState={{ selected }} onPress={(e) => onChoose(dispositionFor(modifiersOf(e)))}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${title}${s.kind === "page" && s.tabId ? ", switch to tab" : s.kind === "page" && s.cleanedId ? ", restore tab" : ""}`} accessibilityState={{ selected }} onPress={(e) => onChoose(dispositionFor(modifiersOf(e)))}>
         <View style={{ height: PALETTE_ROW_HEIGHT, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 9, paddingHorizontal: 10, backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined }}>
           {pageContext ? <View style={{ width: 20, height: 20, borderRadius: 5, alignItems: "center", justifyContent: "center", backgroundColor: theme.toolbarHover, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.panelBorder }}><SuggestionIcon suggestion={s} /></View> : <SuggestionIcon suggestion={s} />}
           <Text numberOfLines={1} style={{ flexShrink: 1, maxWidth: detail ? "53%" : "85%", fontSize: 13, color: theme.textPrimary }}>{title}</Text>

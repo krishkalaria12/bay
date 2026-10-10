@@ -26,6 +26,7 @@ function labels(s: Suggestion): [string, string | null] {
   switch (s.kind) {
     case "page":
       if (s.tabId) return [s.title || displayUrl(s.url), "Switch to Tab"];
+      if (s.cleanedId) return [s.title || displayUrl(s.url), "Restore Tab"];
       return s.title ? [s.title, displayUrl(s.url)] : [displayUrl(s.url), null];
     case "search":
       return [s.query, null];
@@ -97,7 +98,7 @@ const SuggestionRow = memo(
     const { hovered, hoverProps } = useHover();
     const [title, accessory] = labels(s);
     const hint = trailing ?? (s.kind === "action" ? s.hint : null);
-    const onRemove = s.kind === "page" && s.visited && !s.tabId ? () => actions.remove(s.url) : undefined;
+    const onRemove = s.kind === "page" && s.visited && !s.tabId && !s.cleanedId ? () => actions.remove(s.url) : undefined;
     const removable = !!onRemove && (hovered || selected);
     return (
       <View

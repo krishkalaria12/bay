@@ -10,7 +10,7 @@ import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
-import { dispositionFor, openFromBar, openInBackground, switchFromBar, type Disposition } from "./omnibox/open";
+import { dispositionFor, openFromBar, openInBackground, restoreFromBar, switchFromBar, type Disposition } from "./omnibox/open";
 import { clipboardPasteAction, pasteMenuItem, pasteTarget, readClipboard } from "./omnibox/paste";
 import { ScopeChip } from "./omnibox/ScopeChip";
 import { SuggestionIcon, SuggestionList, type RowActions } from "./omnibox/SuggestionRow";
@@ -173,6 +173,7 @@ export function Omnibox({
           switchFromBar(s.tabId, s.url, tabId, disposition);
           return;
         }
+        if (s.cleanedId && disposition === "current" && restoreFromBar(s.cleanedId, tabId)) return;
         return go(s.url, disposition);
       case "search":
       case "create":

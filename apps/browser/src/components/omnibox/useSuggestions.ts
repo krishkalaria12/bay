@@ -13,8 +13,9 @@ import { useEffect, useState } from "react";
 import { bookmarksByUrl } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { bookmarkSpaceId } from "../../store/model";
+import { cleanedTabsFor } from "../../store/organize";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
-import type { Bookmarks, HistoryEntry } from "../../store/types";
+import type { Bookmarks, ClosedTab, HistoryEntry } from "../../store/types";
 import { currentBarActions } from "./actions";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
@@ -36,6 +37,25 @@ function profileBookmarks(b: Bookmarks, spaceId: string): BookmarkRow[] {
       if (node?.kind === "url") rows.push({ url, title: node.title, favicon: node.favicon });
     }
     perProfile.set(spaceId, rows);
+  }
+  return rows;
+}
+
+type CleanedRow = { id: string; url: string; title: string; favicon: string | null; closedAt: number };
+const cleanedCache = new WeakMap<ClosedTab[], Map<string, CleanedRow[]>>();
+
+// The space's cleaned up tabs (Arc's archive), newest first, for the bar to find and restore.
+function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
+  let perSpace = cleanedCache.get(list);
+  if (!perSpace) cleanedCache.set(list, (perSpace = new Map()));
+  let rows = perSpace.get(spaceId);
+  if (!rows) {
+    rows = [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const { id, tab, closedAt } = list[i]!;
+      if (tab.spaceId === spaceId && tab.url) rows.push({ id, url: tab.url, title: tab.customTitle || tab.title, favicon: tab.favicon, closedAt });
+    }
+    perSpace.set(spaceId, rows);
   }
   return rows;
 }
@@ -103,6 +123,7 @@ export function useSuggestions({
   const allTabs = useBrowser((s) => s.tabs);
   const history = useBrowser((s) => s.history[spaceId] ?? NO_HISTORY);
   const bookmarks = useBrowser((s) => s.bookmarks);
+  const cleanedTabs = useBrowser((s) => cleanedTabsFor(s, windowId));
   const bookmarkProfile = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
   const engines = useBrowser((s) => searchEngines(s.settings));
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
@@ -111,7 +132,7 @@ export function useSuggestions({
 
   const tabs = Object.values(allTabs).filter((t) => t.spaceId === spaceId);
   const bookmarkRows = profileBookmarks(bookmarks, bookmarkProfile);
-  const source = { tabs, history, bookmarks: bookmarkRows };
+  const source = { tabs, history, bookmarks: bookmarkRows, cleaned: spaceCleaned(cleanedTabs, spaceId) };
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;

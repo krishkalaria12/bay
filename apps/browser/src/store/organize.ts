@@ -61,7 +61,8 @@ export type OrganizeSlice = {
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; spaceId?: string }): number;
   /** The automatic clean up (Arc's archive): every window's spaces, each after its own time. */
   cleanUpInactiveTabs(): number;
-  restoreCleaned(entryId?: string, windowId?: string): void;
+  /** Puts cleaned up tabs back: one entry (returning its tab), or every one. */
+  restoreCleaned(entryId?: string, windowId?: string): string | undefined;
   closeAbandonedNewTabs(): void;
 };
 
@@ -661,6 +662,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
     let next: BrowserState = privateId
       ? { ...s, privateCleanedTabs: { ...s.privateCleanedTabs, [privateId]: left } }
       : { ...s, cleanedTabs: left };
+    let restoredId: string | undefined;
     for (const e of entries) {
       // A private tab only ever goes back to its own private window.
       const windowId = privateId ? (next.windows[privateId]?.incognito ? privateId : undefined) : restoreTarget(next, e.windowId);
@@ -674,9 +676,13 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
         const list = { key: w.key, tabIds: placeBlock(w.tabIds, w.tabIds.filter((t) => members.includes(t))) };
         next = { ...withList(next, list), groups: syncGroupOrder({ ...next.groups, [g.id]: { ...g, tabIds: members } }, list) };
       }
-      if (id && entryId) next = apply(next, activated(next, id, windowId));
+      if (id && entryId) {
+        next = apply(next, activated(next, id, windowId));
+        restoredId = id;
+      }
     }
     set(next);
+    return restoredId;
   },
 
   closeAbandonedNewTabs() {

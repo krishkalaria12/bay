@@ -62,6 +62,35 @@ test("open tabs are marked so the bar can switch to them, except the bar's own t
   assert.equal(own.items[0]?.kind === "page" && own.items[0].tabId, undefined);
 });
 
+test("cleaned up tabs are found and marked so the bar can restore them", () => {
+  const cleaned = [{ id: "c1", url: "https://linear.app/team/issue/BAY-12", title: "BAY-12 Archive search", favicon: null, closedAt: now - DAY }];
+  const { items } = buildSuggestions("archive", { tabs: [], history, cleaned }, { now });
+  const row = items.find((i) => i.kind === "page" && i.url === cleaned[0]!.url);
+  assert.equal(row?.kind === "page" && row.cleanedId, "c1");
+  // Its page in history is the same row, restored rather than opened.
+  const visited = buildSuggestions("notif", { tabs: [], history, cleaned: [{ id: "c2", url: "https://x.com/notifications", title: "Notifications / X", favicon: null, closedAt: now }] }, { now });
+  const rowsFor = visited.items.filter((i) => i.kind === "page" && i.url === "https://x.com/notifications");
+  assert.equal(rowsFor.length, 1);
+  assert.equal(rowsFor[0]?.kind === "page" && rowsFor[0].cleanedId, "c2");
+});
+
+test("an open tab wins over a cleaned up copy of its page, and the newest cleaned entry wins over older ones", () => {
+  const tabs = [{ id: "t1", url: "https://github.com/", title: "GitHub", favicon: null }];
+  const cleaned = [
+    { id: "new", url: "https://github.com/", title: "GitHub", favicon: null, closedAt: now },
+    { id: "docs-new", url: "https://docs.rs/", title: "Docs.rs", favicon: null, closedAt: now },
+    { id: "docs-old", url: "https://docs.rs/", title: "Docs.rs", favicon: null, closedAt: now - DAY },
+  ];
+  const gh = buildSuggestions("gith", { tabs, history, cleaned }, { now }).items[0];
+  assert.equal(gh?.kind === "page" && gh.tabId, "t1");
+  assert.equal(gh?.kind === "page" && gh.cleanedId, undefined);
+  const docs = buildSuggestions("docs", { tabs, history, cleaned }, { now }).items.filter((i) => i.kind === "page" && i.url === "https://docs.rs/");
+  assert.deepEqual(docs.map((i) => i.kind === "page" && i.cleanedId), ["docs-new"]);
+  // The bar's own tab isn't offered, so its page's cleaned copy is.
+  const own = buildSuggestions("gith", { tabs, history, cleaned }, { now, currentTabId: "t1" }).items[0];
+  assert.equal(own?.kind === "page" && own.cleanedId, "new");
+});
+
 test("frecency: frequent + recent beats old, and multi-word queries match words", () => {
   const hist = [
     { url: "https://a.com/docs", title: "Rust docs", favicon: null, visits: 2, lastVisit: now - DAY * 60 },

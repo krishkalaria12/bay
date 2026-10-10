@@ -61,3 +61,18 @@ test("Clean Up Tabs from the menu cleans the space on screen only", () => {
   assert.equal(S().cleanUpTabs(w), 1);
   assert.equal(urls(w, work).length, 2);
 });
+
+test("restoring one cleaned up tab puts it back in its space and returns it, as the command bar needs", () => {
+  const { work, w } = setup(13);
+  S().cleanUpInactiveTabs();
+  const entry = S().cleanedTabs.find((c) => c.tab.url === "https://d.com");
+  assert.ok(entry);
+  const id = S().restoreCleaned(entry.id, w);
+  assert.equal(S().tabs[id]?.url, "https://d.com");
+  assert.equal(S().tabs[id].spaceId, work);
+  assert.equal(S().windows[w].spaceId, work);
+  assert.equal(S().windows[w].activeTabIds[work], id);
+  assert.ok(!S().cleanedTabs.some((c) => c.id === entry.id));
+  // Gone once restored, so a second pick falls back to opening the page.
+  assert.equal(S().restoreCleaned(entry.id, w), undefined);
+});

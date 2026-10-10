@@ -34,3 +34,14 @@ export function switchFromBar(targetTabId: string, url: string, barTabId: string
   if (bar) s.closePanel(bar.windowId);
   switchToTab(targetTabId);
 }
+
+// A cleaned up tab goes back where it was, in its space, and the bar switches to it; false if it's no longer there.
+export function restoreFromBar(entryId: string, barTabId: string): boolean {
+  const s = useBrowser.getState();
+  const bar = s.tabs[barTabId];
+  const restored = s.restoreCleaned(entryId, bar?.windowId);
+  if (!restored) return false;
+  if (bar) s.closePanel(bar.windowId);
+  switchToTab(restored);
+  return true;
+}

@@ -27,13 +27,15 @@ export function isSearchResultsPage(url: string, templates: readonly string[]): 
   });
 }
 
-// A history page (or a frequent site) the palette can forget; open tabs close instead, and searches have nothing to forget.
+// A history page (or a frequent site) the palette can forget; open tabs close instead, cleaned up tabs restore, and
+// searches have nothing to forget.
 export const forgettable = (s: PaletteSuggestion | undefined, searchTemplates: readonly string[] = []): boolean =>
-  s?.kind === "page" && !s.tabId && (!!s.host || (!!s.visited && !isSearchResultsPage(s.url, searchTemplates)));
+  s?.kind === "page" && !s.tabId && !s.cleanedId && (!!s.host || (!!s.visited && !isSearchResultsPage(s.url, searchTemplates)));
 
 // What ↩ does to the row: its menu's first action.
 function primaryTitle(target: PaletteSuggestion, newTabPanel: boolean): string {
   if (target.kind === "page" && target.tabId) return "Switch to Tab";
+  if (target.kind === "page" && target.cleanedId) return "Restore Tab";
   if (target.kind === "calc") return "Copy Answer";
   if (target.kind === "action") return target.title;
   return newTabPanel ? "Open in New Tab" : "Open";

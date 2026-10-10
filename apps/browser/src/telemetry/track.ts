@@ -1,15 +1,15 @@
 import { appInfo, capture, isSharing } from "./client";
 import { MAX_SAMPLES, SAMPLE_EVERY } from "./config";
 
-export type SuggestionType = "history" | "bookmark" | "tab" | "url" | "search" | "calc" | "action" | "create" | "typed";
+export type SuggestionType = "history" | "bookmark" | "tab" | "cleaned" | "url" | "search" | "calc" | "action" | "create" | "typed";
 
-type SuggestionLike = { kind: string; tabId?: string; bookmarked?: boolean; visited?: boolean } | undefined;
+type SuggestionLike = { kind: string; tabId?: string; cleanedId?: string; bookmarked?: boolean; visited?: boolean } | undefined;
 
 export function suggestionType(s: SuggestionLike): SuggestionType {
   if (!s) return "typed";
   switch (s.kind) {
     case "page":
-      return s.tabId ? "tab" : s.bookmarked ? "bookmark" : s.visited ? "history" : "url";
+      return s.tabId ? "tab" : s.cleanedId ? "cleaned" : s.bookmarked ? "bookmark" : s.visited ? "history" : "url";
     case "search":
     case "calc":
     case "action":
