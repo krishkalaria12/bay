@@ -96,7 +96,7 @@ const schema = [
         tabs, folders, Peek and Split View, on Chrome’s own engine.
       </p>
       <div class="mt-8 flex animate-rise flex-wrap items-center justify-center gap-2 [animation-delay:120ms]">
-        <a href={site.downloadUrl} class="btn px-6 py-3.5 text-[16px]">Download for Mac</a>
+        <a href={site.downloadUrl} data-download-location="hero" class="btn px-6 py-3.5 text-[16px]">Download for Mac</a>
         <a href="#arc" class="btn-ghost">See what’s inside ›</a>
       </div>
       <p class="mt-3 animate-rise text-[13px] text-muted [animation-delay:140ms]">
@@ -421,7 +421,7 @@ const schema = [
       <h2 class="mt-6 text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
         Your spaces have a new <span class="marker">home</span>.
       </h2>
-      <a href={site.downloadUrl} class="btn mt-8 px-7 py-3.5 text-[16px]">Download for Mac</a>
+      <a href={site.downloadUrl} data-download-location="closing" class="btn mt-8 px-7 py-3.5 text-[16px]">Download for Mac</a>
       <p class="mt-4 text-[13px] text-muted">For {site.requirement}. Bring your Arc; we’ll unpack it.</p>
     </section>
   </main>

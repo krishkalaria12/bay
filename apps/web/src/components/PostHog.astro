@@ -1,0 +1,147 @@
+<script>
+  const token = import.meta.env.PUBLIC_POSTHOG_TOKEN;
+
+  if (import.meta.env.PROD && token) {
+    const host = import.meta.env.PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+    const endpoint = `${host.replace(/\/$/, "")}/i/v0/e/`;
+    let visitorId: string | undefined;
+
+    interface Session {
+      id: string;
+      startedAt: number;
+      lastSeenAt: number;
+    }
+    let session: Session | undefined;
+    let pageviewSent = false;
+
+    function getVisitorId() {
+      if (!visitorId) {
+        visitorId = crypto.randomUUID();
+        try {
+          // Keep the existing ID so visits and download clicks belong to the same visitor.
+          visitorId = localStorage.getItem("bay_download_visitor_id") || visitorId;
+          localStorage.setItem("bay_download_visitor_id", visitorId);
+        } catch {
+          // Keep the in-memory ID when browser storage is unavailable.
+        }
+      }
+      return visitorId;
+    }
+
+    function getSessionId() {
+      const now = Date.now();
+      try {
+        const stored: Session | null = JSON.parse(localStorage.getItem("bay_analytics_session") || "null");
+        if (
+          stored &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(stored.id) &&
+          Number.isFinite(stored.startedAt) &&
+          Number.isFinite(stored.lastSeenAt)
+        ) {
+          session = stored;
+        }
+      } catch {
+        // Use the in-memory session if storage is unavailable or malformed.
+      }
+
+      if (
+        !session ||
+        now - session.lastSeenAt >= 30 * 60 * 1000 ||
+        now - session.startedAt >= 24 * 60 * 60 * 1000 ||
+        session.startedAt > now ||
+        session.lastSeenAt > now
+      ) {
+        // PostHog session IDs must be UUIDv7, with the session's start time in the first 48 bits.
+        const time = now.toString(16).padStart(12, "0");
+        const id = `${time.slice(0, 8)}-${time.slice(8)}-7${crypto.randomUUID().slice(15)}`;
+        session = { id, startedAt: now, lastSeenAt: now };
+      }
+      session.lastSeenAt = now;
+      try {
+        localStorage.setItem("bay_analytics_session", JSON.stringify(session));
+      } catch {
+        // Events can still be sent without browser storage.
+      }
+      return session.id;
+    }
+
+    function capture(event: string, properties: Record<string, unknown> = {}) {
+      const body = JSON.stringify({
+        api_key: token,
+        event,
+        distinct_id: getVisitorId(),
+        properties: {
+          $process_person_profile: false,
+          $session_id: getSessionId(),
+          $current_url: window.location.origin + window.location.pathname,
+          $pathname: window.location.pathname,
+          $host: window.location.host,
+          $title: document.title,
+          $referrer: document.referrer,
+          page_path: window.location.pathname,
+          ...properties,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // A string body avoids a CORS preflight; delivery never blocks navigation.
+      try {
+        if (navigator.sendBeacon?.(endpoint, body)) return;
+      } catch {
+        // Fall back if the browser cannot queue a beacon.
+      }
+      void fetch(endpoint, {
+        method: "POST",
+        body,
+        keepalive: true,
+        credentials: "omit",
+      }).catch(() => {});
+    }
+
+    function capturePageview() {
+      if (pageviewSent) return;
+      pageviewSent = true;
+      capture("$pageview");
+    }
+
+    function schedulePageview() {
+      // Send after page assets have loaded, during idle time when the browser supports it.
+      if ("requestIdleCallback" in window) {
+        window.requestIdleCallback(capturePageview, { timeout: 1000 });
+      } else {
+        setTimeout(capturePageview, 0);
+      }
+    }
+
+    function trackDownload(event: MouseEvent) {
+      if (event.defaultPrevented || !(event.target instanceof Element)) return;
+      if (event.type === "auxclick" && event.button !== 1) return;
+
+      const link = event.target.closest<HTMLAnchorElement>("a[data-download-location]");
+      if (!link) return;
+
+      // Record short visits too, even when someone downloads before the idle callback.
+      capturePageview();
+      capture("browser_download_clicked", {
+        button_location: link.dataset.downloadLocation,
+        download_url: link.href,
+        platform: "macos",
+      });
+    }
+
+    if (document.readyState === "complete") schedulePageview();
+    else window.addEventListener("load", schedulePageview, { once: true });
+    window.addEventListener("pagehide", capturePageview);
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) {
+        pageviewSent = false;
+        schedulePageview();
+      }
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") capturePageview();
+    });
+    document.addEventListener("click", trackDownload);
+    document.addEventListener("auxclick", trackDownload);
+  }
+</script>
