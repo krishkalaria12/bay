@@ -171,7 +171,7 @@
 					};
 					514201482437B4B30078DB4F = {
 						CreatedOnToolsVersion = 11.4;
-						DevelopmentTeam = U5L5T3NGVV;
+						DevelopmentTeam = GP328GJT66;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -395,7 +395,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 34;
 				DEAD_CODE_STRIPPING = NO;
-				DEVELOPMENT_TEAM = U5L5T3NGVV;
+				DEVELOPMENT_TEAM = GP328GJT66;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = "Bay-macOS/Info.plist";
@@ -410,7 +410,7 @@
 					"\"$(NNCORE_STAGE_DIR)/Chromium Framework.framework/Chromium Framework\"",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.bay.browser;
+				PRODUCT_BUNDLE_IDENTIFIER = in.krishkalaria.bay;
 				PRODUCT_NAME = Bay;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -430,7 +430,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 34;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = U5L5T3NGVV;
+				DEVELOPMENT_TEAM = GP328GJT66;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = "Bay-macOS/Info.plist";
@@ -445,7 +445,7 @@
 					"\"$(NNCORE_STAGE_DIR)/Chromium Framework.framework/Chromium Framework\"",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.bay.browser;
+				PRODUCT_BUNDLE_IDENTIFIER = in.krishkalaria.bay;
 				PRODUCT_NAME = Bay;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;

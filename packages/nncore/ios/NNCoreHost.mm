@@ -58,7 +58,7 @@ NSString *DirectoryName(NSString *name) {
 // The release script's carryover opens a previous release's data this way.
 NSString *InstalledDataDirectory() {
   NSString *support = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
-  NSString *bundleId = NSBundle.mainBundle.bundleIdentifier ?: @"com.bay.browser";
+  NSString *bundleId = NSBundle.mainBundle.bundleIdentifier ?: @"in.krishkalaria.bay";
   return [[support stringByAppendingPathComponent:bundleId] stringByAppendingPathComponent:@"Chromium"];
 }
 

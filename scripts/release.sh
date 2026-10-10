@@ -191,7 +191,7 @@ done
 sign --options restrict,library,kill,runtime "$fwv/Helpers/chrome_crashpad_handler"
 sign --options restrict,library,kill,runtime "$fwv/Helpers/app_mode_loader"
 [ -e "$fwv/Helpers/web_app_shortcut_copier" ] && sign --options restrict,library,kill,runtime \
-  --identifier com.bay.browser.web_app_shortcut_copier "$fwv/Helpers/web_app_shortcut_copier"
+  --identifier in.krishkalaria.bay.web_app_shortcut_copier "$fwv/Helpers/web_app_shortcut_copier"
 sign "$fw"
 sign --preserve-metadata=entitlements,requirements,flags,runtime "$app"
 
@@ -203,7 +203,7 @@ entitlements() { codesign -d --entitlements - --xml "$1" 2>/dev/null; }
 info() { plutil -extract "$1" raw "$app/Contents/Info.plist" 2>/dev/null; }
 # What an in-place update from an earlier copy depends on: the same bundle id and executable (Sparkle), the
 # designated requirement (the keychain's Safe Storage item, TCC's grants), the feed and the update key.
-[ "$(info CFBundleIdentifier)" = com.bay.browser ] || die "bundle id is $(info CFBundleIdentifier)"
+[ "$(info CFBundleIdentifier)" = in.krishkalaria.bay ] || die "bundle id is $(info CFBundleIdentifier)"
 [ "$(info CFBundleExecutable)" = Bay ] || die "executable is $(info CFBundleExecutable)"
 [ "$(info CFBundleShortVersionString)" = "$version" ] || die "CFBundleShortVersionString is $(info CFBundleShortVersionString)"
 for key in SUFeedURL SUPublicEDKey NSDockTilePlugIn NSCameraUsageDescription NSMicrophoneUsageDescription \
@@ -215,11 +215,11 @@ done
 [ -f "$app/Contents/embedded.provisionprofile" ] || die "no Developer ID provisioning profile (keychain groups need it)"
 [ -f "$app/Contents/Resources/Extensions/ublock-lite/manifest.json" ] || die "no uBlock Origin Lite in the app"
 designated="$(codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => //p')"
-[[ "$designated" == *'identifier "com.bay.browser"'* && "$designated" == *"subject.OU] = U5L5T3NGVV"* ]] \
+[[ "$designated" == *'identifier "in.krishkalaria.bay"'* && "$designated" == *"subject.OU] = GP328GJT66"* ]] \
   || die "designated requirement: $designated"
 app_ents="$(entitlements "$app")"
 for group in webauthn unexportable-keys secure-payment-confirmation; do
-  [[ "$app_ents" == *"U5L5T3NGVV.com.bay.browser.$group"* ]] || die "the app lacks the keychain group …$group"
+  [[ "$app_ents" == *"GP328GJT66.in.krishkalaria.bay.$group"* ]] || die "the app lacks the keychain group …$group"
 done
 # Apple hasn't granted the managed passkey capability (Bay-ICloudPasskeys.entitlements).
 [[ "$app_ents" != *web-browser.public-key-credential* ]] || die "the app is signed with com.apple.developer.web-browser.public-key-credential"
@@ -229,7 +229,7 @@ done
 # Every piece of code: Developer ID, our team, a timestamp, no debugging entitlement.
 while IFS= read -r -d '' code; do
   details="$(codesign -dvv "$code" 2>&1)"
-  [[ "$details" == *"TeamIdentifier=U5L5T3NGVV"* && "$details" == *"Authority=Developer ID Application"* \
+  [[ "$details" == *"TeamIdentifier=GP328GJT66"* && "$details" == *"Authority=Developer ID Application"* \
     && "$details" == *"Timestamp="* ]] || die "$code isn't Developer ID-signed with a timestamp"
   [[ "$(entitlements "$code")" != *get-task-allow* ]] || die "$code has get-task-allow"
 done < <(find "$app" \( -name "*.app" -o -name "*.framework" -o -name "*.dylib" -o -name "*.xpc" -o -name "*.plugin" \

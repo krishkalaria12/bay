@@ -4,7 +4,7 @@
 <dict>
 	<!-- Bay.entitlements plus Apple's managed web-browser passkey capability (iCloud Keychain passkeys
 	     through ASAuthorizationWebBrowserPublicKeyCredentialManager). Use it (CODE_SIGN_ENTITLEMENTS) only once
-	     Apple has granted the capability to team U5L5T3NGVV and it is enabled on the com.bay.browser App ID:
+	     Apple has granted the capability to team GP328GJT66 and it is enabled on the in.krishkalaria.bay App ID:
 	     until then no provisioning profile allows it and signing fails. Keep the rest in sync with
 	     Bay.entitlements. -->
 	<key>com.apple.developer.web-browser.public-key-credential</key>
