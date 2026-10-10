@@ -3,6 +3,7 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "start": "bash scripts/run-app",
     "dev:app": "bash scripts/dev-app",
     "dev": "turbo run dev --filter=@bay/browser",

@@ -60,6 +60,8 @@ pnpm macos
 Other tasks: `pnpm typecheck`, `pnpm test`, `pnpm lint` (oxlint), `pnpm fmt` / `pnpm fmt:check` (oxfmt),
 `pnpm shaders:check` (compiles the embedded Metal offline), `pnpm build` (Release `.app` with a Hermes bytecode
 bundle in `apps/browser/build/`). CI (`.github/workflows`) runs the same checks on every push and pull request.
+`pnpm install` turns on the git hooks in `.githooks`: a commit formats its files with oxfmt, and a push stops if lint
+or the format check fails.
 Swift package tests need full Xcode for XCTest. The test runner uses `/Applications/Xcode.app`
 if the selected Command Line Tools lack XCTest. Set `DEVELOPER_DIR` to use another Xcode installation;
 the runner leaves the global `xcode-select` setting unchanged.
