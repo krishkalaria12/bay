@@ -96,4 +96,3 @@ export const SEARCH_TABS_MAX_ROWS = 10;
 export const SWITCHER_SHOW_AFTER_MS = 140;
 export const SWITCHER_WIDTH = 400;
 export const SWITCHER_ROW = 40;
-export const SWITCHER_MAX_ROWS = 9;

@@ -8,16 +8,14 @@ import { useSidebarUi } from "./state";
 import { commitSwitcher, focusSwitcherRow } from "./switcher";
 import { TabIcon } from "./TabIcon";
 import { useSidebarTokens } from "./tokens";
-import { SWITCHER_MAX_ROWS, SWITCHER_ROW, SWITCHER_WIDTH } from "./constants";
+import { SWITCHER_ROW, SWITCHER_WIDTH } from "./constants";
 
 export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const switcher = useSidebarUi((u) => (u.switcher?.windowId === windowId && u.switcher.visible ? u.switcher : null));
   if (!switcher) return null;
-  const start = Math.max(0, Math.min(switcher.index - Math.floor(SWITCHER_MAX_ROWS / 2), switcher.ids.length - SWITCHER_MAX_ROWS));
-  const shown = switcher.ids.slice(start, start + SWITCHER_MAX_ROWS);
-  const height = shown.length * SWITCHER_ROW + 16 + 26;
+  const height = switcher.ids.length * SWITCHER_ROW + 16 + 26;
   return (
     <Surface
       fill={hex(theme.panel)}
@@ -37,15 +35,8 @@ export function TabSwitcher({ windowId, windowWidth, windowHeight }: { windowId:
       }}
     >
       <Text style={{ fontSize: 11, fontWeight: "600", color: theme.textTertiary, paddingHorizontal: 8, paddingBottom: 6, paddingTop: 2 }}>Recent Tabs</Text>
-      {shown.map((id, i) => (
-        <SwitcherRow
-          key={id}
-          tabId={id}
-          focused={start + i === switcher.index}
-          index={start + i}
-          focusFill={tokens.switcherFocus}
-          outline={tokens.switcherOutline}
-        />
+      {switcher.ids.map((id, i) => (
+        <SwitcherRow key={id} tabId={id} focused={i === switcher.index} index={i} focusFill={tokens.switcherFocus} outline={tokens.switcherOutline} />
       ))}
     </Surface>
   );

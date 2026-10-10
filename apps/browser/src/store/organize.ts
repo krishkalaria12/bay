@@ -10,6 +10,7 @@ import {
   newId,
   pinnedPage,
   sharesProfile,
+  shownElsewhere,
   snapshotTab,
   viewTabIds,
   windowTabIds,
@@ -19,7 +20,7 @@ import {
 } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { ClosedGroup, ClosedTab, Tab, TabGroup } from "./types";
-import { CLEAN_UP_AFTER_MS, DELETED_GROUP_MS, MAX_CLEANED, MAX_CLOSED_GROUPS } from "./constants";
+import { CLEAN_UP_AFTER_MS, DELETED_GROUP_MS, MAX_CLEANED, MAX_CLOSED_GROUPS, RECENT_TABS } from "./constants";
 
 export type TabPlacement = {
   // An Essential (a pinned tile).
@@ -384,10 +385,13 @@ export function abandonedNewTabs(s: BrowserState, windowId: string): string[] {
   return out.length >= mine.length ? out.slice(0, mine.length - 1) : out;
 }
 
-export function recentTabIds(s: BrowserState, windowId: string, now = Date.now(), staleAfterMs = CLEAN_UP_AFTER_MS): string[] {
-  const view = viewTabIds(s, windowId).map((id) => s.tabs[id]!);
-  const sorted = view.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
-  return sorted.filter((t, i) => i < 2 || now - t.lastActiveAt < staleAfterMs).map((t) => t.id);
+/** As Arc's ⌃Tab: the most recent tabs of every space the window can show (not one another window shows now). */
+export function recentTabIds(s: BrowserState, windowId: string): string[] {
+  const w = s.windows[windowId];
+  if (!w) return [];
+  const spaces = w.incognito || w.kind === "small" ? [w.spaceId] : s.spaceOrder;
+  const tabs = spaces.flatMap((space) => viewTabIds(s, windowId, space)).filter((id) => !shownElsewhere(s, id, windowId));
+  return tabs.sort((a, b) => s.tabs[b]!.lastActiveAt - s.tabs[a]!.lastActiveAt).slice(0, RECENT_TABS);
 }
 
 export function placing(s: BrowserState, ids: string[], p: TabPlacement): BrowserState {
