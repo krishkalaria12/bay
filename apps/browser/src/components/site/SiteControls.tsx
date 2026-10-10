@@ -27,7 +27,7 @@ import { useIsDeveloperTab } from "../developer/sites";
 import { patchPage, setPopover, usePage, usePages } from "../layout/pageState";
 import { showToast } from "../layout/splitActions";
 import { toggleCastPicker } from "../media/cast";
-import { useMedia, usePictureInPicture } from "../media/state";
+import { autoPictureInPictureFor, setAutoPictureInPictureForSite, useMedia, usePictureInPicture } from "../media/state";
 import { TranslateRows } from "./TranslateControls";
 import { ZoomStepper } from "./ZoomControls";
 import { activateExtension, loadUnpacked, openManageExtensions, openWebStore, useExtensions, useWindowExtensions, type Anchor } from "../extensions/state";
@@ -91,6 +91,9 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
   // Document PiP may have a window without a tab session.
   const video = useMedia((m) => !!m.sessions[tabId]?.hasVideo || !!m.pipOpen[tabId]);
   const [pip, togglePip] = usePictureInPicture(tabId);
+  // Arc's per-site switch, while automatic Picture in Picture is on in Settings.
+  const autoPipEverywhere = useBrowser((s) => s.settings.autoPictureInPicture ?? true);
+  const autoPip = useBrowser((s) => autoPictureInPictureFor(s, tabId));
 
   useEffect(() => {
     if (!origin) return;
@@ -308,6 +311,13 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
                   togglePip();
                   close();
                 }}
+              />
+            ) : null}
+            {video && host && autoPipEverywhere ? (
+              <PopoverRow
+                icon="pip"
+                title="Automatic Picture in Picture"
+                accessory={<Toggle value={autoPip} onChange={(on) => setAutoPictureInPictureForSite(tabId, on)} />}
               />
             ) : null}
             {origin ? (

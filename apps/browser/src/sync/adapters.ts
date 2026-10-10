@@ -35,6 +35,7 @@ export const SYNCED_SETTINGS = [
   "cleanUpInactiveTabsAfterHours",
   "mutedSites",
   "autoPictureInPicture",
+  "noAutoPictureInPictureSites",
   "showFullUrl",
   "bookmarksBar",
   "appearance",

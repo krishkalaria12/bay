@@ -149,6 +149,21 @@ export function playerTabFor(m: Pick<Store, "sessions" | "dismissed">, tabIds: s
 
 // MARK: Picture in Picture
 
+/** Whether a tab's video floats out when you leave it: on in Settings, and not turned off for its site. */
+export function autoPictureInPictureFor(s: Pick<BrowserState, "settings" | "tabs">, tabId: string): boolean {
+  const host = hostOf(s.tabs[tabId]?.url ?? "");
+  return (s.settings.autoPictureInPicture ?? true) && !(host && (s.settings.noAutoPictureInPictureSites ?? []).includes(host));
+}
+
+/** Turns automatic Picture in Picture on or off for a tab's site. */
+export function setAutoPictureInPictureForSite(tabId: string, on: boolean) {
+  const s = useBrowser.getState();
+  const host = hostOf(s.tabs[tabId]?.url ?? "");
+  if (!host) return;
+  const sites = (s.settings.noAutoPictureInPictureSites ?? []).filter((h) => h !== host);
+  s.updateSettings({ noAutoPictureInPictureSites: on ? sites : [...sites, host] });
+}
+
 // A video in Picture in Picture, or the page's own document Picture in Picture window (a call's pop-out): either way the
 // page is in PiP, and a request for the video's would close the page's window.
 const PIP_STATE = 'post("result", JSON.stringify(!!document.pictureInPictureElement || !!window.documentPictureInPicture?.window))';

@@ -88,3 +88,19 @@ test("a skip goes to the time itself on a site that can seek to one, since its o
   assert.equal(M().sessions[tab].position, 0, "never before the start");
   webviews.delete(tab);
 });
+
+test("automatic Picture in Picture goes off for one site, and on again, as Arc's site switch does", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://www.youtube.com/watch?v=x" });
+  const yt = S().windows[w].activeTabIds[S().windows[w].spaceId];
+  const other = S().newTab(w, { url: "https://vimeo.com/1", background: true });
+  assert.equal(media.autoPictureInPictureFor(S(), yt), true);
+  media.setAutoPictureInPictureForSite(yt, false);
+  assert.deepEqual(S().settings.noAutoPictureInPictureSites, ["youtube.com"]);
+  assert.equal(media.autoPictureInPictureFor(S(), yt), false);
+  assert.equal(media.autoPictureInPictureFor(S(), other), true, "other sites keep it");
+  media.setAutoPictureInPictureForSite(yt, true);
+  assert.deepEqual(S().settings.noAutoPictureInPictureSites, []);
+  S().updateSettings({ autoPictureInPicture: false });
+  assert.equal(media.autoPictureInPictureFor(S(), other), false, "off in Settings, off everywhere");
+});

@@ -44,6 +44,8 @@ export type Settings = {
   // Sites in Developer Mode, by host and port ("localhost:3000"): components/developer/devMode.ts.
   developerSites: string[];
   autoPictureInPicture: boolean;
+  // Sites whose videos stay in their page when you leave them (Arc's per-site Picture-in-Picture switch), by host.
+  noAutoPictureInPictureSites: string[];
   sidebarWidth: number;
   // Which side of the window the sidebar docks on; the page takes the other. The window buttons stay at the top left.
   sidebarPosition: "left" | "right";
@@ -96,6 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   neverTranslateSites: {},
   developerSites: [],
   autoPictureInPicture: true,
+  noAutoPictureInPictureSites: [],
   sidebarWidth: 190,
   sidebarPosition: "left",
   batterySaver: true,
