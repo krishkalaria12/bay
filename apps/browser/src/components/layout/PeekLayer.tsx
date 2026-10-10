@@ -1,6 +1,6 @@
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { layout } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
@@ -9,10 +9,11 @@ import { useBrowser } from "../../store/browser";
 import type { Peek } from "../../store/peeks";
 import { useHover } from "../primitives";
 import type { Rect } from "./geometry";
-import { PEEK_BUTTON, PEEK_CARD_GAP, PEEK_INSET_MIN, PEEK_INSET_SHARE, PEEK_LABEL_ROOM, PEEK_OPEN_MS } from "./constants";
+import { PEEK_BUTTON, PEEK_CARD_GAP, PEEK_INSET_MIN, PEEK_INSET_SHARE, PEEK_OPEN_MS } from "./constants";
 
 // Arc's Peek, over the page it was opened from (store/peeks.ts): the page dims away, the link's page sits on it in a
-// card nearly its size, and beside the card are Close, Open as Tab and Split View. A click on the dimmed page, Esc
+// card nearly its size, and beside the card are buttons for Close, Open as Tab and Split View (their names are their
+// tooltips). A click on the dimmed page, Esc
 // (TabWebView's escape) or ⌘W closes it; ⌘O keeps it (lib/commands.ts).
 
 const ARRIVE = Easing.bezier(0.2, 0.8, 0.2, 1);
@@ -37,7 +38,6 @@ export function PeekLayer({ windowId, peek, rect, children }: { windowId: string
   const theme = useTheme();
   const close = () => useBrowser.getState().closePeek(windowId);
   const inset = Math.round(Math.max(PEEK_INSET_MIN, rect.width * PEEK_INSET_SHARE));
-  const labels = inset >= PEEK_LABEL_ROOM;
 
   // In: the dim and the card fade up together, the card rising a little; each new peek plays it again.
   const shown = useSharedValue(0);
@@ -82,48 +82,35 @@ export function PeekLayer({ windowId, peek, rect, children }: { windowId: string
       </Animated.View>
 
       <Animated.View style={[{ position: "absolute", top: PEEK_CARD_GAP, left: rect.width - inset + 10, right: 6, gap: 10 }, card]}>
-        <PeekButton icon="xmark" label="Close" tooltip="Close Peek (⌘W)" labels={labels} onPress={close} />
-        <PeekButton
-          icon="arrow.up.left.and.arrow.down.right"
-          label="Open as Tab"
-          tooltip="Open as Tab (⌘O)"
-          labels={labels}
-          onPress={() => useBrowser.getState().keepPeek(windowId)}
-        />
-        <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" labels={labels} onPress={() => useBrowser.getState().splitPeek(windowId)} />
+        <PeekButton icon="xmark" label="Close" tooltip="Close Peek (⌘W)" onPress={close} />
+        <PeekButton icon="arrow.up.left.and.arrow.down.right" label="Open as Tab" tooltip="Open as Tab (⌘O)" onPress={() => useBrowser.getState().keepPeek(windowId)} />
+        <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" onPress={() => useBrowser.getState().splitPeek(windowId)} />
       </Animated.View>
     </View>
   );
 }
 
-function PeekButton({ icon, label, tooltip, labels, onPress }: { icon: string; label: string; tooltip: string; labels: boolean; onPress: () => void }) {
+function PeekButton({ icon, label, tooltip, onPress }: { icon: string; label: string; tooltip: string; onPress: () => void }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const face = hovered ? (theme.dark ? "#3A3A3D" : "#F2F2F4") : theme.panel;
   return (
-    <View tooltip={labels ? undefined : tooltip} {...hoverProps}>
-      <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+    <View tooltip={tooltip} {...hoverProps} style={{ alignSelf: "flex-start" }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
         {({ pressed }) => (
-          <>
-            <Surface
-              fill={face}
-              cornerRadius={PEEK_BUTTON / 2}
-              borderColor={theme.panelBorder}
-              borderWidth={0.5}
-              shadowColor="#000000"
-              shadowOpacity={theme.panelShadowOpacity * 0.6}
-              shadowRadius={4}
-              shadowOffset={[0, 1]}
-              style={{ width: PEEK_BUTTON, height: PEEK_BUTTON, alignItems: "center", justifyContent: "center", transform: [{ scale: pressed ? 0.92 : 1 }] }}
-            >
-              <Symbol name={icon} size={11} weight="semibold" color={theme.textPrimary} style={{ width: 14, height: 14 }} />
-            </Surface>
-            {labels && (
-              <Text numberOfLines={2} style={{ flex: 1, fontSize: 10.5, lineHeight: 13, color: hovered ? theme.textPrimary : theme.textSecondary }}>
-                {label}
-              </Text>
-            )}
-          </>
+          <Surface
+            fill={face}
+            cornerRadius={PEEK_BUTTON / 2}
+            borderColor={theme.panelBorder}
+            borderWidth={0.5}
+            shadowColor="#000000"
+            shadowOpacity={theme.panelShadowOpacity * 0.6}
+            shadowRadius={4}
+            shadowOffset={[0, 1]}
+            style={{ width: PEEK_BUTTON, height: PEEK_BUTTON, alignItems: "center", justifyContent: "center", transform: [{ scale: pressed ? 0.92 : 1 }] }}
+          >
+            <Symbol name={icon} size={11} weight="semibold" color={theme.textPrimary} style={{ width: 14, height: 14 }} />
+          </Surface>
         )}
       </Pressable>
     </View>

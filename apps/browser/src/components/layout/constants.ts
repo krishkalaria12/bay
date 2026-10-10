@@ -156,11 +156,9 @@ export const STRIP_SLIDE = { stiffness: 8100, damping: 180, mass: 1, restDisplac
 
 // MARK: Link peeks (PeekLayer.tsx): Arc's Peek, a link's page in a card over the page it came from
 
-// The card's room on each side of the pane: a share of its width, at least this; the buttons sit in the right one,
-// with their labels once there's this much room.
+// The card's room on each side of the pane: a share of its width, at least this; the buttons sit in the right one.
 export const PEEK_INSET_SHARE = 0.09;
 export const PEEK_INSET_MIN = 48;
-export const PEEK_LABEL_ROOM = 84;
 export const PEEK_CARD_GAP = 8;
 export const PEEK_BUTTON = 26;
 export const PEEK_OPEN_MS = 240;
