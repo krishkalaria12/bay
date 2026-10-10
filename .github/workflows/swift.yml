@@ -1,0 +1,48 @@
+# The Swift packages' tests and the Metal shaders' offline compile, on macOS (runner minutes cost more there), only
+# when they change.
+name: Swift and Metal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/import/**"
+      - "packages/sync/**"
+      - "packages/shaders/**"
+      - "scripts/swift-test.sh"
+      - ".github/workflows/swift.yml"
+  pull_request:
+    paths:
+      - "packages/import/**"
+      - "packages/sync/**"
+      - "packages/shaders/**"
+      - "scripts/swift-test.sh"
+      - ".github/workflows/swift.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: swift-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  swift:
+    name: Swift tests and shaders
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Import tests
+        working-directory: packages/import
+        run: bash ../../scripts/swift-test.sh
+      - name: Sync tests
+        working-directory: packages/sync
+        run: bash ../../scripts/swift-test.sh
+      - name: Shaders compile
+        run: node packages/shaders/scripts/check-shaders.mjs
