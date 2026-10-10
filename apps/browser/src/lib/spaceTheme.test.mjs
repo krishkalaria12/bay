@@ -34,3 +34,13 @@ test("dragging through many custom themes keeps only the latest few", () => {
   const again = themeFor(spaceThemeKey({ color: "plum", theme: { colors: [spectrumColor(199 / 200, 0.5)], intensity: 0.5, grain: 0.3 } }, true));
   assert.ok(again.windowTint[0].startsWith("#"));
 });
+
+test("a solid window over a page with a colour fills with it, in the look that reads on it", () => {
+  const google = themeFor("plum:dark@#202124");
+  assert.deepEqual(google.windowTint, ["#202124", "#202124"]);
+  assert.equal(google.dark, true);
+  assert.equal(google.glass, false);
+  const white = themeFor("plum:light@#FFFFFF");
+  assert.deepEqual(white.windowTint, ["#FFFFFF", "#FFFFFF"]);
+  assert.equal(white.dark, false);
+});

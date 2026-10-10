@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import type { Theme } from "../../lib/theme";
+import { isLightColor } from "../../lib/windowTint";
 
 export type ToolbarPalette = {
   background: string | null;
@@ -19,16 +20,6 @@ function channels(color: string): [number, number, number] | null {
   if (!m) return null;
   const n = parseInt(m[1]!, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function luminance(color: string): number {
-  const c = channels(color);
-  if (!c) return 0;
-  const [r, g, b] = c.map((v) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 const cache = new Map<string, ToolbarPalette>();
@@ -50,9 +41,7 @@ export function toolbarPalette(theme: Theme, websiteColor: string | null): Toolb
       divider: theme.divider,
     };
   } else {
-    const l = luminance(websiteColor);
-    const light = (1.05 / (l + 0.05)) < ((l + 0.05) / 0.05);
-    palette = light
+    palette = isLightColor(websiteColor)
       ? {
           background: websiteColor.slice(0, 7),
           text: "#000000E6",

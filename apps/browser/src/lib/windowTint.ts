@@ -39,6 +39,20 @@ const rgb = (hex: string) => [0, 1, 2].map((i) => parseInt(hex.slice(1 + 2 * i, 
 const hex = (c: number[]) =>
   `#${c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 
+function luminance(color: string): number {
+  const [r, g, b] = rgb(color).map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Whether dark text reads better than white on a "#RRGGBB" colour. */
+export function isLightColor(color: string): boolean {
+  const l = luminance(color);
+  return 1.05 / (l + 0.05) < (l + 0.05) / 0.05;
+}
+
 /** A "#RRGGBB" colour's hue, saturation and lightness, each 0–1. */
 export const hslOf = (color: string) => hsl(rgb(color));
 /** A "#RRGGBB" colour from hue, saturation and lightness, each 0–1. */

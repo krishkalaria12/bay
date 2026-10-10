@@ -2,8 +2,9 @@ import type { AreaLightPalette } from "@bay/shaders";
 import { createContext, createElement, useContext, type ReactNode } from "react";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { PageSpaceContext, WindowContext } from "../store/hooks";
+import { activeTabId } from "../store/model";
 import type { Space, SpaceColor } from "../store/types";
-import { backdropTint, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
+import { backdropTint, isLightColor, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
 
 export type Theme = typeof dark & ProfileTheme & {
   backdrop: BackdropTint;
@@ -199,11 +200,15 @@ function profileTheme(color: SpaceColor, isDark: boolean): ProfileTheme {
 }
 
 const cache = new Map<string, Theme>();
-// Custom themes are keyed by their values, so dragging in the theme editor makes a key a frame: keep the latest few.
-const MAX_CUSTOM = 48;
+// Custom themes are keyed by their values, so dragging in the theme editor makes a key a frame, and solid windows by
+// their pages' colours: keep the latest few.
+const MAX_TRANSIENT = 48;
 const CUSTOM = "custom|";
 
 const GLASS = ":glass";
+// A solid window's page colour, after its space's key: "plum:dark@#202124".
+const SITE = "@";
+const transient = (key: string) => key.startsWith(CUSTOM) || key.includes(SITE);
 
 /** A space's theme key: its preset colour's, or its own theme's (the theme editor); glass windows' end in ":glass". */
 export function spaceThemeKey(profile: Pick<Space, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
@@ -238,39 +243,55 @@ function customTheme(key: string): Theme {
   };
 }
 
+function presetTheme(key: string): Theme {
+  const [color, mode, material] = key.split(":") as [SpaceColor | "incognito", string, string | undefined];
+  const solid = material !== "glass";
+  const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
+  const spec = color === "incognito" ? null : (SPACE_COLORS[color] ?? SPACE_COLORS.plum);
+  // Dia: neutral band 0.502 at 0.65.
+  const powerUpColor = !spec ? null : spec.palette ? (spec.powerUp ?? spec.swatch) : "#808080A6";
+  const backdrop = backdropTint(spec ? (spec.tint ?? tintForHue(spec.swatch, !spec.palette)) : INCOGNITO_TINT, !spec?.palette);
+  return {
+    ...base,
+    backdrop,
+    windowTint: opaqueTint(backdrop, base.dark, solid),
+    glass: !solid,
+    powerUpColor,
+  };
+}
+
 export function themeFor(key: string): Theme {
   let theme = cache.get(key);
-  if (!theme && key.startsWith(CUSTOM)) {
-    theme = customTheme(key);
-    cache.set(key, theme);
-    const custom = [...cache.keys()].filter((k) => k.startsWith(CUSTOM));
-    for (const old of custom.slice(0, Math.max(0, custom.length - MAX_CUSTOM))) cache.delete(old);
-  }
-  if (!theme) {
-    const [color, mode, material] = key.split(":") as [SpaceColor | "incognito", string, string | undefined];
-    const solid = material !== "glass";
-    const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
-    const spec = color === "incognito" ? null : (SPACE_COLORS[color] ?? SPACE_COLORS.plum);
-    // Dia: neutral band 0.502 at 0.65.
-    const powerUpColor = !spec ? null : spec.palette ? (spec.powerUp ?? spec.swatch) : "#808080A6";
-    const backdrop = backdropTint(spec ? (spec.tint ?? tintForHue(spec.swatch, !spec.palette)) : INCOGNITO_TINT, !spec?.palette);
-    theme = {
-      ...base,
-      backdrop,
-      windowTint: opaqueTint(backdrop, base.dark, solid),
-      glass: !solid,
-      powerUpColor,
-    };
-    cache.set(key, theme);
+  if (theme) return theme;
+  const site = key.indexOf(SITE);
+  // A solid window filled with its page's colour, its space's theme in the look that reads on it.
+  if (site >= 0) theme = { ...themeFor(key.slice(0, site)), windowTint: [key.slice(site + 1), key.slice(site + 1)] };
+  else theme = key.startsWith(CUSTOM) ? customTheme(key) : presetTheme(key);
+  cache.set(key, theme);
+  if (transient(key)) {
+    const keys = [...cache.keys()].filter(transient);
+    for (const old of keys.slice(0, Math.max(0, keys.length - MAX_TRANSIENT))) cache.delete(old);
   }
   return theme;
 }
 
-function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
-  const w = s.windows[windowId ?? s.ui.focusedWindowId ?? ""];
+// The colour the page the window shows for a space reports (its theme-color, else its top's), if any.
+function siteColor(s: BrowserState, windowId: string, spaceId: string): string | null {
+  const id = activeTabId(s, windowId, spaceId);
+  const color = id && s.tabs[id]?.url ? s.live[id]?.themeColor : null;
+  return color && /^#[0-9a-f]{6}/i.test(color) ? color.slice(0, 7).toUpperCase() : null;
+}
+
+/** A window's theme key for a space (its own by default): a solid one takes its page's colour, glass its space's. */
+export function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
+  const id = windowId ?? s.ui.focusedWindowId ?? "";
+  const w = s.windows[id];
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
-  return spaceThemeKey(s.spaces[page ?? w?.spaceId ?? s.settings.defaultSpaceId], s.ui.appDark, glass);
+  const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
+  const site = w && !glass ? siteColor(s, id, spaceId) : null;
+  const key = spaceThemeKey(s.spaces[spaceId], site ? !isLightColor(site) : s.ui.appDark, glass);
+  return site ? `${key}${SITE}${site}` : key;
 }
 
 const ThemeContext = createContext<Theme | null>(null);

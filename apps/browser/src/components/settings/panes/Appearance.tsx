@@ -41,7 +41,7 @@ function MaterialPicker() {
   const choose = (value: Settings["windowMaterial"]) => useBrowser.getState().updateSettings({ windowMaterial: value });
   return (
     <>
-      <SectionHeader title="Window" description="Solid fills the sidebar with your space’s colour. Glass lets the desktop show through it." />
+      <SectionHeader title="Window" description="Solid fills the window with the page’s colour, or your space’s when it has none. Glass lets the desktop show through it." />
       <View style={{ flexDirection: "row", gap: 14 }}>
         <MaterialChoice value="solid" title="Solid" selected={material === "solid"} onPress={() => choose("solid")} />
         <MaterialChoice value="glass" title="Glass" selected={material === "glass"} onPress={() => choose("glass")} />
