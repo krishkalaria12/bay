@@ -165,10 +165,11 @@ export function groupWithOpener(s: BrowserState, tabId: string, openerId: string
 export const pinnedChildGroup = (s: Pick<BrowserState, "groups">, openerId: string, spaceId: string): TabGroup | undefined =>
   Object.values(s.groups).find((g) => g.pinnedOpenerId === openerId && g.spaceId === spaceId && g.tabIds.length);
 
+// A link joining its opener's group opens the group, so the tab is seen (Dia 1.47.1: no longer hidden in a collapsed one).
 function joinGroup(s: BrowserState, w: TabList, group: TabGroup, tabId: string): BrowserState {
   const members = [...group.tabIds, tabId];
   const list = { key: w.key, tabIds: placeBlock(w.tabIds, w.tabIds.filter((id) => members.includes(id))) };
-  const groups = { ...s.groups, [group.id]: { ...group, tabIds: list.tabIds.filter((id) => members.includes(id)) } };
+  const groups = { ...s.groups, [group.id]: { ...group, collapsed: false, tabIds: list.tabIds.filter((id) => members.includes(id)) } };
   return { ...withList(s, list), groups };
 }
 

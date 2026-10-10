@@ -71,6 +71,18 @@ test("closing goes to the page's own tabs, then its siblings, then its opener", 
   assert.equal(shown(w), "a", "no siblings left: the opener");
 });
 
+test("a link ⌘-clicked into a collapsed group opens the group, so its tab is seen", () => {
+  reset({ cmdClickCreatesTabGroup: true });
+  const [w, a] = setup("a", "b");
+  open(w, "c1", a);
+  const group = Object.values(S().groups)[0];
+  assert.equal(group.tabIds.length, 2, "the opener and its link, together");
+  S().updateGroup(group.id, { collapsed: true });
+  const c2 = open(w, "c2", a);
+  assert.equal(S().groups[group.id].collapsed, false);
+  assert.ok(S().groups[group.id].tabIds.includes(c2));
+});
+
 test("closing a group that holds the shown tab shows the tab just above the group", () => {
   reset({ cmdClickCreatesTabGroup: true });
   const [w, pin, home] = setup("pin", "home");
