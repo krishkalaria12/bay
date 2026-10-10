@@ -282,15 +282,19 @@ function siteColor(s: BrowserState, windowId: string, spaceId: string): string |
   return color && /^#[0-9a-f]{6}/i.test(color) ? color.slice(0, 7).toUpperCase() : null;
 }
 
-/** A window's theme key for a space (its own by default): a solid one takes its page's colour, glass its space's. */
+/**
+ * A window's theme key for a space (its own by default): a solid one takes its page's colour, glass its space's. A
+ * space's own theme (the theme editor's) always shows, as Arc's and Zen's do: only a preset colour gives way to the page.
+ */
 export function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
   const id = windowId ?? s.ui.focusedWindowId ?? "";
   const w = s.windows[id];
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
   const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
-  const site = w && !glass ? siteColor(s, id, spaceId) : null;
-  const key = spaceThemeKey(s.spaces[spaceId], site ? !isLightColor(site) : s.ui.appDark, glass);
+  const space = s.spaces[spaceId];
+  const site = w && !glass && !space?.theme?.colors.length ? siteColor(s, id, spaceId) : null;
+  const key = spaceThemeKey(space, site ? !isLightColor(site) : s.ui.appDark, glass);
   return site ? `${key}${SITE}${site}` : key;
 }
 

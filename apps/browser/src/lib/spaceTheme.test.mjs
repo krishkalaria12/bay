@@ -44,3 +44,17 @@ test("a solid window over a page with a colour fills with it, in the look that r
   assert.deepEqual(white.windowTint, ["#FFFFFF", "#FFFFFF"]);
   assert.equal(white.dark, false);
 });
+
+test("a space's own theme shows over a page with a colour; a preset colour gives way to the page", async () => {
+  const { useBrowser } = await import("../store/browser.ts");
+  const { themeKey } = await import("./theme.ts");
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const space = S().settings.defaultSpaceId;
+  const w = S().createWindow({ spaceId: space, url: "https://example.com" });
+  const tab = S().windows[w].activeTabIds[space];
+  useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor: "#202124" } } });
+  assert.match(themeKey(S(), w, null), /@#202124$/);
+  S().updateSpace(space, { theme: { colors: ["#F27AA0", "#B04FD0"], intensity: 0.9, grain: 0.5 } });
+  assert.match(themeKey(S(), w, null), /^custom\|#F27AA0,#B04FD0\|0\.90\|0\.50:(light|dark)$/);
+});
