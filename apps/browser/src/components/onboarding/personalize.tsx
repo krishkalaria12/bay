@@ -27,7 +27,6 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
   const themed = useBrowser((s) => (spaceId ? !!s.spaces[spaceId]?.theme : false));
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
   if (!spaceId || incognito) return null;
-  const update = useBrowser.getState().updateSpace;
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 5 : 4 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
       <ColorButton
@@ -35,7 +34,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
         colors={TWILIGHT.colors}
         size={size}
         selected={twilight}
-        onPress={() => update(spaceId, { color: "purple", theme: { ...TWILIGHT } })}
+        onPress={() => useBrowser.getState().updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } })}
       />
       {COLORS.map((c) => (
         <ColorButton
@@ -44,7 +43,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
           colors={[SPACE_COLORS[c].swatch]}
           size={size}
           selected={!themed && current === c}
-          onPress={() => update(spaceId, { color: c, theme: null })}
+          onPress={() => useBrowser.getState().updateSpace(spaceId, { color: c, theme: null })}
         />
       ))}
     </View>
