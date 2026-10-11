@@ -1,5 +1,4 @@
-// Favourites (the pinned tiles) are shared by the spaces with one profile, as Arc's: listed in each, opened in the one
-// on screen, and brought back with any of them.
+// Favorites belong to their space, survive window closure, and never appear in another space.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
@@ -9,13 +8,13 @@ const { sidebarEntries } = await import("../components/sidebar/entries.ts");
 const S = () => useBrowser.getState();
 const urls = (ids) => ids.map((id) => S().tabs[id].url);
 
-// Personal (the default space), Work sharing its profile, and Side with a profile of its own; a Personal window with a
+// Personal, Work and Side each own a profile. A Personal window has a
 // favourite (a.com) and a page (b.com).
 const setup = () => {
   S().hydrate({});
   const personal = S().settings.defaultSpaceId;
-  const work = S().createSpace({ name: "Work", shareWith: personal });
-  const side = S().createSpace({ name: "Side", shareWith: null });
+  const work = S().createSpace({ name: "Work" });
+  const side = S().createSpace({ name: "Side" });
   const w = S().createWindow({ spaceId: personal, url: "https://a.com" });
   const fav = S().windows[w].activeTabIds[S().windows[w].spaceId];
   S().newTab(w, { url: "https://b.com" });
@@ -23,22 +22,22 @@ const setup = () => {
   return { personal, work, side, w, fav };
 };
 
-test("a favourite shows in every space with its profile, and only those", () => {
+test("a favorite appears only in its owning space", () => {
   const { personal, work, side, w } = setup();
   assert.deepEqual(urls(model.favoriteTabIds(S(), w, personal)), ["https://a.com"]);
-  assert.deepEqual(urls(model.favoriteTabIds(S(), w, work)), ["https://a.com"], "Work shares Personal's profile");
+  assert.deepEqual(model.favoriteTabIds(S(), w, work), []);
   assert.deepEqual(model.favoriteTabIds(S(), w, side), [], "Side has a profile of its own");
-  assert.deepEqual(urls(sidebarEntries(S(), w, work).tiles), ["https://a.com"]);
+  assert.deepEqual(sidebarEntries(S(), w, work).tiles, []);
   assert.deepEqual(sidebarEntries(S(), w, work).list, [], "the page stays Personal's");
 });
 
-test("opening a shared favourite keeps the space on screen, and makes it that space's", () => {
-  const { work, w, fav } = setup();
+test("opening another space's favorite switches to its owner", () => {
+  const { personal, work, w, fav } = setup();
   S().switchSpace(w, work);
   assert.equal(S().windows[w].spaceId, work);
   S().activate(fav);
-  assert.equal(S().windows[w].spaceId, work, "the window stays on Work");
-  assert.equal(S().tabs[fav].spaceId, work);
+  assert.equal(S().windows[w].spaceId, personal);
+  assert.equal(S().tabs[fav].spaceId, personal);
   assert.equal(model.activeTabId(S(), w), fav);
 });
 
@@ -61,16 +60,17 @@ test("a space with its own profile doesn't take another's favourite: opening it 
   assert.equal(S().windows[w].spaceId, personal);
 });
 
-test("favourites stay their profile's when the window closes, and show in a window on another space with it", () => {
+test("favorites survive window closure without appearing in another space", () => {
   const { personal, work, w, fav } = setup();
   S().closeWindow(w);
   assert.ok(S().tabs[fav]?.unloaded, "the favourite waits, unloaded");
   const next = S().createWindow({ spaceId: work, url: "https://c.com" });
-  assert.deepEqual(urls(model.favoriteTabIds(S(), next, work)), ["https://a.com"]);
+  assert.deepEqual(model.favoriteTabIds(S(), next, work), []);
+  assert.deepEqual(urls(model.favoriteTabIds(S(), next, personal)), ["https://a.com"]);
   assert.equal(S().tabs[fav].spaceId, personal, "it stays Personal's until opened");
 });
 
-test("switching to a space whose remembered favourite is already its own shows that space", () => {
+test("switching spaces does not reuse another space's remembered favorite", () => {
   const { personal, work, w, fav } = setup();
   S().switchSpace(w, work);
   S().activate(fav);
@@ -78,6 +78,6 @@ test("switching to a space whose remembered favourite is already its own shows t
   assert.equal(S().windows[w].spaceId, personal, "Personal shows its own page");
   S().switchSpace(w, work);
   assert.equal(S().windows[w].spaceId, work, "back on Work, not kept on Personal");
-  assert.equal(S().tabs[fav].spaceId, work);
-  assert.equal(model.activeTabId(S(), w), fav);
+  assert.equal(S().tabs[fav].spaceId, personal);
+  assert.notEqual(model.activeTabId(S(), w), fav);
 });

@@ -1,8 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { bookmarkRoots, engineRoots, ensureRoots, removeBookmarkTree } from "./bookmarks";
-import { orderSections } from "./groups";
-import { listIds, navigationTo, newId, setSpaceProfiles, spaceListKey, tabToShow, viewTabIds, without } from "./model";
+import { bookmarkRoots, engineRoots, removeBookmarkTree } from "./bookmarks";
+import { newId, setSpaceProfiles, tabToShow, viewTabIds, without } from "./model";
 import { DEFAULT_GRAIN, DEFAULT_INTENSITY } from "../lib/constants";
 import { THEME_PRESETS } from "../lib/spaceTheme";
 import { SPACE_SWATCHES } from "../lib/spaceSwatches";
@@ -17,10 +16,8 @@ export type SpacesSlice = {
   orphanedProfileData: string[];
 
   /** Without a colour or theme, the space gets a look no other space has (unusedSpaceLook). */
-  createSpace(options: { name: string; color?: SpaceColor; theme?: SpaceTheme | null; icon?: string | null; shareWith?: string | null }): string;
+  createSpace(options: { name: string; color?: SpaceColor; theme?: SpaceTheme | null; icon?: string | null }): string;
   updateSpace(id: string, patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>): void;
-  /** The space takes another space's profile (`shareWith`'s), or a new one of its own (null). */
-  setSpaceProfile(id: string, shareWith: string | null): void;
   deleteSpace(id: string): void;
   reorderSpaces(ids: string[]): void;
   setDefaultSpace(id: string): void;
@@ -72,68 +69,47 @@ export function themeOfColor(color: SpaceColor): { color: SpaceColor; theme: Spa
   return { color, theme: { colors: [SPACE_SWATCHES[color]], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN } };
 }
 
-// MARK: Shared data
+// Each space owns a native profile. profileId preserves existing native directories after upgrades.
+export const profileIdOf = (space: Space) => space.profileId || space.id;
+export const engineIdOf = (space: Space) => (profileIdOf(space) === DEFAULT_SPACE_ID ? "" : profileIdOf(space));
 
-export const profileIdOf = (profile: Space) => profile.profileId ?? profile.id;
-// The engine's profile id, as model.engineProfile maps it: the original profile's data is Chrome's default profile.
-export const engineIdOf = (profile: Space) => (profileIdOf(profile) === DEFAULT_SPACE_ID ? "" : profileIdOf(profile));
-
-export function profileGroups(s: Pick<BrowserState, "spaces" | "spaceOrder">): { profileId: string; spaceIds: string[] }[] {
+/** Split older shared profiles without discarding the original owner's native data. */
+export function isolateSavedSpaces(spaces: Record<string, Space>, order: string[], orphaned: string[]) {
   const groups = new Map<string, string[]>();
-  for (const id of s.spaceOrder) {
-    const p = s.spaces[id];
-    if (!p) continue;
-    const key = profileIdOf(p);
-    groups.set(key, [...(groups.get(key) ?? []), id]);
+  for (const id of order) {
+    const profile = profileIdOf(spaces[id]!);
+    groups.set(profile, [...(groups.get(profile) ?? []), id]);
   }
-  return [...groups].map(([profileId, spaceIds]) => ({ profileId, spaceIds }));
-}
-
-/** The space that syncs its profile's data: the one the data is named after while it uses it, else the first using it. */
-export function ownsProfileData(s: Pick<BrowserState, "spaces" | "spaceOrder">, id: string): boolean {
-  const p = s.spaces[id];
-  if (!p) return false;
-  const profileId = profileIdOf(p);
-  const named = s.spaces[profileId];
-  if (named && profileIdOf(named) === profileId) return profileId === id;
-  return s.spaceOrder.find((other) => s.spaces[other] && profileIdOf(s.spaces[other]!) === profileId) === id;
-}
-
-export function sharingSpaces(s: Pick<BrowserState, "spaces" | "spaceOrder">, id: string): string[] {
-  const p = s.spaces[id];
-  if (!p) return [];
-  return s.spaceOrder.filter((other) => other !== id && s.spaces[other] && profileIdOf(s.spaces[other]!) === profileIdOf(p));
-}
-
-function syncSharedData(s: BrowserState, prev: BrowserState): Partial<BrowserState> | null {
-  if (s.spaces !== prev.spaces) {
-    setSpaceProfiles(
-      Object.fromEntries(
-        Object.values(s.spaces)
-          .filter((p) => p.profileId)
-          .map((p) => [p.id, p.profileId!]),
-      ),
-    );
+  const reserved = new Set([...groups.keys(), ...Object.keys(spaces), ...orphaned.map((id) => id || DEFAULT_SPACE_ID)]);
+  const next = { ...spaces };
+  const detached = new Set<string>();
+  const owners = new Map<string, string[]>();
+  for (const [profile, ids] of groups) {
+    const owner = ids.includes(profile) ? profile : ids[0]!;
+    owners.set(owner, ids);
+    for (const id of ids) {
+      if (id === owner) continue;
+      // Its former directory may belong to another space or still be queued for deletion.
+      let nativeId = id;
+      if (groups.has(id) || orphaned.includes(id === DEFAULT_SPACE_ID ? "" : id)) {
+        nativeId = `${id}-isolated`;
+        let suffix = 1;
+        while (reserved.has(nativeId)) nativeId = `${id}-isolated-${suffix++}`;
+      }
+      reserved.add(nativeId);
+      const { profileId: _, ...space } = spaces[id]!;
+      next[id] = nativeId === id ? space : { ...space, profileId: nativeId };
+      detached.add(id);
+    }
   }
-  if (s.spaces === prev.spaces && s.history === prev.history && s.bookmarks.roots === prev.bookmarks.roots) return null;
-  let history = s.history;
-  let roots = s.bookmarks.roots;
-  for (const { profileId, spaceIds } of profileGroups(s)) {
-    if (spaceIds.length < 2) continue;
-    const changed = spaceIds.find((id) => s.history[id] !== prev.history[id]);
-    const list = s.history[changed ?? spaceIds.find((id) => s.history[id]) ?? ""];
-    if (list) for (const id of spaceIds) if (history[id] !== list) history = { ...history, [id]: list };
-    const shared = roots[profileId] ?? roots[spaceIds.find((id) => roots[id]) ?? ""];
-    if (shared) for (const id of spaceIds) if (roots[id]?.bar !== shared.bar || roots[id]?.other !== shared.other) roots = { ...roots, [id]: shared };
-  }
-  if (history === s.history && roots === s.bookmarks.roots) return null;
-  return { history, bookmarks: roots === s.bookmarks.roots ? s.bookmarks : { ...s.bookmarks, roots } };
+  return { spaces: next, detached, owners };
 }
 
 export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> = (set, get, api) => {
   api.subscribe((s, prev) => {
-    const patch = syncSharedData(s, prev);
-    if (patch) set(patch);
+    if (s.spaces !== prev.spaces) {
+      setSpaceProfiles(Object.fromEntries(Object.values(s.spaces).map((space) => [space.id, profileIdOf(space)])));
+    }
   });
 
   return {
@@ -141,9 +117,8 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
     spaceOrder: [DEFAULT_SPACE.id],
     orphanedProfileData: [],
 
-    createSpace({ name, color, theme, icon = null, shareWith }) {
+    createSpace({ name, color, theme, icon = null }) {
       const s = get();
-      const source = shareWith ? s.spaces[shareWith] : undefined;
       const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
       const profile: Space = {
         id: newId("p"),
@@ -152,86 +127,14 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         ...(look.theme ? { theme: look.theme } : {}),
         icon,
         createdAt: Date.now(),
-        ...(source ? { profileId: profileIdOf(source) } : {}),
       };
-      let bookmarks = s.bookmarks;
-      let history = s.history;
-      if (source) {
-        const [withRoots, roots] = ensureRoots(bookmarks, source.id);
-        bookmarks = { ...withRoots, roots: { ...withRoots.roots, [profile.id]: roots } };
-        if (s.history[source.id]) history = { ...history, [profile.id]: s.history[source.id]! };
-      } else {
-        bookmarks = ensureRoots(bookmarks, profile.id)[0];
-      }
-      set({ spaces: { ...s.spaces, [profile.id]: profile }, spaceOrder: [...s.spaceOrder, profile.id], bookmarks, history });
+      const bookmarks = engineRoots(s.bookmarks, profile.id, engineIdOf(profile))[0];
+      set({ spaces: { ...s.spaces, [profile.id]: profile }, spaceOrder: [...s.spaceOrder, profile.id], bookmarks });
       return profile.id;
     },
 
     updateSpace(id, patch) {
       set((s) => (s.spaces[id] ? { spaces: { ...s.spaces, [id]: { ...s.spaces[id]!, ...patch } } } : {}));
-    },
-
-    setSpaceProfile(id, shareWith) {
-      const s = get();
-      const p = s.spaces[id];
-      const target = shareWith ? s.spaces[shareWith] : undefined;
-      if (!p || (shareWith && !target)) return;
-      const from = profileIdOf(p);
-      let profileId: string;
-      if (target) {
-        profileId = profileIdOf(target);
-        if (profileId === from) return;
-      } else {
-        if (!sharingSpaces(s, id).length) return;
-        // Its own id names its new profile, unless other spaces' profile has it (or that data is still going).
-        const free =
-          !Object.values(s.spaces).some((o) => o.id !== id && profileIdOf(o) === id) && !s.orphanedProfileData.includes(engineIdOf({ ...p, profileId: id }));
-        profileId = free ? id : newId("d");
-      }
-      const { profileId: _, ...rest } = p;
-      const moved: Space = profileId === id ? rest : { ...rest, profileId };
-      const spaces = { ...s.spaces, [id]: moved };
-      const left = engineIdOf(p);
-      const kept = Object.values(spaces).some((o) => profileIdOf(o) === from);
-      const orphanedProfileData = kept || s.orphanedProfileData.includes(left) ? s.orphanedProfileData : [...s.orphanedProfileData, left];
-
-      // Its bookmarks and history are its new profile's: another space's, or none until Chrome's are read.
-      const oldRoots = bookmarkRoots(s.bookmarks, id);
-      let bookmarks = oldRoots && !kept ? removeBookmarkTree(s.bookmarks, [oldRoots.bar, oldRoots.other]) : s.bookmarks;
-      bookmarks = target ? ensureRoots(bookmarks, target.id)[0] : bookmarks;
-      bookmarks = engineRoots(bookmarks, id, engineIdOf(moved))[0];
-      const shared = target ? s.history[target.id] : undefined;
-      const history = shared ? { ...s.history, [id]: shared } : without(s.history, [id]);
-      const ready = (map: Record<string, true>) => (target && map[target.id] ? { ...map, [id]: true as const } : without(map, [id]));
-
-      // Its tabs go to its new profile's list, after that list's own.
-      const oldKey = spaceListKey(s, id);
-      const newKey = spaceListKey({ spaces }, id);
-      const own = listIds(s, oldKey).filter((t) => s.tabs[t]?.spaceId === id);
-      const tabLists = { ...s.tabLists };
-      const remaining = listIds(s, oldKey).filter((t) => !own.includes(t));
-      if (remaining.length) tabLists[oldKey] = remaining;
-      else delete tabLists[oldKey];
-      tabLists[newKey] = orderSections([...listIds(s, newKey), ...own], s.tabs, s.groups);
-
-      // Its pages are the old profile's: each reloads in the new one, as a tab moved to another profile does.
-      const tabs = { ...s.tabs };
-      for (const t of Object.values(s.tabs)) {
-        if (t.spaceId !== id) continue;
-        const loaded = !!t.url && (!!t.navigation || !!t.adoptId);
-        const { adoptId: _a, wakeAdoptId: _w, ...tab } = t;
-        tabs[t.id] = { ...tab, navigation: loaded ? navigationTo(t.url) : null };
-      }
-      set({
-        spaces,
-        orphanedProfileData,
-        bookmarks,
-        history,
-        historyReady: ready(s.historyReady),
-        bookmarksReady: ready(s.bookmarksReady),
-        tabs,
-        tabLists,
-      });
     },
 
     deleteSpace(id) {
@@ -244,7 +147,6 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         defaultSpaceId: s.settings.defaultSpaceId === id ? fallback : s.settings.defaultSpaceId,
         neverTranslateSites: without(s.settings.neverTranslateSites ?? {}, [id]),
       };
-      const shared = sharingSpaces(s, id).length > 0;
       const engine = engineIdOf(s.spaces[id]!);
       const orphaned =
         spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine) || s.orphanedProfileData.includes(engine)
@@ -279,8 +181,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         orphanedProfileData: orphaned,
         settings,
         history: without(s.history, [id]),
-        bookmarks:
-          roots && !shared ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
+        bookmarks: roots ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
         groups: Object.fromEntries(Object.entries(s.groups).filter(([, g]) => g.spaceId !== id)),
         closedTabs: s.closedTabs.filter((c) => c.tab.spaceId !== id),
         cleanedTabs: s.cleanedTabs.filter((c) => c.tab.spaceId !== id),

@@ -121,18 +121,19 @@ test("a closed window's tabs wait with their back/forward list, and come back wi
   assert.equal(S().tabs[b].wakeAdoptId, undefined);
 });
 
-test("profiles sharing data still share it after a save and reload", () => {
+test("spaces keep separate history and bookmarks after a save and reload", () => {
   reset();
   const a = S().createSpace({ name: "A" });
-  const b = S().createSpace({ name: "B", shareWith: a });
+  const b = S().createSpace({ name: "B" });
   S().importHistory(b, [{ url: "https://a.com/", title: "A", visits: 1, lastVisit: Date.now() }]);
   const saved = JSON.parse(JSON.stringify({ spaces: S().spaces, spaceOrder: S().spaceOrder, history: S().history, bookmarks: S().bookmarks }));
   reset();
-  assert.equal(model.engineProfile(b), b, "registry follows the loaded profiles");
   S().hydrate(saved);
-  assert.equal(model.engineProfile(b), a);
-  assert.equal(S().history[a], S().history[b]);
-  assert.deepEqual(S().bookmarks.roots[a], S().bookmarks.roots[b]);
+  assert.equal(model.engineProfile(b), b);
+  assert.notEqual(model.engineProfile(a), model.engineProfile(b));
+  assert.equal(S().history[a], undefined);
+  assert.equal(S().history[b].length, 1);
+  assert.notDeepEqual(S().bookmarks.roots[a], S().bookmarks.roots[b]);
 });
 
 const flushEvents = () => new Promise((r) => setTimeout(r, 0));
@@ -146,7 +147,7 @@ test("history.json moves into Chrome once: Chrome's own visits aren't doubled, a
   stub.historyDbs.clear();
   const now = Date.now();
   const work = S().createSpace({ name: "Work" });
-  const shared = S().createSpace({ name: "Shared", shareWith: work });
+  const independent = S().createSpace({ name: "Independent" });
   // Chrome recorded a.com 20 s after the app did; b.com (imported) and c.com (another Mac's) only the app has.
   stub.chromeVisit("", "https://a.com/", "A", now - DAY + 20_000);
   // d.com: Chrome has one of two visits 30 s apart; the other is still added.
@@ -161,7 +162,10 @@ test("history.json moves into Chrome once: Chrome's own visits aren't doubled, a
   const workList = [entry("https://c.com/", [now - DAY])];
   stub.docs.set(
     "history.json",
-    JSON.stringify({ version: 2, history: { default: list, [work]: workList, [shared]: workList, gone: [entry("https://x.com/", [now])] } }),
+    JSON.stringify({
+      version: 2,
+      history: { default: list, [work]: workList, [independent]: [entry("https://independent.com/", [now - DAY])], gone: [entry("https://x.com/", [now])] },
+    }),
   );
 
   assert.equal(await migrateHistoryFile(now, { keepMs: 0 }), "moved");
@@ -170,7 +174,9 @@ test("history.json moves into Chrome once: Chrome's own visits aren't doubled, a
   assert.equal(visits("", "https://b.com/"), 2);
   assert.equal(visits("", "https://d.com/"), 2, "one visit Chrome has accounts for one saved visit");
   assert.equal(visits("", "https://old.com/"), 0, "Chrome has expired what's older than 90 days");
-  assert.equal(visits(work, "https://c.com/"), 1, "profiles sharing data add their list once");
+  assert.equal(visits(work, "https://c.com/"), 1, "Work receives only its own saved visits");
+  assert.equal(visits(independent, "https://independent.com/"), 1);
+  assert.equal(visits(independent, "https://c.com/"), 0);
   assert.equal(stub.historyDbs.get(null).has("gone"), false, "a deleted profile's list goes");
   assert.equal(stub.docs.has("history.json"), false, "the file is deleted");
 

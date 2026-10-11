@@ -25,8 +25,7 @@ export const useClearDataRequest = create<{ windowId: string | null; request(win
 
 export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const theme = useTheme();
-  const profileName = useBrowser((s) => spaceFor(s, spaceId).name);
-  const multipleProfiles = useBrowser((s) => s.spaceOrder.length > 1);
+  const spaceName = useBrowser((s) => spaceFor(s, spaceId).name);
   const [range, setRange] = useState<Range>("hour");
   const [history, setHistory] = useState(true);
   const [siteData, setSiteData] = useState(true);
@@ -61,7 +60,7 @@ export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose
         style={{ width: 440, padding: 20 }}
       >
         <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Clear Browsing Data</Text>
-        {multipleProfiles && <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>{`From your ${profileName} space`}</Text>}
+        <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>{`From your ${spaceName} space`}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 16, gap: 10 }}>
           <Text style={{ fontSize: 13, color: theme.textPrimary }}>Time range</Text>
           <PopUp value={range} options={RANGES.map(({ value, title }) => ({ value, title }))} onChange={setRange} minWidth={150} />

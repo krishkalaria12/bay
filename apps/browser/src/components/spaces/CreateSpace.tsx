@@ -1,18 +1,17 @@
-import { Symbol } from "@bay/shell";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { create } from "zustand";
 import { SPACE_COLORS, useTheme } from "../../lib/theme";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
-import { profileGroups, SPACE_LOOKS, themeOfColor, unusedSpaceLook } from "../../store/spaces";
+import { SPACE_LOOKS, themeOfColor, unusedSpaceLook } from "../../store/spaces";
 import type { SpaceColor } from "../../store/types";
 import { Button, Sheet, TextField, useFormColors } from "../settings/controls";
 import { closeSettingsSheet, showSettingsSheet } from "../settings/sheet";
 import { CREATE_SPACE_ICON_COLUMNS } from "./constants";
 import { SpaceBadge, SPACE_EMOJI, unusedSpaceIcon } from "./icons";
 
-export type CreateSpacePreset = { name?: string; shareWith?: string };
+export type CreateSpacePreset = { name?: string };
 
 type Request = { windowId: string; preset: CreateSpacePreset; resolve: (id: string | null) => void };
 
@@ -29,7 +28,7 @@ export function requestCreateSpace(windowId?: string, preset: CreateSpacePreset 
       closeSettingsSheet();
       resolve(id);
     };
-    showSettingsSheet(<CreateSpaceSheet windowId={null} preset={preset} onDone={done} />);
+    showSettingsSheet(<CreateSpaceSheet preset={preset} onDone={done} />);
   });
 }
 
@@ -41,47 +40,18 @@ export function CreateSpaceHost() {
     useRequest.setState({ request: null });
     request.resolve(id);
   };
-  return <CreateSpaceSheet windowId={windowId} preset={request.preset} onDone={done} />;
+  return <CreateSpaceSheet preset={request.preset} onDone={done} />;
 }
 
-export function profileNames(names: string[]): string {
-  if (names.length <= 2) return names.join(" & ");
-  return `${names.slice(0, 2).join(", ")}, & ${names.length - 2} more`;
-}
-
-type ProfileChoice = { value: string; title: string; separatorBefore?: boolean };
-
-/** The spaces a space can use: its own, each other one (named by the spaces using it), or a new one if it shares. */
-export function profileChoices(s: Pick<BrowserState, "spaces" | "spaceOrder">, spaceId: string): { value: string; options: ProfileChoice[] } {
-  const names = (ids: string[]) => profileNames(ids.map((id) => s.spaces[id]?.name ?? ""));
-  const groups = profileGroups(s);
-  const own = groups.find((g) => g.spaceIds.includes(spaceId));
-  const title = (ids: string[]) => {
-    if (!ids.includes(spaceId)) return `Same as ${names(ids)}`;
-    const others = ids.filter((id) => id !== spaceId);
-    return others.length ? `Shared with ${names(others)}` : "Its own profile";
-  };
-  const options = groups.map((g): ProfileChoice => ({ value: g.spaceIds[0]!, title: title(g.spaceIds) }));
-  if (own && own.spaceIds.length > 1) options.push({ value: "new", title: "New Profile", separatorBefore: true });
-  return { value: own?.spaceIds[0] ?? "new", options };
-}
-
-function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | null; preset: CreateSpacePreset; onDone: (id: string | null) => void }) {
+function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDone: (id: string | null) => void }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const spaces = useBrowser((s) => s.spaces);
-  const spaceOrder = useBrowser((s) => s.spaceOrder);
-  const groups = profileGroups({ spaces, spaceOrder });
-  const current = useBrowser((s) => (windowId && !s.windows[windowId]?.incognito ? s.windows[windowId]!.spaceId : s.settings.defaultSpaceId));
   const [name, setName] = useState(preset.name ?? "");
   const [look, setLook] = useState(() => unusedSpaceLook(useBrowser.getState().spaces));
   const [icon, setIcon] = useState<string | null>(() => unusedSpaceIcon(useBrowser.getState().spaces));
-  // As Arc: a new space uses the current space's profile (its logins and cookies) unless a new one is chosen.
-  const [shareWith, setShareWith] = useState<string | null>(preset.shareWith ?? current);
-  const selectedGroup = shareWith === null ? null : (groups.find((g) => g.spaceIds.includes(shareWith)) ?? groups[0]);
 
   const submit = () => {
-    const id = useBrowser.getState().createSpace({ name, color: look.color, theme: look.theme, icon, shareWith: selectedGroup?.spaceIds[0] ?? null });
+    const id = useBrowser.getState().createSpace({ name, color: look.color, theme: look.theme, icon });
     onDone(id);
   };
 
@@ -92,7 +62,7 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
         <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Create a Space</Text>
       </View>
       <Text style={{ fontSize: 12.5, lineHeight: 17, marginTop: 8, color: theme.textSecondary }}>
-        Spaces keep their own tabs, pinned tabs and theme. Each uses a profile for its logins, cookies, passwords, extensions, bookmarks and history.
+        Each space has its own tabs, pinned tabs, theme, history, logins, cookies, passwords, extensions and bookmarks.
       </Text>
 
       <TextField
@@ -151,47 +121,6 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
         })}
       </View>
 
-      <Label>Profile</Label>
-      <View style={{ borderRadius: 8, backgroundColor: colors.field, borderWidth: 1, borderColor: colors.fieldBorder, overflow: "hidden" }}>
-        {groups.map((g, i) => (
-          <Pressable key={g.profileId} onPress={() => setShareWith(g.spaceIds[0]!)}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-                height: 32,
-                paddingHorizontal: 10,
-                borderTopWidth: i ? 1 : 0,
-                borderColor: colors.separator,
-              }}
-            >
-              <RadioDot on={g === selectedGroup} />
-              <ColorStack colors={g.spaceIds.map((id) => SPACE_COLORS[spaces[id]!.color]?.swatch ?? "#888888")} />
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
-                Same as {profileNames(g.spaceIds.map((id) => spaces[id]!.name))}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setShareWith(null)}>
-          <View
-            style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 32, paddingHorizontal: 10, borderTopWidth: 1, borderColor: colors.separator }}
-          >
-            <RadioDot on={!selectedGroup} />
-            <Symbol name="person.crop.circle.badge.plus" size={12} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
-              New profile
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-      <Text style={{ fontSize: 11.5, lineHeight: 15, marginTop: 6, color: theme.textSecondary }}>
-        {selectedGroup
-          ? "Shares logins, cookies, passwords, extensions, bookmarks and history with those spaces. Tabs stay separate."
-          : "Starts with its own logins, cookies, passwords, extensions, bookmarks and history."}
-      </Text>
-
       <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
         <Button title="Cancel" onPress={() => onDone(null)} />
         <Button title="Create Space" kind="primary" onPress={submit} />
@@ -203,47 +132,4 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
 function Label({ children }: { children: string }) {
   const theme = useTheme();
   return <Text style={{ fontSize: 12, fontWeight: "600", color: theme.textSecondary, marginTop: 16, marginBottom: 7 }}>{children}</Text>;
-}
-
-function RadioDot({ on }: { on: boolean }) {
-  const colors = useFormColors();
-  return (
-    <View
-      style={{
-        width: 14,
-        height: 14,
-        borderRadius: 7,
-        borderWidth: on ? 0 : 1,
-        borderColor: colors.fieldBorder,
-        backgroundColor: on ? colors.accent : colors.control,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {on && <Symbol name="circle.fill" size={6} color="#FFFFFF" style={{ width: 8, height: 8 }} />}
-    </View>
-  );
-}
-
-export function ColorStack({ colors: swatches, size = 12 }: { colors: string[]; size?: number }) {
-  const theme = useTheme();
-  const shown = swatches.slice(0, 4);
-  return (
-    <View style={{ flexDirection: "row", width: size + (shown.length - 1) * (size * 0.6) }}>
-      {shown.map((c, i) => (
-        <View
-          key={i}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            marginLeft: i ? -size * 0.4 : 0,
-            backgroundColor: c,
-            borderWidth: 1,
-            borderColor: theme.dark ? "rgba(0,0,0,0.35)" : "#FFFFFF",
-          }}
-        />
-      ))}
-    </View>
-  );
 }

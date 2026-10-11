@@ -17,7 +17,6 @@ import {
 import { create } from "zustand";
 import { useBrowser } from "../store/browser";
 import { isIncognitoSpace } from "../store/model";
-import { ownsProfileData } from "../store/spaces";
 import { DEFAULT_SPACE_ID } from "../store/constants";
 import type { Space } from "../store/types";
 import {
@@ -254,17 +253,15 @@ function appAdapters(retiring: boolean): Adapter[] {
 function profileAdapters(spaceId: string, retiring: boolean): Adapter[] {
   const id = doc.deviceId!;
   if (retiring) return [deviceTabsAdapter(spaceId, id, deviceName, true)];
-  const s = useBrowser.getState();
-  const ownsData = ownsProfileData(s, spaceId);
   const t = doc.types;
   let passwords = passwordAdapters.get(spaceId);
   if (!passwords) passwordAdapters.set(spaceId, (passwords = passwordsAdapter(spaceId, () => forcePasswords)));
   return [
     ...(t.pinned ? [pinnedAdapter(spaceId)] : []),
-    ...(t.bookmarks && ownsData ? [bookmarksAdapter(spaceId)] : []),
-    ...(t.history && ownsData ? [historyAdapter(spaceId)] : []),
+    ...(t.bookmarks ? [bookmarksAdapter(spaceId)] : []),
+    ...(t.history ? [historyAdapter(spaceId)] : []),
     deviceTabsAdapter(spaceId, id, deviceName, !t.tabs),
-    ...(t.passwords && ownsData ? [passwords] : []),
+    ...(t.passwords ? [passwords] : []),
   ];
 }
 

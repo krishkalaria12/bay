@@ -12,6 +12,7 @@ export type Space = {
   color: SpaceColor;
   icon: string | null;
   createdAt: number;
+  // An existing native directory alias. Every space has a unique native profile.
   profileId?: string;
   theme?: SpaceTheme | null;
   // How long its tabs stay unused before they're cleaned up (Arc's archive, per profile there): hours, never (null),

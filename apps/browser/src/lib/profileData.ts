@@ -1,5 +1,6 @@
 import { deleteProfileData } from "@bay/nncore";
 import { useBrowser } from "../store/browser";
+import { engineIdOf } from "../store/spaces";
 import { PROFILE_CLOSE_DELAY_MS } from "./constants";
 
 // A deleted profile's engine data goes once its web views have closed. What can't be deleted stays queued
@@ -16,6 +17,12 @@ async function drain() {
       const engine = useBrowser.getState().orphanedProfileData.find((e) => !failed.has(e));
       if (engine === undefined) return;
       await new Promise((resolve) => setTimeout(resolve, PROFILE_CLOSE_DELAY_MS));
+      const state = useBrowser.getState();
+      if (!state.orphanedProfileData.includes(engine)) continue;
+      if (Object.values(state.spaces).some((space) => engineIdOf(space) === engine)) {
+        state.profileDataDeleted(engine);
+        continue;
+      }
       const remaining = await deleteProfileData(engine).catch((error: unknown) => [String(error)]);
       if (remaining.length) {
         failed.add(engine);

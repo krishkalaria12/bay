@@ -3,6 +3,7 @@ import { readDocument, writeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
 import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../store/model";
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
+import { isolateSavedSpaces } from "../store/spaces";
 import { startFavicons } from "./favicons";
 import { startBookmarks } from "./bookmarks";
 import { startHistory } from "./history";
@@ -109,6 +110,8 @@ type SessionV2 = {
   version: 2;
   spaces: HydrateData["spaces"];
   spaceOrder: string[];
+  profiles?: HydrateData["spaces"];
+  profileOrder?: string[];
   orphanedProfileData?: string[];
   settings: HydrateData["settings"];
   windows: BrowserWindow[];
@@ -126,13 +129,56 @@ type SessionV2 = {
   cleanedTabs?: BrowserState["cleanedTabs"];
 };
 
+function backupBeforeIsolation(name: string) {
+  const original = readDocument(name);
+  const backup = `${name.replace(/\.json$/, "")}.before-space-isolation.json`;
+  if (original && !readDocument(backup)) writeDocument(backup, original);
+}
+
+// Older cache files used space IDs even when several spaces shared one native profile.
+// Keep those records with the original owner before the native cache migrations run.
+function isolateLegacyFiles(owners: Map<string, string[]>, detached: Set<string>) {
+  for (const name of ["history.json", "bookmarks.json"]) {
+    const file = read<{ history?: BrowserState["history"]; bookmarks?: BrowserState["bookmarks"] }>(name);
+    if (!file) continue;
+    backupBeforeIsolation(name);
+    if (file.history) {
+      const history = { ...file.history };
+      for (const [owner, ids] of owners) {
+        const source = [owner, ...ids].find((id) => history[id]);
+        if (source) history[owner] = history[source]!;
+      }
+      for (const id of detached) delete history[id];
+      file.history = history;
+    }
+    if (file.bookmarks) {
+      const roots = { ...file.bookmarks.roots };
+      for (const [owner, ids] of owners) {
+        const source = [owner, ...ids].find((id) => roots[id]);
+        if (source) roots[owner] = roots[source]!;
+      }
+      for (const id of detached) delete roots[id];
+      file.bookmarks = { ...file.bookmarks, roots };
+    }
+    writeDocument(name, JSON.stringify(file));
+  }
+}
+
 export function loadSession(): HydrateData | null {
   const session = read<SessionV2>("session.json");
   if (session?.version !== 2) return null;
+  const spaces = session.spaces ?? session.profiles;
+  const spaceOrder = session.spaceOrder ?? session.profileOrder ?? [];
+  if (spaces) {
+    const order = [...new Set([...spaceOrder.filter((id) => spaces[id]), ...Object.keys(spaces)])];
+    const { owners, detached } = isolateSavedSpaces(spaces, order, session.orphanedProfileData ?? []);
+    if (detached.size || (!session.spaces && session.profiles)) backupBeforeIsolation("session.json");
+    if (detached.size) isolateLegacyFiles(owners, detached);
+  }
   const downloads = read<{ downloads: Download[] }>("downloads.json");
   const data: HydrateData = {
-    spaces: session.spaces,
-    spaceOrder: session.spaceOrder,
+    spaces,
+    spaceOrder,
     orphanedProfileData: session.orphanedProfileData ?? [],
     settings: session.settings,
     windows: byId(session.windows),
@@ -201,7 +247,8 @@ export function resumePersistence() {
 }
 
 export function startPersistence() {
-  useBrowser.getState().hydrate(loadSession() ?? {});
+  const session = loadSession();
+  useBrowser.getState().hydrate(session ?? {});
 
   const lastSources = new Map<string, unknown[]>();
   const lastJson = new Map<string, string>();
@@ -236,6 +283,14 @@ export function startPersistence() {
     if (dirty.size && !timer) timer = setTimeout(save, SAVE_DELAY_MS);
   };
   check(useBrowser.getState(), true);
+  if (
+    session?.spaces &&
+    (!read<SessionV2>("session.json")?.spaces ||
+      Object.entries(session.spaces).some(([id, space]) => space.profileId !== useBrowser.getState().spaces[id]?.profileId))
+  ) {
+    dirty.add(DOCS.find((doc) => doc.name === "session.json")!);
+    save();
+  }
   resume = () => {
     check(useBrowser.getState());
     save();

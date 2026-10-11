@@ -2,10 +2,10 @@ import * as cef from "@bay/nncore";
 import { listExtensions } from "@bay/nncore";
 import { confirm, focusWindow } from "@bay/shell";
 import { pageToSpace } from "../components/layout/spacePager";
-import { profileNames, requestCreateSpace, type CreateSpacePreset } from "../components/spaces/CreateSpace";
+import { requestCreateSpace, type CreateSpacePreset } from "../components/spaces/CreateSpace";
 import { useBrowser, type CreateWindowOptions } from "../store/browser";
-import { closesWindow, engineProfile, isIncognitoSpace, resolveWindowId } from "../store/model";
-import { engineIdOf, sharingSpaces } from "../store/spaces";
+import { closesWindow, isIncognitoSpace, resolveWindowId } from "../store/model";
+import { engineIdOf } from "../store/spaces";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
 import { closeWindowDialog } from "./windowClose";
@@ -61,12 +61,9 @@ export async function deleteSpace(spaceId: string, windowId?: string) {
   const s = store();
   const profile = s.spaces[spaceId];
   if (!profile || s.spaceOrder.length <= 1) return;
-  const sharing = sharingSpaces(s, spaceId).map((id) => s.spaces[id]!.name);
   const { confirmed } = await confirm({
     title: `Delete “${profile.name}”?`,
-    message: sharing.length
-      ? `Its tabs will be closed. Its cookies, passwords, extensions, bookmarks and history stay with ${profileNames(sharing)}, which share them.`
-      : `Its tabs will be closed, and its profile and all its data (cookies, passwords, extensions, bookmarks and history) will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
+    message: `Its tabs will be closed, and its cookies, passwords, extensions, bookmarks and history will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
     confirmTitle: "Delete Space",
     destructive: true,
     windowId,
@@ -74,32 +71,6 @@ export async function deleteSpace(spaceId: string, windowId?: string) {
   if (!confirmed) return;
   // The store queues its engine data for deletion (lib/profileData.ts).
   store().deleteSpace(spaceId);
-}
-
-/** As Arc's Change Profile: the space uses `shareWith`'s profile, or a new one of its own (null). Its tabs reload. */
-export async function changeSpaceProfile(spaceId: string, shareWith: string | null, windowId?: string) {
-  const s = store();
-  const profile = s.spaces[spaceId];
-  const target = shareWith ? s.spaces[shareWith] : undefined;
-  if (!profile || (shareWith && !target)) return;
-  const sharing = sharingSpaces(s, spaceId);
-  // Already so: the target's profile is its own, or it has a profile to itself.
-  const unchanged = target ? target.id === spaceId || sharing.includes(target.id) : !sharing.length;
-  if (unchanged) return;
-  const names = target ? [target.id, ...sharingSpaces(s, target.id)].map((id) => s.spaces[id]!.name) : [];
-  const uses = target ? `the profile it shares with ${profileNames(names)}` : "a new profile";
-  const { confirmed } = await confirm({
-    title: `Change “${profile.name}”'s Profile?`,
-    message: sharing.length
-      ? `Its tabs will reload in ${uses}, with that profile's logins, cookies, extensions, bookmarks and history. Its current profile stays with ${profileNames(sharing.map((id) => s.spaces[id]!.name))}.`
-      : `Its tabs will reload in ${uses}, with that profile's logins, cookies, extensions, bookmarks and history. Its current profile and all its data (cookies, passwords, extensions, bookmarks and history) will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
-    confirmTitle: "Change Profile",
-    destructive: !sharing.length,
-    windowId,
-  });
-  if (!confirmed) return;
-  // A profile no space uses any more is queued for deletion (lib/profileData.ts).
-  store().setSpaceProfile(spaceId, shareWith);
 }
 
 // Chrome won't remove the original profile's extensions without asking, so they're only turned off
@@ -110,7 +81,7 @@ async function keptExtensionsNote(): Promise<string> {
     () => null,
   );
   if (names && !names.length) return "";
-  return names ? ` Its extensions (${profileNames(names)}) stay installed on this Mac, turned off.` : " Its extensions stay installed on this Mac, turned off.";
+  return names ? ` Its extensions (${names.join(", ")}) stay installed on this Mac, turned off.` : " Its extensions stay installed on this Mac, turned off.";
 }
 
 export async function moveTabToSpace(tabId: string, target: string) {
@@ -118,11 +89,10 @@ export async function moveTabToSpace(tabId: string, target: string) {
   if (!tab || isIncognitoSpace(tab.spaceId)) return;
   const spaceId = target === "new" ? await createSpace(tab.windowId) : target;
   if (!spaceId || spaceId === tab.spaceId) return;
-  const shared = engineProfile(spaceId) === engineProfile(tab.spaceId);
-  if (store().settings.warnBeforeMovingTabsToSpace && !shared) {
+  if (store().settings.warnBeforeMovingTabsToSpace) {
     const { confirmed, suppressed } = await confirm({
       title: "Move Tab to Space?",
-      message: "This space uses a different profile, so some of the tab's site data could be lost.",
+      message: "Each space has separate logins and site data. The tab will reload using the destination space's data.",
       confirmTitle: "Move Tab",
       suppression: "Don't warn me again",
       windowId: tab.windowId,

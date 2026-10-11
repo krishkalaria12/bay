@@ -98,16 +98,15 @@ test("Little Bay's page isn't its space's until it moves to a main window", () =
   assert.equal(shown(one), "quick");
 });
 
-test("a space that changes profile takes its tabs to its new profile's list, its favourites too", () => {
+test("each space lists only its own tabs and favorites", () => {
   const { one, a } = setup();
   S().pinTabs([a], true);
   const work = S().createSpace({ name: "Work" });
   S().switchSpace(one, work);
   const w = model.activeTabId(S(), one);
-  S().setSpaceProfile("default", work);
-  assert.deepEqual(model.favoriteTabIds(S(), one, work).map(short), ["a"], "Personal's favourite is Work's profile's now");
-  assert.ok(model.spaceTabIds(S(), "default").map(short).includes("b"));
-  assert.ok(model.listIds(S(), model.spaceListKey(S(), work)).includes(w));
+  assert.deepEqual(model.favoriteTabIds(S(), one, work), []);
+  assert.deepEqual(model.spaceTabIds(S(), work), [w]);
+  assert.deepEqual(model.spaceTabIds(S(), "default").map(short), ["a", "b", "c"]);
 });
 
 test("a session keeps each space's tabs in order, and none of a private window's or Little Bay's", () => {

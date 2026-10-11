@@ -1,12 +1,12 @@
 import { create, type StateCreator } from "zustand";
-import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "./bookmarks";
+import { createBookmarksSlice, EMPTY_BOOKMARKS, engineRoots, rootIdsFor, type BookmarksSlice } from "./bookmarks";
 import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./folders";
 import { createGroupsSlice, placeFolders, type GroupsSlice } from "./groups";
 import { createHistorySlice, type HistorySlice } from "./history";
 import { IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage, spaceListKey, tabListKey, tabToShow, windowListKey } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createPeeksSlice, type PeeksSlice } from "./peeks";
-import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, type SpacesSlice } from "./spaces";
+import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, type SpacesSlice } from "./spaces";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
 import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
@@ -98,8 +98,9 @@ export const useBrowser = create<BrowserState>()(
     hydrate(data) {
       const [set, get] = a;
       const s = get();
-      const spaces = data.spaces && Object.keys(data.spaces).length ? data.spaces : { [DEFAULT_SPACE.id]: DEFAULT_SPACE };
-      const spaceOrder = [...(data.spaceOrder ?? []).filter((id) => spaces[id]), ...Object.keys(spaces).filter((id) => !data.spaceOrder?.includes(id))];
+      const savedSpaces = data.spaces && Object.keys(data.spaces).length ? data.spaces : { [DEFAULT_SPACE.id]: DEFAULT_SPACE };
+      const spaceOrder = [...new Set([...(data.spaceOrder ?? []).filter((id) => savedSpaces[id]), ...Object.keys(savedSpaces)])];
+      const { spaces, detached, owners } = isolateSavedSpaces(savedSpaces, spaceOrder, data.orphanedProfileData ?? []);
       const settings = { ...DEFAULT_SETTINGS, ...data.settings };
       if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
 
@@ -112,7 +113,7 @@ export const useBrowser = create<BrowserState>()(
         const own = rawWindows[t.windowId];
         // A peek is thrown away with its window's session (store/peeks.ts).
         if (!spaceOk(t.spaceId) || (isIncognitoSpace(t.spaceId) && !own) || t.peekOf) continue;
-        const { adoptId: _, ...rest } = t;
+        const { adoptId: _, wakeAdoptId: _wake, ...rest } = t;
         tabs[t.id] = { ...rest, windowId: own ? t.windowId : "", navigation: null, pinnedUrl: rest.pinnedUrl ?? (pinnedPage(rest) ? rest.url || null : null) };
       }
       // Each list: the saved one's order, then (an older session) each window's.
@@ -150,8 +151,47 @@ export const useBrowser = create<BrowserState>()(
           .map((g) => [g.id, g]),
       );
       const splits = sanitizeSplits(data.splits ?? {}, tabs);
-      let bookmarks = data.bookmarks ?? s.bookmarks;
-      for (const id of spaceOrder) bookmarks = ensureRoots(bookmarks, id)[0];
+      let bookmarks = data.bookmarks ?? EMPTY_BOOKMARKS;
+      const history: BrowserState["history"] = {};
+      const replacedRoots = new Set<string>();
+      // Shared native data stays with its canonical owner. Other spaces retain their tabs but start clean.
+      for (const [owner, ids] of owners) {
+        const source = [owner, ...ids].find((id) => data.history?.[id]);
+        if (source) history[owner] = data.history![source]!;
+        const roots = [owner, ...ids].map((id) => bookmarks.roots[id]).find(Boolean);
+        if (roots) {
+          const expected = rootIdsFor(engineIdOf(spaces[owner]!));
+          const nodes = { ...bookmarks.nodes };
+          for (const kind of ["bar", "other"] as const) {
+            const from = roots[kind];
+            const to = expected[kind];
+            const node = nodes[from];
+            if (from === to || node?.kind !== "folder") continue;
+            nodes[to] = { ...node, id: to };
+            replacedRoots.add(from);
+            for (const child of node.children) if (nodes[child]) nodes[child] = { ...nodes[child]!, parentId: to };
+          }
+          bookmarks = { nodes, roots: { ...bookmarks.roots, [owner]: expected } };
+        }
+      }
+      for (const id of spaceOrder) {
+        const engine = engineIdOf(spaces[id]!);
+        if (detached.has(id)) {
+          const roots = rootIdsFor(engine);
+          const nodes = { ...bookmarks.nodes };
+          delete nodes[roots.bar];
+          delete nodes[roots.other];
+          bookmarks = { ...bookmarks, nodes };
+        }
+        bookmarks = engineRoots(bookmarks, id, engine)[0];
+      }
+      // Replaced permanent folders are aliases, not another bookmark tree.
+      if (replacedRoots.size) {
+        const liveRoots = new Set(spaceOrder.flatMap((id) => Object.values(bookmarks.roots[id]!)));
+        const nodes = { ...bookmarks.nodes };
+        for (const id of replacedRoots) if (!liveRoots.has(id)) delete nodes[id];
+        bookmarks = { ...bookmarks, nodes };
+      }
       const focused = data.focusedWindowId && windows[data.focusedWindowId] ? data.focusedWindowId : (windowOrder.at(-1) ?? null);
 
       const engines = new Set(Object.values(spaces).map(engineIdOf));
@@ -184,18 +224,15 @@ export const useBrowser = create<BrowserState>()(
         selection: {},
         peeks: {},
         closedPeeks: {},
-        history: Object.fromEntries(Object.entries(data.history ?? {}).filter(([p]) => spaces[p])),
+        history,
+        historyFloor: {},
         // A view handed in (tests) counts as read; the app's history and bookmarks come from Chrome later
         // (lib/history.ts, lib/bookmarks.ts).
-        historyReady: Object.fromEntries(
-          Object.keys(data.history ?? {})
-            .filter((p) => spaces[p])
-            .map((p) => [p, true as const]),
-        ),
+        historyReady: Object.fromEntries(Object.keys(history).map((p) => [p, true as const])),
         bookmarks,
         bookmarksReady: Object.fromEntries(
           Object.keys(data.bookmarks?.roots ?? {})
-            .filter((p) => spaces[p])
+            .filter((p) => spaces[p] && !detached.has(p))
             .map((p) => [p, true as const]),
         ),
         downloads: data.downloads ?? [],

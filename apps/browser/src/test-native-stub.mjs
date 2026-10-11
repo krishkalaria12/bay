@@ -37,7 +37,7 @@ export const deleteProfileData = (profile) => (deletedProfileData.push(profile),
 
 // expo-modules-core: a test installs native modules on globalThis.nnTestNativeModules.
 export const requireOptionalNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? null;
-export const requireNativeModule = () => ({});
+export const requireNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? {};
 // Saved passwords, one store per simulated device (sync tests).
 export const passwordStores = new Map();
 export const current = { device: null };

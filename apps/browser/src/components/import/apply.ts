@@ -212,6 +212,38 @@ export async function applyResult(spaceId: string, result: ImportResult, browser
   return counts;
 }
 
+/** Each imported Arc space owns its profile. Shared source data is copied once into each destination;
+ * cookies and autofill need a fresh native token because writing consumes the token. */
+export async function applyArcProfile(
+  destinations: { spaceId: string; space: SpaceSuggestion }[],
+  result: ImportResult,
+  browserName: string,
+  readNative: () => Promise<Pick<ImportResult, "vaultToken" | "failed">>,
+  onFailed?: (kind: ImportKind) => void,
+): Promise<ImportCounts> {
+  const total = emptyCounts();
+  for (let i = 0; i < destinations.length; i++) {
+    const { spaceId, space } = destinations[i]!;
+    let token = result.vaultToken;
+    if (i > 0 && token) {
+      token = undefined;
+      try {
+        const fresh = await readNative();
+        token = fresh.vaultToken;
+        fresh.failed.forEach((kind) => onFailed?.(kind));
+      } catch (error) {
+        if ((error as { code?: string } | null)?.code === "cancelled") throw error;
+        if (result.cookieCount) onFailed?.("cookies");
+        if (result.addressCount || result.cardCount) onFailed?.("autofill");
+      }
+    }
+    const counts = await applyResult(spaceId, { ...result, vaultToken: token }, browserName, onFailed);
+    counts.tabs += importArcSpace(spaceId, space);
+    for (const key of Object.keys(total) as (keyof ImportCounts)[]) total[key] += counts[key];
+  }
+  return total;
+}
+
 /** `cookies`: whether the user kept Safari's cookies ticked (the export file has none; its cards always come). */
 export async function applySafari(spaceId: string, data: SafariExport, cookies = true, onFailed?: (kind: ImportKind) => void): Promise<ImportCounts> {
   const counts = emptyCounts();

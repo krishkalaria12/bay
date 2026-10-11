@@ -8,9 +8,9 @@ import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID } from "../settings/windows";
 import {
   applyResult,
+  applyArcProfile,
   applySafari,
   emptyCounts,
-  importArcSpace,
   importBookmarks,
   importDiaProfile,
   openInWebStore,
@@ -136,10 +136,10 @@ export function useImportFlow() {
     void run(without);
   };
 
-  const destination = async (index: number, name: string, color?: string, emoji?: string): Promise<string> => {
+  const destination = async (index: number, name: string, color?: string, emoji?: string, used?: Set<string>): Promise<string> => {
     if (index === 0) return target;
     const s = useBrowser.getState();
-    const clash = s.spaceOrder.find((id) => s.spaces[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
+    const clash = s.spaceOrder.find((id) => !used?.has(id) && s.spaces[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (clash) {
       const { confirmed } = await confirm({
         title: "Import as new Space?",
@@ -169,6 +169,7 @@ export function useImportFlow() {
     const failed = new Map<ImportKind, string[]>();
     const add = (c: ImportCounts) => (Object.keys(total) as (keyof ImportCounts)[]).forEach((k) => (total[k] += c[k]));
     let destinationIndex = 0;
+    const usedDestinations = new Set<string>();
     const found = new Map<string, ImportedExtension>();
     const left: string[] = [];
     let extensionsProfile = "";
@@ -203,21 +204,29 @@ export function useImportFlow() {
         if (!names.includes(profile.name)) failed.set(k, [...names, profile.name]);
       };
 
-      // Arc: each space goes to its own profile, the first holding the rest of the profile's data.
+      // Arc's spaces can share source data; each destination keeps an independent copy.
       let dest: string;
-      if (isArc) {
-        let first: string | null = null;
+      if (isArc && result.spaces.length) {
+        const destinations = [];
         for (const space of result.spaces) {
           const name = space.name || "Space";
-          const spaceDest = await destination(destinationIndex++, name, space.color, space.emoji);
-          if (first === null) first = spaceDest;
-          add({ ...emptyCounts(), tabs: importArcSpace(spaceDest, space) });
+          const spaceDest = await destination(destinationIndex++, name, space.color, space.emoji, usedDestinations);
+          usedDestinations.add(spaceDest);
+          destinations.push({ spaceId: spaceDest, space });
         }
-        dest = first ?? (await destination(destinationIndex++, result.profile?.name ?? profile.name, result.profile?.color));
+        dest = destinations[0]!.spaceId;
+        const nativeKinds = order.filter((kind) => kind === "cookies" || kind === "autofill");
+        try {
+          add(await applyArcProfile(destinations, result, source.name, () => api.importData(source.id, profile.id, nativeKinds, options), refused));
+        } catch (error) {
+          if (errorCode(error) === "cancelled") return;
+          throw error;
+        }
       } else {
-        dest = await destination(destinationIndex++, result.profile?.name ?? profile.name, result.profile?.color ?? profile.color);
+        dest = await destination(destinationIndex++, result.profile?.name ?? profile.name, result.profile?.color ?? profile.color, undefined, usedDestinations);
+        usedDestinations.add(dest);
+        add(await applyResult(dest, result, source.name, refused));
       }
-      add(await applyResult(dest, result, source.name, refused));
       if (!extensionsProfile) extensionsProfile = dest;
       if (source.family === "chromium" || source.family === "arc") {
         for (const e of await api.listExtensions(source.id, profile.id).catch(() => [])) found.set(e.id, e);

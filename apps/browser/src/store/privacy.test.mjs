@@ -324,17 +324,17 @@ test("deleting the original profile queues Chrome's default profile for deletion
   assert.deepEqual(S().orphanedProfileData, [""], "the last profile can't be deleted");
 });
 
-test("a profile sharing another's data leaves nothing to delete until the last one goes", () => {
+test("each deleted space queues only its own native data", () => {
   S().hydrate({});
-  const shared = S().createSpace({ name: "Shared", shareWith: "default" });
+  const independent = S().createSpace({ name: "Independent" });
   const other = S().createSpace({ name: "Other" });
   S().deleteSpace("default");
-  assert.deepEqual(S().orphanedProfileData, []);
-  S().deleteSpace(shared);
   assert.deepEqual(S().orphanedProfileData, [""]);
+  S().deleteSpace(independent);
+  assert.deepEqual(S().orphanedProfileData, ["", independent]);
   S().createSpace({ name: "New" });
   S().deleteSpace(other);
-  assert.deepEqual(S().orphanedProfileData, ["", other]);
+  assert.deepEqual(S().orphanedProfileData, ["", independent, other]);
 });
 
 test("queued profile data is deleted once, and stays queued in session.json until that succeeds", async () => {
@@ -364,22 +364,24 @@ test("queued profile data is deleted once, and stays queued in session.json unti
   again();
 });
 
-test("deleting a profile keeps the data others share", () => {
+test("deleting a space removes only its own history and bookmarks", () => {
   S().hydrate({});
   const a = S().createSpace({ name: "A" });
   S().importHistory(a, [{ url: "https://a.com/", title: "A", visits: 1, lastVisit: 2 }]);
   const bookmark = S().addBookmark({ spaceId: a, url: "https://b.com/", title: "B" });
-  const b = S().createSpace({ name: "B", shareWith: a });
+  const b = S().createSpace({ name: "B" });
+  S().importHistory(b, [{ url: "https://c.com/", title: "C", visits: 1, lastVisit: 3 }]);
+  const kept = S().addBookmark({ spaceId: b, url: "https://d.com/", title: "D" });
   S().deleteSpace(a);
   assert.equal(S().spaces[a], undefined);
-  assert.equal(model.engineProfile(b), a, "still on A's engine context");
-  assert.ok(S().bookmarks.nodes[bookmark], "shared bookmarks stay");
+  assert.equal(model.engineProfile(b), b);
+  assert.equal(S().bookmarks.nodes[bookmark], undefined);
+  assert.ok(S().bookmarks.nodes[kept]);
+  assert.equal(S().history[a], undefined);
   assert.deepEqual(
     S().history[b].map((h) => h.url),
-    ["https://a.com/"],
+    ["https://c.com/"],
   );
-  S().importHistory(b, [{ url: "https://c.com/", title: "C", visits: 1, lastVisit: 3 }]);
-  assert.equal(S().history[b].length, 2);
   S().deleteSpace(b);
-  assert.equal(S().bookmarks.nodes[bookmark], undefined);
+  assert.equal(S().bookmarks.nodes[kept], undefined);
 });

@@ -3,9 +3,7 @@ import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
-import { ownsProfileData, sharingSpaces } from "../../../store/spaces";
 import {
   addRemoteProfile,
   chooseSyncFolder,
@@ -42,8 +40,8 @@ export function SyncPane() {
   return (
     <View>
       <Text style={{ marginTop: 20, fontSize: 12.5, lineHeight: 17, color: theme.textSecondary }}>
-        Sync your profiles, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your Macs. It all goes through a folder you
-        choose, like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
+        Sync your spaces, bookmarks, history, open tabs, pinned tabs, groups, passwords and settings across your Macs. It all goes through a folder you choose,
+        like one in iCloud Drive, and it’s end-to-end encrypted: only your devices can read it.
       </Text>
       {enabled ? <SyncOn info={info} /> : <SyncOff info={info} />}
     </View>
@@ -184,8 +182,6 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
   const devices = useSync((s) => s.devices);
   const remoteProfiles = useSync((s) => s.remoteProfiles);
   const profiles = useSpaces();
-  const allProfiles = useBrowser((s) => s.spaces);
-  const order = useBrowser((s) => s.spaceOrder);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000);
@@ -234,16 +230,8 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       <Group>
         {profiles.map((p) => {
           const link = links[p.id];
-          const state = { spaces: allProfiles, spaceOrder: order };
-          const ownerId = ownsProfileData(state, p.id) ? undefined : [p.id, ...sharingSpaces(state, p.id)].find((id) => ownsProfileData(state, id));
-          const owner = ownerId ? allProfiles[ownerId] : undefined;
           return (
-            <Row
-              key={p.id}
-              icon={<SpaceBadge profile={p} size={24} />}
-              title={p.name}
-              description={owner ? `Shares data with ${owner.name}: its tabs sync here, its data syncs with ${owner.name}.` : undefined}
-            >
+            <Row key={p.id} icon={<SpaceBadge profile={p} size={24} />} title={p.name}>
               <Toggle value={!!link?.enabled} disabled={!link} onChange={(on) => setProfileSynced(p.id, on)} />
             </Row>
           );

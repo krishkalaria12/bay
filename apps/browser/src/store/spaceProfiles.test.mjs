@@ -1,84 +1,141 @@
-// A space's profile can change after it's made, as Arc's Change Profile: to another space's, or to a new one of its
-// own. Its tabs reload in it, and a profile no space uses any more goes.
+// Every sidebar space has its own native browser profile. Older shared profiles split on hydration.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
 const model = await import("./model.ts");
-const { ownsProfileData, sharingSpaces } = await import("./spaces.ts");
-
 const S = () => useBrowser.getState();
-const urls = (ids) => ids.map((id) => S().tabs[id].url);
+const space = (id, profileId) => ({ id, name: id, color: "blue", icon: null, createdAt: 0, ...(profileId ? { profileId } : {}) });
+const history = [{ url: "https://visited.example/", title: "Visited", favicon: null, visits: 1, lastVisit: 10 }];
+const save = () =>
+  JSON.parse(
+    JSON.stringify({
+      spaces: S().spaces,
+      spaceOrder: S().spaceOrder,
+      tabs: S().tabs,
+      tabLists: S().tabLists,
+      bookmarks: S().bookmarks,
+      history: S().history,
+      orphanedProfileData: S().orphanedProfileData,
+    }),
+  );
 
-// Personal (the default space) with a favourite (a.com) and a page (b.com), Work sharing its profile, and Side with a
-// profile of its own and a page (c.com).
-const setup = () => {
+test("new spaces have separate native history and bookmarks, even with a legacy sharing option", () => {
   S().hydrate({});
   const personal = S().settings.defaultSpaceId;
+  S().importHistory(personal, history);
+  const bookmark = S().addBookmark({ spaceId: personal, url: "https://saved.example/", title: "Saved" });
   const work = S().createSpace({ name: "Work", shareWith: personal });
-  const side = S().createSpace({ name: "Side", shareWith: null });
-  const w = S().createWindow({ spaceId: personal, url: "https://a.com" });
-  const fav = S().windows[w].activeTabIds[S().windows[w].spaceId];
-  S().newTab(w, { url: "https://b.com" });
+  assert.notEqual(model.engineProfile(personal), model.engineProfile(work));
+  assert.notDeepEqual(S().bookmarks.roots[personal], S().bookmarks.roots[work]);
+  assert.equal(S().history[work], undefined);
+  S().importHistory(work, [{ ...history[0], url: "https://work.example/" }]);
+  assert.deepEqual(
+    S().history[personal].map((h) => h.url),
+    [history[0].url],
+  );
+  assert.ok(S().bookmarks.nodes[bookmark]);
+  assert.equal(S().setSpaceProfile, undefined, "profiles cannot be reassigned between spaces");
+});
+
+test("legacy sharing preserves the named owner, its native directory and bookmarks", () => {
+  S().hydrate({});
+  const bookmark = S().addBookmark({ spaceId: "default", url: "https://saved.example/", title: "Saved" });
+  const bookmarks = S().bookmarks;
+  S().hydrate({
+    spaces: { work: space("work", "default"), default: space("default") },
+    spaceOrder: ["work", "default"],
+    bookmarks: { ...bookmarks, roots: { ...bookmarks.roots, work: bookmarks.roots.default } },
+    history: { default: history, work: history },
+    orphanedProfileData: [""],
+  });
+  assert.equal(model.engineProfile("default"), "");
+  assert.equal(model.engineProfile("work"), "work");
+  assert.deepEqual(S().history.default, history);
+  assert.equal(S().history.work, undefined);
+  assert.equal(S().historyReady.work, undefined);
+  assert.equal(S().bookmarksReady.work, undefined);
+  assert.ok(S().bookmarks.nodes[bookmark]);
+  assert.notDeepEqual(S().bookmarks.roots.default, S().bookmarks.roots.work);
+  assert.deepEqual(S().orphanedProfileData, [], "the original native directory must not be deleted");
+});
+
+test("a legacy profile without its named space belongs to the first ordered space", () => {
+  S().hydrate({ spaces: { a: space("a", "old"), b: space("b", "old") }, spaceOrder: ["b", "a"], history: { a: history }, orphanedProfileData: ["old"] });
+  assert.equal(model.engineProfile("b"), "old", "existing engine data keeps its alias");
+  assert.equal(model.engineProfile("a"), "a");
+  assert.deepEqual(S().history.b, history, "the shared saved view stays with its native owner");
+  assert.equal(S().history.a, undefined);
+  assert.deepEqual(S().orphanedProfileData, []);
+});
+
+test("splitting legacy shared lists preserves each space's tab order and favorites", () => {
+  S().hydrate({});
+  const work = S().createSpace({ name: "Work" });
+  const w = S().createWindow({ url: "https://personal.example/" });
+  const personalTab = model.activeTabId(S(), w);
+  S().pinTabs([personalTab], true);
+  const row = S().newTab(w, { spaceId: work, url: "https://row.example/", background: true });
+  S().updateTab(row, { pinnedRow: true });
+  const fav = S().newTab(w, { spaceId: work, url: "https://favorite.example/", background: true });
   S().pinTabs([fav], true);
-  S().switchSpace(w, side);
-  const page = S().newTab(w, { url: "https://c.com" });
-  S().switchSpace(w, work);
-  return { personal, work, side, w, fav, page };
-};
-
-test("a space sharing a profile can take a new one of its own; the other keeps the old one", () => {
-  const { personal, work, w } = setup();
-  S().setSpaceProfile(work, null);
-  assert.equal(S().spaces[work].profileId, undefined, "its own id names its new profile");
-  assert.notEqual(model.engineProfile(work), model.engineProfile(personal));
-  assert.deepEqual(sharingSpaces(S(), work), []);
-  assert.deepEqual(S().orphanedProfileData, [], "Personal still uses the old profile");
-  assert.deepEqual(model.favoriteTabIds(S(), w, work), [], "Personal's favourite isn't Work's any more");
-  assert.notDeepEqual(S().bookmarks.roots[work], S().bookmarks.roots[personal]);
-  assert.equal(S().historyReady[work], undefined, "its history is read from its new profile");
+  const page = S().newTab(w, { spaceId: work, url: "https://page.example/", background: true });
+  const saved = save();
+  saved.spaces[work].profileId = "default";
+  saved.tabLists = { default: [personalTab, fav, row, page] };
+  saved.tabs[page].wakeAdoptId = "restore:old-profile";
+  S().hydrate(saved);
+  assert.deepEqual(model.spaceTabIds(S(), "default"), [personalTab]);
+  assert.deepEqual(model.spaceTabIds(S(), work), [fav, row, page]);
+  assert.equal(S().tabs[page].wakeAdoptId, undefined, "restored pages cannot adopt the old native context");
+  assert.equal(S().tabs[fav].spaceId, work);
+  assert.equal(S().tabs[row].pinnedRow, true);
 });
 
-test("the space a profile is named after can leave it: it takes a new id, and the others keep the profile", () => {
-  const { personal, work } = setup();
-  const engine = model.engineProfile(personal);
-  S().setSpaceProfile(personal, null);
-  assert.ok(S().spaces[personal].profileId, "its own id still names the profile Work uses");
-  assert.notEqual(model.engineProfile(personal), engine);
-  assert.equal(model.engineProfile(work), engine);
-  assert.ok(ownsProfileData(S(), work), "Work syncs the profile's data now");
-  assert.ok(ownsProfileData(S(), personal));
+test("migration avoids active native ids and native data still queued for deletion", () => {
+  const saved = {
+    spaces: { default: space("default", "shared"), shared: space("shared"), work: space("work", "shared"), other: space("other", "work-isolated") },
+    spaceOrder: ["default", "work", "shared", "other"],
+    orphanedProfileData: ["work"],
+  };
+  S().hydrate(saved);
+  const native = S().spaceOrder.map(model.engineProfile);
+  assert.equal(new Set(native).size, native.length);
+  assert.notEqual(model.engineProfile("work"), "work");
+  assert.notEqual(model.engineProfile("work"), "work-isolated");
+  assert.equal(model.engineProfile("shared"), "shared");
+  assert.deepEqual(S().orphanedProfileData, ["work"]);
+  const migrated = save();
+  S().hydrate(migrated);
+  assert.deepEqual(save(), migrated, "an already migrated session stays unchanged");
 });
 
-test("a space can take another's profile: it shares their favourites and bookmarks, and its old profile goes", () => {
-  const { personal, side, w } = setup();
-  const engine = model.engineProfile(side);
-  S().setSpaceProfile(side, personal);
-  assert.equal(model.engineProfile(side), model.engineProfile(personal));
-  assert.deepEqual(S().orphanedProfileData, [engine], "no space uses Side's old profile");
-  assert.deepEqual(urls(model.favoriteTabIds(S(), w, side)), ["https://a.com"]);
-  assert.deepEqual(S().bookmarks.roots[side], S().bookmarks.roots[personal]);
-  assert.equal(S().bookmarks.nodes[`bar@${engine}`], undefined, "the old profile's bookmarks went with it");
+test("unique historical aliases keep their native data and tab list becomes space-owned", () => {
+  S().hydrate({ spaces: { work: space("work", "historical") }, spaceOrder: ["work"], history: { work: history } });
+  assert.equal(model.engineProfile("work"), "historical");
+  assert.deepEqual(S().bookmarks.roots.work, { bar: "bar@historical", other: "other@historical" });
+  assert.equal(model.spaceListKey(S(), "work"), "work");
+  assert.deepEqual(S().history.work, history);
+  S().hydrate({});
+  assert.equal(model.engineProfile("work"), "work", "the native registry follows the next hydrated session");
 });
 
-test("a space's pages reload in its new profile; one that hasn't loaded stays so", () => {
-  const { side, w, page } = setup();
-  const before = S().tabs[page].navigation;
-  const asleep = S().newTab(w, { url: "https://d.com", spaceId: side, background: true });
-  S().updateTab(asleep, { navigation: null, wakeAdoptId: "restore:x" });
-  S().setSpaceProfile(side, null);
-  assert.equal(S().tabs[page].navigation, before, "Side has its own profile already: nothing changes");
-  S().setSpaceProfile(side, S().settings.defaultSpaceId);
-  assert.notEqual(S().tabs[page].navigation, before);
-  assert.equal(S().tabs[page].navigation.url, "https://c.com");
-  assert.equal(S().tabs[asleep].navigation, null);
-  assert.equal(S().tabs[asleep].wakeAdoptId, undefined, "its closed page was the old profile's");
-});
-
-test("a profile left while its data is still going isn't reused", () => {
-  const { personal, side } = setup();
-  S().setSpaceProfile(side, personal);
-  const gone = S().orphanedProfileData[0];
-  S().setSpaceProfile(side, null);
-  assert.notEqual(model.engineProfile(side), gone);
-  assert.ok(S().spaces[side].profileId);
+test("the canonical owner rekeys cached bookmark roots and detached roots start empty", () => {
+  const bar = { kind: "folder", id: "legacy-bar", parentId: null, title: "Bookmarks Bar", children: ["saved"], addedAt: 0 };
+  const other = { kind: "folder", id: "legacy-other", parentId: null, title: "Other Bookmarks", children: [], addedAt: 0 };
+  const saved = { kind: "url", id: "saved", parentId: bar.id, title: "Saved", url: "https://saved.example/", favicon: null, addedAt: 0 };
+  S().hydrate({
+    spaces: { a: space("a", "old"), b: space("b", "old") },
+    spaceOrder: ["a", "b"],
+    bookmarks: {
+      nodes: { [bar.id]: bar, [other.id]: other, saved, "bar@b": { ...bar, id: "bar@b" } },
+      roots: { a: { bar: bar.id, other: other.id }, b: { bar: bar.id, other: other.id } },
+    },
+  });
+  assert.deepEqual(S().bookmarks.roots.a, { bar: "bar@old", other: "other@old" });
+  assert.deepEqual(S().bookmarks.nodes["bar@old"].children, ["saved"]);
+  assert.equal(S().bookmarks.nodes.saved.parentId, "bar@old");
+  assert.equal(S().bookmarks.nodes[bar.id], undefined, "the replaced bar root is not a duplicate tree");
+  assert.equal(S().bookmarks.nodes[other.id], undefined);
+  assert.equal(Object.keys(S().bookmarks.nodes).length, 5);
+  assert.deepEqual(S().bookmarks.nodes["bar@b"].children, [], "an unused cached root is not another space's bookmarks");
 });

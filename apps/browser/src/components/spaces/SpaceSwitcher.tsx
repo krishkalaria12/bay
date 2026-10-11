@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 import { useEffect } from "react";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
-import { changeSpaceProfile, deleteSpace, switchSpace } from "../../lib/actions";
+import { deleteSpace, switchSpace } from "../../lib/actions";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
@@ -14,7 +14,6 @@ import { newPinnedFolderWith, openIconPicker } from "../sidebar/actions";
 import { openNewMenu } from "../sidebar/NewMenu";
 import { NEW_MENU_ID, NEW_MENU_MS } from "../sidebar/constants";
 import { registerRow, useSidebarUi } from "../sidebar/state";
-import { profileChoices } from "./CreateSpace";
 import { SpaceGlyph } from "./SpaceGlyph";
 import { requestRename } from "../RenameDialog";
 import { newLiveFolderMenuItem, runNewLiveFolder } from "../sidebar/liveMenus";
@@ -31,8 +30,7 @@ import {
   SPACE_SIDE,
 } from "./constants";
 
-// Arc's space switcher, at the foot of the sidebar: a space's icon each (Bay's profiles are Arc's spaces), the shown
-// one at full strength as the pager moves, and + for a new space. Dots once the icons don't fit.
+// Each icon selects a space with its own browsing profile. Dots replace icons once they no longer fit.
 
 export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.spaceOrder));
@@ -88,12 +86,11 @@ function NewButton({ windowId }: { windowId: string }) {
 
 export { openNewMenu };
 
-/** A space's menu (only from its title row's …), in yab's order, then the space's profile and deleting it. */
+/** A space's menu from its title row's …, with customization, settings and deletion. */
 export async function openSpaceMenu(windowId: string, id: string) {
   const s = useBrowser.getState();
   const space = s.spaces[id];
   if (!space) return;
-  const profiles = profileChoices(s, id);
   const choice = await showMenu([
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
     { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
@@ -102,15 +99,6 @@ export async function openSpaceMenu(windowId: string, id: string) {
     { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
     newLiveFolderMenuItem(),
     { separator: true },
-    {
-      id: "profileMenu",
-      title: "Profile",
-      symbol: "person.crop.circle",
-      children: profiles.options.flatMap((o) => [
-        ...(o.separatorBefore ? [{ separator: true as const }] : []),
-        { id: `profile:${o.value}`, title: o.title, checked: o.value === profiles.value },
-      ]),
-    },
     { id: "settings", title: "Settings…", symbol: "gearshape" },
     { id: "delete", title: "Delete Space…", symbol: "trash", enabled: s.spaceOrder.length > 1 },
   ]);
@@ -128,9 +116,6 @@ export async function openSpaceMenu(windowId: string, id: string) {
   } else if (choice.startsWith("live:")) {
     here();
     runNewLiveFolder(windowId, choice);
-  } else if (choice.startsWith("profile:") && choice !== `profile:${profiles.value}`) {
-    const target = choice.slice("profile:".length);
-    void changeSpaceProfile(id, target === "new" ? null : target, windowId);
   } else if (choice === "settings") openSettings("spaces", id);
   else if (choice === "delete") void deleteSpace(id, windowId);
 }
