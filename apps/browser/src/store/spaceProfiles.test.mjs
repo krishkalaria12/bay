@@ -153,3 +153,44 @@ test("the canonical owner rekeys cached bookmark roots and detached roots start 
   assert.equal(Object.keys(S().bookmarks.nodes).length, 5);
   assert.deepEqual(S().bookmarks.nodes["bar@b"].children, [], "an unused cached root is not another space's bookmarks");
 });
+
+// New Space › Sign-ins, both ways. Shared: one native profile (Chrome's logins, cookies, passwords, autofill,
+// extensions and history are the profile's), one bookmark tree, one space syncing it, and deleting either space
+// leaves the other everything. Its own: a profile, bookmarks and sync of its own. Tabs, pinned tabs, folders and the
+// look are always the space's.
+test("shared sign-ins share the whole profile; its own sign-ins share nothing", async () => {
+  const { ownsProfileData } = await import("./spaces.ts");
+  const { folderChildren } = await import("./bookmarks.ts");
+  S().hydrate({});
+  const personal = S().settings.defaultSpaceId;
+  const shared = S().createSpace({ name: "Shared", shareWith: personal });
+  const own = S().createSpace({ name: "Own" });
+  const bar = (id) => folderChildren(S().bookmarks, S().bookmarks.roots[id].bar).map((n) => n.title);
+
+  // The profile: what Chrome keeps (cookies, logins, passwords, history, extensions) goes by it.
+  assert.equal(model.engineProfile(shared), model.engineProfile(personal));
+  assert.notEqual(model.engineProfile(own), model.engineProfile(personal));
+
+  // Bookmarks: one tree for the shared pair, wherever one is added.
+  S().addBookmark({ spaceId: shared, url: "https://from-shared.example/", title: "From Shared" });
+  assert.deepEqual(bar(personal), bar(shared));
+  assert.ok(bar(personal).includes("From Shared"), "a bookmark added in the shared space shows in Personal");
+  assert.ok(!bar(own).includes("From Shared"), "and not in the space with its own sign-ins");
+
+  // Sync: the pair's profile data goes up once; the separate space syncs its own.
+  assert.deepEqual(
+    [personal, shared, own].map((id) => ownsProfileData(S(), id)),
+    [true, false, true],
+  );
+
+  // Tabs stay each space's own.
+  const w = S().createWindow({ spaceId: shared, url: "https://shared-tab.example/" });
+  const tab = S().windows[w].activeTabIds[shared];
+  assert.equal(S().tabs[tab].spaceId, shared);
+  assert.ok(!model.viewTabIds(S(), w, personal).includes(tab));
+
+  // Deleting one of the pair keeps the profile and the bookmarks for the other.
+  S().deleteSpace(shared);
+  assert.ok(bar(personal).includes("From Shared"), "Personal keeps the shared bookmarks");
+  assert.ok(!S().orphanedProfileData.includes(model.engineProfile(personal)), "its profile isn't queued for deletion");
+});

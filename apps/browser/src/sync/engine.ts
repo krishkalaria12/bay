@@ -1,3 +1,4 @@
+import { ownsProfileData } from "../store/spaces";
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import {
   Clock,
@@ -256,12 +257,14 @@ function profileAdapters(spaceId: string, retiring: boolean): Adapter[] {
   const t = doc.types;
   let passwords = passwordAdapters.get(spaceId);
   if (!passwords) passwordAdapters.set(spaceId, (passwords = passwordsAdapter(spaceId, () => forcePasswords)));
+  // Spaces sharing sign-ins share one profile's bookmarks, history and passwords: one of them syncs those.
+  const owns = ownsProfileData(useBrowser.getState(), spaceId);
   return [
     ...(t.pinned ? [pinnedAdapter(spaceId)] : []),
-    ...(t.bookmarks ? [bookmarksAdapter(spaceId)] : []),
-    ...(t.history ? [historyAdapter(spaceId)] : []),
+    ...(t.bookmarks && owns ? [bookmarksAdapter(spaceId)] : []),
+    ...(t.history && owns ? [historyAdapter(spaceId)] : []),
     deviceTabsAdapter(spaceId, id, deviceName, !t.tabs),
-    ...(t.passwords ? [passwords] : []),
+    ...(t.passwords && owns ? [passwords] : []),
   ];
 }
 

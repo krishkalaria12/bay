@@ -74,6 +74,20 @@ export function themeOfColor(color: SpaceColor): { color: SpaceColor; theme: Spa
 export const profileIdOf = (space: Space) => space.profileId || space.id;
 export const engineIdOf = (space: Space) => (profileIdOf(space) === DEFAULT_SPACE_ID ? "" : profileIdOf(space));
 
+/**
+ * The space that syncs its profile's data (bookmarks, history, passwords): with shared sign-ins several spaces use one
+ * profile, and only one may sync it (else the same data goes up twice). The one the profile is named after, else the
+ * first using it.
+ */
+export function ownsProfileData(s: Pick<BrowserState, "spaces" | "spaceOrder">, id: string): boolean {
+  const space = s.spaces[id];
+  if (!space) return false;
+  const profile = profileIdOf(space);
+  const named = s.spaces[profile];
+  if (named && profileIdOf(named) === profile) return profile === id;
+  return s.spaceOrder.find((other) => s.spaces[other] && profileIdOf(s.spaces[other]!) === profile) === id;
+}
+
 /** Split older shared profiles without discarding the original owner's native data. */
 export function isolateSavedSpaces(spaces: Record<string, Space>, order: string[], orphaned: string[]) {
   const groups = new Map<string, string[]>();
@@ -152,10 +166,9 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         neverTranslateSites: without(s.settings.neverTranslateSites ?? {}, [id]),
       };
       const engine = engineIdOf(s.spaces[id]!);
-      const orphaned =
-        spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine) || s.orphanedProfileData.includes(engine)
-          ? s.orphanedProfileData
-          : [...s.orphanedProfileData, engine];
+      // Another space shares its sign-ins: the profile, and its bookmarks, stay theirs.
+      const shared = spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine);
+      const orphaned = shared || s.orphanedProfileData.includes(engine) ? s.orphanedProfileData : [...s.orphanedProfileData, engine];
 
       // Its windows show the fallback space: the tab each showed there, else its most recent one, else a new one.
       for (const w of Object.values(s.windows)) {
@@ -185,7 +198,8 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         orphanedProfileData: orphaned,
         settings,
         history: without(s.history, [id]),
-        bookmarks: roots ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
+        bookmarks:
+          roots && !shared ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
         groups: Object.fromEntries(Object.entries(s.groups).filter(([, g]) => g.spaceId !== id)),
         closedTabs: s.closedTabs.filter((c) => c.tab.spaceId !== id),
         cleanedTabs: s.cleanedTabs.filter((c) => c.tab.spaceId !== id),
