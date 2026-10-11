@@ -96,3 +96,34 @@ test("a space's own theme shows over a page with a colour; a preset colour gives
   S().updateSpace(space, { theme: { colors: ["#F27AA0", "#B04FD0"], intensity: 0.9, grain: 0.5 } });
   assert.match(themeKey(S(), w, null), /^custom\|#F27AA0,#B04FD0\|0\.90\|0\.50:(light|dark)$/);
 });
+
+// 1.0.0: a light page (Bay's site, #EDEEF1) turned a dark-mode window light, and a dark one (apple.com) a light-mode
+// window dark. Light or dark is the user's; the page's colour is fitted to it, keeping its hue.
+test("a page's colour never overrides the user's light or dark", async () => {
+  const { useBrowser } = await import("../store/browser.ts");
+  const { themeKey, themeFor } = await import("./theme.ts");
+  const { isLightColor } = await import("./windowTint.ts");
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const space = S().settings.defaultSpaceId;
+  S().updateSpace(space, { theme: null });
+  const w = S().createWindow({ spaceId: space, url: "https://example.com" });
+  const tab = S().windows[w].activeTabIds[space];
+  const page = (themeColor) => useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor } } });
+  const tint = () => themeKey(S(), w, null).split("@")[1];
+
+  S().setAppDark(true);
+  page("#EDEEF1");
+  assert.match(themeKey(S(), w, null), /:dark@/, "dark mode stays dark on a light page");
+  assert.equal(themeFor(themeKey(S(), w, null)).dark, true);
+  assert.equal(isLightColor(tint()), false, "the window takes the page's hue, dark");
+  page("#202124");
+  assert.match(themeKey(S(), w, null), /:dark@#202124$/, "a dark page shows as it is");
+
+  S().setAppDark(false);
+  page("#000000");
+  assert.match(themeKey(S(), w, null), /:light@/, "light mode stays light on a dark page");
+  assert.equal(isLightColor(tint()), true);
+  page("#FFFFFF");
+  assert.match(themeKey(S(), w, null), /:light@#FFFFFF$/, "a light page shows as it is");
+});

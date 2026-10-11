@@ -60,6 +60,18 @@ export function isLightColor(color: string): boolean {
   return 1.05 / (l + 0.05) < (l + 0.05) / 0.05;
 }
 
+/**
+ * A page's colour as a window in the user's appearance shows it: as it is when it already suits (dark in dark, light
+ * in light), else the same hue at the appearance's lightness (a light page in dark mode gives a dark window of its
+ * hue), so the window follows the page without overriding Light or Dark.
+ */
+export function pageTint(color: string, dark: boolean): string {
+  if (isLightColor(color) !== dark) return color;
+  const [h, s] = hsl(rgb(color));
+  // About as light as the solid window itself (constants SOLID_FILL), keeping some of the page's colour.
+  return hex(fromHsl(h, Math.min(s, 0.45), dark ? 0.14 : 0.92));
+}
+
 /** A "#RRGGBB" colour's hue, saturation and lightness, each 0–1. */
 export const hslOf = (color: string) => hsl(rgb(color));
 /** A "#RRGGBB" colour from hue, saturation and lightness, each 0–1. */

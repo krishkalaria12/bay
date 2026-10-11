@@ -6,7 +6,7 @@ import { activeTabId } from "../store/model";
 import { DEFAULT_SPACE } from "../store/spaces";
 import type { Space, SpaceColor } from "../store/types";
 import { SPACE_SWATCHES } from "./spaceSwatches";
-import { backdropTint, isLightColor, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
+import { backdropTint, opaqueTint, pageTint, tintForHue, type BackdropTint } from "./windowTint";
 
 export type Theme = typeof dark &
   ProfileTheme & {
@@ -304,8 +304,10 @@ export function themeKey(s: BrowserState, windowId: string | null, page: string 
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
   const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
   const space = s.spaces[spaceId] ?? DEFAULT_SPACE;
-  const site = w && !glass && !space?.theme?.colors.length ? siteColor(s, id, spaceId) : null;
-  const key = spaceThemeKey(space, site ? !isLightColor(site) : s.ui.appDark, glass);
+  // Light or dark is always the user's (Appearance, or macOS's with Automatic); the page's colour is fitted to it.
+  const pageColor = w && !glass && !space?.theme?.colors.length ? siteColor(s, id, spaceId) : null;
+  const site = pageColor ? pageTint(pageColor, s.ui.appDark) : null;
+  const key = spaceThemeKey(space, s.ui.appDark, glass);
   return site ? `${key}${SITE}${site}` : key;
 }
 
