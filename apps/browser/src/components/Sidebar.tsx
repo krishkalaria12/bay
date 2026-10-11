@@ -54,7 +54,8 @@ import {
   ROWS_PER_FRAME,
 } from "./sidebar/constants";
 
-// The list's room and its height: the New Tab row docks below the list once the list leaves no room for it.
+// The list's room and its height: with new tabs at the bottom, the New Tab row docks below the list once the list
+// leaves no room for it (at the top it stays the list's first row).
 type Room = { available: number; list: number };
 const dockedIn = ({ available, list }: Room) => available > 0 && list + NEW_TAB_PITCH + 12 > available;
 
@@ -68,7 +69,8 @@ export function Sidebar() {
   const listHeight = useRef(0);
   const [room, setRoom] = useState<Room>({ available: 0, list: 0 });
   const { available } = room;
-  const docked = dockedIn(room);
+  const newTabsAtBottom = useSettings((s) => s.newTabPosition === "bottom");
+  const docked = newTabsAtBottom && dockedIn(room);
   const onListHeight = (height: number) => {
     listHeight.current = height;
     setRoom((r) => (dockedIn({ ...r, list: height }) === dockedIn(r) ? r : { ...r, list: height }));
