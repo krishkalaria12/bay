@@ -370,7 +370,7 @@ export function Group({ children, style }: { children: ReactNode; style?: StyleP
   return (
     <View
       style={[
-        { borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder, overflow: "hidden" },
+        { borderRadius: 12, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder, overflow: "hidden" },
         style,
       ]}
     >

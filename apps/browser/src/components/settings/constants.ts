@@ -2,10 +2,9 @@
 
 // MARK: Window (SettingsWindow.tsx)
 
-// The title row the traffic lights sit in, then the row of tabs under it.
-export const SETTINGS_TITLE_HEIGHT = 28;
-export const SETTINGS_TAB_BAR_HEIGHT = 58;
-export const SETTINGS_TAB_MIN_WIDTH = 62;
+// The sidebar of panes, and the toolbar row over both (the traffic lights sit in the sidebar's).
+export const SETTINGS_SIDEBAR_WIDTH = 220;
+export const SETTINGS_TOOLBAR_HEIGHT = 52;
 
 // MARK: Panes
 
