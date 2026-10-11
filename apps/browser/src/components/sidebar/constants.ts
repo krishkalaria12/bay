@@ -85,8 +85,15 @@ export const HOVER_CARD_PEEK_ROWS = 8;
 // MARK: Icon picker (IconPicker.tsx)
 
 export const ICON_PICKER_COLUMNS = 8;
-export const ICON_PICKER_CELL = 30;
-export const ICON_PICKER_WIDTH = ICON_PICKER_COLUMNS * ICON_PICKER_CELL + 16;
+export const ICON_PICKER_CELL = 36;
+export const ICON_PICKER_WIDTH = ICON_PICKER_COLUMNS * ICON_PICKER_CELL + 20;
+// About as tall as it draws (switch, search, six rows and a heading, the category bar): enough to keep it on screen.
+export const ICON_PICKER_HEIGHT = 390;
+// A space's emoji panel (yab's): the sidebar's width, seven emoji a row.
+export const SPACE_PICKER_COLUMNS = 7;
+export const SPACE_PICKER_PAD = 12;
+// The pickers fade in and out over this long.
+export const PICKER_FADE_MS = 150;
 
 // MARK: Search tabs and the tab switcher (SearchTabs.tsx, switcher.ts, TabSwitcher.tsx)
 
