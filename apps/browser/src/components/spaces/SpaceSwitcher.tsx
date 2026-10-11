@@ -1,13 +1,14 @@
-import { showMenu } from "@bay/shell";
+import { showMenu, Symbol } from "@bay/shell";
 import { Pressable, View } from "react-native";
 import { useEffect } from "react";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useShallow } from "zustand/react/shallow";
 import { deleteSpace, switchSpace } from "../../lib/actions";
 import { layout } from "../../lib/constants";
+import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
-import { IconButton, useHover } from "../primitives";
+import { useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { newPinnedFolderWith, openIconPicker } from "../sidebar/actions";
@@ -73,13 +74,21 @@ function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page:
 
 // The + that opens the menu of what can be made here, and turns to × while it's open.
 function NewButton({ windowId }: { windowId: string }) {
+  const theme = useTheme();
   const open = useSidebarUi((u) => u.newMenu?.windowId === windowId);
   const turn = useSharedValue(0);
   useEffect(() => turn.set(withTiming(open ? 1 : 0, { duration: NEW_MENU_MS, easing: Easing.out(Easing.cubic) })), [open]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 45}deg` }] }));
   return (
     <Animated.View ref={(v) => registerRow(windowId, NEW_MENU_ID, v as unknown as View | null)} style={style}>
-      <IconButton icon="plus" size={14} box={SPACE_PLUS} radius={8} tooltip={open ? undefined : "New"} onPress={() => void openNewMenu(windowId)} />
+      {/* Just the +: no hover or press fill behind it, it turns to × instead. */}
+      <Pressable onPress={() => void openNewMenu(windowId)} accessibilityRole="button" accessibilityLabel="New" tooltip={open ? undefined : "New"}>
+        {({ pressed }) => (
+          <View style={{ width: SPACE_PLUS, height: SPACE_PLUS, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.6 : 1 }}>
+            <Symbol name="plus" size={14} color={theme.icon} style={{ width: SPACE_PLUS, height: SPACE_PLUS }} />
+          </View>
+        )}
+      </Pressable>
     </Animated.View>
   );
 }
