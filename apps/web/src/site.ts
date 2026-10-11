@@ -15,6 +15,12 @@ export const site = {
   requirement: "macOS 14 Sonoma or later",
 } as const;
 
+/**
+ * Spread on every link to site.downloadUrl: it redirects off the site to a 200 MB file, so the client router must
+ * leave it to the browser (a full navigation, which downloads) and never prefetch it.
+ */
+export const downloadLink = { "data-astro-reload": true, "data-astro-prefetch": "false" } as const;
+
 const id = (name: string) => `${site.url}/#${name}`;
 export const ids = { org: id("organization"), site: id("website"), app: id("app") };
 

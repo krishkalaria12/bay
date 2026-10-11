@@ -1,10 +1,11 @@
 ---
 import { Image } from "astro:assets";
 import appIcon from "../assets/app-icon.png";
-import { site } from "../site";
+import { downloadLink, site } from "../site";
 ---
 
-<header class="sticky top-0 z-50 bg-paper/80 backdrop-blur-md">
+<!-- The same on every page: kept in place as the client router swaps the rest. -->
+<header class="sticky top-0 z-50 bg-paper/80 backdrop-blur-md" transition:persist="site-header">
   <nav class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5" aria-label="Main">
     <a href="/" class="flex items-center gap-2 text-[21px] font-bold tracking-tight" aria-label="Bay home">
       <Image src={appIcon} alt="" width={30} height={30} class="size-[30px]" loading="eager" />
@@ -29,6 +30,6 @@ import { site } from "../site";
         ></path>
       </svg>
     </a>
-    <a href={site.downloadUrl} data-download-location="header" class="btn px-4 py-2.5 text-[14px]">Download for Mac</a>
+    <a href={site.downloadUrl} {...downloadLink} data-download-location="header" class="btn px-4 py-2.5 text-[14px]">Download for Mac</a>
   </nav>
 </header>

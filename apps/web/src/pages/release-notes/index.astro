@@ -54,9 +54,9 @@ const schema = [
 
           <li id={latest.version} class="relative scroll-mt-24">
             <Marker date={latest.date} top="top-9" />
-            <article class="release-glow animate-rise rounded-3xl border border-line p-7 shadow-[0_24px_48px_-32px_rgba(30,32,60,0.35)] [animation-delay:160ms] sm:p-9">
+            <article transition:name={`release-card-${latest.version}`} class="release-glow animate-rise rounded-3xl border border-line p-7 shadow-[0_24px_48px_-32px_rgba(30,32,60,0.35)] [animation-delay:160ms] sm:p-9">
               <p class="hand text-[24px]">the latest</p>
-              <h2 class="mt-1 text-[34px] leading-tight font-bold tracking-[-0.03em]">
+              <h2 transition:name={`release-title-${latest.version}`} class="mt-1 w-fit text-[34px] leading-tight font-bold tracking-[-0.03em]">
                 Bay <Circled>{latest.version}</Circled>
               </h2>
               <p class="mt-1 text-[14px] text-muted">{longDate(latest.date)}</p>
@@ -77,7 +77,7 @@ const schema = [
                     <Marker date={r.date} top="top-1/2 -translate-y-1/2" />
                     <a href={`/release-notes/${r.version}/`} class="flex items-center gap-6 px-5 py-4 transition hover:bg-paper/60">
                       <span class="w-32 shrink-0">
-                        <span class="block text-[16px] font-semibold">Bay {r.version}</span>
+                        <span transition:name={`release-title-${r.version}`} class="block w-fit text-[16px] font-semibold">Bay {r.version}</span>
                         <span class="block text-[13px] text-muted">{shortDate(r.date)}</span>
                       </span>
                       <span class="line-clamp-2 flex-1 text-[15px] leading-relaxed text-muted">{r.headline}</span>

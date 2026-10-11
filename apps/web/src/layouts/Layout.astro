@@ -3,6 +3,7 @@ import "@fontsource/caveat/latin-600.css";
 import "../styles/global.css";
 import handFont from "@fontsource/caveat/files/caveat-latin-600-normal.woff2?url";
 import { graph, site } from "../site";
+import { ClientRouter } from "astro:transitions";
 import PostHog from "../components/PostHog.astro";
 
 interface Props {
@@ -70,6 +71,8 @@ const jsonLd = { "@context": "https://schema.org", "@graph": [...graph, ...schem
     <meta name="twitter:image:alt" content={imageAlt} />
 
     <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <!-- Links between pages swap in place with a view transition (fade), prefetched on hover. -->
+    <ClientRouter />
     <PostHog />
   </head>
   <body class="min-h-dvh overflow-x-clip">

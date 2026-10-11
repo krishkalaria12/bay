@@ -5,7 +5,7 @@ import Footer from "../../components/Footer.astro";
 import Circled from "../../components/Circled.astro";
 import Day from "../../components/Day.astro";
 import { inline, longDate, releases, type Release } from "../../releases";
-import { ids, site } from "../../site";
+import { ids, downloadLink, site } from "../../site";
 
 export function getStaticPaths() {
   const all = releases();
@@ -44,10 +44,10 @@ const schema = [
       <span aria-hidden="true">‹</span> All versions
     </a>
 
-    <header class="release-glow mt-5 animate-rise rounded-3xl border border-line px-7 py-9 shadow-[0_24px_48px_-32px_rgba(30,32,60,0.35)] sm:px-10 sm:py-12">
+    <header transition:name={latest ? `release-card-${release.version}` : undefined} class="release-glow mt-5 animate-rise rounded-3xl border border-line px-7 py-9 shadow-[0_24px_48px_-32px_rgba(30,32,60,0.35)] sm:px-10 sm:py-12">
       {latest && <p class="hand text-[24px]">the latest</p>}
       <div class="mt-1 flex items-baseline gap-4">
-        <h1 class="text-[44px] leading-tight font-bold tracking-[-0.04em] sm:text-[56px]">
+        <h1 transition:name={`release-title-${release.version}`} class="w-fit text-[44px] leading-tight font-bold tracking-[-0.04em] sm:text-[56px]">
           Bay <Circled>{release.version}</Circled>
         </h1>
         <Day date={release.date} class="hand hidden text-[22px] sm:inline" />
@@ -73,7 +73,7 @@ const schema = [
     }
 
     <div class="mt-16 flex flex-wrap items-center gap-3 border-t border-line pt-8">
-      <a href={site.downloadUrl} data-download-location="release-notes" class="btn">Download Bay {release.version}</a>
+      <a href={site.downloadUrl} {...downloadLink} data-download-location="release-notes" class="btn">Download Bay {release.version}</a>
       <p class="text-[13px] text-muted">For {site.requirement}. Already have Bay? It updates itself.</p>
     </div>
   </main>

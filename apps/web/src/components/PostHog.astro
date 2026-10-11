@@ -13,6 +13,9 @@
     }
     let session: Session | undefined;
     let pageviewSent = false;
+    // The client router swaps pages without loading them: the page before this one, as the referrer.
+    let previousUrl: string | undefined;
+    let currentUrl: string | undefined;
 
     function getVisitorId() {
       if (!visitorId) {
@@ -77,7 +80,7 @@
           $pathname: window.location.pathname,
           $host: window.location.host,
           $title: document.title,
-          $referrer: document.referrer,
+          $referrer: previousUrl ?? document.referrer,
           page_path: window.location.pathname,
           ...properties,
         },
@@ -129,8 +132,20 @@
       });
     }
 
-    if (document.readyState === "complete") schedulePageview();
-    else window.addEventListener("load", schedulePageview, { once: true });
+    // Every page the client router shows (astro:page-load fires on the first load too, once the DOM is ready):
+    // the first waits for its assets to load, as before.
+    document.addEventListener("astro:page-load", () => {
+      const url = window.location.origin + window.location.pathname;
+      if (url === currentUrl) return;
+      if (currentUrl) {
+        capturePageview();
+        previousUrl = currentUrl;
+      }
+      currentUrl = url;
+      pageviewSent = false;
+      if (document.readyState === "complete") schedulePageview();
+      else window.addEventListener("load", schedulePageview, { once: true });
+    });
     window.addEventListener("pagehide", capturePageview);
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
