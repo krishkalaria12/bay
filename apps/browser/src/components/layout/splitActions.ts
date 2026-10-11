@@ -39,6 +39,14 @@ export function openSplitPane(windowId: string, options: OpenPaneOptions = {}): 
 
 export const openNewTabInSplit = (windowId: string) => openSplitPane(windowId);
 
+/** The sidebar's + › Split View: a new pane beside the window's tab, or with no tab to split, just a new tab. */
+export function splitWithCurrentTab(windowId: string) {
+  const result = store().openSplitPane(windowId);
+  if (result.ok) return;
+  if (result.reason === "max") maxedOut(windowId);
+  else store().openNewTabPanel(windowId);
+}
+
 export function openInSplit(tabId: string, side: SplitSide = "right") {
   const tab = store().tabs[tabId];
   if (!tab) return;

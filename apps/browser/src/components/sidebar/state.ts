@@ -7,6 +7,8 @@ export type Target = { kind: "tab" | "group" | "folder" | "live" | "space"; id: 
 type SidebarUi = {
   renaming: (Target & { windowId: string }) | null;
   iconPicker: (Target & { windowId: string; anchor: Anchor | null }) | null;
+  // The + menu at the sidebar's foot (sidebar/NewMenu.tsx), over the + it came from.
+  newMenu: { windowId: string; anchor: Anchor | null } | null;
   hover: (Target & { windowId: string; anchor: Anchor }) | null;
   searchTabs: string | null;
   switcher: { windowId: string; ids: string[]; index: number; visible: boolean } | null;
@@ -16,6 +18,7 @@ type SidebarUi = {
 export const useSidebarUi = create<SidebarUi>()(() => ({
   renaming: null,
   iconPicker: null,
+  newMenu: null,
   hover: null,
   searchTabs: null,
   switcher: null,

@@ -16,10 +16,10 @@ import { SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
 import { SIDEBAR_PLAYER_HEIGHT } from "./media/constants";
 import { HoverSlot } from "./HoverSlot";
 import { IconButton, useHover } from "./primitives";
-import { SpaceIndicator } from "./SpaceIndicator";
 import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./spaces/constants";
 import { usePageStyle, usePagerPages } from "./layout/spacePager";
 import { SpaceSwitcher } from "./spaces/SpaceSwitcher";
+import { SpaceTitle } from "./sidebar/SpaceTitle";
 import { clearableTabs, clearTabs } from "./sidebar/clear";
 import { UPDATE_ROW_HEIGHT, UpdateRow, useUpdateRowShown } from "./sidebar/UpdateRow";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
@@ -185,7 +185,6 @@ export function Sidebar() {
                   paddingTop: 27 - 17,
                 }}
               >
-                <SpaceIndicator room={width - profileX - 7} />
                 <View pointerEvents="none" style={{ flex: 1 }} />
               </View>
             )}
@@ -315,10 +314,13 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                         }}
                       >
                         <PinnedGrid tabs={tiles} innerWidth={innerWidth} />
+                        <View style={{ marginTop: tiles.length ? 6 : topGap }}>
+                          <SpaceTitle windowId={windowId} spaceId={spaceId} />
+                        </View>
                         {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
                         <View
                           onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y) : undefined}
-                          style={{ marginTop: tiles.length ? 6 : topGap, gap: layout.rowGap }}
+                          style={{ marginTop: layout.rowGap, gap: layout.rowGap }}
                         >
                           {pinned.map((entry) => (
                             <PinnedEntry key={entry} entry={entry} />

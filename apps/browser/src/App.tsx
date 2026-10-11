@@ -15,6 +15,7 @@ import { UtilityWindow } from "./components/settings/UtilityWindow";
 import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding";
 import { CreateSpaceHost } from "./components/spaces/CreateSpace";
+import { RenameDialogHost } from "./components/RenameDialog";
 import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/layout/SpaceSwipe";
@@ -143,6 +144,7 @@ function BrowserWindow() {
       <BookmarkDialog />
       <EditBookmarkDialog />
       <CreateSpaceHost />
+      <RenameDialogHost pageLeft={showSidebar && !right ? sidebarWidth : 0} pageRight={showSidebar && right ? sidebarWidth : 0} />
       <SidebarOverlays windowWidth={width} />
       {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
       <DownloadsPanel windowWidth={width} windowHeight={size.height} />

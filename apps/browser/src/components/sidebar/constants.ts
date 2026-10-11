@@ -104,6 +104,13 @@ export const SWITCHER_SHOW_AFTER_MS = 140;
 export const SWITCHER_WIDTH = 400;
 export const SWITCHER_ROW = 40;
 
+// MARK: + menu (NewMenu.tsx)
+
+// The + it rises from (its registered row), its width and how long it takes to come and go.
+export const NEW_MENU_ID = "new-menu";
+export const NEW_MENU_WIDTH = 230;
+export const NEW_MENU_MS = 170;
+
 // MARK: Clear (clear.ts)
 
 // The room the divider's line leaves for Clear at its end.
