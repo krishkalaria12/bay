@@ -71,6 +71,30 @@ export function startDevHarness() {
     get previews(): typeof import("../components/previews/SitePreview") {
       return require("../components/previews/SitePreview");
     },
+    // Onboarding's steps: a test goes to one without clicking through those before it.
+    get onboarding(): typeof import("../components/onboarding/state") {
+      return require("../components/onboarding/state");
+    },
+    // The sidebar's Clear (and its rows breaking up), which a test runs without the click.
+    get clear(): typeof import("../components/sidebar/clear") {
+      return require("../components/sidebar/clear");
+    },
+    // Split View's actions: the sidebar's + › Split View, its edge cases included.
+    get splits(): typeof import("../components/layout/splitActions") {
+      return require("../components/layout/splitActions");
+    },
+    // The sidebar's menus, which a test opens to see them (a hidden instance can't right-click).
+    get menus(): typeof import("../components/sidebar/menus") {
+      return require("../components/sidebar/menus");
+    },
+    // The update waiting for the user: a test shows the sidebar's Update row without a feed.
+    get updates(): typeof import("./updates") {
+      return require("./updates");
+    },
+    // A space's menu actions (renaming it in its dialog), which only a menu opens.
+    get spaces(): typeof import("../components/spaces/SpaceSwitcher") {
+      return require("../components/spaces/SpaceSwitcher");
+    },
     // The space theme editor, which only a menu opens.
     get themeEditor(): typeof import("../components/spaces/ThemeEditor") {
       return require("../components/spaces/ThemeEditor");

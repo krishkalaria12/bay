@@ -294,7 +294,8 @@ public class AppModule: Module {
           guard let event = NSEvent.keyEvent(
             with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
             windowNumber: target.windowNumber, context: nil, characters: keys[i], charactersIgnoringModifiers: keys[i],
-            isARepeat: false, keyCode: 0) else { continue }
+            // Return and Esc as their keys, so a field submits or cancels on them.
+            isARepeat: false, keyCode: keys[i] == "\r" ? 36 : keys[i] == "\u{1b}" ? 53 : 0) else { continue }
           if toKeyWindow { NSApp.sendEvent(event) }
           else if type == .keyDown { target.firstResponder?.keyDown(with: event) } else { target.firstResponder?.keyUp(with: event) }
         }
