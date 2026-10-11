@@ -8,7 +8,10 @@ export const site = {
   // Around 155 characters, the answer first.
   description:
     "Bay is a beautiful, fast browser for Mac with everything you loved about Arc: the sidebar, spaces, pinned tabs, folders, Peek and Split View, on Chrome’s engine.",
+  // public/_redirects sends it to the latest GitHub release's Bay.dmg.
   downloadUrl: "/download",
+  // The source, releases and issues.
+  github: "https://github.com/krishkalaria12/bay",
   requirement: "macOS 14 Sonoma or later",
 } as const;
 
@@ -80,6 +83,7 @@ export const graph = [
     "@id": ids.org,
     name: site.name,
     url: site.url,
+    sameAs: [site.github],
     logo: { "@type": "ImageObject", url: `${site.url}/icon-512.png`, width: 512, height: 512 },
   },
   {

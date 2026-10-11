@@ -49,8 +49,8 @@ or **Unique users** for estimated unique visitors, and break down by `button_loc
 to compare buttons. Anonymous browser IDs cannot count the same person across devices or after they
 clear browser storage. A click does not confirm a completed download or installation.
 
-The links currently point to `/download` in `src/site.ts`; this checkout does not define that route.
-Configure a working download URL or redirect separately so those clicks lead to the browser release.
+The links point to `/download` in `src/site.ts`, which `public/_redirects` sends to the latest GitHub
+release's `Bay.dmg` (every release carries a copy of its DMG under that name).
 
 References: [PostHog's Astro guide](https://posthog.com/docs/libraries/astro),
 [capture API and anonymous events](https://posthog.com/docs/api/capture),
