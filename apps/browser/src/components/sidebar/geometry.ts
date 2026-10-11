@@ -3,7 +3,7 @@
 import { layout } from "../../lib/constants";
 import type { BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
-import { GROUP_BORDER, GROUP_PAD } from "./constants";
+import { GROUP_BORDER, GROUP_PAD, NEW_TAB_PITCH } from "./constants";
 import { folderEntries, groupEntries, sidebarEntries } from "./entries";
 
 const ROW = layout.rowHeight;
@@ -60,7 +60,7 @@ export function rowSpan(
   const sections: [Section, string[], number][] = [
     ["pinned", pinned, 0],
     ["pinnedGroups", pinnedGroups.map((id) => `g:${id}`), 0],
-    ["list", list, newTabAtTop ? ROW + GAP : 0],
+    ["list", list, newTabAtTop ? NEW_TAB_PITCH : 0],
   ];
   for (const [section, entries, start] of sections) {
     let top = start;

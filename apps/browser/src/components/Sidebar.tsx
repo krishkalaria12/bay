@@ -8,13 +8,12 @@ import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
 import { activeTabId, listIds, windowListKey } from "../store/model";
-import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
+import { cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
 import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD } from "./layout/constants";
 import { SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
 import { SIDEBAR_PLAYER_HEIGHT } from "./media/constants";
-import { HoverSlot } from "./HoverSlot";
 import { IconButton, useHover } from "./primitives";
 import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./spaces/constants";
 import { usePageStyle, usePagerPages } from "./layout/spacePager";
@@ -44,16 +43,20 @@ import {
   FIRST_PAINT_ROWS,
   GLOW_ROOM,
   NEW_TAB_DOCK,
+  NEW_TAB_GAP,
+  NEW_TAB_PITCH,
   PIN_BAND,
   PINNED_DIVIDER_PAD,
   CLEAR_WIDTH,
+  CLEAR_GAP,
+  SPACE_TITLE_GAP,
   ROW_PITCH,
   ROWS_PER_FRAME,
 } from "./sidebar/constants";
 
 // The list's room and its height: the New Tab row docks below the list once the list leaves no room for it.
 type Room = { available: number; list: number };
-const dockedIn = ({ available, list }: Room) => available > 0 && list + ROW_PITCH + 12 > available;
+const dockedIn = ({ available, list }: Room) => available > 0 && list + NEW_TAB_PITCH + 12 > available;
 
 export function Sidebar() {
   const windowId = useWindowId();
@@ -252,7 +255,9 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
   // early scrolls to its place, and the New Tab row docks once.
   const pending = useBrowser((s) => (growing ? entriesHeight(s, windowId, spaceId, all.slice(mountedRows)) : 0));
   const topGap = listTopGap(useSidebarFieldShown());
-  const newTabsAtTop = useSettings((s) => s.newTabPosition === "top");
+  const preferNewTabsAtTop = useSettings((s) => s.newTabPosition === "top");
+  const singleTab = all.length === 1 && all[0]!.startsWith("t:");
+  const newTabsAtTop = singleTab || preferNewTabsAtTop;
   const innerWidth = width - layout.sidebarInset * 2;
   const pageStyle = usePageStyle(windowId, slot, width);
   const inlineNewTab = !current || !docked;
@@ -309,7 +314,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                     >
                       <View
                         onLayout={(e) => {
-                          measured.current = e.nativeEvent.layout.height + glowRoom - (inlineNewTab ? ROW_PITCH : 0);
+                          measured.current = e.nativeEvent.layout.height + glowRoom - (inlineNewTab ? NEW_TAB_PITCH : 0);
                           if (current) onListHeight(measured.current);
                         }}
                       >
@@ -320,14 +325,14 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                         {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
                         <View
                           onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y) : undefined}
-                          style={{ marginTop: layout.rowGap, gap: layout.rowGap }}
+                          style={{ marginTop: SPACE_TITLE_GAP, gap: layout.rowGap }}
                         >
                           {pinned.map((entry) => (
                             <PinnedEntry key={entry} entry={entry} />
                           ))}
                           <Tail id="tail:pinned" section="pinned" />
                         </View>
-                        <PinnedDivider pinned={pinned.length > 0} windowId={windowId} spaceId={spaceId} />
+                        <PinnedDivider pinned={pinned.length > 0} listed={all.length > 0 || pinnedGroups.length > 0} windowId={windowId} spaceId={spaceId} />
                         <View
                           ref={(v) => {
                             controller?.regions.set("pinnedGroups", v);
@@ -348,7 +353,11 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                           onLayout={geometryRef ? (e) => void (geometryRef.current.regions.list = e.nativeEvent.layout.y) : undefined}
                           style={{ marginTop: pinnedGroups.length ? 7 : 0, gap: layout.rowGap }}
                         >
-                          {newTabsAtTop && inlineNewTab ? <NewTabRow windowId={windowId} /> : null}
+                          {newTabsAtTop && inlineNewTab ? (
+                            <View style={{ marginBottom: NEW_TAB_GAP - layout.rowGap }}>
+                              <NewTabRow windowId={windowId} />
+                            </View>
+                          ) : null}
                           {listed.map((row) =>
                             typeof row === "string" ? (
                               <OpeningRow key={row} entry={row} opening={motion.opening.has(row)} onOpened={motion.opened}>
@@ -360,7 +369,11 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                           )}
                           {pending ? <View style={{ height: pending }} /> : null}
                           <Tail id="tail:list" section="list" />
-                          {!newTabsAtTop && inlineNewTab ? <NewTabRow windowId={windowId} /> : null}
+                          {!newTabsAtTop && inlineNewTab ? (
+                            <View style={{ marginTop: NEW_TAB_GAP - layout.rowGap }}>
+                              <NewTabRow windowId={windowId} />
+                            </View>
+                          ) : null}
                         </View>
                         {current ? <CleanUpUpsell windowId={windowId} /> : null}
                       </View>
@@ -397,22 +410,22 @@ const PinnedEntry = memo(function PinnedEntry({ entry }: { entry: string }) {
   return entry.startsWith("f:") ? <FolderBlock folderId={id} /> : <TabRowItem tabId={id} section="pinned" />;
 });
 
-// The line under the Pinned section: dropping a tab above its middle pins it. With nothing pinned (and nothing to
-// clear) there's no line, and no room: a tab dropped above the list's first row is pinned. With tabs that aren't the
-// one on screen, yab's Clear sits at its end and puts them away.
-function PinnedDivider({ pinned, windowId, spaceId }: { pinned: boolean; windowId: string; spaceId: string }) {
+// The line separates pinned content from the tab list, including a lone tab. Dropping above its middle pins a tab.
+// With tabs that aren't the one on screen, yab's Clear sits at its end and puts them away.
+function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean; listed: boolean; windowId: string; spaceId: string }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const controller = useDragController();
   const clearable = useBrowser((s) => clearableTabs(s, windowId, spaceId).length > 0);
   const { hovered, hoverProps } = useHover();
-  const shown = pinned || clearable;
+  const shown = pinned || listed || clearable;
   return (
     <View
       ref={(v) => {
         controller?.regions.set("divider", v);
       }}
-      style={{ paddingVertical: shown ? PINNED_DIVIDER_PAD : 0, paddingHorizontal: 9 }}
+      // Clear stands on the line: room under it so it, and the line, aren't on the first tab.
+      style={{ paddingTop: shown ? PINNED_DIVIDER_PAD : 0, paddingBottom: shown ? PINNED_DIVIDER_PAD + (clearable ? CLEAR_GAP : 0) : 0, paddingHorizontal: 9 }}
     >
       {shown ? <View style={{ height: 1, borderRadius: 0.5, marginRight: clearable ? CLEAR_WIDTH : 0, backgroundColor: tokens.separator }} /> : null}
       {clearable ? (
@@ -518,7 +531,6 @@ function DownloadsButton({ windowId }: { windowId: string }) {
 function NewTabRow({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const tokens = useSidebarTokens();
-  const cleaned = useBrowser((s) => cleanedTabsFor(s, windowId).length);
   const { hovered, hoverProps } = useHover();
   return (
     <View {...hoverProps} style={{ flexDirection: "row", alignItems: "center" }}>
@@ -547,11 +559,6 @@ function NewTabRow({ windowId }: { windowId: string }) {
         )}
       </Pressable>
       <View style={{ position: "absolute", right: 6, flexDirection: "row", alignItems: "center" }}>
-        <HoverSlot
-          hovered={hovered && cleaned > 0}
-          width={0}
-          hover={<Text style={{ fontSize: 11, color: theme.textTertiary, marginRight: 2 }}>{cleaned} cleaned</Text>}
-        />
         <IconButton
           icon="chevron.down"
           size={10}

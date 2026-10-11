@@ -12,7 +12,7 @@ import { Keycaps } from "./Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./PaletteActionMenu";
 import { useHover } from "../primitives";
 import { SuggestionIcon } from "./SuggestionRow";
-import { usePointerHover } from "./usePointerHover";
+import { usePointerHover, type PointerHoverEvent } from "./usePointerHover";
 import type { PaletteSection, PaletteSuggestion } from "./paletteStart";
 import { PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT, PALETTE_HEIGHT, PALETTE_LIST_TOP, PALETTE_ROW_HEIGHT, PALETTE_TITLE_HEIGHT } from "./constants";
 
@@ -76,7 +76,8 @@ export function PaletteContent({
   const rows = useRef(new Map<number, { y: number; height: number }>());
   const [height, setHeight] = useState(maxHeight);
   const presence = useMenuPresence(menu);
-  const hover = usePointerHover(sections);
+  // Selection rerenders rebuild sections; only changed results should reset pointer tracking.
+  const hover = usePointerHover(JSON.stringify(sections));
   const keepSelectedVisible = () => {
     const row = rows.current.get(selectedIndex);
     const visible = viewport.current;
@@ -223,7 +224,7 @@ function PaletteResultRow({
   suggestion: PaletteSuggestion;
   pageContext: boolean;
   selected: boolean;
-  onHover(event: { nativeEvent: { pageX: number; pageY: number } }): void;
+  onHover(event: PointerHoverEvent): void;
   onChoose(disposition: Disposition): void;
   onMenu(): void;
 }) {

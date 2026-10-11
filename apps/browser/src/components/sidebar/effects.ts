@@ -5,6 +5,8 @@ import { useBrowser } from "../../store/browser";
 import { changedIds } from "../../store/changes";
 import { cancelSwitcher, commitSwitcher, moveSwitcher } from "./switcher";
 import { AUTO_CLEAN_EVERY_MS } from "./constants";
+import { startCleanupNotifications } from "./cleanupNotifications";
+import { showToast } from "../layout/splitActions";
 
 let started = false;
 
@@ -12,6 +14,10 @@ export function startSidebarEffects() {
   if (started) return;
   started = true;
   startLive();
+  // Effects start after session hydration, so saved cleaned tabs don't replay a notice.
+  startCleanupNotifications((windowId, count) => {
+    showToast(windowId, `${count} ${count === 1 ? "tab" : "tabs"} cleaned`, undefined, { icon: "wand.and.stars" });
+  });
 
   useBrowser.subscribe((s, prev) => {
     for (const id of changedIds(s.tabs, prev.tabs)) {

@@ -298,7 +298,7 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
               backgroundColor: hovered && !active ? theme.rowHover : undefined,
             }}
           >
-            <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} size={14} />
+            <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} />
             <FadeLabel
               text={tabTitle(tab)}
               fontSize={12}

@@ -13,9 +13,11 @@ export const GLOW_ROOM = 24;
 // The pin target's band between the header and the first row, with no address field there.
 export const PIN_BAND = 17;
 export const ROW_PITCH = layout.rowHeight + layout.rowGap;
+export const NEW_TAB_GAP = 6;
+export const NEW_TAB_PITCH = layout.rowHeight + NEW_TAB_GAP;
 export const DOCKED_BOTTOM = 6;
-// Room the docked New Tab row takes from the list: the row plus one row gap above it.
-export const NEW_TAB_DOCK = DOCKED_BOTTOM + ROW_PITCH;
+// Room the docked New Tab row takes from the list, including its gap above.
+export const NEW_TAB_DOCK = DOCKED_BOTTOM + NEW_TAB_PITCH;
 // Rows in 2400 pt, more than the tallest sidebar.
 export const FIRST_PAINT_ROWS = 64;
 export const ROWS_PER_FRAME = 32;
@@ -115,5 +117,9 @@ export const NEW_MENU_MS = 170;
 
 // The room the divider's line leaves for Clear at its end.
 export const CLEAR_WIDTH = 44;
+// The room the divider leaves under its line while Clear shows (Clear's text reaches below the line).
+export const CLEAR_GAP = 6;
+// Under the space's title row, before its pinned tabs (or, with none, its tabs).
+export const SPACE_TITLE_GAP = 6;
 // The rows Clear breaks into pixels (a screenful): any more go without.
 export const CLEAR_MAX_ROWS = 18;

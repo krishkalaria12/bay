@@ -16,7 +16,7 @@ import { Keycaps } from "./omnibox/Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./omnibox/PaletteActionMenu";
 import { FooterButton, useMenuPresence } from "./omnibox/PaletteContent";
 import { PaletteSurface } from "./omnibox/PaletteSurface";
-import { usePointerHover } from "./omnibox/usePointerHover";
+import { usePointerHover, type PointerHoverEvent } from "./omnibox/usePointerHover";
 import { hostLabel, matchesQuery } from "./pages/PageLayout";
 import { IconButton, useHover } from "./primitives";
 import { DOWNLOADS_LIST_TOP, DOWNLOADS_ROW_HEIGHT, PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT } from "./omnibox/constants";
@@ -550,7 +550,7 @@ const PanelRow = memo(function PanelRow({
 }: {
   id: string;
   selected: boolean;
-  onHover(e: { nativeEvent: { pageX: number; pageY: number } }): void;
+  onHover(e: PointerHoverEvent): void;
   onPress(d: Download): void;
   onMenu(d: Download): void;
 }) {

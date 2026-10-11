@@ -41,8 +41,9 @@ const dark = {
   tabSelectedText: "#FFFFFF",
   // Dia: 0.5pt border; 15/12.5 shadow.
   tabSelectedBorder: ["rgba(255,255,255,0.15)", "rgba(255,255,255,0.15)"] as [string, string],
-  tabSelectedShadow: "rgba(255,255,255,0.15)",
-  tabSelectedShadowRadius: 15,
+  // No glow: a white one haloed the row on the dark sidebar. Its fill and border set it apart.
+  tabSelectedShadow: "rgba(0,0,0,0)",
+  tabSelectedShadowRadius: 0,
   pinnedResting: "rgba(255,255,255,0.1)",
   pinnedRestingStroke: "rgba(255,255,255,0.14)",
   pinnedSelectedFill: "rgba(255,255,255,0.25)",
@@ -92,8 +93,9 @@ const light: typeof dark = {
   tabSelected: "rgba(255,255,255,0.7)",
   tabSelectedText: "#000000",
   tabSelectedBorder: ["rgba(255,255,255,0.98)", "rgba(0,0,0,0.06)"],
-  tabSelectedShadow: "rgba(0,0,0,0.12)",
-  tabSelectedShadowRadius: 12.5,
+  // No shadow, as in dark: its fill and border set it apart.
+  tabSelectedShadow: "rgba(0,0,0,0)",
+  tabSelectedShadowRadius: 0,
   pinnedResting: "rgba(0,0,0,0.05)",
   pinnedRestingStroke: "rgba(0,0,0,0.18)",
   pinnedSelectedFill: "rgba(255,255,255,0.7)",

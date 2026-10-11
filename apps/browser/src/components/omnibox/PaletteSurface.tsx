@@ -18,7 +18,7 @@ export function PaletteSurface({
   const theme = useTheme();
   return (
     <Surface
-      fill="#00000000"
+      fill={theme.glass ? "#00000000" : theme.panel}
       cornerRadius={radius}
       shadowColor="#000000"
       shadowOpacity={theme.dark ? 0.36 : 0.18}
@@ -26,7 +26,7 @@ export function PaletteSurface({
       shadowOffset={[0, raised ? 8 : 16]}
       style={style}
     >
-      {liquidGlass ? (
+      {theme.glass && liquidGlass ? (
         <GlassEffect
           pointerEvents="none"
           dark={theme.dark}
@@ -35,15 +35,15 @@ export function PaletteSurface({
           cornerRadius={radius}
           style={StyleSheet.absoluteFill}
         />
-      ) : (
+      ) : theme.glass ? (
         <>
-          <VisualEffect material="popover" blendingMode="withinWindow" cornerRadius={radius} style={StyleSheet.absoluteFill} />
+          <VisualEffect pointerEvents="none" material="popover" blendingMode="withinWindow" cornerRadius={radius} style={StyleSheet.absoluteFill} />
           <View
             pointerEvents="none"
             style={[StyleSheet.absoluteFill, { borderRadius: radius, backgroundColor: theme.dark ? "rgba(35,33,39,0.82)" : "rgba(250,249,252,0.85)" }]}
           />
         </>
-      )}
+      ) : null}
       <View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: 0.5, borderColor: theme.dark ? "#FFFFFF24" : "#00000020" }]}
