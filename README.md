@@ -235,32 +235,6 @@ Most are for tests and hidden instances rather than normal use.
 | `BAY_ALLOW_AUDIO`, `BAY_ALLOW_OCCLUSION` | Let a hidden instance play sound and be treated as occluded |
 | `BAY_IMPORT_SOURCE_DIR`, `BAY_IMPORT_SAFARI_HOME`, `BAY_IMPORT_TEST_SECRET` | Point the importer at fixture folders and a test Safe Storage key instead of the real Keychain |
 
-### Architecture notes
-
-- **Why Expo SDK 54:** `react-native-macos` tops out at 0.81, which pairs with Expo SDK 54 (whose
-  `ExpoAppDelegate` / `ExpoReactNativeFactory` have macOS code paths).
-- **Legacy architecture.** react-native-macos 0.81's Fabric support is experimental, so the app runs
-  on the legacy architecture. One consequence: Expo's legacy view-manager adapter instantiates a
-  module's *first* view class for every view it declares, so each native view has its own module.
-- **Metro, not `expo start`.** Metro runs through the react-native-macos CLI. `metro.config.js`
-  redirects `react-native` → `react-native-macos` for `platform=macos`, because defining our own
-  `resolveRequest` replaces the redirect the CLI would install.
-- **No Reanimated.** It has no macOS build for 0.81; animations use RN's `Animated`.
-- **Monorepo paths.** pnpm is set to `nodeLinker: hoisted` because CocoaPods and Metro resolve
-  `react-native-macos` by path. The Podfile rewrites `REACT_NATIVE_PATH` to the hoisted location and
-  raises every pod's deployment target to 14.0, since Xcode 26+ rejects the 11.0 some Expo pods
-  declare.
-- **Native subviews** are sized in `setFrameSize`, not `layout()`. RN macOS assigns frames directly and
-  never autoresizes subviews.
-- **Shaders** are Metal source embedded in Swift and compiled at runtime (once per class, cached).
-  This keeps the pods free of a metallib build phase.
-- **The engine is mirrored, not generated.** `engine/<layer>/src` mirrors paths in the Chromium tree
-  and `apply.sh` copies it in; `--check` exits 1 when the tree drifts from the repo. The repo copy is
-  the only one to edit.
-- **Chrome's surfaces are ours.** Chrome-hosted windows, the tab strip as revisioned transactions, the
-  context menu, PiP and the autofill dropdowns are Chrome's own views, driven from
-  `engine/nncore/src/bay/core`.
-
 ### The icon
 
 The Golden Gate's twin towers and catenary over the bay at dusk. Two sources, both in
