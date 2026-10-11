@@ -2,7 +2,8 @@ import { listInstalledBrowsers, type BrowserApplication } from "@bay/import";
 import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { SPACE_COLORS, themeFor, useTheme } from "../../lib/theme";
+import { interpolateColor } from "react-native-reanimated";
+import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
@@ -181,13 +182,21 @@ export function PersonalizeStep() {
   );
 }
 
+// The preview's gradient: bands this many, top to bottom.
+const PREVIEW_BANDS = 16;
+
 function WindowPreview({ windowId }: { windowId: string }) {
   const colors = useOnboardingColors();
   const dark = useTheme().dark;
-  const color = useBrowser((s) => s.spaces[s.windows[windowId]?.spaceId ?? ""]?.color ?? "plum");
+  // The space's whole look, as its window shows it: a gradient theme (a new install's Twilight) or a preset colour.
+  const key = useBrowser((s) => spaceThemeKey(s.spaces[s.windows[windowId]?.spaceId ?? ""], dark));
+  const accent = useBrowser((s) => {
+    const space = s.spaces[s.windows[windowId]?.spaceId ?? ""];
+    return space?.theme?.colors[0] ?? SPACE_COLORS[space?.color ?? "plum"]?.swatch ?? SPACE_COLORS.plum.swatch;
+  });
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
-  const theme = themeFor(`${color}:${dark ? "dark" : "light"}`);
-  const swatch = SPACE_COLORS[color]?.swatch ?? SPACE_COLORS.plum.swatch;
+  const theme = themeFor(key);
+  const [top, bottom] = theme.windowTint;
   const line = { height: 6, borderRadius: 3, backgroundColor: colors.progressTrack };
   return (
     <View
@@ -197,12 +206,29 @@ function WindowPreview({ windowId }: { windowId: string }) {
         borderRadius: 12,
         padding: 7,
         gap: 6,
-        backgroundColor: theme.windowTint[0],
+        backgroundColor: top,
         borderWidth: StyleSheet.hairlineWidth * 2,
         borderColor: colors.rowBorder,
         flexDirection: layout === "sidebar" ? "row" : "column",
+        overflow: "hidden",
       }}
     >
+      {/* Top to bottom, the window's two colours (one, for a preset), in bands fine enough to read as a gradient. */}
+      {top !== bottom
+        ? Array.from({ length: PREVIEW_BANDS }, (_, i) => (
+            <View
+              key={i}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: `${(i / PREVIEW_BANDS) * 100}%`,
+                height: `${100 / PREVIEW_BANDS + 1}%`,
+                backgroundColor: interpolateColor(i / (PREVIEW_BANDS - 1), [0, 1], [top, bottom]),
+              }}
+            />
+          ))
+        : null}
       {layout === "sidebar" ? (
         <View style={{ width: 70, gap: 6, paddingTop: 4 }}>
           <View style={{ flexDirection: "row", gap: 4, marginBottom: 6 }}>
@@ -229,7 +255,7 @@ function WindowPreview({ windowId }: { windowId: string }) {
         </View>
       )}
       <View style={{ flex: 1, borderRadius: 7, backgroundColor: theme.card, alignItems: "center", justifyContent: "center" }}>
-        <View style={{ width: "62%", height: 22, borderRadius: 7, backgroundColor: colors.card, borderWidth: 1, borderColor: `${swatch}99` }} />
+        <View style={{ width: "62%", height: 22, borderRadius: 7, backgroundColor: colors.card, borderWidth: 1, borderColor: `${accent}99` }} />
       </View>
     </View>
   );
