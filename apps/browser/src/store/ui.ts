@@ -2,7 +2,7 @@ import type { Download } from "@bay/nncore";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { isIncognitoSpace, newId } from "./model";
-import type { FindState, WindowUi } from "./types";
+import type { FindState, Space, WindowUi } from "./types";
 import { MAX_DOWNLOADS } from "./constants";
 
 export type UiSlice = {
@@ -10,6 +10,8 @@ export type UiSlice = {
     focusedWindowId: string | null;
     focusOrder: string[];
     appDark: boolean;
+    // Looks shown on windows before they're a space's (the new space panel's Look step), by window. Not saved.
+    previewLooks?: Record<string, Pick<Space, "color" | "theme" | "followSite">>;
   };
   windowUi: Record<string, WindowUi>;
   find: Record<string, FindState>;

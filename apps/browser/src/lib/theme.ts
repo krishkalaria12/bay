@@ -303,15 +303,28 @@ export function themeKey(s: BrowserState, windowId: string | null, page: string 
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
   const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
-  const space = s.spaces[spaceId] ?? DEFAULT_SPACE;
+  // A look being chosen for this window (the new space panel's) shows on its space meanwhile.
+  const preview = w && spaceId === w.spaceId ? s.ui.previewLooks?.[id] : undefined;
+  const space = { ...(s.spaces[spaceId] ?? DEFAULT_SPACE), ...preview };
   // Light or dark is always the user's (Appearance, or macOS's with Automatic); the page's colour is fitted to it.
-  const pageColor = w && !glass && !space?.theme?.colors.length ? siteColor(s, id, spaceId) : null;
+  const follow = space?.followSite ?? !space?.theme?.colors.length;
+  const pageColor = w && !glass && follow ? siteColor(s, id, spaceId) : null;
   const site = pageColor ? pageTint(pageColor, s.ui.appDark) : null;
   const key = spaceThemeKey(space, s.ui.appDark, glass);
   return site ? `${key}${SITE}${site}` : key;
 }
 
 const ThemeContext = createContext<Theme | null>(null);
+
+/** Shows `look` on the window's space until it's cleared (null): the new space panel's Look step. */
+export function setPreviewLook(windowId: string, look: Pick<Space, "color" | "theme" | "followSite"> | null) {
+  useBrowser.setState((s) => {
+    const looks = { ...s.ui.previewLooks };
+    if (look) looks[windowId] = look;
+    else delete looks[windowId];
+    return { ui: { ...s.ui, previewLooks: looks } };
+  });
+}
 
 // Resolves the theme once for everything below it: every window root and every profile page (which
 // sets PageProfileContext) has one, so the hundreds of components that call useTheme read a context

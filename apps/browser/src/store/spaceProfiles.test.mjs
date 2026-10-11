@@ -19,12 +19,12 @@ const save = () =>
     }),
   );
 
-test("new spaces have separate native history and bookmarks, even with a legacy sharing option", () => {
+test("a space with its own sign-ins has separate native history and bookmarks", () => {
   S().hydrate({});
   const personal = S().settings.defaultSpaceId;
   S().importHistory(personal, history);
   const bookmark = S().addBookmark({ spaceId: personal, url: "https://saved.example/", title: "Saved" });
-  const work = S().createSpace({ name: "Work", shareWith: personal });
+  const work = S().createSpace({ name: "Work" });
   assert.notEqual(model.engineProfile(personal), model.engineProfile(work));
   assert.notDeepEqual(S().bookmarks.roots[personal], S().bookmarks.roots[work]);
   assert.equal(S().history[work], undefined);
@@ -35,6 +35,20 @@ test("new spaces have separate native history and bookmarks, even with a legacy 
   );
   assert.ok(S().bookmarks.nodes[bookmark]);
   assert.equal(S().setSpaceProfile, undefined, "profiles cannot be reassigned between spaces");
+});
+
+// New Space › Sign-ins › Shared: the space uses the space's native profile (its logins and cookies), and keeps it
+// across launches, where older sharing nobody chose is split apart (the tests below).
+test("a space made to share sign-ins uses that space's profile, and still does after a reload", () => {
+  S().hydrate({});
+  const personal = S().settings.defaultSpaceId;
+  const work = S().createSpace({ name: "Work", shareWith: personal });
+  assert.equal(S().spaces[work].sharesSignIns, true);
+  assert.equal(model.engineProfile(work), model.engineProfile(personal));
+  assert.deepEqual(S().bookmarks.roots[work], S().bookmarks.roots[personal], "one profile, one set of bookmarks");
+  S().hydrate({ spaces: S().spaces, spaceOrder: S().spaceOrder, bookmarks: S().bookmarks });
+  assert.equal(model.engineProfile(work), model.engineProfile(personal), "loading keeps a chosen share");
+  assert.equal(S().spaces[work].sharesSignIns, true);
 });
 
 test("legacy sharing preserves the named owner, its native directory and bookmarks", () => {

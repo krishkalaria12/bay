@@ -16,8 +16,9 @@ export type SpacesSlice = {
   orphanedProfileData: string[];
 
   /** Without a colour or theme, the space gets a look no other space has (unusedSpaceLook). */
-  createSpace(options: { name: string; color?: SpaceColor; theme?: SpaceTheme | null; icon?: string | null }): string;
-  updateSpace(id: string, patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>): void;
+  /** `shareWith`: a space whose sign-ins (native profile) the new one shares; else it gets its own, signed out. */
+  createSpace(options: { name: string; color?: SpaceColor; theme?: SpaceTheme | null; icon?: string | null; shareWith?: string | null }): string;
+  updateSpace(id: string, patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "followSite" | "cleanUpAfterHours">>): void;
   deleteSpace(id: string): void;
   reorderSpaces(ids: string[]): void;
   setDefaultSpace(id: string): void;
@@ -88,7 +89,8 @@ export function isolateSavedSpaces(spaces: Record<string, Space>, order: string[
     const owner = ids.includes(profile) ? profile : ids[0]!;
     owners.set(owner, ids);
     for (const id of ids) {
-      if (id === owner) continue;
+      // A space made to share its sign-ins stays with them; only older, unchosen sharing is split.
+      if (id === owner || spaces[id]!.sharesSignIns) continue;
       // Its former directory may belong to another space or still be queued for deletion.
       let nativeId = id;
       if (groups.has(id) || orphaned.includes(id === DEFAULT_SPACE_ID ? "" : id)) {
@@ -117,8 +119,9 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
     spaceOrder: [DEFAULT_SPACE.id],
     orphanedProfileData: [],
 
-    createSpace({ name, color, theme, icon = null }) {
+    createSpace({ name, color, theme, icon = null, shareWith }) {
       const s = get();
+      const source = shareWith ? s.spaces[shareWith] : undefined;
       const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
       const profile: Space = {
         id: newId("p"),
@@ -127,6 +130,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         ...(look.theme ? { theme: look.theme } : {}),
         icon,
         createdAt: Date.now(),
+        ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : {}),
       };
       const bookmarks = engineRoots(s.bookmarks, profile.id, engineIdOf(profile))[0];
       set({ spaces: { ...s.spaces, [profile.id]: profile }, spaceOrder: [...s.spaceOrder, profile.id], bookmarks });

@@ -12,9 +12,14 @@ export type Space = {
   color: SpaceColor;
   icon: string | null;
   createdAt: number;
-  // An existing native directory alias. Every space has a unique native profile.
+  // An existing native directory alias: another space's, when it shares that space's sign-ins.
   profileId?: string;
+  // Created to share another space's sign-ins (its native profile: logins, cookies, passwords, history, extensions),
+  // so loading keeps it there. Older spaces that shared one without choosing to are split apart (isolateSavedSpaces).
+  sharesSignIns?: boolean;
   theme?: SpaceTheme | null;
+  // Whether a page's colour tints the window: by default only a space without a theme of its own takes it.
+  followSite?: boolean;
   // How long its tabs stay unused before they're cleaned up (Arc's archive, per profile there): hours, never (null),
   // or the app's setting (unset).
   cleanUpAfterHours?: number | null;

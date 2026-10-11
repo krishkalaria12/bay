@@ -55,3 +55,9 @@ export const THEME_WAVE_AMPLITUDE = 9;
 export const THEME_WAVE_PERIOD = 22;
 export const THEME_DIAL = 64;
 export const THEME_DIAL_STEPS = 16;
+
+// MARK: New space (NewSpace.tsx)
+
+// Its panel (the sidebar's width): its padding, and how long it takes to fade in.
+export const NEW_SPACE_PAD = 12;
+export const NEW_SPACE_FADE_MS = 170;

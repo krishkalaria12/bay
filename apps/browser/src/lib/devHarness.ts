@@ -91,6 +91,10 @@ export function startDevHarness() {
     get updates(): typeof import("./updates") {
       return require("./updates");
     },
+    // New Space's panel: its steps, which a test goes through without clicks.
+    get newSpace(): typeof import("../components/spaces/NewSpace") {
+      return require("../components/spaces/NewSpace");
+    },
     // A space's menu actions (renaming it in its dialog), which only a menu opens.
     get spaces(): typeof import("../components/spaces/SpaceSwitcher") {
       return require("../components/spaces/SpaceSwitcher");

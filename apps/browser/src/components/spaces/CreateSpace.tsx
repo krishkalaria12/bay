@@ -10,10 +10,11 @@ import { Button, Sheet, TextField, useFormColors } from "../settings/controls";
 import { closeSettingsSheet, showSettingsSheet } from "../settings/sheet";
 import { CREATE_SPACE_ICON_COLUMNS } from "./constants";
 import { SpaceBadge, SPACE_EMOJI, unusedSpaceIcon } from "./icons";
+import { NewSpacePanel } from "./NewSpace";
 
 export type CreateSpacePreset = { name?: string };
 
-type Request = { windowId: string; preset: CreateSpacePreset; resolve: (id: string | null) => void };
+type Request = { windowId: string; preset: CreateSpacePreset; resolve: (id: string | null) => void; key: number };
 
 const useRequest = create<{ request: Request | null }>(() => ({ request: null }));
 
@@ -21,7 +22,7 @@ export function requestCreateSpace(windowId?: string, preset: CreateSpacePreset 
   return new Promise((resolve) => {
     if (windowId && useBrowser.getState().windows[windowId]) {
       useRequest.getState().request?.resolve(null);
-      useRequest.setState({ request: { windowId, preset, resolve } });
+      useRequest.setState({ request: { windowId, preset, resolve, key: Date.now() } });
       return;
     }
     const done = (id: string | null) => {
@@ -40,7 +41,8 @@ export function CreateSpaceHost() {
     useRequest.setState({ request: null });
     request.resolve(id);
   };
-  return <CreateSpaceSheet preset={request.preset} onDone={done} />;
+  // In a window: yab's panel at the sidebar's foot. (Settings, which has no sidebar, keeps the sheet.)
+  return <NewSpacePanel key={request.key} windowId={windowId} presetName={request.preset.name} onDone={done} />;
 }
 
 function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDone: (id: string | null) => void }) {

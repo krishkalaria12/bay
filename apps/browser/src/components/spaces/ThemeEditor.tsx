@@ -1,7 +1,7 @@
 import { hapticTick, Surface, Symbol } from "@bay/shell";
 import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useRef, useState } from "react";
-import { Image, PanResponder, Pressable, StyleSheet, View, type GestureResponderEvent } from "react-native";
+import { Image, PanResponder, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import { create } from "zustand";
 import {
   defaultHarmony,
@@ -22,6 +22,7 @@ import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
+import { Toggle } from "../settings/controls";
 import { useSidebarWidth } from "../sidebar/tokens";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import {
@@ -58,7 +59,6 @@ const SWATCHES: Swatch[] = [
   ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ name: SPACE_COLORS[c].name, color: c, colors: [SPACE_COLORS[c].swatch] })),
   ...THEME_PRESETS,
 ];
-const PAGES = Math.ceil(SWATCHES.length / THEME_SWATCHES_PER_PAGE);
 
 type Request = { windowId: string; spaceId: string };
 
@@ -93,26 +93,63 @@ export function ThemeEditorHost() {
 function ThemeEditor({ request }: { request: Request }) {
   const theme = useTheme();
   const space = useBrowser((s) => s.spaces[request.spaceId]);
-  const appearance = useBrowser((s) => s.settings.appearance);
   const sidebarOpen = useSidebarOpen();
   const sidebarWidth = useSidebarWidth(request.windowId);
   // Over the page's corner beside the sidebar, on whichever side it is.
   const side = useSidebarOnRight() ? "right" : "left";
-  const [page, setPage] = useState(0);
-  const [harmony, setHarmony] = useState<Harmony>(() => defaultHarmony(space?.theme?.colors.length ?? 1));
   const keys = useRef<View>(null);
   useEffect(() => {
     const t = setTimeout(() => (keys.current as unknown as { focus?: () => void } | null)?.focus?.(), 50);
     return () => clearTimeout(t);
   }, []);
-  // The edit in progress: shown at once, and taken by the store (and the window's theme) once a frame.
+  if (!space) return null;
+  return (
+    <>
+      <Pressable accessibilityLabel="Close Theme Editor" style={StyleSheet.absoluteFill} onPress={close} />
+      <Surface
+        fill={hex(theme.panel)}
+        cornerRadius={16}
+        borderColor={hex(theme.panelBorder)}
+        borderWidth={0.5}
+        shadowColor="#000000"
+        shadowOpacity={theme.panelShadowOpacity}
+        shadowRadius={22}
+        shadowOffset={[0, 8]}
+        style={{ position: "absolute", [side]: (sidebarOpen ? sidebarWidth : 0) + 10, bottom: 12, width: THEME_FIELD_WIDTH + 2 * THEME_EDITOR_PAD }}
+      >
+        <View ref={keys} focusable enableFocusRing={false} keyDownEvents={[{ key: "Escape" }]} onKeyDown={close} style={{ padding: THEME_EDITOR_PAD }}>
+          <ThemeControls
+            look={{ color: space.color, theme: space.theme ?? null, followSite: space.followSite }}
+            onChange={(next) => useBrowser.getState().updateSpace(request.spaceId, next)}
+          />
+        </View>
+      </Surface>
+    </>
+  );
+}
+
+/** A space's look: its preset colour, its own theme (a gradient) if it has one, and whether pages tint it. */
+export type Look = { color: SpaceColor; theme: SpaceTheme | null; followSite?: boolean };
+
+/**
+ * The look's controls, for a space (the editor above) or one being made (the new space panel): light, dark or
+ * automatic over a colour wheel of up to three colours, pages of swatches, a wave for how strongly they tint, a dial
+ * for grain, and whether a page's colour tints the window. Changes reach `onChange` at most once a frame.
+ */
+export function ThemeControls({ look, width = THEME_FIELD_WIDTH, onChange }: { look: Look; width?: number; onChange(next: Look): void }) {
+  // As many swatches a page as the width holds (the arrows either side take the rest).
+  const perPage = Math.max(4, Math.min(THEME_SWATCHES_PER_PAGE, Math.floor((width - 48) / (THEME_SWATCH + 7))));
+  const pages = Math.ceil(SWATCHES.length / perPage);
+  const appearance = useBrowser((s) => s.settings.appearance);
+  const [page, setPage] = useState(0);
+  const [harmony, setHarmony] = useState<Harmony>(() => defaultHarmony(look.theme?.colors.length ?? 1));
+  // The edit in progress: shown at once, and handed on once a frame.
   const [draft, setDraft] = useState<SpaceTheme | null>(null);
   const pending = useRef<SpaceTheme | null>(null);
   const frame = useRef<number | null>(null);
-  if (!space) return null;
 
-  const current = draft && space.theme ? draft : editableTheme(space.theme, SPACE_COLORS[space.color].swatch);
-  // Many changes a second while dragging: the store (and the window's theme) takes the latest once a frame.
+  const current = draft && look.theme ? draft : editableTheme(look.theme, SPACE_COLORS[look.color].swatch);
+  // Many changes a second while dragging: `onChange` takes the latest once a frame.
   const set = (patch: Partial<SpaceTheme>) => {
     const next = { ...(pending.current ?? current), ...patch };
     pending.current = next;
@@ -120,7 +157,7 @@ function ThemeEditor({ request }: { request: Request }) {
     if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
-      if (pending.current) useBrowser.getState().updateSpace(request.spaceId, { theme: pending.current });
+      if (pending.current) onChange({ ...look, theme: pending.current });
     });
   };
   const colors = () => (pending.current ?? current).colors;
@@ -143,90 +180,95 @@ function ThemeEditor({ request }: { request: Request }) {
     pending.current = null;
     setDraft(null);
     setHarmony(defaultHarmony(swatch.colors.length));
-    if (swatch.color) useBrowser.getState().updateSpace(request.spaceId, { color: swatch.color, theme: null });
-    else useBrowser.getState().updateSpace(request.spaceId, { theme: { ...current, colors: swatch.colors } });
+    if (swatch.color) onChange({ ...look, color: swatch.color, theme: null });
+    else onChange({ ...look, theme: { ...current, colors: swatch.colors } });
   };
   const chosen = (swatch: Swatch) =>
-    swatch.color ? !space.theme && space.color === swatch.color : !!space.theme && space.theme.colors.join() === swatch.colors.join();
+    swatch.color ? !look.theme && look.color === swatch.color : !!look.theme && look.theme.colors.join() === swatch.colors.join();
+  const follows = look.followSite ?? !look.theme?.colors.length;
 
   return (
-    <>
-      <Pressable accessibilityLabel="Close Theme Editor" style={StyleSheet.absoluteFill} onPress={close} />
-      <Surface
-        fill={hex(theme.panel)}
-        cornerRadius={16}
-        borderColor={hex(theme.panelBorder)}
-        borderWidth={0.5}
-        shadowColor="#000000"
-        shadowOpacity={theme.panelShadowOpacity}
-        shadowRadius={22}
-        shadowOffset={[0, 8]}
-        style={{ position: "absolute", [side]: (sidebarOpen ? sidebarWidth : 0) + 10, bottom: 12, width: THEME_FIELD_WIDTH + 2 * THEME_EDITOR_PAD }}
-      >
-        <View ref={keys} focusable enableFocusRing={false} keyDownEvents={[{ key: "Escape" }]} onKeyDown={close} style={{ padding: THEME_EDITOR_PAD }}>
-          <View>
-            <ColorField colors={current.colors} onMoveFirst={moveFirst} />
-            {/* Over the field: light, dark or automatic at the top; at the bottom −, + and the next harmony. */}
-            <View pointerEvents="box-none" style={{ position: "absolute", top: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 }}>
-              {SCHEMES.map((s) => (
-                <IconButton
-                  key={s.mode}
-                  icon={s.icon}
-                  tooltip={s.tooltip}
-                  on={appearance === s.mode}
-                  onPress={() => useBrowser.getState().updateSettings({ appearance: s.mode })}
-                />
-              ))}
-            </View>
-            <View
-              pointerEvents="box-none"
-              style={{ position: "absolute", bottom: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 }}
-            >
-              <IconButton icon="minus" tooltip="Remove Colour" disabled={current.colors.length <= 1} onPress={removeColor} />
-              <IconButton icon="plus" tooltip="Add Colour" disabled={current.colors.length >= MAX_THEME_COLORS} onPress={addColor} />
-              <IconButton icon="dice" tooltip="Change Harmony" disabled={current.colors.length < 2} onPress={cycleHarmony} />
-            </View>
-          </View>
-
-          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
-            <IconButton icon="chevron.left" tooltip="Previous Colours" narrow disabled={page === 0} onPress={() => setPage(page - 1)} />
-            <View style={{ flex: 1, flexDirection: "row", justifyContent: "center", gap: 3 }}>
-              {SWATCHES.slice(page * THEME_SWATCHES_PER_PAGE, (page + 1) * THEME_SWATCHES_PER_PAGE).map((s) => (
-                <SwatchButton key={s.name} swatch={s} on={chosen(s)} onPress={() => applySwatch(s)} />
-              ))}
-            </View>
-            <IconButton icon="chevron.right" tooltip="More Colours" narrow disabled={page >= PAGES - 1} onPress={() => setPage(page + 1)} />
-          </View>
-
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 10 }}>
-            <WaveSlider value={current.intensity} colors={current.colors} onChange={(intensity) => set({ intensity })} />
-            <GrainDial value={current.grain} onChange={(grain) => set({ grain })} />
-          </View>
+    <View>
+      <View>
+        <ColorField colors={current.colors} width={width} onMoveFirst={moveFirst} />
+        {/* Over the field: light, dark or automatic at the top; at the bottom −, + and the next harmony. */}
+        <View pointerEvents="box-none" style={{ position: "absolute", top: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 }}>
+          {SCHEMES.map((s) => (
+            <IconButton
+              key={s.mode}
+              icon={s.icon}
+              tooltip={s.tooltip}
+              on={appearance === s.mode}
+              onPress={() => useBrowser.getState().updateSettings({ appearance: s.mode })}
+            />
+          ))}
         </View>
-      </Surface>
-    </>
+        <View pointerEvents="box-none" style={{ position: "absolute", bottom: 8, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 }}>
+          <IconButton icon="minus" tooltip="Remove Colour" disabled={current.colors.length <= 1} onPress={removeColor} />
+          <IconButton icon="plus" tooltip="Add Colour" disabled={current.colors.length >= MAX_THEME_COLORS} onPress={addColor} />
+          <IconButton icon="dice" tooltip="Change Harmony" disabled={current.colors.length < 2} onPress={cycleHarmony} />
+        </View>
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
+        <IconButton icon="chevron.left" tooltip="Previous Colours" narrow disabled={page === 0} onPress={() => setPage(page - 1)} />
+        <View style={{ flex: 1, flexDirection: "row", justifyContent: "center", gap: 3 }}>
+          {SWATCHES.slice(page * perPage, (page + 1) * perPage).map((s) => (
+            <SwatchButton key={s.name} swatch={s} on={chosen(s)} onPress={() => applySwatch(s)} />
+          ))}
+        </View>
+        <IconButton icon="chevron.right" tooltip="More Colours" narrow disabled={page >= pages - 1} onPress={() => setPage(page + 1)} />
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 10 }}>
+        <WaveSlider value={current.intensity} colors={current.colors} onChange={(intensity) => set({ intensity })} />
+        <GrainDial value={current.grain} onChange={(grain) => set({ grain })} />
+      </View>
+
+      <SiteColorRow on={follows} onChange={(followSite) => onChange({ ...look, followSite })} />
+    </View>
   );
 }
 
-// The wheel's centre, and a colour's dot on it.
-const CX = THEME_FIELD_WIDTH / 2;
-const CY = THEME_FIELD_HEIGHT / 2;
-function dotAt(color: string) {
-  const { angle, distance } = wheelPosition(color);
-  const r = distance * THEME_WHEEL_RADIUS;
-  return { x: CX + Math.cos(angle * 2 * Math.PI) * r, y: CY + Math.sin(angle * 2 * Math.PI) * r };
+// yab's "Take the site's color": a page with a colour of its own tints the window.
+function SiteColorRow({ on, onChange }: { on: boolean; onChange(on: boolean): void }) {
+  const theme = useTheme();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 }}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Take the site’s color</Text>
+        <Text style={{ fontSize: 11.5, lineHeight: 15, marginTop: 2, color: theme.textSecondary }}>Pages that have one tint the window.</Text>
+      </View>
+      <Toggle value={on} onChange={onChange} />
+    </View>
+  );
+}
+
+// The wheel at a width (its height in proportion): its centre, its radius, and a colour's dot on it.
+function wheel(width: number) {
+  const height = (width * THEME_FIELD_HEIGHT) / THEME_FIELD_WIDTH;
+  const radius = (THEME_WHEEL_RADIUS * width) / THEME_FIELD_WIDTH;
+  const cx = width / 2;
+  const cy = height / 2;
+  const dotAt = (color: string) => {
+    const { angle, distance } = wheelPosition(color);
+    const r = distance * radius;
+    return { x: cx + Math.cos(angle * 2 * Math.PI) * r, y: cy + Math.sin(angle * 2 * Math.PI) * r };
+  };
+  return { height, radius, cx, cy, dotAt };
 }
 
 // The dotted field over the colour wheel, a dot for each colour, the first one large. A press or a drag anywhere
 // brings the first colour to the pointer (held to the wheel's edge), and the others follow it.
-function ColorField({ colors, onMoveFirst }: { colors: string[]; onMoveFirst(color: string): void }) {
+function ColorField({ colors, width, onMoveFirst }: { colors: string[]; width: number; onMoveFirst(color: string): void }) {
   const theme = useTheme();
+  const { height, radius, cx, cy, dotAt } = wheel(width);
   const field = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
   const follow = useEffectEvent((e: GestureResponderEvent) => {
-    const dx = e.nativeEvent.pageX - origin.current.x - CX;
-    const dy = e.nativeEvent.pageY - origin.current.y - CY;
-    onMoveFirst(wheelColor(Math.atan2(dy, dx) / (2 * Math.PI), Math.hypot(dx, dy) / THEME_WHEEL_RADIUS));
+    const dx = e.nativeEvent.pageX - origin.current.x - cx;
+    const dy = e.nativeEvent.pageY - origin.current.y - cy;
+    onMoveFirst(wheelColor(Math.atan2(dy, dx) / (2 * Math.PI), Math.hypot(dx, dy) / radius));
   });
   const [pan] = useState(() =>
     PanResponder.create({
@@ -243,15 +285,15 @@ function ColorField({ colors, onMoveFirst }: { colors: string[]; onMoveFirst(col
       {...pan.panHandlers}
       onLayout={() => field.current?.measureInWindow((x, y) => (origin.current = { x, y }))}
       style={{
-        width: THEME_FIELD_WIDTH,
-        height: THEME_FIELD_HEIGHT,
+        width,
+        height,
         borderRadius: 10,
         overflow: "hidden",
         backgroundColor: theme.dark ? "#FFFFFF08" : "#0000000D",
       }}
     >
       <View pointerEvents="none">
-        <Image source={theme.dark ? DOTS.dark : DOTS.light} style={{ width: THEME_FIELD_WIDTH, height: THEME_FIELD_HEIGHT }} />
+        <Image source={theme.dark ? DOTS.dark : DOTS.light} style={{ width, height }} />
       </View>
       {/* Back to front, so the first colour's dot is on top. */}
       {colors
