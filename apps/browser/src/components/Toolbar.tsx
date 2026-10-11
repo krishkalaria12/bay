@@ -24,7 +24,7 @@ import { showUrlBarMenu } from "./omnibox/paste";
 import { CAPTURE_RED } from "./media/tokens";
 import { useHover } from "./primitives";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "./extensions/ToolbarExtensions";
-import { GlassFill, liquidGlass } from "./glass";
+import { GlassFill, useLiquidGlass } from "./glass";
 import { TranslateButton } from "./site/TranslateControls";
 import { ZoomIndicator } from "./site/ZoomControls";
 import { copyPageUrl } from "./site/selection";
@@ -239,6 +239,7 @@ export function UrlField({
   sidebar?: { height: number };
 }) {
   const theme = useTheme();
+  const glass = useLiquidGlass();
   const showFullUrl = useSettings((s) => s.showFullUrl);
   const bookmarked = useIsBookmarked(tab.url);
   const insecure = usePage(tab.id, (p) =>
@@ -280,14 +281,14 @@ export function UrlField({
               height: sidebar.height,
               borderRadius: SIDEBAR_FIELD.radius,
               borderWidth: StyleSheet.hairlineWidth * 2,
-              borderColor: liquidGlass ? "transparent" : theme.pinnedRestingStroke,
-              backgroundColor: liquidGlass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
+              borderColor: glass ? "transparent" : theme.pinnedRestingStroke,
+              backgroundColor: glass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
               overflow: "hidden",
             }
-          : { height: 30, borderRadius: 8, backgroundColor: hovered && !liquidGlass ? palette.pill : undefined },
+          : { height: 30, borderRadius: 8, backgroundColor: hovered && !glass ? palette.pill : undefined },
       ]}
     >
-      {liquidGlass ? (
+      {glass ? (
         sidebar ? (
           <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} />
         ) : (

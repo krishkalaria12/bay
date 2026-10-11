@@ -6,7 +6,7 @@ import { closeTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
-import { GlassFill, liquidGlass } from "../glass";
+import { GlassFill, useLiquidGlass } from "../glass";
 import { listTopGap, useSidebarFieldShown } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
 import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
@@ -105,6 +105,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
     badge.set(withSpring(away ? 1 : 0, PINNED_BADGE_SPRING));
   }, [away]);
   const badgeStyle = useAnimatedStyle(() => ({ opacity: badge.get(), transform: [{ scale: interpolate(badge.get(), [0, 1], [0.4, 1]) }] }));
+  const glass = useLiquidGlass();
   if (!tab) return null;
   const radius = 10;
 
@@ -125,7 +126,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
               }}
             >
               {({ pressed }) =>
-                liquidGlass ? (
+                glass ? (
                   <GlassTile tabId={tabId} width={width} active={active} selected={selected} hovered={hovered} pressed={pressed} tileTheme={tileTheme} />
                 ) : active && tileTheme ? (
                   <DockSelection

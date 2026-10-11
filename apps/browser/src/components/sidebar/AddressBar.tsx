@@ -12,7 +12,7 @@ import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
 import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
 import { SIDEBAR_FIELD } from "../layout/constants";
-import { GlassFill, liquidGlass } from "../glass";
+import { GlassFill, useLiquidGlass } from "../glass";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
 import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
@@ -87,6 +87,7 @@ function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
 
 function EmptyField({ windowId }: { windowId: string }) {
   const theme = useTheme();
+  const glass = useLiquidGlass();
   const { hovered, hoverProps } = useHover();
   const open = () => {
     useBrowser.getState().openPanel(windowId, "");
@@ -99,13 +100,13 @@ function EmptyField({ windowId }: { windowId: string }) {
             height: SIDEBAR_FIELD.height,
             borderRadius: SIDEBAR_FIELD.radius,
             borderWidth: StyleSheet.hairlineWidth * 2,
-            borderColor: liquidGlass ? "transparent" : theme.pinnedRestingStroke,
-            backgroundColor: liquidGlass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
+            borderColor: glass ? "transparent" : theme.pinnedRestingStroke,
+            backgroundColor: glass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
             justifyContent: "center",
             paddingLeft: 10,
           }}
         >
-          {liquidGlass ? (
+          {glass ? (
             <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} />
           ) : null}
           <FadeLabel text="Search or enter address" fontSize={13} color={theme.placeholder} fadeWidth={14} style={{ height: 18, marginLeft: -2 }} />
