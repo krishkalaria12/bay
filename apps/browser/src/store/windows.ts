@@ -206,7 +206,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       const entry: ClosedWindow = {
         kind: "window",
         id: newId("cw"),
-        window: { spaceId: w.spaceId, sidebarOpen: w.sidebarOpen, frame: w.frame },
+        window: { spaceId: w.spaceId, sidebarOpen: w.sidebarOpen, frame: w.frame, shownTabId: w.activeTabIds[w.spaceId] },
         tabs: [],
         groups: [],
         closedAt: Date.now(),
@@ -422,6 +422,8 @@ function restoreWindow(s: BrowserState, entry: ClosedWindow): BrowserState {
   const spaceOk = (p: string) => (s.spaces[p] ? p : s.settings.defaultSpaceId);
   const w = emptyWindow(id, spaceOk(entry.window.spaceId), false, entry.window.frame);
   w.sidebarOpen = entry.window.sidebarOpen;
+  // What it showed, as it showed it (tabToShow takes it while it's still the space's and no other window shows it).
+  if (entry.window.shownTabId && s.tabs[entry.window.shownTabId]) w.activeTabIds[w.spaceId] = entry.window.shownTabId;
   const tabs = { ...s.tabs };
   const live = { ...s.live };
   const added: Record<string, string[]> = {};

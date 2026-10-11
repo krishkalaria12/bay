@@ -105,6 +105,8 @@ test("a closed window's tabs wait with their back/forward list, and come back wi
   const b = S().newTab(w, { url: "b.com", background: true });
   const lazy = S().newTab(w, { url: "c.com", background: true, snapshot: { url: "https://c.com" } });
   S().updateTab(lazy, { navigation: null });
+  // A tab opened behind it was opened after it: the window still comes back on the one it showed.
+  S().updateTab(b, { lastActiveAt: S().tabs[a].lastActiveAt + 1 });
   S().closeWindow(w);
   assert.equal(S().tabs[a].windowId, "", "its page closed with the window");
   assert.match(S().tabs[b].wakeAdoptId, new RegExp(`^restore:${b}$`), "it waits with its history");

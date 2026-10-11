@@ -157,7 +157,8 @@ export type ClosedTab = {
 export type ClosedWindow = {
   kind: "window";
   id: string;
-  window: Pick<BrowserWindow, "spaceId" | "sidebarOpen" | "frame">;
+  // `shownTabId`: the tab it showed, which it shows again when it comes back (if nothing else shows it by then).
+  window: Pick<BrowserWindow, "spaceId" | "sidebarOpen" | "frame"> & { shownTabId?: string };
   tabs: (TabSnapshot & { active: boolean; tabId?: string })[];
   groups: (Omit<TabGroup, "tabIds"> & { tabIndexes: number[] })[];
   closedAt: number;
