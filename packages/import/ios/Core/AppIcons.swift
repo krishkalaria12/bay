@@ -27,7 +27,9 @@ public enum AppIcons {
     guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
     do {
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      for old in (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [] where old.hasPrefix("\(id)-") {
+      // Another discovery call can have just written this same icon. Keep its current path readable.
+      for old in (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        where old.hasPrefix("\(id)-") && old != file.lastPathComponent {
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(old))
       }
       try png.write(to: file, options: .atomic)

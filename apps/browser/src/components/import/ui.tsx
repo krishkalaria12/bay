@@ -1,7 +1,7 @@
 import type { BrowserSource, SpaceSummary } from "@bay/import";
 import { Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
 import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
@@ -11,6 +11,7 @@ import { useHover } from "../primitives";
 import { Button, Checkbox, PopUp, useFormColors } from "../settings/controls";
 import { CHECK_SPRING, SUCCESS_SPRING } from "./constants";
 import type { Status } from "./useImportFlow";
+import { BrowserIcon } from "./BrowserIcon";
 
 /** The window's backdrop, the same under every step (a step's own views come and go with it). */
 export function ImportBackdrop({ children }: { children: ReactNode }) {
@@ -95,7 +96,7 @@ export function Handoff({ iconPath, symbol }: { iconPath?: string; symbol: strin
   const theme = useTheme();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-      {iconPath ? <Image source={{ uri: `file://${iconPath}` }} style={{ width: 56, height: 56 }} /> : null}
+      <BrowserIcon iconPath={iconPath} size={56} color={theme.icon} />
       <Symbol name="arrow.right" size={16} color={theme.textTertiary} style={{ width: 20, height: 20 }} />
       <Symbol name={symbol} size={30} color={theme.icon} style={{ width: 56, height: 56 }} />
     </View>
@@ -135,11 +136,7 @@ export function BrowserRow({ browser, selected, onPress }: { browser: BrowserSou
           }}
         >
           <Radio on={selected} />
-          {browser.iconPath ? (
-            <Image source={{ uri: `file://${browser.iconPath}` }} style={{ width: 32, height: 32 }} />
-          ) : (
-            <Symbol name="globe" size={22} color={theme.icon} style={{ width: 32, height: 32 }} />
-          )}
+          <BrowserIcon iconPath={browser.iconPath} size={32} color={theme.icon} />
           <Text style={{ flex: 1, fontSize: 14, fontWeight: "500", color: theme.textPrimary }}>{browser.name}</Text>
           {detail ? <Text style={{ fontSize: 12, color: theme.textSecondary }}>{detail}</Text> : null}
           {browser.needsKeychain && <Symbol name="lock" size={11} color={theme.textTertiary} style={{ width: 14, height: 14 }} />}

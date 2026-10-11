@@ -38,6 +38,13 @@ export type BrowserSource = {
   profiles: BrowserProfile[];
 };
 
+export type BrowserApplication = {
+  id: string;
+  name: string;
+  appPath: string;
+  iconPath?: string;
+};
+
 export type BookmarkRole = "toolbar" | "other" | "mobile" | "menu" | "readingList";
 
 export type BookmarkNode = {
@@ -197,6 +204,7 @@ type ImportEvent = ({ jobId: string; type: "progress" } & ImportProgress) | { jo
 const Native = requireNativeModule<{
   addListener(name: "onImportEvent", listener: (e: ImportEvent) => void): EventSubscription;
   listBrowsers(): Promise<string>;
+  listInstalledBrowsers(): Promise<string>;
   importData(jobId: string, browserId: string, profileId: string, kinds: ImportKind[], options: object): Promise<string>;
   cancelImport(jobId: string): void;
   unlockBrowser(browserId: string, primaryPassword: string | null): Promise<null>;
@@ -250,6 +258,9 @@ async function job<T>(options: ImportOptions, start: (jobId: string) => Promise<
 }
 
 export const listBrowsers = () => call<BrowserSource[]>(Native.listBrowsers());
+
+/** Installed browser apps, including ones with no importable browsing data yet. */
+export const listInstalledBrowsers = () => call<BrowserApplication[]>(Native.listInstalledBrowsers());
 
 export function importData(browserId: string, profileId: string, kinds: ImportKind[], options: ImportOptions = {}) {
   const native = {

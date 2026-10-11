@@ -1,4 +1,5 @@
-import { addToDock, fileExists, fileIcon, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
+import { listInstalledBrowsers, type BrowserApplication } from "@bay/import";
+import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { SPACE_COLORS, themeFor, useTheme } from "../../lib/theme";
@@ -10,6 +11,7 @@ import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, recordDefaultBrowserTrial, useOnboarding } from "./state";
 import { CheckMark, CheckRow, PrimaryButton, Reveal, SecondaryButton, StepProgress, StepTitle, useOnboardingColors } from "./ui";
 import { APP_ICON } from "../../lib/assets";
+import { BrowserIcon } from "../import/BrowserIcon";
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
@@ -235,30 +237,25 @@ function WindowPreview({ windowId }: { windowId: string }) {
 
 // MARK: Import
 
-const BROWSERS = [
-  { name: "Chrome", path: "/Applications/Google Chrome.app" },
-  { name: "Safari", path: "/Applications/Safari.app" },
-  { name: "Arc", path: "/Applications/Arc.app" },
-  { name: "Dia", path: "/Applications/Dia.app" },
-  { name: "Helium", path: "/Applications/Helium.app" },
-  { name: "Firefox", path: "/Applications/Firefox.app" },
-  { name: "Edge", path: "/Applications/Microsoft Edge.app" },
-  { name: "Brave", path: "/Applications/Brave Browser.app" },
-  { name: "Opera", path: "/Applications/Opera.app" },
-  { name: "Vivaldi", path: "/Applications/Vivaldi.app" },
-];
-
 export function ImportStep() {
   const next = useOnboarding((s) => s.next);
   const colors = useOnboardingColors();
   const [opened, setOpened] = useState(false);
-  const [icons, setIcons] = useState<{ name: string; uri: string }[]>([]);
+  const [browsers, setBrowsers] = useState<BrowserApplication[]>([]);
 
   useEffect(() => {
-    const installed = BROWSERS.filter((b) => fileExists(b.path)).slice(0, 6);
-    void Promise.all(installed.map(async (b) => ({ name: b.name, uri: (await fileIcon(b.path, 56)) ?? "" }))).then((list) =>
-      setIcons(list.filter((i) => i.uri)),
+    let active = true;
+    void listInstalledBrowsers().then(
+      (installed) => {
+        if (active) setBrowsers(installed);
+      },
+      () => {
+        if (active) setBrowsers([]);
+      },
     );
+    return () => {
+      active = false;
+    };
   }, []);
 
   const importNow = () => {
@@ -281,12 +278,16 @@ export function ImportStep() {
       preview={
         <View style={{ alignItems: "center", gap: 22 }}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, maxWidth: 300 }}>
-            {icons.map((i) => (
-              <View key={i.name} style={{ alignItems: "center", gap: 6, width: 72 }}>
-                <Image source={{ uri: i.uri }} style={{ width: 56, height: 56 }} />
-                <Text style={{ fontSize: 11, color: colors.subtitle }}>{i.name}</Text>
-              </View>
-            ))}
+            {browsers.length ? (
+              browsers.map((browser) => (
+                <View key={browser.id} style={{ alignItems: "center", gap: 6, width: 72 }}>
+                  <BrowserIcon iconPath={browser.iconPath} size={56} color={colors.steps} />
+                  <Text style={{ fontSize: 11, color: colors.subtitle }}>{browser.name}</Text>
+                </View>
+              ))
+            ) : (
+              <Symbol name="globe" size={40} color={colors.steps} style={{ width: 56, height: 56 }} />
+            )}
           </View>
           <Symbol name="arrow.down" size={18} weight="medium" color={colors.steps} style={{ width: 24, height: 24 }} />
           <Image source={APP_ICON} style={{ width: 72, height: 72 }} />

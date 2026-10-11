@@ -88,6 +88,13 @@ public struct BrowserSource: Codable, Equatable, Sendable {
   public var profiles: [BrowserProfile]
 }
 
+public struct BrowserApplication: Codable, Equatable, Sendable {
+  public var id: String
+  public var name: String
+  public var appPath: String
+  public var iconPath: String?
+}
+
 public struct BrowserDiscovery {
   public var applicationSupport: URL
   public var locateApp: ([String]) -> URL?
@@ -106,6 +113,14 @@ public struct BrowserDiscovery {
       out.insert(tabs, at: out.firstIndex { $0.id == "dia" }.map { $0 + 1 } ?? out.count)
     }
     return out
+  }
+
+  // Onboarding shows installed apps even when they have no importable profiles yet.
+  public func installedApplications() -> [BrowserApplication] {
+    BrowserDefinition.all.compactMap { def in
+      guard let app = locateApp(def.bundleIds) else { return nil }
+      return BrowserApplication(id: def.id, name: def.name, appPath: app.path, iconPath: iconFor(app, def.id))
+    }
   }
 
   func diaTabsSource() -> BrowserSource? {

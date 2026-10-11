@@ -48,6 +48,10 @@ public class ImportModule: Module {
       self.run(promise) { try Self.json(self.importer.discovery.list()) }
     }
 
+    AsyncFunction("listInstalledBrowsers") { (promise: Promise) in
+      self.run(promise) { try Self.json(self.importer.discovery.installedApplications()) }
+    }
+
     AsyncFunction("importData") { (jobId: String, browserId: String, profileId: String, kinds: [String], options: [String: Any], promise: Promise) in
       let cancellation = self.jobs.start(jobId)
       let observer = self.observer(jobId: jobId, options: options)
