@@ -4,6 +4,7 @@ import { useBrowser, type BrowserState } from "../store/browser";
 import { PageSpaceContext, WindowContext } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import type { Space, SpaceColor } from "../store/types";
+import { SPACE_SWATCHES } from "./spaceSwatches";
 import { backdropTint, isLightColor, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
 
 export type Theme = typeof dark &
@@ -155,7 +156,7 @@ type SpaceColorSpec = {
 export const SPACE_COLORS: Record<SpaceColor, SpaceColorSpec> = {
   plum: {
     name: "Plum",
-    swatch: "#C07A98",
+    swatch: SPACE_SWATCHES.plum,
     // Dia: plum band #B5556B, tint #B25B6B, name #DD899B.
     powerUp: "#B5556B",
     tint: "#B25B6B",
@@ -164,16 +165,16 @@ export const SPACE_COLORS: Record<SpaceColor, SpaceColorSpec> = {
     dark: { lightPalette: "pink", edgeLight: "#EBB3CB80" },
     light: { lightPalette: "pink", edgeLight: "#D37B8B66" },
   },
-  blue: { name: "Blue", swatch: "#4691C3", palette: "blue" },
-  purple: { name: "Purple", swatch: "#7873AF", palette: "purple" },
-  pink: { name: "Pink", swatch: "#D37B8B", palette: "pink" },
-  red: { name: "Red", swatch: "#C1575C", palette: "red" },
-  orange: { name: "Orange", swatch: "#D87249", palette: "orange" },
-  yellow: { name: "Yellow", swatch: "#E3AC38", palette: "yellow" },
-  green: { name: "Green", swatch: "#3EB489", palette: "green" },
+  blue: { name: "Blue", swatch: SPACE_SWATCHES.blue, palette: "blue" },
+  purple: { name: "Purple", swatch: SPACE_SWATCHES.purple, palette: "purple" },
+  pink: { name: "Pink", swatch: SPACE_SWATCHES.pink, palette: "pink" },
+  red: { name: "Red", swatch: SPACE_SWATCHES.red, palette: "red" },
+  orange: { name: "Orange", swatch: SPACE_SWATCHES.orange, palette: "orange" },
+  yellow: { name: "Yellow", swatch: SPACE_SWATCHES.yellow, palette: "yellow" },
+  green: { name: "Green", swatch: SPACE_SWATCHES.green, palette: "green" },
   neutral: {
     name: "Neutral",
-    swatch: "#8E8E93",
+    swatch: SPACE_SWATCHES.neutral,
     palette: null,
     dark: { lightPalette: null, edgeLight: "#FFFFFF40" },
     light: { lightPalette: null, edgeLight: "#00000026" },

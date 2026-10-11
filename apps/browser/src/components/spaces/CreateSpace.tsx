@@ -5,13 +5,12 @@ import { create } from "zustand";
 import { SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
-import { profileGroups, unusedSpaceColor } from "../../store/spaces";
+import { profileGroups, SPACE_LOOKS, themeOfColor, unusedSpaceLook } from "../../store/spaces";
 import type { SpaceColor } from "../../store/types";
 import { Button, Sheet, TextField, useFormColors } from "../settings/controls";
 import { closeSettingsSheet, showSettingsSheet } from "../settings/sheet";
-import { IconGrid } from "../IconGrid";
 import { CREATE_SPACE_ICON_COLUMNS } from "./constants";
-import { SpaceBadge, SPACE_SYMBOLS, unusedSpaceIcon } from "./icons";
+import { SpaceBadge, SPACE_EMOJI, unusedSpaceIcon } from "./icons";
 
 export type CreateSpacePreset = { name?: string; shareWith?: string };
 
@@ -75,21 +74,21 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
   const groups = profileGroups({ spaces, spaceOrder });
   const current = useBrowser((s) => (windowId && !s.windows[windowId]?.incognito ? s.windows[windowId]!.spaceId : s.settings.defaultSpaceId));
   const [name, setName] = useState(preset.name ?? "");
-  const [color, setColor] = useState<SpaceColor>(() => unusedSpaceColor(useBrowser.getState().spaces));
+  const [look, setLook] = useState(() => unusedSpaceLook(useBrowser.getState().spaces));
   const [icon, setIcon] = useState<string | null>(() => unusedSpaceIcon(useBrowser.getState().spaces));
   // As Arc: a new space uses the current space's profile (its logins and cookies) unless a new one is chosen.
   const [shareWith, setShareWith] = useState<string | null>(preset.shareWith ?? current);
   const selectedGroup = shareWith === null ? null : (groups.find((g) => g.spaceIds.includes(shareWith)) ?? groups[0]);
 
   const submit = () => {
-    const id = useBrowser.getState().createSpace({ name, color, icon, shareWith: selectedGroup?.spaceIds[0] ?? null });
+    const id = useBrowser.getState().createSpace({ name, color: look.color, theme: look.theme, icon, shareWith: selectedGroup?.spaceIds[0] ?? null });
     onDone(id);
   };
 
   return (
     <Sheet width={420} onClose={() => onDone(null)}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <SpaceBadge profile={{ name: name || "Space", color, icon }} size={30} />
+        <SpaceBadge profile={{ name: name || "Space", color: look.color, theme: look.theme, icon }} size={30} />
         <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Create a Space</Text>
       </View>
       <Text style={{ fontSize: 12.5, lineHeight: 17, marginTop: 8, color: theme.textSecondary }}>
@@ -112,28 +111,44 @@ function CreateSpaceSheet({ windowId, preset, onDone }: { windowId: string | nul
           <Text style={{ fontSize: 12, marginTop: 16, marginBottom: 7, color: icon ? colors.accent : theme.textTertiary }}>Use Initial</Text>
         </Pressable>
       </View>
-      <IconGrid
-        symbols={SPACE_SYMBOLS}
-        current={icon}
-        onChoose={setIcon}
-        columns={CREATE_SPACE_ICON_COLUMNS}
-        cell={30}
-        rows={3}
-        highlight={colors.selected}
-        bold
-      />
-
-      <Label>Theme</Label>
-      <View style={{ flexDirection: "row", gap: 7 }}>
-        {(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => (
-          <Pressable key={c} onPress={() => setColor(c)} tooltip={SPACE_COLORS[c].name}>
-            <View
-              style={{ width: 22, height: 22, borderRadius: 11, padding: 2, borderWidth: 2, borderColor: color === c ? SPACE_COLORS[c].swatch : "transparent" }}
-            >
-              <View style={{ flex: 1, borderRadius: 9, backgroundColor: SPACE_COLORS[c].swatch }} />
-            </View>
+      {/* The space emoji (the sidebar's space panel has the same): a random free one is chosen to start with. */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", width: CREATE_SPACE_ICON_COLUMNS * 30 }}>
+        {SPACE_EMOJI.map((e) => (
+          <Pressable key={e} onPress={() => setIcon(e)} accessibilityLabel={e}>
+            {({ pressed }) => (
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: e === icon || pressed ? colors.selected : undefined,
+                }}
+              >
+                <Text style={{ fontSize: 19 }}>{e}</Text>
+              </View>
+            )}
           </Pressable>
         ))}
+      </View>
+
+      <Label>Theme</Label>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+        {[...SPACE_LOOKS, ...(Object.keys(SPACE_COLORS) as SpaceColor[]).map((c) => ({ name: SPACE_COLORS[c].name, ...themeOfColor(c) }))].map((l) => {
+          const on = l.theme.colors.join() === look.theme.colors.join();
+          return (
+            <Pressable key={l.name} onPress={() => setLook({ color: l.color, theme: l.theme })} tooltip={l.name}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, padding: 2, borderWidth: 2, borderColor: on ? l.theme.colors[0] : "transparent" }}>
+                <View style={{ flex: 1, borderRadius: 9, overflow: "hidden", flexDirection: "row" }}>
+                  {l.theme.colors.map((c) => (
+                    <View key={c} style={{ flex: 1, backgroundColor: c }} />
+                  ))}
+                </View>
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Label>Profile</Label>

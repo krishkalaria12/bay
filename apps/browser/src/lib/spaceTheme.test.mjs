@@ -86,6 +86,9 @@ test("a space's own theme shows over a page with a colour; a preset colour gives
   const S = () => useBrowser.getState();
   S().hydrate({});
   const space = S().settings.defaultSpaceId;
+  // A new install's space has a theme (Twilight); from a preset colour, the page's shows instead.
+  assert.ok(S().spaces[space].theme);
+  S().updateSpace(space, { theme: null });
   const w = S().createWindow({ spaceId: space, url: "https://example.com" });
   const tab = S().windows[w].activeTabIds[space];
   useBrowser.setState({ live: { ...S().live, [tab]: { ...S().live[tab], themeColor: "#202124" } } });

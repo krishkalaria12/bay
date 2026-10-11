@@ -3,10 +3,12 @@ import type { BrowserState } from "./browser";
 import { bookmarkRoots, engineRoots, ensureRoots, removeBookmarkTree } from "./bookmarks";
 import { orderSections } from "./groups";
 import { listIds, navigationTo, newId, setSpaceProfiles, spaceListKey, tabToShow, viewTabIds, without } from "./model";
-import { SYMBOL_PREFIX } from "../lib/constants";
+import { DEFAULT_GRAIN, DEFAULT_INTENSITY } from "../lib/constants";
+import { THEME_PRESETS } from "../lib/spaceTheme";
+import { SPACE_SWATCHES } from "../lib/spaceSwatches";
 import { DEFAULT_SPACE_ID } from "./constants";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
-import type { Space, SpaceColor } from "./types";
+import type { Space, SpaceColor, SpaceTheme } from "./types";
 
 export type SpacesSlice = {
   spaces: Record<string, Space>;
@@ -14,7 +16,8 @@ export type SpacesSlice = {
   // Engine spaces whose data a deleted profile left behind, until it's gone (lib/profileData.ts).
   orphanedProfileData: string[];
 
-  createSpace(options: { name: string; color?: SpaceColor; icon?: string | null; shareWith?: string | null }): string;
+  /** Without a colour or theme, the space gets a look no other space has (unusedSpaceLook). */
+  createSpace(options: { name: string; color?: SpaceColor; theme?: SpaceTheme | null; icon?: string | null; shareWith?: string | null }): string;
   updateSpace(id: string, patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>): void;
   /** The space takes another space's profile (`shareWith`'s), or a new one of its own (null). */
   setSpaceProfile(id: string, shareWith: string | null): void;
@@ -24,11 +27,50 @@ export type SpacesSlice = {
   profileDataDeleted(engineId: string): void;
 };
 
-export const DEFAULT_SPACE: Space = { id: DEFAULT_SPACE_ID, name: "Personal", color: "plum", icon: `${SYMBOL_PREFIX}house.fill`, createdAt: 0 };
+function presetTheme(name: string): SpaceTheme {
+  return { colors: [...THEME_PRESETS.find((p) => p.name === name)!.colors], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN };
+}
+
+// A new install's first space wears Arc's best-loved look: the Twilight gradient (violet into fuchsia), with grain.
+export const DEFAULT_SPACE: Space = {
+  id: DEFAULT_SPACE_ID,
+  name: "Personal",
+  color: "purple",
+  icon: "🏠",
+  createdAt: 0,
+  theme: presetTheme("Twilight"),
+};
 
 const COLORS: SpaceColor[] = ["blue", "green", "orange", "purple", "red", "yellow", "pink"];
 
 export const unusedSpaceColor = (spaces: Record<string, Space>): SpaceColor => COLORS.find((c) => !Object.values(spaces).some((p) => p.color === c)) ?? "blue";
+
+// The gradients a new space takes in turn, each with the preset colour nearest it (what shows where one colour does).
+const LOOKS: [string, SpaceColor][] = [
+  ["Twilight", "purple"],
+  ["Sunset", "orange"],
+  ["Aurora", "green"],
+  ["Dusk", "blue"],
+];
+
+/** The looks a space can start from: the gradients, then each preset colour's (the new space sheet offers them). */
+export const SPACE_LOOKS: { name: string; color: SpaceColor; theme: SpaceTheme }[] = LOOKS.map(([name, color]) => ({ name, color, theme: presetTheme(name) }));
+
+/**
+ * A new space's look, so that no two spaces look alike: the first gradient no space wears, then a theme of a colour
+ * no space has. Always a theme, so the space shows as itself over any page.
+ */
+export function unusedSpaceLook(spaces: Record<string, Space>): { color: SpaceColor; theme: SpaceTheme } {
+  const worn = new Set(Object.values(spaces).map((p) => p.theme?.colors.join()));
+  const look = LOOKS.find(([name]) => !worn.has(presetTheme(name).colors.join()));
+  if (look) return { color: look[1], theme: presetTheme(look[0]) };
+  return themeOfColor(unusedSpaceColor(spaces));
+}
+
+/** A space's look from one of the preset colours: its swatch, as a theme. */
+export function themeOfColor(color: SpaceColor): { color: SpaceColor; theme: SpaceTheme } {
+  return { color, theme: { colors: [SPACE_SWATCHES[color]], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN } };
+}
 
 // MARK: Shared data
 
@@ -99,13 +141,15 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
     spaceOrder: [DEFAULT_SPACE.id],
     orphanedProfileData: [],
 
-    createSpace({ name, color, icon = null, shareWith }) {
+    createSpace({ name, color, theme, icon = null, shareWith }) {
       const s = get();
       const source = shareWith ? s.spaces[shareWith] : undefined;
+      const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
       const profile: Space = {
         id: newId("p"),
         name: name.trim() || `Profile ${s.spaceOrder.length + 1}`,
-        color: color ?? unusedSpaceColor(s.spaces),
+        color: look.color,
+        ...(look.theme ? { theme: look.theme } : {}),
         icon,
         createdAt: Date.now(),
         ...(source ? { profileId: profileIdOf(source) } : {}),
