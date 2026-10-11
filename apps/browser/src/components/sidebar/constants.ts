@@ -103,3 +103,10 @@ export const SEARCH_TABS_MAX_ROWS = 10;
 export const SWITCHER_SHOW_AFTER_MS = 140;
 export const SWITCHER_WIDTH = 400;
 export const SWITCHER_ROW = 40;
+
+// MARK: Clear (clear.ts)
+
+// The room the divider's line leaves for Clear at its end.
+export const CLEAR_WIDTH = 44;
+// The rows Clear breaks into pixels (a screenful): any more go without.
+export const CLEAR_MAX_ROWS = 18;

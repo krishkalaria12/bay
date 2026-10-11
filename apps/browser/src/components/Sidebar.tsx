@@ -20,6 +20,7 @@ import { SpaceIndicator } from "./SpaceIndicator";
 import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./spaces/constants";
 import { usePageStyle, usePagerPages } from "./layout/spacePager";
 import { SpaceSwitcher } from "./spaces/SpaceSwitcher";
+import { clearableTabs, clearTabs } from "./sidebar/clear";
 import { UPDATE_ROW_HEIGHT, UpdateRow, useUpdateRowShown } from "./sidebar/UpdateRow";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
@@ -45,6 +46,7 @@ import {
   NEW_TAB_DOCK,
   PIN_BAND,
   PINNED_DIVIDER_PAD,
+  CLEAR_WIDTH,
   ROW_PITCH,
   ROWS_PER_FRAME,
 } from "./sidebar/constants";
@@ -323,7 +325,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                           ))}
                           <Tail id="tail:pinned" section="pinned" />
                         </View>
-                        <PinnedDivider shown={pinned.length > 0} />
+                        <PinnedDivider pinned={pinned.length > 0} windowId={windowId} spaceId={spaceId} />
                         <View
                           ref={(v) => {
                             controller?.regions.set("pinnedGroups", v);
@@ -393,11 +395,16 @@ const PinnedEntry = memo(function PinnedEntry({ entry }: { entry: string }) {
   return entry.startsWith("f:") ? <FolderBlock folderId={id} /> : <TabRowItem tabId={id} section="pinned" />;
 });
 
-// The line under the Pinned section: dropping a tab above its middle pins it. With nothing pinned there's no line,
-// and no room: a tab dropped above the list's first row is pinned.
-function PinnedDivider({ shown }: { shown: boolean }) {
+// The line under the Pinned section: dropping a tab above its middle pins it. With nothing pinned (and nothing to
+// clear) there's no line, and no room: a tab dropped above the list's first row is pinned. With tabs that aren't the
+// one on screen, yab's Clear sits at its end and puts them away.
+function PinnedDivider({ pinned, windowId, spaceId }: { pinned: boolean; windowId: string; spaceId: string }) {
+  const theme = useTheme();
   const tokens = useSidebarTokens();
   const controller = useDragController();
+  const clearable = useBrowser((s) => clearableTabs(s, windowId, spaceId).length > 0);
+  const { hovered, hoverProps } = useHover();
+  const shown = pinned || clearable;
   return (
     <View
       ref={(v) => {
@@ -405,7 +412,14 @@ function PinnedDivider({ shown }: { shown: boolean }) {
       }}
       style={{ paddingVertical: shown ? PINNED_DIVIDER_PAD : 0, paddingHorizontal: 9 }}
     >
-      {shown ? <View style={{ height: 1, borderRadius: 0.5, backgroundColor: tokens.separator }} /> : null}
+      {shown ? <View style={{ height: 1, borderRadius: 0.5, marginRight: clearable ? CLEAR_WIDTH : 0, backgroundColor: tokens.separator }} /> : null}
+      {clearable ? (
+        <View {...hoverProps} style={{ position: "absolute", right: 2, top: PINNED_DIVIDER_PAD - 8, height: 17, justifyContent: "center" }}>
+          <Pressable onPress={() => void clearTabs(windowId)} accessibilityRole="button" tooltip="Put away every tab but this one">
+            <Text style={{ fontSize: 12, fontWeight: "500", color: hovered ? theme.textPrimary : theme.textSecondary }}>Clear</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }

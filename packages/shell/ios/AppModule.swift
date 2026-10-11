@@ -49,6 +49,14 @@ public class AppModule: Module {
     AsyncFunction("setAutomaticUpdateChecks") { (on: Bool) in AppUpdater.shared.setAutomaticChecks(on) }.runOnQueue(.main)
     AsyncFunction("setAutomaticUpdateDownloads") { (on: Bool) in AppUpdater.shared.setAutomaticDownloads(on) }.runOnQueue(.main)
 
+    // MARK: Clear
+
+    // The sidebar's Clear: the rows (window content points, from its top-left) break into their pixels and blow away.
+    AsyncFunction("disintegrate") { (windowId: String, rects: [[Double]]) in
+      guard let window = WindowManager.shared.windows[windowId] else { return }
+      Disintegrate.run(window: window, rects: rects.compactMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil })
+    }.runOnQueue(.main)
+
     // MARK: Handoff and sharing
 
     AsyncFunction("setWindowActivity") { (windowId: String, url: String?, title: String?) in

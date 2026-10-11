@@ -112,6 +112,7 @@ type AppModule = {
   updaterState(): Promise<UpdaterState>;
   checkForUpdates(): Promise<void>;
   installPendingUpdate(): Promise<void>;
+  disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;
   setAutomaticUpdateChecks(on: boolean): Promise<void>;
   setAutomaticUpdateDownloads(on: boolean): Promise<void>;
   setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;
@@ -149,6 +150,13 @@ const App = requireNativeModule<AppModule>("BayApp");
 export const updaterState = () => App.updaterState();
 export const checkForUpdates = () => App.checkForUpdates();
 export const installPendingUpdate = () => App.installPendingUpdate();
+
+/** The sidebar's Clear: rows (window points from its top-left) break into their own pixels, which blow away. */
+export const disintegrate = (windowId: string, rects: { x: number; y: number; width: number; height: number }[]) =>
+  App.disintegrate(
+    windowId,
+    rects.map((r) => [r.x, r.y, r.width, r.height]),
+  );
 export const onUpdatePending = (listener: (pending: PendingUpdate | null) => void) => App.addListener("onUpdatePending", (e) => listener(e.pending ?? null));
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);
