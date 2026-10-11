@@ -3,6 +3,7 @@ import { createContext, createElement, useContext, type ReactNode } from "react"
 import { useBrowser, type BrowserState } from "../store/browser";
 import { PageSpaceContext, WindowContext } from "../store/hooks";
 import { activeTabId } from "../store/model";
+import { DEFAULT_SPACE } from "../store/spaces";
 import type { Space, SpaceColor } from "../store/types";
 import { SPACE_SWATCHES } from "./spaceSwatches";
 import { backdropTint, isLightColor, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
@@ -221,9 +222,10 @@ const transient = (key: string) => key.startsWith(CUSTOM) || key.includes(SITE);
 
 /** A space's theme key: its preset colour's, or its own theme's (the theme editor); glass windows' end in ":glass". */
 export function spaceThemeKey(profile: Pick<Space, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
+  const space = profile ?? DEFAULT_SPACE;
   const mode = `${dark ? "dark" : "light"}${glass ? GLASS : ""}`;
-  const t = profile?.theme;
-  if (!t?.colors.length) return `${profile?.color ?? "plum"}:${mode}`;
+  const t = space.theme;
+  if (!t?.colors.length) return `${space.color}:${mode}`;
   return `${CUSTOM}${t.colors.join(",")}|${t.intensity.toFixed(2)}|${t.grain.toFixed(2)}:${mode}`;
 }
 
@@ -301,7 +303,7 @@ export function themeKey(s: BrowserState, windowId: string | null, page: string 
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
   const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
-  const space = s.spaces[spaceId];
+  const space = s.spaces[spaceId] ?? DEFAULT_SPACE;
   const site = w && !glass && !space?.theme?.colors.length ? siteColor(s, id, spaceId) : null;
   const key = spaceThemeKey(space, site ? !isLightColor(site) : s.ui.appDark, glass);
   return site ? `${key}${SITE}${site}` : key;
