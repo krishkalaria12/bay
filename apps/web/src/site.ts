@@ -7,7 +7,7 @@ export const site = {
   title: "Bay: a beautiful, fast browser for Mac",
   // Around 155 characters, the answer first.
   description:
-    "Bay is a beautiful, fast browser for Mac with everything you loved about Arc: the sidebar, spaces, pinned tabs, folders, Peek and Split View, on Chrome’s engine.",
+    "Bay is a beautiful, fast browser for Mac: spaces, a sidebar of pinned tabs and folders, Peek, Split View and ads blocked out of the box, on Chrome’s engine.",
   // public/_redirects sends it to the latest GitHub release's Bay.dmg.
   downloadUrl: "/download",
   // The source, releases and issues.
@@ -24,7 +24,7 @@ export const downloadLink = { "data-astro-reload": true, "data-astro-prefetch": 
 const id = (name: string) => `${site.url}/#${name}`;
 export const ids = { org: id("organization"), site: id("website"), app: id("app") };
 
-/** What Bay keeps from Arc, by the name Arc gave it. The home page and the switching guide both list it. */
+/** Where each Arc feature is in Bay, by Arc's name for it. The switching guide lists it. */
 export const fromArc = [
   ["The sidebar", "The sidebar", "Tabs down the side: favorites on top, pinned tabs under them, today’s below."],
   ["Spaces", "Spaces", "Each with its own icon, theme and profile, so sign-ins stay apart. Swipe between them."],
@@ -40,12 +40,8 @@ export const fromArc = [
 
 export const faqs = [
   {
-    q: "Does Bay have Arc’s features?",
-    a: "Yes. Bay is its own browser, and it brings what people loved about Arc: the sidebar, spaces, pinned tabs, folders, Peek, Split View and a little window for links from other apps. It imports your Arc spaces, pinned tabs and favorites, so you can pick up where you left off.",
-  },
-  {
-    q: "Is Bay made by The Browser Company?",
-    a: "No. Bay is an independent browser and isn’t affiliated with The Browser Company or Arc.",
+    q: "What is Bay?",
+    a: "A browser for the Mac built around a sidebar: spaces for each part of your life, pinned tabs and folders that stay put, Peek, Split View, and ads and trackers blocked from the first page. It runs on Chrome’s engine, so every site and extension works.",
   },
   {
     q: "Is Bay built on Chromium?",
@@ -56,8 +52,8 @@ export const faqs = [
     a: "They do. Install them from the Chrome Web Store; their buttons sit in the toolbar and side panels open beside the page.",
   },
   {
-    q: "Can I bring my tabs over from Arc?",
-    a: "Bay imports Arc’s spaces, tabs, pinned tabs, folders and favorites, plus bookmarks, history and passwords. It also imports from Chrome, Safari, Firefox and Dia.",
+    q: "Can I bring my bookmarks and passwords?",
+    a: "Yes. Bay imports bookmarks, history and passwords from Chrome, Safari, Firefox, Arc and Dia. From Arc, your spaces, pinned tabs, folders and favorites come over too.",
   },
   {
     q: "What happens to tabs I haven’t looked at in a while?",
@@ -70,6 +66,10 @@ export const faqs = [
   {
     q: "Does Bay sync between my Macs?",
     a: "Yes, with encryption you hold the key to: your data is sealed into files in a folder you choose, like one in iCloud Drive, and only your devices can read it.",
+  },
+  {
+    q: "Is Bay made by The Browser Company?",
+    a: "No. Bay is an independent browser and isn’t affiliated with The Browser Company or Arc.",
   },
 ] as const;
 

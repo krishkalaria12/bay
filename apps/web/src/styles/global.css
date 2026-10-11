@@ -171,7 +171,7 @@
     box-shadow: 0 12px 28px -18px rgba(30, 32, 60, 0.25);
   }
 
-  /* The rest of what's kept from Arc: chips that come in one after another. */
+  /* The rest of what's inside: chips that come in one after another. */
   .chip {
     @apply inline-flex items-center gap-2 rounded-full bg-white py-2 pr-4 pl-3 text-[14.5px] text-ink-soft shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgba(30,32,60,0.04)] transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-[0_0_0_1px_#d3d6dc,0_8px_18px_-10px_rgba(30,32,60,0.35)];
   }

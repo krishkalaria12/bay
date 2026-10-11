@@ -14,9 +14,9 @@ import { faqPage, faqs, ids, downloadLink, site } from "../site";
 
 const cards = [
   {
-    title: "All of Arc, kept",
+    title: "A sidebar that stays tidy",
     marker: "var(--color-note-yellow)",
-    body: "The sidebar, spaces, pinned tabs, folders, Peek, Split View and the little window for links. The way you left them.",
+    body: "Spaces, pinned tabs, folders, Peek, Split View and a little window for links from other apps. Everything has a place.",
   },
   {
     title: "Chrome underneath",
@@ -24,13 +24,13 @@ const cards = [
     body: "Chrome’s own engine, so every site works and every extension from the Chrome Web Store installs.",
   },
   {
-    title: "Your Arc comes with you",
+    title: "Moving in takes a minute",
     marker: "var(--color-note-blue)",
-    body: "Spaces, pinned tabs and folders come over from Arc in one go, with your bookmarks, history and passwords.",
+    body: "Bookmarks, history and passwords come over from Chrome, Safari, Firefox, Arc or Dia in one go.",
   },
 ];
 
-// What Arc people miss, ticked one by one; then the rest of it, opened in place.
+// What Bay is built around, ticked one by one; then the rest of it, opened in place.
 const kept = [
   ["The sidebar", "Tabs down the side: favorites on top, pinned tabs under them, today’s below."],
   ["Spaces", "Work, home, a trip. Each with its own tabs, theme and sign-ins."],
@@ -54,9 +54,9 @@ const more = [
   "Theme editor, with grain",
   "Sidebar on the left or right",
   "Tab groups with ⌘-click",
-  "Arc and Zen shortcuts",
+  "Shortcuts you already know",
   "Incognito windows",
-  "Bring it all from Arc",
+  "Import from any browser",
 ];
 
 const extras = [
@@ -89,15 +89,15 @@ const schema = [
     <!-- Hero -->
     <section class="mx-auto max-w-6xl px-5 pt-14 pb-20 text-center sm:pt-20">
       <h1 class="mx-auto max-w-4xl animate-rise text-[44px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[68px]">
-        Bay: everything you loved about Arc, <span class="marker">kept</span>.
+        Bay: your tabs, finally <span class="marker">in order</span>.
       </h1>
       <p class="mx-auto mt-6 max-w-xl animate-rise text-[17px] leading-relaxed text-pretty text-muted [animation-delay:80ms]">
-        Bay is a beautiful, fast browser for the Mac, with everything you loved about Arc: the sidebar, spaces, pinned
-        tabs, folders, Peek and Split View, on Chrome’s own engine.
+        Bay is a beautiful, fast browser for the Mac. Spaces for every part of your life, a sidebar that stays tidy,
+        Peek, Split View and ads blocked out of the box, all on Chrome’s own engine.
       </p>
       <div class="mt-8 flex animate-rise flex-wrap items-center justify-center gap-2 [animation-delay:120ms]">
         <a href={site.downloadUrl} {...downloadLink} data-download-location="hero" class="btn px-6 py-3.5 text-[16px]">Download for Mac</a>
-        <a href="#arc" class="btn-ghost">See what’s inside ›</a>
+        <a href="#inside" class="btn-ghost">See what’s inside ›</a>
       </div>
       <p class="mt-3 animate-rise text-[13px] text-muted [animation-delay:140ms]">
         For {site.requirement}. Coming from Arc? <a href="/switch-from-arc/" class="font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink">Here’s how to switch</a>.
@@ -127,11 +127,11 @@ const schema = [
       }
     </section>
 
-    <!-- From Arc -->
-    <section id="arc" class="mx-auto max-w-6xl scroll-mt-24 px-5 py-16 sm:py-24" aria-labelledby="arc-title">
-      <p class="eyebrow">From Arc</p>
-      <h2 id="arc-title" class="mt-2 max-w-2xl text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
-        You miss Arc. So we kept <span class="marker">all of it</span>.
+    <!-- Inside -->
+    <section id="inside" class="mx-auto max-w-6xl scroll-mt-24 px-5 py-16 sm:py-24" aria-labelledby="inside-title">
+      <p class="eyebrow">Inside Bay</p>
+      <h2 id="inside-title" class="mt-2 max-w-2xl text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
+        Everything you need, <span class="marker">nothing in the way</span>.
       </h2>
       <ul class="mt-12 grid max-w-4xl gap-x-12 gap-y-7 sm:grid-cols-2">
         {
@@ -156,7 +156,7 @@ const schema = [
             <path d="M6 9.5l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </summary>
-        <ul class="flex flex-wrap gap-2.5 pt-6 pb-3" aria-label="More from Arc">
+        <ul class="flex flex-wrap gap-2.5 pt-6 pb-3" aria-label="More in Bay">
           {
             more.map((m, i) => (
               <li class="chip" style={`--i: ${i}`}>
@@ -177,7 +177,7 @@ const schema = [
         Give each space its own icon, theme and profile, so work stays signed in to work and home stays home. Their
         icons sit at the foot of the sidebar: click one, or swipe two fingers across the sidebar to move between them.
       </p>
-      <p>Right-click a space for its theme. Press + and there’s a new one. Favorites and pinned tabs follow you into every window, the way Arc had them.</p>
+      <p>Right-click a space for its theme. Press + and there’s a new one. Favorites and pinned tabs follow you into every window.</p>
       <Fragment slot="visual">
         <LiveFigure
           client:visible
@@ -260,8 +260,8 @@ const schema = [
     <!-- Tidy -->
     <Feature id="tidy" eyebrow="Old tabs put away" title={`Yesterday’s tabs, <span class="marker" style="--marker: var(--color-note-pink)">gone</span>. Not lost.`}>
       <p>
-        Like Arc, Bay clears out tabs you haven’t looked at. Unlike Arc, you pick when, for each space: twelve hours for
-        work, a week for home.
+        Bay clears out tabs you haven’t looked at, and you pick when, for each space: twelve hours for work, a week for
+        home.
       </p>
       <p>Everything put away is one search away. Skip ahead a few hours, then press New tab.</p>
       <Fragment slot="visual">
@@ -278,9 +278,9 @@ const schema = [
       </Fragment>
     </Feature>
 
-    <!-- More than Arc -->
+    <!-- Extras -->
     <section id="more" class="mx-auto max-w-6xl scroll-mt-24 px-5 pt-16 sm:pt-24" aria-labelledby="more-title">
-      <p class="eyebrow">More than Arc</p>
+      <p class="eyebrow">Extras</p>
       <h2 id="more-title" class="mt-2 max-w-2xl text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
         Then we <span class="marker">kept going</span>.
       </h2>
@@ -337,25 +337,25 @@ const schema = [
     </Feature>
 
     <!-- Import -->
-    <Feature id="import" eyebrow="Moving in" title={`Bring it all <span class="marker">from Arc</span>.`} flip>
+    <Feature id="import" eyebrow="Moving in" title={`Bring it all <span class="marker">with you</span>.`} flip>
       <p>
-        Spaces, pinned tabs and folders come over from Arc, right where you left them. Bookmarks, history and passwords
-        come from Arc, Chrome, Safari, Firefox and Dia.
+        Bookmarks, history and passwords come over from Chrome, Safari, Firefox, Arc and Dia. Coming from Arc? Your
+        spaces, pinned tabs and folders land right where you left them.
       </p>
-      <p><a href="/switch-from-arc/" class="font-semibold text-ink underline decoration-note-yellow decoration-[3px] underline-offset-4">How to switch from Arc, step by step ›</a></p>
+      <p><a href="/switch-from-arc/" class="font-semibold text-ink underline decoration-note-yellow decoration-[3px] underline-offset-4">Switching from Arc, step by step ›</a></p>
       <Fragment slot="visual">
         <div class="card mx-auto max-w-xl p-6 shadow-[0_30px_60px_-30px_rgba(30,32,60,0.35)] sm:p-8">
           <p class="text-[20px] font-bold tracking-tight">Import from</p>
           <div class="mt-4 grid grid-cols-4 gap-2 text-center text-[13px] font-semibold">
             {
-              ["Arc", "Chrome", "Safari", "Firefox"].map((b, i) => (
+              ["Chrome", "Safari", "Firefox", "Arc"].map((b, i) => (
                 <span class:list={["rounded-xl border px-2 py-3", i === 0 ? "border-ink bg-ink text-white" : "border-line text-muted"]}>{b}</span>
               ))
             }
           </div>
           <ul class="mt-6 space-y-3 text-[15px]">
             {
-              ["Spaces, with their colors", "Pinned tabs and folders", "Bookmarks", "History", "Passwords"].map((x) => (
+              ["Bookmarks", "History", "Passwords"].map((x) => (
                 <li class="flex items-center gap-3">
                   <span class="grid size-5 place-items-center rounded-md bg-pen text-[12px] font-bold text-white" aria-hidden="true">✓</span>
                   {x}
@@ -388,7 +388,7 @@ const schema = [
     <!-- Note to self -->
     <div class="px-5 py-12">
       <Sticky tilt={-2} class="mx-auto max-w-md px-9 py-9">
-        <p class="text-[34px] leading-[1.05] sm:text-[38px]">“Stop mourning Arc. The sidebar’s fine.”</p>
+        <p class="text-[34px] leading-[1.05] sm:text-[38px]">“Forty tabs open. Somehow, calm.”</p>
         <p class="mt-4 font-sans text-[13px] text-ink/70">— a note to self, finally true</p>
       </Sticky>
     </div>
@@ -422,7 +422,7 @@ const schema = [
         Your spaces have a new <span class="marker">home</span>.
       </h2>
       <a href={site.downloadUrl} {...downloadLink} data-download-location="closing" class="btn mt-8 px-7 py-3.5 text-[16px]">Download for Mac</a>
-      <p class="mt-4 text-[13px] text-muted">For {site.requirement}. Bring your Arc; we’ll unpack it.</p>
+      <p class="mt-4 text-[13px] text-muted">For {site.requirement}. Bring your tabs; we’ll unpack them.</p>
     </section>
   </main>
 

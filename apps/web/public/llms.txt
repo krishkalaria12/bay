@@ -1,15 +1,15 @@
 # Bay
 
-> Bay is a beautiful, fast browser for the Mac with everything people loved about Arc: the sidebar, spaces, pinned tabs, folders, Peek, Split View and a small window for links from other apps. It runs on Chrome's own engine, so every site works and Chrome Web Store extensions install. It needs macOS 14 Sonoma or later.
+> Bay is a beautiful, fast browser for the Mac built around a sidebar: spaces, pinned tabs, folders, Peek, Split View, a small window for links from other apps, and ads and trackers blocked out of the box. It runs on Chrome's own engine, so every site works and Chrome Web Store extensions install. It needs macOS 14 Sonoma or later.
 
 Bay is an independent browser. It is not made by, or affiliated with, The Browser Company or Arc.
 
 ## Pages
 
-- [Bay](https://bay.krishkalaria.in/): what Bay is, what it brings from Arc, what it adds, and answers to common questions.
+- [Bay](https://bay.krishkalaria.in/): what Bay is, what it does, and answers to common questions.
 - [How to switch from Arc to Bay](https://bay.krishkalaria.in/switch-from-arc/): importing spaces, tabs, pinned tabs, folders, favorites, bookmarks, history and passwords, and where each Arc feature is in Bay.
 
-## What Bay brings from Arc
+## What Bay does
 
 - The sidebar: tabs down the side, favorites on top, pinned tabs below them, today's tabs under that.
 - Spaces: each with its own icon, theme and profile; switch by clicking a space's icon at the foot of the sidebar or swiping two fingers across it.
@@ -19,7 +19,7 @@ Bay is an independent browser. It is not made by, or affiliated with, The Browse
 - Little Bay: links from other apps open in a small window.
 - Old tabs put away after a time set per space, and still searchable from the command bar.
 
-## What Bay adds
+## Extras
 
 - Built-in blocking of ads and trackers, with a per-site switch.
 - Chrome extensions from the Chrome Web Store.
