@@ -25,10 +25,11 @@ function membersHeight(s: BrowserState, windowId: string, spaceId: string, group
   return keptEntry(s, windowId, spaceId, entries) ? ROW + GROUP_PAD : 0;
 }
 
-// A pinned folder's rows below its header: every row open, each after a gap; only the kept one collapsed.
+// A pinned folder's rows below its header: every row open, each after a gap (an open empty one: its "Drag tabs here"
+// line); only the kept one collapsed.
 function folderMembersHeight(s: BrowserState, windowId: string, spaceId: string, folderId: string): number {
   const entries = folderEntries(s, folderId);
-  if (!s.pinnedFolders[folderId]?.collapsed) return entries.length * (ROW + GAP);
+  if (!s.pinnedFolders[folderId]?.collapsed) return Math.max(1, entries.length) * (ROW + GAP);
   return keptEntry(s, windowId, spaceId, entries) ? ROW + GAP : 0;
 }
 

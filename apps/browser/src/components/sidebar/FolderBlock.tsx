@@ -56,10 +56,23 @@ export const FolderBlock = memo(function FolderBlock({ folderId }: { folderId: s
           mountClosed={selectedInside}
           footer={<Animated.View ref={tailRef} style={tailStyle} />}
         />
+        {!entries.length && !collapsed ? <EmptyFolder /> : null}
       </View>
     </Animated.View>
   );
 });
+
+// yab's line under an open folder with nothing in it (a drop there lands in the folder).
+function EmptyFolder() {
+  const theme = useTheme();
+  return (
+    <View pointerEvents="none" style={{ height: layout.rowHeight, marginTop: layout.rowGap, justifyContent: "center", paddingLeft: 9 }}>
+      <Text numberOfLines={1} style={{ fontSize: 13, color: theme.textTertiary }}>
+        Drag tabs here
+      </Text>
+    </View>
+  );
+}
 
 // `open` is the rows' collapse animation: the chevron turns on its frames.
 function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: string; windowId: string; collapsed: boolean; open: SharedValue<number> }) {

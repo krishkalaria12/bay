@@ -347,28 +347,24 @@ function firstAfterFolder(folderId: string): string | null {
   return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
 }
 
+// yab's folder menu (its folders don't nest in Bay: no New Folder Inside), then copying the folder's links.
 export async function openFolderMenu(windowId: string, folderId: string) {
   const s = store();
   const f = s.pinnedFolders[folderId];
   if (!f) return;
   const members = folderTabIds(s, folderId);
   const choice = await showMenu([
+    { id: "collapse", title: f.collapsed ? "Open Folder" : "Close Folder", symbol: f.collapsed ? "folder" : "folder.fill" },
     { id: "rename", title: "Rename…", symbol: "character.cursor.ibeam" },
-    { id: "icon", title: f.icon ? "Change Icon…" : "Add Icon…", symbol: "face.smiling" },
+    { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
     ...(f.icon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
-    {
-      id: "collapse",
-      title: f.collapsed ? "Expand Folder" : "Collapse Folder",
-      symbol: f.collapsed ? "chevron.down" : "chevron.up",
-      enabled: members.length > 0,
-    },
     sep,
+    { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
     { id: "copy", title: "Copy All Links", symbol: "link", enabled: members.length > 0 },
     { id: "copyMd", title: "Copy All Links as Markdown", symbol: "text.badge.checkmark", enabled: members.length > 0 },
     sep,
-    { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
     // Its tabs stay pinned, loose, where they were.
-    { id: "delete", title: "Delete Folder", symbol: "trash" },
+    { id: "delete", title: "Remove Folder", symbol: "trash" },
   ]);
   if (!choice) return;
   const target = { kind: "folder" as const, id: folderId };
