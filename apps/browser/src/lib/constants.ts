@@ -13,7 +13,8 @@ export const SYMBOL_PREFIX = "symbol:";
 
 // The window's metrics: the sidebar, its rows, the page card and its toolbar.
 export const layout = {
-  sidebarWidth: 190,
+  // Wide enough that the header shows the sidebar toggle beside the window buttons (sidebar/AddressBar.tsx).
+  sidebarWidth: 228,
   sidebarHeader: 46,
   // Dia: 6pt inset.
   sidebarInset: 6,

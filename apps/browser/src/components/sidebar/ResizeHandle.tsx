@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useResizeDrag } from "../layout/useResizeDrag";
 import { useSidebarOnRight } from "../layout/windowLayout";
@@ -12,7 +13,7 @@ export function ResizeHandle({ windowId }: { windowId: string }) {
     min: SIDEBAR_MIN_WIDTH,
     max: SIDEBAR_MAX_WIDTH,
     direction: right ? -1 : 1,
-    saved: () => useBrowser.getState().settings.sidebarWidth ?? 190,
+    saved: () => useBrowser.getState().settings.sidebarWidth ?? layout.sidebarWidth,
     onLive: (w) => {
       const dragWidth = { ...sidebarUi().dragWidth };
       if (w === null) delete dragWidth[windowId];
@@ -24,7 +25,7 @@ export function ResizeHandle({ windowId }: { windowId: string }) {
   return (
     <View
       {...handlers}
-      onDoubleClick={() => useBrowser.getState().updateSettings({ sidebarWidth: 190 })}
+      onDoubleClick={() => useBrowser.getState().updateSettings({ sidebarWidth: layout.sidebarWidth })}
       style={[{ position: "absolute", top: 46, bottom: 0, width: 7, cursor: "col-resize" }, right ? { left: -3 } : { right: -3 }]}
     />
   );

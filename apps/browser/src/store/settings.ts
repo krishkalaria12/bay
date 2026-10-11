@@ -12,6 +12,7 @@ import {
 } from "@bay/core";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
+import { layout } from "../lib/constants";
 import { DEFAULT_SPACE_ID } from "./constants";
 
 export type SearchEngineId = string;
@@ -108,7 +109,7 @@ export const DEFAULT_SETTINGS: Settings = {
   previewFolders: true,
   previewGmail: true,
   previewGithub: true,
-  sidebarWidth: 190,
+  sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
   batterySaver: true,
   extensionSidePanelWidth: 360,
