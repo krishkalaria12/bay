@@ -20,6 +20,7 @@ import { SpaceIndicator } from "./SpaceIndicator";
 import { PROFILE_DOTS_HEIGHT, PROFILE_INDICATOR_X } from "./spaces/constants";
 import { usePageStyle, usePagerPages } from "./layout/spacePager";
 import { SpaceSwitcher } from "./spaces/SpaceSwitcher";
+import { UPDATE_ROW_HEIGHT, UpdateRow, useUpdateRowShown } from "./sidebar/UpdateRow";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
 import { DragProvider, DragScope, useDragController, useDragItem, type Ghost } from "./sidebar/dnd";
@@ -82,7 +83,9 @@ export function Sidebar() {
   // The footer: downloads at its left, then the space switcher with its + for a new space (every window but a
   // private one).
   const spaces = !useIsIncognito();
-  const footer = PROFILE_DOTS_HEIGHT;
+  // An update waiting: its row over the footer.
+  const update = useUpdateRowShown();
+  const footer = PROFILE_DOTS_HEIGHT + (update ? UPDATE_ROW_HEIGHT : 0);
   const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
   useRevealTabs(windowId, scroll, scrollY, geometry, glowRoom);
@@ -149,6 +152,11 @@ export function Sidebar() {
           ) : null}
 
           <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
+            {update ? (
+              <View style={{ height: UPDATE_ROW_HEIGHT, paddingHorizontal: layout.sidebarInset, justifyContent: "flex-end" }}>
+                <UpdateRow />
+              </View>
+            ) : null}
             {spaces ? <SpaceSwitcher windowId={windowId} /> : null}
             <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
               <DownloadsButton windowId={windowId} />

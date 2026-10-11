@@ -28,6 +28,11 @@ public final class AppUpdater: NSObject {
   private var firstCheckPending = false
   #endif
   private var started = false
+  /// An update found but not shown in Sparkle's window (its gentle reminder), or downloaded and waiting for a
+  /// restart: the sidebar shows an Update button while there's one. ["version": String, "ready": Bool]
+  public private(set) var pending: [String: Any]?
+  public var onPendingChange: (([String: Any]?) -> Void)?
+  private var installNow: (() -> Void)?
 
   public var isAvailable: Bool {
     #if canImport(Sparkle)
@@ -88,10 +93,24 @@ public final class AppUpdater: NSObject {
       "feedURL": updater.feedURL?.absoluteString as Any,
       "lastCheck": updater.lastUpdateCheckDate.map { $0.timeIntervalSince1970 * 1000 } as Any,
       "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as Any,
+      "pending": pending as Any,
     ]
     #else
     return ["available": false]
     #endif
+  }
+
+  /// The sidebar's Update button: a downloaded update installs and relaunches; otherwise Sparkle shows the update.
+  public func installPendingUpdate() {
+    #if canImport(Sparkle)
+    if let install = installNow { return install() }
+    checkForUpdates(nil)
+    #endif
+  }
+
+  private func setPending(_ value: [String: Any]?) {
+    pending = value
+    onPendingChange?(value)
   }
 
   public func setAutomaticChecks(_ on: Bool) {
@@ -151,6 +170,26 @@ extension AppUpdater: SPUUpdaterDelegate {
     return [["key": "first", "value": "1"]]
   }
 
+  public func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+    setPending(["version": item.displayVersionString, "ready": false])
+  }
+
+  public func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+    installNow = nil
+    setPending(nil)
+  }
+
+  public func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate updateItem: SUAppcastItem, state: SPUUserUpdateState) {
+    if choice == .skip { setPending(nil) }
+  }
+
+  // Downloaded in the background: it installs as Bay quits, or now from the sidebar's button.
+  public func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
+    installNow = immediateInstallHandler
+    setPending(["version": item.displayVersionString, "ready": true])
+    return true
+  }
+
   public func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
     guard Self.isPresentingFullScreen else { return false }
     deferredRelaunch = installHandler
@@ -161,12 +200,16 @@ extension AppUpdater: SPUUpdaterDelegate {
 extension AppUpdater: SPUStandardUserDriverDelegate {
   public var supportsGentleScheduledUpdateReminders: Bool { true }
 
+  // A scheduled check finding an update while the user is busy shows it gently, as the sidebar's Update button;
+  // Sparkle's window comes up only when it would have the user's attention anyway (just launched, back from idle).
   public func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
-    !Self.isPresentingFullScreen
+    immediateFocus && !Self.isPresentingFullScreen
   }
 
   public func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
-    if !handleShowingUpdate { deferredUpdate = true }
+    guard !handleShowingUpdate else { return }
+    setPending(["version": update.displayVersionString, "ready": false])
+    if Self.isPresentingFullScreen { deferredUpdate = true }
   }
 
   public func standardUserDriverWillFinishUpdateSession() {

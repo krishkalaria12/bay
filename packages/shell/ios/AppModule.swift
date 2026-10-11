@@ -7,8 +7,8 @@ public class AppModule: Module {
     Name("BayApp")
     // The JS/native contract: NATIVE_API_VERSION in apps/browser/src/nativeApi.tsx, which a JS bundle checks before it
     // loads the app. Bump both together whenever JS starts needing native code that older builds lack.
-    Constant("apiVersion") { () -> Int in 8 }
-    Events("onNotificationResponse", "onScriptCommand")
+    Constant("apiVersion") { () -> Int in 10 }
+    Events("onNotificationResponse", "onScriptCommand", "onUpdatePending")
 
     OnCreate {
       DispatchQueue.main.async {
@@ -29,6 +29,12 @@ public class AppModule: Module {
       }
     }
 
+    OnStartObserving("onUpdatePending") {
+      DispatchQueue.main.async { [weak self] in
+        AppUpdater.shared.onPendingChange = { pending in self?.sendEvent("onUpdatePending", ["pending": pending as Any]) }
+      }
+    }
+
     OnStartObserving("onScriptCommand") {
       DispatchQueue.main.async { [weak self] in
         ShellScripting.send = { body in self?.sendEvent("onScriptCommand", body) }
@@ -39,6 +45,7 @@ public class AppModule: Module {
 
     AsyncFunction("updaterState") { () -> [String: Any] in AppUpdater.shared.state }.runOnQueue(.main)
     AsyncFunction("checkForUpdates") { AppUpdater.shared.checkForUpdates(nil) }.runOnQueue(.main)
+    AsyncFunction("installPendingUpdate") { AppUpdater.shared.installPendingUpdate() }.runOnQueue(.main)
     AsyncFunction("setAutomaticUpdateChecks") { (on: Bool) in AppUpdater.shared.setAutomaticChecks(on) }.runOnQueue(.main)
     AsyncFunction("setAutomaticUpdateDownloads") { (on: Bool) in AppUpdater.shared.setAutomaticDownloads(on) }.runOnQueue(.main)
 

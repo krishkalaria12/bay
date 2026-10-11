@@ -12,7 +12,11 @@ export type UpdaterState =
       feedURL: string | null;
       lastCheck: number | null;
       version: string;
+      pending: PendingUpdate | null;
     };
+
+/** An update waiting for the user: found (Sparkle shows it on install), or downloaded and installing on a restart. */
+export type PendingUpdate = { version: string; ready: boolean };
 
 export type AppIcon = { id: string; name: string; preview: string | null };
 
@@ -104,8 +108,10 @@ export type ScriptCommand = { id: string } & (
 type AppModule = {
   addListener(name: "onNotificationResponse", listener: (e: NotificationResponse) => void): EventSubscription;
   addListener(name: "onScriptCommand", listener: (e: ScriptCommand) => void): EventSubscription;
+  addListener(name: "onUpdatePending", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;
   updaterState(): Promise<UpdaterState>;
   checkForUpdates(): Promise<void>;
+  installPendingUpdate(): Promise<void>;
   setAutomaticUpdateChecks(on: boolean): Promise<void>;
   setAutomaticUpdateDownloads(on: boolean): Promise<void>;
   setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;
@@ -142,6 +148,8 @@ const App = requireNativeModule<AppModule>("BayApp");
 
 export const updaterState = () => App.updaterState();
 export const checkForUpdates = () => App.checkForUpdates();
+export const installPendingUpdate = () => App.installPendingUpdate();
+export const onUpdatePending = (listener: (pending: PendingUpdate | null) => void) => App.addListener("onUpdatePending", (e) => listener(e.pending ?? null));
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);
 
