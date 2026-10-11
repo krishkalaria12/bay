@@ -8,6 +8,8 @@ const { flushPersistence, loadSession, startPersistence } = await import("../lib
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
+// These cases read lists in the order their tabs opened: new tabs go to the bottom.
+(await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
 const reset = () => S().hydrate({});
 const view = (w) => model.viewTabIds(S(), w).map((id) => S().tabs[id].url);
 const active = (w) => model.activeTabId(S(), w);

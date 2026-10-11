@@ -9,6 +9,8 @@ const drop = await import("../components/layout/windowDrop.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
+// These cases read lists in the order their tabs opened: new tabs go to the bottom.
+(await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
 const tabLists = await import("./model.ts");
 // A window's list: its space's tabs, in sidebar order (store/model.ts).
 const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));

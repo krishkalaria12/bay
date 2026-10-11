@@ -7,6 +7,8 @@ const { cleanUpHours } = await import("./organize.ts");
 const model = await import("./model.ts");
 
 const S = () => useBrowser.getState();
+// These cases read lists in the order their tabs opened: new tabs go to the bottom.
+(await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
 const HOUR = 3_600_000;
 const urls = (w, spaceId) => model.viewTabIds(S(), w, spaceId).map((id) => S().tabs[id].url);
 

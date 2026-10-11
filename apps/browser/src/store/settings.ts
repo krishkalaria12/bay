@@ -90,7 +90,7 @@ export const DEFAULT_SETTINGS: Settings = {
   commandBarPreference: "website",
   tabLayout: "sidebar",
   hideToolbarWhileScrolling: true,
-  newTabPosition: "bottom",
+  newTabPosition: "top",
   warnBeforeClosingLastTab: true,
   warnBeforeMovingTabsToSpace: true,
   tabReorderHaptics: true,

@@ -8,6 +8,8 @@ const { opensInPeek, shownPeek, siteOf } = await import("./peeks.ts");
 const { splitOf } = await import("./splits.ts");
 
 const S = () => useBrowser.getState();
+// These cases read lists in the order their tabs opened: new tabs go to the bottom.
+(await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
 const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com$/g, "");
 const order = (w) => model.listIds(S(), model.windowListKey(S(), S().windows[w])).map(short);
 const shown = (w) => short(model.activeTabId(S(), w));
