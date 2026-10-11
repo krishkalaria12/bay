@@ -1,0 +1,97 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Header from "../../components/Header.astro";
+import Footer from "../../components/Footer.astro";
+import Sticky from "../../components/Sticky.astro";
+import Circled from "../../components/Circled.astro";
+import Marker from "../../components/TimelineMarker.astro";
+import { counts, longDate, releases, shortDate } from "../../releases";
+import { ids, site } from "../../site";
+
+// The app's Bay › Release Notes opens this page at #<version>: each version keeps its anchor here.
+const all = releases();
+const [latest, ...earlier] = all;
+const url = `${site.url}/release-notes/`;
+const title = "What’s new in Bay";
+const description = "Every version of Bay, newest first: what each one added, improved and fixed.";
+const issues = "https://github.com/krishkalaria12/bay/issues";
+
+const schema = [
+  {
+    "@type": "WebPage",
+    "@id": `${url}#webpage`,
+    url,
+    name: title,
+    description,
+    isPartOf: { "@id": ids.site },
+    about: { "@id": ids.app },
+    inLanguage: "en",
+  },
+];
+---
+
+<Layout title={title} description={description} schema={schema}>
+  <Header />
+
+  <main class="mx-auto max-w-4xl px-5 pt-14 pb-24 sm:pt-20">
+    <div class="flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between sm:pl-28">
+      <div class="max-w-md animate-rise">
+        <h1 class="text-[44px] leading-[1.02] font-bold tracking-[-0.04em] sm:text-[56px]">What’s <span class="marker">new</span></h1>
+        <p class="mt-4 text-[17px] leading-relaxed text-pretty text-muted">
+          Every version of Bay, newest first. It updates itself; restart it when it says so.
+        </p>
+      </div>
+      <Sticky tilt={3} class="w-56 shrink-0 animate-rise self-end p-5 text-[24px] leading-[1.15] [animation-delay:120ms] sm:self-auto">
+        Found a bug, or want something?
+        <a href={issues} class="mt-2 block text-[22px] text-pen hover:underline">tell us on GitHub →</a>
+      </Sticky>
+    </div>
+
+    {
+      latest && (
+        <ol class="relative mt-16 sm:pl-28" aria-label="Versions">
+          <span class="absolute top-6 bottom-6 left-[88px] hidden w-[2px] rounded-full bg-pen/70 sm:block" aria-hidden="true" />
+
+          <li id={latest.version} class="relative scroll-mt-24">
+            <Marker date={latest.date} top="top-9" />
+            <article class="release-glow animate-rise rounded-3xl border border-line p-7 shadow-[0_24px_48px_-32px_rgba(30,32,60,0.35)] [animation-delay:160ms] sm:p-9">
+              <p class="hand text-[24px]">the latest</p>
+              <h2 class="mt-1 text-[34px] leading-tight font-bold tracking-[-0.03em]">
+                Bay <Circled>{latest.version}</Circled>
+              </h2>
+              <p class="mt-1 text-[14px] text-muted">{longDate(latest.date)}</p>
+              <p class="mt-5 max-w-lg text-[18px] leading-relaxed text-ink-soft text-pretty">{latest.headline}</p>
+              <p class="mt-4 text-[14px] text-faint">{counts(latest)}</p>
+              <a href={`/release-notes/${latest.version}/`} class="mt-6 inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-[14px] font-semibold shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgba(30,32,60,0.05)] transition hover:-translate-y-px hover:shadow-[0_0_0_1px_#d3d6dc,0_10px_22px_-12px_rgba(30,32,60,0.4)]">
+                Read more <span aria-hidden="true">›</span>
+              </a>
+            </article>
+          </li>
+
+          {earlier.length > 0 && (
+            <li class="mt-12">
+              <p class="eyebrow mb-3">Earlier</p>
+              <ol class="card divide-y divide-line overflow-hidden">
+                {earlier.map((r) => (
+                  <li id={r.version} class="relative scroll-mt-24">
+                    <Marker date={r.date} top="top-1/2 -translate-y-1/2" />
+                    <a href={`/release-notes/${r.version}/`} class="flex items-center gap-6 px-5 py-4 transition hover:bg-paper/60">
+                      <span class="w-32 shrink-0">
+                        <span class="block text-[16px] font-semibold">Bay {r.version}</span>
+                        <span class="block text-[13px] text-muted">{shortDate(r.date)}</span>
+                      </span>
+                      <span class="line-clamp-2 flex-1 text-[15px] leading-relaxed text-muted">{r.headline}</span>
+                      <span class="text-faint" aria-hidden="true">›</span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </li>
+          )}
+        </ol>
+      )
+    }
+  </main>
+
+  <Footer />
+</Layout>

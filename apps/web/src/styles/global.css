@@ -200,6 +200,25 @@
     @apply text-sm font-semibold text-muted;
   }
 
+  /* A key in the release notes (⌘L), as yab's. */
+  .kbd {
+    @apply mx-px inline-flex min-w-[1.5em] items-center justify-center rounded-md border border-line bg-white px-1 py-px font-sans text-[0.85em] font-medium text-ink-soft shadow-[0_1px_0_var(--color-line)];
+  }
+
+  /*
+    A release's card: the sticky notes' colors glowing through fine vertical stripes (yab's, on paper), with the
+    left side kept white for the words.
+  */
+  .release-glow {
+    background:
+      linear-gradient(90deg, #fff 0%, rgba(255, 255, 255, 0.92) 34%, rgba(255, 255, 255, 0) 68%),
+      repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.7) 0 2px, transparent 2px 7px),
+      radial-gradient(38% 70% at 66% 28%, color-mix(in srgb, var(--color-note-yellow) 90%, transparent), transparent 70%),
+      radial-gradient(30% 60% at 86% 62%, color-mix(in srgb, var(--color-note-pink) 85%, transparent), transparent 70%),
+      radial-gradient(34% 70% at 98% 18%, color-mix(in srgb, var(--color-note-blue) 85%, transparent), transparent 70%),
+      radial-gradient(30% 60% at 58% 96%, color-mix(in srgb, var(--color-note-green) 80%, transparent), transparent 70%), #fff;
+  }
+
   /*
     Browser mockups are drawn in em and scale with their container like an image.
     Tailwind's spacing, type and radius utilities read these variables, so inside .mock

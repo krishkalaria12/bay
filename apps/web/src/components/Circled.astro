@@ -1,0 +1,21 @@
+---
+// Words circled by hand in the pen's blue, as the version on a release's card (the loop doesn't quite close).
+---
+
+<span class="relative inline-block whitespace-nowrap">
+  <slot />
+  <svg
+    class="pointer-events-none absolute -top-[0.22em] -right-[0.28em] -bottom-[0.2em] -left-[0.3em] h-[calc(100%+0.42em)] w-[calc(100%+0.58em)] overflow-visible text-pen"
+    viewBox="0 0 200 80"
+    preserveAspectRatio="none"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M150 9C112 0 42 4 14 22C-6 36 4 62 46 72C88 81 160 77 188 60C206 48 196 22 158 12C140 7 112 6 92 8"
+      stroke="currentColor"
+      stroke-width="3.2"
+      stroke-linecap="round"
+      vector-effect="non-scaling-stroke"></path>
+  </svg>
+</span>

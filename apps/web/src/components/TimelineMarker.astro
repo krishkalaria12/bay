@@ -1,0 +1,16 @@
+---
+// A version's dot on the release timeline, and beside it, in the pen's hand, how long ago it came out.
+import Day from "./Day.astro";
+
+interface Props {
+  date: string;
+  /** Where the dot sits on the entry: level with its version. */
+  top: string;
+}
+const { date, top } = Astro.props;
+---
+
+<span class:list={["absolute right-[calc(100%+16px)] hidden items-center gap-3 sm:flex", top]} aria-hidden="true">
+  <Day date={date} class="hand text-[20px] whitespace-nowrap" />
+  <span class="size-[14px] rounded-full border-[2.5px] border-pen bg-paper"></span>
+</span>

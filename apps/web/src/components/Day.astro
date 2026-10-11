@@ -1,0 +1,24 @@
+---
+// A release's day as the timeline says it: "today", "yesterday", "3 days ago", else the date. Worked out in the
+// reader's browser (the page is built once, read for months); the date is what shows without script.
+import { shortDate } from "../releases";
+
+interface Props {
+  date: string;
+  class?: string;
+}
+const { date, class: className } = Astro.props;
+---
+
+<span data-day={date} class={className}>{shortDate(date)}</span>
+
+<script>
+  const day = 86_400_000;
+  const startOf = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  for (const el of document.querySelectorAll<HTMLElement>("[data-day]")) {
+    const ago = Math.round((startOf(new Date()) - Date.parse(`${el.dataset.day}T00:00:00Z`)) / day);
+    if (ago === 0) el.textContent = "today";
+    else if (ago === 1) el.textContent = "yesterday";
+    else if (ago > 1 && ago < 7) el.textContent = `${ago} days ago`;
+  }
+</script>
