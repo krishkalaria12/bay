@@ -1631,14 +1631,22 @@ const char kPageReportsKey = 0;
 }
 
 - (void)requestPictureInPicture:(void (^)(BOOL))completion {
+  [self requestPictureInPicture:NO completion:completion];
+}
+
+// `fromFullScreen`: the page's full-screen element is kept for -exitAutoPictureInPicture, since Picture in Picture
+// takes the page out of full screen (Chrome's VideoPictureInPictureWindowControllerImpl).
+- (void)requestPictureInPicture:(BOOL)fromFullScreen completion:(void (^)(BOOL))completion {
   if (![_tab respondsToSelector:@selector(evaluate:completion:)]) return completion(NO);
-  [self evaluateWithGesture:@"(async () => {"
+  NSString *keep = fromFullScreen ? @"  if (document.fullscreenElement) document[Symbol.for('bay.pipFullscreen')] = document.fullscreenElement;" : @"";
+  NSString *script = [NSString stringWithFormat:@"(async () => {%@"
                   "  const videos = [...document.querySelectorAll('video')].filter(v => v.readyState > 0 && !v.disablePictureInPicture);"
                   "  videos.sort((a, b) => (b.paused ? 0 : 1) - (a.paused ? 0 : 1) || b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight);"
                   "  if (!videos.length) return post('result', 'false');"
                   "  if (document.pictureInPictureElement === videos[0]) return post('result', 'true');"
                   "  try { await videos[0].requestPictureInPicture(); post('result', 'true'); } catch (e) { post('result', 'false'); }"
-                  "})()"
+                  "})()", keep];
+  [self evaluateWithGesture:script
       completion:^(NSString *json) { completion([json isEqualToString:@"true"]); }];
 }
 
@@ -1684,14 +1692,29 @@ const char kPageReportsKey = 0;
     _autoPictureInPictureActive = YES;
     // The user may be back before the window opens: it closes again then.
     __weak NNCoreWebView *weakSelf = self;
-    [self requestPictureInPicture:^(BOOL ok) {
+    [self requestPictureInPicture:YES completion:^(BOOL ok) {
       NNCoreWebView *view = weakSelf;
-      if (ok && view && view->_seenByUser) [view exitPictureInPicture];
+      if (ok && view && view->_seenByUser) [view exitAutoPictureInPicture];
     }];
   } else if (_seenByUser && (_autoPictureInPictureActive || _inPictureInPicture)) {
     _autoPictureInPictureActive = NO;
-    [self exitPictureInPicture];
+    [self exitAutoPictureInPicture];
   }
+}
+
+// The user is back: the video leaves Picture in Picture, and a page that was in full screen when it went (the user
+// left a full-screen video's Space) goes back into full screen, its window kept in full screen meanwhile
+// (NNWindowFullScreen -sync). Full screen needs the user activation a click would give.
+- (void)exitAutoPictureInPicture {
+  [self evaluateWithGesture:@"(async () => {"
+                  "  const key = Symbol.for('bay.pipFullscreen'), element = document[key];"
+                  "  delete document[key];"
+                  "  if (document.pictureInPictureElement) await document.exitPictureInPicture().catch(() => {});"
+                  "  window.documentPictureInPicture && documentPictureInPicture.window && documentPictureInPicture.window.close();"
+                  "  if (element && element.isConnected && !document.fullscreenElement) await element.requestFullscreen().catch(() => {});"
+                  "  post('result', '0');"
+                  "})()"
+      completion:^(NSString *) {}];
 }
 
 // Back to Tab from our PiP menu: the video's own frame leaves Picture in Picture (CEF kept the CefFrame).
