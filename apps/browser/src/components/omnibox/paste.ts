@@ -1,11 +1,11 @@
 import { classifyPaste, cleanUrl, searchUrl, type PasteAction } from "@bay/core";
 import { copyText, showMenu, type MenuItem } from "@bay/shell";
-import { NativeModules } from "react-native";
+import { TurboModuleRegistry, type TurboModule } from "react-native";
 import { useBrowser } from "../../store/browser";
 import { defaultSearchEngine } from "../../store/settings";
 import type { Tab } from "../../store/types";
 
-const NativeClipboard = NativeModules.Clipboard as { getString(): Promise<string> } | undefined;
+const NativeClipboard = TurboModuleRegistry.get<{ getString(): Promise<string> } & TurboModule>("Clipboard");
 
 export const readClipboard = (): Promise<string> => NativeClipboard?.getString().catch(() => "") ?? Promise.resolve("");
 
