@@ -388,12 +388,12 @@ const char kPageReportsKey = 0;
 // A JS reload (development: Metro) unmounts every view and mounts them again once the new bundle has run: each tab's
 // page is parked for its next view, as prepareTransfer: parks it, instead of closing and loading again (wasted work,
 // and a second history visit for every open page). One the new bundle hasn't shown again within 30 s closes, and an
-// old view torn down later closes its tab as usual. RN posts the notification from any thread, then queues its
-// teardown on the main queue: this goes first.
+// old view torn down later closes its tab as usual. RN posts the reload command's notification from any thread, ahead
+// of the host's reload, which queues the surfaces' teardown on the main queue: this goes first.
 + (void)initialize {
   if (self != NNCoreWebView.class) return;
   static NSUInteger reloads = 0;
-  [NSNotificationCenter.defaultCenter addObserverForName:@"RCTBridgeWillReloadNotification"
+  [NSNotificationCenter.defaultCenter addObserverForName:@"RCTTriggerReloadCommandNotification"
                                                   object:nil
                                                    queue:nil
                                               usingBlock:^(NSNotification *) {
