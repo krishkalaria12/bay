@@ -7,6 +7,7 @@ export const KINDS: { kind: ImportKind; title: string; icon: string }[] = [
   { kind: "passwords", title: "Passwords", icon: "key" },
   { kind: "cookies", title: "Cookies (stay signed in)", icon: "person.badge.key" },
   { kind: "autofill", title: "Addresses and cards", icon: "creditcard" },
+  { kind: "extensions", title: "Extensions", icon: "puzzlepiece.extension" },
   { kind: "tabs", title: "Tabs", icon: "square.on.square" },
   { kind: "spaces", title: "Spaces", icon: "square.stack" },
   { kind: "pinnedTabs", title: "Pinned tabs", icon: "pin" },

@@ -1,4 +1,4 @@
-import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportedExtension, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
+import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
@@ -13,9 +13,11 @@ import {
   emptyCounts,
   importBookmarks,
   importDiaProfile,
+  importExtensions,
   openInWebStore,
   profileColorFor,
   type ImportCounts,
+  type ExtensionFailure,
 } from "./apply";
 import { DIA_LAUNCH_MS, DIA_POLL_MS, DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
 import { importModule } from "./module";
@@ -44,7 +46,7 @@ export function useImportFlow() {
   const [safariCookies, setSafariCookies] = useState(true);
   // What was left behind (cookies or cards that didn't decrypt, isolated Firefox cookies), shown at the end.
   const [notes, setNotes] = useState<string[]>([]);
-  const [extensions, setExtensions] = useState<{ spaceId: string; list: ImportedExtension[] }>({ spaceId: "", list: [] });
+  const [extensions, setExtensions] = useState<ExtensionFailure[]>([]);
   const [diaStatus, setDiaStatus] = useState<DiaAutomationStatus | "checking" | "reading">("checking");
   const [dia, setDia] = useState<DiaTabsResult | null>(null);
   const [asking, setAsking] = useState(false);
@@ -77,7 +79,7 @@ export function useImportFlow() {
     setKinds(new Set(available));
     if (b.family === "safari" && api) setFullDiskAccess(api.safariHasFullDiskAccess());
     setDia(null);
-    setExtensions({ spaceId: "", list: [] });
+    setExtensions([]);
     setNotes([]);
     setError(null);
   };
@@ -161,6 +163,7 @@ export function useImportFlow() {
     const selected = source.profiles.filter((p) => sourceProfiles.includes(p.id) || (isArc && p.spaces?.some((s) => spaces.includes(s.id))));
     const requested: ImportKind[] = [...wanted];
     if (isArc && requested.includes("tabs")) requested.push("spaces", "pinnedTabs");
+    if (isArc && requested.includes("extensions") && !requested.includes("spaces")) requested.push("spaces");
     const order = KINDS.map((k) => k.kind).filter((k) => requested.includes(k));
     setStatus(Object.fromEntries(order.map((k) => [k, "pending"])));
     setPreparing(isArc ? Math.max(1, spaces.length) : selected.length);
@@ -171,9 +174,8 @@ export function useImportFlow() {
     const add = (c: ImportCounts) => (Object.keys(total) as (keyof ImportCounts)[]).forEach((k) => (total[k] += c[k]));
     let destinationIndex = 0;
     const usedDestinations = new Set<string>();
-    const found = new Map<string, ImportedExtension>();
+    const extensionFailures: ExtensionFailure[] = [];
     const left: string[] = [];
-    let extensionsProfile = "";
     // Firefox keeps no keychain key: without a primary password its logins open as they are.
     if (source.family === "firefox" && requested.includes("passwords") && !api.isBrowserUnlocked(source.id)) {
       await api.unlockBrowser(source.id).catch(() => {});
@@ -207,6 +209,7 @@ export function useImportFlow() {
 
       // Arc's spaces can share source data; each destination keeps an independent copy.
       let dest: string;
+      let extensionDestinations: string[];
       if (isArc && result.spaces.length) {
         const destinations = [];
         for (const space of result.spaces) {
@@ -216,6 +219,7 @@ export function useImportFlow() {
           destinations.push({ spaceId: spaceDest, space });
         }
         dest = destinations[0]!.spaceId;
+        extensionDestinations = destinations.map((d) => d.spaceId);
         const nativeKinds = order.filter((kind) => kind === "cookies" || kind === "autofill");
         try {
           add(await applyArcProfile(destinations, result, source.name, () => api.importData(source.id, profile.id, nativeKinds, options), refused));
@@ -224,16 +228,33 @@ export function useImportFlow() {
           throw error;
         }
       } else {
+        // When all of a profile's Arc spaces were deselected, it has no destination to receive extensions.
+        if (isArc && profile.spaces?.length && !profile.spaces.some((s) => spaces.includes(s.id))) {
+          if (result.vaultToken) api.discardImported(result.vaultToken);
+          continue;
+        }
         dest = await destination(destinationIndex++, result.profile?.name ?? profile.name, result.profile?.color ?? profile.color, undefined, usedDestinations);
+        extensionDestinations = [dest];
         usedDestinations.add(dest);
         add(await applyResult(dest, result, source.name, refused));
       }
-      if (!extensionsProfile) extensionsProfile = dest;
-      if (source.family === "chromium" || source.family === "arc") {
-        for (const e of await api.listExtensions(source.id, profile.id).catch(() => [])) found.set(e.id, e);
+      if (wanted.has("extensions")) {
+        setStatus((st) => ({ ...st, extensions: "active" }));
+        try {
+          const written = await importExtensions(extensionDestinations, result, abort.current.signal);
+          total.extensions += written.imported;
+          total.extensionSettings += written.storageImported;
+          left.push(...written.notes);
+          extensionFailures.push(...written.failed);
+          if (written.failed.length) refused("extensions");
+        } catch (error) {
+          if (errorCode(error) === "cancelled") return;
+          throw error;
+        }
       }
     }
-    setExtensions({ spaceId: extensionsProfile, list: [...found.values()] });
+    setExtensions(extensionFailures);
+    left.push(...extensionFailures.map((f) => `${f.extension.name} in ${useBrowser.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));
     setNotes(left);
     setStatus((st) => Object.fromEntries(Object.entries(st).map(([k, v]) => [k, failed.has(k as ImportKind) ? "failed" : v === "failed" ? v : "done"])));
     setFailures([...failed].map(([kind, names]) => ({ kind, profiles: selected.length > 1 ? names : [] })));
@@ -394,11 +415,14 @@ export function useImportFlow() {
   };
 
   const openExtensions = () => {
-    openInWebStore(
-      extensions.spaceId || target,
-      extensions.list.map((e) => e.webStoreUrl),
-    );
-    setExtensions({ spaceId: "", list: [] });
+    const bySpace = new Map<string, Set<string>>();
+    for (const { spaceId, extension } of extensions) {
+      if (!extension.webStoreUrl) continue;
+      if (!bySpace.has(spaceId)) bySpace.set(spaceId, new Set());
+      bySpace.get(spaceId)!.add(extension.webStoreUrl);
+    }
+    for (const [spaceId, urls] of bySpace) openInWebStore(spaceId, [...urls]);
+    setExtensions([]);
   };
 
   const close = () => void closeWindow(IMPORT_WINDOW_ID);
@@ -500,7 +524,7 @@ export function useImportFlow() {
     safariCookies,
     setSafariCookies,
     notes,
-    extensions: extensions.list,
+    extensions: extensions.filter((f) => f.extension.webStoreUrl),
     diaStatus,
     dia,
     asking,

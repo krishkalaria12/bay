@@ -98,6 +98,13 @@ export function ChooseStep({ flow }: StepProps) {
               />
             ))}
           </View>
+          {flow.kinds.has("extensions") && (source.family === "chromium" || source.family === "arc" || source.family === "firefox") && (
+            <Text style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary, marginTop: 10 }}>
+              {source.family === "firefox"
+                ? `Compatible add-ons and verified Chromium versions will be imported. Unsupported add-ons are listed in the results. Add-on settings stay in ${source.name}.`
+                : `Quit ${source.name} before continuing to bring over your extension settings.`}
+            </Text>
+          )}
           {isDiaTabs && (
             <Text style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary, marginTop: 10 }}>
               {`${APP_NAME} asks Dia for each profile's open and pinned tabs while Dia is running. ${DIA_NOT_SHARED}`}
@@ -422,6 +429,8 @@ export function DoneStep({ flow }: StepProps) {
     counts.addresses && `${counts.addresses} ${counts.addresses === 1 ? "address" : "addresses"}`,
     counts.cards && plural(counts.cards, "card"),
     counts.tabs && plural(counts.tabs, "tab"),
+    counts.extensions && plural(counts.extensions, "extension"),
+    counts.extensionSettings && plural(counts.extensionSettings, "extension setting"),
   ].filter(Boolean) as string[];
   const leftBehind = notes.length ? (
     <Text style={{ fontSize: 12, lineHeight: 17, marginTop: 10, color: theme.textTertiary, textAlign: failed ? "left" : "center" }}>{notes.join(" ")}</Text>
@@ -429,10 +438,10 @@ export function DoneStep({ flow }: StepProps) {
   const extensionList = extensions.length ? (
     <View style={{ alignSelf: "stretch", marginTop: 14, gap: 8 }}>
       <Text style={{ fontSize: 12, color: theme.textSecondary, textAlign: "center" }}>
-        {`${flow.source?.name ?? "Your browser"} has ${plural(extensions.length, "extension")} from the Chrome Web Store. Add the ones you want there:`}
+        {`${plural(extensions.length, "extension")} couldn't be imported. You can try adding them from the Chrome Web Store in their destination spaces:`}
       </Text>
       <Text style={{ fontSize: 12, color: theme.textPrimary, textAlign: "center" }} numberOfLines={3}>
-        {extensions.map((e) => e.name).join(", ")}
+        {extensions.map((e) => e.extension.name).join(", ")}
       </Text>
       <View style={{ alignItems: "center" }}>
         <Button title={extensions.length === 1 ? "Open in Chrome Web Store" : `Open ${extensions.length} in Chrome Web Store`} onPress={flow.openExtensions} />

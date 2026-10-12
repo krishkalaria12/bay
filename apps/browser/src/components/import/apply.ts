@@ -3,6 +3,7 @@ import type {
   BookmarkNode as ImportedNode,
   Credential,
   DiaTabsProfile,
+  ImportedExtension,
   ImportedTab,
   ImportKind,
   ImportResult,
@@ -16,9 +17,61 @@ import { withNewTab } from "../../store/tabs";
 import type { SpaceColor } from "../../store/types";
 import { importModule } from "./module";
 
-export type ImportCounts = { bookmarks: number; history: number; tabs: number; passwords: number; cookies: number; addresses: number; cards: number };
+export type ImportCounts = {
+  bookmarks: number;
+  history: number;
+  tabs: number;
+  passwords: number;
+  cookies: number;
+  addresses: number;
+  cards: number;
+  extensions: number;
+  extensionSettings: number;
+};
 
-export const emptyCounts = (): ImportCounts => ({ bookmarks: 0, history: 0, tabs: 0, passwords: 0, cookies: 0, addresses: 0, cards: 0 });
+export const emptyCounts = (): ImportCounts => ({
+  bookmarks: 0,
+  history: 0,
+  tabs: 0,
+  passwords: 0,
+  cookies: 0,
+  addresses: 0,
+  cards: 0,
+  extensions: 0,
+  extensionSettings: 0,
+});
+
+export type ExtensionFailure = { spaceId: string; extension: ImportedExtension; message: string };
+
+/** One source profile's extensions go only to its destination spaces. Shared destination profiles are written once. */
+export async function importExtensions(spaceIds: string[], result: ImportResult, signal?: AbortSignal) {
+  const api = importModule();
+  let imported = 0;
+  let storageImported = 0;
+  const failed: ExtensionFailure[] = [];
+  const notes: string[] = [];
+  const seen = new Set<string>();
+  for (const spaceId of spaceIds) {
+    const profile = engineProfile(spaceId);
+    if (seen.has(profile)) continue;
+    seen.add(profile);
+    for (const extension of result.extensions ?? []) {
+      if (signal?.aborted) throw Object.assign(new Error("Import cancelled"), { code: "cancelled" });
+      try {
+        if (!api || isIncognitoSpace(spaceId) || !useBrowser.getState().spaces[spaceId]) throw new Error("The destination space is unavailable");
+        const written = await api.writeExtension(result.browserId, result.profileId, extension.id, profile);
+        if (written.installed) imported++;
+        storageImported += written.storageImported;
+        const name = useBrowser.getState().spaces[spaceId]?.name ?? "Space";
+        notes.push(...written.warnings.map((message) => `${extension.name} in ${name}: ${message}`));
+      } catch (error) {
+        failed.push({ spaceId, extension, message: (error as Error).message });
+      }
+      if (signal?.aborted) throw Object.assign(new Error("Import cancelled"), { code: "cancelled" });
+    }
+  }
+  return { imported, storageImported, failed, notes };
+}
 
 const toDraft = (n: ImportedNode): BookmarkDraft =>
   n.type === "url"
