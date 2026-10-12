@@ -40,38 +40,46 @@ test("Gmail's feed gives how many are unread, and each mail's sender, subject, s
   assert.equal(sites.parseGmailFeed("<!doctype html><title>Sign in</title>"), null, "a sign-in page isn't a feed");
 });
 
-// GitHub's pull request lists are a React app: the page embeds its data as JSON (fetched from github.com in Oct 2026).
-const page = (results) =>
-  `<html><script type="application/json" data-target="react-app.embeddedData">${JSON.stringify({
-    payload: { repoPullsDashboardContentRoute: { results, totalCount: results.length } },
-    title: "Pull requests",
-  })}</script></html>`;
+// GitHub's pull request search, as JSON (its shape from github.com/search?type=pullrequests in Oct 2026). github.com/pulls
+// became a dashboard that loads its lists after the page: its HTML only held an empty review section.
+const search = (results, loggedIn = true) =>
+  JSON.stringify({ payload: { blackbirdSearchRoute: { results, result_count: results.length, logged_in: loggedIn, type: "pullrequests" } }, title: "Search" });
 const PR = {
-  author: { displayLogin: "someone" },
-  createdAt: "2026-10-10T02:52:48Z",
-  updatedAt: "2026-10-10T02:53:19Z",
-  number: 37806,
-  permalink: "https://github.com/react/react/pull/37806",
-  repoNameWithOwner: "react/react",
-  state: "REPO_PULL_REQUEST_STATE_OPEN",
-  title: "[Fast Refresh] Don't retain roots that unmount before their first commit",
+  author_name: "someone",
+  created: "2026-10-08T23:52:17.000+05:30",
+  hl_title: "docs: add <em>windows</em> port &amp; plan",
+  number: 1,
+  repo: { repository: { id: 1, name: "bay", owner_id: 2, owner_login: "someone" } },
+  reviewable_state: "ready",
+  state: "open",
 };
 
-test("a GitHub pull request page gives each pull request, and its review state when the page says it", () => {
-  const pulls = sites.parseGithubPulls(page([PR, { ...PR, number: 2, permalink: "https://github.com/a/b/pull/2", reviewDecision: "APPROVED" }]));
+test("a GitHub pull request search gives each pull request, newest first, and its review state when it says it", () => {
+  const older = {
+    ...PR,
+    number: 7,
+    created: "2026-09-25T15:45:13.000Z",
+    repo: { repository: { name: "ferret", owner_login: "someone" } },
+    review_decision: "APPROVED",
+  };
+  const pulls = sites.parseGithubPulls(search([older, PR]));
   assert.deepEqual(pulls[0], {
-    title: PR.title,
-    repo: "react/react",
-    number: 37806,
-    url: PR.permalink,
-    at: Date.parse(PR.updatedAt),
+    title: "docs: add windows port & plan",
+    repo: "someone/bay",
+    number: 1,
+    url: "https://github.com/someone/bay/pull/1",
+    at: Date.parse(PR.created),
     review: null,
   });
+  assert.equal(pulls[1].url, "https://github.com/someone/ferret/pull/7");
   assert.equal(pulls[1].review, "approved");
-  assert.equal(sites.parseGithubPulls(page([{ ...PR, reviewState: "CHANGES_REQUESTED" }]))[0].review, "changes");
-  assert.deepEqual(sites.parseGithubPulls(page([])), [], "none open: an empty list, not an unreadable page");
-  assert.equal(sites.parseGithubPulls(page([{ id: 1 }]).replace('"results"', '"other"')), null, "data, but no pull request list");
+  assert.deepEqual(sites.parseGithubPulls(search([])), [], "none open: an empty list, not an unreadable page");
+  assert.equal(sites.parseGithubPulls(JSON.stringify({ payload: { pullsDashboardSurfaceLayoutRoute: {} } })), null, "the dashboard isn't a search");
   assert.equal(sites.parseGithubPulls("<html>Sign in to GitHub</html>"), null);
+  const answer = (body) => ({ status: 200, url: "https://github.com/search?type=pullrequests", body });
+  assert.equal(sites.signedOut(answer(search([], false))), true, "a signed-out search answers instead of redirecting");
+  assert.equal(sites.signedOut(answer(search([PR]))), false);
+  assert.match(sites.fetchScript(sites.githubPullsUrls, sites.githubPullsHeaders), /"Accept":"application\/json"/);
 });
 
 test("a request the site sent to its sign-in page means the tab is signed out", () => {

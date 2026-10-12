@@ -12,6 +12,7 @@ import { dismissHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
 import {
   fetchScript,
+  githubPullsHeaders,
   githubPullsUrls,
   gmailAccount,
   gmailFeedUrl,
@@ -63,7 +64,8 @@ async function ask(tabId: string, site: PreviewSite): Promise<Answer<GmailData |
   if (place === "elsewhere") return { kind: "unloaded" };
   const urls = site === "gmail" ? [gmailFeedUrl(gmailAccount(tab.url))] : githubPullsUrls;
   const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), ANSWER_MS));
-  const all = await Promise.race([view.evaluate<Fetched[]>(fetchScript(urls)).catch(() => null), timeout]);
+  const headers = site === "github" ? githubPullsHeaders : {};
+  const all = await Promise.race([view.evaluate<Fetched[]>(fetchScript(urls, headers)).catch(() => null), timeout]);
   if (!all?.length) return { kind: "unreadable" };
   if (all.some(signedOut)) return { kind: "signedOut" };
   if (site === "gmail") {

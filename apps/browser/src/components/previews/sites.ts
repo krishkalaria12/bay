@@ -51,9 +51,9 @@ export function gmailAccount(url: string): number {
 export type Fetched = { status: number; url: string; body: string } | { error: string };
 
 // Runs in the tab: fetches each path from the site with the tab's own sign-in, and posts every answer back.
-export function fetchScript(urls: string[]): string {
+export function fetchScript(urls: string[], headers: Record<string, string> = {}): string {
   return `
-const one = (u) => fetch(u, { credentials: "include" }).then(
+const one = (u) => fetch(u, { credentials: "include", headers: ${JSON.stringify(headers)} }).then(
   async (r) => ({ status: r.status, url: r.url, body: r.ok ? await r.text() : "" }),
   (e) => ({ error: String(e) }),
 );
@@ -62,16 +62,21 @@ Promise.all(${JSON.stringify(urls)}.map(one)).then((all) => post("result", JSON.
 
 export const gmailFeedUrl = (account: number) => `https://mail.google.com/mail/u/${account}/feed/atom`;
 
-const GITHUB_PULLS = "https://github.com/pulls?q=";
+// GitHub's search, as JSON (what its own page asks for): github.com/pulls became a dashboard that ignores its query
+// and loads its lists after the page, so its HTML had none (an empty review section read as "0 open", Oct 2026).
+const GITHUB_SEARCH = "https://github.com/search?type=pullrequests&q=";
 export const githubPullsUrls = [
-  `${GITHUB_PULLS}${encodeURIComponent("is:open is:pr author:@me archived:false")}`,
-  `${GITHUB_PULLS}${encodeURIComponent("is:open is:pr review-requested:@me archived:false")}`,
+  `${GITHUB_SEARCH}${encodeURIComponent("is:open is:pr author:@me archived:false")}`,
+  `${GITHUB_SEARCH}${encodeURIComponent("is:open is:pr review-requested:@me archived:false")}`,
 ];
+export const githubPullsHeaders = { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" };
 
-/** A sign-in page in place of the data: the site sent the tab's request to its login. */
+/** A sign-in page in place of the data: the site sent the tab's request to its login, or (GitHub's search) answered a
+ *  signed-out visitor. */
 export function signedOut(f: Fetched): boolean {
   if ("error" in f) return false;
-  return f.status === 401 || f.status === 403 || /\/(login|signin|ServiceLogin)\b|accounts\.google\.com/.test(f.url);
+  if (f.status === 401 || f.status === 403 || /\/(login|signin|ServiceLogin)\b|accounts\.google\.com/.test(f.url)) return true;
+  return searchRoute(f.body)?.logged_in === false;
 }
 
 // MARK: Gmail
@@ -122,46 +127,44 @@ function reviewOf(item: Record<string, unknown>): Review | null {
   return null;
 }
 
-// The first list on the page that holds pull requests (number, title and link), wherever the page keeps it.
-function findPulls(node: unknown, depth = 0): Record<string, unknown>[] | null {
-  if (!node || typeof node !== "object" || depth > 8) return null;
-  if (Array.isArray(node)) {
-    const first = node[0] as Record<string, unknown> | undefined;
-    if (first && typeof first === "object" && typeof first.number === "number" && typeof first.title === "string" && typeof first.permalink === "string")
-      return node as Record<string, unknown>[];
-    return null;
-  }
-  for (const value of Object.values(node)) {
-    const found = findPulls(value, depth + 1);
-    if (found) return found;
-  }
-  return null;
-}
+type SearchResult = {
+  number?: unknown;
+  hl_title?: unknown;
+  title?: unknown;
+  created?: unknown;
+  repo?: { repository?: { owner_login?: unknown; name?: unknown } };
+};
 
-// An empty `results` list: a page that lists pull requests, with none to list.
-function hasEmptyResults(node: unknown, depth = 0): boolean {
-  if (!node || typeof node !== "object" || depth > 8 || Array.isArray(node)) return false;
-  return Object.entries(node).some(([key, value]) => (key === "results" && Array.isArray(value) && !value.length) || hasEmptyResults(value, depth + 1));
-}
-
-/** A GitHub pull request list page: its pull requests, newest first ([] for none). Null when it isn't such a page. */
-export function parseGithubPulls(html: string): Pull[] | null {
-  const json = /<script type="application\/json" data-target="react-app\.embeddedData">([\s\S]*?)<\/script>/.exec(html)?.[1];
-  if (!json) return null;
-  let data: unknown;
+// GitHub's search JSON: its route, or null when the body isn't that.
+function searchRoute(body: string): { logged_in?: unknown; results?: unknown } | null {
   try {
-    data = JSON.parse(json);
+    const route = (JSON.parse(body) as { payload?: { blackbirdSearchRoute?: unknown } })?.payload?.blackbirdSearchRoute;
+    return route && typeof route === "object" ? (route as { logged_in?: unknown; results?: unknown }) : null;
   } catch {
     return null;
   }
-  const items = findPulls(data);
-  if (!items) return hasEmptyResults(data) ? [] : null;
-  return items.map((item) => ({
-    title: String(item.title),
-    repo: typeof item.repoNameWithOwner === "string" ? item.repoNameWithOwner : "",
-    number: item.number as number,
-    url: String(item.permalink),
-    at: Date.parse(String(item.updatedAt ?? item.createdAt ?? "")) || 0,
-    review: reviewOf(item),
-  }));
+}
+
+/** GitHub's pull request search (JSON): its pull requests, newest first ([] for none). Null when it isn't that. */
+export function parseGithubPulls(body: string): Pull[] | null {
+  const route = searchRoute(body);
+  if (!route || !Array.isArray(route.results)) return null;
+  const pulls: Pull[] = [];
+  for (const item of route.results as SearchResult[]) {
+    const owner = item.repo?.repository?.owner_login;
+    const name = item.repo?.repository?.name;
+    if (typeof item.number !== "number" || typeof owner !== "string" || typeof name !== "string") continue;
+    const repo = `${owner}/${name}`;
+    // The title comes highlighted (<em> around what matched).
+    const title = decode(String(item.hl_title ?? item.title ?? "").replace(/<[^>]*>/g, ""));
+    pulls.push({
+      title,
+      repo,
+      number: item.number,
+      url: `https://github.com/${repo}/pull/${item.number}`,
+      at: Date.parse(String(item.created ?? "")) || 0,
+      review: reviewOf(item as Record<string, unknown>),
+    });
+  }
+  return pulls.sort((a, b) => b.at - a.at);
 }
