@@ -1,0 +1,4 @@
+module BayNNCore {
+  header "MockControl.h"
+  export *
+}

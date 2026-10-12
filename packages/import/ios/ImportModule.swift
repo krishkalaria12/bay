@@ -90,11 +90,25 @@ public class ImportModule: Module {
 
     Function("discardImported") { (token: String) in self.vault.discard(token) }
 
-    // The source profile's Chrome Web Store extensions, for the app to offer on the Web Store (nothing is installed).
+    // Reads extension metadata; installation re-reads the source rather than trusting paths from JS.
     AsyncFunction("listExtensions") { (browserId: String, profileId: String, promise: Promise) in
       self.run(promise) {
-        guard let def = BrowserDefinition.find(browserId), def.isChromiumBased else { return "[]" }
-        return try Self.json(ChromiumExtensions.list(profile: try self.importer.discovery.profileDirectory(def, profileId)))
+        guard let def = BrowserDefinition.find(browserId) else { return "[]" }
+        return try Self.json(ExtensionsImport.list(profile: try self.importer.discovery.profileDirectory(def, profileId), browser: def))
+      }
+    }
+
+    AsyncFunction("writeExtension") { (browserId: String, profileId: String, id: String, profile: String, promise: Promise) in
+      Task { @MainActor in
+        do {
+          let reply = try await ExtensionImportWriter.write(importer: self.importer, browserId: browserId,
+                                                            sourceProfile: profileId, id: id, profile: profile)
+          promise.resolve(try Self.json(reply))
+        } catch let error as ImportError {
+          promise.reject(error.code, error.description)
+        } catch {
+          promise.reject("unreadable", error.localizedDescription)
+        }
       }
     }
 

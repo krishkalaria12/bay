@@ -1,6 +1,6 @@
 import { requireNativeModule, type EventSubscription } from "expo-modules-core";
 
-export type ImportKind = "bookmarks" | "history" | "tabs" | "passwords" | "cookies" | "autofill" | "spaces" | "pinnedTabs" | "favorites";
+export type ImportKind = "bookmarks" | "history" | "tabs" | "passwords" | "cookies" | "autofill" | "extensions" | "spaces" | "pinnedTabs" | "favorites";
 
 export type BrowserFamily = "chromium" | "firefox" | "safari" | "arc" | "automation";
 
@@ -124,6 +124,7 @@ export type ImportResult = {
   vaultToken?: string;
   spaces: SpaceSuggestion[];
   favorites: ImportedTab[];
+  extensions: ImportedExtension[];
   failed: ImportKind[];
   warnings: ImportWarning[];
 };
@@ -153,8 +154,28 @@ export type WrittenCounts = {
   error?: string;
 };
 
-/** An extension the source profile installed from the Chrome Web Store. */
-export type ImportedExtension = { id: string; name: string; webStoreUrl: string };
+/** A user-installed Chromium extension, with its source profile's enabled and pinned settings. */
+export type ImportedExtension = {
+  id: string;
+  name: string;
+  webStoreUrl?: string;
+  path?: string;
+  enabled: boolean;
+  pinned: boolean;
+  source: "chromium" | "firefox";
+  compatibility?: { status: "compatible" | "unsupported"; reasons: string[] };
+  destinationId?: string;
+  updateMode?: "store" | "local";
+  warnings: string[];
+};
+
+export type WrittenExtension = {
+  id: string;
+  installed: boolean;
+  storageImported: number;
+  warnings: string[];
+  updateMode: "store" | "local";
+};
 
 export type ImportProgress = {
   kind: ImportKind;
@@ -214,6 +235,7 @@ const Native = requireNativeModule<{
   writeImported(token: string, profile: string, kinds: string[]): Promise<string>;
   discardImported(token: string): void;
   listExtensions(browserId: string, profileId: string): Promise<string>;
+  writeExtension(browserId: string, profileId: string, id: string, profile: string): Promise<string>;
   importSafariExport(jobId: string, path: string): Promise<string>;
   safariHasFullDiskAccess(): boolean;
   openFullDiskAccessSettings(): Promise<null>;
@@ -288,8 +310,12 @@ export const writeImported = (token: string, profile: string, kinds: ("cookies" 
 
 export const discardImported = (token: string) => Native.discardImported(token);
 
-/** A Chromium-family profile's Chrome Web Store extensions (empty for other browsers). */
+/** A Chromium-family profile's user-installed extensions (empty for other browsers). */
 export const listExtensions = (browserId: string, profileId: string) => call<ImportedExtension[]>(Native.listExtensions(browserId, profileId));
+
+/** Copies and installs an extension into an engine profile, preserving an existing installation on retries. */
+export const writeExtension = (browserId: string, profileId: string, id: string, profile: string) =>
+  call<WrittenExtension>(Native.writeExtension(browserId, profileId, id, profile));
 
 export const importSafariExport = (path: string, options: Pick<ImportOptions, "signal"> = {}) =>
   job<SafariExport>(options, (jobId) => Native.importSafariExport(jobId, path));
