@@ -1,92 +1,5 @@
-diff --git a/Libraries/Text/TextInput/RCTBaseTextInputView.mm b/Libraries/Text/TextInput/RCTBaseTextInputView.mm
-index cac171e70c9fa225cdec45b205086342a0d50f06..3e63c9761e540e6450448b5241fe55b9980e64dc 100644
---- a/Libraries/Text/TextInput/RCTBaseTextInputView.mm
-+++ b/Libraries/Text/TextInput/RCTBaseTextInputView.mm
-@@ -47,6 +47,10 @@ @implementation RCTBaseTextInputView {
- #if TARGET_OS_OSX // [macOS avoids duplicating effects of textInputDid(Begin|End)Editing calls
-   BOOL _isCurrentlyEditing;
- #endif // macOS]
-+#if TARGET_OS_OSX // [Bay: the edit in progress (counted), and whether a click began it with its focus props to come
-+  NSUInteger _editSession;
-+  BOOL _clickFocused;
-+#endif // Bay]
- }
- 
- #if !TARGET_OS_OSX // [macOS]
-@@ -521,6 +525,11 @@ - (void)textInputDidBeginEditing
-     return;
-   }
-   _isCurrentlyEditing = YES;
-+  // [Bay
-+  _editSession++;
-+  NSEventType began = NSApp.currentEvent.type;
-+  _clickFocused = began == NSEventTypeLeftMouseDown || began == NSEventTypeRightMouseDown || began == NSEventTypeOtherMouseDown;
-+  // Bay]
- #endif // macOS]
-   
-   [_eventDispatcher sendTextEventWithType:RCTTextEventTypeFocus
-@@ -894,8 +903,49 @@ - (RCTUIView *)reactAccessibilityElement // [macOS]
- 
- #pragma mark - Focus Control
- 
-+#if TARGET_OS_OSX // [Bay
-+// Being edited: its window's first responder is the field editor (single line) or the view itself (multiline).
-+- (BOOL)nn_isEditing
-+{
-+  NSView *backed = self.backedTextInputView;
-+  NSResponder *responder = backed.window.firstResponder;
-+  return responder && (responder == backed ||
-+                       ([backed isKindOfClass:[NSTextField class]] && responder == [(NSTextField *)backed currentEditor]));
-+}
-+
-+- (void)nn_applyFocusPropsInSession:(NSUInteger)session
-+{
-+  if (session != _editSession || ![self nn_isEditing]) {
-+    return;
-+  }
-+  if (_clearTextOnFocus) {
-+    self.backedTextInputView.attributedText = [NSAttributedString new];
-+  }
-+  if (_selectTextOnFocus) {
-+    [self.backedTextInputView selectAll:nil];
-+  }
-+}
-+#endif // Bay]
-+
- - (void)reactFocus
- {
-+#if TARGET_OS_OSX // [Bay: focus() on a field already being edited leaves the edit as it is. A press in a TextInput
-+  // calls focus() (TextInput.js skips its "already focused" check on macOS), and making an editing NSTextField first
-+  // responder again ends its edit (a blur), starts a new one and selects all: a click in the command bar closed it.
-+  // A field a click just focused (AppKit, on mouse-down) gets its focus props once, after that click: run inside the
-+  // click's mouse tracking, the caret it places would land after them.
-+  if ([self nn_isEditing]) {
-+    if (_clickFocused) {
-+      _clickFocused = NO;
-+      NSUInteger session = _editSession;
-+      __weak RCTBaseTextInputView *weakSelf = self;
-+      [[NSRunLoop mainRunLoop] performInModes:@[ NSDefaultRunLoopMode ] block:^{
-+        [weakSelf nn_applyFocusPropsInSession:session];
-+      }];
-+    }
-+    return;
-+  }
-+#endif // Bay]
-   [self.backedTextInputView reactFocus];
- 
-   if (_clearTextOnFocus) {
-@@ -909,6 +959,9 @@ - (void)reactFocus
-     [self.backedTextInputView setSelectedTextRange:NSMakeRange(NSNotFound, 0) notifyDelegate:NO];
- #endif // macOS]
-   }
-+#if TARGET_OS_OSX // [Bay: applied here
-+  _clickFocused = NO;
-+#endif // Bay]
- }
- 
- - (void)reactBlur
 diff --git a/Libraries/Text/TextInput/Singleline/macOS/RCTUISecureTextField.mm b/Libraries/Text/TextInput/Singleline/macOS/RCTUISecureTextField.mm
-index 6f332dc..5dd8e99 100644
+index 6f332dc1701cada0aff0e9a2678fa7bdcea0ef85..462853ec8b76f004cd5b9e92291473bc673a7ed1 100644
 --- a/Libraries/Text/TextInput/Singleline/macOS/RCTUISecureTextField.mm
 +++ b/Libraries/Text/TextInput/Singleline/macOS/RCTUISecureTextField.mm
 @@ -14,6 +14,11 @@
@@ -102,19 +15,19 @@ index 6f332dc..5dd8e99 100644
  
  @property (nonatomic, assign) UIEdgeInsets textContainerInset;
 @@ -71,13 +76,53 @@ - (NSText *)setUpFieldEditorAttributes:(NSText *)textObj
-
+ 
  #pragma mark - RCTUISecureTextField
-
+ 
 -@implementation RCTUISecureTextField
 +@implementation RCTUISecureTextField {
 +  BOOL _showsIndicators;
 +}
-
+ 
  + (Class)cellClass
  {
    return RCTUISecureTextFieldCell.class;
  }
-
+ 
 +// NSSecureTextField answers NO here, which keeps Writing Tools out of its field editor; NSTextField's YES would offer
 +// them on the secret being typed.
 ++ (BOOL)allowsWritingTools
@@ -157,7 +70,7 @@ index 6f332dc..5dd8e99 100644
  
  #endif // TARGET_OS_OSX
 diff --git a/React/Base/macOS/RCTUIKit.m b/React/Base/macOS/RCTUIKit.m
-index a37a1c106a04752c1baeb6dd2170402ce5f34f71..c096a10720e76e449619a026d4b756ec1bb6907b 100644
+index a37a1c106a04752c1baeb6dd2170402ce5f34f71..f75757c78f01aabb1e36b0e28eeb350d12c69b87 100644
 --- a/React/Base/macOS/RCTUIKit.m
 +++ b/React/Base/macOS/RCTUIKit.m
 @@ -284,20 +284,53 @@ - (CATransform3D)transform3D
@@ -234,7 +147,7 @@ index a37a1c106a04752c1baeb6dd2170402ce5f34f71..c096a10720e76e449619a026d4b756ec
  
    if (_respondsToDisplayLayer) {
 diff --git a/React/CoreModules/RCTTiming.mm b/React/CoreModules/RCTTiming.mm
-index 3edcc9670a8ccb5eef44524e78445117d2416ed8..4aa0da5897e9ca7f1b21d374ad88d63be3fd3089 100644
+index 3edcc9670a8ccb5eef44524e78445117d2416ed8..4e0021ea84e68c165c5b2acbe8c9dd1bad4abdcf 100644
 --- a/React/CoreModules/RCTTiming.mm
 +++ b/React/CoreModules/RCTTiming.mm
 @@ -18,7 +18,9 @@
@@ -433,92 +346,15 @@ index 3edcc9670a8ccb5eef44524e78445117d2416ed8..4aa0da5897e9ca7f1b21d374ad88d63b
    _sendIdleEvents = sendIdleEvents;
    if (sendIdleEvents) {
      [self startTimers];
-diff --git a/React/Views/RCTView.m b/React/Views/RCTView.m
-index 0a4efc1fff0a6e32ea1634ab5f863c211f452409..751d6a53f627a66a8199b7fa98cf2fd311fc3329 100644
---- a/React/Views/RCTView.m
-+++ b/React/Views/RCTView.m
-@@ -143,6 +143,9 @@ @implementation RCTView {
-   NSTrackingArea *_trackingArea;
-   BOOL _hasMouseOver;
-   BOOL _mouseDownCanMoveWindow;
-+  // [Bay: the clip view whose bounds changes this view observes, if any (viewDidMoveToWindow). Bay]
-+  __weak NSClipView *_observedClipView;
-+  BOOL _observesBounds;
- #endif // macOS]
-   NSMutableDictionary<NSString *, NSDictionary *> *accessibilityActionsNameMap;
-   NSMutableDictionary<NSString *, NSDictionary *> *accessibilityActionsLabelMap;
-@@ -784,17 +787,28 @@ - (void)viewDidMoveToWindow
-   // scroll event occurs either due to trackpad/gesture based scrolling or a scrollwheel event
-   // both of which would not cause the mouseExited to be invoked.
- 
--  if ([self window] == nil) {
-+  // [Bay: one registration per view. AppKit calls this again whenever a view already in the window is
-+  // re-added (didUpdateReactSubviews re-adds every subview each time a container's children change), and each call
-+  // added another observer: a long-lived row in a scroll view piled up dozens, every removal scans them all, so
-+  // each view leaving the window cost a little more the longer the app ran (profile switches, which mount and unmount
-+  // views, slowed with every switch).
-+  NSClipView *clipView = [self window] != nil ? [[self enclosingScrollView] contentView] : nil;
-+  if (_observesBounds && (clipView == nil || clipView != _observedClipView)) {
-     [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                     name:NSViewBoundsDidChangeNotification
--                                                  object:nil];
-+                                                  object:_observedClipView]; // nil (gone) removes them all
-+    _observesBounds = NO;
-+    _observedClipView = nil;
-   }
--  else if ([[self enclosingScrollView] contentView] != nil) {
-+  if (!_observesBounds && clipView != nil) {
-     [[NSNotificationCenter defaultCenter] addObserver:self
-                                              selector:@selector(viewBoundsChanged:)
-                                                  name:NSViewBoundsDidChangeNotification
--                                               object:[[self enclosingScrollView] contentView]];
-+                                               object:clipView];
-+    _observesBounds = YES;
-+    _observedClipView = clipView;
-   }
-+  // Bay]
- 
-   [self reactViewDidMoveToWindow]; // [macOS] Github#1412
- 
-@@ -1248,17 +1262,8 @@ - (void)displayLayer:(CALayer *)layer
-   RCTUIColor *backgroundColor = _backgroundColor;
- #endif // macOS]
- 
--#if TARGET_OS_OSX // [macOS
--  CATransform3D transform = [[self layer] transform];
--  CGPoint anchorPoint = [layer anchorPoint];
--  if (CGPointEqualToPoint(anchorPoint, CGPointZero) && !CATransform3DEqualToTransform(transform, CATransform3DIdentity)) {
--    // https://developer.apple.com/documentation/quartzcore/calayer/1410817-anchorpoint
--    // This compensates for the fact that layer.anchorPoint is {0, 0} instead of {0.5, 0.5} on macOS for some reason.
--    CATransform3D originAdjust = CATransform3DTranslate(CATransform3DIdentity, self.frame.size.width / 2, self.frame.size.height / 2, 0);
--    transform = CATransform3DConcat(CATransform3DConcat(CATransform3DInvert(originAdjust), transform), originAdjust);
--  }
--  [layer setTransform:transform];
--#endif // macOS]
-+  // [Bay: the anchor point compensation that was here moved to -[RCTUIView setTransform3D:], which
-+  // UIView+React's updateTransform now goes through; doing it here as well applied it twice. Bay]
- 
-   if (useIOSBorderRendering) {
-     layer.cornerRadius = cornerRadii.topLeftHorizontal;
-diff --git a/React/Views/ScrollView/RCTScrollView.m b/React/Views/ScrollView/RCTScrollView.m
-index eb79ff32614392cb16e6eb3dbec6cc5b037fe27a..18b2f96cf65892c3db53b751d2878ecb5b05a71d 100644
---- a/React/Views/ScrollView/RCTScrollView.m
-+++ b/React/Views/ScrollView/RCTScrollView.m
-@@ -740,13 +740,23 @@ - (void)viewDidMoveToWindow
-   NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
-   if ([self window] == nil) {
-     // Unregister for bounds change notifications
-+    // [Bay: every clip view's, as RCTView's removal here used to do for it (it now removes only its own).
-     [defaultCenter removeObserver:self
-                              name:NSViewBoundsDidChangeNotification
--                           object:_scrollView.contentView];
-+                           object:nil];
-+    // Bay]
-     [defaultCenter removeObserver:self
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+index a14a8641e13dd3c10f0047c1b81d15cbd789a038..e80c3008f9a8137418441f3e0bfa64b6ab2c1034 100644
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+@@ -892,6 +892,14 @@ - (void)viewDidMoveToWindow // [macOS]
                               name:NSPreferredScrollerStyleDidChangeNotification
                             object:nil];
    } else {
-+    // [Bay: AppKit calls this again each time the view is re-added in the same window: register once.
++    // [Bay: AppKit calls this again each time the view is re-added in the same window (a mount move): register once.
 +    [defaultCenter removeObserver:self
 +                             name:NSViewBoundsDidChangeNotification
 +                           object:_scrollView.contentView];
@@ -526,26 +362,117 @@ index eb79ff32614392cb16e6eb3dbec6cc5b037fe27a..18b2f96cf65892c3db53b751d2878ecb
 +                             name:NSPreferredScrollerStyleDidChangeNotification
 +                           object:nil];
 +    // Bay]
-     // Register for bounds change notifications so we can track scrolling
+     // Register for scrollview's clipview bounds change notifications so we can track scrolling
      [defaultCenter addObserver:self
                        selector:@selector(scrollViewDocumentViewBoundsDidChange:)
-diff --git a/React/Views/UIView+React.m b/React/Views/UIView+React.m
-index 30c4f1e53e7b94016c8ed1b425587753fc80c2ce..b1c734080b05e4924a2034aae15b3f03bd071f88 100644
---- a/React/Views/UIView+React.m
-+++ b/React/Views/UIView+React.m
-@@ -306,7 +306,15 @@ static void updateTransform(RCTPlatformView *view) // [macOS]
-     transform = view.reactTransform;
+diff --git a/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm b/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
+index e7254907271b70783e886d378c7824df46e04e93..c66c0ee69a3d06feeeacc65d457994366aa6c70e 100644
+--- a/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
+@@ -70,6 +70,10 @@ @implementation RCTTextInputComponentView {
+ #endif // macOS]
+   NSUInteger _mostRecentEventCount;
+   NSAttributedString *_lastStringStateWasUpdatedWith;
++#if TARGET_OS_OSX // [Bay: the edit in progress (counted), and whether a click began it with its focus props to come
++  NSUInteger _editSession;
++  BOOL _clickFocused;
++#endif // Bay]
+ 
+   /*
+    * UIKit uses either UITextField or UITextView as its UIKit element for <TextInput>. UITextField is for single line
+@@ -534,6 +538,11 @@ - (BOOL)textInputShouldBeginEditing
+ 
+ - (void)textInputDidBeginEditing
+ {
++#if TARGET_OS_OSX // [Bay
++  _editSession++;
++  NSEventType began = NSApp.currentEvent.type;
++  _clickFocused = began == NSEventTypeLeftMouseDown || began == NSEventTypeRightMouseDown || began == NSEventTypeOtherMouseDown;
++#endif // Bay]
+   if (_eventEmitter) {
+     static_cast<const TextInputEventEmitter &>(*_eventEmitter).onFocus([self _textInputMetrics]);
+   }
+@@ -958,8 +967,52 @@ - (void)handleCommand:(const NSString *)commandName args:(const NSArray *)args
+   RCTTextInputHandleCommand(self, commandName, args);
+ }
+ 
++#if TARGET_OS_OSX // [Bay
++// Being edited: its window's first responder is the field editor (single line) or the view itself (multiline).
++- (BOOL)nn_isEditing
++{
++  NSView *backed = _backedTextInputView;
++  NSResponder *responder = backed.window.firstResponder;
++  return responder && (responder == backed ||
++                       ([backed isKindOfClass:[NSTextField class]] && responder == [(NSTextField *)backed currentEditor]));
++}
++
++- (void)nn_applyFocusPropsInSession:(NSUInteger)session
++{
++  if (session != _editSession || ![self nn_isEditing]) {
++    return;
++  }
++  const auto &props = static_cast<const TextInputProps &>(*_props);
++  if (props.traits.clearTextOnFocus) {
++    _backedTextInputView.attributedText = nil;
++    [self textInputDidChange];
++  }
++  if (props.traits.selectTextOnFocus) {
++    [_backedTextInputView selectAll:nil];
++    [self textInputDidChangeSelection];
++  }
++}
++#endif // Bay]
++
+ - (void)focus
+ {
++#if TARGET_OS_OSX // [Bay: focus() on a field already being edited leaves the edit as it is. A press in a TextInput
++  // calls focus() (TextInput.js skips its "already focused" check on macOS), and making an editing NSTextField first
++  // responder again ends its edit (a blur), starts a new one and selects all: a click in the command bar closed it.
++  // A field a click just focused (AppKit, on mouse-down) gets its focus props once, after that click: run inside the
++  // click's mouse tracking, the caret it places would land after them.
++  if ([self nn_isEditing]) {
++    if (_clickFocused) {
++      _clickFocused = NO;
++      NSUInteger session = _editSession;
++      __weak RCTTextInputComponentView *weakSelf = self;
++      [[NSRunLoop mainRunLoop] performInModes:@[ NSDefaultRunLoopMode ] block:^{
++        [weakSelf nn_applyFocusPropsInSession:session];
++      }];
++    }
++    return;
++  }
++#endif // Bay]
+ #if !TARGET_OS_OSX // [macOS]
+   [_backedTextInputView becomeFirstResponder];
+ #else // [macOS
+@@ -983,6 +1036,9 @@ - (void)focus
    }
  
-+#if TARGET_OS_OSX // [Bay: RCTUIView keeps the transform and puts it back after AppKit resets the layer's.
-+  if ([view isKindOfClass:[RCTUIView class]]) {
-+    ((RCTUIView *)view).transform3D = transform;
-+  } else {
-+    view.layer.transform = transform;
-+  }
-+#else
-   view.layer.transform = transform;
+   [self scrollCursorIntoView];
++#if TARGET_OS_OSX // [Bay: applied here
++  _clickFocused = NO;
 +#endif // Bay]
-   // Enable edge antialiasing in rotation, skew, or perspective transforms
-   view.layer.allowsEdgeAntialiasing = transform.m12 != 0.0f || transform.m21 != 0.0f || transform.m34 != 0.0f;
  }
+ 
+ - (void)blur
+diff --git a/React/Fabric/Mounting/RCTMountingManager.mm b/React/Fabric/Mounting/RCTMountingManager.mm
+index 506768a6c1b5edc872da852667f6100f0909eec0..f929390c955a2e9417026e1ec4650ff667fa7018 100644
+--- a/React/Fabric/Mounting/RCTMountingManager.mm
++++ b/React/Fabric/Mounting/RCTMountingManager.mm
+@@ -315,10 +315,12 @@ - (void)synchronouslyUpdateViewOnUIThread:(ReactTag)reactTag
+     layoutMetrics.frame.size.height = componentView.layer.bounds.size.height;
+     CATransform3D newTransform = RCTCATransform3DFromTransformMatrix(newViewProps.resolveTransform(layoutMetrics));
+ #if TARGET_OS_OSX // [macOS]
+-    if (CGPointEqualToPoint(componentView.layer.anchorPoint, CGPointZero) && !CATransform3DEqualToTransform(newTransform, CATransform3DIdentity)) {
+-      CATransform3D originAdjust = CATransform3DTranslate(CATransform3DIdentity, componentView.frame.size.width / 2, componentView.frame.size.height / 2, 0);
+-      newTransform = CATransform3DConcat(CATransform3DConcat(CATransform3DInvert(originAdjust), newTransform), originAdjust);
+-    }
++    // [Bay: through RCTUIView, as updateProps sets it: it compensates for the anchor point at the view's current size
++    // and puts its stored transform back whenever AppKit resets the layer's, so a direct write here (Reanimated's
++    // transforms) was undone by the view's next updateLayer, which restored the previous one.
++    componentView.transform3D = newTransform;
++    newTransform = componentView.layer.transform;
++    // Bay]
+ #endif // macOS]
+     if (!CATransform3DEqualToTransform(newTransform, componentView.layer.transform)) {
+       componentView.layer.transform = newTransform;

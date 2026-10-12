@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		2FF0A6F31D6FB76878E63C5F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E0CAE61008516DE07A12694 /* PrivacyInfo.xcprivacy */; };
-		3FF132665BBAFDDFE46449C0 /* DisableFusebox.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A15241E979C9B4F4BB79D8 /* DisableFusebox.mm */; };
 		514201522437B4B40078DB4F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 514201512437B4B40078DB4F /* Assets.xcassets */; };
 		6AFA04B3BADCFAB2D5E0529A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B616A5F60952076D0F8358 /* AppDelegate.swift */; };
 		793DD2DF8D4FBD44ADF01157 /* BrowserWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECCA23360FAE34CDF7FD998D /* BrowserWindow.swift */; };
@@ -32,7 +31,6 @@
 		C1D4F94ED9B4A4D62FC468D0 /* libPods-Bay-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Bay-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C35C3DFDC1BA58B94EE6A74C /* Pods-Bay-macOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Bay-macOS.release.xcconfig"; path = "Target Support Files/Pods-Bay-macOS/Pods-Bay-macOS.release.xcconfig"; sourceTree = "<group>"; };
 		DE21821D6B4527B7E023B602 /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		E9A15241E979C9B4F4BB79D8 /* DisableFusebox.mm */ = {isa = PBXFileReference; includeInIndex = 1; path = DisableFusebox.mm; sourceTree = "<group>"; };
 		ECCA23360FAE34CDF7FD998D /* BrowserWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowserWindow.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -86,7 +84,6 @@
 				B5B616A5F60952076D0F8358 /* AppDelegate.swift */,
 				ECCA23360FAE34CDF7FD998D /* BrowserWindow.swift */,
 				3E0CAE61008516DE07A12694 /* PrivacyInfo.xcprivacy */,
-				E9A15241E979C9B4F4BB79D8 /* DisableFusebox.mm */,
 				4F6F34DACD396890604E4F3F /* Bay.sdef */,
 			);
 			path = "Bay-macOS";
@@ -376,7 +373,6 @@
 				6AFA04B3BADCFAB2D5E0529A /* AppDelegate.swift in Sources */,
 				793DD2DF8D4FBD44ADF01157 /* BrowserWindow.swift in Sources */,
 				9C21C633DCE93A2C521A0862 /* ExpoModulesProvider.swift in Sources */,
-				3FF132665BBAFDDFE46449C0 /* DisableFusebox.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

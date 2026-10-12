@@ -30,7 +30,12 @@ const nameOf = (f: Fiber): string => {
   if (typeof t === "string") return t;
   return t.displayName || t.name || t.render?.name || t.type?.name || "";
 };
-const isHost = (f: Fiber) => typeof (f.stateNode as Host | null)?.measureInWindow === "function" && typeof f.type === "string";
+// A host fiber's view: Fabric keeps it on the fiber's instance as `canonical.publicInstance`.
+const hostOf = (f: Fiber): Host | null => {
+  const host = (f.stateNode as { canonical?: { publicInstance?: Host } } | null)?.canonical?.publicInstance;
+  return typeof f.type === "string" && typeof host?.measureInWindow === "function" ? host : null;
+};
+const isHost = (f: Fiber) => hostOf(f) !== null;
 
 function* fibers(root: Fiber, skip?: (f: Fiber) => boolean): Generator<Fiber> {
   const stack = [root];
@@ -67,7 +72,10 @@ function around(f: Fiber): Map<Host, Fiber> {
   while (parent && !isHost(parent)) parent = parent.return;
   const out = new Map<Host, Fiber>();
   if (!parent) return out;
-  for (const x of fibers(parent, (x) => isHost(x) && x.return?.type === HoverSlot)) if (isHost(x)) out.set(x.stateNode as Host, x);
+  for (const x of fibers(parent, (x) => isHost(x) && x.return?.type === HoverSlot)) {
+    const host = hostOf(x);
+    if (host) out.set(host, x);
+  }
   return out;
 }
 
