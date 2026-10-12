@@ -31,14 +31,16 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
   const area = useRef<SwipeAreaHandle>(null);
   const pager = pagerFor(windowId);
   const nativePager = usePagerNativeConfig(windowId, pageWidth);
-  // On the UI thread, each frame the native pager moves: no JS on the way.
+  // On the UI thread, each frame the native pager moves: no JS on the way. The legacy bridge sends the frame as
+  // topPagerPosition (RCTComponentEvent's name) and Reanimated matches it as sent there, so a handler on
+  // onPagerPosition alone never ran and the sidebar stayed on the space it opened with.
   const pos = pager.pos;
   const onPagerPosition = useEvent<{ position: number }>(
     (event) => {
       "worklet";
       pos.set(event.position);
     },
-    ["onPagerPosition"],
+    ["onPagerPosition", "topPagerPosition"],
   );
 
   const onSwipe = (event: SwipeEvent) => {
