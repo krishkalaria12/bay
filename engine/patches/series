@@ -37,6 +37,7 @@ chromium chromium-devtools-redock-display.patch
 chromium chromium-devtools-window-title.patch
 chromium chromium-extension-install-prompt-hook.patch
 chromium chromium-extension-updates.patch
+chromium chromium-extension-import.patch
 chromium chromium-extension-window-hidden.patch
 chromium chromium-branding.patch
 chromium chromium-icloud-keychain-window.patch
