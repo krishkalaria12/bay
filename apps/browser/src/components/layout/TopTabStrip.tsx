@@ -1,6 +1,6 @@
-import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
+import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
-import { findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
@@ -410,6 +410,9 @@ type StripDrag = {
 type Dock = { ids: string[]; left: number };
 const dockWidth = (cells: number) => cells * (STRIP_PINNED_CELL + STRIP_PINNED_SPACING) - STRIP_PINNED_SPACING;
 const DockContext = createContext<{ dock: Dock | null; top: DragGeometry } | null>(null);
+// A group's member raises its place in the group while its item is dragged: zIndex orders siblings only, so the item's
+// own zIndex keeps it over the group's other members only once its member is over theirs.
+const MemberRaise = createContext<((raised: boolean) => void) | null>(null);
 
 // An item follows the pointer along the strip, trading places with whole tabs, splits and groups. Pulled down
 // past the strip a tab leaves it for the page (whose split targets show, SplitChrome.tsx); let go outside the
@@ -425,6 +428,12 @@ function useStripDrag(item: StripDrag) {
   const current = useEffectEvent(() => item);
   // One machine for the item's life: a new responder mid-gesture would drop the gesture.
   const [machine] = useState(() => stripDrag(current, { dx, lift }, setDragging));
+  const raiseMember = useContext(MemberRaise);
+  useEffect(() => {
+    if (!raiseMember || !dragging) return;
+    raiseMember(true);
+    return () => raiseMember(false);
+  }, [raiseMember, dragging]);
   useEffect(
     () =>
       registerSlot(
@@ -464,20 +473,12 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
     makeRoom(geometry, from, to < 0 ? from : to);
   };
   let owns = false;
-  // Drawn over the row while dragged and settling (a group's member over the group's other members).
-  let raised: number | null = null;
-  const raise = (on: boolean) => {
-    const tag = on ? findNodeHandle(view) : raised;
-    raiseView(tag, current().groupId ? 1 : 0, on);
-    raised = on ? tag : null;
-  };
   const reset = () => {
     owns = false;
     makeRoomAt(-1);
     dx.set(0);
     setLifted(false);
     setDragging(false);
-    raise(false);
   };
   // Let go: it settles into its new place (`to`; none: back home) with the row already laid out around it, and
   // only then does the store move it: until that one update, nothing reorders the views, so it stays drawn on top.
@@ -497,7 +498,6 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
         }
         dx.set(0);
         setDragging(false);
-        raise(false);
       },
     };
     settle = landing;
@@ -537,7 +537,6 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
       drag = mine;
       owns = true;
       setDragging(true);
-      if (current().from >= 0) raise(true);
       if (current().local) return;
       const seq = beginTabDrag(ids.length === 1 ? current().tabId : null, ids);
       view?.measureInWindow((x, y, width, height) => {
@@ -1236,16 +1235,19 @@ function GroupMember({
     const opacity = Math.min(1, Math.max(0, shownValue.get() + Math.min(1, Math.max(0, o * 2))));
     return { left: interpolate(o, [0, 1], [start, start + offset]), opacity };
   }, [start, offset]);
+  const [raised, setRaised] = useState(false);
   return (
     <Animated.View
       pointerEvents={interactive ? "box-none" : "none"}
-      style={[{ position: "absolute", top: 0, width, height: TOP_STRIP_HEIGHT, zIndex: shown ? 2 : 1 }, placeStyle]}
+      style={[{ position: "absolute", top: 0, width, height: TOP_STRIP_HEIGHT, zIndex: raised ? 10 : shown ? 2 : 1 }, placeStyle]}
     >
-      {member.kind === "split" ? (
-        <SplitChip tabIds={member.tabIds} width={width} geometry={geometry} from={from} group={member.group} />
-      ) : (
-        <DraggableChip tabId={member.id} width={width} geometry={geometry} from={from} group={member.group} tuck={tuck} />
-      )}
+      <MemberRaise.Provider value={setRaised}>
+        {member.kind === "split" ? (
+          <SplitChip tabIds={member.tabIds} width={width} geometry={geometry} from={from} group={member.group} />
+        ) : (
+          <DraggableChip tabId={member.id} width={width} geometry={geometry} from={from} group={member.group} tuck={tuck} />
+        )}
+      </MemberRaise.Provider>
     </Animated.View>
   );
 }
