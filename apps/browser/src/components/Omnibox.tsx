@@ -30,6 +30,13 @@ import { isEscapeKey } from "../lib/escapeKey";
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
 
+// The text an arrowed-to row puts in the field, to open as is or keep editing.
+function fillText(s: Suggestion | undefined, dropdown: boolean): string | null {
+  if (s?.kind === "search") return s.query;
+  if (s?.kind === "page") return dropdown ? s.url : s.url.replace(/^https?:\/\//, "");
+  return null;
+}
+
 const BASE_KEYS = [
   { key: "Escape" },
   { key: "Enter" },
@@ -91,6 +98,7 @@ export function Omnibox({
   const [suppressCompletion, setSuppressCompletion] = useState(true);
   const [selected, setSelected] = useState(palette && !newTab && !!currentUrl && initialText === currentUrl ? -1 : 0);
   const [scope, setScope] = useState<SearchScope | null>(null);
+  const [arrowed, setArrowed] = useState<{ typed: string; index: number; text: string } | null>(null);
   const scopeFrom = useRef("");
   const [pendingSelection, setPendingSelection] = useState<Selection | null>(initial ? { start: 0, end: initial.length } : null);
   const selection = useRef<Selection>({ start: 0, end: typed.length });
@@ -119,13 +127,15 @@ export function Omnibox({
   const items = palette ? sections.flatMap((s) => s.items) : dropdown && !edited && !scope ? start : suggested;
   const inline = useInlineCompletion(input, typed, suppressCompletion || scope ? "" : completion);
   const shownCompletion = inline.shown;
-  const value = typed + shownCompletion;
+  const typedValue = typed + shownCompletion;
   const selectedIndex = Math.min(selected, items.length - 1);
+  const preview = arrowed && arrowed.typed === typed && arrowed.index === selectedIndex ? arrowed.text : null;
+  const value = preview ?? typedValue;
   const current: PaletteSuggestion | undefined = items[selectedIndex];
   // ⇧⌫ forgets the selected history row once it was picked from the list, not while it's the typed match.
   const canForget = palette && forgettable(current, searchTemplates) && (!edited || selectedIndex > 0);
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
-  const tabScope = canScope ? scopeFor(value, windowId) : null;
+  const tabScope = canScope ? scopeFor(typedValue, windowId) : null;
 
   // Apply selection imperatively; RN macOS can restore a stale caret when its selection prop clears.
   useLayoutEffect(() => {
@@ -211,7 +221,15 @@ export function Omnibox({
     setSuppressCompletion(true);
   };
 
-  const move = (delta: 1 | -1) => setSelected((i) => Math.max(0, Math.min(Math.min(i, items.length - 1) + delta, items.length - 1)));
+  const move = (delta: 1 | -1) => {
+    const next = Math.max(0, Math.min(selectedIndex + delta, items.length - 1));
+    setSelected(next);
+    // Arrowing through results fills the field with the row, as Chrome's omnibox; the top row is what was typed.
+    const text = !idle && next > 0 ? fillText(items[next], dropdown) : null;
+    setArrowed(text === null ? null : { typed, index: next, text });
+    if (text !== null) setPendingSelection({ start: text.length, end: text.length });
+    else if (preview !== null) setPendingSelection({ start: typed.length, end: typedValue.length });
+  };
 
   const forget = (s: PaletteSuggestion) => {
     const { history, removeHistory } = useBrowser.getState();
@@ -260,7 +278,7 @@ export function Omnibox({
     if (key === "Tab") {
       if (shiftKey) return move(-1);
       if (tabScope) return enterScope(tabScope);
-      if (shownCompletion) {
+      if (shownCompletion && preview === null) {
         setTyped(value);
         setSuppressCompletion(true);
         setPendingSelection({ start: value.length, end: value.length });
@@ -327,7 +345,7 @@ export function Omnibox({
     keyAt.current = Date.now();
     setEdited(true);
     setTyped(change.typed);
-    setSuppressCompletion(change.suppress);
+    setSuppressCompletion(change.suppress || (preview !== null && next.length < preview.length));
     setSelected(0);
   };
 
