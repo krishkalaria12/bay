@@ -125,6 +125,32 @@ public enum ChromiumSecrets {
     return Outcome(items: items, undecryptable: bad)
   }
 
+  /// The sites whose sign-in the browser bound to this Mac (Device Bound Session Credentials, Google's sign-in in
+  /// Chrome and its forks): their cookies only stay valid with a key that never leaves the source browser, so a copy
+  /// is signed out, and replacing a working sign-in with one would sign the user out. Hosts such as "google.com".
+  public static func boundSites(profile: URL) -> [String] {
+    let file = profile.appendingPathComponent("Device Bound Sessions")
+    guard FileManager.default.fileExists(atPath: file.path),
+          let db = try? SQLiteSnapshot(copying: file), db.tableExists("dbsc_session_tbl") else { return [] }
+    var sites = Set<String>()
+    try? db.query("SELECT key FROM dbsc_session_tbl") { row in
+      // Keyed by schemeful site ("https://google.com").
+      if let key = row.text("key"), let host = URL(string: key)?.host?.lowercased(), !host.isEmpty { sites.insert(host) }
+      return true
+    }
+    return sites.sorted()
+  }
+
+  /// `cookies` less those of `sites` and their subdomains, and how many went.
+  public static func withoutSites(_ cookies: [Cookie], _ sites: [String]) -> (kept: [Cookie], dropped: Int) {
+    guard !sites.isEmpty else { return (cookies, 0) }
+    let kept = cookies.filter { cookie in
+      let host = cookie.domain.lowercased().drop { $0 == "." }
+      return !sites.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+    return (kept, cookies.count - kept.count)
+  }
+
   static func priority(_ v: Int64?) -> String {
     switch v {
     case 0: "low"

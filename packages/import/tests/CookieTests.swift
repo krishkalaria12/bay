@@ -208,6 +208,31 @@ final class CookieTests: XCTestCase {
     XCTAssertEqual(CookieWire.batches(many, size: 4).batches.count, 2)
   }
 
+  // A site whose sign-in the source bound to this Mac (Device Bound Sessions): its cookies stay behind.
+  func testDeviceBoundSitesKeepTheirCookies() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dbsc-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    XCTAssertEqual(ChromiumSecrets.boundSites(profile: dir), [], "no store, no bound sites")
+    let sqlite = Process()
+    sqlite.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    sqlite.arguments = [dir.appendingPathComponent("Device Bound Sessions").path,
+                        "CREATE TABLE dbsc_session_tbl (key TEXT, proto BLOB, PRIMARY KEY(key));"
+                          + "INSERT INTO dbsc_session_tbl VALUES ('https://google.com', x'00');"]
+    try sqlite.run()
+    sqlite.waitUntilExit()
+    XCTAssertEqual(sqlite.terminationStatus, 0)
+    XCTAssertEqual(ChromiumSecrets.boundSites(profile: dir), ["google.com"])
+
+    let cookies = [".google.com", "accounts.google.com", ".youtube.com", "notgoogle.com", ".mail.google.com"].map {
+      Cookie(domain: $0, name: "SID", value: secret("v"))
+    }
+    let (kept, dropped) = ChromiumSecrets.withoutSites(cookies, ["google.com"])
+    XCTAssertEqual(kept.map(\.domain), [".youtube.com", "notgoogle.com"])
+    XCTAssertEqual(dropped, 3)
+    XCTAssertEqual(ChromiumSecrets.withoutSites(cookies, []).kept.count, 5)
+  }
+
   func testResultJSONCarriesCountsNotSecrets() throws {
     var result = ImportResult(browserId: "chrome", profileId: "Default")
     result.cookies = try ChromiumSecrets.cookies(profile: chrome, key: Fixtures.chromiumKey).items

@@ -143,10 +143,17 @@ public final class Importer: @unchecked Sendable {
         case (.cookies, .chromium), (.cookies, .arc):
           guard let key = key(browserId) else { throw ImportError.locked("Unlock \(def.name) to import cookies") }
           let outcome = try ChromiumSecrets.cookies(profile: dir, key: key, cancellation: cancellation)
-          result.cookies = outcome.items
-          count = outcome.items.count
+          let bound = ChromiumSecrets.boundSites(profile: dir)
+          let (cookies, dropped) = ChromiumSecrets.withoutSites(outcome.items, bound)
+          result.cookies = cookies
+          count = cookies.count
           if outcome.undecryptable > 0 {
             result.warnings.append(ImportWarning(kind, "undecryptable", "\(Self.count(outcome.undecryptable, "cookie")) couldn't be decrypted"))
+          }
+          if dropped > 0 {
+            let sites = ListFormatter.localizedString(byJoining: bound)
+            result.warnings.append(ImportWarning(kind, "skipped",
+              "\(def.name) keeps your \(sites) sign-in tied to this Mac, so sign in to \(bound.count == 1 ? "it" : "them") again in Bay"))
           }
         case (.cookies, .firefox):
           let outcome = try Firefox.cookies(profile: dir, cancellation: cancellation)
