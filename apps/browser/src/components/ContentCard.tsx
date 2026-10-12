@@ -1,6 +1,6 @@
 import { WebView, type OpenWindowRequest } from "@bay/nncore";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
@@ -344,6 +344,16 @@ const TabPane = memo(function TabPane({
   useEffect(() => {
     if (visible) revealToolbar(tabId);
   }, [visible]);
+  // A tab switched to takes the keyboard, as in Chrome: Space reaches its page (a video pauses), not the sidebar row
+  // that was clicked. Not past the New Tab panel or a field being typed in (find, the address, a rename).
+  useEffect(() => {
+    if (!focused || !visible || isNewTab || small) return;
+    const timer = setTimeout(() => {
+      if (useBrowser.getState().windowUi[windowId]?.panel?.open || TextInput.State.currentlyFocusedInput()) return;
+      void webviews.get(tabId)?.focus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [focused, visible]);
 
   return (
     <Animated.View
