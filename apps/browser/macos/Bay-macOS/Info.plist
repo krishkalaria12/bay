@@ -111,7 +111,7 @@
 	<key>OSAScriptingDefinition</key>
 	<string>Bay.sdef</string>
 	<key>RCTNewArchEnabled</key>
-	<false/>
+	<true/>
 	<key>SUAutomaticallyUpdate</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>

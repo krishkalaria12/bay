@@ -3,7 +3,6 @@ import "./src/lib/perfProbe";
 import { LogBox } from "react-native";
 import { nativeApiSkew, startSkewed } from "./src/nativeApi";
 
-LogBox.ignoreLogs(["The app is running using the Legacy Architecture"]);
 // LogBox views crash react-native-macos; suppress console errors and warnings.
 LogBox.ignoreAllLogs(true);
 

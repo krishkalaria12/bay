@@ -8,8 +8,8 @@ ws_dir = ws_dir.parent until
 require "#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb"
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 
-# Legacy architecture: react-native-macos 0.81's Fabric support is still experimental.
-ENV['RCT_NEW_ARCH_ENABLED'] ||= '0'
+# New architecture: Fabric, TurboModules and bridgeless.
+ENV['RCT_NEW_ARCH_ENABLED'] ||= '1'
 
 prepare_react_native_project!
 
