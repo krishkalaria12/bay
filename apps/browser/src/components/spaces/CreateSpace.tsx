@@ -50,7 +50,7 @@ function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDon
   const colors = useFormColors();
   const [name, setName] = useState(preset.name ?? "");
   const [look, setLook] = useState(() => unusedSpaceLook(useBrowser.getState().spaces));
-  const [icon, setIcon] = useState<string | null>(() => unusedSpaceIcon(useBrowser.getState().spaces));
+  const [icon, setIcon] = useState(() => unusedSpaceIcon(useBrowser.getState().spaces));
 
   const submit = () => {
     const id = useBrowser.getState().createSpace({ name, color: look.color, theme: look.theme, icon });
@@ -79,9 +79,6 @@ function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDon
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Label>Icon</Label>
-        <Pressable onPress={() => setIcon(null)} disabled={!icon}>
-          <Text style={{ fontSize: 12, marginTop: 16, marginBottom: 7, color: icon ? colors.accent : theme.textTertiary }}>Use Initial</Text>
-        </Pressable>
       </View>
       {/* The space emoji (the sidebar's space panel has the same): a random free one is chosen to start with. */}
       <View style={{ flexDirection: "row", flexWrap: "wrap", width: CREATE_SPACE_ICON_COLUMNS * 30 }}>

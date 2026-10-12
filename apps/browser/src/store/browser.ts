@@ -6,7 +6,7 @@ import { createHistorySlice, type HistorySlice } from "./history";
 import { IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage, spaceListKey, tabListKey, tabToShow, windowListKey } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createPeeksSlice, type PeeksSlice } from "./peeks";
-import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, type SpacesSlice } from "./spaces";
+import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, withSpaceEmoji, type SpacesSlice } from "./spaces";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
 import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
@@ -100,7 +100,9 @@ export const useBrowser = create<BrowserState>()(
       const s = get();
       const savedSpaces = data.spaces && Object.keys(data.spaces).length ? data.spaces : { [DEFAULT_SPACE.id]: DEFAULT_SPACE };
       const spaceOrder = [...new Set([...(data.spaceOrder ?? []).filter((id) => savedSpaces[id]), ...Object.keys(savedSpaces)])];
-      const { spaces, detached, owners } = isolateSavedSpaces(savedSpaces, spaceOrder, data.orphanedProfileData ?? []);
+      const isolated = isolateSavedSpaces(savedSpaces, spaceOrder, data.orphanedProfileData ?? []);
+      const { detached, owners } = isolated;
+      const spaces = withSpaceEmoji(isolated.spaces, spaceOrder);
       const settings = { ...DEFAULT_SETTINGS, ...data.settings };
       if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
 

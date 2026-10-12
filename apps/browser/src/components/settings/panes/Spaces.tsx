@@ -278,7 +278,6 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
         </Row>
         <Row title="Icon" description={spaceIconTitle(profile.icon)}>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            {profile.icon ? <Button title="Use Initial" onPress={() => update({ icon: null })} /> : null}
             <Button title={picking ? "Done" : "Change…"} onPress={() => setPicking(!picking)} />
           </View>
         </Row>

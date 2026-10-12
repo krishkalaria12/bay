@@ -17,6 +17,7 @@ export type SpacesSlice = {
 
   /** Without a colour or theme, the space gets a look no other space has (unusedSpaceLook). */
   /** `shareWith`: a space whose sign-ins (native profile) the new one shares; else it gets its own, signed out. */
+  /** Without an icon, the space gets an emoji no other space has (unusedSpaceIcon). */
   createSpace(options: { name: string; color?: SpaceColor; theme?: SpaceTheme | null; icon?: string | null; shareWith?: string | null }): string;
   updateSpace(id: string, patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "followSite" | "cleanUpAfterHours">>): void;
   deleteSpace(id: string): void;
@@ -68,6 +69,63 @@ export function unusedSpaceLook(spaces: Record<string, Space>): { color: SpaceCo
 /** A space's look from one of the preset colours: its swatch, as a theme. */
 export function themeOfColor(color: SpaceColor): { color: SpaceColor; theme: SpaceTheme } {
   return { color, theme: { colors: [SPACE_SWATCHES[color]], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN } };
+}
+
+/** yab's emoji for a space: the space picker offers them, and a new space gets one. */
+export const SPACE_EMOJI = [
+  "🏠",
+  "✨",
+  "📁",
+  "🎯",
+  "💡",
+  "🧭",
+  "🛍️",
+  "🛒",
+  "🎁",
+  "🧪",
+  "🔭",
+  "💰",
+  "🧾",
+  "📈",
+  "✈️",
+  "🗺️",
+  "🏝️",
+  "📚",
+  "🎧",
+  "🎨",
+  "🪴",
+  "⌨️",
+  "🤝",
+  "🎓",
+  "🏋️",
+  "🍜",
+  "☕️",
+  "🎮",
+  "🍿",
+  "🚀",
+  "💼",
+  "🌱",
+  "🧠",
+  "📸",
+  "🗃️",
+];
+
+/** A new space's icon: one of the space emoji no other space has, at random (any of them once all are taken). */
+export function unusedSpaceIcon(profiles: Record<string, Pick<Space, "icon">>): string {
+  const used = new Set(Object.values(profiles).map((p) => p.icon));
+  const free = SPACE_EMOJI.filter((e) => !used.has(e));
+  const from = free.length ? free : SPACE_EMOJI;
+  return from[Math.floor(Math.random() * from.length)]!;
+}
+
+/** Every space shows an emoji: a saved one without (an older session, a space synced without one) gets a free one. */
+export function withSpaceEmoji(spaces: Record<string, Space>, order: string[]): Record<string, Space> {
+  let next = spaces;
+  for (const id of order) {
+    if (!next[id] || next[id]!.icon) continue;
+    next = { ...next, [id]: { ...next[id]!, icon: unusedSpaceIcon(next) } };
+  }
+  return next;
 }
 
 // Each space owns a native profile. profileId preserves existing native directories after upgrades.
@@ -133,7 +191,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
     spaceOrder: [DEFAULT_SPACE.id],
     orphanedProfileData: [],
 
-    createSpace({ name, color, theme, icon = null, shareWith }) {
+    createSpace({ name, color, theme, icon, shareWith }) {
       const s = get();
       const source = shareWith ? s.spaces[shareWith] : undefined;
       const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
@@ -142,7 +200,7 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
         name: name.trim() || `Profile ${s.spaceOrder.length + 1}`,
         color: look.color,
         ...(look.theme ? { theme: look.theme } : {}),
-        icon,
+        icon: icon || unusedSpaceIcon(s.spaces),
         createdAt: Date.now(),
         ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : {}),
       };
@@ -152,7 +210,10 @@ export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> 
     },
 
     updateSpace(id, patch) {
-      set((s) => (s.spaces[id] ? { spaces: { ...s.spaces, [id]: { ...s.spaces[id]!, ...patch } } } : {}));
+      // A space keeps an icon: clearing it (a synced change without one) leaves the one it has.
+      const { icon, ...rest } = patch;
+      const change = icon ? { ...rest, icon } : rest;
+      set((s) => (s.spaces[id] ? { spaces: { ...s.spaces, [id]: { ...s.spaces[id]!, ...change } } } : {}));
     },
 
     deleteSpace(id) {

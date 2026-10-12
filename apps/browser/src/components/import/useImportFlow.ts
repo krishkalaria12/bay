@@ -150,7 +150,8 @@ export function useImportFlow() {
       });
       if (!confirmed) return clash;
     }
-    return s.createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji ?? null });
+    // Without an emoji of its own (Chrome's profiles, an Arc space with a symbol) the space gets a free one (createSpace).
+    return s.createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
   };
 
   const finish = () => setTimeout(() => setStep("done"), DONE_DELAY_MS);

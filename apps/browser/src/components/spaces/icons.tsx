@@ -114,53 +114,7 @@ export function spaceIconTitle(icon: string | null): string {
   return icon ?? "Initial";
 }
 
-/** A new space's icon, as Arc gives one: the first of the set no other space uses. */
-/** yab's emoji for a space: the space picker offers them, and a new space gets one. */
-export const SPACE_EMOJI = [
-  "🏠",
-  "✨",
-  "📁",
-  "🎯",
-  "💡",
-  "🧭",
-  "🛍️",
-  "🛒",
-  "🎁",
-  "🧪",
-  "🔭",
-  "💰",
-  "🧾",
-  "📈",
-  "✈️",
-  "🗺️",
-  "🏝️",
-  "📚",
-  "🎧",
-  "🎨",
-  "🪴",
-  "⌨️",
-  "🤝",
-  "🎓",
-  "🏋️",
-  "🍜",
-  "☕️",
-  "🎮",
-  "🍿",
-  "🚀",
-  "💼",
-  "🌱",
-  "🧠",
-  "📸",
-  "🗃️",
-];
-
-/** A new space's icon: one of the space emoji no other space has, at random (any of them once all are taken). */
-export function unusedSpaceIcon(profiles: Record<string, Pick<Space, "icon">>): string {
-  const used = new Set(Object.values(profiles).map((p) => p.icon));
-  const free = SPACE_EMOJI.filter((e) => !used.has(e));
-  const from = free.length ? free : SPACE_EMOJI;
-  return from[Math.floor(Math.random() * from.length)]!;
-}
+export { SPACE_EMOJI, unusedSpaceIcon } from "../../store/spaces";
 
 export function SpaceBadge({ profile, size = 26 }: { profile: Pick<Space, "name" | "color" | "icon"> & Partial<Pick<Space, "theme">>; size?: number }) {
   const swatch = profile.theme?.colors[0] ?? SPACE_COLORS[profile.color]?.swatch ?? SPACE_COLORS.plum.swatch;
