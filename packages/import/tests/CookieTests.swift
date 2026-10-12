@@ -189,6 +189,25 @@ final class CookieTests: XCTestCase {
     XCTAssertEqual(CookieWire.batches([]).batches.count, 0)
   }
 
+  // Each batch replaces the cookies of the domains it carries, so a domain is never split across two.
+  func testCookieWireKeepsADomainInOneBatch() throws {
+    func cookie(_ domain: String, _ n: Int) -> Cookie {
+      Cookie(domain: domain, name: "c\(n)", value: secret("v"))
+    }
+    let cookies = [cookie(".google.com", 0), cookie(".youtube.com", 1), cookie(".google.com", 2), cookie(".google.com", 3),
+                   cookie(".YouTube.com", 4), cookie("github.com", 5)]
+    let domains = CookieWire.batches(cookies, size: 4).batches.map { batch in
+      batch.withUnsafeBytes { bytes -> [String] in
+        let top = (try? JSONSerialization.jsonObject(with: Data(bytes.dropLast()))) as? [String: Any]
+        return ((top?["cookies"] as? [[String: Any]]) ?? []).map { ($0["domain"] as! String).lowercased() }
+      }
+    }
+    XCTAssertEqual(domains, [[".google.com", ".google.com", ".google.com"], [".youtube.com", ".youtube.com", "github.com"]])
+    // A domain with more cookies than a batch holds is the only one split.
+    let many = (0..<5).map { cookie("big.example", $0) }
+    XCTAssertEqual(CookieWire.batches(many, size: 4).batches.count, 2)
+  }
+
   func testResultJSONCarriesCountsNotSecrets() throws {
     var result = ImportResult(browserId: "chrome", profileId: "Default")
     result.cookies = try ChromiumSecrets.cookies(profile: chrome, key: Fixtures.chromiumKey).items

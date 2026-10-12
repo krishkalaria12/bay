@@ -184,7 +184,7 @@ std::optional<Imported> ToCookie(const base::Value& entry, base::Time now) {
 struct Counts {
   int imported = 0;
   int rejected = 0;
-  int existing = 0;
+  int replaced = 0;
 };
 
 network::mojom::CookieManager* CookieManagerOf(Profile* profile) {
@@ -209,46 +209,39 @@ void Written(base::WeakPtr<Profile> profile,
             reply.Send(base::DictValue()
                            .Set("imported", counts.imported)
                            .Set("rejected", counts.rejected)
-                           .Set("existing", counts.existing));
+                           .Set("replaced", counts.replaced));
           },
           std::move(reply), counts));
 }
 
-// Writes the cookies the profile doesn't have yet; never replaces one.
-void WriteNew(base::WeakPtr<Profile> profile,
-              std::vector<Imported> cookies,
-              Counts counts,
-              Reply reply,
-              const std::vector<net::CanonicalCookie>& present) {
+// The old cookies are gone: writes the imported ones (the first of equivalent
+// ones in the same import).
+void WriteImported(base::WeakPtr<Profile> profile,
+                   std::vector<Imported> cookies,
+                   Counts counts,
+                   Reply reply,
+                   const std::vector<bool>& /*deleted*/) {
   if (!profile) {
     return reply.Error("profile closed");
   }
   std::map<std::string_view, std::vector<const net::CanonicalCookie*>>
       by_domain;
-  for (const net::CanonicalCookie& cookie : present) {
-    by_domain[cookie.Domain()].push_back(&cookie);
-  }
   std::vector<const Imported*> fresh;
   for (const Imported& imported : cookies) {
-    bool exists = false;
-    auto it = by_domain.find(imported.cookie->Domain());
-    if (it != by_domain.end()) {
-      for (const net::CanonicalCookie* other : it->second) {
-        if (imported.cookie->IsEquivalent(*other)) {
-          exists = true;
-          break;
-        }
+    std::vector<const net::CanonicalCookie*>& same =
+        by_domain[imported.cookie->Domain()];
+    bool duplicate = false;
+    for (const net::CanonicalCookie* earlier : same) {
+      if (imported.cookie->IsEquivalent(*earlier)) {
+        duplicate = true;
+        break;
       }
     }
-    if (exists) {
-      ++counts.existing;
-    } else {
-      // A later equivalent in the same import is a duplicate, not a change.
+    if (!duplicate) {
       fresh.push_back(&imported);
-      by_domain[imported.cookie->Domain()].push_back(imported.cookie.get());
+      same.push_back(imported.cookie.get());
     }
   }
-
   base::RepeatingCallback<void(bool)> barrier = base::BarrierCallback<bool>(
       fresh.size(),
       base::BindOnce(&Written, profile, counts, std::move(reply)));
@@ -262,6 +255,48 @@ void WriteNew(base::WeakPtr<Profile> profile,
                                       done.Run(result.status.IsInclude());
                                     },
                                     barrier));
+  }
+}
+
+// The import replaces each site's cookies (by domain and partition) with the
+// source's: a sign-in is several cookies, and keeping the profile's where the
+// source has its own mixed two sessions, which sites (Google) read as signed
+// out.
+void Replace(base::WeakPtr<Profile> profile,
+             std::vector<Imported> cookies,
+             Counts counts,
+             Reply reply,
+             const std::vector<net::CanonicalCookie>& present) {
+  if (!profile) {
+    return reply.Error("profile closed");
+  }
+  std::map<std::string_view,
+           std::vector<const std::optional<net::CookiePartitionKey>*>>
+      sites;
+  for (const Imported& imported : cookies) {
+    sites[imported.cookie->Domain()].push_back(
+        &imported.cookie->PartitionKey());
+  }
+  std::vector<const net::CanonicalCookie*> old;
+  for (const net::CanonicalCookie& cookie : present) {
+    auto it = sites.find(cookie.Domain());
+    if (it == sites.end()) {
+      continue;
+    }
+    for (const std::optional<net::CookiePartitionKey>* key : it->second) {
+      if (*key == cookie.PartitionKey()) {
+        old.push_back(&cookie);
+        break;
+      }
+    }
+  }
+  counts.replaced = static_cast<int>(old.size());
+  base::RepeatingCallback<void(bool)> barrier = base::BarrierCallback<bool>(
+      old.size(), base::BindOnce(&WriteImported, profile, std::move(cookies),
+                                 counts, std::move(reply)));
+  network::mojom::CookieManager* manager = CookieManagerOf(profile.get());
+  for (const net::CanonicalCookie* cookie : old) {
+    manager->DeleteCanonicalCookie(*cookie, barrier);
   }
 }
 
@@ -312,10 +347,10 @@ NN_ENGINE_CALL(nn_cookies_import) {
     return call.TakeReply().Send(base::DictValue()
                                      .Set("imported", 0)
                                      .Set("rejected", counts.rejected)
-                                     .Set("existing", 0));
+                                     .Set("replaced", 0));
   }
   bay::CookieManagerOf(call.profile())
       ->GetAllCookies(
-          base::BindOnce(&bay::WriteNew, call.profile()->GetWeakPtr(),
+          base::BindOnce(&bay::Replace, call.profile()->GetWeakPtr(),
                          std::move(cookies), counts, call.TakeReply()));
 }

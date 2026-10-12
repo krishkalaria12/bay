@@ -10,7 +10,8 @@
 //   <scratch dir>    data/ is BAY_DATA_DIR and home/ the fake Chrome home (both wiped by the import phase);
 //                    result-<phase>.json lists each phase's failures
 //   import           a private profile is refused; the UI imports 5 cookies, 1 address and
-//                    1 card; refused/expired cookies stay out; the site gets the session cookie; a re-import adds nothing
+//                    1 card; refused/expired cookies stay out; the site gets the session cookie; a re-import replaces
+//                    the sites' cookies (one of another session goes)
 //   restart          relaunches on the same data dir: the persistent cookie survives
 //   all              (default) import, then restart
 //   --keep           leaves the last instance running (poke it with scripts/agent/nn eval <scratch dir>/data '<js>')
@@ -180,10 +181,21 @@ async function importPhase(ok) {
   ok(header.includes("nn_session=until-quit"), "fixture server got the imported session cookie");
   ok(!header.includes("nn_other_path") && !header.includes("nn_expired"), "path-scoped and expired cookies not sent");
 
-  // Importing again keeps what's there.
+  // Importing again replaces each site's cookies with the source's: one the profile set meanwhile for the session
+  // cookie's site goes too, so a sign-in never mixes two sessions (Google reads a mix as signed out).
+  const host = by.nn_sid.domain.replace(/^\./, "");
+  await cdp("Storage.setCookies", {
+    cookies: [{ name: "nn_stale", value: "other-session", url: `https://${host}/`, secure: true, expires: Date.now() / 1000 + 3600 }],
+  });
+  ok(
+    (await fixtureCookies()).some((c) => c.name === "nn_stale"),
+    "a cookie of another session is set for the site",
+  );
   const again = await evaluate(nativeImport("e2e-again", ""));
   note("again:", JSON.stringify(again.w));
-  ok(again.w.cookies === 0 && again.w.cookiesExisting === 5, "a second import keeps the profile's cookies");
+  const after = Object.fromEntries((await fixtureCookies()).map((c) => [c.name, c]));
+  ok(again.w.cookies === 5 && again.w.cookiesReplaced === 6, `a second import replaces the sites' cookies (${JSON.stringify(again.w)})`);
+  ok(!after.nn_stale && after.nn_sid?.value === "s3ss10n-e2e", "the other session's cookie is gone; the source's stays");
 }
 
 async function restartPhase(ok) {

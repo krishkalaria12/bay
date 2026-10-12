@@ -139,12 +139,13 @@ export type SafariExport = {
   warnings: ImportWarning[];
 };
 
-/** What `writeImported` wrote. Cookies the profile already had stay as they are (`cookiesExisting`); `cookiesFailed` /
+/** What `writeImported` wrote. The imported cookies replace the profile's for the same sites (`cookiesReplaced`, the
+ * profile's cookies they took the place of); `cookiesFailed` /
  * `autofillFailed` are set when the engine refused the kind (a private profile, say), with its `error`. */
 export type WrittenCounts = {
   cookies: number;
   cookiesRejected: number;
-  cookiesExisting: number;
+  cookiesReplaced: number;
   addresses: number;
   cards: number;
   cookiesFailed?: 1;
