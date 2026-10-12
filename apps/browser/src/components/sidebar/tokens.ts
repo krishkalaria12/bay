@@ -25,6 +25,11 @@ const DARK = {
   upsellButtonHover: "rgba(255,255,255,0.11)",
   newTabLabel: "#FFFFFF8C", // secondaryLabelColor
   newTabIcon: "#FFFFFF40", // tertiaryLabelColor
+  // Fainter than a tab's hover (tabHover read milky beside the dark selected tab); the label brightens instead.
+  newTabHover: "rgba(255,255,255,0.07)",
+  newTabPressed: "rgba(255,255,255,0.11)",
+  newTabLabelHover: "#FFFFFFC7",
+  newTabIconHover: "#FFFFFF8C",
 };
 
 const LIGHT: typeof DARK = {
@@ -48,6 +53,10 @@ const LIGHT: typeof DARK = {
   upsellButtonHover: "rgba(0,0,0,0.11)",
   newTabLabel: "#00000080",
   newTabIcon: "#00000042",
+  newTabHover: "rgba(255,255,255,0.35)",
+  newTabPressed: "rgba(255,255,255,0.5)",
+  newTabLabelHover: "#000000B3",
+  newTabIconHover: "#00000073",
 };
 
 export type SidebarTokens = typeof DARK;

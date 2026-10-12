@@ -552,11 +552,16 @@ function NewTabRow({ windowId }: { windowId: string }) {
               alignItems: "center",
               paddingLeft: 9,
               paddingRight: 34,
-              backgroundColor: pressed ? theme.tabPressed : hovered ? theme.tabHover : undefined,
+              backgroundColor: pressed ? tokens.newTabPressed : hovered ? tokens.newTabHover : undefined,
             }}
           >
-            <Symbol name="plus" size={13} weight="medium" color={tokens.newTabIcon} style={{ width: 16, height: 16 }} />
-            <FadeLabel text="New Tab" fontSize={13} color={tokens.newTabLabel} style={{ flex: 1, height: 18, marginLeft: 5 }} />
+            <Symbol name="plus" size={13} weight="medium" color={hovered ? tokens.newTabIconHover : tokens.newTabIcon} style={{ width: 16, height: 16 }} />
+            <FadeLabel
+              text="New Tab"
+              fontSize={13}
+              color={hovered ? tokens.newTabLabelHover : tokens.newTabLabel}
+              style={{ flex: 1, height: 18, marginLeft: 5 }}
+            />
           </View>
         )}
       </Pressable>
