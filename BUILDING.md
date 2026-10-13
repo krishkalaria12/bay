@@ -65,8 +65,9 @@ first. Edit those folders in the repo, never the copies under `~/chromium-build`
 pnpm start
 ```
 
-This builds the Release app with ad hoc signing and opens it. The app has its JavaScript bundled, so
-it doesn't need Metro. It lands in `apps/browser/build-dev/Build/Products/Release/Bay.app`.
+This builds the Release app with ad hoc signing and opens it on its own data,
+`~/Library/Application Support/Bay Dev`, so it never touches your everyday profile. The app has its
+JavaScript bundled, so it doesn't need Metro. It lands in `apps/browser/build-dev/Build/Products/Release/Bay.app`.
 
 To build without opening it:
 
@@ -78,7 +79,8 @@ scripts/agent/build-app --config Release --force
 
 Ad hoc signing works without an Apple Developer account. It leaves out the restricted keychain
 entitlements, so passkeys saved in the Chrome profile (Touch ID) aren't available. Passkeys from your
-phone or a security key still work.
+phone or a security key still work. An ad hoc build opens only with `BAY_DATA_DIR` set (`pnpm start`
+sets it): it can't read the real keychain key, so on your installed data it would drop your sign-ins.
 
 ## Develop with hot reload
 

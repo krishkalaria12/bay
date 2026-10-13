@@ -206,7 +206,8 @@ In another, build and launch the Debug app:
 pnpm macos
 ```
 
-`pnpm start` builds the Release app with ad hoc signing and opens it.
+`pnpm start` builds the Release app with ad hoc signing and opens it on its own data,
+`~/Library/Application Support/Bay Dev`.
 
 Other tasks: `pnpm typecheck`, `pnpm test`, `pnpm lint` (oxlint), `pnpm fmt` / `pnpm fmt:check` (oxfmt),
 `pnpm shaders:check` (compiles the embedded Metal offline), `pnpm build` (Release `.app` with a Hermes bytecode

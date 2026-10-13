@@ -250,16 +250,21 @@ NSMutableDictionary<NSString *, NSDictionary *> *gInstallPrompts = [NSMutableDic
 + (int)runWithArgc:(int)argc argv:(char **)argv delegate:(id<NSApplicationDelegate> (^)(void))makeDelegate {
   const char *dataDir = getenv("BAY_DATA_DIR");
   // A data dir from the environment is a test or development instance's scratch one: it keeps off the login
-  // keychain too. Without one, a release build uses the installed app's (InstalledDataDirectory), and a development
-  // build refuses (it never falls back to a real profile). The environment stays as it is: the app's other modules
-  // read BAY_DATA_DIR as "a test instance" (documents, sync keys, telemetry, the update feed).
+  // keychain too. Without one, a team-signed release uses the installed app's (InstalledDataDirectory), and any other
+  // build refuses: a development build, or an ad hoc one, which can't read the real keychain key and so would drop
+  // the installed data's cookies (an ad hoc `pnpm start` signed the owner out of everything on 2026-10-13). The
+  // environment stays as it is: the app's other modules read BAY_DATA_DIR as "a test instance" (documents, sync
+  // keys, telemetry, the update feed).
   gScratchDataDir = dataDir && *dataDir;
 #if DEBUG
-  if (!gScratchDataDir) {
+  const bool installedDataAllowed = false;
+#else
+  const bool installedDataAllowed = IsTeamSigned();
+#endif
+  if (!gScratchDataDir && !installedDataAllowed) {
     fprintf(stderr, "[nncore] set BAY_DATA_DIR to a scratch directory\n");
     return 1;
   }
-#endif
   gMakeDelegate = [makeDelegate copy];
   NSString *scratch = gScratchDataDir ? @(dataDir) : nil;
   // A relative data dir is the launcher's working directory's (launchd starts the app in "/"), as NNIsolation reads it.
