@@ -848,7 +848,15 @@ extension NSColor {
 }
 
 let installTextFieldSelectAll: Void = {
-  let block: @convention(block) (NSTextField, Any?) -> Void = { field, sender in field.selectText(sender) }
+  // A field already being edited selects in its editor: selectText(_:) ends the editing first, which React Native reads
+  // as a blur, so a field that selects its text on focus (the sidebar's rename) committed and closed as it opened.
+  let block: @convention(block) (NSTextField, Any?) -> Void = { field, sender in
+    if let editor = field.currentEditor() {
+      editor.selectAll(sender)
+    } else {
+      field.selectText(sender)
+    }
+  }
   class_addMethod(NSTextField.self, #selector(NSText.selectAll(_:)), imp_implementationWithBlock(block), "v@:@")
 }()
 
