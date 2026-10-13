@@ -1,5 +1,5 @@
 import { WindowBackdrop } from "@bay/shaders";
-import { setTrafficLightsOnHover, Surface } from "@bay/shell";
+import { setTrafficLightsOnHover, Surface, WindowDragRegion } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
@@ -70,10 +70,10 @@ function BrowserWindow() {
   const showStrip = sidebarOpen && topTabs;
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left, the window buttons where they are.
   const right = useSidebarOnRight();
-  // The page has no toolbar to hold the window buttons then: it runs up under them, and they show only while the
-  // pointer is over the window's top, as Zen has it.
+  // The page has no toolbar to hold the window buttons then (or with the sidebar closed): it runs up under them, and
+  // they show only while the pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
-  const buttonsOnHover = right && addressInSidebar && !fullscreen;
+  const buttonsOnHover = (right || !sidebarOpen) && addressInSidebar && !fullscreen;
   useEffect(() => {
     void setTrafficLightsOnHover(windowId, buttonsOnHover);
   }, [windowId, buttonsOnHover]);
@@ -133,6 +133,10 @@ function BrowserWindow() {
         <ContentCard />
         {!fullscreen && <ExtensionSidePanel />}
       </View>
+      {/* No toolbar or sidebar to move the window by: the gap over the page does. */}
+      {addressInSidebar && !sidebarOpen && !fullscreen ? (
+        <WindowDragRegion style={{ position: "absolute", top: 0, left: 0, right: 0, height: layout.cardTop }} />
+      ) : null}
       {showStrip && (
         <View pointerEvents={fullscreen ? "none" : "auto"} style={[{ position: "absolute", left: 0, right: 0 }, fullscreen ? { bottom: "100%" } : { top: 0 }]}>
           <TopTabStrip width={width} hidden={fullscreen} />
@@ -169,6 +173,15 @@ function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
   return (
     <>
       {enabled ? <View onMouseEnter={show} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} /> : null}
+      {/* The rest of the window while it's out: the pointer reaching it hides the peek, as leaving the peek does. Its own
+          leave alone missed some exits (onto the page, say), leaving it out. */}
+      {live ? (
+        <View
+          pointerEvents="none"
+          onMouseEnter={hide}
+          style={{ position: "absolute", top: 0, bottom: 0, [side]: 6 + sidebarWidth, [right ? "left" : "right"]: 0 }}
+        />
+      ) : null}
       <Animated.View
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}

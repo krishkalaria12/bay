@@ -1378,6 +1378,10 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   return (
     <>
       {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: layout.trafficLightsWidth, right: 0, top: 0, height: 6 }} /> : null}
+      {/* The window under it while it's out: the pointer reaching it hides the peek, as leaving the peek does. */}
+      {live ? (
+        <View pointerEvents="none" onMouseEnter={hide} style={{ position: "absolute", left: 0, right: 0, top: 4 + STRIP_PEEK_HEIGHT, bottom: 0 }} />
+      ) : null}
       <Animated.View
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}

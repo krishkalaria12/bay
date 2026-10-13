@@ -4,12 +4,12 @@ const { useBrowser } = await import("../../store/browser.ts");
 const { addressBarInSidebar, besideRow, sidebarOnRight, sidebarSiteControlsGeometry } = await import("./windowLayout.ts");
 const S = () => useBrowser.getState();
 
-test("the sidebar address bar defaults on and falls back for hidden sidebar and top tabs", () => {
+test("the sidebar address bar defaults on, stays with a hidden sidebar and falls back for top tabs", () => {
   S().hydrate({});
   const w = S().createWindow({ url: "example.com" });
   assert.equal(addressBarInSidebar(S(), w), true);
   S().toggleSidebar(w);
-  assert.equal(addressBarInSidebar(S(), w), false);
+  assert.equal(addressBarInSidebar(S(), w), true);
   S().toggleSidebar(w);
   S().updateSettings({ tabLayout: "top" });
   assert.equal(addressBarInSidebar(S(), w), false);

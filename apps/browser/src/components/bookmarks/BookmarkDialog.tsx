@@ -22,10 +22,10 @@ export function BookmarkDialog() {
 function DialogPanel({ state }: { state: BookmarkDialogState }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const field = useSidebarFieldShown();
   // Under the star it was opened from: the sidebar's field, or the toolbar's end (the sidebar's edge, on the right).
   const right = useSidebarOnRight();
   const sidebarOpen = useSidebarOpen();
+  const field = useSidebarFieldShown() && sidebarOpen;
   const sidebarWidth = useSidebarWidth(useWindowId());
   const fieldSide = right ? { right: layout.sidebarInset } : { left: layout.sidebarInset };
   const toolbarEnd = (right && sidebarOpen ? sidebarWidth : layout.cardInset) + 10;

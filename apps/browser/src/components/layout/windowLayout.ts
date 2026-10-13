@@ -10,9 +10,10 @@ export function useTabLayout(): "sidebar" | "top" {
   return useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
 }
 
+// Closed, the sidebar keeps it: the page fills the window, and the field is in the sidebar's peek.
 export function addressBarInSidebar(s: BrowserState, windowId: string): boolean {
   const w = s.windows[windowId];
-  return !!w && s.settings.addressBar === "sidebar" && w.sidebarOpen && (w.tabLayout ?? s.settings.tabLayout) === "sidebar";
+  return !!w && s.settings.addressBar === "sidebar" && (w.tabLayout ?? s.settings.tabLayout) === "sidebar";
 }
 
 export function useAddressBarInSidebar(): boolean {

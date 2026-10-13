@@ -196,7 +196,7 @@ export function ContentCard() {
   const geometryFor = (rect: Rect | undefined): ToolbarGeometry => {
     if (small) return NO_TOOLBAR;
     const leading = !!rect && rect.x === 0 && rect.y === 0;
-    if (addressInSidebar) return sidebarRight && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
+    if (addressInSidebar) return (sidebarRight || !sidebarOpen) && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
     // The pane at the top right, beside a sidebar docked on the right: its toolbar's end holds the toggle.
     const trailing = !!rect && rect.y === 0 && rect.x + rect.width >= size.width - 1;
     return toolbarGeometry({
@@ -318,6 +318,7 @@ const TabPane = memo(function TabPane({
   const zoom = useBrowser((s) => s.tabs[tabId]?.zoom ?? 1);
   const popover = usePopover(tabId);
   const addressInSidebar = useAddressBarInSidebar();
+  const sidebarOpen = useSidebarOpen();
   const newTabShown = usePage(tabId, (p) => !!p.newTabShown);
   const inSomeSplit = useBrowser((s) => !!warm && !!splitOf(s, tabId));
   const inSplit = visible ? inActiveSplit : inSomeSplit;
@@ -418,7 +419,7 @@ const TabPane = memo(function TabPane({
                 <PasswordPrompt tabId={tabId} right={barEnd} top={4} />
                 <AutofillPrompt tabId={tabId} right={barEnd} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
-                {popover === "siteControls" && (!addressInSidebar || devBar) && <SiteControls tabId={tabId} {...popoverSide} top={2} />}
+                {popover === "siteControls" && (!addressInSidebar || !sidebarOpen || devBar) && <SiteControls tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "zoom" && <ZoomPopover tabId={tabId} {...popoverSide} top={2} />}
                 <SharePicker tabId={tabId} paneWidth={frame.width} />
