@@ -121,7 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   addressBar: "sidebar",
   defaultSpaceId: DEFAULT_SPACE_ID,
   shortcuts: {},
-  openLinksInLittleBay: true,
+  openLinksInLittleBay: false,
   peekLinksFromPinnedTabs: true,
   littleBaySize: [900, 640],
 };

@@ -64,10 +64,21 @@
   const session = navigator.mediaSession;
   const actions = new Map();
   let positionState = null;
+  // Now playing is media the user has heard, as in Chrome's media controls: never a muted autoplay (X's feed), and
+  // never a sound effect (chess.com's moves) shorter than Chrome's 5 s floor for a media session.
+  const heard = new WeakSet();
+  const SOUND_EFFECT_S = 5;
+  const hear = (m) => {
+    if (heard.has(m) || !audible(m)) return false;
+    heard.add(m);
+    return true;
+  };
+  const showable = (m) => heard.has(m) && m.duration >= SOUND_EFFECT_S;
   const pickMedia = () => {
     const all = [...document.querySelectorAll("video,audio")];
     if (active && !all.includes(active)) all.push(active);
-    return all.find((m) => !m.paused && !m.ended) || active || null;
+    const shown = all.filter(showable);
+    return shown.find((m) => !m.paused && !m.ended) || (shown.includes(active) ? active : null);
   };
   const absolute = (src) => {
     try {
@@ -93,23 +104,23 @@
     const el = pickMedia();
     const md = session && session.metadata;
     let state = null;
-    if (el || md) {
-      const duration = positionState?.duration ?? el?.duration;
+    if (el) {
+      const duration = positionState?.duration ?? el.duration;
       const sessionState = session ? session.playbackState : "none";
+      const elementState = el.paused || el.ended ? "paused" : "playing";
       state = {
         frame,
         title: md?.title || document.title || "",
         artist: md?.artist || "",
         album: md?.album || "",
         artwork: artworkOf(md),
-        playbackState: sessionState !== "none" ? sessionState : el ? (el.paused || el.ended ? "paused" : "playing") : "none",
-        position: positionState?.position ?? el?.currentTime ?? 0,
+        playbackState: sessionState !== "none" ? sessionState : elementState,
+        position: positionState?.position ?? el.currentTime,
         duration: Number.isFinite(duration) ? duration : null,
-        playbackRate: positionState?.playbackRate ?? el?.playbackRate ?? 1,
-        hasVideo: !!el && el.tagName === "VIDEO" && el.videoWidth > 0,
+        playbackRate: positionState?.playbackRate ?? el.playbackRate,
+        hasVideo: el.tagName === "VIDEO" && el.videoWidth > 0,
         actions: [...actions.keys()],
       };
-      if (!state.title && !el) state = null;
     }
     const json = serialize(state && { ...state, position: Math.round(state.position) });
     if (json === lastNowPlaying) return;
@@ -125,8 +136,10 @@
       return;
     }
     if (e.type === "play" || e.type === "playing") active = m;
+    // Unmuting a playing video is when it's first heard.
+    const firstHeard = hear(m);
     reportAudible();
-    if (e.type !== "volumechange") reportNowPlaying();
+    if (e.type !== "volumechange" || firstHeard) reportNowPlaying();
   };
   document.addEventListener("enterpictureinpicture", () => send("pip", { active: true, kind: "video" }), true);
   document.addEventListener("leavepictureinpicture", () => send("pip", { active: false, kind: "video" }), true);

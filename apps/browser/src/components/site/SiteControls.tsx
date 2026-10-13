@@ -202,6 +202,7 @@ export function SiteControls({
       else void loadUnpacked(tab.windowId);
     } else if (choice === "settings") setDetailsOpen((open) => !open);
   };
+  const tileWidth = Math.floor((width - 49) / 5);
   const secure = security?.level === "secure";
   const local = !security || security.level === "none" || security.level === "local";
 
@@ -264,12 +265,12 @@ export function SiteControls({
             </View>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, paddingHorizontal: 10 }}>
               {extensions.map((ext) => (
-                <ExtensionTile key={ext.id} ext={ext} state={actions?.[ext.id]} windowId={tab.windowId} width={(width - 48) / 5} onClose={close} />
+                <ExtensionTile key={ext.id} ext={ext} state={actions?.[ext.id]} windowId={tab.windowId} width={tileWidth} onClose={close} />
               ))}
               <ActionTile
                 icon="plus"
                 title="Add Extension"
-                width={(width - 48) / 5}
+                width={tileWidth}
                 onPress={() => {
                   close();
                   openWebStore(tab.windowId);
