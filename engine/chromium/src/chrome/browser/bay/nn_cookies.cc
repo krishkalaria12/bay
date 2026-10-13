@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,13 +23,18 @@
 #include "base/values.h"
 #include "chrome/browser/bay/nn_sensitive_args.h"
 #include "content/public/browser/storage_partition.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_partition_key.h"
+#include "net/device_bound_sessions/deletion_reason.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
+#include "services/network/public/mojom/device_bound_sessions.mojom.h"
 #include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
 
@@ -300,6 +306,56 @@ void Replace(base::WeakPtr<Profile> profile,
   }
 }
 
+// The registrable domains (sites) of |cookies|, as a ClearDataFilter takes
+// them.
+std::vector<std::string> SitesOf(const std::vector<Imported>& cookies) {
+  std::set<std::string> sites;
+  for (const Imported& imported : cookies) {
+    std::string host = imported.cookie->DomainWithoutDot();
+    std::string site = net::registry_controlled_domains::GetDomainAndRegistry(
+        host, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+    sites.insert(site.empty() ? host : site);
+  }
+  return std::vector<std::string>(sites.begin(), sites.end());
+}
+
+// Ends the profile's own device bound sessions (DBSC: Google's sign-in) for
+// |sites|, then runs |done|. Such a session refreshes its cookies with this
+// profile's key; left over the imported cookies, it would rotate them under a
+// session the server doesn't know and sign the user out. Without it the
+// imported sign-in stands as in the source, and the site can bind it to this
+// profile anew.
+void EndBoundSessions(Profile* profile,
+                      std::vector<std::string> sites,
+                      base::OnceClosure done) {
+  network::mojom::DeviceBoundSessionManager* manager =
+      profile->GetDefaultStoragePartition()->GetDeviceBoundSessionManager();
+  if (!manager) {
+    return std::move(done).Run();
+  }
+  auto filter = network::mojom::ClearDataFilter::New();
+  filter->type = network::mojom::ClearDataFilter::Type::DELETE_MATCHES;
+  filter->domains = std::move(sites);
+  manager->DeleteAllSessions(
+      net::device_bound_sessions::DeletionReason::kStoragePartitionCleared,
+      std::nullopt, std::nullopt, std::move(filter),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(done)));
+}
+
+// Reads the profile's cookies for Replace, once its sessions for the
+// imported sites have ended.
+void ReadPresent(base::WeakPtr<Profile> profile,
+                 std::vector<Imported> cookies,
+                 Counts counts,
+                 Reply reply) {
+  if (!profile) {
+    return reply.Error("profile closed");
+  }
+  CookieManagerOf(profile.get())
+      ->GetAllCookies(base::BindOnce(&Replace, profile, std::move(cookies),
+                                     counts, std::move(reply)));
+}
+
 }  // namespace
 }  // namespace bay
 
@@ -349,8 +405,11 @@ NN_ENGINE_CALL(nn_cookies_import) {
                                      .Set("rejected", counts.rejected)
                                      .Set("replaced", 0));
   }
-  bay::CookieManagerOf(call.profile())
-      ->GetAllCookies(
-          base::BindOnce(&bay::Replace, call.profile()->GetWeakPtr(),
-                         std::move(cookies), counts, call.TakeReply()));
+  Profile* profile = call.profile();
+  // Read before |cookies| moves into the callback below.
+  std::vector<std::string> sites = bay::SitesOf(cookies);
+  bay::EndBoundSessions(
+      profile, std::move(sites),
+      base::BindOnce(&bay::ReadPresent, profile->GetWeakPtr(),
+                     std::move(cookies), counts, call.TakeReply()));
 }

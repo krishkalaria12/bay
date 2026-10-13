@@ -7,7 +7,9 @@
 // Secure only from a secure URL). They replace the profile's cookies for the
 // same sites: every cookie it has with an imported one's domain and partition
 // key goes first, so a site's sign-in is the source's whole, never mixed with
-// the profile's own (Google reads a mix as signed out).
+// the profile's own (Google reads a mix as signed out). The profile's device
+// bound sessions (DBSC) for those sites end first: one would refresh the
+// imported cookies with this profile's key and sign the user out.
 //
 //   nn_cookies_import  {cookies: [cookie…]} -> {imported: n, rejected: n,
 //                                               replaced: n}
