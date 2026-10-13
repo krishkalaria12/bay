@@ -7,6 +7,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId, pinnedPage } from "../../store/model";
+import type { Tab } from "../../store/types";
 import { useIsActiveTab, usePageSpaceId, useTab, useWindowId } from "../../store/hooks";
 import { HoverSlot } from "../HoverSlot";
 import { ActiveHighlight } from "./ActiveHighlight";
@@ -63,6 +64,14 @@ function rowFlags(s: BrowserState, windowId: string, tabId: string): number {
   if (live?.playingAudio) flags |= PLAYING;
   if (live?.isLoading) flags |= LOADING;
   return flags;
+}
+
+// A pinned row isn't closed, only unloaded (Arc's −): it stays, back at its pinned page. Once closed, its × removes
+// it, as Arc's does.
+function closeButton(tab: Pick<Tab, "id" | "pinnedRow" | "unloaded">) {
+  if (!tab.pinnedRow) return { icon: "xmark", tooltip: "Close Tab (⌘W)", onPress: () => void closeTab(tab.id) };
+  if (tab.unloaded) return { icon: "xmark", tooltip: "Remove Pinned Tab", onPress: () => useBrowser.getState().removeTab(tab.id) };
+  return { icon: "minus", tooltip: "Unload Tab (⌘W)", onPress: () => void closeTab(tab.id) };
 }
 
 export function TabRow({ tabId }: { tabId: string }) {
@@ -138,30 +147,7 @@ export function TabRow({ tabId }: { tabId: string }) {
                   <HoverSlot
                     hovered={hovered && !renaming}
                     width={22}
-                    hover={
-                      // A pinned row isn't closed, only unloaded (Arc's −): it stays, back at its pinned page.
-                      tab.pinnedRow ? (
-                        <IconButton
-                          icon="minus"
-                          size={10}
-                          weight="semibold"
-                          box={22}
-                          radius={6}
-                          onPress={() => void closeTab(tab.id)}
-                          tooltip="Unload Tab (⌘W)"
-                        />
-                      ) : (
-                        <IconButton
-                          icon="xmark"
-                          size={10}
-                          weight="semibold"
-                          box={22}
-                          radius={6}
-                          onPress={() => void closeTab(tab.id)}
-                          tooltip="Close Tab (⌘W)"
-                        />
-                      )
-                    }
+                    hover={<IconButton {...closeButton(tab)} size={10} weight="semibold" box={22} radius={6} />}
                   >
                     {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: 2 }} />}
                   </HoverSlot>

@@ -63,6 +63,8 @@ export type TabsSlice = {
   newTab(windowId: string, options?: NewTabOptions): string;
   closeTab(id: string): void;
   closeTabs(ids: string[]): void;
+  // Removes the tab from its list even when it's pinned (a closed pinned row's ×); Reopen Closed Tab brings it back.
+  removeTab(id: string): void;
   /** Shows the tab: in `windowId`, else the window store/tabs.ts windowFor picks. */
   activate(id: string, windowId?: string | null): void;
   activateIndex(windowId: string, index: number): void;
@@ -394,6 +396,10 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
       }
     }
     set(removeTabs(s, closing, true));
+  },
+
+  removeTab(id) {
+    set(removeTabs(get(), [id], true));
   },
 
   activate(id, windowId) {
