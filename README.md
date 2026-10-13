@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="apps/browser/assets/app-icon.png" width="112" alt="Bay's icon: the Golden Gate's towers over the bay at dusk">
+  <img src="apps/web/public/bay-cover.png" alt="Bay: your tabs, finally in order. A beautiful, fast browser for Mac, on Chrome's own engine. Bay's window shows its sidebar of spaces, folders and pinned tabs beside a Wikipedia page, with ads blocked out of the box">
 </p>
-
-<h1 align="center">Bay</h1>
 
 <p align="center">
   A beautiful, fast browser for Mac that brings everything you loved about Arc.<br>
