@@ -1,633 +1,1832 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bay Feature Gaps</title>
-<meta name="description" content="What Bay is missing, the areas to re-test and fix, and what to build next, in phases with exit criteria, risks and open decisions.">
-<style>
-:root {
-  --bg: #fbfaf8;
-  --surface: #ffffff;
-  --sunken: #f3f1ed;
-  --ink: #1d1c1a;
-  --muted: #5f5b54;
-  --faint: #8a857c;
-  --line: #e4e0d8;
-  --accent: #2f5bd3;
-  --accent-soft: #e8eefc;
-  --ok: #1f7a4d;
-  --ok-soft: #e3f3ea;
-  --warn: #9a5b00;
-  --warn-soft: #fbf0dc;
-  --risk: #b0362c;
-  --risk-soft: #fbe7e4;
-  --radius: 10px;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #151514; --surface: #1c1c1b; --sunken: #232321; --ink: #ecebe7; --muted: #b1ada4;
-    --faint: #85817a; --line: #34332f; --accent: #8aa8ff; --accent-soft: #1f2a46; --ok: #6fd1a0;
-    --ok-soft: #173327; --warn: #f0b45c; --warn-soft: #3a2c14; --risk: #f08a80; --risk-soft: #3d1d1a;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #151514; --surface: #1c1c1b; --sunken: #232321; --ink: #ecebe7; --muted: #b1ada4;
-  --faint: #85817a; --line: #34332f; --accent: #8aa8ff; --accent-soft: #1f2a46; --ok: #6fd1a0;
-  --ok-soft: #173327; --warn: #f0b45c; --warn-soft: #3a2c14; --risk: #f08a80; --risk-soft: #3d1d1a;
-}
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15.5px/1.6 var(--sans); }
-a { color: var(--accent); text-underline-offset: 2px; }
-code { font-family: var(--mono); font-size: 0.86em; background: var(--sunken); padding: 0.08em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
-h1, h2, h3, h4 { line-height: 1.25; margin: 0; }
-h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.02em; }
-h2 { font-size: 1.45rem; letter-spacing: -0.01em; margin-bottom: 0.9rem; }
-h3 { font-size: 1.08rem; margin: 1.4rem 0 0.5rem; }
-h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 1.1rem 0 0.4rem; }
-p { margin: 0 0 0.8rem; }
-ul, ol { margin: 0 0 0.9rem; padding-left: 1.25rem; }
-li { margin: 0.18rem 0; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay Feature Gaps</title>
+    <meta
+      name="description"
+      content="What Bay is missing, the areas to re-test and fix, and what to build next, in phases with exit criteria, risks and open decisions."
+    />
+    <style>
+      :root {
+        --bg: #fbfaf8;
+        --surface: #ffffff;
+        --sunken: #f3f1ed;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --faint: #8a857c;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --accent-soft: #e8eefc;
+        --ok: #1f7a4d;
+        --ok-soft: #e3f3ea;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --risk: #b0362c;
+        --risk-soft: #fbe7e4;
+        --radius: 10px;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --sunken: #232321;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --faint: #85817a;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --accent-soft: #1f2a46;
+          --ok: #6fd1a0;
+          --ok-soft: #173327;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+          --risk: #f08a80;
+          --risk-soft: #3d1d1a;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #151514;
+        --surface: #1c1c1b;
+        --sunken: #232321;
+        --ink: #ecebe7;
+        --muted: #b1ada4;
+        --faint: #85817a;
+        --line: #34332f;
+        --accent: #8aa8ff;
+        --accent-soft: #1f2a46;
+        --ok: #6fd1a0;
+        --ok-soft: #173327;
+        --warn: #f0b45c;
+        --warn-soft: #3a2c14;
+        --risk: #f08a80;
+        --risk-soft: #3d1d1a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.86em;
+        background: var(--sunken);
+        padding: 0.08em 0.35em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.9rem, 4vw, 2.6rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.45rem;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.9rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin: 1.4rem 0 0.5rem;
+      }
+      h4 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 1.1rem 0 0.4rem;
+      }
+      p {
+        margin: 0 0 0.8rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 0.9rem;
+        padding-left: 1.25rem;
+      }
+      li {
+        margin: 0.18rem 0;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
 
-.skip { position: absolute; left: -999px; top: 0; background: var(--surface); padding: 8px 12px; }
-.skip:focus { left: 16px; top: 16px; z-index: 10; }
+      .skip {
+        position: absolute;
+        left: -999px;
+        top: 0;
+        background: var(--surface);
+        padding: 8px 12px;
+      }
+      .skip:focus {
+        left: 16px;
+        top: 16px;
+        z-index: 10;
+      }
 
-.wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
-header.top { padding: 48px 0 28px; border-bottom: 1px solid var(--line); }.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 0.6rem; }
-.eyebrow { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
-.lede { font-size: 1.12rem; color: var(--muted); max-width: 72ch; margin-top: 0.9rem; }
-.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 1.1rem; font-size: 0.86rem; color: var(--faint); }
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+      header.top {
+        padding: 48px 0 28px;
+        border-bottom: 1px solid var(--line);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 0.6rem;
+      }
+      .eyebrow {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .lede {
+        font-size: 1.12rem;
+        color: var(--muted);
+        max-width: 72ch;
+        margin-top: 0.9rem;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin-top: 1.1rem;
+        font-size: 0.86rem;
+        color: var(--faint);
+      }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; padding: 28px 16px 80px; }
-@media (min-width: 1000px) {
-  .layout { grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
-  nav.toc { position: sticky; top: 20px; align-self: start; max-height: calc(100vh - 40px); overflow: auto; }
-}
-nav.toc { font-size: 0.9rem; }
-nav.toc h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; }
-nav.toc ol { list-style: none; padding: 0; margin: 0; }
-nav.toc li { margin: 0; }
-nav.toc a { display: block; padding: 4px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; }
-nav.toc a:hover { background: var(--sunken); }
-nav.toc a.active { background: var(--accent-soft); color: var(--accent); }
-nav.toc .sub a { padding-left: 20px; color: var(--muted); font-size: 0.86rem; }
-@media (max-width: 999px) {
-  nav.toc { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px; }
-  nav.toc .sub { display: none; }
-}
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 32px;
+        padding: 28px 16px 80px;
+      }
+      @media (min-width: 1000px) {
+        .layout {
+          grid-template-columns: 220px minmax(0, 1fr);
+          gap: 48px;
+        }
+        nav.toc {
+          position: sticky;
+          top: 20px;
+          align-self: start;
+          max-height: calc(100vh - 40px);
+          overflow: auto;
+        }
+      }
+      nav.toc {
+        font-size: 0.9rem;
+      }
+      nav.toc h2 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
+      }
+      nav.toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      nav.toc li {
+        margin: 0;
+      }
+      nav.toc a {
+        display: block;
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      nav.toc a:hover {
+        background: var(--sunken);
+      }
+      nav.toc a.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      nav.toc .sub a {
+        padding-left: 20px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      @media (max-width: 999px) {
+        nav.toc {
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          padding: 12px;
+        }
+        nav.toc .sub {
+          display: none;
+        }
+      }
 
-main { min-width: 0; }
-main section { margin-bottom: 56px; scroll-margin-top: 16px; }
-.prose { max-width: 78ch; }
+      main {
+        min-width: 0;
+      }
+      main section {
+        margin-bottom: 56px;
+        scroll-margin-top: 16px;
+      }
+      .prose {
+        max-width: 78ch;
+      }
 
-.callout { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: 14px 18px; margin: 0 0 1rem; }
-.callout.warn { border-left-color: var(--warn); }
-.callout.risk { border-left-color: var(--risk); }
-.callout.ok { border-left-color: var(--ok); }
-.callout > :last-child { margin-bottom: 0; }
+      .callout {
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        margin: 0 0 1rem;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+      }
+      .callout.risk {
+        border-left-color: var(--risk);
+      }
+      .callout.ok {
+        border-left-color: var(--ok);
+      }
+      .callout > :last-child {
+        margin-bottom: 0;
+      }
 
-.have { columns: 1; column-gap: 28px; padding-left: 1.1rem; }
-@media (min-width: 760px) { .have { columns: 2; } }
-@media (min-width: 1180px) { .have { columns: 3; } }
-.have li { break-inside: avoid; }
+      .have {
+        columns: 1;
+        column-gap: 28px;
+        padding-left: 1.1rem;
+      }
+      @media (min-width: 760px) {
+        .have {
+          columns: 2;
+        }
+      }
+      @media (min-width: 1180px) {
+        .have {
+          columns: 3;
+        }
+      }
+      .have li {
+        break-inside: avoid;
+      }
 
-.chip { display: inline-block; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; vertical-align: 1px; }
-.chip.s { background: var(--ok-soft); color: var(--ok); }
-.chip.m { background: var(--accent-soft); color: var(--accent); }
-.chip.l { background: var(--warn-soft); color: var(--warn); }
-.chip.risk { background: var(--risk-soft); color: var(--risk); }
-.chip.gate { background: var(--ink); color: var(--bg); }
+      .chip {
+        display: inline-block;
+        font-size: 0.74rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        vertical-align: 1px;
+      }
+      .chip.s {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .chip.m {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .chip.l {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .chip.risk {
+        background: var(--risk-soft);
+        color: var(--risk);
+      }
+      .chip.gate {
+        background: var(--ink);
+        color: var(--bg);
+      }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin: 0 0 1rem; }
-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
-th { background: var(--sunken); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-tr:last-child td { border-bottom: 0; }
-td.c { text-align: center; white-space: nowrap; }
-caption { caption-side: top; text-align: left; padding: 10px 12px 0; color: var(--muted); font-size: 0.85rem; }
-@media (max-width: 759px) { .gaps td:nth-child(3), .gaps th:nth-child(3) { display: none; } }
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0 0 1rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-weight: 600;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td.c {
+        text-align: center;
+        white-space: nowrap;
+      }
+      caption {
+        caption-side: top;
+        text-align: left;
+        padding: 10px 12px 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      @media (max-width: 759px) {
+        .gaps td:nth-child(3),
+        .gaps th:nth-child(3) {
+          display: none;
+        }
+      }
 
-.flow { display: grid; gap: 8px; grid-template-columns: 1fr; margin: 0 0 1.2rem; padding: 0; list-style: none; }
-@media (min-width: 760px) { .flow { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1180px) { .flow { grid-template-columns: repeat(6, 1fr); } }
-.flow li { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; font-size: 0.88rem; }
-.flow li a { color: inherit; text-decoration: none; display: block; }
-.flow li strong { display: block; font-size: 0.95rem; }
-.flow li .n { font-family: var(--mono); font-size: 0.78rem; color: var(--faint); }
-.flow li.gate { border-color: var(--ink); border-width: 2px; }
+      .flow {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr;
+        margin: 0 0 1.2rem;
+        padding: 0;
+        list-style: none;
+      }
+      @media (min-width: 760px) {
+        .flow {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (min-width: 1180px) {
+        .flow {
+          grid-template-columns: repeat(6, 1fr);
+        }
+      }
+      .flow li {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        font-size: 0.88rem;
+      }
+      .flow li a {
+        color: inherit;
+        text-decoration: none;
+        display: block;
+      }
+      .flow li strong {
+        display: block;
+        font-size: 0.95rem;
+      }
+      .flow li .n {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--faint);
+      }
+      .flow li.gate {
+        border-color: var(--ink);
+        border-width: 2px;
+      }
 
-.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 22px 8px; margin-bottom: 18px; scroll-margin-top: 16px; }
-.phase.gate { border: 2px solid var(--ink); }
-.phase-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin-bottom: 0.4rem; }
-.phase-num { font-family: var(--mono); font-size: 0.85rem; color: var(--faint); }
-.phase-head h3 { margin: 0; font-size: 1.2rem; }
-.phase .goal { color: var(--muted); max-width: 80ch; }
-.item { border-top: 1px solid var(--line); padding: 14px 0 6px; }
-.item h4 { text-transform: none; letter-spacing: 0; font-size: 1rem; color: var(--ink); margin: 0 0 0.4rem; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
-.facts { display: grid; grid-template-columns: 1fr; gap: 4px 18px; font-size: 0.86rem; margin: 0.5rem 0 0.6rem; padding: 10px 12px; background: var(--sunken); border-radius: 8px; }
-@media (min-width: 760px) { .facts { grid-template-columns: max-content 1fr; } }
-.facts dt { color: var(--muted); font-weight: 600; }
-.facts dd { margin: 0; min-width: 0; }
-.checks { list-style: none; padding-left: 0; }
-.checks li { padding-left: 1.4rem; position: relative; }
-.checks li::before { content: "✓"; position: absolute; left: 0.2rem; color: var(--ok); font-weight: 700; }
-.exit { margin-top: 0.6rem; }
+      .phase {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px 22px 8px;
+        margin-bottom: 18px;
+        scroll-margin-top: 16px;
+      }
+      .phase.gate {
+        border: 2px solid var(--ink);
+      }
+      .phase-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px 12px;
+        margin-bottom: 0.4rem;
+      }
+      .phase-num {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        color: var(--faint);
+      }
+      .phase-head h3 {
+        margin: 0;
+        font-size: 1.2rem;
+      }
+      .phase .goal {
+        color: var(--muted);
+        max-width: 80ch;
+      }
+      .item {
+        border-top: 1px solid var(--line);
+        padding: 14px 0 6px;
+      }
+      .item h4 {
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 1rem;
+        color: var(--ink);
+        margin: 0 0 0.4rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        align-items: baseline;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px 18px;
+        font-size: 0.86rem;
+        margin: 0.5rem 0 0.6rem;
+        padding: 10px 12px;
+        background: var(--sunken);
+        border-radius: 8px;
+      }
+      @media (min-width: 760px) {
+        .facts {
+          grid-template-columns: max-content 1fr;
+        }
+      }
+      .facts dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .facts dd {
+        margin: 0;
+        min-width: 0;
+      }
+      .checks {
+        list-style: none;
+        padding-left: 0;
+      }
+      .checks li {
+        padding-left: 1.4rem;
+        position: relative;
+      }
+      .checks li::before {
+        content: "✓";
+        position: absolute;
+        left: 0.2rem;
+        color: var(--ok);
+        font-weight: 700;
+      }
+      .exit {
+        margin-top: 0.6rem;
+      }
 
-.grid2 { display: grid; gap: 14px; grid-template-columns: 1fr; }
-@media (min-width: 760px) { .grid2 { grid-template-columns: 1fr 1fr; } }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
-.card h3 { margin-top: 0; }
-.card > :last-child { margin-bottom: 0; }
+      .grid2 {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 760px) {
+        .grid2 {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        min-width: 0;
+      }
+      .card h3 {
+        margin-top: 0;
+      }
+      .card > :last-child {
+        margin-bottom: 0;
+      }
 
-footer { border-top: 1px solid var(--line); padding: 20px 0 40px; color: var(--faint); font-size: 0.85rem; }
-.theme-toggle { margin-left: auto; font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
-@media print {
-  nav.toc, .theme-toggle { display: none; }
-  .layout { grid-template-columns: 1fr; }
-}
-</style>
-</head>
-<body>
-<a class="skip" href="#content">Skip to content</a>
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 20px 0 40px;
+        color: var(--faint);
+        font-size: 0.85rem;
+      }
+      .theme-toggle {
+        margin-left: auto;
+        font: inherit;
+        font-size: 0.82rem;
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 12px;
+        cursor: pointer;
+      }
+      @media print {
+        nav.toc,
+        .theme-toggle {
+          display: none;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
 
-<header class="top">
-  <div class="wrap">
-    <div class="topbar"><span class="eyebrow">Bay · Plan</span><button class="theme-toggle" id="themeToggle" type="button">Light / dark</button></div>
-    <h1>What Bay is missing, and what to build next</h1>
-    <p class="lede">A gap review of Bay's code against what people expect from a sidebar browser on the Mac. It lists what
-      Bay already covers, the gaps the code has no answer for, the areas to re-test and fix, and the build order in phases.</p>
-    <div class="meta">
-      <span>Checked against <code>main</code> at <code>12e254d7</code></span>
-      <span>13 October 2026</span>
-      <span>Sizes are estimates: S a day or two, M about a week, L more</span>
+    <header class="top">
+      <div class="wrap">
+        <div class="topbar"><span class="eyebrow">Bay · Plan</span><button class="theme-toggle" id="themeToggle" type="button">Light / dark</button></div>
+        <h1>What Bay is missing, and what to build next</h1>
+        <p class="lede">
+          A gap review of Bay's code against what people expect from a sidebar browser on the Mac. It lists what Bay already covers, the gaps the code has no
+          answer for, the areas to re-test and fix, and the build order in phases.
+        </p>
+        <div class="meta">
+          <span>Checked against <code>main</code> at <code>12e254d7</code></span>
+          <span>13 October 2026</span>
+          <span>Sizes are estimates: S a day or two, M about a week, L more</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap layout">
+      <nav class="toc" aria-label="Contents">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#summary">Summary</a></li>
+          <li><a href="#have">Already in Bay</a></li>
+          <li><a href="#missing">What's missing</a></li>
+          <li><a href="#fixes">Fixes</a></li>
+          <li><a href="#phases">Phases</a></li>
+          <li class="sub"><a href="#p0">0 · Fix sweep · Done</a></li>
+          <li class="sub"><a href="#p1">1 · Quick wins · Done</a></li>
+          <li class="sub"><a href="#p2">2 · Organising</a></li>
+          <li class="sub"><a href="#p3">3 · Command bar & autofill</a></li>
+          <li class="sub"><a href="#p4">4 · Media</a></li>
+          <li class="sub"><a href="#p5">5 · Bigger bets</a></li>
+          <li><a href="#risks">Risks</a></li>
+          <li><a href="#decisions">Decisions needed</a></li>
+          <li><a href="#out">Not in this plan</a></li>
+        </ol>
+      </nav>
+
+      <main id="content">
+        <section id="summary" aria-labelledby="summary-h">
+          <h2 id="summary-h">Summary</h2>
+          <div class="prose">
+            <p>
+              Bay already covers most of what a sidebar browser needs. The review found <strong>17 gaps</strong> and <strong>14 areas to re-test</strong>. The
+              gaps fall into three kinds: small missing pieces around tabs, media and downloads; two organising features that Arc users rely on (folders inside
+              folders, and rules for links from other apps); and a few larger builds (site tweaks, text in images, notifications with the tab closed) that need
+              a decision before work starts.
+            </p>
+            <p>
+              The order below fixes first, then ships the small wins, then the features that change how people organise their tabs, and leaves the uncertain
+              work for last behind a research gate.
+            </p>
+          </div>
+          <div class="callout ok">
+            <p>
+              <strong>Phases 0 and 1 are done.</strong> Completed on 14 October 2026. The shutdown fix, browser regressions and all six quick wins are
+              implemented. Idle tabs now use a two-hour threshold, and Settings › Tabs has a seeded keep-awake list. Validation and recurring release checks are
+              recorded directly in each phase below.
+            </p>
+          </div>
+        </section>
+
+        <section id="have" aria-labelledby="have-h">
+          <h2 id="have-h">Already in Bay</h2>
+          <p class="prose">These are done, so nobody plans them again. Each was confirmed in the code on <code>main</code>.</p>
+          <ul class="have">
+            <li>Private windows</li>
+            <li>Close Tabs Above/Below (Left/Right with tabs on top)</li>
+            <li>Put Tab to Sleep from the tab menu</li>
+            <li>Pop-up blocker that can open the pop-up or always allow the site</li>
+            <li>Open at Login</li>
+            <li>Prompt for a page that stops responding</li>
+            <li>Link status bubble at the page's foot</li>
+            <li>Dock menu</li>
+            <li>Screen-share picker</li>
+            <li>Translate page, with the language named</li>
+            <li>Per-extension site access</li>
+            <li>1Password's desktop app connection</li>
+            <li>Extension side panels</li>
+            <li>Import from Arc, Chrome, Safari, Firefox, Zen, Dia, Helium and more</li>
+            <li>Reopen closed tab (⇧⌘T)</li>
+            <li>Check for Updates</li>
+            <li>App icon picker in Settings › Appearance</li>
+            <li>Sidebar on either side, or tabs on top</li>
+            <li>Toolbar that hides while scrolling</li>
+            <li>Peek for links from pinned tabs</li>
+            <li>Split View, and Split with Current Tab</li>
+            <li>Picture in picture for a page's own windows</li>
+            <li>Calculator in the command bar</li>
+            <li>Per-site zoom</li>
+            <li>Cast</li>
+            <li>Task manager</li>
+            <li>Replace Pin with Current Page, and Back to Pinned URL</li>
+            <li>Custom keyboard shortcuts</li>
+          </ul>
+        </section>
+
+        <section id="missing" aria-labelledby="missing-h">
+          <h2 id="missing-h">What's missing</h2>
+          <p class="prose">
+            "Missing" means the code on <code>main</code> has nothing for it. Searching the repo found no implementation. The app was not run for this review.
+          </p>
+          <div class="table-wrap">
+            <table class="gaps">
+              <caption>
+                Gaps, in the order they are built
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Gap</th>
+                  <th scope="col">Today in Bay</th>
+                  <th scope="col">Where it lands</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Phase</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Sites kept awake</td>
+                  <td>Idle tabs sleep after 30 min; only pinned and kept tabs are spared</td>
+                  <td><code>lib/tabLifecycle.ts</code>, Settings › Tabs</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>Copy File / Copy Path on downloads</td>
+                  <td>Only Show in Finder</td>
+                  <td><code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code></td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>Extensions in private windows</td>
+                  <td>No per-extension "Allow in Private"</td>
+                  <td><code>settings/panes/Extensions.tsx</code>, engine</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>Every playing tab, with Pause All</td>
+                  <td>The sidebar player shows one session</td>
+                  <td><code>media/SidebarPlayer.tsx</code>, <code>media/state.ts</code></td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>Fold a space</td>
+                  <td>Folders fold; a space's pinned section can't</td>
+                  <td><code>sidebar/SpaceTitle.tsx</code></td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>Density (Comfortable / Compact)</td>
+                  <td>One row size</td>
+                  <td><code>sidebar/tokens.ts</code>, Settings › Appearance</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>Folders inside folders</td>
+                  <td><code>PinnedFolder</code> has no parent; the Arc importer flattens subfolders</td>
+                  <td><code>store/types.ts</code>, <code>FolderBlock.tsx</code>, sync, import</td>
+                  <td class="c"><span class="chip l">L</span></td>
+                  <td class="c">2</td>
+                </tr>
+                <tr>
+                  <td>Rules for links from other apps</td>
+                  <td>One choice: Little Bay or a new tab</td>
+                  <td><code>settings/panes/Links.tsx</code>, <code>lib/appIntegration.ts</code></td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">2</td>
+                </tr>
+                <tr>
+                  <td>Clipboard history in the command bar</td>
+                  <td>None</td>
+                  <td><code>packages/core/src/suggest.ts</code>, shell</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">3</td>
+                </tr>
+                <tr>
+                  <td>Emoji, units and currency in the command bar</td>
+                  <td>Calculator only</td>
+                  <td><code>packages/core/src</code></td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">3</td>
+                </tr>
+                <tr>
+                  <td>One-time codes offered in the code box</td>
+                  <td>None</td>
+                  <td><code>site/Autofill.tsx</code>, engine autofill</td>
+                  <td class="c"><span class="chip l">L</span></td>
+                  <td class="c">3</td>
+                </tr>
+                <tr>
+                  <td>"Allow ads here" when a page breaks</td>
+                  <td>None</td>
+                  <td>Content blocker, Site Controls</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">3</td>
+                </tr>
+                <tr>
+                  <td>Speed and subtitles on the floating video</td>
+                  <td>The PiP window drops Chrome's captions control</td>
+                  <td><code>bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code></td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">4</td>
+                </tr>
+                <tr>
+                  <td>Live streams labelled Live</td>
+                  <td>None</td>
+                  <td><code>media/state.ts</code>, player views</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">4</td>
+                </tr>
+                <tr>
+                  <td>Site tweaks and Zap (hide an element)</td>
+                  <td>Only the ad blocker's cosmetic filters</td>
+                  <td>Site Controls, content blocker, sync</td>
+                  <td class="c"><span class="chip l">L</span></td>
+                  <td class="c">5</td>
+                </tr>
+                <tr>
+                  <td>Copy text from images</td>
+                  <td>None</td>
+                  <td>Context menu, shell (Vision)</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">5</td>
+                </tr>
+                <tr>
+                  <td>Site notifications with the tab closed</td>
+                  <td>Notifications only while the tab is open</td>
+                  <td>Engine (push messaging)</td>
+                  <td class="c"><span class="chip risk">Unknown</span></td>
+                  <td class="c">5</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="fixes" aria-labelledby="fixes-h">
+          <h2 id="fixes-h">Fixes</h2>
+          <p class="prose">
+            Browsers built on the same parts commonly break in these places. None is known to be broken in Bay. Each is a check: run it, and fix what fails.
+            They make up Phase 0.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Area</th>
+                  <th scope="col">How to check</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>Shortcuts on other keyboard layouts</td>
+                  <td>On AZERTY, ⌘Z undoes and doesn't close a tab. On German, ⌘[ and ⌘] go back and forward. On Dvorak, shortcuts follow the key's letter.</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>Extension popups that close themselves</td>
+                  <td>Bitwarden's popup goes away after Fill, as in Chrome (<code>window.close()</code> from a popup).</td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td>Password managers right after launch</td>
+                  <td>1Password, Bitwarden and NordPass buttons work on the first click after launch, and after the app has been idle.</td>
+                </tr>
+                <tr>
+                  <td>4</td>
+                  <td>Passkey prompts from extensions</td>
+                  <td>
+                    Bitwarden's passkey prompt opens once, closes after a pick, and GitHub's "Continue with passkey" finishes, also on a page left open a while.
+                  </td>
+                </tr>
+                <tr>
+                  <td>5</td>
+                  <td>Extension pages at every launch</td>
+                  <td>No welcome or changelog page opens again on relaunch. Removing an extension also removes its data.</td>
+                </tr>
+                <tr>
+                  <td>6</td>
+                  <td>A helper app quitting</td>
+                  <td>Quitting a password manager's desktop helper while its extension is connected doesn't take Bay down.</td>
+                </tr>
+                <tr>
+                  <td>7</td>
+                  <td>Sign-ins through quit, update and crash</td>
+                  <td>
+                    A site that keeps you signed in with a session cookie (YouTube's chosen account, for one) is still signed in after ⌘Q, an update and a Force
+                    Quit.
+                  </td>
+                </tr>
+                <tr>
+                  <td>8</td>
+                  <td>Leaving a call</td>
+                  <td>⌘W on a Meet tab, or ⌘Q during a call, leaves the call for the others at once.</td>
+                </tr>
+                <tr>
+                  <td>9</td>
+                  <td>Google's service icons</td>
+                  <td>Drive, Calendar, Gmail and Maps show their own icons in the sidebar, not Google's G.</td>
+                </tr>
+                <tr>
+                  <td>10</td>
+                  <td>Horizontal scroll vs. swipe</td>
+                  <td>Scrolling a carousel or a wide table sideways doesn't go back or forward.</td>
+                </tr>
+                <tr>
+                  <td>11</td>
+                  <td>Keys on a page</td>
+                  <td>Arrow keys, Home and End on a page (or a video that seeks with them) don't play the error sound.</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>Waking a sleeping tab</td>
+                  <td>A tab that slept comes back scrolled to where it was.</td>
+                </tr>
+                <tr>
+                  <td>13</td>
+                  <td>Icons behind a bot check</td>
+                  <td>Sites that check for bots first (Cloudflare's page, for one) end up with their own icon, not a letter.</td>
+                </tr>
+                <tr>
+                  <td>14</td>
+                  <td>Dragging a tab out</td>
+                  <td>A tab dragged past the window's edge opens in a new window without reloading, including from a window that fills its screen.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="phases" aria-labelledby="phases-h">
+          <h2 id="phases-h">Phases</h2>
+          <ol class="flow" aria-label="Phase order">
+            <li>
+              <a href="#p0"><span class="n">Phase 0</span><strong>Fix sweep</strong>Done · 14 checks</a>
+            </li>
+            <li>
+              <a href="#p1"><span class="n">Phase 1</span><strong>Quick wins</strong>Done · 6 items</a>
+            </li>
+            <li>
+              <a href="#p2"><span class="n">Phase 2</span><strong>Organising</strong>Nested folders, link rules</a>
+            </li>
+            <li>
+              <a href="#p3"><span class="n">Phase 3</span><strong>Command bar & autofill</strong>Clipboard, codes, ads</a>
+            </li>
+            <li>
+              <a href="#p4"><span class="n">Phase 4</span><strong>Media</strong>Floating video</a>
+            </li>
+            <li class="gate">
+              <a href="#p5"><span class="n">Phase 5</span><strong>Bigger bets</strong>Research gate first</a>
+            </li>
+          </ol>
+          <p class="prose">
+            Phases 1, 3 and 4 don't depend on each other and can run side by side. Phase 2 comes before anything else that changes the sidebar's data, because
+            nested folders change the stored and synced shape.
+          </p>
+
+          <!-- Phase 0 -->
+          <article class="phase" id="p0" aria-labelledby="p0-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 0</span>
+              <h3 id="p0-h">Fix sweep</h3>
+              <span class="chip s">Done</span>
+            </div>
+            <p class="goal">Run the 14 checks under <a href="#fixes">Fixes</a> on a release build and fix what fails, before new features land on top.</p>
+            <div class="callout ok">
+              <p>
+                <strong>Done · 14 October 2026.</strong> The implementation and automated audit are complete. Fixed the multi-window shutdown crash that
+                interrupted cookie saving. All reachable regressions pass; external setup checks remain listed below for release sign-off.
+              </p>
+            </div>
+            <details>
+              <summary>Validation and recurring release checks</summary>
+              <p>
+                The 14 checks under <a href="#fixes">Fixes</a> are the recurring release checklist. Local fixtures use isolated profiles. Release fixtures use
+                bundled production JavaScript; Debug fixtures use the native event harness.
+              </p>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Completed audit and regression evidence</th>
+                      <th scope="col">Real-site release check</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1</td>
+                      <td>
+                        Twelve synthetic translated-character shortcut cases passed across five focus contexts. The corrected real-action suite passed 26
+                        checks, including AZERTY Undo without closing, Dvorak new/close and German bracket navigation.
+                      </td>
+                      <td>Actual AZERTY, German and Dvorak input sources, including German Option-generated bracket combinations.</td>
+                    </tr>
+                    <tr>
+                      <td>2</td>
+                      <td>
+                        Native popup <code>window.close()</code> removed its target and cleared the overlay state. Reopening and host dismissal also passed.
+                      </td>
+                      <td>Bitwarden Fill with a saved login.</td>
+                    </tr>
+                    <tr>
+                      <td>3</td>
+                      <td>
+                        Native-messaging startup fixture passed. Source inspection confirmed Chromium&#x27;s background-page readiness path and native-host
+                        preparation.
+                      </td>
+                      <td>First clicks and idle recovery for 1Password, Bitwarden and NordPass.</td>
+                    </tr>
+                    <tr>
+                      <td>4</td>
+                      <td>Source inspection confirmed the real Chromium WebAuthn path and native window integration. No runtime pass claimed.</td>
+                      <td>Bitwarden and GitHub passkey completion, picker dismissal and an idle page.</td>
+                    </tr>
+                    <tr>
+                      <td>5</td>
+                      <td>
+                        Source inspection confirmed version-change gating and Chromium&#x27;s registrar/data-deleter uninstall path. No runtime pass claimed.
+                      </td>
+                      <td>Repeated launches of installed managers, welcome/changelog behavior and storage removal.</td>
+                    </tr>
+                    <tr>
+                      <td>6</td>
+                      <td>A framed native helper echoed, exited and generated <code>onDisconnect</code>; Bay and the engine remained alive.</td>
+                      <td>A real connected password-manager desktop helper quitting.</td>
+                    </tr>
+                    <tr>
+                      <td>7</td>
+                      <td>
+                        A quick multi-window quit exposed an activation crash that interrupted cookie saving. The activation helper now rejects closing and
+                        unregistered Browsers. The release regression checks short-delay cookie saving, a cookie written during <code>beforeunload</code>,
+                        multiple profiles and restoration after forced termination.
+                      </td>
+                      <td>
+                        Real site&#x27;s session sign-in and YouTube account selection through update. Immediate SIGKILL cannot guarantee writes that have not
+                        reached disk.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>8</td>
+                      <td>Source inspection confirmed immediate tab teardown and Chromium&#x27;s close-all-browsers quit path. No call pass claimed.</td>
+                      <td>Meet with a second participant, using Cmd-W and Cmd-Q.</td>
+                    </tr>
+                    <tr>
+                      <td>9</td>
+                      <td>Gmail, Calendar and Drive have bundled fallback icons; the native favicon path was reviewed. No real-service pass claimed.</td>
+                      <td>Signed-in Drive, Calendar, Gmail and Maps icons.</td>
+                    </tr>
+                    <tr>
+                      <td>10</td>
+                      <td>Native horizontal and vertical scrolling retained renderer ownership and did not navigate history.</td>
+                      <td>Physical trackpad checks on representative carousels and wide tables, including their edges.</td>
+                    </tr>
+                    <tr>
+                      <td>11</td>
+                      <td>
+                        Page, text-field and DevTools shortcut routing passed. The current harness does not measure the error beep or send unhandled plain keys
+                        through the page&#x27;s <code>keyDown</code> path.
+                      </td>
+                      <td>Audible arrow/Home/End checks on a page and video player.</td>
+                    </tr>
+                    <tr>
+                      <td>12</td>
+                      <td>The Release fixture restored the sleeping page at scroll position 2300.</td>
+                      <td>Representative real pages with their own scroll containers.</td>
+                    </tr>
+                    <tr>
+                      <td>13</td>
+                      <td>A favicon inserted after the initial page load reached the Release sidebar cache as a decoded image and replaced the fallback.</td>
+                      <td>A real bot challenge.</td>
+                    </tr>
+                    <tr>
+                      <td>14</td>
+                      <td>
+                        Native tear-offs from normal and acted full-screen windows preserved tab ID, CDP target, document nonce, scroll position, unsaved input
+                        and one HTTP document request. The Release live-transfer check also passed.
+                      </td>
+                      <td>A physical drag from a real macOS full-screen Space.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                The release sweep passed three consecutive runs. Quick multi-window quit retains session cookies in both profiles, including cookies written
+                during beforeunload, and forced termination restores committed cookies. The regression rejects fatal logs so a shutdown crash cannot count as a
+                successful quit.
+              </p>
+              <h4>Release checks requiring external setup</h4>
+              <p>These checks remain for release sign-off. They are unverified checks, not confirmed product failures.</p>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">ID</th>
+                      <th scope="col">Checks</th>
+                      <th scope="col">Required setup</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>P0-M01</td>
+                      <td>Physical layouts and page-key sounds, checks 1 and 11</td>
+                      <td>Requires changing actual macOS input sources and observing audio feedback. Synthetic events cannot establish either result.</td>
+                    </tr>
+                    <tr>
+                      <td>P0-M02</td>
+                      <td>Commercial managers, extension passkeys, welcome pages and desktop helper, checks 2 through 6</td>
+                      <td>
+                        Requires disposable manager accounts, configured vaults/passkeys and their desktop apps. Local extension/helper fixtures cover the
+                        integration paths.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>P0-M03</td>
+                      <td>Real sign-ins and update restart, check 7</td>
+                      <td>
+                        Requires a signed-in session-cookie account and an update candidate. The local fixture covers clean/unclean restarts and profile
+                        isolation.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>P0-M04</td>
+                      <td>Meet departure, check 8</td>
+                      <td>Requires an authenticated Meet call and a second participant to observe departure.</td>
+                    </tr>
+                    <tr>
+                      <td>P0-M05</td>
+                      <td>Service icons and bot checks, checks 9 and 13</td>
+                      <td>Requires signed-in service pages and a real challenge. A delayed favicon fixture passed.</td>
+                    </tr>
+                    <tr>
+                      <td>P0-M06</td>
+                      <td>Physical gestures and full-screen tear-off, checks 10 and 14</td>
+                      <td>Hidden tests use native synthesized gestures and acted full screen to avoid changing the user&#x27;s desktop Space.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Nothing</dd>
+              <dt>Setup</dt>
+              <dd>
+                A release build. Bitwarden, 1Password and NordPass installed. A keyboard set to AZERTY, German and Dvorak in turn. A Google Meet call with a
+                second participant.
+              </dd>
+            </dl>
+            <ul>
+              <li>Record each check as pass or fail, with steps for each failure.</li>
+              <li>Fix the failures at the narrowest layer (app, shell or engine patch), each with a regression test where the harness can reach it.</li>
+              <li>Add the passing checks to the release checklist so they stay passing.</li>
+            </ul>
+            <h4 class="exit">Exit criteria</h4>
+            <ul class="checks">
+              <li>All 14 checks pass, or the failures that remain are filed with a reason they wait.</li>
+              <li>The release checklist lists the checks.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 1 -->
+          <article class="phase" id="p1" aria-labelledby="p1-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 1</span>
+              <h3 id="p1-h">Quick wins</h3>
+              <span class="chip s">Done</span>
+            </div>
+            <p class="goal">Small, contained items. Each one can ship alone.</p>
+            <div class="callout ok">
+              <p>
+                <strong>Done · 14 October 2026.</strong> All six items are implemented and validated through unit and native fixtures. Settings and space state
+                persist and sync. Remaining checks needing real service sessions, external paste destinations or a second Mac are recorded below.
+              </p>
+            </div>
+            <details>
+              <summary>Implementation and validation</summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Item</th>
+                      <th scope="col">Implemented behavior</th>
+                      <th scope="col">Verification</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Sites kept awake</td>
+                      <td>
+                        Settings &gt; Tabs manages a normalized host list seeded with WhatsApp, Telegram, Slack, Discord, Gmail and Spotify. The tab menu
+                        toggles Keep This Site Awake. Both active and inactive spaces use a two-hour idle threshold. Critical pressure considers these sites
+                        after ordinary eligible tabs. All pinned containers and kept tabs stay protected. Battery Saver also respects the list.
+                      </td>
+                      <td>
+                        Lifecycle tests cover normal/warning/critical pressure, sweep budgets, late preference changes, inactive spaces, manual sleep and pinned
+                        rows/folders/groups. Settings persistence and sync round-trip the list, including an explicitly empty list.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Download copying</td>
+                      <td>
+                        Copy File and Copy Path appear in the downloads palette, download popover and Downloads page menus. Copy File writes a native file URL
+                        to the pasteboard on the main queue. Missing files leave existing clipboard contents intact and report failure.
+                      </td>
+                      <td>
+                        AppKit file-URL round trips passed for spaces, Unicode and punctuation, with missing/relative/empty-path preservation checks. Finder and
+                        third-party paste destinations remain manual acceptance.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Private extensions</td>
+                      <td>
+                        Allow in Private Windows uses Chrome&#x27;s existing incognito preference. Both split and spanning extensions work when enabled. The
+                        setting respects capability and management restrictions. Native actions, states and panels enforce access, and popup activation checks
+                        revocation after asynchronous replies.
+                      </td>
+                      <td>
+                        Native acceptance passed default-off behavior, content scripts, toolbar/menu visibility, correct popup profile and permission revocation
+                        for both manifest modes.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>All media tabs</td>
+                      <td>
+                        The sidebar shows +N for additional playing/paused tabs in the window. Its list has per-tab play/pause, mute and Go to Tab, plus Pause
+                        All. It includes other spaces and dismissed mini-players.
+                      </td>
+                      <td>
+                        Three real same-host audio tabs passed native clicks for +2, Pause All, every row&#x27;s independent play/pause/mute, and Go to Tab.
+                        Chromium audio state confirmed the changes. Snapshots were inspected.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Fold a space</td>
+                      <td>
+                        Clicking the title folds pinned rows, folders and groups. The menu is on the ellipsis and right-click. Today&#x27;s tabs and Essential
+                        tiles remain visible. The state persists with the space and syncs.
+                      </td>
+                      <td>
+                        Native title clicks hide the pinned content; folding survives relaunch. Session and sync tests preserve the state and handle older
+                        profile records. Snapshots were inspected.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>Density</td>
+                      <td>
+                        Comfortable preserves the existing 36-point rows and 16-point icons. Compact uses 30-point rows and 14-point icons, with smaller pins
+                        and address fields. Layout, animation, reveal and drag geometry follow the same metrics. Changing density cancels an active drag.
+                      </td>
+                      <td>
+                        Native row measurements changed 36 to 30 points. Both densities, folded content and relaunch were checked visually. Geometry,
+                        persistence and sync tests passed.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                Comfortable preserves the existing 36-point rows and 16-point icons. Compact uses 30-point rows and 14-point icons. Both active and inactive
+                spaces use a two-hour idle threshold.
+              </p>
+              <h4>Recurring release checks</h4>
+              <ul>
+                <li>
+                  Leave WhatsApp Web in the background for two hours. It remains live. Test the seeded Telegram, Slack, Discord, Gmail and Spotify entries and a
+                  custom host. Under critical memory pressure, ordinary eligible tabs sleep before these sites.
+                </li>
+                <li>
+                  From the downloads palette, download popover and Downloads page, Copy File and paste into Finder, Slack or Mail. Copy Path pastes the full
+                  path. A missing file reports failure and leaves the existing clipboard intact.
+                </li>
+                <li>
+                  In Settings &gt; Extensions, Allow in Private Windows starts off. Test enabling and revoking it for both split and spanning extensions. Their
+                  scripts, toolbar actions and popups follow the preference.
+                </li>
+                <li>
+                  Play media in three tabs. The sidebar shows +2. The list&#x27;s Pause All pauses all three. Each row&#x27;s play/pause, mute and Go to Tab act
+                  on that row&#x27;s tab.
+                </li>
+                <li>
+                  Click the space title to fold its pinned rows and folders. Today&#x27;s tabs and Essential tiles remain visible. Right-click and the ellipsis
+                  open the space menu. The fold survives relaunch and sync.
+                </li>
+                <li>
+                  Switch between Comfortable and Compact in Settings &gt; Appearance. Rows, icons, pins and address fields resize together without vertical text
+                  clipping. Test dragging, scrolling to a tab, groups and folders in both densities.
+                </li>
+              </ul>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">ID</th>
+                      <th scope="col">Check</th>
+                      <th scope="col">Required setup</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>P1-M01</td>
+                      <td>Two-hour WhatsApp and other seeded sites</td>
+                      <td>The lifecycle clock and policy were tested deterministically; a real two-hour service session was not observed.</td>
+                    </tr>
+                    <tr>
+                      <td>P1-M02</td>
+                      <td>Finder, Slack and Mail file paste</td>
+                      <td>File URLs and clipboard preservation were tested through AppKit; the external destination workflows were not driven.</td>
+                    </tr>
+                    <tr>
+                      <td>P1-M03</td>
+                      <td>Two-device sync</td>
+                      <td>Persistence and adapter round trips passed locally. A second Mac was not available.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+            <details>
+              <summary>Passed gates and reproducible checks</summary>
+              <p>
+                Engine, Release and Debug builds passed. Typecheck, lint, formatting, React compiler, shader checks and all repository test suites passed. The
+                browser suite has 247 passing tests. The final combined native acceptance passed 8/8 checks. Independent reviews found no required corrections.
+              </p>
+              <p>
+                Start Metro for Debug fixtures. The scripts print evidence directories containing JSON results, logs and snapshots. Retain those with real-site
+                release results.
+              </p>
+              <pre style="overflow-x: auto"><code>pnpm typecheck
+pnpm test
+pnpm lint
+pnpm fmt:check
+pnpm compiler:check
+pnpm shaders:check
+
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+scripts/agent/engine-build --as phase01
+scripts/agent/build-app --as dev --config Release
+scripts/agent/build-app --as dev --config Debug
+
+node --no-warnings apps/browser/scripts/phase0-sweep.mjs apps/browser/build-dev/Build/Products/Release/Bay.app /tmp/bay-release-sweep
+node packages/nncore/scripts/acceptance.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app /tmp/bay-release-native extension-popup-and-panel startup-native-messaging extension-configure extension-private-windows quit-cancelled private-release
+node apps/browser/scripts/shortcuts-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app
+node apps/browser/scripts/space-swipe-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app --only=&#x27;web page horizontal&#x27;
+node apps/browser/scripts/phase0-drag-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app /tmp/bay-release-drag
+node apps/browser/scripts/density-fold-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app
+node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app --keep-data</code></pre>
+            </details>
+
+            <div class="item">
+              <h4>Sites kept awake, and a longer idle timer <span class="chip s">S</span></h4>
+              <dl class="facts">
+                <dt>Before</dt>
+                <dd>
+                  <code>POLICY.idleMs</code> is 30 minutes. Pinned and kept tabs are spared, and so are tabs that play audio, capture, show picture in picture
+                  or are picking a screen to share.
+                </dd>
+                <dt>Implemented</dt>
+                <dd>
+                  Settings › Tabs has "Always keep these sites awake", seeded with WhatsApp, Telegram, Slack, Discord, Gmail and Spotify. The tab menu toggles
+                  Keep This Site Awake. Both active and inactive spaces use a two-hour idle threshold. These hosts and their subdomains stay awake unless memory
+                  is critical, when they sleep after other eligible tabs. Pinned containers and kept tabs remain protected.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>A WhatsApp Web tab left alone for two hours is still live when you switch to it.</li>
+                <li>Under critical memory pressure, kept-awake sites sleep only after every other tab.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Copy File and Copy Path on downloads <span class="chip s">S</span></h4>
+              <dl class="facts">
+                <dt>Before</dt>
+                <dd>Download rows offer Show in Finder (<code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code>, <code>pages/DownloadsPage.tsx</code>).</dd>
+                <dt>Implemented</dt>
+                <dd>
+                  Copy File and Copy Path are available in <code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code> and <code>pages/DownloadsPage.tsx</code>.
+                  The shell writes a native file URL to <code>NSPasteboard</code> on the main queue. Missing files report failure and preserve the existing
+                  clipboard.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>Copy File, then ⌘V in Finder, copies the download. Copy Path pastes its full path.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Extensions in private windows <span class="chip s">S</span></h4>
+              <dl class="facts">
+                <dt>Before</dt>
+                <dd>Settings › Extensions sets each extension's site access. It has no private-window switch.</dd>
+                <dt>Implemented</dt>
+                <dd>
+                  Each supported extension has Allow in Private Windows, off by default, backed by Chrome's incognito-enabled preference through nncore. Both
+                  split and spanning modes work when allowed. Scripts, toolbar actions, popups and panels follow the preference, including revocation.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>An extension that is switched on runs in a private window. Switched off, it doesn't.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Every playing tab, with Pause All <span class="chip s">S</span></h4>
+              <dl class="facts">
+                <dt>Before</dt>
+                <dd><code>media/state.ts</code> tracks a session for each tab. The sidebar player shows one.</dd>
+                <dt>Implemented</dt>
+                <dd>
+                  The player shows "+N" when the window has multiple playing or paused sessions. The list includes tabs in other spaces and dismissed
+                  mini-players. Each row has play/pause, per-tab mute and Go to Tab; Pause All pauses the playing sessions in that window.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>With three tabs playing, Pause All pauses all three, and each row's controls act on its own tab.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Fold a space <span class="chip s">S</span></h4>
+              <dl class="facts">
+                <dt>Before</dt>
+                <dd>Pinned folders can fold (<code>PinnedFolder.collapsed</code>). The space as a whole can't.</dd>
+                <dt>Implemented</dt>
+                <dd>
+                  Clicking the space name folds pinned rows, folders and groups. Today's tabs and Essential tiles remain visible. The menu is on the ellipsis
+                  and right-click. Folded state persists with the space and syncs.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>Folding hides the pinned section, survives a relaunch, and leaves today's tabs in view.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Density <span class="chip s">S</span></h4>
+              <dl class="facts">
+                <dt>Before</dt>
+                <dd>Row sizes are fixed in <code>sidebar/tokens.ts</code>.</dd>
+                <dt>Implemented</dt>
+                <dd>
+                  Settings › Appearance has Comfortable, preserving the existing 36-point rows and 16-point icons, and Compact with 30-point rows and 14-point
+                  icons. Pins and address fields resize with the rows. Layout, reveal, animation and drag geometry share the same metrics; changing density
+                  cancels an active drag.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>Switching density resizes rows, pins and the address field at once, with no clipped text in either size.</li>
+              </ul>
+            </div>
+
+            <h4 class="exit">Exit criteria</h4>
+            <ul class="checks">
+              <li>
+                All six items are implemented, with unit and native fixture checks passing. External setup checks are recorded above for release sign-off.
+              </li>
+            </ul>
+          </article>
+
+          <!-- Phase 2 -->
+          <article class="phase" id="p2" aria-labelledby="p2-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 2</span>
+              <h3 id="p2-h">Organising</h3>
+            </div>
+            <p class="goal">The two features that change how people arrange their tabs and links.</p>
+
+            <div class="item">
+              <h4>Folders inside folders <span class="chip l">L</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>
+                  <code>PinnedFolder</code> in <code>store/types.ts</code> has no parent, so folders are one level deep. The Arc importer
+                  (<code>packages/import/ios/Core/ArcSidebar.swift</code>, <code>flatTabs</code>) flattens Arc's subfolders into one folder.
+                </dd>
+                <dt>Build</dt>
+                <dd>
+                  Add a parent to folders, capped at five levels. Render them recursively in <code>FolderBlock.tsx</code>. Let drag and drop in
+                  <code>sidebar/dnd.tsx</code> drop into and out of a nested folder. Show "Move to Folder" as a tree. Keep subfolders in the Arc import. Migrate
+                  stored state and the sync schema, so that a device on an older version still shows the tabs, flattened.
+                </dd>
+                <dt>Depends on</dt>
+                <dd>A decision on how older synced devices see nested folders (<a href="#decisions">Decisions</a>).</dd>
+              </dl>
+              <ul class="checks">
+                <li>An Arc import with subfolders arrives with the same structure.</li>
+                <li>Dragging a tab or a folder between levels works, and ⌘Z undoes it.</li>
+                <li>Sync round-trips nested folders between two Macs. An older build still sees every tab.</li>
+                <li>Existing installs migrate with no change to what they show.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Rules for links from other apps <span class="chip m">M</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>
+                  Settings › Links has one choice for links from Slack, Discord or Mail: Little Bay, or a new tab (<code>openLinksInLittleBay</code>). Incoming
+                  links are handled in <code>lib/appIntegration.ts</code>.
+                </dd>
+                <dt>Build</dt>
+                <dd>
+                  An ordered list of rules. Each has an address pattern (a host or path with <code>*</code>, such as <code>github.com/acme/*</code>) and,
+                  optionally, the app the link came from. Each rule opens matching links in a chosen space, in Little Bay or in a new window. The first match
+                  wins, and anything unmatched follows today's choice. Rules are added, edited and reordered in Settings › Links, and synced.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>With a rule for <code>linear.app/*</code> going to Work, a Linear link clicked in Slack opens in Work, whichever space is in front.</li>
+                <li>A link that matches no rule behaves as it does today.</li>
+              </ul>
+            </div>
+
+            <h4 class="exit">Exit criteria</h4>
+            <ul class="checks">
+              <li>Both features are shipped, the migration has been tested on a copy of a real profile, and sync is tested across two Macs.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 3 -->
+          <article class="phase" id="p3" aria-labelledby="p3-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 3</span>
+              <h3 id="p3-h">Command bar & autofill</h3>
+            </div>
+            <p class="goal">Make the command bar answer more, without leaving it, and fill one-time codes.</p>
+
+            <div class="item">
+              <h4>Clipboard history <span class="chip m">M</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>None.</dd>
+                <dt>Build</dt>
+                <dd>
+                  Opt-in in Settings › Privacy. The shell watches the pasteboard's change count and keeps the most recent text and links on this Mac only. It
+                  skips anything marked concealed or transient (password managers mark theirs) and anything copied in a private window. Type "clipboard" in the
+                  command bar, or use a shortcut, to list it. Return pastes the item, and an item can be deleted.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>A password copied from 1Password never shows. Clearing history empties it, and it never syncs.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Emoji, units and currency <span class="chip m">M</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd><code>packages/core/src/calculator.ts</code> does arithmetic and functions. <code>emojiData.ts</code> already feeds the icon picker.</dd>
+                <dt>Build</dt>
+                <dd>
+                  In <code>suggest.ts</code>: emoji by name ("emoji heart"), with Return to copy. Unit conversions ("5 km in mi", "350 f to c") from a local
+                  table. Currency ("100 usd in inr") from a rates source (<a href="#decisions">Decisions</a>).
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>Each kind shows as the top row with its answer, and Return copies it.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>One-time codes <span class="chip l">L</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>
+                  Autofill covers passwords, cards and addresses (<code>site/Autofill.tsx</code>, engine <code>nn_autofill.cc</code>). It doesn't cover codes.
+                </dd>
+                <dt>Build</dt>
+                <dd>
+                  When a field asks for a code (<code>autocomplete="one-time-code"</code>, or a field the heuristics recognise), offer the newest code from the
+                  last few minutes, and Return puts it in. There are two sources. Messages needs Full Disk Access to read <code>chat.db</code>, so it's asked
+                  for only when switched on. Gmail can reuse the Google connection the calendar preview already has (<code>live/googleAuth.ts</code>), if its
+                  scopes allow. Skip numbers from security notices, and prefer the newest code.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>A code texted or mailed to you is offered under the code box within seconds, and only on the site that asked.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>"Allow ads here" when a page breaks <span class="chip m">M</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>uBlock Origin Lite is built in. Nothing notices when blocking breaks a page.</dd>
+                <dt>Build</dt>
+                <dd>
+                  If a page where the blocker acted is reloaded three times in twenty seconds, offer "Allow Ads Here" in the corner. It adds the site to the
+                  blocker's allow list, and Site Controls can take it back.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>Three quick reloads offer the prompt once. Accepting reloads the page unblocked, and Site Controls shows the exception.</li>
+              </ul>
+            </div>
+
+            <h4 class="exit">Exit criteria</h4>
+            <ul class="checks">
+              <li>The four items are shipped. Clipboard history and codes are opt-in, and both are covered in the privacy page's copy.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 4 -->
+          <article class="phase" id="p4" aria-labelledby="p4-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 4</span>
+              <h3 id="p4-h">Media</h3>
+            </div>
+            <p class="goal">Bring the floating video up to the controls people reach for.</p>
+
+            <div class="item">
+              <h4>Speed and subtitles on the floating video <span class="chip m">M</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>
+                  Bay's PiP window (<code>engine/chromium/src/chrome/browser/bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code>) leaves out
+                  Chrome's captions control. The page script already reports <code>playbackRate</code>.
+                </dd>
+                <dt>Build</dt>
+                <dd>A speed button with a short menu (0.5× to 2×) and a subtitles button listing the video's text tracks, both in the window's top row.</dd>
+              </dl>
+              <ul class="checks">
+                <li>On YouTube, the speed and subtitle choices made in the floating window carry back to the page.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Live streams labelled Live <span class="chip s">S</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>A live stream shows a countdown or a time that doesn't mean anything.</dd>
+                <dt>Build</dt>
+                <dd>
+                  When a video's duration is infinite, or its seekable range keeps moving, the floating video and the sidebar player say Live. Behind the live
+                  edge, they say how far behind ("5m behind"), and a click jumps back to live.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>A YouTube or Twitch live stream shows Live, and "behind" after seeking back.</li>
+              </ul>
+            </div>
+
+            <h4 class="exit">Exit criteria</h4>
+            <ul class="checks">
+              <li>Both items are shipped and checked on YouTube, Twitch and one site with its own player.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 5 -->
+          <article class="phase gate" id="p5" aria-labelledby="p5-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 5</span>
+              <h3 id="p5-h">Bigger bets</h3>
+              <span class="chip gate">Research gate</span>
+            </div>
+            <p class="goal">Each needs a short spike and a go / no-go note before it's built.</p>
+
+            <div class="item">
+              <h4>Site tweaks and Zap <span class="chip l">L</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>Only the ad blocker's cosmetic filters change pages (<code>NNCoreContentBlocker.mm</code>).</dd>
+                <dt>Build</dt>
+                <dd>
+                  First, Zap: pick an element on the page and hide it for that site. Reuse the developer inspector's picker
+                  (<code>developer/inspectorScript.ts</code>), and store the rule as a cosmetic filter for each space. Then site tweaks: a site's own CSS (and
+                  later, perhaps, JS), edited from Site Controls, switched on and off per site, and synced.
+                </dd>
+                <dt>Spike answers</dt>
+                <dd>Can cosmetic rules be added at runtime without rebuilding the blocker's lists? Should user JS ship at all, given the security cost?</dd>
+              </dl>
+              <ul class="checks">
+                <li>A zapped element stays hidden after reloads and on other pages of the site. Site Controls lists it and can undo it.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Copy text from images <span class="chip m">M</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>None.</dd>
+                <dt>Build</dt>
+                <dd>
+                  Start with a context-menu item, Copy Text from Image, that runs Vision text recognition in the shell on the image's pixels. Selectable text
+                  over images, and ⌘F finding words in images, come later if the first step earns it.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>Right-clicking a screenshot of text copies its words, on this Mac, with nothing sent anywhere.</li>
+              </ul>
+            </div>
+
+            <div class="item">
+              <h4>Site notifications with the tab closed <span class="chip risk">Unknown</span></h4>
+              <dl class="facts">
+                <dt>Today</dt>
+                <dd>Notifications work while the site's tab is open (<code>lib/webNotifications.ts</code>).</dd>
+                <dt>Spike answers</dt>
+                <dd>
+                  Chromium's web push relies on Google's push service, which ungoogled builds take out. Can Bay's engine receive push at all? If it can't, the
+                  choices are to run its own push relay, or to keep chosen sites' service workers alive in the background.
+                </dd>
+              </dl>
+              <ul class="checks">
+                <li>The spike ends in a written decision: build (with which approach) or drop.</li>
+              </ul>
+            </div>
+
+            <h4 class="exit">Exit criteria</h4>
+            <ul class="checks">
+              <li>Each bet has a go / no-go note. The ones that go have been planned as their own phase.</li>
+            </ul>
+          </article>
+        </section>
+
+        <section id="risks" aria-labelledby="risks-h">
+          <h2 id="risks-h">Risks</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Risk</th>
+                  <th scope="col">Affects</th>
+                  <th scope="col">Mitigation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Web push may not work in an ungoogled engine at all</td>
+                  <td>Phase 5</td>
+                  <td>Research gate before any build; drop it if there's no clean path</td>
+                </tr>
+                <tr>
+                  <td>Nested folders change stored and synced data</td>
+                  <td>Phase 2</td>
+                  <td>Migrate stored state; older devices see the tabs flattened; test on a copy of a real profile</td>
+                </tr>
+                <tr>
+                  <td>Clipboard history can catch secrets</td>
+                  <td>Phase 3</td>
+                  <td>Opt-in, local only, skips concealed and transient types and private windows, easy to clear</td>
+                </tr>
+                <tr>
+                  <td>One-time codes need Full Disk Access and Gmail scopes</td>
+                  <td>Phase 3</td>
+                  <td>Each source off until switched on; explain the permission where it's asked for</td>
+                </tr>
+                <tr>
+                  <td>Keeping more tabs awake costs memory</td>
+                  <td>Phase 1</td>
+                  <td>Kept-awake sites still sleep under critical pressure, last; the list is short by default</td>
+                </tr>
+                <tr>
+                  <td>User JS in site tweaks is a security surface</td>
+                  <td>Phase 5</td>
+                  <td>Ship CSS and Zap first; JS only after a separate decision</td>
+                </tr>
+                <tr>
+                  <td>Currency rates need a network source</td>
+                  <td>Phase 3</td>
+                  <td>Pick one source, cache it daily, and say where rates come from</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">Decisions needed</h2>
+          <ol class="prose">
+            <li>
+              <strong>The idle sleep timer, decided.</strong> Two hours for active and inactive spaces, with a configurable keep-awake host list. Under critical
+              memory pressure, eligible keep-awake sites sleep last.
+            </li>
+            <li>
+              <strong>Where link rules can send links.</strong> A space, Little Bay and a new window are proposed. Is a specific profile or window also needed?
+            </li>
+            <li><strong>How older synced devices see nested folders.</strong> Flattened (proposed), or held back until every device updates.</li>
+            <li><strong>The currency rates source</strong>, or currency left out, keeping the command bar fully offline.</li>
+            <li><strong>The scope of site tweaks.</strong> CSS and Zap only, or JS as well.</li>
+            <li><strong>Whether to read Messages</strong> for codes, given the Full Disk Access prompt.</li>
+          </ol>
+          <h3>Assumptions in this plan</h3>
+          <ul class="prose">
+            <li>
+              "Missing" comes from searching the code on <code>main</code>. The app wasn't run, so a feature that exists under an unexpected name may be listed
+              by mistake. Check before starting each item.
+            </li>
+            <li>Sizes are rough estimates for one person who knows the codebase.</li>
+            <li>The fixes are areas to check, not confirmed bugs.</li>
+          </ul>
+        </section>
+
+        <section id="out" aria-labelledby="out-h">
+          <h2 id="out-h">Not in this plan</h2>
+          <ul class="prose">
+            <li>AI assistant features in the browser</li>
+            <li>A built-in mail client</li>
+            <li>An iPhone app</li>
+            <li>The Windows port, which has its own plan</li>
+          </ul>
+        </section>
+      </main>
     </div>
-  </div>
-</header>
 
-<div class="wrap layout">
-  <nav class="toc" aria-label="Contents">
-    <h2>Contents</h2>
-    <ol>
-      <li><a href="#summary">Summary</a></li>
-      <li><a href="#have">Already in Bay</a></li>
-      <li><a href="#missing">What's missing</a></li>
-      <li><a href="#fixes">Fixes</a></li>
-      <li><a href="#phases">Phases</a></li>
-      <li class="sub"><a href="#p0">0 · Fix sweep</a></li>
-      <li class="sub"><a href="#p1">1 · Quick wins</a></li>
-      <li class="sub"><a href="#p2">2 · Organising</a></li>
-      <li class="sub"><a href="#p3">3 · Command bar & autofill</a></li>
-      <li class="sub"><a href="#p4">4 · Media</a></li>
-      <li class="sub"><a href="#p5">5 · Bigger bets</a></li>
-      <li><a href="#risks">Risks</a></li>
-      <li><a href="#decisions">Decisions needed</a></li>
-      <li><a href="#out">Not in this plan</a></li>
-    </ol>
-  </nav>
+    <footer>
+      <div class="wrap">Bay · feature gaps plan · checked against <code>main</code> at <code>12e254d7</code>, 13 October 2026</div>
+    </footer>
 
-  <main id="content">
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var btn = document.getElementById("themeToggle");
+        try {
+          var saved = localStorage.getItem("bay-plan-theme");
+          if (saved) root.setAttribute("data-theme", saved);
+        } catch (e) {}
+        btn.addEventListener("click", function () {
+          var dark = root.getAttribute("data-theme") === "dark" || (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+          var next = dark ? "light" : "dark";
+          root.setAttribute("data-theme", next);
+          try {
+            localStorage.setItem("bay-plan-theme", next);
+          } catch (e) {}
+        });
 
-    <section id="summary" aria-labelledby="summary-h">
-      <h2 id="summary-h">Summary</h2>
-      <div class="prose">
-        <p>Bay already covers most of what a sidebar browser needs. The review found <strong>17 gaps</strong> and
-          <strong>14 areas to re-test</strong>. The gaps fall into three kinds: small missing pieces around tabs, media
-          and downloads; two organising features that Arc users rely on (folders inside folders, and rules for links
-          from other apps); and a few larger builds (site tweaks, text in images, notifications with the tab closed)
-          that need a decision before work starts.</p>
-        <p>The order below fixes first, then ships the small wins, then the features that change how people organise
-          their tabs, and leaves the uncertain work for last behind a research gate.</p>
-      </div>
-      <div class="callout warn">
-        <p><strong>One change to make early:</strong> idle tabs go to sleep after <strong>30 minutes</strong>
-          (<code>POLICY.idleMs</code> in <code>apps/browser/src/lib/tabLifecycle.ts</code>). Chat, mail and music tabs
-          that reload whenever you come back to them read as a bug. Phase 1 adds a "keep these sites awake" list and a
-          longer default.</p>
-      </div>
-    </section>
-
-    <section id="have" aria-labelledby="have-h">
-      <h2 id="have-h">Already in Bay</h2>
-      <p class="prose">These are done, so nobody plans them again. Each was confirmed in the code on <code>main</code>.</p>
-      <ul class="have">
-        <li>Private windows</li>
-        <li>Close Tabs Above/Below (Left/Right with tabs on top)</li>
-        <li>Put Tab to Sleep from the tab menu</li>
-        <li>Pop-up blocker that can open the pop-up or always allow the site</li>
-        <li>Open at Login</li>
-        <li>Prompt for a page that stops responding</li>
-        <li>Link status bubble at the page's foot</li>
-        <li>Dock menu</li>
-        <li>Screen-share picker</li>
-        <li>Translate page, with the language named</li>
-        <li>Per-extension site access</li>
-        <li>1Password's desktop app connection</li>
-        <li>Extension side panels</li>
-        <li>Import from Arc, Chrome, Safari, Firefox, Zen, Dia, Helium and more</li>
-        <li>Reopen closed tab (⇧⌘T)</li>
-        <li>Check for Updates</li>
-        <li>App icon picker in Settings › Appearance</li>
-        <li>Sidebar on either side, or tabs on top</li>
-        <li>Toolbar that hides while scrolling</li>
-        <li>Peek for links from pinned tabs</li>
-        <li>Split View, and Split with Current Tab</li>
-        <li>Picture in picture for a page's own windows</li>
-        <li>Calculator in the command bar</li>
-        <li>Per-site zoom</li>
-        <li>Cast</li>
-        <li>Task manager</li>
-        <li>Replace Pin with Current Page, and Back to Pinned URL</li>
-        <li>Custom keyboard shortcuts</li>
-      </ul>
-    </section>
-
-    <section id="missing" aria-labelledby="missing-h">
-      <h2 id="missing-h">What's missing</h2>
-      <p class="prose">"Missing" means the code on <code>main</code> has nothing for it. Searching the repo found no
-        implementation. The app was not run for this review.</p>
-      <div class="table-wrap">
-        <table class="gaps">
-          <caption>Gaps, in the order they are built</caption>
-          <thead><tr><th scope="col">Gap</th><th scope="col">Today in Bay</th><th scope="col">Where it lands</th><th scope="col">Size</th><th scope="col">Phase</th></tr></thead>
-          <tbody>
-            <tr><td>Sites kept awake</td><td>Idle tabs sleep after 30 min; only pinned and kept tabs are spared</td><td><code>lib/tabLifecycle.ts</code>, Settings › Tabs</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-            <tr><td>Copy File / Copy Path on downloads</td><td>Only Show in Finder</td><td><code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code></td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-            <tr><td>Extensions in private windows</td><td>No per-extension "Allow in Private"</td><td><code>settings/panes/Extensions.tsx</code>, engine</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-            <tr><td>Every playing tab, with Pause All</td><td>The sidebar player shows one session</td><td><code>media/SidebarPlayer.tsx</code>, <code>media/state.ts</code></td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-            <tr><td>Fold a space</td><td>Folders fold; a space's pinned section can't</td><td><code>sidebar/SpaceTitle.tsx</code></td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-            <tr><td>Density (Comfortable / Compact)</td><td>One row size</td><td><code>sidebar/tokens.ts</code>, Settings › Appearance</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-            <tr><td>Folders inside folders</td><td><code>PinnedFolder</code> has no parent; the Arc importer flattens subfolders</td><td><code>store/types.ts</code>, <code>FolderBlock.tsx</code>, sync, import</td><td class="c"><span class="chip l">L</span></td><td class="c">2</td></tr>
-            <tr><td>Rules for links from other apps</td><td>One choice: Little Bay or a new tab</td><td><code>settings/panes/Links.tsx</code>, <code>lib/appIntegration.ts</code></td><td class="c"><span class="chip m">M</span></td><td class="c">2</td></tr>
-            <tr><td>Clipboard history in the command bar</td><td>None</td><td><code>packages/core/src/suggest.ts</code>, shell</td><td class="c"><span class="chip m">M</span></td><td class="c">3</td></tr>
-            <tr><td>Emoji, units and currency in the command bar</td><td>Calculator only</td><td><code>packages/core/src</code></td><td class="c"><span class="chip m">M</span></td><td class="c">3</td></tr>
-            <tr><td>One-time codes offered in the code box</td><td>None</td><td><code>site/Autofill.tsx</code>, engine autofill</td><td class="c"><span class="chip l">L</span></td><td class="c">3</td></tr>
-            <tr><td>"Allow ads here" when a page breaks</td><td>None</td><td>Content blocker, Site Controls</td><td class="c"><span class="chip m">M</span></td><td class="c">3</td></tr>
-            <tr><td>Speed and subtitles on the floating video</td><td>The PiP window drops Chrome's captions control</td><td><code>bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code></td><td class="c"><span class="chip m">M</span></td><td class="c">4</td></tr>
-            <tr><td>Live streams labelled Live</td><td>None</td><td><code>media/state.ts</code>, player views</td><td class="c"><span class="chip s">S</span></td><td class="c">4</td></tr>
-            <tr><td>Site tweaks and Zap (hide an element)</td><td>Only the ad blocker's cosmetic filters</td><td>Site Controls, content blocker, sync</td><td class="c"><span class="chip l">L</span></td><td class="c">5</td></tr>
-            <tr><td>Copy text from images</td><td>None</td><td>Context menu, shell (Vision)</td><td class="c"><span class="chip m">M</span></td><td class="c">5</td></tr>
-            <tr><td>Site notifications with the tab closed</td><td>Notifications only while the tab is open</td><td>Engine (push messaging)</td><td class="c"><span class="chip risk">Unknown</span></td><td class="c">5</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="fixes" aria-labelledby="fixes-h">
-      <h2 id="fixes-h">Fixes</h2>
-      <p class="prose">Browsers built on the same parts commonly break in these places. None is known to be broken in
-        Bay. Each is a check: run it, and fix what fails. They make up Phase 0.</p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">#</th><th scope="col">Area</th><th scope="col">How to check</th></tr></thead>
-          <tbody>
-            <tr><td>1</td><td>Shortcuts on other keyboard layouts</td><td>On AZERTY, ⌘Z undoes and doesn't close a tab. On German, ⌘[ and ⌘] go back and forward. On Dvorak, shortcuts follow the key's letter.</td></tr>
-            <tr><td>2</td><td>Extension popups that close themselves</td><td>Bitwarden's popup goes away after Fill, as in Chrome (<code>window.close()</code> from a popup).</td></tr>
-            <tr><td>3</td><td>Password managers right after launch</td><td>1Password, Bitwarden and NordPass buttons work on the first click after launch, and after the app has been idle.</td></tr>
-            <tr><td>4</td><td>Passkey prompts from extensions</td><td>Bitwarden's passkey prompt opens once, closes after a pick, and GitHub's "Continue with passkey" finishes, also on a page left open a while.</td></tr>
-            <tr><td>5</td><td>Extension pages at every launch</td><td>No welcome or changelog page opens again on relaunch. Removing an extension also removes its data.</td></tr>
-            <tr><td>6</td><td>A helper app quitting</td><td>Quitting a password manager's desktop helper while its extension is connected doesn't take Bay down.</td></tr>
-            <tr><td>7</td><td>Sign-ins through quit, update and crash</td><td>A site that keeps you signed in with a session cookie (YouTube's chosen account, for one) is still signed in after ⌘Q, an update and a Force Quit.</td></tr>
-            <tr><td>8</td><td>Leaving a call</td><td>⌘W on a Meet tab, or ⌘Q during a call, leaves the call for the others at once.</td></tr>
-            <tr><td>9</td><td>Google's service icons</td><td>Drive, Calendar, Gmail and Maps show their own icons in the sidebar, not Google's G.</td></tr>
-            <tr><td>10</td><td>Horizontal scroll vs. swipe</td><td>Scrolling a carousel or a wide table sideways doesn't go back or forward.</td></tr>
-            <tr><td>11</td><td>Keys on a page</td><td>Arrow keys, Home and End on a page (or a video that seeks with them) don't play the error sound.</td></tr>
-            <tr><td>12</td><td>Waking a sleeping tab</td><td>A tab that slept comes back scrolled to where it was.</td></tr>
-            <tr><td>13</td><td>Icons behind a bot check</td><td>Sites that check for bots first (Cloudflare's page, for one) end up with their own icon, not a letter.</td></tr>
-            <tr><td>14</td><td>Dragging a tab out</td><td>A tab dragged past the window's edge opens in a new window without reloading, including from a window that fills its screen.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="phases" aria-labelledby="phases-h">
-      <h2 id="phases-h">Phases</h2>
-      <ol class="flow" aria-label="Phase order">
-        <li><a href="#p0"><span class="n">Phase 0</span><strong>Fix sweep</strong>14 checks</a></li>
-        <li><a href="#p1"><span class="n">Phase 1</span><strong>Quick wins</strong>6 small items</a></li>
-        <li><a href="#p2"><span class="n">Phase 2</span><strong>Organising</strong>Nested folders, link rules</a></li>
-        <li><a href="#p3"><span class="n">Phase 3</span><strong>Command bar & autofill</strong>Clipboard, codes, ads</a></li>
-        <li><a href="#p4"><span class="n">Phase 4</span><strong>Media</strong>Floating video</a></li>
-        <li class="gate"><a href="#p5"><span class="n">Phase 5</span><strong>Bigger bets</strong>Research gate first</a></li>
-      </ol>
-      <p class="prose">Phases 1, 3 and 4 don't depend on each other and can run side by side. Phase 2 comes before
-        anything else that changes the sidebar's data, because nested folders change the stored and synced shape.</p>
-
-      <!-- Phase 0 -->
-      <article class="phase" id="p0" aria-labelledby="p0-h">
-        <div class="phase-head"><span class="phase-num">Phase 0</span><h3 id="p0-h">Fix sweep</h3></div>
-        <p class="goal">Run the 14 checks under <a href="#fixes">Fixes</a> on a release build and fix what fails, before new features land on top.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Nothing</dd>
-          <dt>Setup</dt><dd>A release build. Bitwarden, 1Password and NordPass installed. A keyboard set to AZERTY, German and Dvorak in turn. A Google Meet call with a second participant.</dd>
-        </dl>
-        <ul>
-          <li>Record each check as pass or fail, with steps for each failure.</li>
-          <li>Fix the failures at the narrowest layer (app, shell or engine patch), each with a regression test where the harness can reach it.</li>
-          <li>Add the passing checks to the release checklist so they stay passing.</li>
-        </ul>
-        <h4 class="exit">Exit criteria</h4>
-        <ul class="checks">
-          <li>All 14 checks pass, or the failures that remain are filed with a reason they wait.</li>
-          <li>The release checklist lists the checks.</li>
-        </ul>
-      </article>
-
-      <!-- Phase 1 -->
-      <article class="phase" id="p1" aria-labelledby="p1-h">
-        <div class="phase-head"><span class="phase-num">Phase 1</span><h3 id="p1-h">Quick wins</h3></div>
-        <p class="goal">Small, contained items. Each one can ship alone.</p>
-
-        <div class="item">
-          <h4>Sites kept awake, and a longer idle timer <span class="chip s">S</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd><code>POLICY.idleMs</code> is 30 minutes. Pinned and kept tabs are spared, and so are tabs that play audio, capture, show picture in picture or are picking a screen to share.</dd>
-            <dt>Build</dt><dd>Settings › Tabs gets "Always keep these sites awake", seeded with chat, mail and music sites (WhatsApp, Telegram, Slack, Discord, Gmail, Spotify). The tab menu gets Keep This Site Awake. The sweep in <code>tabLifecycle.ts</code> skips those sites unless memory is critical, and then takes them last. Raise the default idle time (see <a href="#decisions">Decisions</a>).</dd>
-          </dl>
-          <ul class="checks">
-            <li>A WhatsApp Web tab left alone for two hours is still live when you switch to it.</li>
-            <li>Under critical memory pressure, kept-awake sites sleep only after every other tab.</li>
-          </ul>
-        </div>
-
-        <div class="item">
-          <h4>Copy File and Copy Path on downloads <span class="chip s">S</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Download rows offer Show in Finder (<code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code>, <code>pages/DownloadsPage.tsx</code>).</dd>
-            <dt>Build</dt><dd>Add Copy File (the file on the pasteboard, ready to paste into Finder, Slack or Mail) and Copy Path. Add a shell call that writes a file URL to <code>NSPasteboard</code> if none exists.</dd>
-          </dl>
-          <ul class="checks"><li>Copy File, then ⌘V in Finder, copies the download. Copy Path pastes its full path.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Extensions in private windows <span class="chip s">S</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Settings › Extensions sets each extension's site access. It has no private-window switch.</dd>
-            <dt>Build</dt><dd>Add "Allow in Private Windows" to each extension, off by default, backed by Chrome's own incognito-enabled preference through nncore.</dd>
-          </dl>
-          <ul class="checks"><li>An extension that is switched on runs in a private window. Switched off, it doesn't.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Every playing tab, with Pause All <span class="chip s">S</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd><code>media/state.ts</code> tracks a session for each tab. The sidebar player shows one.</dd>
-            <dt>Build</dt><dd>When more than one tab is playing or paused, the player shows "+N". It opens a list of those tabs, each with play/pause, mute and Go to Tab, and Pause All at the top.</dd>
-          </dl>
-          <ul class="checks"><li>With three tabs playing, Pause All pauses all three, and each row's controls act on its own tab.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Fold a space <span class="chip s">S</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Pinned folders can fold (<code>PinnedFolder.collapsed</code>). The space as a whole can't.</dd>
-            <dt>Build</dt><dd>Clicking the space's name in <code>SpaceTitle.tsx</code> folds its pinned tabs and folders away, or brings them back, as in Arc. Its menu moves to ••• and right-click. The folded state is stored with the space.</dd>
-          </dl>
-          <ul class="checks"><li>Folding hides the pinned section, survives a relaunch, and leaves today's tabs in view.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Density <span class="chip s">S</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Row sizes are fixed in <code>sidebar/tokens.ts</code>.</dd>
-            <dt>Build</dt><dd>Settings › Appearance › Density: Comfortable (Arc's 36-point rows and 16-point icons) or Compact (today's sizes). Rows, pins and the address field change together.</dd>
-          </dl>
-          <ul class="checks"><li>Switching density resizes rows, pins and the address field at once, with no clipped text in either size.</li></ul>
-        </div>
-
-        <h4 class="exit">Exit criteria</h4>
-        <ul class="checks"><li>All six items are shipped behind their settings, with their checks passing.</li></ul>
-      </article>
-
-      <!-- Phase 2 -->
-      <article class="phase" id="p2" aria-labelledby="p2-h">
-        <div class="phase-head"><span class="phase-num">Phase 2</span><h3 id="p2-h">Organising</h3></div>
-        <p class="goal">The two features that change how people arrange their tabs and links.</p>
-
-        <div class="item">
-          <h4>Folders inside folders <span class="chip l">L</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd><code>PinnedFolder</code> in <code>store/types.ts</code> has no parent, so folders are one level deep. The Arc importer (<code>packages/import/ios/Core/ArcSidebar.swift</code>, <code>flatTabs</code>) flattens Arc's subfolders into one folder.</dd>
-            <dt>Build</dt><dd>Add a parent to folders, capped at five levels. Render them recursively in <code>FolderBlock.tsx</code>. Let drag and drop in <code>sidebar/dnd.tsx</code> drop into and out of a nested folder. Show "Move to Folder" as a tree. Keep subfolders in the Arc import. Migrate stored state and the sync schema, so that a device on an older version still shows the tabs, flattened.</dd>
-            <dt>Depends on</dt><dd>A decision on how older synced devices see nested folders (<a href="#decisions">Decisions</a>).</dd>
-          </dl>
-          <ul class="checks">
-            <li>An Arc import with subfolders arrives with the same structure.</li>
-            <li>Dragging a tab or a folder between levels works, and ⌘Z undoes it.</li>
-            <li>Sync round-trips nested folders between two Macs. An older build still sees every tab.</li>
-            <li>Existing installs migrate with no change to what they show.</li>
-          </ul>
-        </div>
-
-        <div class="item">
-          <h4>Rules for links from other apps <span class="chip m">M</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Settings › Links has one choice for links from Slack, Discord or Mail: Little Bay, or a new tab (<code>openLinksInLittleBay</code>). Incoming links are handled in <code>lib/appIntegration.ts</code>.</dd>
-            <dt>Build</dt><dd>An ordered list of rules. Each has an address pattern (a host or path with <code>*</code>, such as <code>github.com/acme/*</code>) and, optionally, the app the link came from. Each rule opens matching links in a chosen space, in Little Bay or in a new window. The first match wins, and anything unmatched follows today's choice. Rules are added, edited and reordered in Settings › Links, and synced.</dd>
-          </dl>
-          <ul class="checks">
-            <li>With a rule for <code>linear.app/*</code> going to Work, a Linear link clicked in Slack opens in Work, whichever space is in front.</li>
-            <li>A link that matches no rule behaves as it does today.</li>
-          </ul>
-        </div>
-
-        <h4 class="exit">Exit criteria</h4>
-        <ul class="checks"><li>Both features are shipped, the migration has been tested on a copy of a real profile, and sync is tested across two Macs.</li></ul>
-      </article>
-
-      <!-- Phase 3 -->
-      <article class="phase" id="p3" aria-labelledby="p3-h">
-        <div class="phase-head"><span class="phase-num">Phase 3</span><h3 id="p3-h">Command bar & autofill</h3></div>
-        <p class="goal">Make the command bar answer more, without leaving it, and fill one-time codes.</p>
-
-        <div class="item">
-          <h4>Clipboard history <span class="chip m">M</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>None.</dd>
-            <dt>Build</dt><dd>Opt-in in Settings › Privacy. The shell watches the pasteboard's change count and keeps the most recent text and links on this Mac only. It skips anything marked concealed or transient (password managers mark theirs) and anything copied in a private window. Type "clipboard" in the command bar, or use a shortcut, to list it. Return pastes the item, and an item can be deleted.</dd>
-          </dl>
-          <ul class="checks"><li>A password copied from 1Password never shows. Clearing history empties it, and it never syncs.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Emoji, units and currency <span class="chip m">M</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd><code>packages/core/src/calculator.ts</code> does arithmetic and functions. <code>emojiData.ts</code> already feeds the icon picker.</dd>
-            <dt>Build</dt><dd>In <code>suggest.ts</code>: emoji by name ("emoji heart"), with Return to copy. Unit conversions ("5 km in mi", "350 f to c") from a local table. Currency ("100 usd in inr") from a rates source (<a href="#decisions">Decisions</a>).</dd>
-          </dl>
-          <ul class="checks"><li>Each kind shows as the top row with its answer, and Return copies it.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>One-time codes <span class="chip l">L</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Autofill covers passwords, cards and addresses (<code>site/Autofill.tsx</code>, engine <code>nn_autofill.cc</code>). It doesn't cover codes.</dd>
-            <dt>Build</dt><dd>When a field asks for a code (<code>autocomplete="one-time-code"</code>, or a field the heuristics recognise), offer the newest code from the last few minutes, and Return puts it in. There are two sources. Messages needs Full Disk Access to read <code>chat.db</code>, so it's asked for only when switched on. Gmail can reuse the Google connection the calendar preview already has (<code>live/googleAuth.ts</code>), if its scopes allow. Skip numbers from security notices, and prefer the newest code.</dd>
-          </dl>
-          <ul class="checks"><li>A code texted or mailed to you is offered under the code box within seconds, and only on the site that asked.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>"Allow ads here" when a page breaks <span class="chip m">M</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>uBlock Origin Lite is built in. Nothing notices when blocking breaks a page.</dd>
-            <dt>Build</dt><dd>If a page where the blocker acted is reloaded three times in twenty seconds, offer "Allow Ads Here" in the corner. It adds the site to the blocker's allow list, and Site Controls can take it back.</dd>
-          </dl>
-          <ul class="checks"><li>Three quick reloads offer the prompt once. Accepting reloads the page unblocked, and Site Controls shows the exception.</li></ul>
-        </div>
-
-        <h4 class="exit">Exit criteria</h4>
-        <ul class="checks"><li>The four items are shipped. Clipboard history and codes are opt-in, and both are covered in the privacy page's copy.</li></ul>
-      </article>
-
-      <!-- Phase 4 -->
-      <article class="phase" id="p4" aria-labelledby="p4-h">
-        <div class="phase-head"><span class="phase-num">Phase 4</span><h3 id="p4-h">Media</h3></div>
-        <p class="goal">Bring the floating video up to the controls people reach for.</p>
-
-        <div class="item">
-          <h4>Speed and subtitles on the floating video <span class="chip m">M</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Bay's PiP window (<code>engine/chromium/src/chrome/browser/bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code>) leaves out Chrome's captions control. The page script already reports <code>playbackRate</code>.</dd>
-            <dt>Build</dt><dd>A speed button with a short menu (0.5× to 2×) and a subtitles button listing the video's text tracks, both in the window's top row.</dd>
-          </dl>
-          <ul class="checks"><li>On YouTube, the speed and subtitle choices made in the floating window carry back to the page.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Live streams labelled Live <span class="chip s">S</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>A live stream shows a countdown or a time that doesn't mean anything.</dd>
-            <dt>Build</dt><dd>When a video's duration is infinite, or its seekable range keeps moving, the floating video and the sidebar player say Live. Behind the live edge, they say how far behind ("5m behind"), and a click jumps back to live.</dd>
-          </dl>
-          <ul class="checks"><li>A YouTube or Twitch live stream shows Live, and "behind" after seeking back.</li></ul>
-        </div>
-
-        <h4 class="exit">Exit criteria</h4>
-        <ul class="checks"><li>Both items are shipped and checked on YouTube, Twitch and one site with its own player.</li></ul>
-      </article>
-
-      <!-- Phase 5 -->
-      <article class="phase gate" id="p5" aria-labelledby="p5-h">
-        <div class="phase-head"><span class="phase-num">Phase 5</span><h3 id="p5-h">Bigger bets</h3><span class="chip gate">Research gate</span></div>
-        <p class="goal">Each needs a short spike and a go / no-go note before it's built.</p>
-
-        <div class="item">
-          <h4>Site tweaks and Zap <span class="chip l">L</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Only the ad blocker's cosmetic filters change pages (<code>NNCoreContentBlocker.mm</code>).</dd>
-            <dt>Build</dt><dd>First, Zap: pick an element on the page and hide it for that site. Reuse the developer inspector's picker (<code>developer/inspectorScript.ts</code>), and store the rule as a cosmetic filter for each space. Then site tweaks: a site's own CSS (and later, perhaps, JS), edited from Site Controls, switched on and off per site, and synced.</dd>
-            <dt>Spike answers</dt><dd>Can cosmetic rules be added at runtime without rebuilding the blocker's lists? Should user JS ship at all, given the security cost?</dd>
-          </dl>
-          <ul class="checks"><li>A zapped element stays hidden after reloads and on other pages of the site. Site Controls lists it and can undo it.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Copy text from images <span class="chip m">M</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>None.</dd>
-            <dt>Build</dt><dd>Start with a context-menu item, Copy Text from Image, that runs Vision text recognition in the shell on the image's pixels. Selectable text over images, and ⌘F finding words in images, come later if the first step earns it.</dd>
-          </dl>
-          <ul class="checks"><li>Right-clicking a screenshot of text copies its words, on this Mac, with nothing sent anywhere.</li></ul>
-        </div>
-
-        <div class="item">
-          <h4>Site notifications with the tab closed <span class="chip risk">Unknown</span></h4>
-          <dl class="facts">
-            <dt>Today</dt><dd>Notifications work while the site's tab is open (<code>lib/webNotifications.ts</code>).</dd>
-            <dt>Spike answers</dt><dd>Chromium's web push relies on Google's push service, which ungoogled builds take out. Can Bay's engine receive push at all? If it can't, the choices are to run its own push relay, or to keep chosen sites' service workers alive in the background.</dd>
-          </dl>
-          <ul class="checks"><li>The spike ends in a written decision: build (with which approach) or drop.</li></ul>
-        </div>
-
-        <h4 class="exit">Exit criteria</h4>
-        <ul class="checks"><li>Each bet has a go / no-go note. The ones that go have been planned as their own phase.</li></ul>
-      </article>
-    </section>
-
-    <section id="risks" aria-labelledby="risks-h">
-      <h2 id="risks-h">Risks</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Risk</th><th scope="col">Affects</th><th scope="col">Mitigation</th></tr></thead>
-          <tbody>
-            <tr><td>Web push may not work in an ungoogled engine at all</td><td>Phase 5</td><td>Research gate before any build; drop it if there's no clean path</td></tr>
-            <tr><td>Nested folders change stored and synced data</td><td>Phase 2</td><td>Migrate stored state; older devices see the tabs flattened; test on a copy of a real profile</td></tr>
-            <tr><td>Clipboard history can catch secrets</td><td>Phase 3</td><td>Opt-in, local only, skips concealed and transient types and private windows, easy to clear</td></tr>
-            <tr><td>One-time codes need Full Disk Access and Gmail scopes</td><td>Phase 3</td><td>Each source off until switched on; explain the permission where it's asked for</td></tr>
-            <tr><td>Keeping more tabs awake costs memory</td><td>Phase 1</td><td>Kept-awake sites still sleep under critical pressure, last; the list is short by default</td></tr>
-            <tr><td>User JS in site tweaks is a security surface</td><td>Phase 5</td><td>Ship CSS and Zap first; JS only after a separate decision</td></tr>
-            <tr><td>Currency rates need a network source</td><td>Phase 3</td><td>Pick one source, cache it daily, and say where rates come from</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="decisions" aria-labelledby="decisions-h">
-      <h2 id="decisions-h">Decisions needed</h2>
-      <ol class="prose">
-        <li><strong>The idle sleep timer.</strong> Keep 30 minutes, move to a few hours, or let it be set in Settings › Tabs. Chrome only discards tabs under memory pressure.</li>
-        <li><strong>Where link rules can send links.</strong> A space, Little Bay and a new window are proposed. Is a specific profile or window also needed?</li>
-        <li><strong>How older synced devices see nested folders.</strong> Flattened (proposed), or held back until every device updates.</li>
-        <li><strong>The currency rates source</strong>, or currency left out, keeping the command bar fully offline.</li>
-        <li><strong>The scope of site tweaks.</strong> CSS and Zap only, or JS as well.</li>
-        <li><strong>Whether to read Messages</strong> for codes, given the Full Disk Access prompt.</li>
-      </ol>
-      <h3>Assumptions in this plan</h3>
-      <ul class="prose">
-        <li>"Missing" comes from searching the code on <code>main</code>. The app wasn't run, so a feature that exists under an unexpected name may be listed by mistake. Check before starting each item.</li>
-        <li>Sizes are rough estimates for one person who knows the codebase.</li>
-        <li>The fixes are areas to check, not confirmed bugs.</li>
-      </ul>
-    </section>
-
-    <section id="out" aria-labelledby="out-h">
-      <h2 id="out-h">Not in this plan</h2>
-      <ul class="prose">
-        <li>AI assistant features in the browser</li>
-        <li>A built-in mail client</li>
-        <li>An iPhone app</li>
-        <li>The Windows port, which has its own plan</li>
-      </ul>
-    </section>
-  </main>
-</div>
-
-<footer>
-  <div class="wrap">Bay · feature gaps plan · checked against <code>main</code> at <code>12e254d7</code>, 13 October 2026</div>
-</footer>
-
-<script>
-(function () {
-  var root = document.documentElement;
-  var btn = document.getElementById('themeToggle');
-  try { var saved = localStorage.getItem('bay-plan-theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
-  btn.addEventListener('click', function () {
-    var dark = root.getAttribute('data-theme') === 'dark' ||
-      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
-    var next = dark ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    try { localStorage.setItem('bay-plan-theme', next); } catch (e) {}
-  });
-
-  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
-  var targets = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
-  if (!('IntersectionObserver' in window)) return;
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (!e.isIntersecting) return;
-      links.forEach(function (a) {
-        var on = a.getAttribute('href') === '#' + e.target.id;
-        a.classList.toggle('active', on);
-        if (on) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current');
-      });
-    });
-  }, { rootMargin: '0px 0px -70% 0px' });
-  targets.forEach(function (t) { io.observe(t); });
-})();
-</script>
-</body>
+        var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a"));
+        var targets = links
+          .map(function (a) {
+            return document.querySelector(a.getAttribute("href"));
+          })
+          .filter(Boolean);
+        if (!("IntersectionObserver" in window)) return;
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (!e.isIntersecting) return;
+              links.forEach(function (a) {
+                var on = a.getAttribute("href") === "#" + e.target.id;
+                a.classList.toggle("active", on);
+                if (on) a.setAttribute("aria-current", "location");
+                else a.removeAttribute("aria-current");
+              });
+            });
+          },
+          { rootMargin: "0px 0px -70% 0px" },
+        );
+        targets.forEach(function (t) {
+          io.observe(t);
+        });
+      })();
+    </script>
+  </body>
 </html>
