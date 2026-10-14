@@ -1,5 +1,6 @@
 import { showMenu, type MenuItem } from "@bay/shell";
 import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
+import { normalizeAwakeSite, siteKeptAwake } from "../../lib/awakeSites";
 import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
@@ -133,6 +134,8 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const folder = tab.pinnedRow && tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
   const windows = moveToWindowItems(windowId).filter((item) => "id" in item && item.id !== "window:new");
   // Asleep, or never loaded: nothing to put to sleep.
+  const site = normalizeAwakeSite(tab.url);
+  const keptAwake = siteKeptAwake(tab.url, s.settings.awakeSites);
   const awake = !!webviews.get(tab.id) && !useLifecycle.getState().discarded[tab.id];
 
   const choice = await showMenu([
@@ -165,6 +168,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "copyMd", title: "Copy Markdown Link", symbol: "m.square", enabled: !!tab.url, ...hint("c", "option", "shift", "command") },
     { id: "moveToSpace", title: "Move to Space", symbol: "square.stack.3d.up", enabled: !incognito, children: moveToSpace },
     ...(!current && active && !split?.tabIds.includes(active) ? [{ id: "split", title: "Split with Current Tab", symbol: "rectangle.split.2x1" }] : []),
+    { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
     { id: "sleep", title: "Put Tab to Sleep", symbol: "moon", enabled: !current && awake },
     sep,
     { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
@@ -215,7 +219,10 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "copyMd") copyUrls([tab.id], true);
   else if (choice.startsWith("profile:")) void moveTabToSpace(tab.id, choice.slice(8));
   else if (choice === "split") openInSplit(tab.id);
-  else if (choice === "sleep") void sleepTab(tab.id);
+  else if (choice === "keepSiteAwake" && site) {
+    const sites = store().settings.awakeSites;
+    store().updateSettings({ awakeSites: siteKeptAwake(tab.url, sites) ? sites.filter((entry) => !siteKeptAwake(tab.url, [entry])) : [...sites, site] });
+  } else if (choice === "sleep") void sleepTab(tab.id);
   else if (choice === "icon") void openIconPicker(windowId, t);
   else if (choice === "resetIcon") s.updateTab(tab.id, { customIcon: null });
   else if (choice === "mute") toggleMute(tab.id);

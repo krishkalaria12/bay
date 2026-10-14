@@ -13,6 +13,7 @@ import {
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { layout } from "../lib/constants";
+import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/awakeSites";
 import { DEFAULT_SPACE_ID } from "./constants";
 
 export type SearchEngineId = string;
@@ -42,6 +43,7 @@ export type Settings = {
   optShiftClickOpensInGroup: boolean;
   autoGroupMeetingTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
+  awakeSites: string[];
   mutedSites: string[];
   neverTranslateSites: Record<string, string[]>;
   // Sites in Developer Mode, by host and port ("localhost:3000"): components/developer/devMode.ts.
@@ -104,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoGroupMeetingTabs: true,
   // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
   cleanUpInactiveTabsAfterHours: 12,
+  awakeSites: [...DEFAULT_AWAKE_SITES],
   mutedSites: [],
   neverTranslateSites: {},
   developerSites: [],
@@ -179,7 +182,13 @@ const newEngineId = () => `engine-${Date.now().toString(36)}-${(++engineCounter)
 export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSlice> = (set, get) => ({
   settings: DEFAULT_SETTINGS,
   updateSettings(patch) {
-    set((s) => ({ settings: { ...s.settings, ...patch } }));
+    set((s) => ({
+      settings: {
+        ...s.settings,
+        ...patch,
+        ...("awakeSites" in patch ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites } : {}),
+      },
+    }));
   },
 
   setSearchEngine(id) {

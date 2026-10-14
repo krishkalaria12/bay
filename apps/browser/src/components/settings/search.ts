@@ -33,6 +33,7 @@ const SETTINGS: SettingEntry[] = [
   { pane: "tabs", title: "Extend website color into tab bar", words: "colour tint" },
   { pane: "tabs", title: "Automatic Picture in Picture", words: "pip video call" },
   { pane: "tabs", title: "Automatically group tabs for meetings", words: "tab groups" },
+  { pane: "tabs", title: "Always keep these sites awake", words: "sleep memory idle whatsapp telegram slack discord gmail spotify" },
   { pane: "tabs", title: "Previews", words: "hover folders groups gmail github calendar" },
   { pane: "tabs", title: "Clean up", words: "archive inactive close unused tabs" },
 

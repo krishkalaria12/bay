@@ -7,17 +7,18 @@ import { useMedia } from "../components/media/state";
 import { isInternalTab } from "../components/pages";
 import { openSettings } from "../components/settings/windows";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { activeTabId, engineProfile, isIncognitoSpace, wake } from "../store/model";
+import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace, wake } from "../store/model";
 import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
 import { FREEZE_SWEEP_MS, LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
+import { siteKeptAwake } from "./awakeSites";
 
 export const POLICY = {
   protectedRecent: 10,
-  idleMs: 30 * 60_000,
-  profileIdleMs: 10 * 60_000,
+  idleMs: 2 * 60 * 60_000,
+  profileIdleMs: 2 * 60 * 60_000,
   perSweep: 6,
   busyCpu: 10,
   freezeAfterMs: 60_000,
@@ -122,7 +123,7 @@ async function hasUnsavedInput(handle: WebViewHandle): Promise<boolean | null> {
   return typeof result === "boolean" ? result : null;
 }
 
-export async function sleepTab(id: string): Promise<boolean> {
+export async function sleepTab(id: string, automatic = false): Promise<boolean> {
   const handle = webviews.get(id);
   if (!handle || useLifecycle.getState().discarded[id]) return false;
   // Asked now, never remembered: a page can be shown and typed in at any moment before this.
@@ -131,6 +132,11 @@ export async function sleepTab(id: string): Promise<boolean> {
   applyHeldReports();
   const s = store();
   if (shownTabIds(s).has(id) || keepAliveReason(s, id) || webviews.get(id) !== handle) return false;
+  if (
+    automatic &&
+    (s.tabs[id]?.kept || inPinnedContainer(s, id) || (currentSystem()?.memoryPressure !== "critical" && siteKeptAwake(s.tabs[id]?.url, s.settings.awakeSites)))
+  )
+    return false;
   // Only what Chrome did counts, and its onDiscarded records it (a later onReady, the tab woken, clears it): a refusal
   // leaves the tab awake.
   return (await handle.discard()) === "discarded";
@@ -191,15 +197,20 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     const candidates = [...webviews.keys()].filter((id) => {
       const tab = s.tabs[id];
       // A kept tab sleeps only when asked (the tab menu's Put Tab to Sleep).
-      if (!tab || tab.kept || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
+      if (!tab || tab.kept || inPinnedContainer(s, id) || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
+      if (pressure !== "critical" && siteKeptAwake(tab.url, s.settings.awakeSites)) return false;
       const idle = now - (hiddenAt.get(id) ?? now);
       if (!unused.has(tab.spaceId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
       return !keepAliveReason(s, id);
     });
-    candidates.sort((a, b) => (hiddenAt.get(a) ?? now) - (hiddenAt.get(b) ?? now));
+    candidates.sort(
+      (a, b) =>
+        Number(siteKeptAwake(s.tabs[a]?.url, s.settings.awakeSites)) - Number(siteKeptAwake(s.tabs[b]?.url, s.settings.awakeSites)) ||
+        (hiddenAt.get(a) ?? now) - (hiddenAt.get(b) ?? now),
+    );
     for (const id of candidates) {
       if (slept.length >= policy.perSweep) break;
-      if (await sleepTab(id)) slept.push(id);
+      if (await sleepTab(id, true)) slept.push(id);
     }
     releaseUnusedProfiles();
   } finally {
@@ -305,7 +316,7 @@ export async function freezeTab(id: string): Promise<boolean> {
   if (!handle || !useLifecycle.getState().batterySaver) return false;
   applyHeldReports();
   const s = store();
-  if (shownTabIds(s).has(id) || keepAliveReason(s, id)) return false;
+  if (shownTabIds(s).has(id) || keepAliveReason(s, id) || siteKeptAwake(s.tabs[id]?.url, s.settings.awakeSites)) return false;
   await handle.setFrozen(true);
   return true;
 }

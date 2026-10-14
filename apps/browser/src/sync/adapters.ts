@@ -33,6 +33,7 @@ export const SYNCED_SETTINGS = [
   "optShiftClickOpensInGroup",
   "autoGroupMeetingTabs",
   "cleanUpInactiveTabsAfterHours",
+  "awakeSites",
   "mutedSites",
   "autoPictureInPicture",
   "noAutoPictureInPictureSites",
@@ -59,7 +60,9 @@ export const settingsAdapter: Adapter = {
     for (const key of changed) {
       const name = key.slice(4);
       const record = visible.get(key) as { v: unknown } | undefined;
-      if (record && "v" in record && (SYNCED_SETTINGS as readonly string[]).includes(name)) patch[name] = record.v;
+      if (!record || !("v" in record) || !(SYNCED_SETTINGS as readonly string[]).includes(name)) continue;
+      if (name === "awakeSites" && !Array.isArray(record.v)) continue;
+      patch[name] = record.v;
     }
     if (Object.keys(patch).length) store().updateSettings(patch as Partial<Settings>);
   },

@@ -1,10 +1,12 @@
 import { Symbol } from "@bay/shell";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
+import { Button, Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, TextField, Toggle, useFormColors } from "../controls";
 import { CLEAN_UP_CHOICES } from "../constants";
 import { updateCalendarSettings, useLive } from "../../../live/store";
+import { normalizeAwakeSite } from "../../../lib/awakeSites";
 
 export function TabsPane() {
   const settings = useBrowser((s) => s.settings);
@@ -46,6 +48,8 @@ export function TabsPane() {
         <SettingToggle setting="autoGroupMeetingTabs" title="Automatically group tabs for meetings" />
       </Group>
 
+      <AwakeSites />
+
       <SectionHeader
         title="Previews"
         description="Hover a closed folder or group, or a pinned or favorite tab on one of these sites, to see what's there without opening it."
@@ -83,6 +87,57 @@ export function TabsPane() {
           />
         </Row>
       </Group>
+    </View>
+  );
+}
+
+function AwakeSites() {
+  const sites = useBrowser((s) => s.settings.awakeSites);
+  const theme = useTheme();
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const add = () => {
+    const site = normalizeAwakeSite(input);
+    if (!site) {
+      setError("Enter a website such as example.com.");
+      return;
+    }
+    const s = useBrowser.getState();
+    if (!s.settings.awakeSites.includes(site)) s.updateSettings({ awakeSites: [...s.settings.awakeSites, site] });
+    setInput("");
+    setError(null);
+  };
+  const remove = (site: string) => {
+    const s = useBrowser.getState();
+    s.updateSettings({ awakeSites: s.settings.awakeSites.filter((item) => item !== site) });
+  };
+  return (
+    <View>
+      <SectionHeader
+        title="Always keep these sites awake"
+        description="Idle tabs can sleep after two hours. These sites and their subdomains stay awake unless memory is critical, when they sleep last."
+      />
+      <Group>
+        {sites.map((site) => (
+          <Row key={site} title={site}>
+            <Button title="Remove" kind="plain" onPress={() => remove(site)} />
+          </Row>
+        ))}
+        <View style={{ padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <TextField
+            value={input}
+            onChangeText={(value) => {
+              setInput(value);
+              setError(null);
+            }}
+            placeholder="example.com"
+            onSubmit={add}
+            style={{ flex: 1 }}
+          />
+          <Button title="Add" disabled={!input.trim()} onPress={add} />
+        </View>
+      </Group>
+      {error && <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 6 }}>{error}</Text>}
     </View>
   );
 }

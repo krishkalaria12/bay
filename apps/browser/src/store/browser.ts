@@ -7,6 +7,7 @@ import { blankTabToShow, IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage, s
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createPeeksSlice, type PeeksSlice } from "./peeks";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, withSpaceEmoji, type SpacesSlice } from "./spaces";
+import { normalizeAwakeSites } from "../lib/awakeSites";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
 import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
@@ -108,6 +109,7 @@ export const useBrowser = create<BrowserState>()(
       const { detached, owners } = isolated;
       const spaces = withSpaceEmoji(isolated.spaces, spaceOrder);
       const settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
       if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
 
       const rawWindows: Record<string, SavedWindow> = data.windows ?? {};
