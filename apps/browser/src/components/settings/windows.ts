@@ -29,7 +29,9 @@ type Nav = {
   spaceId: string | null;
   back: { pane: SettingsPane; spaceId: string | null }[];
   forward: { pane: SettingsPane; spaceId: string | null }[];
-  go(pane: SettingsPane, spaceId?: string | null): void;
+  // A setting chosen in the sidebar's search, by its row's title: its pane scrolls to it and marks it for a moment.
+  highlight: string | null;
+  go(pane: SettingsPane, spaceId?: string | null, highlight?: string | null): void;
   goBack(): void;
   goForward(): void;
 };
@@ -39,20 +41,21 @@ export const useSettingsNav = create<Nav>((set, get) => ({
   spaceId: null,
   back: [],
   forward: [],
-  go(pane, spaceId = null) {
+  highlight: null,
+  go(pane, spaceId = null, highlight = null) {
     const { pane: from, spaceId: fromProfile, back } = get();
-    if (from === pane && fromProfile === spaceId) return;
-    set({ pane, spaceId, back: [...back, { pane: from, spaceId: fromProfile }].slice(-30), forward: [] });
+    if (from === pane && fromProfile === spaceId) return set({ highlight });
+    set({ pane, spaceId, highlight, back: [...back, { pane: from, spaceId: fromProfile }].slice(-30), forward: [] });
   },
   goBack() {
     const { back, forward, pane, spaceId } = get();
     const prev = back.at(-1);
-    if (prev) set({ ...prev, back: back.slice(0, -1), forward: [{ pane, spaceId }, ...forward] });
+    if (prev) set({ ...prev, highlight: null, back: back.slice(0, -1), forward: [{ pane, spaceId }, ...forward] });
   },
   goForward() {
     const { back, forward, pane, spaceId } = get();
     const next = forward[0];
-    if (next) set({ ...next, forward: forward.slice(1), back: [...back, { pane, spaceId }] });
+    if (next) set({ ...next, highlight: null, forward: forward.slice(1), back: [...back, { pane, spaceId }] });
   },
 }));
 

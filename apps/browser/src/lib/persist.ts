@@ -195,6 +195,7 @@ export function loadSession(): HydrateData | null {
     deletedGroups: session.deletedGroups ?? [],
     cleanedTabs: session.cleanedTabs ?? [],
     downloads: (downloads?.downloads ?? []).map((d, i) => ({ ...d, id: `saved-${i}` })),
+    launch: true,
   };
   if (session.settings && session.settings.restoreSession === false) {
     // A launch that doesn't restore the last session: each space keeps its pinned tabs, and its other tabs wait in

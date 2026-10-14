@@ -1,11 +1,11 @@
 import { Symbol, WindowDragRegion } from "@bay/shell";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { trackSettingsSection } from "../../telemetry/track";
 import { useHover } from "../primitives";
-import { Button } from "./controls";
+import { Button, SettingsScroll } from "./controls";
 import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";
 import { CalendarPane } from "./panes/Calendar";
@@ -21,6 +21,7 @@ import { SearchPane } from "./panes/Search";
 import { ShortcutsPane } from "./panes/Shortcuts";
 import { SyncPane } from "./panes/Sync";
 import { TabsPane } from "./panes/Tabs";
+import { findSettings, type SettingEntry } from "./search";
 import { useSettingsSheet } from "./sheet";
 import { useSettingsNav, type SettingsPane } from "./windows";
 import { SETTINGS_SIDEBAR_WIDTH, SETTINGS_TOOLBAR_HEIGHT } from "./constants";
@@ -62,6 +63,16 @@ export function SettingsWindow() {
   const title = details && profileName ? profileName : itemOf(nav.pane).title;
   const sheet = useSettingsSheet((s) => s.sheet);
   useEffect(() => trackSettingsSection(nav.pane), [nav.pane]);
+  const scroll = useRef<ScrollView>(null);
+  const content = useRef<View>(null);
+  const scrollTo = useCallback((target: View) => {
+    if (!content.current) return;
+    target.measureLayout(
+      content.current,
+      (_x, y) => scroll.current?.scrollTo({ y: Math.max(0, y - 60), animated: true }),
+      () => {},
+    );
+  }, []);
 
   return (
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.dark ? "#1E1E1E" : "#F2F2F2" }}>
@@ -74,14 +85,16 @@ export function SettingsWindow() {
             {title}
           </Text>
         </View>
-        <ScrollView key={`${nav.pane}:${nav.spaceId}`} contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
-          <View style={{ width: "100%", maxWidth: 640, paddingHorizontal: 24 }}>
+        <ScrollView ref={scroll} key={`${nav.pane}:${nav.spaceId}`} contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
+          <View ref={content} style={{ width: "100%", maxWidth: 640, paddingHorizontal: 24 }}>
             {details ? (
               <View style={{ flexDirection: "row", marginTop: 6 }}>
                 <Button title="All Spaces" kind="plain" icon="chevron.left" onPress={() => nav.go("spaces")} />
               </View>
             ) : null}
-            <Pane pane={nav.pane} spaceId={nav.spaceId} />
+            <SettingsScroll.Provider value={scrollTo}>
+              <Pane pane={nav.pane} spaceId={nav.spaceId} />
+            </SettingsScroll.Provider>
           </View>
         </ScrollView>
       </View>
@@ -95,9 +108,16 @@ function SettingsSidebar() {
   const nav = useSettingsNav();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
+  // A search lists the panes it names first, then a few of the settings in them.
   const sections = q ? [ITEMS.filter((i) => i.title.toLowerCase().includes(q) || i.words.includes(q))] : SECTIONS;
+  const settings = findSettings(q);
   // Passwords and Autofill keep the space they were opened for.
-  const open = (pane: SettingsPane) => nav.go(pane, pane === "passwords" || pane === "autofill" ? nav.spaceId : null);
+  const open = (pane: SettingsPane, highlight?: string) => nav.go(pane, pane === "passwords" || pane === "autofill" ? nav.spaceId : null, highlight);
+  const submit = () => {
+    const pane = sections[0]?.[0];
+    if (pane) open(pane.id);
+    else if (settings[0]) open(settings[0].pane, settings[0].title);
+  };
   return (
     <View
       style={{
@@ -126,7 +146,7 @@ function SettingsSidebar() {
             placeholder="Search"
             placeholderTextColor={theme.placeholder}
             enableFocusRing={false}
-            onSubmitEditing={() => sections[0]?.[0] && open(sections[0][0].id)}
+            onSubmitEditing={submit}
             style={{ flex: 1, marginLeft: 6, fontSize: 13, color: theme.textPrimary, paddingVertical: 0 }}
           />
         </View>
@@ -139,7 +159,17 @@ function SettingsSidebar() {
             ))}
           </View>
         ))}
-        {sections.every((items) => !items.length) ? <Text style={{ padding: 8, fontSize: 12, color: theme.textTertiary }}>No Results</Text> : null}
+        {settings.length ? (
+          <View style={{ marginTop: sections[0]?.length ? 18 : 0, gap: 2 }}>
+            <Text style={{ paddingHorizontal: 6, paddingBottom: 4, fontSize: 11, fontWeight: "600", color: theme.textTertiary }}>Settings</Text>
+            {settings.map((entry) => (
+              <SettingResult key={`${entry.pane}:${entry.title}`} entry={entry} onPress={() => open(entry.pane, entry.title)} />
+            ))}
+          </View>
+        ) : null}
+        {sections.every((items) => !items.length) && !settings.length ? (
+          <Text style={{ padding: 8, fontSize: 12, color: theme.textTertiary }}>No Results</Text>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -163,6 +193,43 @@ function SidebarItem({ item, selected, onPress }: { item: Item; selected: boolea
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: selected ? "600" : "400", color: theme.textPrimary }}>
             {item.title}
           </Text>
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
+// A setting the search found: its title, under its pane's name.
+function SettingResult({ entry, onPress }: { entry: SettingEntry; onPress: () => void }) {
+  const theme = useTheme();
+  const { hovered, hoverProps } = useHover();
+  const pane = itemOf(entry.pane);
+  const ink = theme.dark ? "255,255,255" : "0,0,0";
+  return (
+    <View {...hoverProps}>
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${entry.title}, ${pane.title}`}>
+        <View
+          style={{
+            borderRadius: 8,
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 6,
+            paddingVertical: 5,
+            gap: 9,
+            backgroundColor: hovered ? `rgba(${ink},${theme.dark ? 0.05 : 0.035})` : undefined,
+          }}
+        >
+          <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: pane.color, alignItems: "center", justifyContent: "center", opacity: 0.85 }}>
+            <Symbol name={pane.icon} size={12} weight="semibold" color="#FFFFFF" style={{ width: 16, height: 16 }} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={2} style={{ fontSize: 12.5, color: theme.textPrimary }}>
+              {entry.title}
+            </Text>
+            <Text numberOfLines={1} style={{ fontSize: 11, color: theme.textTertiary }}>
+              {pane.title}
+            </Text>
+          </View>
         </View>
       </Pressable>
     </View>

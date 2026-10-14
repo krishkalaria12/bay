@@ -156,6 +156,12 @@ export function tabToShow(s: BrowserState, windowId: string, spaceId: string): s
   return view.reduce<string | undefined>((best, id) => (!best || s.tabs[id]!.lastActiveAt > s.tabs[best]!.lastActiveAt ? id : best), undefined);
 }
 
+/** A blank tab the window can show for a space (settings.launchTab), so launches don't pile up new tabs. None: the
+ *  window takes a new tab. */
+export function blankTabToShow(s: BrowserState, windowId: string, spaceId: string): string | undefined {
+  return viewTabIds(s, windowId, spaceId).find((id) => !s.tabs[id]!.url && !inPinnedContainer(s, id) && !shownElsewhere(s, id, windowId));
+}
+
 /** The tabs whose page is in the window, in their lists' order. */
 export function windowTabIds(s: Pick<BrowserState, "tabs" | "tabLists">, windowId: string): string[] {
   const out: string[] = [];

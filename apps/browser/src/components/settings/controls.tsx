@@ -1,5 +1,5 @@
 import { showMenu, Surface, Symbol, type MenuItem } from "@bay/shell";
-import { useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { hex, useTheme, type Theme } from "../../lib/theme";
@@ -7,6 +7,7 @@ import { useBrowser } from "../../store/browser";
 import type { Settings } from "../../store/settings";
 import { useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
+import { useSettingsNav } from "./windows";
 
 export function formColors(theme: Theme) {
   return theme.dark
@@ -351,12 +352,37 @@ export function TextField({
   );
 }
 
+// Scrolls the pane to a view in it (SettingsWindow's), for a setting chosen in the sidebar's search.
+export const SettingsScroll = createContext<((target: View) => void) | null>(null);
+
+const HIGHLIGHT_MS = 1600;
+
+// The setting chosen in the sidebar's search (search.ts), matched by its title: scrolled to, and marked for a moment.
+function useSearchHighlight(title: ReactNode) {
+  const marked = useSettingsNav((n) => typeof title === "string" && n.highlight === title);
+  const scrollTo = useContext(SettingsScroll);
+  const ref = useRef<View>(null);
+  useEffect(() => {
+    if (!marked) return;
+    // After the pane's first layout, so the row has its place.
+    const frame = requestAnimationFrame(() => ref.current && scrollTo?.(ref.current));
+    const timer = setTimeout(() => useSettingsNav.setState({ highlight: null }), HIGHLIGHT_MS);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [marked, scrollTo]);
+  return { ref, marked };
+}
+
 export function SectionHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   const theme = useTheme();
+  const colors = useFormColors();
+  const { ref, marked } = useSearchHighlight(title);
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 22, marginBottom: 8, paddingHorizontal: 2 }}>
+    <View ref={ref} style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 22, marginBottom: 8, paddingHorizontal: 2 }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{title}</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: marked ? colors.accent : theme.textPrimary }}>{title}</Text>
         {description ? <Text style={{ fontSize: 12, marginTop: 3, color: theme.textSecondary, lineHeight: 16 }}>{description}</Text> : null}
       </View>
       {action}
@@ -400,8 +426,13 @@ export function Row({
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+  const { ref, marked } = useSearchHighlight(title);
+  let fill: string | undefined;
+  if (marked) fill = `${colors.accent}2E`;
+  else if (onPress && hovered) fill = colors.selected;
   const body = (
     <View
+      ref={ref}
       style={{
         minHeight: 40,
         paddingHorizontal: 12,
@@ -409,7 +440,7 @@ export function Row({
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        backgroundColor: onPress && hovered ? colors.selected : undefined,
+        backgroundColor: fill,
       }}
     >
       {icon}

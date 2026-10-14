@@ -116,6 +116,7 @@ test("a session keeps each space's tabs in order, and none of a private window's
   // Persistence starts from the saved session (none): the windows come after.
   const stop = startPersistence();
   const { one } = setup();
+  S().updateSettings({ launchTab: "lastTab" });
   S().pinTabs([model.activeTabId(S(), one)], true);
   S().createWindow({ incognito: true, url: "https://secret.com" });
   S().createWindow({ small: true, url: "https://quick.com" });
@@ -128,4 +129,33 @@ test("a session keeps each space's tabs in order, and none of a private window's
   assert.deepEqual(urls, ["a", "b", "c"]);
   assert.deepEqual(model.spaceTabIds(S(), "default").map(short), ["a", "b", "c"]);
   assert.equal(S().windowOrder.length, 2);
+});
+
+test("a launch starts each window on a blank tab, and the next launch reuses it", () => {
+  stub.docs.clear();
+  const stop = startPersistence();
+  const { one, two } = setup();
+  flushPersistence();
+  stop();
+  S().hydrate(loadSession());
+  const blank = model.activeTabId(S(), one);
+  assert.equal(S().tabs[blank].url, "");
+  assert.equal(S().tabs[model.activeTabId(S(), two)].url, "");
+  assert.notEqual(model.activeTabId(S(), two), blank, "each window its own");
+  assert.deepEqual(listed(one).filter(Boolean), ["a", "b", "c"], "the space's tabs wait in the sidebar");
+
+  const again = startPersistence();
+  flushPersistence();
+  again();
+  const count = Object.keys(S().tabs).length;
+  S().hydrate(loadSession());
+  assert.equal(Object.keys(S().tabs).length, count);
+
+  const last = startPersistence();
+  S().updateSettings({ launchTab: "lastTab" });
+  S().activate(Object.values(S().tabs).find((t) => short(t.id) === "b").id, one);
+  flushPersistence();
+  last();
+  S().hydrate(loadSession());
+  assert.equal(shown(one), "b");
 });

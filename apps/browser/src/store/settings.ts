@@ -21,6 +21,8 @@ export type Settings = {
   warnBeforeQuitting: boolean;
   warnBeforeClosingWindow: boolean;
   restoreSession: boolean;
+  // What a window shows when Bay opens: a blank new tab (its tabs waiting in the sidebar), or the tab it showed.
+  launchTab: "newTab" | "lastTab";
   searchEngine: SearchEngineId;
   customSearchUrl: string;
   customSearchEngines: CustomSearchEngine[];
@@ -82,6 +84,7 @@ export const DEFAULT_SETTINGS: Settings = {
   warnBeforeQuitting: false,
   warnBeforeClosingWindow: true,
   restoreSession: true,
+  launchTab: "newTab",
   searchEngine: "google",
   customSearchUrl: "",
   customSearchEngines: [],

@@ -10,6 +10,18 @@ import { tourAnchorRef } from "./onboarding/tour/anchors";
 import { themeEditorOpen } from "./spaces/ThemeEditor";
 import { useHover } from "./primitives";
 
+// The tabs windows show when Bay starts: a blank one waits quietly, its command bar opening when asked (⌘L, Open
+// search), not over the window on every launch.
+const launchTabs = new Set<string>();
+
+export function quietLaunchTabs() {
+  const s = useBrowser.getState();
+  for (const windowId of s.windowOrder) {
+    const id = activeTabId(s, windowId);
+    if (id) launchTabs.add(id);
+  }
+}
+
 // Restored blank tabs and Back to New Tab retain their tab and history. Search lives in the window palette.
 export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: boolean }) {
   const theme = useTheme();
@@ -19,7 +31,7 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   const open = () => useBrowser.getState().openPanel(windowId, "");
 
   useEffect(() => {
-    if (!focused) return;
+    if (!focused || launchTabs.has(tabId)) return;
     const state = useBrowser.getState();
     if (activeTabId(state, windowId) !== tabId || state.tabs[tabId]?.url || state.windowUi[windowId]?.panel.open || themeEditorOpen(windowId)) return;
     state.openPanel(windowId, "");

@@ -54,6 +54,21 @@ export function GeneralPane() {
         </Row>
       </Group>
 
+      <SectionHeader title={`When opening ${APP_NAME}:`} />
+      <Group>
+        <Row title="Start on" description="Your tabs stay in the sidebar either way.">
+          <PopUp
+            value={settings.launchTab}
+            options={[
+              { value: "newTab", title: "A new tab" },
+              { value: "lastTab", title: "The last tab you viewed" },
+            ]}
+            onChange={(v) => update({ launchTab: v })}
+            minWidth={190}
+          />
+        </Row>
+      </Group>
+
       <SectionHeader title={`When quitting ${APP_NAME}:`} />
       <Group>
         <Row title="Windows and tabs" description="What you see the next time you open it. Closed windows stay in History › Recently Closed.">

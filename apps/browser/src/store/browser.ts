@@ -3,7 +3,7 @@ import { createBookmarksSlice, EMPTY_BOOKMARKS, engineRoots, rootIdsFor, type Bo
 import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./folders";
 import { createGroupsSlice, placeFolders, type GroupsSlice } from "./groups";
 import { createHistorySlice, type HistorySlice } from "./history";
-import { IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage, spaceListKey, tabListKey, tabToShow, windowListKey } from "./model";
+import { blankTabToShow, IDLE_LIVE, isIncognitoSpace, pinnedFirst, pinnedPage, spaceListKey, tabListKey, tabToShow, windowListKey } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createPeeksSlice, type PeeksSlice } from "./peeks";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, withSpaceEmoji, type SpacesSlice } from "./spaces";
@@ -52,7 +52,11 @@ export type HydrateData = Partial<
     | "downloads"
     | "settings"
   >
-> & { focusedWindowId?: string | null };
+> & {
+  focusedWindowId?: string | null;
+  // The app's launch (lib/persist.ts): windows show what settings.launchTab says, not always the tab they showed.
+  launch?: boolean;
+};
 
 // A session from before tabs were their space's: each window kept its tabs, in its order.
 type SavedWindow = BrowserWindow & { tabIds?: string[] };
@@ -243,9 +247,11 @@ export const useBrowser = create<BrowserState>()(
         ui: { ...s.ui, focusedWindowId: focused, focusOrder: focused ? [focused, ...windowOrder.filter((id) => id !== focused).reverse()] : [] },
       };
       next = prunePinnedFolders(next);
-      // Each window shows the tab it showed, else its space's most recent one, else a new tab.
+      // Each window shows the tab it showed, else its space's most recent one, else a new tab. A launch that starts on
+      // a new tab shows a blank one, its space's tabs waiting in the sidebar.
+      const blank = data.launch && settings.launchTab === "newTab";
       for (const w of Object.values(windows)) {
-        const shown = tabToShow(next, w.id, w.spaceId);
+        const shown = blank ? blankTabToShow(next, w.id, w.spaceId) : tabToShow(next, w.id, w.spaceId);
         next = shown ? apply(next, activated(next, shown, w.id)) : withNewTab(next, w.id)[0];
       }
       set(next);
