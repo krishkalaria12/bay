@@ -1,5 +1,5 @@
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
-import { copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/shell";
+import { copyFile, copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -12,6 +12,7 @@ import { useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
 import { SIDEBAR_FOOTER_DOWNLOADS } from "./layout/constants";
 import { openInternalPage } from "./pages/urls";
 import { useSidebarWidth } from "./sidebar/tokens";
+import { showToast } from "./layout/splitActions";
 
 // MARK: Formatting
 
@@ -74,6 +75,8 @@ export async function downloadMenu(d: Download, windowId: string) {
       : [
           { id: "open", title: "Open", enabled: exists },
           { id: "reveal", title: "Show in Finder", enabled: exists },
+          { id: "copyFile", title: "Copy File", enabled: exists },
+          { id: "copyPath", title: "Copy Path", enabled: d.state === "finished" && !!d.path },
         ];
   items.push(
     { separator: true },
@@ -90,10 +93,22 @@ export async function downloadMenu(d: Download, windowId: string) {
   if (choice === "cancel") void cancelDownload(d.id);
   if (choice === "open") void openFile(d.path);
   if (choice === "reveal") void revealFile(d.path);
+  if (choice === "copyFile") {
+    try {
+      await copyDownloadFile(d);
+    } catch (error) {
+      showToast(windowId, "Couldn't copy file", error instanceof Error ? error.message : "Try again.");
+    }
+  }
+  if (choice === "copyPath") copyText(d.path);
   if (choice === "copy") copyText(d.url);
   if (choice === "page") openInternalPage("downloads", windowId);
   if (choice === "trash") void trashDownload(d);
   if (choice === "remove") useBrowser.getState().removeDownload(d.id);
+}
+
+export async function copyDownloadFile(d: Download) {
+  if (!(await copyFile(d.path))) throw new Error("The file may have been moved or deleted.");
 }
 
 export async function trashDownload(d: Download) {

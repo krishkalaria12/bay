@@ -11,7 +11,7 @@ import { useBrowser, type BrowserState } from "../store/browser";
 import { useWindowId, useWindowUi } from "../store/hooks";
 import { activeTabId, engineProfile } from "../store/model";
 import { downloadsIn } from "../store/ui";
-import { downloadStatus, FileIcon, isOpenWhenDone, toggleOpenWhenDone, trashDownload } from "./Downloads";
+import { copyDownloadFile, downloadStatus, FileIcon, isOpenWhenDone, toggleOpenWhenDone, trashDownload } from "./Downloads";
 import { Keycaps } from "./omnibox/Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./omnibox/PaletteActionMenu";
 import { FooterButton, useMenuPresence } from "./omnibox/PaletteContent";
@@ -440,8 +440,10 @@ function downloadActions(d: Download): PaletteMenuAction[] {
       ? [
           { id: "open", title: "Open", icon: "arrow.up.forward.app", hint: "↩", run: () => openFile(d.path) },
           { id: "reveal", title: "Show in Finder", icon: "finder", hint: "⌘↩", run: () => revealFile(d.path) },
+          { id: "copyFile", title: "Copy File", icon: "doc.on.doc", run: () => copyDownloadFile(d) },
         ]
       : []),
+    ...(d.state === "finished" && d.path ? [{ id: "copyPath", title: "Copy Path", icon: "text.alignleft", run: () => copyText(d.path) }] : []),
     copy,
     ...(exists ? [{ id: "trash", title: "Move to Trash", icon: "trash", separator: true, run: () => trashDownload(d) }] : []),
     {
