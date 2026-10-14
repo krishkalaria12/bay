@@ -2,16 +2,17 @@ import { FadeLabel, Surface } from "@bay/shell";
 import { Text, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
-import { layout, SYMBOL_PREFIX } from "../../lib/constants";
+import { SYMBOL_PREFIX } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { groupLabel } from "../../store/organize";
 import { tabTitle } from "./actions";
 import { useTabDrag } from "../layout/tabDrag";
 import type { Ghost } from "./dnd";
 import { TabIcon } from "./TabIcon";
-import { useSidebarTokens } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 
 export function DragGhost({ ghost }: { ghost: Ghost }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const { item, count, width, height, position } = ghost;
@@ -40,7 +41,7 @@ export function DragGhost({ ghost }: { ghost: Ghost }) {
         shadowOffset={[0, 4]}
         style={{
           width,
-          height: tile ? layout.pinnedHeight : height,
+          height: tile ? metrics.pinnedHeight : height,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: tile ? "center" : "flex-start",

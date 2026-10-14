@@ -14,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { create, useStore } from "zustand";
 import { useTheme } from "../../lib/theme";
+import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
@@ -355,8 +356,9 @@ class DragController {
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
     const rowPitch =
-      (source.kind === "group" || source.kind === "folder" ? (source.frame?.h ?? layout.rowHeight) : layout.rowHeight * Math.max(1, this.ghost?.count ?? 1)) +
-      ROW_GAP;
+      (source.kind === "group" || source.kind === "folder"
+        ? (source.frame?.h ?? sidebarMetrics(useBrowser.getState().settings.density).rowHeight)
+        : sidebarMetrics(useBrowser.getState().settings.density).rowHeight * Math.max(1, this.ghost?.count ?? 1)) + ROW_GAP;
     let drop: Drop = { type: "none" };
     let gapKey: string | null = null;
     let pitch = rowPitch;
@@ -465,8 +467,15 @@ class DragController {
 const DragContext = createContext<DragController | null>(null);
 
 export function DragProvider({ children }: { children: (ghost: Ghost | null, controller: DragController) => ReactNode }) {
+  const windowId = useWindowId();
+  const density = useBrowser((s) => s.settings.density);
+  const folded = useBrowser((s) => !!s.spaces[s.windows[windowId]?.spaceId ?? ""]?.folded);
   const [ghost, setGhost] = useState<Ghost | null>(null);
   const [controller] = useState(() => new DragController(setGhost));
+  useEffect(() => {
+    // Changing density or folding the space invalidates the frames captured at drag start.
+    if (controller.active) controller.end(false);
+  }, [controller, density, folded]);
   useEffect(() => {
     if (__DEV__) (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
     // The sidebar going away mid-drag (its window closing, the layout switching) ends the drag and its picture.

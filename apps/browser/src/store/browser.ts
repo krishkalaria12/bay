@@ -109,6 +109,7 @@ export const useBrowser = create<BrowserState>()(
       const { detached, owners } = isolated;
       const spaces = withSpaceEmoji(isolated.spaces, spaceOrder);
       const settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      settings.density = settings.density === "compact" ? "compact" : "comfortable";
       settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
       if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
 

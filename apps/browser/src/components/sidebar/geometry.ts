@@ -1,12 +1,12 @@
 // Where rows sit in the sidebar's list, from the store alone: rows are fixed-height, so a row's place is known before
 // it mounts or lays out. GroupBlock and Fold draw groups by these numbers; revealing a tab scrolls by them.
+import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
 import type { BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
-import { GROUP_BORDER, GROUP_PAD, NEW_TAB_PITCH } from "./constants";
+import { GROUP_BORDER, GROUP_PAD, NEW_TAB_GAP } from "./constants";
 import { folderEntries, groupEntries, sidebarEntries } from "./entries";
 
-const ROW = layout.rowHeight;
 const GAP = layout.rowGap;
 
 export type Section = "pinned" | "pinnedGroups" | "list";
@@ -20,6 +20,7 @@ export function keptEntry(s: BrowserState, windowId: string, spaceId: string, en
 
 // A group's members: every row open; only the kept one collapsed (none: nothing, its padding included).
 function membersHeight(s: BrowserState, windowId: string, spaceId: string, groupId: string): number {
+  const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const entries = groupEntries(s, groupId);
   if (!s.groups[groupId]?.collapsed) return entries.length ? entries.length * ROW + (entries.length - 1) * GAP + GROUP_PAD : GROUP_PAD;
   return keptEntry(s, windowId, spaceId, entries) ? ROW + GROUP_PAD : 0;
@@ -28,6 +29,7 @@ function membersHeight(s: BrowserState, windowId: string, spaceId: string, group
 // A pinned folder's rows below its header: every row open, each after a gap (an open empty one: its "Drag tabs here"
 // line); only the kept one collapsed.
 function folderMembersHeight(s: BrowserState, windowId: string, spaceId: string, folderId: string): number {
+  const ROW = sidebarMetrics(s.settings.density).rowHeight;
   const entries = folderEntries(s, folderId);
   if (!s.pinnedFolders[folderId]?.collapsed) return Math.max(1, entries.length) * (ROW + GAP);
   return keptEntry(s, windowId, spaceId, entries) ? ROW + GAP : 0;
@@ -35,6 +37,7 @@ function folderMembersHeight(s: BrowserState, windowId: string, spaceId: string,
 
 /** A list entry's height: a tab or split row, a pinned folder (its header and rows), or a group block (its border, header and members). */
 export function entryHeight(s: BrowserState, windowId: string, spaceId: string, entry: string): number {
+  const ROW = sidebarMetrics(s.settings.density).rowHeight;
   if (entry.startsWith("f:")) return ROW + folderMembersHeight(s, windowId, spaceId, entry.slice(2));
   if (!entry.startsWith("g:")) return ROW;
   return GROUP_BORDER * 2 + ROW + membersHeight(s, windowId, spaceId, entry.slice(2));
@@ -56,11 +59,13 @@ export function rowSpan(
   tabId: string,
   newTabAtTop: boolean,
 ): { section: Section; top: number; height: number } | null {
+  const ROW = sidebarMetrics(s.settings.density).rowHeight;
+  const folded = !!s.spaces[spaceId]?.folded;
   const { pinned, pinnedGroups, list } = sidebarEntries(s, windowId, spaceId);
   const sections: [Section, string[], number][] = [
-    ["pinned", pinned, 0],
-    ["pinnedGroups", pinnedGroups.map((id) => `g:${id}`), 0],
-    ["list", list, newTabAtTop ? NEW_TAB_PITCH : 0],
+    ["pinned", folded ? [] : pinned, 0],
+    ["pinnedGroups", folded ? [] : pinnedGroups.map((id) => `g:${id}`), 0],
+    ["list", list, newTabAtTop ? ROW + NEW_TAB_GAP : 0],
   ];
   for (const [section, entries, start] of sections) {
     let top = start;

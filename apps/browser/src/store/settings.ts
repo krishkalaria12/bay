@@ -67,6 +67,7 @@ export type Settings = {
   hideBookmarksBarImport: boolean;
 
   appearance: "auto" | "light" | "dark";
+  density: "comfortable" | "compact";
   // The window behind the sidebar and the card: a solid colour (as yab and Arc have it), or glass that shows the
   // desktop through.
   windowMaterial: "solid" | "glass";
@@ -123,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bookmarksBar: "never",
   hideBookmarksBarImport: false,
   appearance: "auto",
+  density: "comfortable",
   windowMaterial: "solid",
   addressBar: "sidebar",
   defaultSpaceId: DEFAULT_SPACE_ID,

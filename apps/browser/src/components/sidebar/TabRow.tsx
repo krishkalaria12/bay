@@ -4,7 +4,6 @@ import { Pressable, TextInput, View, type GestureResponderEvent } from "react-na
 import Animated from "react-native-reanimated";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { layout } from "../../lib/constants";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId, pinnedPage } from "../../store/model";
 import type { Tab } from "../../store/types";
@@ -19,7 +18,7 @@ import { openTabMenu } from "./menus";
 import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
-import { useSidebarTokens } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { isEscapeKey } from "../../lib/escapeKey";
 import { isDeveloperTab } from "../developer/sites";
 import { DEVELOPER_YELLOW } from "../developer/constants";
@@ -75,6 +74,7 @@ function closeButton(tab: Pick<Tab, "id" | "pinnedRow" | "unloaded">) {
 }
 
 export function TabRow({ tabId }: { tabId: string }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const windowId = useWindowId();
@@ -118,7 +118,7 @@ export function TabRow({ tabId }: { tabId: string }) {
                   cornerRadius={10}
                   borderWidth={border}
                   borderColor={border ? hex(tokens.multiSelectedStroke) : undefined}
-                  style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
+                  style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 - border, paddingRight: 6 - border }}
                 >
                   <View>
                     <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
@@ -233,6 +233,7 @@ export const SplitRowItem = memo(function SplitRowItem({
   section: "list" | "pinned" | "pinnedGroups";
   parentGroup?: string;
 }) {
+  const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const tabIds = useBrowser((s) => s.splits[splitId]?.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).join(",") ?? "")
     .split(",")
@@ -250,7 +251,7 @@ export const SplitRowItem = memo(function SplitRowItem({
         <Surface
           fill={hex(!active && hovered ? theme.tabHover : "rgba(0,0,0,0)")}
           cornerRadius={10}
-          style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingHorizontal: 3 }}
+          style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingHorizontal: 3 }}
         >
           {tabIds.map((id, i) => (
             <View key={id} style={{ flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 }}>
@@ -265,6 +266,7 @@ export const SplitRowItem = memo(function SplitRowItem({
 });
 
 function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tab = useTab(tabId);
   const active = useIsActiveTab(tabId);
@@ -276,7 +278,7 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
         <Pressable onPress={(e) => clickTab(windowId, tabId, clickMods(e))}>
           <View
             style={{
-              height: layout.rowHeight - 6,
+              height: metrics.rowHeight - 6,
               borderRadius: 7,
               flexDirection: "row",
               alignItems: "center",

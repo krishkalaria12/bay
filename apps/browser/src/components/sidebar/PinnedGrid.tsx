@@ -20,7 +20,7 @@ import { registerRow } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { clickMods } from "./TabRow";
-import { useSidebarTokens } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { MIN_PINNED_TILE, PINNED_BADGE_SPRING, PINNED_GLASS_RIM, PINNED_SELECTION_STROKE, PINNED_TILE_GAP } from "./constants";
 
 export function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: number }) {
@@ -85,6 +85,7 @@ export function PinDropZone({ top, height, cover }: { top: number; height: numbe
 }
 
 const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; width: number }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const windowId = useWindowId();
@@ -138,7 +139,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
                     cornerRadius={radius}
                     strokeWidth={PINNED_SELECTION_STROKE}
                     dark={theme.dark}
-                    style={{ width, height: layout.pinnedHeight, alignItems: "center", justifyContent: "center" }}
+                    style={{ width, height: metrics.pinnedHeight, alignItems: "center", justifyContent: "center" }}
                   >
                     <View>
                       {tileTheme.theme.kind === "template" ? (
@@ -157,7 +158,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
                     shadowOpacity={theme.dark ? 0.15 : 0.12}
                     shadowRadius={1.5}
                     shadowOffset={[0, 0.5]}
-                    style={{ width, height: layout.pinnedHeight, padding: 1 }}
+                    style={{ width, height: metrics.pinnedHeight, padding: 1 }}
                   >
                     <View
                       style={{
@@ -180,7 +181,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
                   <View
                     style={{
                       width,
-                      height: layout.pinnedHeight,
+                      height: metrics.pinnedHeight,
                       borderRadius: radius,
                       borderWidth: selected ? 1 : 0.5,
                       borderColor: selected ? tokens.dragBorder : theme.pinnedRestingStroke,
@@ -234,6 +235,7 @@ function GlassTile({
   pressed: boolean;
   tileTheme: TileTheme | null;
 }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const tab = useTab(tabId);
@@ -241,7 +243,7 @@ function GlassTile({
   const radius = 10;
   const fill = active ? theme.pinnedSelectedFill : pressed ? theme.tabPressed : hovered || selected ? theme.tabHover : theme.pinnedResting;
   return (
-    <View style={{ width, height: layout.pinnedHeight, alignItems: "center", justifyContent: "center" }}>
+    <View style={{ width, height: metrics.pinnedHeight, alignItems: "center", justifyContent: "center" }}>
       <GlassFill radius={radius} fill={fill} raised={active && !pressed} />
       {active ? (
         <DockSelection

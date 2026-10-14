@@ -7,6 +7,7 @@ import { useBrowser } from "../../store/browser";
 import { Favicon } from "../primitives";
 import { SYMBOL_PREFIX } from "../../lib/constants";
 import { iconColor } from "../symbolColors";
+import { useSidebarMetrics } from "./tokens";
 import { SLEEPING_OPACITY } from "./constants";
 
 // Memoized: rows re-render on hover and selection, and the icon's props rarely change.
@@ -15,7 +16,7 @@ export const TabIcon = memo(function TabIcon({
   url,
   favicon,
   icon,
-  size = 16,
+  size,
   color,
   spaceId: profile,
   direct,
@@ -29,8 +30,10 @@ export const TabIcon = memo(function TabIcon({
   spaceId?: string;
   direct?: boolean;
 }) {
+  const metrics = useSidebarMetrics();
+  const iconSize = size ?? metrics.iconSize;
   const sleeping = useIsSleeping(tabId ?? "");
-  const props = { url, favicon, icon, size, color, direct };
+  const props = { url, favicon, icon, size: iconSize, color, direct };
   return (
     <View style={{ opacity: sleeping ? SLEEPING_OPACITY : 1 }}>
       {profile || !tabId ? <Icon {...props} spaceId={profile} /> : <TabSpaceIcon {...props} tabId={tabId} />}

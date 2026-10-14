@@ -23,6 +23,8 @@ export type Space = {
   // How long its tabs stay unused before they're cleaned up (Arc's archive, per profile there): hours, never (null),
   // or the app's setting (unset).
   cleanUpAfterHours?: number | null;
+  // Hide this space's pinned rows, folders and groups while leaving today's tabs visible.
+  folded?: boolean;
 };
 
 // A window shows one space at a time; its tabs are the space's (store/model.ts tab lists), as Arc's: every window

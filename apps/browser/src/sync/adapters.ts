@@ -43,6 +43,7 @@ export const SYNCED_SETTINGS = [
   "showFullUrl",
   "bookmarksBar",
   "appearance",
+  "density",
   "addressBar",
   "sidebarPosition",
   "shortcuts",
@@ -62,13 +63,14 @@ export const settingsAdapter: Adapter = {
       const record = visible.get(key) as { v: unknown } | undefined;
       if (!record || !("v" in record) || !(SYNCED_SETTINGS as readonly string[]).includes(name)) continue;
       if (name === "awakeSites" && !Array.isArray(record.v)) continue;
+      if (name === "density" && record.v !== "comfortable" && record.v !== "compact") continue;
       patch[name] = record.v;
     }
     if (Object.keys(patch).length) store().updateSettings(patch as Partial<Settings>);
   },
 };
 
-export type ProfileRecord = { n: string; c: Space["color"]; i: string | null; d?: true };
+export type ProfileRecord = { n: string; c: Space["color"]; i: string | null; d?: true; f?: boolean };
 
 export function profilesAdapter(links: () => Record<string, { syncId: string }>): Adapter {
   const linked = () => Object.entries(links()).filter(([id]) => store().spaces[id]);
@@ -79,7 +81,13 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
       const values = new Map<string, unknown>();
       for (const [id, { syncId }] of linked()) {
         const p = store().spaces[id]!;
-        values.set(`prof:${syncId}`, { n: p.name, c: p.color, i: p.icon, ...(id === DEFAULT_SPACE_ID ? { d: true } : {}) } satisfies ProfileRecord);
+        values.set(`prof:${syncId}`, {
+          n: p.name,
+          c: p.color,
+          i: p.icon,
+          f: !!p.folded,
+          ...(id === DEFAULT_SPACE_ID ? { d: true } : {}),
+        } satisfies ProfileRecord);
       }
       const mine = new Set(values.keys());
       return { values, ignore: (key) => !mine.has(key) };
@@ -88,7 +96,7 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
       for (const [id, { syncId }] of linked()) {
         const record = visible.get(`prof:${syncId}`) as ProfileRecord | undefined;
         if (!record || !changed.has(`prof:${syncId}`)) continue;
-        store().updateSpace(id, { name: record.n, color: record.c, icon: record.i });
+        store().updateSpace(id, { name: record.n, color: record.c, icon: record.i, ...(typeof record.f === "boolean" ? { folded: record.f } : {}) });
       }
     },
   };

@@ -521,6 +521,7 @@ export function addRemoteProfile(syncId: string): string | null {
   const record = doc.scopes[APP_SCOPE]?.records[`prof:${syncId}`]?.v as ProfileRecord | undefined;
   if (!record) return null;
   const id = useBrowser.getState().createSpace({ name: record.n, color: record.c, icon: record.i });
+  if (typeof record.f === "boolean") useBrowser.getState().updateSpace(id, { folded: record.f });
   doc.profiles[id] = { syncId, enabled: true };
   doc.scopes[`p:${syncId}`] = { ...emptyScope(), awaitRemote: true };
   save();

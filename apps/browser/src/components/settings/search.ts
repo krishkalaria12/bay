@@ -20,6 +20,7 @@ const SETTINGS: SettingEntry[] = [
   { pane: "search", title: "Show search suggestions", words: "autocomplete" },
 
   { pane: "appearance", title: "Appearance Theme", words: "dark light mode" },
+  { pane: "appearance", title: "Density", words: "comfortable compact rows icons size" },
   { pane: "appearance", title: "Window", words: "solid glass transparent material background" },
   { pane: "appearance", title: "Sidebar", words: "left right position side" },
   { pane: "appearance", title: "Address Bar", words: "url toolbar location" },

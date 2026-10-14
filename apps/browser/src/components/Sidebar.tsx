@@ -11,7 +11,7 @@ import { activeTabId, listIds, windowListKey } from "../store/model";
 import { cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
-import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD } from "./layout/constants";
+import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS } from "./layout/constants";
 import { SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
 import { SIDEBAR_PLAYER_HEIGHT } from "./media/constants";
 import { IconButton, useHover } from "./primitives";
@@ -36,30 +36,30 @@ import { entriesHeight, rowSpan, type Section } from "./sidebar/geometry";
 import { measureRow } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./sidebar/RowMotion";
-import { useSidebarTokens, useSidebarWidth } from "./sidebar/tokens";
+import { useSidebarMetrics, useSidebarTokens, useSidebarWidth } from "./sidebar/tokens";
 import {
   CLEAN_UP_UPSELL_MIN,
   DOCKED_BOTTOM,
   FIRST_PAINT_ROWS,
   GLOW_ROOM,
-  NEW_TAB_DOCK,
   NEW_TAB_GAP,
-  NEW_TAB_PITCH,
   PIN_BAND,
   PINNED_DIVIDER_PAD,
   CLEAR_WIDTH,
   CLEAR_GAP,
   SPACE_TITLE_GAP,
-  ROW_PITCH,
   ROWS_PER_FRAME,
 } from "./sidebar/constants";
 
 // The list's room and its height: with new tabs at the bottom, the New Tab row docks below the list once the list
 // leaves no room for it (at the top it stays the list's first row).
 type Room = { available: number; list: number };
-const dockedIn = ({ available, list }: Room) => available > 0 && list + NEW_TAB_PITCH + 12 > available;
+const dockedIn = ({ available, list }: Room, pitch: number) => available > 0 && list + pitch + 12 > available;
 
 export function Sidebar() {
+  const metrics = useSidebarMetrics();
+  const newTabPitch = metrics.rowHeight + NEW_TAB_GAP;
+  const newTabDock = DOCKED_BOTTOM + newTabPitch;
   const windowId = useWindowId();
   const width = useSidebarWidth(windowId);
   const current = useWindowSpaceId();
@@ -70,10 +70,10 @@ export function Sidebar() {
   const [room, setRoom] = useState<Room>({ available: 0, list: 0 });
   const { available } = room;
   const newTabsAtBottom = useSettings((s) => s.newTabPosition === "bottom");
-  const docked = newTabsAtBottom && dockedIn(room);
+  const docked = newTabsAtBottom && dockedIn(room, newTabPitch);
   const onListHeight = (height: number) => {
     listHeight.current = height;
-    setRoom((r) => (dockedIn({ ...r, list: height }) === dockedIn(r) ? r : { ...r, list: height }));
+    setRoom((r) => (dockedIn({ ...r, list: height }, newTabPitch) === dockedIn(r, newTabPitch) ? r : { ...r, list: height }));
   };
   const scroll = useRef<ScrollView>(null);
   const scrollY = useRef(0);
@@ -83,7 +83,7 @@ export function Sidebar() {
   const addressBar = useAddressBarInSidebar();
   // A tab in Developer Mode has its address over its page: the sidebar keeps its buttons, not its field.
   const field = useSidebarFieldShown();
-  const header = field ? SIDEBAR_HEADER_WITH_FIELD : layout.sidebarHeader;
+  const header = field ? SIDEBAR_FIELD.top + metrics.addressHeight : layout.sidebarHeader;
   const glowRoom = field ? 0 : GLOW_ROOM;
   // On the window's right the header has no window buttons to clear: the profile starts at the inset.
   const profileX = useSidebarOnRight() ? layout.sidebarInset + 4 : PROFILE_INDICATOR_X;
@@ -114,10 +114,10 @@ export function Sidebar() {
               left: 0,
               right: 0,
               top: header - glowRoom,
-              bottom: (docked ? NEW_TAB_DOCK : 0) + playerHeight + footer,
+              bottom: (docked ? newTabDock : 0) + playerHeight + footer,
               overflow: paging ? "hidden" : "visible",
             }}
-            onLayout={(e) => setRoom({ available: e.nativeEvent.layout.height + (docked ? NEW_TAB_DOCK : 0), list: listHeight.current })}
+            onLayout={(e) => setRoom({ available: e.nativeEvent.layout.height + (docked ? newTabDock : 0), list: listHeight.current })}
           >
             {pages.map((page) => (
               <SidebarPage
@@ -130,7 +130,7 @@ export function Sidebar() {
                 docked={docked}
                 glowRoom={glowRoom}
                 ghost={ghost}
-                rows={page.id === current ? undefined : Math.ceil(available / ROW_PITCH) + 1}
+                rows={page.id === current ? undefined : Math.ceil(available / (metrics.rowHeight + layout.rowGap)) + 1}
                 geometryRef={page.id === current ? geometry : undefined}
                 onListHeight={onListHeight}
                 onScrollView={(v) => {
@@ -147,7 +147,7 @@ export function Sidebar() {
           </View>
 
           {playerTab ? (
-            <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: (docked ? NEW_TAB_DOCK : 8) + footer }}>
+            <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: (docked ? newTabDock : 8) + footer }}>
               <SidebarPlayer tabId={playerTab} />
             </View>
           ) : null}
@@ -199,7 +199,7 @@ export function Sidebar() {
           {/* Nothing pinned: the drag's pin target, over room the sidebar already has, so no row moves. */}
           {ghost && !ghost.landing && nothingPinned ? (
             field ? (
-              <PinDropZone top={SIDEBAR_FIELD.top} height={SIDEBAR_FIELD.height} cover />
+              <PinDropZone top={SIDEBAR_FIELD.top} height={metrics.addressHeight} cover />
             ) : (
               <PinDropZone top={layout.pinnedTop - PIN_BAND - 3} height={PIN_BAND} cover={false} />
             )
@@ -230,6 +230,8 @@ type PageProps = {
 
 function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
   const windowId = useWindowId();
+  const metrics = useSidebarMetrics();
+  const folded = useBrowser((s) => !!s.spaces[spaceId]?.folded);
   const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, spaceId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
   // long sidebar neither holds up the window's first frame nor mounts in one long task after it.
@@ -316,7 +318,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                     >
                       <View
                         onLayout={(e) => {
-                          measured.current = e.nativeEvent.layout.height + glowRoom - (inlineNewTab ? NEW_TAB_PITCH : 0);
+                          measured.current = e.nativeEvent.layout.height + glowRoom - (inlineNewTab ? metrics.rowHeight + NEW_TAB_GAP : 0);
                           if (current) onListHeight(measured.current);
                         }}
                       >
@@ -325,35 +327,46 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                           <SpaceTitle windowId={windowId} spaceId={spaceId} />
                         </View>
                         {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
-                        <View
-                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y) : undefined}
-                          style={{ marginTop: SPACE_TITLE_GAP, gap: layout.rowGap }}
-                        >
-                          {pinned.map((entry) => (
-                            <PinnedEntry key={entry} entry={entry} />
-                          ))}
-                          <Tail id="tail:pinned" section="pinned" />
-                        </View>
-                        <PinnedDivider pinned={pinned.length > 0} listed={all.length > 0 || pinnedGroups.length > 0} windowId={windowId} spaceId={spaceId} />
-                        <View
-                          ref={(v) => {
-                            controller?.regions.set("pinnedGroups", v);
-                          }}
-                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
-                          style={{ gap: layout.rowGap }}
-                        >
-                          {pinnedGroups.map((id) => (
-                            <GroupBlock key={id} groupId={id} section="pinnedGroups" />
-                          ))}
-                          <Tail id="tail:pinnedGroups" section="pinnedGroups" />
-                        </View>
-                        <LiveFolders windowId={windowId} spaced={pinnedGroups.length > 0} />
+                        {folded ? null : (
+                          <>
+                            <View
+                              onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y) : undefined}
+                              style={{ marginTop: SPACE_TITLE_GAP, gap: layout.rowGap }}
+                            >
+                              {pinned.map((entry) => (
+                                <PinnedEntry key={entry} entry={entry} />
+                              ))}
+                              <Tail id="tail:pinned" section="pinned" />
+                            </View>
+                          </>
+                        )}
+                        <PinnedDivider
+                          pinned={!folded && pinned.length > 0}
+                          listed={all.length > 0 || (!folded && pinnedGroups.length > 0)}
+                          windowId={windowId}
+                          spaceId={spaceId}
+                        />
+                        {folded ? null : (
+                          <View
+                            ref={(v) => {
+                              controller?.regions.set("pinnedGroups", v);
+                            }}
+                            onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
+                            style={{ gap: layout.rowGap }}
+                          >
+                            {pinnedGroups.map((id) => (
+                              <GroupBlock key={id} groupId={id} section="pinnedGroups" />
+                            ))}
+                            <Tail id="tail:pinnedGroups" section="pinnedGroups" />
+                          </View>
+                        )}
+                        <LiveFolders windowId={windowId} spaced={!folded && pinnedGroups.length > 0} />
                         <View
                           ref={(v) => {
                             controller?.regions.set("list", v);
                           }}
                           onLayout={geometryRef ? (e) => void (geometryRef.current.regions.list = e.nativeEvent.layout.y) : undefined}
-                          style={{ marginTop: pinnedGroups.length ? 7 : 0, gap: layout.rowGap }}
+                          style={{ marginTop: !folded && pinnedGroups.length ? 7 : 0, gap: layout.rowGap }}
                         >
                           {newTabsAtTop && inlineNewTab ? (
                             <View style={{ marginBottom: NEW_TAB_GAP - layout.rowGap }}>
@@ -531,6 +544,7 @@ function DownloadsButton({ windowId }: { windowId: string }) {
 }
 
 function NewTabRow({ windowId }: { windowId: string }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const { hovered, hoverProps } = useHover();
@@ -546,7 +560,7 @@ function NewTabRow({ windowId }: { windowId: string }) {
         {({ pressed }) => (
           <View
             style={{
-              height: layout.rowHeight,
+              height: metrics.rowHeight,
               borderRadius: 10,
               flexDirection: "row",
               alignItems: "center",

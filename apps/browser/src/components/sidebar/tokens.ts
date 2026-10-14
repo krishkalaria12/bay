@@ -1,3 +1,4 @@
+import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
@@ -114,4 +115,8 @@ export function useSidebarWidth(windowId: string): number {
   const saved = useBrowser((s) => s.settings.sidebarWidth ?? layout.sidebarWidth);
   const dragging = useSidebarUi((u) => u.dragWidth[windowId]);
   return dragging ?? saved;
+}
+
+export function useSidebarMetrics() {
+  return useBrowser((s) => sidebarMetrics(s.settings.density));
 }

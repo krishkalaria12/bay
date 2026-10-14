@@ -13,6 +13,7 @@ import { ToolbarButton } from "../layout/controls";
 import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
 import { SIDEBAR_FIELD } from "../layout/constants";
 import { GlassFill, useLiquidGlass } from "../glass";
+import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
 import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
@@ -60,6 +61,7 @@ function NavigationButtons({ tab, palette }: { tab: Tab; palette: ToolbarPalette
 }
 
 export function SidebarAddressRow() {
+  const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const tab = useActiveTab();
   const field = useRef<View>(null);
@@ -72,7 +74,7 @@ export function SidebarAddressRow() {
     <View
       ref={field}
       onLayout={anchor}
-      style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, top: SIDEBAR_FIELD.top, height: SIDEBAR_FIELD.height }}
+      style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, top: SIDEBAR_FIELD.top, height: metrics.addressHeight }}
     >
       {tab?.url ? <PageField tab={tab} windowId={windowId} /> : <EmptyField windowId={windowId} />}
     </View>
@@ -80,12 +82,14 @@ export function SidebarAddressRow() {
 }
 
 function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
+  const metrics = useSidebarMetrics();
   const palette = toolbarPalette(useTheme(), null);
   const inSplit = useBrowser((s) => !!splitOf(s, tab.id));
-  return <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={alreadyFocused} sidebar={{ height: SIDEBAR_FIELD.height }} />;
+  return <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={alreadyFocused} sidebar={{ height: metrics.addressHeight }} />;
 }
 
 function EmptyField({ windowId }: { windowId: string }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const glass = useLiquidGlass();
   const { hovered, hoverProps } = useHover();
@@ -97,7 +101,7 @@ function EmptyField({ windowId }: { windowId: string }) {
       <Pressable onPress={open}>
         <View
           style={{
-            height: SIDEBAR_FIELD.height,
+            height: metrics.addressHeight,
             borderRadius: SIDEBAR_FIELD.radius,
             borderWidth: StyleSheet.hairlineWidth * 2,
             borderColor: glass ? "transparent" : theme.pinnedRestingStroke,

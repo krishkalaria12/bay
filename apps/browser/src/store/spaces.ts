@@ -19,7 +19,7 @@ export type SpacesSlice = {
   /** `shareWith`: a space whose sign-ins (native profile) the new one shares; else it gets its own, signed out. */
   /** Without an icon, the space gets an emoji no other space has (unusedSpaceIcon). */
   createSpace(options: { name: string; color?: SpaceColor; theme?: SpaceTheme | null; icon?: string | null; shareWith?: string | null }): string;
-  updateSpace(id: string, patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "followSite" | "cleanUpAfterHours">>): void;
+  updateSpace(id: string, patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "followSite" | "cleanUpAfterHours" | "folded">>): void;
   deleteSpace(id: string): void;
   reorderSpaces(ids: string[]): void;
   setDefaultSpace(id: string): void;

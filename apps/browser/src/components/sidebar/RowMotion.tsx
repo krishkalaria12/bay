@@ -1,3 +1,4 @@
+import { useSidebarMetrics } from "./tokens";
 import { FadeLabel } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
@@ -122,6 +123,7 @@ export function OpeningRow({
   onOpened: (entry: string) => void;
   children: ReactNode;
 }) {
+  const metrics = useSidebarMetrics();
   const [grows] = useState(opening);
   const progress = useSharedValue(grows ? 0 : 1);
   useEffect(() => {
@@ -132,12 +134,12 @@ export function OpeningRow({
   const style = useAnimatedStyle(() => {
     const p = growing ? progress.get() : 1;
     return {
-      height: growing ? p * layout.rowHeight : "auto",
+      height: growing ? p * metrics.rowHeight : "auto",
       marginBottom: (p - 1) * layout.rowGap,
       opacity: interpolate(p, [0.25, 1], [0, 1], Extrapolation.CLAMP),
       overflow: growing ? "hidden" : "visible",
     };
-  }, [growing]);
+  }, [growing, metrics.rowHeight]);
   // Dragged, its entry closes up inside this wrapper: the wrapper takes back the list's gap after it, or the rows
   // below moved down by it as a drag began.
   const dragged = useDragSource(entry);
@@ -146,6 +148,7 @@ export function OpeningRow({
 
 /** A closed tab's row on its way out: it fades, and its room (its gap included) closes. */
 export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId: string) => void }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const progress = useSharedValue(0);
   useEffect(() => {
@@ -153,12 +156,12 @@ export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId
   }, []);
   const style = useAnimatedStyle(() => {
     const p = progress.get();
-    return { height: (1 - p) * layout.rowHeight, marginBottom: -p * layout.rowGap, opacity: interpolate(p, [0, 0.75], [1, 0], Extrapolation.CLAMP) };
+    return { height: (1 - p) * metrics.rowHeight, marginBottom: -p * layout.rowGap, opacity: interpolate(p, [0, 0.75], [1, 0], Extrapolation.CLAMP) };
   });
   const { tab, active } = row;
   return (
     <Animated.View pointerEvents="none" style={[{ overflow: "hidden" }, style]}>
-      <View style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}>
+      <View style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}>
         {active && <SelectedFill borderWidth={0.5} />}
         <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
         <FadeLabel text={tabTitle(tab)} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />

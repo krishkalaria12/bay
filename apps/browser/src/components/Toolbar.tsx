@@ -1,3 +1,4 @@
+import { useSidebarMetrics } from "./sidebar/tokens";
 import { breadcrumb, urlForDisplay } from "@bay/core";
 import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef } from "react";
@@ -238,6 +239,8 @@ export function UrlField({
   // In the sidebar, the page shows its load (PageLoadGlow).
   sidebar?: { height: number };
 }) {
+  const metrics = useSidebarMetrics();
+  const fieldHeight = sidebar?.height ?? metrics.toolbarAddressHeight;
   const theme = useTheme();
   const glass = useLiquidGlass();
   const showFullUrl = useSettings((s) => s.showFullUrl);
@@ -285,7 +288,7 @@ export function UrlField({
               backgroundColor: glass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
               overflow: "hidden",
             }
-          : { height: 30, borderRadius: 8, backgroundColor: hovered && !glass ? palette.pill : undefined },
+          : { height: fieldHeight, borderRadius: 8, backgroundColor: hovered && !glass ? palette.pill : undefined },
       ]}
     >
       {glass ? (
@@ -301,14 +304,14 @@ export function UrlField({
             name="lock.open.trianglebadge.exclamationmark.fill"
             size={12}
             color={insecure === "certificateError" ? "#FF5F57" : palette.secondary}
-            style={{ width: 18, height: 30 }}
+            style={{ width: 18, height: fieldHeight }}
           />
         </Pressable>
       )}
       <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => void showUrlBarMenu(tab)}>
         <Pressable
           onPress={() => openPanel(tab.url)}
-          style={{ flex: 1, height: sidebar?.height ?? 30, justifyContent: "center", paddingLeft: insecure ? 3 : sidebar ? 10 : 8 }}
+          style={{ flex: 1, height: fieldHeight, justifyContent: "center", paddingLeft: insecure ? 3 : sidebar ? 10 : 8 }}
         >
           {sidebar ? (
             <View style={{ flexDirection: "row", alignItems: "center" }}>

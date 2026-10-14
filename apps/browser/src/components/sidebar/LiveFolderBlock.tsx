@@ -36,7 +36,7 @@ import { dismissHover, useRowHover } from "./hover";
 import { openLiveFolderMenu, openLiveItemMenu } from "./liveMenus";
 import { registerRow } from "./state";
 import { TabIcon } from "./TabIcon";
-import { useSidebarTokens } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { LIVE_FOLDER_PAD, LIVE_POP_SPRING } from "./constants";
 
 const EMPTY: LiveItem[] = [];
@@ -129,6 +129,7 @@ function FolderNote({ folderId }: { folderId: string }) {
 }
 
 function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; windowId: string; collapsed: boolean }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const colors = useLiveColors();
@@ -160,7 +161,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
             <Surface
               fill={hex(pressed ? theme.tabPressed : hovered ? tokens.groupHeaderHover : "rgba(0,0,0,0)")}
               cornerRadius={10}
-              style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - LIVE_FOLDER_PAD }}
+              style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - LIVE_FOLDER_PAD }}
             >
               <TabIcon url={sourceSite} icon={icon} />
               <FadeLabel text={folder.name} fontSize={13} weight="medium" color={tokens.groupTitle} style={{ flex: 1, height: 18, marginLeft: 5 }} />
@@ -301,6 +302,7 @@ function MoreRow({ folderId, section, count }: { folderId: string; section: stri
 }
 
 function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: string; stack: Extract<FolderRow, { kind: "stack" }> }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const collapsed = useLive((s) => s.expandedStacks[stack.id] === false);
@@ -358,7 +360,7 @@ function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: s
         collapsed={collapsed}
         entries={stack.items.map((item) => ({ key: item.id, node: <LiveItemRow folderId={folderId} item={item} windowId={windowId} indent={10} /> }))}
         gap={layout.rowGap}
-        rowHeight={layout.rowHeight}
+        rowHeight={metrics.rowHeight}
         padTop={layout.rowGap}
       />
     </View>
@@ -366,6 +368,7 @@ function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: s
 }
 
 function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: string; item: LiveItem; windowId: string; indent?: number }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const colors = useLiveColors();
   const key = liveRowKey(folderId, item.id);
@@ -390,8 +393,8 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
   // Every value, "auto" at rest: a value the style stops giving keeps the last one it gave.
   const foldStyle = useAnimatedStyle(() => {
     const f = completing ? fold.get() : 1;
-    return { height: completing ? f * layout.rowHeight : "auto", opacity: f, overflow: completing ? "hidden" : "visible" };
-  }, [completing]);
+    return { height: completing ? f * metrics.rowHeight : "auto", opacity: f, overflow: completing ? "hidden" : "visible" };
+  }, [completing, metrics.rowHeight]);
   const fill = active ? theme.tabSelected : hovered ? theme.tabHover : "rgba(0,0,0,0)";
 
   return (
@@ -419,7 +422,7 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
                 shadowOpacity={active ? 1 : 0}
                 shadowRadius={theme.tabSelectedShadowRadius}
                 shadowOffset={[0, 0.5]}
-                style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 + indent, paddingRight: 6 }}
+                style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9 + indent, paddingRight: 6 }}
               >
                 {unread ? (
                   <View style={{ position: "absolute", left: 2 + indent, width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.pip }} />

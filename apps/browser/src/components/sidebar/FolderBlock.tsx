@@ -17,7 +17,7 @@ import { openFolderMenu } from "./menus";
 import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, TabRowItem } from "./TabRow";
-import { useSidebarTokens, withAlpha } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
 import { folderTabIds } from "../../store/folders";
 
 /**
@@ -25,6 +25,7 @@ import { folderTabIds } from "../../store/folders";
  * No box around it, unlike a group's. Collapsed, it keeps the window's active tab out, as a group does.
  */
 export const FolderBlock = memo(function FolderBlock({ folderId }: { folderId: string }) {
+  const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const spaceId = usePageSpaceId();
   const collapsed = useBrowser((s) => !!s.pinnedFolders[folderId]?.collapsed);
@@ -51,7 +52,7 @@ export const FolderBlock = memo(function FolderBlock({ folderId }: { folderId: s
           entries={entries.map((entry) => ({ key: entry, node: <TabRowItem tabId={entry.slice(2)} section="pinned" parentGroup={folderId} /> }))}
           keep={activeEntry}
           gap={layout.rowGap}
-          rowHeight={layout.rowHeight}
+          rowHeight={metrics.rowHeight}
           padTop={entries.length ? layout.rowGap : 0}
           mountClosed={selectedInside}
           footer={<Animated.View ref={tailRef} style={tailStyle} />}
@@ -64,9 +65,10 @@ export const FolderBlock = memo(function FolderBlock({ folderId }: { folderId: s
 
 // yab's line under an open folder with nothing in it (a drop there lands in the folder).
 function EmptyFolder() {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   return (
-    <View pointerEvents="none" style={{ height: layout.rowHeight, marginTop: layout.rowGap, justifyContent: "center", paddingLeft: 9 }}>
+    <View pointerEvents="none" style={{ height: metrics.rowHeight, marginTop: layout.rowGap, justifyContent: "center", paddingLeft: 9 }}>
       <Text numberOfLines={1} style={{ fontSize: 13, color: theme.textTertiary }}>
         Drag tabs here
       </Text>
@@ -76,6 +78,7 @@ function EmptyFolder() {
 
 // `open` is the rows' collapse animation: the chevron turns on its frames.
 function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: string; windowId: string; collapsed: boolean; open: SharedValue<number> }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const folder = useBrowser((s) => s.pinnedFolders[folderId]);
@@ -107,7 +110,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
             <Surface
               fill={hex(dropInto || pressed ? theme.tabPressed : hovered ? theme.tabHover : "rgba(0,0,0,0)")}
               cornerRadius={10}
-              style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}
+              style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}
             >
               <TabIcon url="" icon={folder.icon ?? `${SYMBOL_PREFIX}${collapsed ? "folder.fill" : "folder"}`} color={folder.icon ? undefined : theme.textTab} />
               {renaming ? (

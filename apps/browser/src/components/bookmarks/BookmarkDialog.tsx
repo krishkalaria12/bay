@@ -9,8 +9,8 @@ import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
 import { FolderTree } from "./FolderTree";
 import { useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
-import { SIDEBAR_HEADER_WITH_FIELD } from "../layout/constants";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { SIDEBAR_FIELD } from "../layout/constants";
+import { useSidebarMetrics, useSidebarWidth } from "../sidebar/tokens";
 
 export function BookmarkDialog() {
   const windowId = useWindowId();
@@ -22,6 +22,7 @@ export function BookmarkDialog() {
 function DialogPanel({ state }: { state: BookmarkDialogState }) {
   const theme = useTheme();
   const colors = useFormColors();
+  const metrics = useSidebarMetrics();
   // Under the star it was opened from: the sidebar's field, or the toolbar's end (the sidebar's edge, on the right).
   const right = useSidebarOnRight();
   const sidebarOpen = useSidebarOpen();
@@ -82,7 +83,9 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
         shadowOffset={[0, 10]}
         style={{
           position: "absolute",
-          ...(field ? { top: SIDEBAR_HEADER_WITH_FIELD + 4, ...fieldSide } : { top: layout.cardTop + layout.toolbarHeight - 2, right: toolbarEnd }),
+          ...(field
+            ? { top: SIDEBAR_FIELD.top + metrics.addressHeight + 4, ...fieldSide }
+            : { top: layout.cardTop + layout.toolbarHeight - 2, right: toolbarEnd }),
           width: 320,
           padding: 14,
         }}

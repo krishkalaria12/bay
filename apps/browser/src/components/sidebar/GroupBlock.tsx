@@ -22,9 +22,10 @@ import { openGroupMenu } from "./menus";
 import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, SplitRowItem, TabRowItem } from "./TabRow";
-import { GROUP_COLORS, useSidebarTokens, withAlpha } from "./tokens";
+import { GROUP_COLORS, useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
 
 export const GroupBlock = memo(function GroupBlock({ groupId, section }: { groupId: string; section: "list" | "pinnedGroups" }) {
+  const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const tokens = useSidebarTokens();
   const collapsed = useBrowser((s) => !!s.groups[groupId]?.collapsed);
@@ -68,7 +69,7 @@ export const GroupBlock = memo(function GroupBlock({ groupId, section }: { group
           entries={entries.map((entry) => ({ key: entry, node: <Entry entry={entry} section={section} groupId={groupId} /> }))}
           keep={activeEntry}
           gap={layout.rowGap}
-          rowHeight={layout.rowHeight}
+          rowHeight={metrics.rowHeight}
           padBottom={GROUP_PAD}
           mountClosed={selectedInside}
           footer={<Animated.View ref={tailRef} style={tailStyle} />}
@@ -88,6 +89,7 @@ function Entry({ entry, section, groupId }: { entry: string; section: "list" | "
 
 // `open` is the members' collapse animation: the chevron turns on its frames, so the two never drift apart.
 function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; windowId: string; collapsed: boolean; open: SharedValue<number> }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const group = useBrowser((s) => s.groups[groupId]);
@@ -125,7 +127,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
             <Surface
               fill={hex(dropInto || pressed ? theme.tabPressed : hovered ? tokens.groupHeaderHover : "rgba(0,0,0,0)")}
               cornerRadius={10}
-              style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - GROUP_PAD }}
+              style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 - GROUP_PAD }}
             >
               {group.icon || firstTab ? (
                 <TabIcon url={firstTab?.url ?? ""} favicon={firstTab?.favicon} icon={group.icon ?? firstTab?.customIcon} spaceId={firstTab?.spaceId} />

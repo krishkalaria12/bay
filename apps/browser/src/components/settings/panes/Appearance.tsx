@@ -35,11 +35,45 @@ export function AppearancePane() {
           />
         ))}
       </View>
+      <DensityPicker />
       <MaterialPicker />
       <SidebarPositionPicker />
       <AddressBarPicker />
       <AppIconPicker />
     </View>
+  );
+}
+
+function DensityPicker() {
+  const density = useBrowser((s) => s.settings.density);
+  const theme = useTheme();
+  const colors = useFormColors();
+  return (
+    <>
+      <SectionHeader title="Density" description="Resize sidebar rows, pinned tiles and the address field together." />
+      <View style={{ flexDirection: "row", gap: 14 }}>
+        {(["comfortable", "compact"] as const).map((value) => (
+          <Pressable
+            key={value}
+            onPress={() => useBrowser.getState().updateSettings({ density: value })}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: density === value }}
+            style={{
+              flex: 1,
+              padding: 12,
+              borderRadius: 9,
+              borderWidth: density === value ? 2 : 1,
+              borderColor: density === value ? colors.accent : colors.groupBorder,
+            }}
+          >
+            <Text style={{ fontSize: 13, color: theme.textPrimary }}>{value === "comfortable" ? "Comfortable" : "Compact"}</Text>
+            <Text style={{ marginTop: 4, fontSize: 12, color: theme.textSecondary }}>
+              {value === "comfortable" ? "36-point rows, 16-point icons" : "30-point rows, 14-point icons"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </>
   );
 }
 
