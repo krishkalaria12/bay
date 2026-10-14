@@ -10,7 +10,8 @@
 //       description, enabled, state, icon, permissions: [message],
 //       siteAccess: "ON_CLICK" | "ON_SPECIFIC_SITES" | "ON_ALL_SITES" | null,
 //       sites: [granted host], optionsUrl, location, path, homepageUrl,
-//       incognito, fileAccess, pinned, mayModify, errors: [message]}]}
+//       incognito, incognitoAllowed, fileAccess, pinned, mayModify,
+//       errors: [message]}]}
 //       Extensions only (no apps or themes), disabled and terminated
 //       included. state and location are developerPrivate's names
 //       ("ENABLED", "FROM_STORE"…).

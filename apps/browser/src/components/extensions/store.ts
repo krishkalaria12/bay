@@ -53,11 +53,10 @@ export const pageProfile = (s: BrowserState, windowId: string) =>
   isPrivate(s, windowId) ? engineProfile(s.windows[windowId]!.spaceId) : extensionProfile(s, windowId);
 
 /**
- * Whether a window shows an extension. A private window shows only extensions allowed in incognito whose pages
- * Chrome runs in the private profile (split mode); a spanning one's popup and side panel would use the regular
- * profile's storage and sign-ins.
+ * Whether a window shows an extension. Chrome hosts split-mode pages in the private profile and spanning-mode
+ * pages in the original profile. Both work in a private window when the user grants access.
  */
-const showsExtension = (priv: boolean, ext: InstalledExtension) => ext.enabled && (!priv || (ext.incognito && !!ext.incognitoSplit));
+const showsExtension = (priv: boolean, ext: InstalledExtension) => ext.enabled && (!priv || ext.incognito);
 
 export function useWindowExtensions(windowId: string): InstalledExtension[] {
   const profile = useBrowser((s) => extensionProfile(s, windowId));

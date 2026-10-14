@@ -217,6 +217,8 @@ export async function activateExtension(windowId: string, ext: InstalledExtensio
   // The extensions menu and shortcuts pass no state; the tab's popup may not be the manifest's.
   const browserId = browserIdOf(tabId);
   if (!state && result === "popup" && browserId) state = (await extensionActionStates(browserId, [ext.id]))[ext.id];
+  // Private access may have been revoked while Chrome was answering the action.
+  if (!shownIn(windowId, ext.id)) return;
   const url = state ? state.popup : ext.popup ? `chrome-extension://${ext.id}/${ext.popup.replace(/^\//, "")}` : "";
   if (result === "none") return;
   if (result === "sidePanel") return void toggleSidePanel(windowId, ext.id);

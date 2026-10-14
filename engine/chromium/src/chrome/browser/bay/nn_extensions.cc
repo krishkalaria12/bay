@@ -33,6 +33,7 @@
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/permissions/scripting_permissions_modifier.h"
@@ -104,6 +105,7 @@ base::DictValue Entry(const developer::ExtensionInfo& info) {
                               ? base::Value()
                               : base::Value(info.home_page.url))
       .Set("incognito", info.incognito_access.is_active)
+      .Set("incognitoAllowed", info.incognito_access.is_enabled)
       .Set("fileAccess", info.file_access.is_active)
       .Set("pinned", info.pinned_to_toolbar.value_or(false))
       .Set("mayModify", info.user_may_modify)
@@ -436,8 +438,18 @@ NN_ENGINE_CALL(nn_extensions_configure) {
   NN_EXTENSIONS_CALL();
   Profile* profile = call.profile();
   const std::string id = call.String("id");
-  if (!bay::Find(profile, id)) {
+  const extensions::Extension* extension = bay::Find(profile, id);
+  if (!extension) {
     return call.TakeReply().Error("No such extension");
+  }
+  if (call.args().FindBool("incognito")) {
+    if (!bay::UserMayModify(profile, extension)) {
+      return call.TakeReply().Error("The extension can't be changed");
+    }
+    if (!extensions::util::CanBeIncognitoEnabled(extension)) {
+      return call.TakeReply().Error(
+          "This extension doesn't support private windows");
+    }
   }
   // Pinning first: it needs the extension loaded, and file access and
   // incognito below may reload it (pinning is kept by id across a reload).

@@ -85,6 +85,7 @@ const usesPageA = [
   "extension-prompts",
   "traffic-lights-after-profile-switch",
   "extension-configure",
+  "extension-private-windows",
   "private-windows-create",
   "extension-installed-bubble",
   "popup-window",
@@ -2905,6 +2906,75 @@ try {
       await exts(`uninstall("${id}", "")`).catch(() => null);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`).catch(() => null);
     }
+  });
+
+  await check("extension-private-windows", async () => {
+    // Chrome's private-access preference gates content scripts, actions and hosted popups, for both manifest modes.
+    const results = [];
+    for (const mode of ["spanning", "split"]) {
+      const folder = join(scratch, `fixture-ext-private-${mode}`);
+      cpSync(extPath, folder, { recursive: true });
+      const manifestPath = join(folder, "manifest.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      manifest.incognito = mode;
+      writeFileSync(manifestPath, JSON.stringify(manifest));
+      const installed = await exts(`install(${JSON.stringify(folder)}, "")`);
+      if (installed?.error) throw new Error(installed.error);
+      const id = installed.id;
+      let windowId;
+      const info = async () => (await exts(`list("")`)).extensions?.find((e) => e.id === id);
+      const setPrivate = async (allowed) => {
+        const result = await exts(`configure("${id}", "", { incognito: ${allowed} })`);
+        if (result?.error) throw new Error(result.error);
+        await until(`private access ${allowed}`, async () => (await info())?.incognito === allowed);
+        await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
+      };
+      const visit = async (tag) => {
+        const url = `${base}/e?private-extension-${mode}-${tag}`;
+        const tabId = await evalApp(`return nn.store.getState().newTab(${JSON.stringify(windowId)}, { url: ${JSON.stringify(url)} })`);
+        const page = await until("the private fixture page", () => pageFor(tabId, url));
+        let mark = null;
+        const deadline = Date.now() + 2500;
+        while (Date.now() < deadline) {
+          mark = (await cdp(page, "Runtime.evaluate", { expression: "document.documentElement.dataset.nnext ?? null", returnByValue: true })).result.value;
+          if (mark) break;
+          await sleep(200);
+        }
+        const browserId = Number(await browserOf(tabId));
+        const states = await evalApp(`return globalThis.expo.modules.BayChromeUI.actionStates(${browserId}, ["${id}"])`);
+        const shown = await evalApp(`return nn.extensions.windowExtensions(nn.store.getState(), ${JSON.stringify(windowId)}).some((e) => e.id === "${id}")`);
+        return { mark, states, shown };
+      };
+      try {
+        const before = await until("the private fixture listed", info);
+        if (before.incognito !== false || before.incognitoAllowed !== true) throw new Error(`private access should start off: ${JSON.stringify(before)}`);
+        windowId = await evalApp(`return nn.actions.openWindow({ incognito: true })`);
+        await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
+        const off = await visit("off");
+        if (off.mark || off.shown || off.states[id]) throw new Error(`extension ran before permission: ${JSON.stringify(off)}`);
+        await setPrivate(true);
+        const on = await visit("on");
+        if (!on.mark || !on.shown || !on.states[id]) throw new Error(`extension didn't run with permission: ${JSON.stringify(on)}`);
+        const opened = await evalApp(`const ext = nn.extensions.findExtension("", "${id}");
+          return nn.extensions.activateExtension(${JSON.stringify(windowId)}, ext, { x: 100, y: 40, width: 20, height: 20 })
+            .then(() => nn.extensions.useExtensions.getState().popup?.extensionId === "${id}")`);
+        if (!opened) throw new Error("the private extension action didn't open its popup");
+        const popup = await until("the private popup renderer", async () => (await targets()).find((t) => t.url.includes(`${id}/popup.html`)), 10000);
+        const privateContext = (await cdp(popup, "Runtime.evaluate", { expression: "chrome.extension.inIncognitoContext", returnByValue: true })).result.value;
+        if (privateContext !== (mode === "split")) throw new Error(`${mode} popup used the wrong profile: ${privateContext}`);
+        await setPrivate(false);
+        await until("revocation closing the private popup", async () => await evalApp(`return nn.extensions.useExtensions.getState().popup === null`), 10000);
+        const revoked = await visit("revoked");
+        if (revoked.mark || revoked.shown || revoked.states[id]) throw new Error(`extension ran after revocation: ${JSON.stringify(revoked)}`);
+        results.push({ mode, defaultOff: true, contentScript: on.mark, popupPrivateContext: privateContext, revoked: true });
+      } finally {
+        await evalApp(`nn.extensions.closeExtensionPopup(); return true`).catch(() => null);
+        if (windowId) await evalApp(`nn.store.getState().closeWindow(${JSON.stringify(windowId)}); return true`).catch(() => null);
+        await exts(`uninstall("${id}", "")`).catch(() => null);
+        await evalApp(`nn.actions.switchToTab("${first.id}"); return true`).catch(() => null);
+      }
+    }
+    return results;
   });
 
   await check("chrome-windows-create", async () => {

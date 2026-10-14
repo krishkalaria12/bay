@@ -17,6 +17,8 @@ export type InstalledExtension = {
   optionsUrl: string | null;
   pinned: boolean;
   incognito: boolean;
+  /** Whether Chrome allows this extension to be enabled in private windows. */
+  incognitoAllowed?: boolean;
   /** "incognito": "split": its pages can run in a private window's own profile. */
   incognitoSplit?: boolean;
   fileAccess: boolean;

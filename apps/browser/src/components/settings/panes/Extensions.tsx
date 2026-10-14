@@ -146,8 +146,19 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
         <Row title="Pin to toolbar" description="Show its button next to the address.">
           <Toggle value={ext.pinned} onChange={(pinned) => void setPinned(profile, ext.id, pinned)} />
         </Row>
-        <Row title="Allow in Incognito" description="Incognito can't stop extensions from recording your browsing.">
-          <Toggle value={ext.incognito} onChange={(incognito) => void configure(profile, ext.id, { incognito })} />
+        <Row
+          title="Allow in Private Windows"
+          description={
+            ext.incognitoAllowed === false
+              ? "This extension doesn't support private windows."
+              : "Extensions can read and record your browsing in private windows."
+          }
+        >
+          <Toggle
+            value={ext.incognito}
+            disabled={!ext.mayModify || ext.incognitoAllowed === false}
+            onChange={(incognito) => void configure(profile, ext.id, { incognito })}
+          />
         </Row>
         {ext.optionsUrl ? (
           <Row title="Extension options">
