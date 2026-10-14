@@ -1,6 +1,6 @@
 // Every shortcut in every focus, then a few for real, in a hidden instance.
 //
-//   node apps/browser/scripts/shortcuts-test.mjs <Debug Bay.app> [cdpPort]
+//   node apps/browser/scripts/shortcuts-test.mjs <Debug Bay.app> [cdpPort] [--real-only]
 //
 // One line per focus (the shortcuts that failed in it) and per real check; the table and the details go to
 // shortcuts-test.log beside the instance's data.
@@ -10,10 +10,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launch, reporter, session, sleep } from "../../../scripts/lib/instance.mjs";
 
-const [appArg, port] = process.argv.slice(2);
+const [appArg, ...options] = process.argv.slice(2);
+const realOnly = options.includes("--real-only");
+const port = options.find((option) => option !== "--real-only");
 const appPath = appArg && resolve(appArg);
 if (!appPath) {
-  console.error("usage: node shortcuts-test.mjs <Debug Bay.app> [cdpPort]");
+  console.error("usage: node shortcuts-test.mjs <Debug Bay.app> [cdpPort] [--real-only]");
   process.exit(2);
 }
 const scratch = mkdtempSync(join(tmpdir(), "nn-shortcuts-"));
@@ -50,6 +52,7 @@ app = await launch(appPath, {
   data,
   port,
   session: session({
+    settings: { launchTab: "lastTab" },
     spaces: [
       { id: "default", name: "Personal", color: "plum" },
       { id: "p-work", name: "Work", color: "blue" },
@@ -85,7 +88,7 @@ async function cdp(urlPart, expression) {
 
 const state = () =>
   nn(`const s = nn.store.getState(), w = s.windows.w1;
-  return { profile: w.spaceId, active: w.activeTabIds[w.spaceId], tabs: w.tabIds.length,
+  return { profile: w.spaceId, active: w.activeTabIds[w.spaceId], tabs: (s.tabLists[w.kind === "small" ? w.id : w.spaceId] ?? []).length,
     panel: !!s.windowUi.w1?.panel.open, panelMode: s.windowUi.w1?.panel.mode };`);
 const activeUrl = async () =>
   await nn(`const s = nn.store.getState(), w = s.windows.w1; return w ? s.tabs[w.activeTabIds[w.spaceId]]?.url ?? "" : "no window w1";`);
@@ -94,6 +97,23 @@ const press = (key, options) => nn(`return nn.shell.devKeyEquivalent("w1", ${JSO
 const F = (code) => String.fromCharCode(code);
 const K = (key, keyCode, ...modifiers) => ({ key, keyCode, modifiers });
 const cmd = (key, keyCode, ...more) => K(key, keyCode, "command", ...more);
+
+// Synthetic translated NSEvents, not a switch of the macOS input source. The letters differ from the
+// US physical-key positions so a keyCode-based shortcut router cannot accidentally pass these checks.
+const translatedShortcuts = [
+  ["AZERTY synthetic ⌘Z", cmd("z", 13), { title: "Undo" }, "translated z on physical W"],
+  ["AZERTY synthetic ⇧⌘Z", cmd("Z", 13, "shift"), { title: "Redo" }, "translated Z on physical W"],
+  ["Dvorak synthetic ⌘T", cmd("t", 40), { command: "newTab" }, "translated t on physical K"],
+  ["Dvorak synthetic ⇧⌘T", cmd("T", 40, "shift"), { command: "reopenClosedTab" }, "translated T on physical K"],
+  ["Dvorak synthetic ⌘W", cmd("w", 43), { command: "closeTab" }, "translated w on physical comma"],
+  ["Dvorak synthetic ⌘N", cmd("n", 37), { command: "newWindow" }, "translated n on physical L"],
+  ["Dvorak synthetic ⌘L", cmd("l", 35), { command: "focusCommandBar" }, "translated l on physical P"],
+  ["Dvorak synthetic ⌘R", cmd("r", 31), { command: "reload" }, "translated r on physical O"],
+  ["Dvorak synthetic ⌘F", cmd("f", 16), { command: "findInPage" }, "translated f on physical Y"],
+  ["Dvorak synthetic ⌘G", cmd("g", 32), { command: "findNext" }, "translated g on physical U"],
+  ["German synthetic ⌘[", cmd("[", 23), { command: "back" }, "translated [ on physical 5"],
+  ["German synthetic ⌘]", cmd("]", 22), { command: "forward" }, "translated ] on physical 6"],
+];
 
 const shortcuts = [
   ["⌘,", cmd(",", 43), { command: "openSettings" }, "⌘,"],
@@ -136,7 +156,7 @@ const shortcuts = [
   ["⇧⌘R", cmd("R", 15, "shift"), { command: "forceReload" }, "⇧⌘R"],
   ["⇧⌘S", cmd("S", 1, "shift"), { command: "toggleTabLayout" }, "⇧⌘S"],
   ["⌘S", cmd("s", 1), { command: "toggleSidebar" }, "⌘S"],
-  ["⇧⌘L", cmd("L", 37, "shift"), { command: "toggleSidebar" }, "(Chrome's)"],
+  ["⇧⌘L", cmd("L", 37, "shift"), { command: "downloads" }, "(Chrome's)"],
   ["⇧⌘F", cmd("F", 3, "shift"), { command: "toggleSidebar" }, "(Chrome's)"],
   ["⌥⌘N", cmd("n", 45, "option"), { command: "newLittleBay" }, "Arc's Little Arc"],
   ["⌃⇧=", K("+", 24, "control", "shift"), { command: "openSplitPane" }, "⌃⇧="],
@@ -161,8 +181,8 @@ const shortcuts = [
   ["⌘→", cmd(F(0xf703), 124, "function"), { command: "forward" }, "⌘→", "not-field"],
   ["⇧⌘]", cmd("}", 30, "shift"), { command: "nextTab" }, "⇧⌘]"],
   ["⇧⌘[", cmd("{", 33, "shift"), { command: "previousTab" }, "⇧⌘["],
-  ["⌥⌘→", cmd(F(0xf703), 124, "option", "function"), { command: "nextTab" }, "(Chrome's)"],
-  ["⌥⌘←", cmd(F(0xf702), 123, "option", "function"), { command: "previousTab" }, "(Chrome's)"],
+  ["⌥⌘→", cmd(F(0xf703), 124, "option", "function"), { command: "nextSpace" }, "⌥⌘→"],
+  ["⌥⌘←", cmd(F(0xf702), 123, "option", "function"), { command: "previousSpace" }, "⌥⌘←"],
   ["⌃⇟", K(F(0xf72d), 121, "control", "function"), { command: "nextTab" }, "(Chrome's)"],
   ["⌃⇞", K(F(0xf72c), 116, "control", "function"), { command: "previousTab" }, "(Chrome's)"],
   ["⌥⌘↓", cmd(F(0xf701), 125, "option", "function"), { command: "nextTab" }, "⌥⌘↓ (alternate)"],
@@ -185,7 +205,7 @@ const shortcuts = [
   ["⌃⌘C", cmd("c", 8, "control"), { command: "newTabInGroup" }, "(Chrome's)"],
   ["⌃⌘W", cmd("w", 13, "control"), { command: "closeTabGroup" }, "(Chrome's)"],
   ["⌘D", cmd("d", 2), { command: "bookmarkPage" }, "⌘D"],
-  ["⇧⌘D", cmd("D", 2, "shift"), { command: "bookmarkAllTabs" }, "(Chrome's)", "devtools-own"],
+  ["⇧⌘D", cmd("D", 2, "shift"), { command: "togglePinRow" }, "⇧⌘D", "devtools-own"],
   ["⌥⌘B", cmd("b", 11, "option"), { command: "manageBookmarks" }, "⌥⌘B"],
   ["⌘Y", cmd("y", 16), { command: "showHistory" }, "⌘Y"],
   ["⇧⌘⌫", cmd(F(0x7f), 51, "shift"), { command: "clearBrowsingData" }, "⇧⌘⌫", "page-field"],
@@ -197,7 +217,12 @@ const shortcuts = [
   ["⌥⇧⌘I", cmd("I", 34, "shift", "option"), { command: "sendFeedback" }, "(Chrome's)"],
   ["⌃1", K("1", 18, "control"), { command: "switchSpace", arg: "default" }, "⌃1"],
   ["⌃2", K("2", 19, "control"), { command: "switchSpace", arg: "p-work" }, "⌃2"],
+  ...translatedShortcuts,
 ];
+
+rep.log("Layout regression events are synthetic translated characters; actual AZERTY/German/Dvorak input sources are not exercised.");
+rep.log("German Command+Option bracket combinations are not covered: the existing bracket menu shortcuts require Command without Option.");
+rep.log("Arrow/Home/End error-sound acceptance is unverified: devKeyEquivalent does not send unhandled events through keyDown or measure beeps.");
 
 const same = (f, expect) =>
   expect.command
@@ -268,7 +293,8 @@ function recordFocus(focusName) {
 const results = new Map(shortcuts.map(([name]) => [name, {}]));
 let failures = 0;
 await showPage("t3");
-for (const [focusName, focus] of Object.entries(focuses)) {
+if (realOnly) rep.log("--real-only skips the dry shortcut matrices; only actual action checks run.");
+for (const [focusName, focus] of Object.entries(realOnly ? {} : focuses)) {
   await focus.setup?.();
   for (const [name, key, expect, , only] of shortcuts) {
     if (focusName !== "sidebar" && (only === "window-only" || only === "clipboard")) continue;
@@ -328,12 +354,12 @@ await real("⌘2 in the command bar", cmd("2", 19), { asKey: true }, "pin2");
 check("…and the command bar closes", !(await state()).panel, "");
 await real("⇧⌘] (Next Tab)", cmd("}", 30, "shift"), sidebar, "t1");
 await real("⇧⌘[ (Previous Tab)", cmd("{", 33, "shift"), sidebar, "pin2");
-await real("⌥⌘→ (Next Tab)", cmd(F(0xf703), 124, "option", "function"), sidebar, "t1");
+await real("⌥⌘↓ (Next Tab)", cmd(F(0xf701), 125, "option", "function"), sidebar, "t1");
 await real("⌃⇟ (Next Tab)", K(F(0xf72d), 121, "control", "function"), sidebar, "t2");
 await showPage("t3");
 await sleep(2000);
 {
-  const next = await nn(`const s = nn.store.getState(), w = s.windows.w1, ids = w.tabIds.filter((id) => s.tabs[id].spaceId === w.spaceId);
+  const next = await nn(`const s = nn.store.getState(), w = s.windows.w1, ids = s.tabLists[w.spaceId] ?? [];
     return ids[ids.indexOf("t3") + 1];`);
   const before = await activeUrl();
   const r = await press(cmd("}", 30, "shift"), page);
@@ -343,11 +369,11 @@ await sleep(2000);
 }
 
 let s = await state();
-await press(cmd("t", 17), sidebar);
+await press(cmd("t", 40), sidebar);
 await sleep(400);
 let after = await state();
 check(
-  "⌘T opens the new tab palette",
+  "synthetic Dvorak ⌘T opens the new tab palette",
   after.panel && after.panelMode === "newTab" && after.tabs === s.tabs && after.active === s.active,
   `${s.tabs} → ${after.tabs} tabs; active ${after.active}; panel ${after.panelMode}`,
 );
@@ -363,9 +389,9 @@ check(
   after.tabs === s.tabs + 1 && after.active !== s.active && !after.panel && (await activeUrl()).endsWith("?closed"),
   `${s.tabs} → ${after.tabs} tabs; active ${after.active}; palette ${after.panel ? "open" : "closed"}`,
 );
-await press(cmd("w", 13), sidebar);
+await press(cmd("w", 43), sidebar);
 await sleep(400);
-check("⌘W closes it", (await state()).tabs === s.tabs, `${(await state()).tabs} tabs`);
+check("synthetic Dvorak ⌘W closes it", (await state()).tabs === s.tabs, `${(await state()).tabs} tabs`);
 await sleep(1000);
 await press(cmd("T", 17, "shift"), sidebar);
 await sleep(400);
@@ -387,6 +413,30 @@ await cdp("?t3", "(f => (f.value = 'hello field', f.focus(), f.setSelectionRange
 await press(cmd("a", 0), page);
 const selection = await cdp("?t3", "(f => [f.selectionStart, f.selectionEnd, f.value.length].join())(document.getElementById('f'))");
 check("⌘A selects all of a page's text field", selection === "0,11,11", selection);
+
+const fieldPage = await app.page("?t3");
+try {
+  await fieldPage.send("Input.insertText", { text: "edited field" });
+} finally {
+  fieldPage.close();
+}
+const edited = await cdp("?t3", "document.getElementById('f').value");
+const tabsBeforeUndo = (await state()).tabs;
+const undo = await press(cmd("z", 13), page);
+const undone = await cdp("?t3", "document.getElementById('f').value");
+check(
+  "synthetic AZERTY ⌘Z undoes a page edit without closing a tab",
+  edited === "edited field" && undone === "hello field" && (await state()).tabs === tabsBeforeUndo,
+  `${edited} → ${undone}; ${describe(undo)}; ${(await state()).tabs} tabs`,
+);
+
+await cdp("?t3", "document.activeElement.blur(); history.pushState({}, '', '?t3-history'); true");
+const back = await press(cmd("[", 23), page);
+const backUrl = await activeUrl();
+check("synthetic German ⌘[ navigates back", backUrl.endsWith("?t3"), `${backUrl}; ${describe(back)}`);
+const forward = await press(cmd("]", 22), page);
+const forwardUrl = await activeUrl();
+check("synthetic German ⌘] navigates forward", forwardUrl.endsWith("?t3-history"), `${forwardUrl}; ${describe(forward)}`);
 
 await press(cmd("q", 12), { focus: "window", wait: 0 });
 let quit = false;

@@ -854,7 +854,8 @@ const eventsOf = async (tabId) => {
 };
 const state = () =>
   evalApp(`const s = nn.store.getState(); const w = s.windows[${JSON.stringify(mainWindow)}] ?? Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small").sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))[0];
-    return { windowId: w?.id, profileId: w?.profileId, tabs: (w?.tabIds ?? []).map((id) => ({ id, url: s.tabs[id]?.url, title: s.tabs[id]?.title, favicon: s.tabs[id]?.favicon?.slice(0, 40), adoptId: s.tabs[id]?.adoptId, profileId: s.tabs[id]?.profileId, loading: s.live[id]?.isLoading, back: s.live[id]?.canGoBack, fwd: s.live[id]?.canGoForward })), active: w ? w.activeTabIds[w.profileId] : null, windows: Object.keys(s.windows).length, profiles: s.profileOrder };`);
+    const key = w?.kind === "small" ? w.id : w?.spaceId;
+    return { windowId: w?.id, profileId: w?.spaceId, tabs: (s.tabLists[key] ?? []).filter((id) => s.tabs[id]?.spaceId === w?.spaceId).map((id) => ({ id, url: s.tabs[id]?.url, title: s.tabs[id]?.title, favicon: s.tabs[id]?.favicon?.slice(0, 40), adoptId: s.tabs[id]?.adoptId, profileId: s.tabs[id]?.spaceId, loading: s.live[id]?.isLoading, back: s.live[id]?.canGoBack, fwd: s.live[id]?.canGoForward })), active: w ? w.activeTabIds[w.spaceId] : null, windows: Object.keys(s.windows).length, profiles: s.spaceOrder };`);
 
 // MARK: Helpers
 
@@ -2469,7 +2470,9 @@ try {
     await until(
       "the private cookie set",
       async () => {
-        const tabs = await evalApp(`const s = nn.store.getState(); return (s.windows["${a}"]?.tabIds ?? []).map((i) => s.tabs[i]?.title)`);
+        const tabs = await evalApp(
+          `const s = nn.store.getState(); const w = s.windows["${a}"]; return (s.tabLists[w?.spaceId] ?? []).map((i) => s.tabs[i]?.title)`,
+        );
         return tabs.includes("Cookie") ? true : null;
       },
       10000,
@@ -2482,7 +2485,9 @@ try {
       await until(
         "the second private window's page",
         async () => {
-          const tabs = await evalApp(`const s = nn.store.getState(); return (s.windows["${b}"]?.tabIds ?? []).map((i) => s.tabs[i]?.title)`);
+          const tabs = await evalApp(
+            `const s = nn.store.getState(); const w = s.windows["${b}"]; return (s.tabLists[w?.spaceId] ?? []).map((i) => s.tabs[i]?.title)`,
+          );
           return tabs.includes("Page B") ? true : null;
         },
         10000,
@@ -2547,8 +2552,10 @@ try {
     try {
       await evalApp(`return nn.extensions.refreshExtensions("").then(() => true)`);
       await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
-      await evalApp(`const lists = nn.extensions.useExtensions.getState().lists; const ext = Object.values(lists).flat().find((x) => x.id === "${installed.id}");
+      const openPopup = () =>
+        evalApp(`const lists = nn.extensions.useExtensions.getState().lists; const ext = Object.values(lists).flat().find((x) => x.id === "${installed.id}");
         return nn.extensions.activateExtension(${JSON.stringify(mainWindow)}, ext, { x: 100, y: 40, width: 20, height: 20 }).then(() => !!nn.extensions.useExtensions.getState().popup)`);
+      await openPopup();
       const popupTarget = await until(
         "the popup page",
         async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${installed.id}/popup.html`)),
@@ -2557,8 +2564,16 @@ try {
       const strips = await cef(`tabStrips()`);
       const inStrip = strips.strips.some((st) => st.tabs.some((x) => x.key == null));
       const popupVisible = (await cdp(popupTarget, "Runtime.evaluate", { expression: "document.visibilityState", returnByValue: true })).result.value;
+      // A popup can close itself, too: Chrome's close callback must also clear the app's popup state.
+      await closeFromPage(popupTarget);
+      await until("the self-closed popup target gone", async () => !(await targets()).some((t) => t.id === popupTarget.id), 8000);
+      await until("the self-closed popup state cleared", () => evalApp(`return nn.extensions.useExtensions.getState().popup === null`), 8000);
+      // Reopen it to keep covering the app's own dismissal path independently of window.close().
+      await openPopup();
+      await until("the popup reopened", async () => (await targets()).find((t) => t.type === "page" && t.url.includes(`${installed.id}/popup.html`)), 10000);
       await evalApp(`nn.extensions.closeExtensionPopup(); return true`);
       await until("the popup gone", async () => !(await targets()).some((t) => t.url.includes(`${installed.id}/popup.html`)), 8000);
+      if (!(await evalApp(`return nn.extensions.useExtensions.getState().popup === null`))) throw new Error("the dismissed popup state survived");
       await evalApp(
         `return nn.extensions.openSidePanel(${JSON.stringify(mainWindow)}, "${installed.id}").then(() => !!nn.extensions.useExtensions.getState().sidePanels[${JSON.stringify(mainWindow)}])`,
       );
@@ -2582,7 +2597,7 @@ try {
       ).catch(async () => (await cef(`chromeWindows()`)).length);
       if (inStrip || panelInStrip) throw new Error("a standalone WebView's tab is in the window's strip");
       if (popupVisible !== "visible" || panelVisible !== "visible") throw new Error(`popup ${popupVisible}, panel ${panelVisible}`);
-      return { popup: popupVisible, panel: panelVisible, windowsBefore, windowsAfter };
+      return { popup: popupVisible, selfClosed: true, panel: panelVisible, windowsBefore, windowsAfter };
     } finally {
       await evalApp(`nn.extensions.closeExtensionPopup(); nn.extensions.closeSidePanel(${JSON.stringify(mainWindow)}); return true`).catch(() => null);
       await exts(`uninstall("${installed.id}", "")`);
@@ -5543,6 +5558,42 @@ try {
         allowed_origins: [`chrome-extension://${installed.id}/`],
       }),
     );
+    // The persistent Port API must report a helper's EOF without taking the browser down. This host echoes one
+    // complete native-messaging frame and exits by itself, after stdout has flushed.
+    const eofScript = join(scratch, "echo-once-host.cjs");
+    writeFileSync(
+      eofScript,
+      `let pending = Buffer.alloc(0);
+let answered = false;
+process.stdin.on("data", (chunk) => {
+  if (answered) return;
+  pending = Buffer.concat([pending, chunk]);
+  if (pending.length < 4) return;
+  const length = pending.readUInt32LE(0);
+  if (pending.length < length + 4) return;
+  answered = true;
+  const message = JSON.parse(pending.subarray(4, 4 + length).toString("utf8"));
+  const reply = Buffer.from(JSON.stringify(message));
+  const header = Buffer.alloc(4);
+  header.writeUInt32LE(reply.length);
+  process.stdout.end(Buffer.concat([header, reply]), () => process.exit(0));
+});
+`,
+    );
+    const eofHost = join(scratch, "echo-once-host.sh");
+    const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+    writeFileSync(eofHost, `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(eofScript)}\n`, { mode: 0o755 });
+    const eofManifest = join(dir, "com.bay.acceptance.eof.json");
+    writeFileSync(
+      eofManifest,
+      JSON.stringify({
+        name: "com.bay.acceptance.eof",
+        description: "echo once then exit",
+        path: eofHost,
+        type: "stdio",
+        allowed_origins: [`chrome-extension://${installed.id}/`],
+      }),
+    );
     try {
       const worker = await until(
         "the extension's worker",
@@ -5562,9 +5613,31 @@ try {
       });
       const echoed = reply.result?.value;
       if (echoed !== JSON.stringify({ ping: 42 })) throw new Error(`echo host: ${echoed}`);
-      return { hosts: expected, echoed };
+      await cdp(worker, "Runtime.evaluate", {
+        expression: `globalThis.__nativeEOF = { echoed: null, disconnected: false, error: null };
+          const port = chrome.runtime.connectNative("com.bay.acceptance.eof");
+          port.onMessage.addListener((message) => { globalThis.__nativeEOF.echoed = JSON.stringify(message); });
+          port.onDisconnect.addListener(() => {
+            globalThis.__nativeEOF.error = chrome.runtime.lastError?.message ?? null;
+            globalThis.__nativeEOF.disconnected = true;
+          });
+          port.postMessage({ ping: 43 }); true`,
+      });
+      const eof = await until(
+        "the native helper's Port disconnect",
+        async () => {
+          const result = (await cdp(worker, "Runtime.evaluate", { expression: "globalThis.__nativeEOF", returnByValue: true })).result.value;
+          return result?.disconnected ? result : null;
+        },
+        10000,
+      );
+      if (eof.echoed !== JSON.stringify({ ping: 43 })) throw new Error(`native Port lost its reply before EOF: ${JSON.stringify(eof)}`);
+      const engine = await cef(`engineInfo()`);
+      if (exited || !engine) throw new Error("the app or engine stopped after native helper EOF");
+      return { hosts: expected, echoed, eof };
     } finally {
       rmSync(hostManifest, { force: true });
+      rmSync(eofManifest, { force: true });
       await exts(`uninstall("${installed.id}", "")`).catch(() => null);
     }
   });
