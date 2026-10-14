@@ -120,3 +120,75 @@ test("automatic Picture in Picture goes off for one site, and on again, as Arc's
   S().updateSettings({ autoPictureInPicture: false });
   assert.equal(media.autoPictureInPictureFor(S(), other), false, "off in Settings, off everywhere");
 });
+
+test("the media list includes playing and paused tabs across spaces, including dismissed and active tabs", () => {
+  S().hydrate({});
+  media.useMedia.setState({ sessions: {}, dismissed: {} });
+  const w = S().createWindow({ url: "active.com" });
+  const active = S().windows[w].activeTabIds[S().windows[w].spaceId];
+  const paused = S().newTab(w, { url: "paused.com", background: true });
+  const ended = S().newTab(w, { url: "ended.com", background: true });
+  const otherWindow = S().createWindow({ url: "other.com" });
+  const other = S().windows[otherWindow].activeTabIds[S().windows[otherWindow].spaceId];
+  media.setNowPlaying(active, report());
+  media.setNowPlaying(paused, report({ playbackState: "paused" }));
+  media.setNowPlaying(ended, report({ playbackState: "none" }));
+  media.setNowPlaying(other, report());
+  media.useMedia.setState({ dismissed: { [paused]: true } });
+  // A session belongs to this window even when its Space is not the one currently visible.
+  S().updateTab(paused, { spaceId: "another-space" });
+  assert.deepEqual(media.mediaTabsForWindow(S(), M(), w), [active, paused]);
+  S().closeTab(paused);
+  assert.deepEqual(media.mediaTabsForWindow(S(), M(), w), [active]);
+});
+
+test("Pause All pauses each playing tab once and leaves paused sessions and other windows alone", () => {
+  S().hydrate({});
+  media.useMedia.setState({ sessions: {}, dismissed: {} });
+  const w = S().createWindow({ url: "one.com" });
+  const first = S().windows[w].activeTabIds[S().windows[w].spaceId];
+  const second = S().newTab(w, { url: "two.com", background: true });
+  const third = S().newTab(w, { url: "three.com", background: true });
+  const paused = S().newTab(w, { url: "paused.com", background: true });
+  const otherWindow = S().createWindow({ url: "other.com" });
+  const other = S().windows[otherWindow].activeTabIds[S().windows[otherWindow].spaceId];
+  const ids = [first, second, third, paused, other];
+  const sent = [];
+  for (const id of ids) {
+    webviews.set(id, { mediaCommand: async (command) => void sent.push([id, command]) });
+    media.setNowPlaying(id, report({ playbackState: id === paused ? "paused" : "playing" }));
+  }
+  media.useMedia.setState({ dismissed: { [second]: true } });
+  media.pauseAllMedia(w);
+  assert.deepEqual(sent, [
+    [first, "pause"],
+    [second, "pause"],
+    [third, "pause"],
+  ]);
+  assert.equal(M().sessions[first].playbackState, "playing", "playback stays authoritative until the page reports its pause");
+  // A row's play/pause command only targets that row.
+  media.mediaCommand(second, "toggle");
+  assert.deepEqual(sent.at(-1), [second, "toggle"]);
+  assert.equal(sent.length, 4);
+  for (const id of ids) webviews.delete(id);
+});
+
+test("muting a media-list row only mutes that tab, even with another session on the same site", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://same.com/one" });
+  const first = S().windows[w].activeTabIds[S().windows[w].spaceId];
+  const second = S().newTab(w, { url: "https://same.com/two", background: true });
+  const sent = [];
+  for (const id of [first, second]) webviews.set(id, { setMuted: async (muted) => void sent.push([id, muted]) });
+  media.toggleMediaTabMute(second);
+  assert.equal(S().tabs[second].muted, true);
+  assert.equal(S().tabs[first].muted, false);
+  assert.deepEqual(S().settings.mutedSites ?? [], []);
+  media.toggleMediaTabMute(second);
+  assert.equal(S().tabs[second].muted, false);
+  assert.deepEqual(sent, [
+    [second, true],
+    [second, false],
+  ]);
+  for (const id of [first, second]) webviews.delete(id);
+});

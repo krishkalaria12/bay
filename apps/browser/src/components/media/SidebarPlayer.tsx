@@ -14,10 +14,12 @@ import { hasTrackControls, hostOf, isPlaying, isTabShown, mediaCommand, playerTa
 import { SIDEBAR_PLAYER_HEIGHT, SKIP_SECONDS } from "./constants";
 import { useMediaTokens } from "./tokens";
 import { listIds, windowListKey } from "../../store/model";
+import { MediaSessionButton, useWindowMediaTabs } from "./SessionList";
 
 const NO_IDS: string[] = [];
 
 export function useSidebarPlayerTab(windowId: string): string | undefined {
+  const all = useWindowMediaTabs(windowId);
   // Only tabs with a media session can have a player: start from those (usually none) rather than
   // filtering every tab in the window on every store update.
   const sessions = useMedia(useShallow((m) => Object.keys(m.sessions)));
@@ -33,7 +35,9 @@ export function useSidebarPlayerTab(windowId: string): string | undefined {
   );
   // The player keeps the tab it shows (playerTabFor): a pause, or a report that was already on its way, never swaps it.
   const [shown, setShown] = useState<string | undefined>(undefined);
-  const next = useMedia((m) => playerTabFor(m, hidden, shown));
+  const next = useMedia(
+    (m) => playerTabFor(m, hidden, shown) ?? (all.length > 1 ? (playerTabFor(m, all, shown) ?? all.find((id) => !m.dismissed[id])) : undefined),
+  );
   if (next !== shown) setShown(next);
   return next;
 }
@@ -44,6 +48,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
   const media = useMediaTokens();
   const session = useSession(tabId);
   const tab = useTab(tabId);
+  const sessions = useWindowMediaTabs(tab?.windowId ?? "");
   const playing = isPlaying(session);
   const { hovered, hoverProps } = useHover();
   const artwork = useArtwork(tabId, session?.artwork);
@@ -126,7 +131,10 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
                 onSeek={(p) => seekTo(tabId, session, p * session.duration!)}
               />
             </View>
-          ) : null}
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+          {sessions.length > 1 ? <MediaSessionButton windowId={tab.windowId} count={sessions.length} /> : null}
         </View>
       </Surface>
       {hovered ? (

@@ -18,6 +18,7 @@ type Store = {
   pipOpen: Record<string, PictureInPictureState["kind"]>;
   displayRequests: Record<string, DisplayMediaRequest>;
   tabShares: Record<string, TabShare>;
+  sessionList: { windowId: string; anchor: { x: number; y: number; width: number; height: number } } | null;
 };
 
 export type TabShare = {
@@ -26,7 +27,7 @@ export type TabShare = {
   dismissed: Record<string, true>;
 };
 
-export const useMedia = create<Store>()(() => ({ sessions: {}, dismissed: {}, pip: {}, pipOpen: {}, displayRequests: {}, tabShares: {} }));
+export const useMedia = create<Store>()(() => ({ sessions: {}, dismissed: {}, pip: {}, pipOpen: {}, displayRequests: {}, tabShares: {}, sessionList: null }));
 
 export function setPictureInPictureState(tabId: string, { kind, active }: PictureInPictureState) {
   useMedia.setState((s) => {
@@ -88,6 +89,30 @@ export function formatTime(seconds: number): string {
 // on its way, and the player would flip twice.
 export function mediaCommand(tabId: string, action: MediaCommand, seconds?: number) {
   void webviews.get(tabId)?.mediaCommand(action, seconds);
+}
+
+// Dismissing a compact player doesn't remove a session from the list: its tab can still be making sound.
+export function mediaTabsForWindow(s: Pick<BrowserState, "tabs">, m: Pick<Store, "sessions">, windowId: string): string[] {
+  return Object.keys(m.sessions).filter((id) => {
+    const session = m.sessions[id]!;
+    return s.tabs[id]?.windowId === windowId && (session.playbackState === "playing" || session.playbackState === "paused");
+  });
+}
+
+export function pauseAllMedia(windowId: string) {
+  const m = useMedia.getState();
+  for (const id of mediaTabsForWindow(useBrowser.getState(), m, windowId)) {
+    if (isPlaying(m.sessions[id])) mediaCommand(id, "pause");
+  }
+}
+
+export function toggleMediaTabMute(tabId: string) {
+  const s = useBrowser.getState();
+  const tab = s.tabs[tabId];
+  if (!tab) return;
+  const muted = !tab.muted;
+  s.setMuted([tabId], muted);
+  void webviews.get(tabId)?.setMuted(muted);
 }
 
 /**

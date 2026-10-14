@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useWindowId } from "../../store/hooks";
 import { startSidebarEffects } from "./effects";
+import { MediaSessionsOverlay } from "../media/SessionList";
 import { MeetingAlert } from "../live/MeetingAlert";
 import { HoverCard } from "./HoverCard";
 import { IconPicker } from "./IconPicker";
@@ -23,6 +24,7 @@ export function SidebarOverlays({ windowWidth }: { windowWidth: number }) {
       <NewMenu windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
       <SearchTabs windowId={windowId} windowWidth={windowWidth} />
       <TabSwitcher windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
+      <MediaSessionsOverlay windowId={windowId} windowWidth={windowWidth} windowHeight={height} />
     </View>
   );
 }
