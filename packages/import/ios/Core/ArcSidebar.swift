@@ -102,36 +102,52 @@ public struct ArcSidebar: Equatable {
                        customTitle: customTitle(item), lastActive: last)
   }
 
-  static func tree(of containerID: String, items: [String: [String: Any]], seen: inout Set<String>, depth: Int = 0) -> [BookmarkNode] {
-    guard depth < 64, let container = items[containerID], seen.insert(containerID).inserted else { return [] }
+  private enum TreeTask {
+    case visit(String, Int)
+    case finishFolder(String, Int)
+  }
+
+  static func tree(of containerID: String, items: [String: [String: Any]], seen: inout Set<String>) -> [BookmarkNode] {
+    guard let container = items[containerID], seen.insert(containerID).inserted else { return [] }
     var out: [BookmarkNode] = []
-    for id in container["childrenIds"] as? [String] ?? [] {
-      guard let item = items[id] else { continue }
-      let data = item["data"] as? [String: Any] ?? [:]
-      if let t = tab(item, pinned: true) {
-        guard seen.insert(id).inserted else { continue }
-        var link = BookmarkNode.link(t.customTitle ?? t.title, t.url)
-        if t.customTitle != nil { link.pageTitle = t.title }
-        out.append(link)
-      } else if data["list"] != nil {
-        let kids = tree(of: id, items: items, seen: &seen, depth: depth + 1)
-        out.append(.folder(customTitle(item) ?? "Folder", kids))
-      } else if data["splitView"] != nil {
-        out += tree(of: id, items: items, seen: &seen, depth: depth + 1)
+    var pending = (container["childrenIds"] as? [String] ?? []).reversed().map { TreeTask.visit($0, 0) }
+    while let task = pending.popLast() {
+      switch task {
+      case let .finishFolder(title, start):
+        let children = Array(out[start...])
+        out.removeSubrange(start...)
+        out.append(.folder(title, children))
+      case let .visit(id, depth):
+        guard let item = items[id], seen.insert(id).inserted else { continue }
+        let data = item["data"] as? [String: Any] ?? [:]
+        if let t = tab(item, pinned: true) {
+          var link = BookmarkNode.link(t.customTitle ?? t.title, t.url)
+          if t.customTitle != nil { link.pageTitle = t.title }
+          out.append(link)
+        } else if data["list"] != nil || data["splitView"] != nil {
+          // Keep five folder levels. Overflow folders contribute their tabs to the fifth level.
+          // An explicit stack also keeps deeply nested or cyclic source data from losing tabs.
+          let folder = data["list"] != nil && depth < 5
+          if folder { pending.append(.finishFolder(customTitle(item) ?? "Folder", out.count)) }
+          for child in (item["childrenIds"] as? [String] ?? []).reversed() {
+            pending.append(.visit(child, depth + (folder ? 1 : 0)))
+          }
+        }
       }
     }
     return out
   }
 
-  static func flatTabs(of containerID: String, items: [String: [String: Any]], seen: inout Set<String>, pinned: Bool, depth: Int = 0) -> [ImportedTab] {
-    guard depth < 64, let container = items[containerID], seen.insert(containerID).inserted else { return [] }
+  static func flatTabs(of containerID: String, items: [String: [String: Any]], seen: inout Set<String>, pinned: Bool) -> [ImportedTab] {
+    guard let container = items[containerID], seen.insert(containerID).inserted else { return [] }
     var out: [ImportedTab] = []
-    for id in container["childrenIds"] as? [String] ?? [] {
-      guard let item = items[id] else { continue }
+    var pending = Array((container["childrenIds"] as? [String] ?? []).reversed())
+    while let id = pending.popLast() {
+      guard let item = items[id], seen.insert(id).inserted else { continue }
       if let t = tab(item, pinned: pinned) {
-        if seen.insert(id).inserted { out.append(t) }
+        out.append(t)
       } else {
-        out += flatTabs(of: id, items: items, seen: &seen, pinned: pinned, depth: depth + 1)
+        pending.append(contentsOf: (item["childrenIds"] as? [String] ?? []).reversed())
       }
     }
     return out

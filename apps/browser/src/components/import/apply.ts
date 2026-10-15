@@ -196,23 +196,47 @@ export function importTabs(spaceId: string, tabs: TabDraft[], group: string | nu
   return fresh.length;
 }
 
-/** A space's pinned tabs become the Pinned section's rows, in Arc's order, and its folders the section's folders.
- * Bay's folders don't nest: a folder inside one gives its tabs to the outer one. */
+/** Keeps Arc's pinned order and folder tree, with overflow tabs retained in the fifth folder level. */
 export function importArcSpace(spaceId: string, space: SpaceSuggestion): number {
-  const links = (n: ImportedNode): ImportedNode[] => (n.type === "url" ? (n.url ? [n] : []) : (n.children ?? []).flatMap(links));
   const asTab = (n: ImportedNode): TabDraft => ({ url: n.url!, title: n.pageTitle ?? n.title, pinned: false, customTitle: n.pageTitle ? n.title : undefined });
-  const entries = space.pinned.map((n) => ({ folder: n.type === "folder" ? n.title : null, tabs: links(n).map(asTab).filter(usable) }));
-  const ids = openTabs(
-    spaceId,
-    entries.flatMap((e) => e.tabs),
-  );
+  const tabs: TabDraft[] = [];
+  const folders: { name: string; parent: number | undefined; start: number; end: number }[] = [];
+  type Visit = { node: ImportedNode; parent: number | undefined; depth: number } | { finish: number };
+  const pending: Visit[] = [...space.pinned].reverse().map((node) => ({ node, parent: undefined, depth: 0 }));
+  while (pending.length) {
+    const entry = pending.pop()!;
+    if ("finish" in entry) {
+      folders[entry.finish]!.end = tabs.length;
+      continue;
+    }
+    const { node, depth } = entry;
+    if (node.type === "url") {
+      if (node.url && usable(asTab(node))) tabs.push(asTab(node));
+      continue;
+    }
+    let parent = entry.parent;
+    if (depth < 5) {
+      parent = folders.push({ name: node.title, parent, start: tabs.length, end: tabs.length }) - 1;
+      pending.push({ finish: parent });
+    }
+    for (const child of [...(node.children ?? [])].reverse()) pending.push({ node: child, parent, depth: Math.min(depth + 1, 5) });
+  }
+  const ids = openTabs(spaceId, tabs);
   const rows = ids.filter((id): id is string => !!id);
   if (rows.length) useBrowser.getState().pinRows(rows, true);
   const windowId = rows.length ? useBrowser.getState().tabs[rows[0]!]!.windowId : windowFor(spaceId);
-  let at = 0;
-  for (const e of entries) {
-    const members = ids.slice(at, (at += e.tabs.length)).filter((id): id is string => !!id);
-    if (e.folder !== null) useBrowser.getState().newPinnedFolder(windowId, { tabIds: members, name: e.folder });
+  const folderIds: string[] = [];
+  for (const folder of folders) {
+    const tabIds = ids.slice(folder.start, folder.end).filter((id): id is string => !!id);
+    folderIds.push(
+      useBrowser.getState().newPinnedFolder(windowId, {
+        tabIds,
+        name: folder.name,
+        parentId: folder.parent === undefined ? undefined : folderIds[folder.parent],
+        spaceId,
+        beforeId: tabIds.length ? undefined : ids.slice(folder.end).find((id): id is string => !!id),
+      }),
+    );
   }
   return (
     rows.length +
