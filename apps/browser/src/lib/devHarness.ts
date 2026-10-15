@@ -87,6 +87,18 @@ export function startDevHarness() {
     get menus(): typeof import("../components/sidebar/menus") {
       return require("../components/sidebar/menus");
     },
+    // Nested-folder acceptance tests inspect the same tree and geometry the sidebar renders.
+    get folders(): {
+      model: typeof import("../store/folders");
+      entries: typeof import("../components/sidebar/entries");
+      geometry: typeof import("../components/sidebar/geometry");
+    } {
+      return {
+        model: require("../store/folders"),
+        entries: require("../components/sidebar/entries"),
+        geometry: require("../components/sidebar/geometry"),
+      };
+    },
     // The update waiting for the user: a test shows the sidebar's Update row without a feed.
     get updates(): typeof import("./updates") {
       return require("./updates");

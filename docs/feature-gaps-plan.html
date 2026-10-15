@@ -729,7 +729,7 @@
                 </tr>
                 <tr>
                   <td>Folders inside folders</td>
-                  <td><code>PinnedFolder</code> has no parent; the Arc importer flattens subfolders</td>
+                  <td>Done: five levels, recursive sidebar, move undo, nested import and sync</td>
                   <td><code>store/types.ts</code>, <code>FolderBlock.tsx</code>, sync, import</td>
                   <td class="c"><span class="chip l">L</span></td>
                   <td class="c">2</td>
@@ -1444,21 +1444,26 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
             <p class="goal">The two features that change how people arrange their tabs and links.</p>
 
             <div class="item">
-              <h4>Folders inside folders <span class="chip l">L</span></h4>
+              <h4>Folders inside folders <span class="chip l">L</span> <span class="chip s">Done</span></h4>
+              <p>
+                Implemented 15 October 2026. Native Debug fixtures cover nesting, empty-folder ordering, drag and drop, ⌘Z, page text Undo and restart. Import
+                and sync tests cover tree order, migration and older clients' flat records. See
+                <a href="nested-folders.md">implementation and test instructions</a>. Two physical Macs with different released builds have not been exercised.
+              </p>
               <dl class="facts">
-                <dt>Today</dt>
+                <dt>Before</dt>
                 <dd>
                   <code>PinnedFolder</code> in <code>store/types.ts</code> has no parent, so folders are one level deep. The Arc importer
                   (<code>packages/import/ios/Core/ArcSidebar.swift</code>, <code>flatTabs</code>) flattens Arc's subfolders into one folder.
                 </dd>
-                <dt>Build</dt>
+                <dt>Implemented</dt>
                 <dd>
                   Add a parent to folders, capped at five levels. Render them recursively in <code>FolderBlock.tsx</code>. Let drag and drop in
                   <code>sidebar/dnd.tsx</code> drop into and out of a nested folder. Show "Move to Folder" as a tree. Keep subfolders in the Arc import. Migrate
                   stored state and the sync schema, so that a device on an older version still shows the tabs, flattened.
                 </dd>
-                <dt>Depends on</dt>
-                <dd>A decision on how older synced devices see nested folders (<a href="#decisions">Decisions</a>).</dd>
+                <dt>Compatibility</dt>
+                <dd>Older devices read the tabs as flat pinned groups; updated devices retain the folder tree.</dd>
               </dl>
               <ul class="checks">
                 <li>An Arc import with subfolders arrives with the same structure.</li>
@@ -1753,7 +1758,10 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
             <li>
               <strong>Where link rules can send links.</strong> A space, Little Bay and a new window are proposed. Is a specific profile or window also needed?
             </li>
-            <li><strong>How older synced devices see nested folders.</strong> Flattened (proposed), or held back until every device updates.</li>
+            <li>
+              <strong>How older synced devices see nested folders, decided.</strong> Flattened pinned groups keep every tab visible; updated devices retain the
+              tree.
+            </li>
             <li><strong>The currency rates source</strong>, or currency left out, keeping the command bar fully offline.</li>
             <li><strong>The scope of site tweaks.</strong> CSS and Zap only, or JS as well.</li>
             <li><strong>Whether to read Messages</strong> for codes, given the Full Disk Access prompt.</li>
