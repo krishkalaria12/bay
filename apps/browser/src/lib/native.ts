@@ -44,7 +44,7 @@ export function startNativeSync() {
   onCommand(runCommand);
   startWindowCloseGuard();
   startExtensionsBridge();
-  onOpenURLs((urls) => openExternalUrls(urls));
+  onOpenURLs(openExternalUrls);
   onDownload((d) => store.getState().upsertDownload(d));
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");

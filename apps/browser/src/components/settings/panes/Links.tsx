@@ -4,6 +4,7 @@ import { APP_NAME } from "../../../lib/constants";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
+import { LinkRules } from "./LinkRules";
 
 export function LinksPane() {
   const theme = useTheme();
@@ -21,6 +22,8 @@ export function LinksPane() {
           ? `Little Bay is a small window of its own, for a quick look at a link. ⌘O moves it into ${APP_NAME}; closing it throws it away.`
           : `The link opens as a new tab in your ${APP_NAME} window, in the default space.`}
       </Text>
+
+      <LinkRules />
 
       <SectionHeader title="Clicking links" />
       <Group>

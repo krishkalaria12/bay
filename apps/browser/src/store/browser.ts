@@ -8,6 +8,7 @@ import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, typ
 import { createPeeksSlice, type PeeksSlice } from "./peeks";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, withSpaceEmoji, type SpacesSlice } from "./spaces";
 import { normalizeAwakeSites } from "../lib/awakeSites";
+import { normalizeExternalLinkRules } from "../lib/externalLinkRules";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
 import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
@@ -109,6 +110,7 @@ export const useBrowser = create<BrowserState>()(
       const { detached, owners } = isolated;
       const spaces = withSpaceEmoji(isolated.spaces, spaceOrder);
       const settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      settings.externalLinkRules = normalizeExternalLinkRules(settings.externalLinkRules);
       settings.density = settings.density === "compact" ? "compact" : "comfortable";
       settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
       if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
