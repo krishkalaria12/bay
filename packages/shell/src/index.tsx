@@ -140,7 +140,7 @@ export type AppEvent =
 
 type ShellEvents = {
   onCommand: (e: CommandEvent) => void;
-  onOpenURLs: (e: { urls: string[] }) => void;
+  onOpenURLs: (e: { urls: string[]; sourceApp?: string }) => void;
   onWindowEvent: (e: WindowEvent) => void;
   onAppEvent: (e: AppEvent) => void;
 };
@@ -335,7 +335,8 @@ export const prompt = (options: PromptOptions) => Shell.prompt(options);
 export const onCommand = (listener: (e: CommandEvent) => void) => Shell.addListener("onCommand", listener);
 export const onWindowEvent = (listener: (e: WindowEvent) => void) => Shell.addListener("onWindowEvent", listener);
 export const onAppEvent = (listener: (e: AppEvent) => void) => Shell.addListener("onAppEvent", listener);
-export const onOpenURLs = (listener: (urls: string[]) => void) => Shell.addListener("onOpenURLs", ({ urls }) => listener(urls));
+export const onOpenURLs = (listener: (urls: string[], sourceApp?: string) => void) =>
+  Shell.addListener("onOpenURLs", ({ urls, sourceApp }) => listener(urls, sourceApp));
 
 export const WindowDragRegion = requireNativeViewManager<ViewProps>("BayShell");
 

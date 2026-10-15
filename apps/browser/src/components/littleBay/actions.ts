@@ -1,4 +1,5 @@
 import { focus, openWindow } from "../../lib/actions";
+import { matchingLinkRule } from "../../lib/externalLinkRules";
 import { useBrowser } from "../../store/browser";
 import { activeTabId, viewTabIds } from "../../store/model";
 import { isSmall, mainWindowFor } from "../../store/small";
@@ -14,14 +15,18 @@ export function openLittleBay(url?: string, spaceId?: string): string {
 
 const opensInLittleBay = (url: string) => /^(https?|file):/i.test(url);
 
-// URLs from other apps (Launch Services, `open`, Handoff) open in the default profile (Settings › Profiles). With
-// Settings › General › "Open links from other apps in" Little Bay, one web link opens in its own Little Bay, even when a
-// Little Bay is already in front; several at once, or set to a new tab, they open as tabs of the main window.
-export function openExternalUrls(urls: string[]) {
-  const [url] = urls;
-  const spaceId = store().settings.defaultSpaceId;
-  if (store().settings.openLinksInLittleBay && urls.length === 1 && url && opensInLittleBay(url)) return void openLittleBay(url, spaceId);
-  openLinksInMainWindow(urls, spaceId);
+// Only incoming desktop links use these rules. Page navigation and explicit tab commands keep their behavior.
+export function openExternalUrls(urls: string[], sourceApp?: string) {
+  for (const url of urls) {
+    const s = store();
+    const spaceId = s.settings.defaultSpaceId;
+    const target = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
+    if (target?.kind === "space" && s.spaces[target.spaceId]) openLinksInMainWindow([url], target.spaceId);
+    else if (target?.kind === "littleBay") openLittleBay(url, spaceId);
+    else if (target?.kind === "newWindow") focus(openWindow({ url, spaceId }));
+    else if (s.settings.openLinksInLittleBay && urls.length === 1 && opensInLittleBay(url)) openLittleBay(url, spaceId);
+    else openLinksInMainWindow([url], spaceId);
+  }
 }
 
 // New tabs in the frontmost main window showing the profile (else the frontmost main window, paged to it), which

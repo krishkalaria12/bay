@@ -35,6 +35,7 @@ import {
   type ProfileRecord,
 } from "./adapters";
 import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_CYCLE_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
+import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules";
 
 export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "settings";
 
@@ -245,7 +246,7 @@ function appAdapters(retiring: boolean): Adapter[] {
   const id = doc.deviceId!;
   if (retiring) return [deviceAdapter(id, deviceName, true)];
   return [
-    ...(doc.types.settings ? [settingsAdapter] : []),
+    ...(doc.types.settings ? [settingsAdapter, linkRulesAdapter(() => doc.profiles)] : []),
     profilesAdapter(() => Object.fromEntries(Object.entries(doc.profiles).filter(([, l]) => l.enabled))),
     deviceAdapter(id, deviceName),
   ];
@@ -299,6 +300,7 @@ async function runCycle({ retiring = false } = {}) {
     const clock = new Clock(doc.deviceId, doc.clock);
     const device = doc.deviceId;
     const app = (doc.scopes[APP_SCOPE] ??= { ...emptyScope(), awaitRemote: doc.joining });
+    if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
     await syncScope({
       scope: APP_SCOPE,
       state: app,
@@ -309,6 +311,7 @@ async function runCycle({ retiring = false } = {}) {
       options: { persist: persistJournal(APP_SCOPE) },
     });
     if (app.joined) linkProfiles(app);
+    if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
     let pending = app.pending;
     const s = useBrowser.getState();
     for (const [spaceId, link] of Object.entries(doc.profiles)) {
@@ -523,6 +526,7 @@ export function addRemoteProfile(syncId: string): string | null {
   const id = useBrowser.getState().createSpace({ name: record.n, color: record.c, icon: record.i });
   if (typeof record.f === "boolean") useBrowser.getState().updateSpace(id, { folded: record.f });
   doc.profiles[id] = { syncId, enabled: true };
+  if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
   doc.scopes[`p:${syncId}`] = { ...emptyScope(), awaitRemote: true };
   save();
   publishUi();

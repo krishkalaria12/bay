@@ -33,6 +33,12 @@ export function startDevHarness() {
     store: useBrowser,
     actions,
     runCommand,
+    get externalLinks(): typeof import("../components/littleBay/actions") {
+      return require("../components/littleBay/actions");
+    },
+    get linkRules(): typeof import("../components/settings/panes/LinkRules") {
+      return require("../components/settings/panes/LinkRules");
+    },
     webviews,
     shell,
     omnibox: omniboxDrivers,

@@ -2,12 +2,17 @@ import AppKit
 import ExpoModulesCore
 
 public enum OpenURLInbox {
-  static var pending: [String] = []
-  static var deliver: (([String]) -> Void)?
+  struct Batch {
+    let urls: [String]
+    let sourceApp: String?
+  }
 
-  public static func receive(_ urls: [URL]) {
-    let strings = urls.map { $0.isFileURL ? $0.absoluteString : $0.absoluteString }
-    if let deliver { deliver(strings) } else { pending += strings }
+  static var pending: [Batch] = []
+  static var deliver: ((Batch) -> Void)?
+
+  public static func receive(_ urls: [URL], sourceApp: String? = nil) {
+    let batch = Batch(urls: urls.map(\.absoluteString), sourceApp: sourceApp)
+    if let deliver { deliver(batch) } else { pending.append(batch) }
   }
 }
 
@@ -186,11 +191,15 @@ public class ShellModule: Module {
 
     OnStartObserving("onOpenURLs") {
       DispatchQueue.main.async { [weak self] in
-        OpenURLInbox.deliver = { urls in self?.sendEvent("onOpenURLs", ["urls": urls]) }
+        OpenURLInbox.deliver = { batch in
+          var event: [String: Any] = ["urls": batch.urls]
+          if let sourceApp = batch.sourceApp { event["sourceApp"] = sourceApp }
+          self?.sendEvent("onOpenURLs", event)
+        }
         if !OpenURLInbox.pending.isEmpty {
-          let urls = OpenURLInbox.pending
+          let batches = OpenURLInbox.pending
           OpenURLInbox.pending = []
-          OpenURLInbox.deliver?(urls)
+          for batch in batches { OpenURLInbox.deliver?(batch) }
         }
       }
     }

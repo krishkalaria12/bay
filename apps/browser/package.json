@@ -12,6 +12,8 @@
     "compiler:check": "node scripts/compiler-check.mjs",
     "test:folders": "node scripts/nested-folders-test.mjs",
     "dev:folders": "node scripts/nested-folders-demo.mjs",
+    "test:links": "node scripts/external-link-rules-test.mjs",
+    "dev:links": "node scripts/external-link-rules-demo.mjs",
     "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\""
   },
   "dependencies": {

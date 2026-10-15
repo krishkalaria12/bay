@@ -15,6 +15,7 @@ import type { BrowserState } from "./browser";
 import { layout } from "../lib/constants";
 import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/awakeSites";
 import { DEFAULT_SPACE_ID } from "./constants";
+import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
 
 export type SearchEngineId = string;
 
@@ -78,6 +79,7 @@ export type Settings = {
   shortcuts: Record<string, string[]>;
 
   openLinksInLittleBay: boolean;
+  externalLinkRules: ExternalLinkRule[];
   // Arc's Peek: a link a pinned tab or a favourite opens in front shows over its page (store/peeks.ts).
   peekLinksFromPinnedTabs: boolean;
   littleBaySize: [number, number];
@@ -130,6 +132,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultSpaceId: DEFAULT_SPACE_ID,
   shortcuts: {},
   openLinksInLittleBay: false,
+  externalLinkRules: [],
   peekLinksFromPinnedTabs: true,
   littleBaySize: [900, 640],
 };
@@ -188,6 +191,7 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
       settings: {
         ...s.settings,
         ...patch,
+        ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : {}),
         ...("awakeSites" in patch ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites } : {}),
       },
     }));
