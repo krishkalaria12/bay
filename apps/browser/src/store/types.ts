@@ -107,6 +107,10 @@ export type TabGroup = {
 // are its space's tabs with its id, in their list's order.
 export type PinnedFolder = {
   id: string;
+  // Absent on root folders and older flat sessions.
+  parentId?: string;
+  // Empty folders can retain a position before a sibling folder or row. Missing anchors append.
+  beforeId?: string;
   spaceId: string;
   name: string;
   icon: string | null;

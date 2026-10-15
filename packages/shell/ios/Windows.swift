@@ -457,6 +457,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   func windowWillClose(_ notification: Notification) {
     guard let window = notification.object as? NSWindow, let id = id(of: window) else { return }
     NotificationCenter.default.removeObserver(self, name: nil, object: window)
+    SidebarMoveUndoView.remove(windowId: id)
     windows[id] = nil
     stopKeepingContentSized(id)
     lightsCenters[id] = nil

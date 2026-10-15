@@ -3,11 +3,12 @@ import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedL
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
 import { DEFAULT_SPACE_ID, MAX_HISTORY, MAX_VISIT_TIMES } from "../store/constants";
 import { useBrowser } from "../store/browser";
+import { normalizePinnedFolders, prunePinnedFolders } from "../store/folders";
 import { orderSections, syncGroupOrder } from "../store/groups";
 import { engineProfile, IDLE_LIVE, listIds, makeTab, pinnedFirst, spaceListKey, withList } from "../store/model";
 import { removeTabs } from "../store/tabs";
 import type { Settings } from "../store/settings";
-import type { BookmarkNode, HistoryEntry, Space, Tab, TabGroup } from "../store/types";
+import type { BookmarkNode, HistoryEntry, PinnedFolder, Space, Tab, TabGroup } from "../store/types";
 import { HISTORY_WINDOW_MS, MAX_DEVICE_TABS, PASSWORD_READ_INTERVAL_MS, SAME_VISIT_MS } from "./constants";
 
 const store = () => useBrowser.getState();
@@ -361,17 +362,18 @@ export function deviceTabsAdapter(spaceId: string, deviceId: string, name: () =>
   };
 }
 
-type PinValue = { g: string | null; u: string; t: string | null; i: string | null; ti: string; pos: string };
-type PinGroupValue = { n: string; i: string | null; c: TabGroup["color"]; pos: string };
+type PinValue = { g: string | null; u: string; t: string | null; i: string | null; ti: string; pos: string; r?: true; o?: string };
+// Optional folder metadata keeps these records readable as flat pinned groups on older devices.
+type PinGroupValue = { n: string; i: string | null; c: TabGroup["color"]; pos: string; f?: true; p?: string | null; b?: string | null; a?: number };
 
 export function pinnedAdapter(spaceId: string): Adapter {
   return {
     prefix: "pin:",
     extract: (base) => {
       const s = store();
-      type Pin = Pick<Tab, "id" | "url" | "title" | "customTitle" | "customIcon"> & { pinnedUrl?: string | null };
+      type Pin = Pick<Tab, "id" | "url" | "title" | "customTitle" | "customIcon" | "pinnedRow"> & { pinnedUrl?: string | null };
       const tiles: Pin[] = [];
-      const groups: Pick<TabGroup, "id" | "name" | "icon" | "color">[] = [];
+      const groups: (Pick<TabGroup, "id" | "name" | "icon" | "color"> | PinnedFolder)[] = [];
       const members = new Map<string, Pin[]>();
       const pinnedGroupOf = new Map<string, TabGroup>();
       for (const g of Object.values(s.groups)) if (g.pinned && g.spaceId === spaceId) g.tabIds.forEach((id) => pinnedGroupOf.set(id, g));
@@ -380,8 +382,15 @@ export function pinnedAdapter(spaceId: string): Adapter {
         const t = s.tabs[id];
         if (!t || t.spaceId !== spaceId) continue;
         const g = pinnedGroupOf.get(id);
-        if (t.pinned) tiles.push(t);
-        else if (g) {
+        const folder = t.pinnedRow && t.folderId ? s.pinnedFolders[t.folderId] : undefined;
+        if (t.pinned || (t.pinnedRow && !folder)) tiles.push(t);
+        else if (folder) {
+          if (!members.has(folder.id)) {
+            members.set(folder.id, []);
+            groups.push(folder);
+          }
+          members.get(folder.id)!.push(t);
+        } else if (g) {
           if (!members.has(g.id)) {
             members.set(g.id, []);
             groups.push(g);
@@ -389,6 +398,14 @@ export function pinnedAdapter(spaceId: string): Adapter {
           members.get(g.id)!.push(t);
         }
       }
+      for (const folder of Object.values(s.pinnedFolders)) {
+        if (folder.spaceId !== spaceId || members.has(folder.id)) continue;
+        groups.push(folder);
+        members.set(folder.id, []);
+      }
+      const rowIds = listIds(s, spaceListKey(s, spaceId)).filter((id) => s.tabs[id]?.spaceId === spaceId && s.tabs[id]?.pinnedRow);
+      const rowOrder = assignPositions(rowIds.map((id) => (base(`pin:t:${id}`) as PinValue | undefined)?.o));
+      const rowPositions = new Map(rowIds.map((id, index) => [id, rowOrder[index]!]));
       const values = new Map<string, unknown>();
       const place = (tabs: Pin[], group: string | null) => {
         const positions = assignPositions(
@@ -399,18 +416,26 @@ export function pinnedAdapter(spaceId: string): Adapter {
         tabs.forEach((t, i) =>
           values.set(`pin:t:${t.id}`, {
             g: group,
-            u: (group ? t.url : t.pinnedUrl || t.url) || "",
+            u: (group && !t.pinnedRow ? t.url : t.pinnedUrl || t.url) || "",
             t: t.customTitle,
             i: t.customIcon,
             ti: t.title,
             pos: positions[i]!,
+            ...(t.pinnedRow ? { r: true, o: rowPositions.get(t.id)! } : {}),
           } satisfies PinValue),
         );
       };
       place(tiles, null);
       const groupPositions = assignPositions(groups.map((g) => (base(`pin:g:${g.id}`) as PinGroupValue | undefined)?.pos));
       groups.forEach((g, i) => {
-        values.set(`pin:g:${g.id}`, { n: g.name, i: g.icon, c: g.color, pos: groupPositions[i]! } satisfies PinGroupValue);
+        const folder = s.pinnedFolders[g.id];
+        values.set(`pin:g:${g.id}`, {
+          n: g.name,
+          i: g.icon,
+          c: "color" in g ? g.color : null,
+          pos: groupPositions[i]!,
+          ...(folder ? { f: true, p: folder.parentId ?? null, b: folder.beforeId ?? null, a: folder.createdAt } : {}),
+        } satisfies PinGroupValue);
         place(members.get(g.id)!, g.id);
       });
       return { values } satisfies Extraction;
@@ -450,25 +475,59 @@ export function pinnedAdapter(spaceId: string): Adapter {
         false,
       );
       const tabs = { ...s.tabs };
-      for (const id of goneTabs) if (tabs[id]) tabs[id] = { ...tabs[id]!, pinned: false, pinnedUrl: null };
+      for (const id of goneTabs)
+        if (tabs[id]) {
+          const { pinnedRow: _, folderId: _f, ...rest } = tabs[id]!;
+          tabs[id] = { ...rest, pinned: false, pinnedUrl: null };
+        }
       let groups = { ...s.groups };
-      for (const k of changed) if (k.startsWith("pin:g:") && !visible.has(k)) delete groups[k.slice(6)];
+      let pinnedFolders = { ...s.pinnedFolders };
+      for (const k of changed)
+        if (k.startsWith("pin:g:") && !visible.has(k)) {
+          delete groups[k.slice(6)];
+          delete pinnedFolders[k.slice(6)];
+        }
 
       for (const id of groupOrder) {
         const v = groupValues.get(id)!;
+        if (v.f) {
+          const old = pinnedFolders[id];
+          pinnedFolders[id] = {
+            id,
+            spaceId,
+            name: v.n,
+            icon: v.i,
+            collapsed: old?.collapsed ?? false,
+            createdAt: v.a ?? old?.createdAt ?? 0,
+            ...(v.p ? { parentId: v.p } : {}),
+            ...(v.b ? { beforeId: v.b } : {}),
+          };
+          delete groups[id];
+          continue;
+        }
+        delete pinnedFolders[id];
         const old = groups[id];
         groups[id] = old
           ? { ...old, name: v.n, icon: v.i, color: v.c, pinned: true }
           : { id, spaceId, name: v.n, icon: v.i, color: v.c, collapsed: false, pinned: true, tabIds: [], createdAt: Date.now() };
       }
+      pinnedFolders = normalizePinnedFolders(pinnedFolders);
+      // Sync order includes empty folders too, so it also defines their sibling order.
+      const folderOrder = [...Object.keys(pinnedFolders).filter((id) => !groupValues.has(id)), ...groupOrder.filter((id) => pinnedFolders[id])];
+      pinnedFolders = Object.fromEntries(folderOrder.map((id) => [id, pinnedFolders[id]!]));
       const added: string[] = [];
       for (const [id, v] of pins) {
         const group = v.g && groups[v.g] ? groups[v.g]! : null;
+        const folder = v.g && pinnedFolders[v.g] ? pinnedFolders[v.g]! : null;
+        const row = !!folder || (!!v.r && !group);
         const old = tabs[id];
         if (old) {
+          const { pinnedRow: _, folderId: _f, ...rest } = old;
           tabs[id] = {
-            ...old,
-            pinned: !group,
+            ...rest,
+            pinned: !group && !row,
+            ...(row ? { pinnedRow: true } : {}),
+            ...(folder ? { folderId: folder.id } : {}),
             pinnedUrl: group ? null : v.u,
             customTitle: v.t,
             customIcon: v.i,
@@ -478,8 +537,9 @@ export function pinnedAdapter(spaceId: string): Adapter {
         }
         // Not shown in a window yet: its page loads in the first that shows it.
         tabs[id] = {
-          ...makeTab("", spaceId, v.u, { title: v.ti, pinned: !group, customTitle: v.t, customIcon: v.i }),
+          ...makeTab("", spaceId, v.u, { title: v.ti, pinned: !group && !row, ...(row ? { pinnedRow: true } : {}), customTitle: v.t, customIcon: v.i }),
           id,
+          ...(folder ? { folderId: folder.id } : {}),
           pinnedUrl: group ? null : v.u,
           navigation: null,
           unloaded: true,
@@ -495,16 +555,28 @@ export function pinnedAdapter(spaceId: string): Adapter {
       for (const g of Object.values(groups)) if (g.spaceId === spaceId && !g.tabIds.length) delete groups[g.id];
 
       // The list in the synced order: its pins where its pins were, the rest as they are.
-      const sequence = [...tileOrder, ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
+      const flatSequence = [...tileOrder, ...groupOrder.flatMap((g) => memberOrder.get(g) ?? [])];
+      const rowSequence = flatSequence
+        .filter((id) => tabs[id]?.pinnedRow)
+        .sort((a, z) => {
+          const aPos = pins.get(a)?.o ?? "";
+          const zPos = pins.get(z)?.o ?? "";
+          return aPos < zPos ? -1 : aPos > zPos ? 1 : 0;
+        });
+      const sequence = [
+        ...flatSequence.filter((id) => tabs[id]?.pinned),
+        ...rowSequence,
+        ...flatSequence.filter((id) => !tabs[id]?.pinned && !tabs[id]?.pinnedRow),
+      ];
       const rank = new Map(sequence.map((id, i) => [id, i]));
       const ids = [...listIds(s, key).filter((id) => tabs[id]), ...added];
       const slots = ids.map((id, i) => (rank.has(id) ? i : -1)).filter((i) => i >= 0);
       const sorted = slots.map((i) => ids[i]!).sort((a, z) => rank.get(a)! - rank.get(z)!);
       slots.forEach((slot, i) => (ids[slot] = sorted[i]!));
-      const list = { key, tabIds: orderSections(pinnedFirst(ids, tabs), tabs, groups) };
+      const list = { key, tabIds: orderSections(pinnedFirst(ids, tabs), tabs, groups, pinnedFolders) };
       groups = syncGroupOrder(groups, list);
       const live = { ...s.live, ...Object.fromEntries(added.map((id) => [id, s.live[id] ?? IDLE_LIVE])) };
-      useBrowser.setState({ ...withList({ ...s, tabs, groups, live }, list) });
+      useBrowser.setState(prunePinnedFolders(withList({ ...s, tabs, groups, live, pinnedFolders }, list)));
     },
   };
 }

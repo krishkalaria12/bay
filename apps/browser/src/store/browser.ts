@@ -137,7 +137,7 @@ export const useBrowser = create<BrowserState>()(
       for (const ids of Object.values(data.tabLists ?? {})) ids.forEach(add);
       for (const w of Object.values(rawWindows)) (w.tabIds ?? []).forEach(add);
       Object.keys(tabs).forEach(add);
-      const tabLists = Object.fromEntries(Object.entries(lists).map(([key, ids]) => [key, placeFolders(pinnedFirst(ids, tabs), tabs)]));
+      const tabLists = Object.fromEntries(Object.entries(lists).map(([key, ids]) => [key, placeFolders(pinnedFirst(ids, tabs), tabs, data.pinnedFolders)]));
 
       const windows: Record<string, BrowserWindow> = {};
       for (const { tabIds: _, ...w } of Object.values(rawWindows)) {
@@ -221,6 +221,7 @@ export const useBrowser = create<BrowserState>()(
             .filter((f) => spaces[f.spaceId])
             .map((saved: PinnedFolder & { windowId?: string }) => [saved.id, withoutWindowId(saved)]),
         ),
+        folderMoveUndo: [],
         splits,
         closedTabs: data.closedTabs ?? [],
         closedWindows: data.closedWindows ?? [],

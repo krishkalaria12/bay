@@ -13,15 +13,18 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { create, useStore } from "zustand";
+import { armSidebarMoveUndo } from "../../lib/folderUndo";
 import { useTheme } from "../../lib/theme";
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { useEffectEvent } from "../../lib/useEffectEvent";
+import { canMoveFolder, folderDepth } from "../../store/folders";
 import type { TabPlacement } from "../../store/organize";
 import { STRIP_SLIDE } from "../layout/constants";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../layout/tabDrag";
+import { folderDragItemVisible } from "./geometry";
 import { suppressHover } from "./hover";
 import { DRAG_SCROLL_EDGE, PINNED_TILE_GAP } from "./constants";
 
@@ -52,7 +55,7 @@ type Item = ItemSpec & {
 type Drop =
   | { type: "tabs"; placement: TabPlacement }
   | { type: "group"; placement: { pinned: boolean; beforeId?: string | null } }
-  | { type: "folder"; folderId: string; beforeId: string | null }
+  | { type: "folder"; folderId: string; beforeId: string | null; parentId: string | null }
   | { type: "none" };
 
 // `landing`: let go, it settles into the item's place while the item stays hidden.
@@ -109,7 +112,10 @@ class DragController {
   private token: object | null = null;
   landed: { key: string; x: number; y: number } | null = null;
 
-  constructor(private setGhost: (ghost: Ghost | null) => void) {}
+  constructor(
+    private setGhost: (ghost: Ghost | null) => void,
+    private windowId: string,
+  ) {}
 
   create(key: string): Item {
     return {
@@ -224,12 +230,13 @@ class DragController {
       !splitDrop && this.measured && ghost && sources.length === 1 && sources[0]!.kind !== "tile" && !this.into
         ? this.landingSpot(commit ? drop : { type: "none" })
         : null;
+    const undoBefore = useBrowser.getState().folderMoveUndo;
     if (commit && !splitDrop && this.measured && sources.length) {
       const s = useBrowser.getState();
       const ids = sources.flatMap((i) => i.tabIds);
       if (drop.type === "tabs") s.placeTabs(ids, drop.placement);
       else if (drop.type === "group" && sources[0]!.groupId) s.moveGroup(sources[0]!.groupId, drop.placement);
-      else if (drop.type === "folder") s.movePinnedFolder(drop.folderId, drop.beforeId);
+      else if (drop.type === "folder") s.movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId);
     }
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
     for (const i of this.items.values()) {
@@ -248,6 +255,7 @@ class DragController {
     this.setSources(new Set());
     this.setDropInto(null);
     this.marks.setState({ pins: false });
+    if (useBrowser.getState().folderMoveUndo !== undoBefore) armSidebarMoveUndo(this.windowId);
     if (!spot || !ghost) {
       this.token = null;
       this.setLanding(null);
@@ -345,7 +353,20 @@ class DragController {
     const { x, y } = this.pointer;
     const source = this.sources[0]!;
     const sourceKeys = new Set(this.sources.map((s) => s.key));
-    const live = [...this.items.values()].filter((i) => !sourceKeys.has(i.key) && i.frame);
+    const state = useBrowser.getState();
+    const inSourceFolder = (i: Item) => {
+      if (source.kind !== "folder") return false;
+      const id = i.folderId ?? i.parentGroup;
+      let folder = id ? state.pinnedFolders[id] : undefined;
+      while (folder) {
+        if (folder.id === source.folderId) return true;
+        folder = folder.parentId ? state.pinnedFolders[folder.parentId] : undefined;
+      }
+      return false;
+    };
+    const live = [...this.items.values()].filter(
+      (i) => !sourceKeys.has(i.key) && i.frame && !inSourceFolder(i) && folderDragItemVisible(state, this.windowId, i),
+    );
     const cy = (i: Item) => {
       const f = this.at(i.frame)!;
       return f.y + Math.min(f.h, i.headerFrame?.h ?? f.h) / 2;
@@ -383,15 +404,18 @@ class DragController {
       const divider = this.at(this.regionFrames.get("divider") ?? null);
       const pinning = tabsDrag && !!divider && y < divider.y + divider.h / 2;
       // Onto a pinned folder's header (its middle third), or among its open rows.
-      const folder = tabsDrag
-        ? live
-            .filter((i) => i.kind === "folder")
-            .find((f) => {
-              const header = this.at(f.headerFrame);
-              if (header && inside(header, x, y)) return Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
-              return !f.collapsed && inside(this.at(f.frame)!, x, y);
-            })
-        : undefined;
+      const folderDrag = source.kind === "folder";
+      const folder =
+        tabsDrag || folderDrag
+          ? live
+              .filter((i) => i.kind === "folder" && (!folderDrag || canMoveFolder(state, source.folderId!, i.folderId!)))
+              .sort((a, b) => folderDepth(state, b.folderId!) - folderDepth(state, a.folderId!))
+              .find((f) => {
+                const header = this.at(f.headerFrame);
+                if (header && inside(header, x, y)) return Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
+                return !f.collapsed && inside(this.at(f.frame)!, x, y);
+              })
+          : undefined;
       const groups = live.filter((i) => i.kind === "group");
       const box = tabsDrag
         ? groups.find((g) => {
@@ -404,12 +428,16 @@ class DragController {
       if (folder) {
         const header = this.at(folder.headerFrame);
         if (header && y <= header.y + header.h) {
-          drop = { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: null } };
+          drop = folderDrag
+            ? { type: "folder", folderId: source.folderId!, parentId: folder.folderId!, beforeId: null }
+            : { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: null } };
           into = folder.folderId!;
         } else {
-          const members = live.filter((i) => i.kind === "row" && i.parentGroup === folder.folderId).sort(byY);
+          const members = live.filter((i) => (i.kind === "row" || i.kind === "folder") && i.parentGroup === folder.folderId).sort(byY);
           const before = members.find((m) => cy(m) > y);
-          drop = { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: firstTab(before) } };
+          drop = folderDrag
+            ? { type: "folder", folderId: source.folderId!, parentId: folder.folderId!, beforeId: before?.folderId ?? firstTab(before) }
+            : { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: firstTab(before) } };
           gapKey = before?.key ?? `tail:folder:${folder.folderId}`;
         }
       } else if (box?.collapsed) {
@@ -436,7 +464,7 @@ class DragController {
           source.kind === "group"
             ? { type: "group", placement: { pinned, beforeId: firstTab(before) } }
             : source.kind === "folder"
-              ? { type: "folder", folderId: source.folderId!, beforeId: firstTab(before) }
+              ? { type: "folder", folderId: source.folderId!, beforeId: before?.folderId ?? firstTab(before), parentId: null }
               : { type: "tabs", placement: { pinned: false, row: section === "pinned", folderId: null, beforeId: firstTab(before) } };
       }
     }
@@ -471,7 +499,7 @@ export function DragProvider({ children }: { children: (ghost: Ghost | null, con
   const density = useBrowser((s) => s.settings.density);
   const folded = useBrowser((s) => !!s.spaces[s.windows[windowId]?.spaceId ?? ""]?.folded);
   const [ghost, setGhost] = useState<Ghost | null>(null);
-  const [controller] = useState(() => new DragController(setGhost));
+  const [controller] = useState(() => new DragController(setGhost, windowId));
   useEffect(() => {
     // Changing density or folding the space invalidates the frames captured at drag start.
     if (controller.active) controller.end(false);

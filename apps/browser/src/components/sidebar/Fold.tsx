@@ -35,7 +35,7 @@ export function useFold(collapsed: boolean): FoldState {
   return { open, moving: running || settled !== collapsed };
 }
 
-export type FoldEntry = { key: string; node: ReactNode };
+export type FoldEntry = { key: string; node: ReactNode; height?: number };
 
 /**
  * The members of a sidebar group or live folder, opening and closing on `fold`. Closed, the block shows nothing, or
@@ -68,11 +68,11 @@ export function Fold({
   footer?: ReactNode;
 }) {
   const { open, moving } = fold;
-  const measuring = rowHeight === undefined;
+  const measuring = rowHeight === undefined && entries.some((e) => e.height === undefined);
   const [measured, setMeasured] = useState<Record<string, number>>({});
   const kept = keep && entries.some((e) => e.key === keep) ? keep : null;
   const folding = !!kept && (collapsed || moving);
-  const heightOf = (key: string) => rowHeight ?? measured[key] ?? 0;
+  const heightOf = (key: string) => entries.find((e) => e.key === key)?.height ?? rowHeight ?? measured[key] ?? 0;
   const total = entries.reduce((sum, e) => sum + heightOf(e.key), 0) + gap * Math.max(0, entries.length - 1) + padTop + padBottom;
   // The block: its own height while folding around a kept entry (the entries fold instead) or open, else from
   // nothing to all of it.

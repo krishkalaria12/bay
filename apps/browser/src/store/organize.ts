@@ -1,3 +1,4 @@
+import { folderInsertionBeforeId, folderTabIds, withFolderPlacementUndo } from "./folders";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { autoGroupName } from "./groupNames";
@@ -208,7 +209,7 @@ export function withGroup(
     ...(o.pinnedOpenerId ? { pinnedOpenerId: o.pinnedOpenerId } : {}),
   };
   const groups = { ...leaveGroups(s.groups, members), [group.id]: group };
-  tabIds = orderSections(tabIds, s.tabs, groups);
+  tabIds = orderSections(tabIds, s.tabs, groups, s.pinnedFolders);
   const list = { key: w.key, tabIds };
   return [{ ...withList(s, list), groups: syncGroupOrder(groups, list) }, group.id];
 }
@@ -427,8 +428,12 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
   else if (target) {
     const kept = target.tabIds.filter((id) => !movingSet.has(id));
     at = kept.length ? rest.indexOf(kept.at(-1)!) + 1 : Math.min(order.get(target.tabIds[0]!)!, rest.length);
-  } else if (folder && rest.some((id) => tabs[id]?.pinnedRow && tabs[id]!.folderId === folder.id)) {
-    at = rest.reduce((last, id, i) => (tabs[id]?.pinnedRow && tabs[id]!.folderId === folder.id ? i + 1 : last), 0);
+  } else if (folder && folderTabIds(s, folder.id).some((id) => !movingSet.has(id))) {
+    const subtree = new Set(folderTabIds(s, folder.id));
+    at = rest.reduce((last, id, i) => (subtree.has(id) ? i + 1 : last), 0);
+  } else if (folder) {
+    const anchor = folderInsertionBeforeId(s, folder.id, moving);
+    at = anchor && rest.includes(anchor) ? rest.indexOf(anchor) : rest.reduce((last, id, i) => (pinnedPage(tabs[id] ?? { pinned: false }) ? i + 1 : last), 0);
   } else if (p.pinned) at = rest.reduce((last, id, i) => (tabs[id]?.pinned ? i + 1 : last), 0);
   else if (p.row) at = rest.reduce((last, id, i) => (pinnedPage(tabs[id] ?? { pinned: false }) ? i + 1 : last), 0);
   else at = rest.length;
@@ -446,7 +451,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
         tabIds,
         tabIds.filter((id) => g.tabIds.includes(id)),
       );
-  tabIds = orderSections(tabIds, tabs, groups);
+  tabIds = orderSections(tabIds, tabs, groups, s.pinnedFolders);
   const list = { key: w.key, tabIds };
   return { ...withList({ ...s, tabs }, list), groups: syncGroupOrder(groups, list) };
 }
@@ -478,7 +483,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
   },
 
   placeTabs(ids, placement) {
-    set((s) => placing(s, ids, placement));
+    set((s) => withFolderPlacementUndo(s, placing(s, ids, placement), ids));
   },
 
   pinTabs(ids, pinned) {
@@ -578,7 +583,7 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
         at = rest.reduce((last, id, i) => (s.tabs[id]?.pinned || pinnedGroup.has(id) ? i + 1 : last), 0);
       } else at = rest.length;
       rest.splice(at, 0, ...g.tabIds);
-      const list = { key: w.key, tabIds: orderSections(rest, s.tabs, groups) };
+      const list = { key: w.key, tabIds: orderSections(rest, s.tabs, groups, s.pinnedFolders) };
       return { groups: syncGroupOrder(groups, list), tabLists: withList(s, list).tabLists };
     });
   },

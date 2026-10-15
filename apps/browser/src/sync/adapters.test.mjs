@@ -390,3 +390,137 @@ test("bookmarks: a Mac on old ids and one on Chrome's UUIDs keep one tree", asyn
   assertTreeWhole(now);
   assertTreeWhole(old);
 });
+
+test("nested pinned folders, empty descendants and loose rows sync to a new device and settle", async () => {
+  const transport = new Folder();
+  const a = new Device("A", transport);
+  const b = new Device("B", transport);
+  const ids = a.with(() => {
+    const w = S().createWindow({ url: "https://root.example" });
+    const first = model.viewTabIds(S(), w)[0];
+    const second = S().newTab(w, { url: "https://child.example" });
+    const loose = S().newTab(w, { url: "https://loose.example" });
+    const root = S().newPinnedFolder(w, { name: "Work", tabIds: [first] });
+    const child = S().newPinnedFolder(w, { name: "Research", parentId: root, tabIds: [second] });
+    const empty = S().newPinnedFolder(w, { name: "Empty", parentId: child });
+    S().pinRows([loose], true);
+    return { root, child, empty, first, second, loose };
+  });
+  await syncAll([a, b], 3);
+  b.with(() => {
+    assert.equal(S().pinnedFolders[ids.child].parentId, ids.root);
+    assert.equal(S().pinnedFolders[ids.empty].parentId, ids.child);
+    assert.equal(S().tabs[ids.first].folderId, ids.root);
+    assert.equal(S().tabs[ids.second].folderId, ids.child);
+    assert.equal(S().tabs[ids.loose].pinnedRow, true);
+    assert.equal(S().tabs[ids.loose].pinned, false);
+    assert.equal(Object.values(S().groups).length, 0, "folders remain distinct from tab groups");
+  });
+  assert.equal((await a.sync()).published + (await b.sync()).published, 0, "records settle after joining");
+  a.with(() => S().movePinnedFolder(ids.child, null, null));
+  await syncAll([a, b]);
+  b.with(() => {
+    assert.equal(S().pinnedFolders[ids.child].parentId, undefined);
+    assert.equal(S().pinnedFolders[ids.empty].parentId, ids.child);
+  });
+  a.with(() => S().deletePinnedFolder(ids.child));
+  await syncAll([a, b]);
+  b.with(() => {
+    assert.equal(S().pinnedFolders[ids.child], undefined);
+    assert.equal(S().pinnedFolders[ids.empty].parentId, undefined);
+    assert.equal(S().tabs[ids.second].pinnedRow, true);
+    assert.equal(S().tabs[ids.second].folderId, undefined);
+  });
+});
+
+test("folder records remain visible through the old flat pinned-group wire format", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://root.example" });
+  const first = model.viewTabIds(S(), w)[0];
+  const second = S().newTab(w, { url: "https://child.example" });
+  const root = S().newPinnedFolder(w, { name: "Work", tabIds: [first] });
+  const child = S().newPinnedFolder(w, { name: "Child", parentId: root, tabIds: [second] });
+  const adapter = adapters.pinnedAdapter("default");
+  const { values } = adapter.extract(() => undefined);
+  // Pre-folder clients read n/i/c/pos as a pinned group, and g as its direct membership.
+  const flatGroups = [...values]
+    .filter(([key]) => key.startsWith("pin:g:"))
+    .map(([key, value]) => ({
+      name: value.n,
+      tabs: [...values].filter(([pinKey, pin]) => pinKey.startsWith("pin:t:") && pin.g === key.slice(6)).map(([, pin]) => pin.u),
+      id: key.slice(6),
+    }));
+  assert.deepEqual(
+    flatGroups.map((group) => [group.name, group.tabs]),
+    [
+      ["Work", ["https://root.example"]],
+      ["Child", ["https://child.example"]],
+    ],
+  );
+  for (const id of [root, child]) {
+    const group = values.get(`pin:g:${id}`);
+    assert.equal(group.c, null);
+    const member = [...values].find(([key, pin]) => key.startsWith("pin:t:") && pin.g === id);
+    assert.ok(member, "each nested folder is an independently readable flat group");
+  }
+  // Simulate an older client's rewrite, which has only the original pin fields.
+  const legacy = new Map(
+    [...values].map(([key, value]) => [
+      key,
+      key.startsWith("pin:g:")
+        ? { n: value.n, i: value.i, c: value.c, pos: value.pos }
+        : { g: value.g, u: value.u, t: value.t, i: value.i, ti: value.ti, pos: value.pos },
+    ]),
+  );
+  adapter.apply(legacy, new Set(legacy.keys()), () => undefined);
+  assert.equal(S().pinnedFolders[root], undefined);
+  assert.equal(S().pinnedFolders[child], undefined);
+  assert.equal(S().groups[root].name, "Work");
+  assert.equal(S().groups[child].name, "Child");
+  assert.equal(S().tabs[first].folderId, undefined);
+  assert.equal(S().tabs[second].pinnedRow, undefined);
+  assert.deepEqual(S().groups[root].tabIds, [first]);
+  assert.deepEqual(S().groups[child].tabIds, [second]);
+});
+
+test("sync retains loose rows around folders, mixed child rows and empty sibling anchors", async () => {
+  const transport = new Folder();
+  const a = new Device("A", transport);
+  const b = new Device("B", transport);
+  a.with(() => {
+    S().updateSettings({ newTabPosition: "bottom" });
+    const w = S().createWindow({ url: "https://a.example" });
+    const ids = [model.viewTabIds(S(), w)[0], ...["b", "c", "d", "e"].map((name) => S().newTab(w, { url: `https://${name}.example` }))];
+    S().pinRows(ids, true);
+    const root = S().newPinnedFolder(w, { name: "Root", tabIds: ids.slice(1, 4) });
+    S().newPinnedFolder(w, { name: "Child", parentId: root, tabIds: [ids[2]] });
+    S().newPinnedFolder(w, { name: "Empty root", beforeId: ids[1] });
+    S().newPinnedFolder(w, { name: "Empty child", parentId: root, beforeId: ids[3] });
+  });
+  const { folderEntries, sidebarEntries } = await import("../components/sidebar/entries.ts");
+  const snapshot = (device) =>
+    device.with(() => {
+      const render = (entry) =>
+        entry.startsWith("f:")
+          ? {
+              name: S().pinnedFolders[entry.slice(2)].name,
+              children: folderEntries(S(), entry.slice(2)).map(render),
+            }
+          : S().tabs[entry.slice(2)].url;
+      const window = S().windowOrder[0] ?? S().createWindow({ spaceId: "default", url: "https://new.example" });
+      return sidebarEntries(S(), window).pinned.map(render);
+    });
+  const expected = snapshot(a);
+  assert.deepEqual(expected, [
+    "https://a.example",
+    { name: "Empty root", children: [] },
+    {
+      name: "Root",
+      children: ["https://b.example", { name: "Child", children: ["https://c.example"] }, { name: "Empty child", children: [] }, "https://d.example"],
+    },
+    "https://e.example",
+  ]);
+  await syncAll([a, b], 3);
+  assert.deepEqual(snapshot(b), expected);
+  assert.deepEqual(snapshot(a), expected);
+});

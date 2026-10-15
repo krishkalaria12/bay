@@ -29,6 +29,7 @@ import { openWindow as createWindow } from "./actions";
 import { openExternalUrls } from "../components/littleBay/actions";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./commands";
+import { startSidebarMoveUndoSync } from "./folderUndo";
 import { flushPersistence, resumePersistence } from "./persist";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
@@ -42,6 +43,7 @@ export function startNativeSync() {
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
   onCommand(runCommand);
+  startSidebarMoveUndoSync();
   startWindowCloseGuard();
   startExtensionsBridge();
   onOpenURLs((urls) => openExternalUrls(urls));

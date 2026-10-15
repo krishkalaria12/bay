@@ -521,6 +521,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
         list.tabIds.map((t) => (inSection(t) ? moved[k++]! : t)),
         s.tabs,
         s.groups,
+        s.pinnedFolders,
       );
       const next = { key: list.key, tabIds };
       return { tabLists: withList(s, next).tabLists, groups: syncGroupOrder(s.groups, next) };

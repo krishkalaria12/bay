@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { folderTabIds, inFolder } from "../../store/folders";
+import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
 import { activeTabId, favoriteTabIds, pinnedPage, viewTabIds } from "../../store/model";
 import { splitIndex, stableList } from "../../store/structure";
 
@@ -48,7 +48,8 @@ function computeEntries(s: BrowserState, windowId: string, spaceId?: string): Si
     if (tab.pinned) continue;
     if (tab.pinnedRow) {
       const folder = tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
-      const entry = folder && inFolder(tab, folder) ? `f:${folder.id}` : `t:${id}`;
+      const rootId = folder && inFolder(tab, folder) ? folderRootId(s, folder.id) : undefined;
+      const entry = rootId ? `f:${rootId}` : `t:${id}`;
       if (!seen.has(entry)) pinned.push(entry);
       seen.add(entry);
       continue;
@@ -61,10 +62,15 @@ function computeEntries(s: BrowserState, windowId: string, spaceId?: string): Si
     if (groupId && s.groups[groupId]!.pinned) pinnedGroups.push(groupId);
     else list.push(entry);
   }
-  // A folder with nothing in it still shows, after the rest.
+  // Empty folders retain explicit drag anchors; old folders without one remain after populated rows.
   const profile = spaceId ?? s.windows[windowId]?.spaceId;
-  const empty = Object.values(s.pinnedFolders).filter((f) => f.spaceId === profile && !seen.has(`f:${f.id}`));
-  for (const f of empty.sort((a, b) => a.createdAt - b.createdAt)) pinned.push(`f:${f.id}`);
+  const roots = childFolderIds(s, null, profile);
+  insertEmptyFolders(
+    s,
+    pinned,
+    roots.filter((id) => !seen.has(`f:${id}`)),
+  );
+
   return { tiles, pinned, pinnedGroups, list };
 }
 
@@ -74,7 +80,7 @@ export function numberedTabs(s: BrowserState, windowId: string): string[] {
   const rowTab = (entry: string): string[] => {
     const id = entry.slice(2);
     if (entry.startsWith("g:")) return groupEntries(s, id).flatMap(rowTab);
-    if (entry.startsWith("f:")) return folderTabIds(s, id);
+    if (entry.startsWith("f:")) return folderEntries(s, id).flatMap(rowTab);
     if (!entry.startsWith("s:")) return [id];
     const panes = (s.splits[id]?.tabIds ?? []).filter((tabId) => s.tabs[tabId] && !pinnedPage(s.tabs[tabId]!));
     if (active && panes.includes(active)) return [active];
@@ -93,7 +99,7 @@ export function sidebarTabOrder(s: BrowserState, windowId: string): string[] {
   const rowTabs = (entry: string): string[] => {
     const id = entry.slice(2);
     if (entry.startsWith("g:")) return groupEntries(s, id).flatMap(rowTabs);
-    if (entry.startsWith("f:")) return folderTabIds(s, id);
+    if (entry.startsWith("f:")) return folderEntries(s, id).flatMap(rowTabs);
     return entry.startsWith("s:") ? (s.splits[id]?.tabIds ?? []) : [id];
   };
   return [...tiles, ...pinned.flatMap(rowTabs), ...pinnedGroups.flatMap((id) => rowTabs(`g:${id}`)), ...list.flatMap(rowTabs)];
@@ -134,20 +140,70 @@ export function useSidebarEntries(windowId: string, spaceId?: string): SidebarEn
 
 export const useGroupEntries = (groupId: string) => useBrowser(useShallow((s) => groupEntries(s, groupId)));
 
-const folderMemo = new Map<string, { tabs: BrowserState["tabs"]; windows: BrowserState["windows"]; folder: unknown; result: string[] }>();
+const folderMemo = new Map<string, { tabs: BrowserState["tabs"]; lists: BrowserState["tabLists"]; folders: BrowserState["pinnedFolders"]; result: string[] }>();
 
-/** A pinned folder's rows, as "t:" entries. */
+/** A folder's immediate tabs and child folders in sidebar order. */
 export function folderEntries(s: BrowserState, folderId: string): string[] {
   const cached = folderMemo.get(folderId);
   const folder = s.pinnedFolders[folderId];
-  if (cached && cached.tabs === s.tabs && cached.windows === s.windows && cached.folder === folder) return cached.result;
-  const result = stableList(
-    cached?.result,
-    folderTabIds(s, folderId).map((id) => `t:${id}`),
-  );
-  if (folder) folderMemo.set(folderId, { tabs: s.tabs, windows: s.windows, folder, result });
+  if (cached && cached.tabs === s.tabs && cached.lists === s.tabLists && cached.folders === s.pinnedFolders) return cached.result;
+  const out: string[] = [];
+  if (folder) {
+    const children = childFolderIds(s, folderId, folder.spaceId);
+    const childForTab = new Map<string, string>();
+    for (const child of children) for (const id of folderTabIds(s, child)) childForTab.set(id, child);
+    const seen = new Set<string>();
+    for (const id of folderTabIds(s, folderId)) {
+      const child = childForTab.get(id);
+      const entry = child ? `f:${child}` : `t:${id}`;
+      if (!seen.has(entry)) out.push(entry);
+      seen.add(entry);
+    }
+    insertEmptyFolders(
+      s,
+      out,
+      children.filter((id) => !seen.has(`f:${id}`)),
+    );
+  }
+  const result = stableList(cached?.result, out);
+  if (folder) folderMemo.set(folderId, { tabs: s.tabs, lists: s.tabLists, folders: s.pinnedFolders, result });
   else folderMemo.delete(folderId);
   return result;
 }
 
 export const useFolderEntries = (folderId: string) => useBrowser((s) => folderEntries(s, folderId));
+
+/** Resolve an empty folder's stored anchor to an immediate entry in its parent. */
+function insertEmptyFolders(s: BrowserState, entries: string[], emptyIds: string[]) {
+  const pending = new Set(emptyIds);
+  const keys = new Set([...entries, ...emptyIds.map((id) => `f:${id}`)]);
+  const anchorOf = (id: string): string | null => {
+    const before = s.pinnedFolders[id]?.beforeId;
+    if (!before) return null;
+    if (keys.has(`t:${before}`)) return `t:${before}`;
+    let folder = s.pinnedFolders[before] ?? s.pinnedFolders[s.tabs[before]?.folderId ?? ""];
+    const visited = new Set<string>([id]);
+    while (folder && !visited.has(folder.id)) {
+      visited.add(folder.id);
+      if (keys.has(`f:${folder.id}`)) return `f:${folder.id}`;
+      folder = folder.parentId ? s.pinnedFolders[folder.parentId] : undefined;
+    }
+    return null;
+  };
+  while (pending.size) {
+    let placed = false;
+    for (const id of pending) {
+      const anchor = anchorOf(id);
+      if (anchor?.startsWith("f:") && pending.has(anchor.slice(2))) continue;
+      const at = anchor ? entries.indexOf(anchor) : -1;
+      entries.splice(at < 0 ? entries.length : at, 0, `f:${id}`);
+      pending.delete(id);
+      placed = true;
+    }
+    // Broken or cyclic remote anchors must never hide a folder.
+    if (!placed) {
+      for (const id of pending) entries.push(`f:${id}`);
+      break;
+    }
+  }
+}

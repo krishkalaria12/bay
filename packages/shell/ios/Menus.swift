@@ -1,5 +1,43 @@
 import AppKit
 
+/// A move puts focus in the sidebar. Page and text views reclaim the normal responder chain when clicked.
+final class SidebarMoveUndoView: NSView, NSMenuItemValidation {
+  private static var views: [String: SidebarMoveUndoView] = [:]
+  private var windowId = ""
+  private var available = false
+
+  override var acceptsFirstResponder: Bool { true }
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+  static func set(windowId: String, available: Bool, focus: Bool) {
+    guard let window = WindowManager.shared.windows[windowId], let content = window.contentView else { return }
+    let view = views[windowId] ?? SidebarMoveUndoView(frame: .zero)
+    view.windowId = windowId
+    view.available = available
+    if view.superview !== content {
+      view.removeFromSuperview()
+      content.addSubview(view)
+    }
+    views[windowId] = view
+    if focus && available { window.makeFirstResponder(view) }
+  }
+
+  static func remove(windowId: String) {
+    views.removeValue(forKey: windowId)?.removeFromSuperview()
+  }
+
+  @objc func undo(_ sender: Any?) {
+    guard available else { return }
+    // Consume before crossing the bridge so a repeated key cannot undo the same pending move twice.
+    available = false
+    MenuTarget.shared.handler?("undoPinnedFolderMove", nil, windowId)
+  }
+
+  func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    menuItem.action == #selector(undo(_:)) && available
+  }
+}
+
 struct MenuState {
   struct Entry: Equatable {
     let id: String

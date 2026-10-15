@@ -294,7 +294,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const fromList = listIds(next, from).filter((id) => id !== tabId);
     next = withList(next, { key: from, tabIds: fromList });
     const toList = from === to ? fromList : listIds(next, to);
-    next = withList(next, { key: to, tabIds: orderSections([tabId, ...toList], tabs, next.groups) });
+    next = withList(next, { key: to, tabIds: orderSections([tabId, ...toList], tabs, next.groups, next.pinnedFolders) });
     set(apply(next, activated(next, tabId, s.windows[tab.windowId] ? tab.windowId : undefined)));
   },
 

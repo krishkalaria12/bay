@@ -1,5 +1,6 @@
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
 import { memo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Pressable, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { hex, useTheme } from "../../lib/theme";
@@ -9,34 +10,52 @@ import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { commitRename, endRename, startRename } from "./actions";
 import { useDragItem, useDropInto } from "./dnd";
 import { Fold, useFold } from "./Fold";
-import { keptEntry } from "./geometry";
+import { entryHeight, keptEntry } from "./geometry";
 import { FOLDER_INDENT } from "./constants";
-import { useFolderEntries } from "./entries";
+import { folderEntries, useFolderEntries } from "./entries";
 import { dismissHover, useRowHover } from "./hover";
 import { openFolderMenu } from "./menus";
 import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, TabRowItem } from "./TabRow";
 import { useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
-import { folderTabIds } from "../../store/folders";
+import { folderDepth, folderTabIds, MAX_FOLDER_DEPTH } from "../../store/folders";
 
 /**
  * A folder of the Pinned section (Arc's, Zen's): a header row with its name, and its pinned rows indented below it.
  * No box around it, unlike a group's. Collapsed, it keeps the window's active tab out, as a group does.
  */
-export const FolderBlock = memo(function FolderBlock({ folderId }: { folderId: string }) {
+export const FolderBlock = memo(function PinnedFolderBlock({ folderId }: { folderId: string }) {
   const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const spaceId = usePageSpaceId();
   const collapsed = useBrowser((s) => !!s.pinnedFolders[folderId]?.collapsed);
   const entries = useFolderEntries(folderId);
+  const parentId = useBrowser((s) => s.pinnedFolders[folderId]?.parentId);
+  const depth = useBrowser((s) => folderDepth(s, folderId));
+  const heights = useBrowser(useShallow((s) => entries.map((entry) => entryHeight(s, windowId, spaceId, entry))));
+  const activeFolderId = useBrowser((s) => {
+    const id = s.windows[windowId]?.activeTabIds[spaceId];
+    return id ? s.tabs[id]?.folderId : undefined;
+  });
+  const activeTab = useBrowser((s) => {
+    const id = s.windows[windowId]?.activeTabIds[spaceId];
+    return id && folderTabIds(s, folderId).includes(id) ? id : undefined;
+  });
   const selectedInside = useBrowser((s) => {
     const selection = s.selection[windowId];
-    return !!selection?.length && entries.some((e) => selection.includes(e.slice(2)));
+    return !!selection?.length && folderTabIds(s, folderId).some((id) => selection.includes(id));
   });
   const activeEntry = useBrowser((s) => keptEntry(s, windowId, spaceId, entries));
-  const tabIds = entries.map((e) => e.slice(2));
-  const { ref, style, handle, headerRef } = useDragItem(`f:${folderId}`, { kind: "folder", tabIds, section: "pinned", folderId, collapsed });
+  const tabIds = useBrowser(useShallow((s) => folderTabIds(s, folderId)));
+  const { ref, style, handle, headerRef } = useDragItem(`f:${folderId}`, {
+    kind: "folder",
+    tabIds,
+    section: "pinned",
+    folderId,
+    parentGroup: parentId ?? undefined,
+    collapsed,
+  });
   const { ref: tailRef, style: tailStyle } = useDragItem(`tail:folder:${folderId}`, { kind: "tail", tabIds: [], section: "pinned", parentGroup: folderId });
   const fold = useFold(collapsed);
 
@@ -49,10 +68,23 @@ export const FolderBlock = memo(function FolderBlock({ folderId }: { folderId: s
         <Fold
           fold={fold}
           collapsed={collapsed}
-          entries={entries.map((entry) => ({ key: entry, node: <TabRowItem tabId={entry.slice(2)} section="pinned" parentGroup={folderId} /> }))}
+          entries={entries.map((entry, index) => {
+            // A closed ancestor keeps the active leaf visible, without showing the entire child folder.
+            const keepLeaf = collapsed && entry === activeEntry && entry.startsWith("f:") && activeTab;
+            return {
+              key: entry,
+              height: keepLeaf ? metrics.rowHeight : heights[index],
+              node: keepLeaf ? (
+                <TabRowItem tabId={activeTab} section="pinned" parentGroup={activeFolderId} />
+              ) : entry.startsWith("f:") && depth < MAX_FOLDER_DEPTH ? (
+                <FolderBlock folderId={entry.slice(2)} />
+              ) : (
+                <TabRowItem tabId={entry.slice(2)} section="pinned" parentGroup={folderId} />
+              ),
+            };
+          })}
           keep={activeEntry}
           gap={layout.rowGap}
-          rowHeight={metrics.rowHeight}
           padTop={entries.length ? layout.rowGap : 0}
           mountClosed={selectedInside}
           footer={<Animated.View ref={tailRef} style={tailStyle} />}
@@ -82,7 +114,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const folder = useBrowser((s) => s.pinnedFolders[folderId]);
-  const empty = useBrowser((s) => !folderTabIds(s, folderId).length);
+  const empty = useBrowser((s) => !folderEntries(s, folderId).length);
   const renaming = useSidebarUi((u) => u.renaming?.kind === "folder" && u.renaming.id === folderId);
   const dropInto = useDropInto() === folderId;
   // A closed folder peeks its tabs on hover (Arc's folder previews); an open one shows them already.

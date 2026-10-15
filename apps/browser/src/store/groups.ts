@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { listOfTab, newId, pinnedPage, withList, type TabList } from "./model";
 import { closingGroup } from "./organize";
-import type { GroupColor, Tab, TabGroup } from "./types";
+import type { GroupColor, PinnedFolder, Tab, TabGroup } from "./types";
 
 export type GroupsSlice = {
   groups: Record<string, TabGroup>;
@@ -34,7 +34,12 @@ export function syncGroupOrder(groups: Record<string, TabGroup>, list: TabList):
 }
 
 // The Essentials, the pinned rows (each folder's together), the pinned groups, then the rest.
-export function orderSections(ids: string[], tabs: Record<string, Tab>, groups: Record<string, TabGroup>): string[] {
+export function orderSections(
+  ids: string[],
+  tabs: Record<string, Tab>,
+  groups: Record<string, TabGroup>,
+  folders: Record<string, PinnedFolder> = {},
+): string[] {
   const pinnedGroup = new Set(
     Object.values(groups)
       .filter((g) => g.pinned)
@@ -49,21 +54,35 @@ export function orderSections(ids: string[], tabs: Record<string, Tab>, groups: 
   const out = placeFolders(
     [0, 1, 2, 3].flatMap((r) => ids.filter((id) => rank(id) === r)),
     tabs,
+    folders,
   );
   return out.every((id, i) => id === ids[i]) ? ids : out;
 }
 
-/** Each pinned folder's rows together, where its first one is. */
-export function placeFolders(ids: string[], tabs: Record<string, Tab>): string[] {
-  let out = ids;
-  const done = new Set<string>();
+/** Keep each subtree together, allowing direct rows to sit before and after its child folders. */
+export function placeFolders(ids: string[], tabs: Record<string, Tab>, folders: Record<string, PinnedFolder> = {}): string[] {
+  const blocks = new Map<string, { depth: number; members: Set<string> }>();
   for (const id of ids) {
-    const folderId = tabs[id]?.pinnedRow ? tabs[id]!.folderId : undefined;
-    if (!folderId || done.has(folderId)) continue;
-    done.add(folderId);
+    const tab = tabs[id];
+    if (!tab?.pinnedRow || !tab.folderId) continue;
+    const path: string[] = [];
+    let at: string | undefined = tab.folderId;
+    while (at && !path.includes(at)) {
+      path.unshift(at);
+      const parent: string | undefined = folders[at]?.parentId;
+      at = parent && folders[parent]?.spaceId === tab.spaceId ? parent : undefined;
+    }
+    path.forEach((folderId, depth) => {
+      let block = blocks.get(folderId);
+      if (!block) blocks.set(folderId, (block = { depth, members: new Set() }));
+      block.members.add(id);
+    });
+  }
+  let out = ids;
+  for (const block of [...blocks.values()].sort((a, b) => a.depth - b.depth)) {
     out = placeBlock(
       out,
-      out.filter((t) => tabs[t]?.pinnedRow && tabs[t]!.folderId === folderId),
+      out.filter((id) => block.members.has(id)),
     );
   }
   return out;
@@ -128,7 +147,7 @@ export const createGroupsSlice: StateCreator<BrowserState, [], [], GroupsSlice> 
       const groups = { ...s.groups, [id]: { ...g, ...patch } };
       const list = g.tabIds[0] ? listOfTab(s, g.tabIds[0]) : undefined;
       if (patch.pinned === undefined || patch.pinned === g.pinned || !list) return { groups };
-      const next = { key: list.key, tabIds: orderSections(list.tabIds, s.tabs, groups) };
+      const next = { key: list.key, tabIds: orderSections(list.tabIds, s.tabs, groups, s.pinnedFolders) };
       return { groups: syncGroupOrder(groups, next), tabLists: withList(s, next).tabLists };
     });
   },

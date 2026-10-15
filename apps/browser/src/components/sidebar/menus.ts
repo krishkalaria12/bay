@@ -1,5 +1,6 @@
 import { showMenu, type MenuItem } from "@bay/shell";
 import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
+import { armSidebarMoveUndo } from "../../lib/folderUndo";
 import { normalizeAwakeSite, siteKeptAwake } from "../../lib/awakeSites";
 import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
@@ -41,7 +42,7 @@ import { calendarMenuItem, newLiveFolderMenuItem, runCalendarMenu, runNewLiveFol
 import { openSyncedTab, syncedDevicesMenuItem } from "../../sync/menu";
 import { setSidebarUi } from "./state";
 import { GROUP_COLORS, nearestGroupColor } from "./tokens";
-import { folderTabIds } from "../../store/folders";
+import { canMoveFolder, childFolderIds, folderDepth, folderTabIds, MAX_FOLDER_DEPTH } from "../../store/folders";
 
 const store = () => useBrowser.getState();
 const sep = { separator: true } as const;
@@ -78,23 +79,42 @@ function moveToGroupItems(windowId: string, exclude: string | undefined): MenuIt
   return groups.map((g) => ({ id: `group:${g.id}`, title: groupLabel(s, g), symbol: g.pinned ? "pin" : "square.on.square" }));
 }
 
-// The Pinned section's folders in the window's space: "pfolder:<id>", then a new one.
-function moveToFolderItems(windowId: string, exclude: string | undefined): MenuItem[] {
+// Branches have their own destination as well as their children.
+export function moveToFolderItems(windowId: string, exclude: string | undefined, movingFolder = false): MenuItem[] {
   const s = store();
-  const w = s.windows[windowId];
-  const folders = Object.values(s.pinnedFolders).filter((f) => f.spaceId === w?.spaceId && f.id !== exclude);
-  return [
-    ...folders.map((f) => ({ id: `pfolder:${f.id}`, title: f.name || "New Folder", symbol: "folder" })),
-    ...(folders.length ? [sep] : []),
-    { id: "pfolder:new", title: "New Folder", symbol: "folder.badge.plus" },
-  ];
+  const spaceId = s.windows[windowId]?.spaceId;
+  const branch = (parentId: string | null, depth: number): MenuItem[] =>
+    childFolderIds(s, parentId, spaceId).flatMap((id): MenuItem[] => {
+      if (depth > MAX_FOLDER_DEPTH || (movingFolder && !canMoveFolder(s, exclude!, id))) return [];
+      const f = s.pinnedFolders[id]!;
+      const children = branch(id, depth + 1);
+      const item: MenuItem = { id: `pfolder:${id}`, title: f.name || "New Folder", symbol: "folder", enabled: id !== exclude };
+      return children.length
+        ? [
+            {
+              id: `pfolderBranch:${id}`,
+              title: f.name || "New Folder",
+              symbol: "folder",
+              children: [{ ...item, title: "Move Here" }, sep, ...children],
+            },
+          ]
+        : [item];
+    });
+  const folders = branch(null, 1);
+  return [...folders, ...(folders.length ? [sep] : []), ...(!movingFolder ? [{ id: "pfolder:new", title: "New Folder", symbol: "folder.badge.plus" }] : [])];
+}
+
+function withFolderMoveUndo(windowId: string, move: () => void) {
+  const before = store().folderMoveUndo;
+  move();
+  if (store().folderMoveUndo !== before) armSidebarMoveUndo(windowId);
 }
 
 function runFolderChoice(windowId: string, ids: string[], choice: string): boolean {
   if (!choice.startsWith("pfolder:")) return false;
   const folderId = choice.slice(8);
   if (folderId === "new") newPinnedFolderWith(windowId, ids);
-  else store().placeTabs(ids, { pinned: false, row: true, folderId });
+  else withFolderMoveUndo(windowId, () => store().placeTabs(ids, { pinned: false, row: true, folderId }));
   return true;
 }
 
@@ -206,7 +226,10 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "pinRow") s.pinRows([tab.id], !tab.pinnedRow);
   else if (choice === "essential") s.togglePin(tab.id);
   else if (runFolderChoice(windowId, [tab.id], choice)) return;
-  else if (choice === "leaveFolder") s.placeTabs([tab.id], { pinned: false, row: true, folderId: null, beforeId: firstAfterFolder(tab.folderId!) });
+  else if (choice === "leaveFolder")
+    withFolderMoveUndo(windowId, () =>
+      s.placeTabs([tab.id], { pinned: false, row: true, folderId: folder?.parentId ?? null, beforeId: firstAfterFolder(tab.folderId!) }),
+    );
   else if (choice === "keep") s.updateTab(tab.id, { kept: !tab.kept });
   else if (choice === "rename") void startRename(windowId, t);
   else if (choice === "resetName") s.updateTab(tab.id, { customTitle: null });
@@ -350,11 +373,12 @@ function firstAfterFolder(folderId: string): string | null {
   const s = store();
   const f = s.pinnedFolders[folderId];
   const ids = f ? listIds(s, spaceListKey(s, f.spaceId)) : [];
-  const last = ids.reduce((at, id, i) => (s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId ? i : at), -1);
+  const members = new Set(folderTabIds(s, folderId));
+  const last = ids.reduce((at, id, i) => (members.has(id) ? i : at), -1);
   return last < 0 ? null : (ids.slice(last + 1).find((id) => s.tabs[id]?.pinnedRow) ?? null);
 }
 
-// yab's folder menu (its folders don't nest in Bay: no New Folder Inside), then copying the folder's links.
+// Folder operations apply to its descendant tabs too.
 export async function openFolderMenu(windowId: string, folderId: string) {
   const s = store();
   const f = s.pinnedFolders[folderId];
@@ -366,7 +390,9 @@ export async function openFolderMenu(windowId: string, folderId: string) {
     { id: "icon", title: "Change Icon…", symbol: "face.smiling" },
     ...(f.icon ? [{ id: "resetIcon", title: "Reset Icon", symbol: "arrow.counterclockwise" }] : []),
     sep,
-    { id: "newFolder", title: "New Folder", symbol: "folder.badge.plus" },
+    { id: "newFolder", title: "New Folder Inside", symbol: "folder.badge.plus", enabled: folderDepth(s, folderId) < MAX_FOLDER_DEPTH },
+    { id: "moveToFolder", title: "Move to Folder", symbol: "folder", children: moveToFolderItems(windowId, folderId, true) },
+    ...(f.parentId ? [{ id: "moveOut", title: "Move Out of Folder", symbol: "folder.badge.minus" }] : []),
     { id: "copy", title: "Copy All Links", symbol: "link", enabled: members.length > 0 },
     { id: "copyMd", title: "Copy All Links as Markdown", symbol: "text.badge.checkmark", enabled: members.length > 0 },
     sep,
@@ -381,7 +407,10 @@ export async function openFolderMenu(windowId: string, folderId: string) {
   else if (choice === "collapse") s.updatePinnedFolder(folderId, { collapsed: !f.collapsed });
   else if (choice === "copy") copyUrls(members, false);
   else if (choice === "copyMd") copyUrls(members, true);
-  else if (choice === "newFolder") newPinnedFolderWith(windowId);
+  else if (choice === "newFolder") newPinnedFolderWith(windowId, [], folderId);
+  else if (choice === "moveOut")
+    withFolderMoveUndo(windowId, () => s.movePinnedFolder(folderId, firstAfterFolder(f.parentId!), s.pinnedFolders[f.parentId!]?.parentId ?? null));
+  else if (choice.startsWith("pfolder:")) withFolderMoveUndo(windowId, () => s.movePinnedFolder(folderId, null, choice.slice(8)));
   else if (choice === "delete") s.deletePinnedFolder(folderId);
 }
 

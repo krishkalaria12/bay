@@ -4,6 +4,7 @@ import { updateFolder } from "../../live/store";
 import { useBrowser } from "../../store/browser";
 import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
+import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
 
@@ -71,7 +72,11 @@ export async function startRename(windowId: string, target: Target) {
     const group = groupOf(s, tab.id);
     if (group?.collapsed && activeTabId(s, windowId) !== tab.id) s.updateGroup(group.id, { collapsed: false });
     const folder = tab.pinnedRow && tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
-    if (folder?.collapsed && activeTabId(s, windowId) !== tab.id) s.updatePinnedFolder(folder.id, { collapsed: false });
+    let parent = folder;
+    while (parent) {
+      if (parent.collapsed) s.updatePinnedFolder(parent.id, { collapsed: false });
+      parent = parent.parentId ? s.pinnedFolders[parent.parentId] : undefined;
+    }
   }
   setSidebarUi({ renaming: { windowId, ...target } });
 }
@@ -142,8 +147,10 @@ export async function bookmarkTabs(windowId: string, ids: string[], folder: stri
 }
 
 /** A new folder in the Pinned section, with `ids` pinned into it; its name is typed in place. */
-export function newPinnedFolderWith(windowId: string, ids: string[] = []) {
-  const folderId = store().newPinnedFolder(windowId, { tabIds: ids });
+export function newPinnedFolderWith(windowId: string, ids: string[] = [], parentId?: string) {
+  if (parentId && folderDepth(store(), parentId) >= MAX_FOLDER_DEPTH) return "";
+  if (parentId) store().updatePinnedFolder(parentId, { collapsed: false });
+  const folderId = store().newPinnedFolder(windowId, { tabIds: ids, parentId });
   if (folderId) void startRename(windowId, { kind: "folder", id: folderId });
   return folderId;
 }

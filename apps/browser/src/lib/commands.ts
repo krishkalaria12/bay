@@ -39,6 +39,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
   switch (command) {
+    case "undoPinnedFolderMove":
+      return s.undoPinnedFolderMove();
     case "newWindow":
       return void openWindow({ spaceId: arg ?? undefined });
     case "newIncognitoWindow":
