@@ -625,7 +625,8 @@
             <p>
               <strong>Phases 0 and 1 are done.</strong> Completed on 14 October 2026. The shutdown fix, browser regressions and all six quick wins are
               implemented. Idle tabs now use a two-hour threshold, and Settings › Tabs has a seeded keep-awake list. Validation and recurring release checks are
-              recorded directly in each phase below.
+              recorded directly in each phase below. Emoji, unit and currency answers in phase 3 are also done, with an enabled-by-default Calculator toggle and
+              larger answer rows.
             </p>
           </div>
         </section>
@@ -750,8 +751,8 @@
                 </tr>
                 <tr>
                   <td>Emoji, units and currency in the command bar</td>
-                  <td>Calculator only</td>
-                  <td><code>packages/core/src</code></td>
+                  <td>Done: top-row answers, Return to copy, calculator toggle and larger answer rows</td>
+                  <td><code>packages/core/src</code>, <code>omnibox/CalculationAnswer.tsx</code>, Settings › Search</td>
                   <td class="c"><span class="chip m">M</span></td>
                   <td class="c">3</td>
                 </tr>
@@ -1448,7 +1449,8 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
               <p>
                 Implemented 15 October 2026. Native Debug fixtures cover nesting, empty-folder ordering, drag and drop, ⌘Z, page text Undo and restart. Import
                 and sync tests cover tree order, migration and older clients' flat records. See
-                <a href="nested-folders.md">implementation and test instructions</a>. Two physical Macs with different released builds have not been exercised.
+                <a href="screenshots/nested-folders.png">the nested folders screenshot</a>. Two physical Macs with different released builds have not been
+                exercised.
               </p>
               <dl class="facts">
                 <dt>Before</dt>
@@ -1526,18 +1528,41 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
             </div>
 
             <div class="item">
-              <h4>Emoji, units and currency <span class="chip m">M</span></h4>
+              <h4>Emoji, units and currency <span class="chip m">M</span> <span class="chip s">Done</span></h4>
+              <p>
+                Implemented 16 October 2026 in <code>bac4b54a</code>. Core tests and native fixtures cover top-row answers, Return to copy, unit conversions,
+                live currency rates and the Calculator toggle. The larger answer rows were checked in light and dark mode, in the palette and narrow dropdown,
+                with keyboard scrolling through mixed-height results.
+              </p>
               <dl class="facts">
-                <dt>Today</dt>
+                <dt>Before</dt>
                 <dd><code>packages/core/src/calculator.ts</code> does arithmetic and functions. <code>emojiData.ts</code> already feeds the icon picker.</dd>
-                <dt>Build</dt>
+                <dt>Implemented</dt>
                 <dd>
-                  In <code>suggest.ts</code>: emoji by name ("emoji heart"), with Return to copy. Unit conversions ("5 km in mi", "350 f to c") from a local
-                  table. Currency ("100 usd in inr") from a rates source (<a href="#decisions">Decisions</a>).
+                  <code>suggest.ts</code> puts emoji by name ("emoji heart"), local unit conversions ("5 km in mi", "350 f to c") and currency conversions ("100
+                  usd in inr") first. Return copies the answer. SuperCalculator's unit and currency source files are vendored with their MIT license. Calculator
+                  and currency rows show a larger answer beneath the expression, a copy icon and Return hint; currency rows also show the rate source and date.
+                </dd>
+                <dt>Setting</dt>
+                <dd>
+                  Settings › Search › Command bar › Calculator defaults to on. Turning it off hides arithmetic, unit and currency answers and prevents new
+                  currency lookups. The choice persists and syncs. Emoji search remains available.
+                </dd>
+                <dt>Rates</dt>
+                <dd>
+                  Frankfurter, with ExchangeRate-API and Fawaz Ahmed as fallbacks. Valid dated rates are cached in memory for one hour, and concurrent requests
+                  for the same pair share a lookup. Failed requests never substitute hardcoded or expired rates. Arithmetic, units and emoji work offline.
+                </dd>
+                <dt>History</dt>
+                <dd>
+                  The history page uses Legend List in <code>6746b4ea</code>. A native fixture with 5,000 entries verified virtualization, selection and
+                  removal.
                 </dd>
               </dl>
               <ul class="checks">
                 <li>Each kind shows as the top row with its answer, and Return copies it.</li>
+                <li>The Calculator toggle defaults to on, and an explicit off choice survives persistence and sync.</li>
+                <li>Light and dark layouts, narrow rows and keyboard scrolling were checked in the native app.</li>
               </ul>
             </div>
 
@@ -1741,7 +1766,7 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
                 <tr>
                   <td>Currency rates need a network source</td>
                   <td>Phase 3</td>
-                  <td>Pick one source, cache it daily, and say where rates come from</td>
+                  <td>Implemented: live providers with fallbacks, one-hour memory cache, source and date shown, no hardcoded or expired-rate fallback</td>
                 </tr>
               </tbody>
             </table>
@@ -1762,7 +1787,10 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
               <strong>How older synced devices see nested folders, decided.</strong> Flattened pinned groups keep every tab visible; updated devices retain the
               tree.
             </li>
-            <li><strong>The currency rates source</strong>, or currency left out, keeping the command bar fully offline.</li>
+            <li>
+              <strong>The currency rates source, decided.</strong> Frankfurter with ExchangeRate-API and Fawaz Ahmed fallbacks. Currency needs a network
+              connection; arithmetic, units and emoji stay offline. The Calculator toggle defaults to on.
+            </li>
             <li><strong>The scope of site tweaks.</strong> CSS and Zap only, or JS as well.</li>
             <li><strong>Whether to read Messages</strong> for codes, given the Full Disk Access prompt.</li>
           </ol>
