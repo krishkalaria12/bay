@@ -16,6 +16,7 @@ import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
+import { SETTINGS } from "../definitions";
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
@@ -34,7 +35,8 @@ export function GeneralPane() {
       <SectionHeader title="General" />
       <Group>
         <Row
-          title={`Open ${APP_NAME} at login`}
+          settingId={SETTINGS.launchAtLogin.id}
+          title={SETTINGS.launchAtLogin.title}
           description={loginStatus === "requiresApproval" ? "Allow it in System Settings › General › Login Items." : undefined}
         >
           <Toggle
@@ -46,17 +48,21 @@ export function GeneralPane() {
             }
           />
         </Row>
-        <Row title="Warn before quitting" description={`Asks before ${APP_NAME} quits with ⌘Q.`}>
+        <Row settingId={SETTINGS.warnBeforeQuitting.id} title={SETTINGS.warnBeforeQuitting.title} description={`Asks before ${APP_NAME} quits with ⌘Q.`}>
           <Toggle value={settings.warnBeforeQuitting} onChange={(v) => update({ warnBeforeQuitting: v })} />
         </Row>
-        <Row title="Warn before closing a window with multiple tabs" description="Asks before ⇧⌘W or the close button closes its tabs.">
+        <Row
+          settingId={SETTINGS.warnBeforeClosingWindow.id}
+          title={SETTINGS.warnBeforeClosingWindow.title}
+          description="Asks before ⇧⌘W or the close button closes its tabs."
+        >
           <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => update({ warnBeforeClosingWindow: v })} />
         </Row>
       </Group>
 
       <SectionHeader title={`When opening ${APP_NAME}:`} />
       <Group>
-        <Row title="Start on" description="Your tabs stay in the sidebar either way.">
+        <Row settingId={SETTINGS.launchTab.id} title={SETTINGS.launchTab.title} description="Your tabs stay in the sidebar either way.">
           <PopUp
             value={settings.launchTab}
             options={[
@@ -71,7 +77,11 @@ export function GeneralPane() {
 
       <SectionHeader title={`When quitting ${APP_NAME}:`} />
       <Group>
-        <Row title="Windows and tabs" description="What you see the next time you open it. Closed windows stay in History › Recently Closed.">
+        <Row
+          settingId={SETTINGS.restoreSession.id}
+          title={SETTINGS.restoreSession.title}
+          description="What you see the next time you open it. Closed windows stay in History › Recently Closed."
+        >
           <PopUp
             value={settings.restoreSession ? "keep" : "close"}
             options={[
@@ -86,7 +96,7 @@ export function GeneralPane() {
 
       <SectionHeader title="Command bar" description="What happens when what you type could be a website or a search." />
       <Group>
-        <Row title="When input looks like a website">
+        <Row settingId={SETTINGS.commandBarPreference.id} title={SETTINGS.commandBarPreference.title}>
           <PopUp
             value={settings.commandBarPreference}
             options={[
@@ -103,7 +113,11 @@ export function GeneralPane() {
 
       <SectionHeader title="Import" />
       <Group>
-        <Row title="Import from another browser" description="Bookmarks, history, passwords, tabs and Arc spaces from Chrome, Arc, Safari, Firefox and more.">
+        <Row
+          settingId={SETTINGS.importBrowser.id}
+          title={SETTINGS.importBrowser.title}
+          description="Bookmarks, history, passwords, tabs and Arc spaces from Chrome, Arc, Safari, Firefox and more."
+        >
           <Button title="Import…" onPress={openImport} />
         </Row>
       </Group>
@@ -133,10 +147,14 @@ function UpdatesSection() {
     <>
       <SectionHeader title="Updates" description={ready ? undefined : "Updates aren't set up for this build."} />
       <Group>
-        <Row title="Check for updates automatically" description={SHARING_COPY.updateChecks}>
+        <Row settingId={SETTINGS.automaticUpdateChecks.id} title={SETTINGS.automaticUpdateChecks.title} description={SHARING_COPY.updateChecks}>
           <Toggle value={ready && state.automaticChecks} disabled={!ready} onChange={(v) => set({ automaticChecks: v })} />
         </Row>
-        <Row title={`Automatically update ${APP_NAME}`} description="Downloads updates in the background and installs them the next time it restarts.">
+        <Row
+          settingId={SETTINGS.automaticUpdateDownloads.id}
+          title={SETTINGS.automaticUpdateDownloads.title}
+          description="Downloads updates in the background and installs them the next time it restarts."
+        >
           <Toggle
             value={ready && state.automaticChecks && state.automaticDownloads}
             disabled={!ready || !state.automaticChecks}

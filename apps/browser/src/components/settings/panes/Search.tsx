@@ -8,6 +8,7 @@ import { controllingSearchExtension, defaultSearchEngine, searchEngines } from "
 import { setEnabled } from "../../extensions/state";
 import { Favicon, IconButton } from "../../primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField, Toggle, useFormColors } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { openSettings } from "../windows";
 
@@ -24,7 +25,7 @@ export function SearchPane() {
 
   return (
     <View>
-      <SectionHeader title="Default search engine" description="Used by the command bar and the New Tab page." />
+      <SectionHeader settingId={SETTINGS.searchEngine.id} title={SETTINGS.searchEngine.title} description="Used by the command bar and the New Tab page." />
       <Group>
         {controlling && (
           <Row
@@ -67,13 +68,21 @@ export function SearchPane() {
 
       <SectionHeader title="Suggestions" />
       <Group>
-        <Row title="Show search suggestions" description="Sends what you type to your search engine to suggest searches.">
+        <Row
+          settingId={SETTINGS.searchSuggestions.id}
+          title={SETTINGS.searchSuggestions.title}
+          description="Sends what you type to your search engine to suggest searches."
+        >
           <Toggle value={settings.searchSuggestions} onChange={(v) => useBrowser.getState().updateSettings({ searchSuggestions: v })} />
         </Row>
       </Group>
       <SectionHeader title="Command bar" />
       <Group>
-        <Row title="Calculator" description="Show answers for math, unit conversions and currency conversions. Currency rates require an internet connection.">
+        <Row
+          settingId={SETTINGS.calculatorEnabled.id}
+          title={SETTINGS.calculatorEnabled.title}
+          description="Show answers for math, unit conversions and currency conversions. Currency rates require an internet connection."
+        >
           <Toggle value={settings.calculatorEnabled} onChange={(v) => useBrowser.getState().updateSettings({ calculatorEnabled: v })} />
         </Row>
       </Group>

@@ -27,6 +27,7 @@ export const focusedWindows = [];
 export const sidebarMoveUndoCalls = [];
 export const setSidebarMoveUndo = (windowId, available, focus = false) => (sidebarMoveUndoCalls.push({ windowId, available, focus }), Promise.resolve());
 export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise.resolve());
+export const openWindow = () => Promise.resolve();
 export const onAppEvent = () => ({ remove() {} });
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();

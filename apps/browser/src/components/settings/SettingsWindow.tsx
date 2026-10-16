@@ -22,6 +22,7 @@ import { ShortcutsPane } from "./panes/Shortcuts";
 import { SyncPane } from "./panes/Sync";
 import { TabsPane } from "./panes/Tabs";
 import { findSettings, type SettingEntry } from "./search";
+import type { SettingId } from "./definitions";
 import { useSettingsSheet } from "./sheet";
 import { useSettingsNav, type SettingsPane } from "./windows";
 import { SETTINGS_SIDEBAR_WIDTH, SETTINGS_TOOLBAR_HEIGHT } from "./constants";
@@ -112,11 +113,11 @@ function SettingsSidebar() {
   const sections = q ? [ITEMS.filter((i) => i.title.toLowerCase().includes(q) || i.words.includes(q))] : SECTIONS;
   const settings = findSettings(q);
   // Passwords and Autofill keep the space they were opened for.
-  const open = (pane: SettingsPane, highlight?: string) => nav.go(pane, pane === "passwords" || pane === "autofill" ? nav.spaceId : null, highlight);
+  const open = (pane: SettingsPane, highlight?: SettingId) => nav.go(pane, pane === "passwords" || pane === "autofill" ? nav.spaceId : null, highlight);
   const submit = () => {
     const pane = sections[0]?.[0];
     if (pane) open(pane.id);
-    else if (settings[0]) open(settings[0].pane, settings[0].title);
+    else if (settings[0]) open(settings[0].pane, settings[0].id);
   };
   return (
     <View
@@ -163,7 +164,7 @@ function SettingsSidebar() {
           <View style={{ marginTop: sections[0]?.length ? 18 : 0, gap: 2 }}>
             <Text style={{ paddingHorizontal: 6, paddingBottom: 4, fontSize: 11, fontWeight: "600", color: theme.textTertiary }}>Settings</Text>
             {settings.map((entry) => (
-              <SettingResult key={`${entry.pane}:${entry.title}`} entry={entry} onPress={() => open(entry.pane, entry.title)} />
+              <SettingResult key={entry.id} entry={entry} onPress={() => open(entry.pane, entry.id)} />
             ))}
           </View>
         ) : null}

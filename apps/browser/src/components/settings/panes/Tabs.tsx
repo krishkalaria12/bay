@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, TextField, Toggle, useFormColors } from "../controls";
+import { SETTINGS } from "../definitions";
 import { CLEAN_UP_CHOICES } from "../constants";
 import { updateCalendarSettings, useLive } from "../../../live/store";
 import { normalizeAwakeSite } from "../../../lib/awakeSites";
@@ -15,7 +16,7 @@ export function TabsPane() {
 
   return (
     <View>
-      <SectionHeader title="Tab layout" />
+      <SectionHeader settingId={SETTINGS.tabLayout.id} title={SETTINGS.tabLayout.title} />
       <View style={{ flexDirection: "row", gap: 14 }}>
         <LayoutChoice layout="sidebar" title="Tab layout in the sidebar" selected={!top} />
         <LayoutChoice layout="top" title="Tab layout across the top of the window" selected={top} />
@@ -23,35 +24,38 @@ export function TabsPane() {
       <Group style={{ marginTop: 14 }}>
         <SettingToggle
           setting="hideToolbarWhileScrolling"
-          title="Hide toolbar while scrolling"
+          settingId={SETTINGS.hideToolbarWhileScrolling.id}
+          title={SETTINGS.hideToolbarWhileScrolling.title}
           description="With tabs across the top, scrolling down tucks the toolbar into a thin strip with the site's name. Scroll up, or click the strip, to bring it back."
         />
       </Group>
 
       <SectionHeader title="General" />
       <Group>
-        <Row title={top ? "Add new tabs to the left" : "Add new tabs to the top"}>
+        <Row settingId={SETTINGS.newTabPosition.id} title={top ? SETTINGS.newTabPosition.topTabsTitle : SETTINGS.newTabPosition.title}>
           <Toggle value={settings.newTabPosition === "top"} onChange={(v) => update({ newTabPosition: v ? "top" : "bottom" })} />
         </Row>
-        <SettingToggle setting="warnBeforeClosingLastTab" title="Warn before closing last tab in a Space" />
-        <SettingToggle setting="tabReorderHaptics" title="Haptic feedback when reordering tabs" />
-        <SettingToggle setting="extendWebsiteColor" title="Extend website color into tab bar" />
+        <SettingToggle setting="warnBeforeClosingLastTab" settingId={SETTINGS.warnBeforeClosingLastTab.id} title={SETTINGS.warnBeforeClosingLastTab.title} />
+        <SettingToggle setting="tabReorderHaptics" settingId={SETTINGS.tabReorderHaptics.id} title={SETTINGS.tabReorderHaptics.title} />
+        <SettingToggle setting="extendWebsiteColor" settingId={SETTINGS.extendWebsiteColor.id} title={SETTINGS.extendWebsiteColor.title} />
         <SettingToggle
           setting="autoPictureInPicture"
-          title="Automatic Picture in Picture"
+          settingId={SETTINGS.autoPictureInPicture.id}
+          title={SETTINGS.autoPictureInPicture.title}
           description="A video or call you're watching pops out when you switch tabs or leave the window, and returns when you come back."
         />
       </Group>
 
       <SectionHeader title="Tab groups" />
       <Group>
-        <SettingToggle setting="autoGroupMeetingTabs" title="Automatically group tabs for meetings" />
+        <SettingToggle setting="autoGroupMeetingTabs" settingId={SETTINGS.autoGroupMeetingTabs.id} title={SETTINGS.autoGroupMeetingTabs.title} />
       </Group>
 
       <AwakeSites />
 
       <SectionHeader
-        title="Previews"
+        settingId={SETTINGS.previews.id}
+        title={SETTINGS.previews.title}
         description="Hover a closed folder or group, or a pinned or favorite tab on one of these sites, to see what's there without opening it."
       />
       <Group>
@@ -66,7 +70,8 @@ export function TabsPane() {
       </Group>
 
       <SectionHeader
-        title="Clean up"
+        settingId={SETTINGS.cleanUpInactiveTabsAfterHours.id}
+        title={SETTINGS.cleanUpInactiveTabsAfterHours.title}
         description="Closes tabs you haven't used (and duplicates) automatically, like the tab menu's Clean Up Daily. Pinned, playing and selected tabs stay; cleaned tabs are listed under Recently Cleaned. A space can have its own time, in its settings."
       />
       <Group>
@@ -114,7 +119,8 @@ function AwakeSites() {
   return (
     <View>
       <SectionHeader
-        title="Always keep these sites awake"
+        settingId={SETTINGS.awakeSites.id}
+        title={SETTINGS.awakeSites.title}
         description="Idle tabs can sleep after two hours. These sites and their subdomains stay awake unless memory is critical, when they sleep last."
       />
       <Group>

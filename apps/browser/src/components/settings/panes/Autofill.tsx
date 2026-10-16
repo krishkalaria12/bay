@@ -22,6 +22,7 @@ import { engineProfile } from "../../../store/model";
 import { IconButton } from "../../primitives";
 import { NetworkBadge } from "../../site/Autofill";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, type Option } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
 export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) {
@@ -66,10 +67,14 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
         }
       />
       <Group>
-        <Row title="Save and fill addresses" description="Names, addresses, email addresses and phone numbers.">
+        <Row settingId={SETTINGS.saveAddresses.id} title={SETTINGS.saveAddresses.title} description="Names, addresses, email addresses and phone numbers.">
           <Toggle value={enabled?.addresses ?? true} disabled={!enabled} onChange={(v) => toggle("addresses", v)} />
         </Row>
-        <Row title="Save and fill credit cards" description="Filling in or showing a card number asks for Touch ID or your password.">
+        <Row
+          settingId={SETTINGS.saveCreditCards.id}
+          title={SETTINGS.saveCreditCards.title}
+          description="Filling in or showing a card number asks for Touch ID or your password."
+        >
           <Toggle value={enabled?.cards ?? true} disabled={!enabled} onChange={(v) => toggle("cards", v)} />
         </Row>
       </Group>

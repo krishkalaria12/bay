@@ -4,6 +4,7 @@ import { APP_NAME } from "../../../lib/constants";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
+import { SETTINGS } from "../definitions";
 import { LinkRules } from "./LinkRules";
 
 export function LinksPane() {
@@ -12,7 +13,11 @@ export function LinksPane() {
 
   return (
     <View>
-      <SectionHeader title="Links from other apps" description="Where a link you click in Discord, Slack or Mail opens." />
+      <SectionHeader
+        settingId={SETTINGS.openLinksInLittleBay.id}
+        title={SETTINGS.openLinksInLittleBay.title}
+        description="Where a link you click in Discord, Slack or Mail opens."
+      />
       <View style={{ flexDirection: "row", gap: 14 }}>
         <OpenInChoice small title="Little Bay" selected={small} />
         <OpenInChoice small={false} title={`A new tab in ${APP_NAME}`} selected={!small} />
@@ -29,13 +34,15 @@ export function LinksPane() {
       <Group>
         <SettingToggle
           setting="peekLinksFromPinnedTabs"
-          title="Open a Peek window when clicking links to other sites"
+          settingId={SETTINGS.peekLinksFromPinnedTabs.id}
+          title={SETTINGS.peekLinksFromPinnedTabs.title}
           description="From pinned tabs and favorites, as Arc does. ⌘W or Esc closes it; ⌘O opens it as a tab."
         />
-        <SettingToggle setting="cmdClickCreatesTabGroup" title="⌘-clicking links creates tab groups" />
+        <SettingToggle setting="cmdClickCreatesTabGroup" settingId={SETTINGS.cmdClickCreatesTabGroup.id} title={SETTINGS.cmdClickCreatesTabGroup.title} />
         <SettingToggle
           setting="optShiftClickOpensInGroup"
-          title="⌥⇧-click opens tab in group"
+          settingId={SETTINGS.optShiftClickOpensInGroup.id}
+          title={SETTINGS.optShiftClickOpensInGroup.title}
           description="⌥⇧-click a tab to open it in a group with the current tab. (⌥⇧-clicking a link opens it in a split.)"
         />
       </Group>

@@ -7,6 +7,7 @@ import { useSpaces } from "../../../store/hooks";
 import { newId } from "../../../store/model";
 import { IconButton } from "../../primitives";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
 export function showRuleEditor(ruleId?: string) {
@@ -30,7 +31,8 @@ export function LinkRules() {
   return (
     <>
       <SectionHeader
-        title="Rules for links from other apps"
+        settingId={SETTINGS.externalLinkRules.id}
+        title={SETTINGS.externalLinkRules.title}
         description="The first matching rule decides where a link opens. Other links use your choice above."
         action={<Button title="Add…" icon="plus" onPress={() => showRuleEditor()} />}
       />

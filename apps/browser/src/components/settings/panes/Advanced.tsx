@@ -5,6 +5,7 @@ import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { openInternalPage } from "../../pages/urls";
 import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
+import { SETTINGS } from "../definitions";
 
 export function AdvancedPane() {
   const theme = useTheme();
@@ -26,37 +27,45 @@ export function AdvancedPane() {
     <View>
       <SectionHeader title="Browsing" />
       <Group>
-        <Row title="Show full URL in the address bar" description="Instead of the site alone.">
+        <Row settingId={SETTINGS.showFullUrl.id} title={SETTINGS.showFullUrl.title} description="Instead of the site alone.">
           <Toggle value={settings.showFullUrl} onChange={(v) => update({ showFullUrl: v })} />
         </Row>
-        <Row title="Warn before moving tabs between spaces" description="Some site data doesn't come along.">
+        <Row
+          settingId={SETTINGS.warnBeforeMovingTabsToSpace.id}
+          title={SETTINGS.warnBeforeMovingTabsToSpace.title}
+          description="Some site data doesn't come along."
+        >
           <Toggle value={settings.warnBeforeMovingTabsToSpace} onChange={(v) => update({ warnBeforeMovingTabsToSpace: v })} />
         </Row>
-        <Row title="Show the Import bookmarks button" description="On an empty bookmarks bar.">
+        <Row settingId={SETTINGS.showBookmarksImport.id} title={SETTINGS.showBookmarksImport.title} description="On an empty bookmarks bar.">
           <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => update({ hideBookmarksBarImport: !v })} />
         </Row>
       </Group>
 
       <SectionHeader title="Performance" />
       <Group>
-        <Row title="Battery Saver" description="On battery or in Low Power Mode, pause background tabs that keep the processor busy.">
+        <Row
+          settingId={SETTINGS.batterySaver.id}
+          title={SETTINGS.batterySaver.title}
+          description="On battery or in Low Power Mode, pause background tabs that keep the processor busy."
+        >
           <Toggle value={settings.batterySaver} onChange={(v) => update({ batterySaver: v })} />
         </Row>
       </Group>
 
       <SectionHeader title="Data" />
       <Group>
-        <Row title="History" description="Every page you visited, by day.">
+        <Row settingId={SETTINGS.history.id} title={SETTINGS.history.title} description="Every page you visited, by day.">
           <Button title="Show History" onPress={() => openInternalPage("history")} />
         </Row>
-        <Row title="Downloads" description="Files you downloaded, with where they're saved.">
+        <Row settingId={SETTINGS.downloads.id} title={SETTINGS.downloads.title} description="Files you downloaded, with where they're saved.">
           <Button title="Show Downloads" onPress={() => openInternalPage("downloads")} />
         </Row>
       </Group>
 
       <SectionHeader title="Web engine" />
       <Group>
-        <Row title="Chromium" description={info ? "NNCore" : undefined}>
+        <Row settingId={SETTINGS.chromium.id} title={SETTINGS.chromium.title} description={info ? "NNCore" : undefined}>
           <Text selectable style={{ fontSize: 13, color: theme.textSecondary }}>
             {info?.chromiumVersion ?? "…"}
           </Text>

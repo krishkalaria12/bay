@@ -30,13 +30,14 @@ import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { Favicon } from "../../primitives";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, Toggle } from "../controls";
+import { SETTINGS, type SettingId } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { ShareDiagnosticsSection } from "./ShareDiagnostics";
 
-const CATEGORIES: { id: FilterListCategory; toggle: string; section: string }[] = [
-  { id: "ads", toggle: "Block ads", section: "Ad blockers" },
-  { id: "trackers", toggle: "Block trackers", section: "Trackers" },
-  { id: "cookies", toggle: "Block cookie banners", section: "Cookie banners" },
+const CATEGORIES: { id: FilterListCategory; toggle: string; settingId?: SettingId; section: string }[] = [
+  { id: "ads", toggle: SETTINGS.blockAds.title, settingId: SETTINGS.blockAds.id, section: "Ad blockers" },
+  { id: "trackers", toggle: SETTINGS.blockTrackers.title, settingId: SETTINGS.blockTrackers.id, section: "Trackers" },
+  { id: "cookies", toggle: SETTINGS.blockCookieBanners.title, settingId: SETTINGS.blockCookieBanners.id, section: "Cookie banners" },
   { id: "annoyances", toggle: "", section: "Annoyances" },
   { id: "security", toggle: "", section: "Malware and scams" },
   { id: "regional", toggle: "", section: "Regional blockers" },
@@ -90,11 +91,15 @@ export function PrivacyPane() {
       <SectionHeader title="Content blocking" description="Built on EasyList and EasyPrivacy. Blocking happens on this Mac." />
       <Group>
         {CATEGORIES.filter((c) => c.toggle).map((c) => (
-          <Row key={c.id} title={c.toggle}>
+          <Row key={c.id} settingId={c.settingId} title={c.toggle}>
             <Toggle value={!!blocker && categoryOn(blocker, c.id)} disabled={!blocker} onChange={(v) => void toggleCategory(c.id, v)} />
           </Row>
         ))}
-        <Row title="Advanced Settings" description="Block common components found across the web by using additional rules and filters.">
+        <Row
+          settingId={SETTINGS.contentBlockerFilters.id}
+          title={SETTINGS.contentBlockerFilters.title}
+          description="Block common components found across the web by using additional rules and filters."
+        >
           <Button title="Advanced…" disabled={!blocker} onPress={() => showSettingsSheet(<FilterListsSheet />)} />
         </Row>
       </Group>
@@ -188,7 +193,8 @@ function ZoomLevels() {
   return (
     <>
       <SectionHeader
-        title="Zoom levels"
+        settingId={SETTINGS.zoomLevels.id}
+        title={SETTINGS.zoomLevels.title}
         action={
           profiles.length > 1 ? <PopUp value={selected} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSelected} /> : undefined
         }
@@ -246,7 +252,8 @@ function SitePermissions() {
   return (
     <>
       <SectionHeader
-        title="Site permissions"
+        settingId={SETTINGS.sitePermissions.id}
+        title={SETTINGS.sitePermissions.title}
         description="Pop-ups, camera, location and other permissions you've set for sites."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
@@ -283,7 +290,8 @@ function AppLinks() {
   return (
     <>
       <SectionHeader
-        title="Apps allowed to open links"
+        settingId={SETTINGS.externalAppAllowances.id}
+        title={SETTINGS.externalAppAllowances.title}
         description="Sites that open another app without asking first."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
