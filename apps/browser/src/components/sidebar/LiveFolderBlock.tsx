@@ -44,13 +44,14 @@ const NONE: string[] = [];
 
 export const liveRowKey = (folderId: string, itemId: string) => `live|${folderId}|${itemId}`;
 
+// `spaced`: pinned groups are open above (their gap folds with them), so the list keeps its own gap below.
 export function LiveFolders({ windowId, spaced }: { windowId: string; spaced: boolean }) {
   const page = usePageSpaceId();
   const spaceId = useBrowser((s) => (s.windows[windowId]?.incognito ? "" : page));
   const ids = useLive(useShallow((s) => profileFolders(s, spaceId)));
   if (!ids.length) return null;
   return (
-    <View style={{ marginTop: spaced ? 7 : 0, marginBottom: 7, gap: layout.rowGap }}>
+    <View style={{ marginBottom: spaced ? 14 : 7, gap: layout.rowGap }}>
       {ids.map((id) => (
         <LiveFolderBlock key={id} folderId={id} windowId={windowId} />
       ))}

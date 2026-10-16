@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { FOLD_MS } from "./constants";
 
@@ -120,6 +120,25 @@ export function Fold({
           );
         })}
         {footer}
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
+ * A block that folds away whole (a space's pinned sections): its height measured, unmounted once closed. Moving, the
+ * content lays out on its own, so it tells its height even opening for the first time.
+ */
+export function FoldAway({ collapsed, onLayout, children }: { collapsed: boolean; onLayout?: (e: LayoutChangeEvent) => void; children: ReactNode }) {
+  const fold = useFold(collapsed);
+  const [height, setHeight] = useState(0);
+  const mode: FoldMode = fold.moving ? "moving" : collapsed ? "closed" : "free";
+  const style = useFoldStyle(fold.open, mode, height, 0);
+  if (mode === "closed") return null;
+  return (
+    <Animated.View style={style} onLayout={onLayout} pointerEvents={collapsed ? "none" : "auto"}>
+      <View style={mode === "moving" ? { position: "absolute", left: 0, right: 0, top: 0 } : null} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
+        {children}
       </View>
     </Animated.View>
   );

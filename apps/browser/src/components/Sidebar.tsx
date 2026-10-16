@@ -26,6 +26,7 @@ import { DragGhost } from "./sidebar/DragGhost";
 import { DragProvider, DragScope, useDragController, useDragItem, type Ghost } from "./sidebar/dnd";
 import { sidebarEntries, useSidebarEntries } from "./sidebar/entries";
 import { FolderBlock } from "./sidebar/FolderBlock";
+import { FoldAway, useFold } from "./sidebar/Fold";
 import { GroupBlock } from "./sidebar/GroupBlock";
 import { dismissHover } from "./sidebar/hover";
 import { LiveFolders } from "./sidebar/LiveFolderBlock";
@@ -327,46 +328,47 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                           <SpaceTitle windowId={windowId} spaceId={spaceId} />
                         </View>
                         {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
-                        {folded ? null : (
-                          <>
-                            <View
-                              onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y) : undefined}
-                              style={{ marginTop: SPACE_TITLE_GAP, gap: layout.rowGap }}
-                            >
-                              {pinned.map((entry) => (
-                                <PinnedEntry key={entry} entry={entry} />
-                              ))}
-                              <Tail id="tail:pinned" section="pinned" />
-                            </View>
-                          </>
-                        )}
+                        <FoldAway
+                          collapsed={folded}
+                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y + SPACE_TITLE_GAP) : undefined}
+                        >
+                          <View style={{ marginTop: SPACE_TITLE_GAP, gap: layout.rowGap }}>
+                            {pinned.map((entry) => (
+                              <PinnedEntry key={entry} entry={entry} />
+                            ))}
+                            <Tail id="tail:pinned" section="pinned" />
+                          </View>
+                        </FoldAway>
                         <PinnedDivider
                           pinned={!folded && pinned.length > 0}
                           listed={all.length > 0 || (!folded && pinnedGroups.length > 0)}
                           windowId={windowId}
                           spaceId={spaceId}
                         />
-                        {folded ? null : (
+                        {/* The gap under the groups folds with them. */}
+                        <FoldAway
+                          collapsed={folded}
+                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
+                        >
                           <View
                             ref={(v) => {
                               controller?.regions.set("pinnedGroups", v);
                             }}
-                            onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
-                            style={{ gap: layout.rowGap }}
+                            style={{ gap: layout.rowGap, marginBottom: pinnedGroups.length ? 7 : 0 }}
                           >
                             {pinnedGroups.map((id) => (
                               <GroupBlock key={id} groupId={id} section="pinnedGroups" />
                             ))}
                             <Tail id="tail:pinnedGroups" section="pinnedGroups" />
                           </View>
-                        )}
+                        </FoldAway>
                         <LiveFolders windowId={windowId} spaced={!folded && pinnedGroups.length > 0} />
                         <View
                           ref={(v) => {
                             controller?.regions.set("list", v);
                           }}
                           onLayout={geometryRef ? (e) => void (geometryRef.current.regions.list = e.nativeEvent.layout.y) : undefined}
-                          style={{ marginTop: !folded && pinnedGroups.length ? 7 : 0, gap: layout.rowGap }}
+                          style={{ gap: layout.rowGap }}
                         >
                           {newTabsAtTop && inlineNewTab ? (
                             <View style={{ marginBottom: NEW_TAB_GAP - layout.rowGap }}>
@@ -434,15 +436,26 @@ function PinnedDivider({ pinned, listed, windowId, spaceId }: { pinned: boolean;
   const clearable = useBrowser((s) => clearableTabs(s, windowId, spaceId).length > 0);
   const { hovered, hoverProps } = useHover();
   const shown = pinned || listed || clearable;
+  // The line and its room come and go with the pinned section folding.
+  const { open } = useFold(!shown);
+  const room = useAnimatedStyle(
+    () => ({
+      paddingTop: open.get() * PINNED_DIVIDER_PAD,
+      paddingBottom: open.get() * PINNED_DIVIDER_PAD + (clearable ? CLEAR_GAP : 0),
+    }),
+    [clearable],
+  );
+  const line = useAnimatedStyle(() => ({ height: open.get(), opacity: open.get() }));
   return (
     <View
       ref={(v) => {
         controller?.regions.set("divider", v);
       }}
-      // Clear stands on the line: room under it so it, and the line, aren't on the first tab.
-      style={{ paddingTop: shown ? PINNED_DIVIDER_PAD : 0, paddingBottom: shown ? PINNED_DIVIDER_PAD + (clearable ? CLEAR_GAP : 0) : 0, paddingHorizontal: 9 }}
     >
-      {shown ? <View style={{ height: 1, borderRadius: 0.5, marginRight: clearable ? CLEAR_WIDTH : 0, backgroundColor: tokens.separator }} /> : null}
+      {/* Clear stands on the line: room under it so it, and the line, aren't on the first tab. */}
+      <Animated.View style={[{ paddingHorizontal: 9 }, room]}>
+        <Animated.View style={[{ borderRadius: 0.5, marginRight: clearable ? CLEAR_WIDTH : 0, backgroundColor: tokens.separator }, line]} />
+      </Animated.View>
       {clearable ? (
         <View {...hoverProps} style={{ position: "absolute", right: 2, top: PINNED_DIVIDER_PAD - 8, height: 17, justifyContent: "center" }}>
           <Pressable onPress={() => void clearTabs(windowId)} accessibilityRole="button" tooltip="Put away every tab but this one">
