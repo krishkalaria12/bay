@@ -1,4 +1,4 @@
-import { displayUrl, type Suggestion } from "@bay/core";
+import { displayUrl, suggestionKey, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -12,9 +12,20 @@ import { Keycaps } from "./Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./PaletteActionMenu";
 import { useHover } from "../primitives";
 import { SuggestionIcon } from "./SuggestionRow";
+import { CalculationAnswer } from "./CalculationAnswer";
 import { usePointerHover, type PointerHoverEvent } from "./usePointerHover";
 import type { PaletteSection, PaletteSuggestion } from "./paletteStart";
-import { PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT, PALETTE_HEIGHT, PALETTE_LIST_TOP, PALETTE_ROW_HEIGHT, PALETTE_TITLE_HEIGHT } from "./constants";
+import {
+  calculationRowHeight,
+  PALETTE_FIELD_HEIGHT,
+  PALETTE_FOOTER_HEIGHT,
+  PALETTE_HEIGHT,
+  PALETTE_LIST_TOP,
+  PALETTE_ROW_HEIGHT,
+  PALETTE_TITLE_HEIGHT,
+} from "./constants";
+
+const rowHeight = (s: Suggestion) => (s.kind === "calc" ? calculationRowHeight(s) : PALETTE_ROW_HEIGHT);
 
 export type PaletteMenu = { side: "left" | "right"; title: string; actions: PaletteMenuAction[] };
 
@@ -100,7 +111,9 @@ export function PaletteContent({
           ? current.title
           : current?.kind === "calc"
             ? "Copy Answer"
-            : "Open";
+            : current?.kind === "emoji"
+              ? "Copy Emoji"
+              : "Open";
 
   return (
     <View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={{ height: Math.min(PALETTE_HEIGHT, maxHeight) }}>
@@ -133,7 +146,12 @@ export function PaletteContent({
               onLayout={(e) => {
                 const top = e.nativeEvent.layout.y + (titled ? PALETTE_TITLE_HEIGHT : 0);
                 const first = firsts[sectionIndex]!;
-                section.items.forEach((_, offset) => rows.current.set(first + offset, { y: top + offset * PALETTE_ROW_HEIGHT, height: PALETTE_ROW_HEIGHT }));
+                let y = top;
+                section.items.forEach((item, offset) => {
+                  const height = rowHeight(item);
+                  rows.current.set(first + offset, { y, height });
+                  y += height;
+                });
                 keepSelectedVisible();
               }}
             >
@@ -155,7 +173,7 @@ export function PaletteContent({
                 const rowIndex = firsts[sectionIndex]! + offset;
                 return (
                   <PaletteResultRow
-                    key={`${suggestion.kind}:${"id" in suggestion ? suggestion.id : suggestion.url}:${rowIndex}`}
+                    key={`${suggestionKey(suggestion)}:${rowIndex}`}
                     suggestion={suggestion}
                     pageContext={pageContext}
                     selected={rowIndex === selectedIndex}
@@ -229,23 +247,24 @@ function PaletteResultRow({
   onMenu(): void;
 }) {
   const theme = useTheme();
-  const title = s.kind === "page" ? s.title || displayUrl(s.url) : s.kind === "search" ? s.query : s.kind === "calc" ? s.value : s.title;
+  const title =
+    s.kind === "page" ? s.title || displayUrl(s.url) : s.kind === "search" ? s.query : s.kind === "calc" ? s.value : s.kind === "emoji" ? s.name : s.title;
   const shownUrl = s.kind === "page" || s.kind === "create" ? displayUrl(s.url) : "";
   // The typed search names its engine, as yab's does ("how to  Google"); the engine's own suggestions don't.
   const engine = s.kind === "search" && !s.suggested ? s.engine : "";
-  const detail = s.detail ?? (s.kind === "calc" ? s.expression : engine || (shownUrl !== title ? shownUrl : ""));
+  const detail = s.kind === "calc" ? s.expression : (s.detail ?? (engine || (shownUrl !== title ? shownUrl : "")));
   return (
     <View onMouseEnter={onHover}>
       <ContextMenuArea onContextMenu={onMenu}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${title}${s.kind === "page" && s.tabId ? ", switch to tab" : s.kind === "page" && s.cleanedId ? ", restore tab" : ""}`}
+          accessibilityLabel={`${title}${s.kind === "page" && s.tabId ? ", switch to tab" : s.kind === "page" && s.cleanedId ? ", restore tab" : s.kind === "emoji" ? ", copy emoji" : s.kind === "calc" ? `, ${s.expression}, copy answer` : ""}`}
           accessibilityState={{ selected }}
           onPress={(e) => onChoose(dispositionFor(modifiersOf(e)))}
         >
           <View
             style={{
-              height: PALETTE_ROW_HEIGHT,
+              height: rowHeight(s),
               flexDirection: "row",
               alignItems: "center",
               gap: 11,
@@ -254,41 +273,47 @@ function PaletteResultRow({
               backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined,
             }}
           >
-            {pageContext ? (
-              <View
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 5,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: theme.toolbarHover,
-                  borderWidth: StyleSheet.hairlineWidth,
-                  borderColor: theme.panelBorder,
-                }}
-              >
-                <SuggestionIcon suggestion={s} />
-              </View>
+            {s.kind === "calc" ? (
+              <CalculationAnswer suggestion={s} selected={selected} />
             ) : (
-              <SuggestionIcon suggestion={s} />
+              <>
+                {pageContext ? (
+                  <View
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 5,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: theme.toolbarHover,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: theme.panelBorder,
+                    }}
+                  >
+                    <SuggestionIcon suggestion={s} />
+                  </View>
+                ) : (
+                  <SuggestionIcon suggestion={s} />
+                )}
+                <Text numberOfLines={1} style={{ flexShrink: 1, maxWidth: detail ? "53%" : "85%", fontSize: 13, color: theme.textPrimary }}>
+                  {title}
+                </Text>
+                {detail ? (
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>
+                    {detail}
+                  </Text>
+                ) : (
+                  <View style={{ flex: 1 }} />
+                )}
+                {s.kind === "action" && s.hint && pageContext ? (
+                  <Keycaps hint={s.hint} />
+                ) : selected ? (
+                  <Keycaps hint="↩" />
+                ) : s.kind === "action" && s.hint ? (
+                  <Keycaps hint={s.hint} />
+                ) : null}
+              </>
             )}
-            <Text numberOfLines={1} style={{ flexShrink: 1, maxWidth: detail ? "53%" : "85%", fontSize: 13, color: theme.textPrimary }}>
-              {title}
-            </Text>
-            {detail ? (
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>
-                {detail}
-              </Text>
-            ) : (
-              <View style={{ flex: 1 }} />
-            )}
-            {s.kind === "action" && s.hint && pageContext ? (
-              <Keycaps hint={s.hint} />
-            ) : selected ? (
-              <Keycaps hint="↩" />
-            ) : s.kind === "action" && s.hint ? (
-              <Keycaps hint={s.hint} />
-            ) : null}
           </View>
         </Pressable>
       </ContextMenuArea>

@@ -1,4 +1,6 @@
 import { calculate } from "./calculator.ts";
+import { parseCurrency, type CurrencyAnswer } from "./currency.ts";
+import { findEmoji } from "./emoji.ts";
 import { BUILT_IN_ENGINES, searchUrl, type SearchEngine } from "./engines.ts";
 import { matchActions, type ActionCandidate } from "./fuzzy.ts";
 import { fixupUrl, hostOf, urlForDisplay } from "./omnibox.ts";
@@ -27,7 +29,8 @@ export type Suggestion =
       visited?: boolean;
     }
   | { kind: "search"; query: string; url: string; engine: string; suggested?: boolean }
-  | { kind: "calc"; expression: string; value: string; url: string }
+  | { kind: "calc"; expression: string; value: string; url: string; detail?: string }
+  | { kind: "emoji"; value: string; name: string }
   | { kind: "action"; id: string; title: string; icon?: string; hint?: string }
   | { kind: "create"; id: string; title: string; url: string; site: string };
 
@@ -51,6 +54,8 @@ export type SuggestOptions = {
   currentTabId?: string;
   currentUrl?: string;
   scope?: SearchScope | null;
+  currency?: CurrencyAnswer | null;
+  calculatorEnabled?: boolean;
 };
 
 export function displayUrl(url: string): string {
@@ -334,6 +339,8 @@ export function suggestionKey(s: Suggestion): string {
       return `search:${s.url}`;
     case "calc":
       return `calc:${s.expression}`;
+    case "emoji":
+      return `emoji:${s.value}`;
     case "action":
       return `action:${s.id}`;
     case "create":
@@ -415,7 +422,11 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
 
   const search: Suggestion = { kind: "search", query, url: searchUrl(engine, query), engine: engine.name };
   const typedUrl = fixupUrl(query);
-  const calc = calculate(query);
+  const calculatorEnabled = options.calculatorEnabled !== false;
+  const calc = calculatorEnabled ? calculate(query) : null;
+  const currency = calculatorEnabled && options.currency?.expression === parseCurrency(query)?.expression ? options.currency : null;
+  const answer = currency ?? calc;
+  const emoji = findEmoji(query).map((match): Suggestion => ({ kind: "emoji", ...match }));
   const creates = matchQuickCreate(raw.trimStart());
   const actionMatches = matchActions(query, actions, 3).filter((m) => m.exact || m.score >= 50);
 
@@ -431,9 +442,17 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   else if (websiteFirst && best && best.m >= 40) first = pageSuggestion(best.c, best.tabId, best.cleanedId);
   else first = search;
 
+  out.push(...emoji);
+  if (answer)
+    out.push({
+      kind: "calc",
+      expression: answer.expression,
+      value: answer.display,
+      url: searchUrl(engine, answer.expression),
+      ...(currency ? { detail: currency.detail } : {}),
+    });
   out.push(first);
   out.push(search);
-  if (calc) out.push({ kind: "calc", expression: calc.expression, value: calc.display, url: searchUrl(engine, calc.expression) });
   out.push(...actionMatches.slice(0, 2).map((m) => actionRow(m.action)));
   out.push(...creates.map(createRow));
   const pageRows = ranked.map((x) => pageSuggestion(x.c, x.tabId, x.cleanedId));
@@ -441,7 +460,7 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   out.push(...pageRows.slice(0, ahead));
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));
   out.push(...pageRows.slice(ahead));
-  return { items: out.items, completion };
+  return { items: out.items, completion: answer || emoji.length ? "" : completion };
 }
 
 function inlineMatch(t: PageText, q: string): boolean {

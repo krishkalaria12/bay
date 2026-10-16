@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Writes apps/browser/src/components/emojiData.ts, the icon picker's emoji, from Unicode's emoji-test.txt:
+// Writes packages/core/src/emojiData.ts, shared by emoji search and the icon picker, from Unicode's emoji-test.txt:
 //   curl -fsSLO https://unicode.org/Public/emoji/15.0/emoji-test.txt && node scripts/emoji-data.mjs emoji-test.txt
 // Fully qualified emoji only, without skin tones (a picker shows the default), grouped as macOS's picker does:
 // smileys and people together, then nature, food, activities, travel, objects, symbols and flags. 15.0 is what
@@ -56,6 +56,6 @@ export const EMOJI_GROUPS: EmojiGroup[] = ${JSON.stringify(
   1,
 )};
 `;
-const target = join(dirname(fileURLToPath(import.meta.url)), "../apps/browser/src/components/emojiData.ts");
+const target = join(dirname(fileURLToPath(import.meta.url)), "../packages/core/src/emojiData.ts");
 writeFileSync(target, out);
 console.log(`${[...byGroup.values()].reduce((n, list) => n + list.length, 0)} emoji in ${GROUPS.length} groups: ${target}`);

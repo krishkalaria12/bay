@@ -41,6 +41,7 @@ function primaryTitle(target: PaletteSuggestion, newTabPanel: boolean): string {
   if (target.kind === "page" && target.tabId) return "Switch to Tab";
   if (target.kind === "page" && target.cleanedId) return "Restore Tab";
   if (target.kind === "calc") return "Copy Answer";
+  if (target.kind === "emoji") return "Copy Emoji";
   if (target.kind === "action") return target.title;
   return newTabPanel ? "Open in New Tab" : "Open";
 }
@@ -57,7 +58,7 @@ export function rowMenuActions(
     {
       id: "open",
       title: primaryTitle(target, newTabPanel),
-      icon: target.kind === "action" ? (target.icon ?? "command") : "arrow.up.right",
+      icon: target.kind === "action" ? (target.icon ?? "command") : target.kind === "emoji" ? "doc.on.doc" : "arrow.up.right",
       hint: "↩",
       run: () => run.choose(target),
     },

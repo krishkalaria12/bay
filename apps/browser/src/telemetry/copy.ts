@@ -43,7 +43,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
       "Launches, updates, and whether the last session ended cleanly",
       "How many tabs and windows you open (a count, not which)",
       "Opening split view, switching profiles and opening the command bar",
-      "The kind of command bar row you pick: history, bookmark, tab, address, search, calculator or action",
+      "The kind of command bar row you pick: history, bookmark, tab, address, search, calculator, emoji or action",
       "Installing an extension, turning sync on or off, translating a page, and which Settings sections you open",
     ],
   },

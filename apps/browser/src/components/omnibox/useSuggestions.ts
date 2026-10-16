@@ -1,10 +1,13 @@
 import {
   buildSuggestions,
+  createCurrencyConverter,
   createSuggestFetcher,
   engineById,
   findScope,
   hostOf,
   prepareSuggestions,
+  parseCurrency,
+  type CurrencyAnswer,
   type SearchEngine,
   type SearchScope,
   type SuggestionResult,
@@ -129,6 +132,7 @@ export function useSuggestions({
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const preference = useBrowser((s) => s.settings.commandBarPreference);
   const suggestionsOn = useBrowser((s) => s.settings.searchSuggestions);
+  const calculatorEnabled = useBrowser((s) => s.settings.calculatorEnabled);
 
   const tabs = Object.values(allTabs).filter((t) => t.spaceId === spaceId);
   const bookmarkRows = profileBookmarks(bookmarks, bookmarkProfile);
@@ -147,6 +151,21 @@ export function useSuggestions({
   const [remote, setRemote] = useState<{ text: string; list: string[] }>({ text: "", list: [] });
   const [fetcher] = useState(() => createSuggestFetcher({ fetch: (url, init) => fetch(url, init) }));
   const query = text.trim();
+  const [currency, setCurrency] = useState<CurrencyAnswer | null>(null);
+  const [convertCurrency] = useState(() => createCurrencyConverter({ fetch: (url, init) => fetch(url, init) }));
+  useEffect(() => {
+    if (!active || !calculatorEnabled || scope || !parseCurrency(query)) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void convertCurrency(query).then((answer) => {
+        if (!cancelled) setCurrency(answer);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [active, calculatorEnabled, scope, query, convertCurrency]);
   const fromEngine = suggestEngine(scope, engines, engine);
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
@@ -170,5 +189,7 @@ export function useSuggestions({
     limit,
     remoteLimit,
     remoteFirst,
+    currency,
+    calculatorEnabled,
   });
 }

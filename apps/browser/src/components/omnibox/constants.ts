@@ -18,6 +18,9 @@ export const DROPDOWN_RADIUS = 12;
 export const PALETTE_FIELD_HEIGHT = 58;
 export const PALETTE_FOOTER_HEIGHT = 44;
 export const PALETTE_ROW_HEIGHT = 38;
+export const CALCULATION_ROW_HEIGHT = 72;
+export const CURRENCY_ROW_HEIGHT = 90;
+export const calculationRowHeight = (answer: { detail?: string }) => (answer.detail ? CURRENCY_ROW_HEIGHT : CALCULATION_ROW_HEIGHT);
 // As yab's: one height whatever it lists (room for about nine rows), the list scrolling inside, so the palette
 // neither grows nor moves as you type.
 export const PALETTE_HEIGHT = 470;

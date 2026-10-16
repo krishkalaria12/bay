@@ -71,6 +71,12 @@ export function SearchPane() {
           <Toggle value={settings.searchSuggestions} onChange={(v) => useBrowser.getState().updateSettings({ searchSuggestions: v })} />
         </Row>
       </Group>
+      <SectionHeader title="Command bar" />
+      <Group>
+        <Row title="Calculator" description="Show answers for math, unit conversions and currency conversions. Currency rates require an internet connection.">
+          <Toggle value={settings.calculatorEnabled} onChange={(v) => useBrowser.getState().updateSettings({ calculatorEnabled: v })} />
+        </Row>
+      </Group>
     </View>
   );
 }

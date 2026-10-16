@@ -18,6 +18,7 @@ const SETTINGS: SettingEntry[] = [
 
   { pane: "search", title: "Default search engine", words: "google duckduckgo bing custom" },
   { pane: "search", title: "Show search suggestions", words: "autocomplete" },
+  { pane: "search", title: "Calculator", words: "command bar math arithmetic units conversion currency exchange rates" },
 
   { pane: "appearance", title: "Appearance Theme", words: "dark light mode" },
   { pane: "appearance", title: "Density", words: "comfortable compact rows icons size" },

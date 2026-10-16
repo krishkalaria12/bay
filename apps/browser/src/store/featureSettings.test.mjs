@@ -10,6 +10,25 @@ const { settingsAdapter, profilesAdapter } = await import("../sync/adapters.ts")
 const stub = await import("../test-native-stub.mjs");
 const S = () => useBrowser.getState();
 
+test("calculator defaults on, and an explicit off choice survives persistence and sync", () => {
+  S().hydrate({ settings: { searchSuggestions: false } });
+  assert.equal(S().settings.calculatorEnabled, true);
+  stub.docs.clear();
+  const stop = startPersistence();
+  S().updateSettings({ calculatorEnabled: false });
+  const settings = settingsAdapter.extract().values;
+  flushPersistence();
+  stop();
+  S().hydrate(loadSession());
+  assert.equal(S().settings.calculatorEnabled, false);
+  S().hydrate({});
+  assert.equal(S().settings.calculatorEnabled, true);
+  settingsAdapter.apply(settings, new Set(settings.keys()));
+  assert.equal(S().settings.calculatorEnabled, false);
+  settingsAdapter.apply(new Map([["set:calculatorEnabled", { v: null }]]), new Set(["set:calculatorEnabled"]));
+  assert.equal(S().settings.calculatorEnabled, false);
+});
+
 function tabs() {
   S().hydrate({});
   const w = S().createWindow({ url: "https://today.example" });

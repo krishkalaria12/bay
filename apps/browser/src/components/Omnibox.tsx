@@ -187,7 +187,8 @@ export function Omnibox({
       case "create":
         return go(s.url, disposition);
       case "calc":
-        if (disposition !== "current") return go(s.url, disposition);
+      case "emoji":
+        if (s.kind === "calc" && disposition !== "current") return go(s.url, disposition);
         copyText(s.value);
         setTyped(s.value);
         setSuppressCompletion(true);
@@ -244,7 +245,7 @@ export function Omnibox({
         ? target.title || displayUrl(target.url)
         : target.kind === "search"
           ? target.query
-          : target.kind === "calc"
+          : target.kind === "calc" || target.kind === "emoji"
             ? target.value
             : target.title;
     const actions = rowMenuActions(target, newTab, searchTemplates, {

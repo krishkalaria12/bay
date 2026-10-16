@@ -23,6 +23,8 @@ function rows(items: Suggestion[]): string[] {
         return `${i.suggested ? "suggest" : "search"}:${i.query}`;
       case "calc":
         return `calc:${i.value}`;
+      case "emoji":
+        return `emoji:${i.value}`;
       case "action":
         return `action:${i.id}`;
       case "create":

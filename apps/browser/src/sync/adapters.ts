@@ -22,6 +22,7 @@ export const SYNCED_SETTINGS = [
   "customSearchUrl",
   "customSearchEngines",
   "searchSuggestions",
+  "calculatorEnabled",
   "commandBarPreference",
   "tabLayout",
   "hideToolbarWhileScrolling",
@@ -65,6 +66,7 @@ export const settingsAdapter: Adapter = {
       if (!record || !("v" in record) || !(SYNCED_SETTINGS as readonly string[]).includes(name)) continue;
       if (name === "awakeSites" && !Array.isArray(record.v)) continue;
       if (name === "density" && record.v !== "comfortable" && record.v !== "compact") continue;
+      if (name === "calculatorEnabled" && typeof record.v !== "boolean") continue;
       patch[name] = record.v;
     }
     if (Object.keys(patch).length) store().updateSettings(patch as Partial<Settings>);

@@ -30,6 +30,7 @@ export type Settings = {
   customSearchEngines: CustomSearchEngine[];
   extensionSearchEngines: ExtensionSearchEngine[];
   searchSuggestions: boolean;
+  calculatorEnabled: boolean;
   commandBarPreference: "website" | "search";
 
   tabLayout: "sidebar" | "top";
@@ -95,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customSearchEngines: [],
   extensionSearchEngines: [],
   searchSuggestions: true,
+  calculatorEnabled: true,
   commandBarPreference: "website",
   tabLayout: "sidebar",
   hideToolbarWhileScrolling: true,

@@ -4,6 +4,8 @@ import { memo } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Favicon, IconButton, useHover } from "../primitives";
+import { CalculationAnswer } from "./CalculationAnswer";
+import { calculationRowHeight } from "./constants";
 
 export function SuggestionIcon({ suggestion: s, color }: { suggestion: Suggestion; color?: string }) {
   const theme = useTheme();
@@ -17,6 +19,8 @@ export function SuggestionIcon({ suggestion: s, color }: { suggestion: Suggestio
       return <Symbol name="magnifyingglass" size={13} color={tint} style={{ width: 16, height: 16 }} />;
     case "calc":
       return <Symbol name="equal.circle" size={14} color={tint} style={{ width: 16, height: 16 }} />;
+    case "emoji":
+      return <Text style={{ width: 20, fontSize: 17, textAlign: "center" }}>{s.value}</Text>;
     case "action":
       return <Symbol name={s.icon ?? "command"} size={13} color={tint} style={{ width: 16, height: 16 }} />;
   }
@@ -32,6 +36,8 @@ function labels(s: Suggestion): [string, string | null] {
       return [s.query, null];
     case "calc":
       return [s.value, s.expression];
+    case "emoji":
+      return [s.name, null];
     case "action":
     case "create":
       return [s.title, null];
@@ -101,10 +107,15 @@ const SuggestionRow = memo(
         }}
         onMouseLeave={hoverProps.onMouseLeave}
       >
-        <Pressable onPress={() => actions.choose(s)}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={s.kind === "calc" ? `${s.expression}, ${s.value}, copy answer` : title}
+          accessibilityState={{ selected }}
+          onPress={() => actions.choose(s)}
+        >
           <View
             style={{
-              height: 35,
+              height: s.kind === "calc" ? calculationRowHeight(s) : 35,
               marginVertical: 2.5,
               borderRadius: 11,
               flexDirection: "row",
@@ -114,21 +125,27 @@ const SuggestionRow = memo(
               backgroundColor: selected ? theme.rowSelected : hovered ? theme.rowHover : undefined,
             }}
           >
-            <SuggestionIcon suggestion={s} />
-            <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 14, color: theme.textPrimary }}>
-              {title}
-              {accessory ? (
-                <Text style={{ color: theme.textSecondary }}>
-                  {" — "}
-                  {accessory}
+            {s.kind === "calc" ? (
+              <CalculationAnswer suggestion={s} selected={selected} />
+            ) : (
+              <>
+                <SuggestionIcon suggestion={s} />
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 14, color: theme.textPrimary }}>
+                  {title}
+                  {accessory ? (
+                    <Text style={{ color: theme.textSecondary }}>
+                      {" — "}
+                      {accessory}
+                    </Text>
+                  ) : null}
                 </Text>
-              ) : null}
-            </Text>
-            <View style={{ flex: 1 }} />
-            {hint && !removable ? <Text style={{ fontSize: 12, color: theme.textTertiary }}>{hint}</Text> : null}
-            {removable ? (
-              <IconButton icon="xmark" size={10} box={22} radius={6} color={theme.textSecondary} tooltip="Remove from History" onPress={onRemove} />
-            ) : null}
+                <View style={{ flex: 1 }} />
+                {hint && !removable ? <Text style={{ fontSize: 12, color: theme.textTertiary }}>{hint}</Text> : null}
+                {removable ? (
+                  <IconButton icon="xmark" size={10} box={22} radius={6} color={theme.textSecondary} tooltip="Remove from History" onPress={onRemove} />
+                ) : null}
+              </>
+            )}
           </View>
         </Pressable>
       </View>

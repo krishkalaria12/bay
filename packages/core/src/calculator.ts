@@ -1,3 +1,5 @@
+import { UNIT_CATEGORIES, convertUnit, lookupUnit } from "./vendor/supercalculator/units.ts";
+
 type Token = { type: "num"; value: number } | { type: "op"; value: string } | { type: "id"; value: string };
 
 const CONSTANTS: Record<string, number> = { pi: Math.PI, π: Math.PI, e: Math.E, tau: 2 * Math.PI, τ: 2 * Math.PI };
@@ -219,92 +221,76 @@ export function formatNumber(value: number, digits = 12): string {
   return String(rounded);
 }
 
-type Unit = { dim: string; factor: number; label: string };
-
-const UNITS: Record<string, Unit> = {};
-function units(dim: string, factor: number, label: string, ...names: string[]) {
-  for (const name of [label, ...names]) UNITS[name.toLowerCase()] = { dim, factor, label };
-}
-units("length", 1, "m", "meter", "meters", "metre", "metres");
-units("length", 1000, "km", "kilometer", "kilometers", "kilometre", "kilometres");
-units("length", 0.01, "cm", "centimeter", "centimeters");
-units("length", 0.001, "mm", "millimeter", "millimeters");
-units("length", 1609.344, "mi", "mile", "miles");
-units("length", 0.9144, "yd", "yard", "yards");
-units("length", 0.3048, "ft", "foot", "feet");
-units("length", 0.0254, "in", "inch", "inches");
-units("length", 1852, "nmi", "nautical mile");
-units("mass", 1, "kg", "kilogram", "kilograms", "kilo", "kilos");
-units("mass", 0.001, "g", "gram", "grams");
-units("mass", 1e-6, "mg", "milligram", "milligrams");
-units("mass", 0.45359237, "lb", "lbs", "pound", "pounds");
-units("mass", 0.028349523125, "oz", "ounce", "ounces");
-units("mass", 6.35029318, "st", "stone", "stones");
-units("mass", 1000, "t", "tonne", "tonnes");
-units("volume", 1, "l", "liter", "liters", "litre", "litres");
-units("volume", 0.001, "ml", "milliliter", "milliliters", "millilitre", "millilitres");
-units("volume", 3.785411784, "gal", "gallon", "gallons");
-units("volume", 0.946352946, "qt", "quart", "quarts");
-units("volume", 0.473176473, "pt", "pint", "pints");
-units("volume", 0.2365882365, "cup", "cups");
-units("volume", 0.0295735295625, "fl oz", "floz");
-units("volume", 0.01478676478125, "tbsp", "tablespoon", "tablespoons");
-units("volume", 0.00492892159375, "tsp", "teaspoon", "teaspoons");
-units("time", 0.001, "ms", "millisecond", "milliseconds");
-units("time", 1, "s", "sec", "secs", "second", "seconds");
-units("time", 60, "min", "mins", "minute", "minutes");
-units("time", 3600, "h", "hr", "hrs", "hour", "hours");
-units("time", 86400, "days", "day", "d");
-units("time", 604800, "weeks", "week", "wk");
-units("time", 31556952, "years", "year", "yr");
-units("data", 0.125, "bits", "bit");
-units("data", 1, "bytes", "byte", "B");
-units("data", 1e3, "KB", "kilobyte", "kilobytes");
-units("data", 1e6, "MB", "megabyte", "megabytes");
-units("data", 1e9, "GB", "gigabyte", "gigabytes");
-units("data", 1e12, "TB", "terabyte", "terabytes");
-units("data", 1024, "KiB");
-units("data", 1024 ** 2, "MiB");
-units("data", 1024 ** 3, "GiB");
-units("data", 1024 ** 4, "TiB");
-units("speed", 1, "m/s");
-units("speed", 1000 / 3600, "km/h", "kph", "kmh");
-units("speed", 1609.344 / 3600, "mph");
-units("speed", 1852 / 3600, "knots", "knot", "kn");
-
-const TEMPERATURES: Record<string, "C" | "F" | "K"> = {
-  c: "C",
-  "°c": "C",
-  celsius: "C",
-  f: "F",
-  "°f": "F",
-  fahrenheit: "F",
-  k: "K",
+const legacyLabels: Record<string, string> = {
+  meter: "m",
+  kilometer: "km",
+  centimeter: "cm",
+  millimeter: "mm",
+  mile: "mi",
+  yard: "yd",
+  foot: "ft",
+  inch: "in",
+  "nautical mile": "nmi",
+  kilogram: "kg",
+  gram: "g",
+  milligram: "mg",
+  pound: "lb",
+  ounce: "oz",
+  stone: "st",
+  "metric ton": "t",
+  liter: "l",
+  milliliter: "ml",
+  gallon: "gal",
+  quart: "qt",
+  pint: "pt",
+  cup: "cup",
+  "fluid ounce": "fl oz",
+  tablespoon: "tbsp",
+  teaspoon: "tsp",
+  millisecond: "ms",
+  second: "s",
+  minute: "min",
+  hour: "h",
+  day: "days",
+  week: "weeks",
+  year: "years",
+  bit: "bits",
+  byte: "bytes",
+  kilobyte: "KB",
+  megabyte: "MB",
+  gigabyte: "GB",
+  terabyte: "TB",
+  kibibyte: "KiB",
+  mebibyte: "MiB",
+  gibibyte: "GiB",
+  tebibyte: "TiB",
+  "meter per second": "m/s",
+  "kilometer per hour": "km/h",
+  "mile per hour": "mph",
+  knot: "knots",
+  celsius: "°C",
+  fahrenheit: "°F",
   kelvin: "K",
 };
-const toCelsius = { C: (v: number) => v, F: (v: number) => ((v - 32) * 5) / 9, K: (v: number) => v - 273.15 };
-const fromCelsius = { C: (v: number) => v, F: (v: number) => (v * 9) / 5 + 32, K: (v: number) => v + 273.15 };
 
-const unitPattern = [...Object.keys(UNITS), ...Object.keys(TEMPERATURES)]
+const unitAliases = new Set(UNIT_CATEGORIES.flatMap((category) => Object.keys(category.units).map((key) => key.toLowerCase())));
+const unitPattern = [...unitAliases]
   .sort((a, b) => b.length - a.length)
-  .map((u) => u.replace(/[/.]/g, "\\$&").replace(/ /g, "\\s*"))
+  .map((unit) => unit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s/g, "\\s*"))
   .join("|");
-const CONVERSION = new RegExp(`^(.+?)\\s*(${unitPattern})\\s+(?:to|in|into|as|=|->|→)\\s+(${unitPattern})$`, "i");
+const CONVERSION = new RegExp(`^(.+?)\\s*(${unitPattern})\\s*(?:to|in|into|as|=|->|→)\\s*(${unitPattern})$`, "i");
 
 function convert(input: string): { value: number; unit: string } | null {
-  const m = CONVERSION.exec(input);
+  const m = CONVERSION.exec(input.replace(/²/g, "2").replace(/³/g, "3"));
   if (!m) return null;
   const amount = evaluate(m[1]!);
   if (amount === null) return null;
-  const from = m[2]!.toLowerCase().replace(/\s+/g, " ");
-  const to = m[3]!.toLowerCase().replace(/\s+/g, " ");
-  const tFrom = TEMPERATURES[from];
-  const tTo = TEMPERATURES[to];
-  if (tFrom && tTo) return { value: fromCelsius[tTo](toCelsius[tFrom](amount)), unit: `°${tTo}`.replace("°K", "K") };
-  const a = UNITS[from];
-  const b = UNITS[to];
-  if (!a || !b || a.dim !== b.dim) return null;
-  return { value: (amount * a.factor) / b.factor, unit: b.label };
+  const from = lookupUnit(m[2]!);
+  const to = lookupUnit(m[3]!);
+  if (!from || !to || from.category !== to.category) return null;
+  const value = convertUnit(amount, from, to);
+  if (!Number.isFinite(value)) return null;
+  return { value, unit: legacyLabels[to.def.name] ?? to.def.name };
 }
 
 export type Calculation = { expression: string; value: number; display: string };

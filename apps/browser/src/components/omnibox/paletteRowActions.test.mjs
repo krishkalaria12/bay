@@ -65,6 +65,20 @@ test("rows without a URL only offer their primary action", () => {
   assert.equal(forgettable({ kind: "search", query: "q", url: "https://s/?q", engine: "e" }), false);
 });
 
+test("emoji rows only copy the emoji, including from the new tab panel", () => {
+  const emoji = { kind: "emoji", value: "👩🏽‍💻", name: "woman technologist: medium skin tone" };
+  const chosen = [];
+  const copyHandlers = { ...handlers, choose: (...args) => chosen.push(args) };
+  for (const newTabPanel of [false, true]) {
+    const actions = rowMenuActions(emoji, newTabPanel, [], copyHandlers);
+    assert.deepEqual(summary(actions), [["Copy Emoji", "↩", false]]);
+    assert.equal(actions[0].icon, "doc.on.doc");
+    actions[0].run();
+    assert.equal(forgettable(emoji), false);
+  }
+  assert.deepEqual(chosen, [[emoji], [emoji]]);
+});
+
 const engines = ["https://www.google.com/search?q=%s", "https://duckduckgo.com/?q=%s", "https://www.google.com/maps/search/%s"];
 
 test("search suggestions and visited search results pages can't be forgotten", () => {
