@@ -23,6 +23,7 @@
     "@bay/shaders": "workspace:*",
     "@bay/shell": "workspace:*",
     "@bay/sync": "workspace:*",
+    "@legendapp/list": "^3.6.0",
     "expo": "~54.0.37",
     "expo-modules-core": "~3.0.29",
     "react": "19.1.4",

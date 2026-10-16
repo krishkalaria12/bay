@@ -1,7 +1,8 @@
 import { cleanUrl } from "@bay/core";
 import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/shell";
+import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import type { HistoryEntry } from "../../store/types";
@@ -14,22 +15,22 @@ import { HISTORY_HEADER, HISTORY_ROW, PAGE_WIDTH } from "./constants";
 import { NO_HISTORY } from "../../store/constants";
 import { useResetOn } from "../../lib/useResetOn";
 
-type Item =
-  | { type: "day"; key: string; label: string; offset: number }
-  | { type: "row"; key: string; entry: HistoryEntry; first: boolean; last: boolean; offset: number };
+type Item = { type: "day"; key: string; label: string } | { type: "row"; key: string; entry: HistoryEntry; first: boolean; last: boolean };
 
-// The list: each day's header, then its pages, each at its offset down the list.
+const itemKey = (item: Item) => item.key;
+const itemType = (item: Item) => item.type;
+const itemSize = (item: Item) => (item.type === "day" ? HISTORY_HEADER : HISTORY_ROW);
+
+// Each day's header followed by its pages.
 function listItems(history: HistoryEntry[], query: string): Item[] {
   const out: Item[] = [];
-  let offset = 0;
   let day = -1;
   const matches = history.filter((h) => matchesQuery(query, h.title, h.url));
   matches.forEach((entry, i) => {
     const start = dayStart(entry.lastVisit);
     if (start !== day) {
       day = start;
-      out.push({ type: "day", key: `d${start}`, label: dayLabel(start), offset });
-      offset += HISTORY_HEADER;
+      out.push({ type: "day", key: `d${start}`, label: dayLabel(start) });
     }
     const next = matches[i + 1];
     out.push({
@@ -38,9 +39,7 @@ function listItems(history: HistoryEntry[], query: string): Item[] {
       entry,
       first: out.at(-1)?.type === "day",
       last: !next || dayStart(next.lastVisit) !== start,
-      offset,
     });
-    offset += HISTORY_ROW;
   });
   return out;
 }
@@ -66,6 +65,7 @@ export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; s
   useResetOn(initialQuery, () => setQuery(initialQuery));
 
   const items = listItems(history, query);
+  const listExtraData = { selected, theme, spaceId, windowId };
 
   const rowUrls = items.flatMap((i) => (i.type === "row" ? [i.entry.url] : []));
 
@@ -115,20 +115,27 @@ export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; s
           title={query ? "No search results found" : "Your browsing history appears here"}
         />
       ) : (
-        <FlatList
+        <LegendList
+          style={{ flex: 1 }}
           data={items}
-          keyExtractor={(i) => i.key}
-          getItemLayout={(_, index) => {
-            const item = items[index]!;
-            return { length: item.type === "day" ? HISTORY_HEADER : HISTORY_ROW, offset: item.offset, index };
-          }}
-          initialNumToRender={30}
-          windowSize={8}
-          contentContainerStyle={{ paddingBottom: 40, alignItems: "center" }}
+          keyExtractor={itemKey}
+          getItemType={itemType}
+          getFixedItemSize={itemSize}
+          extraData={listExtraData}
+          recycleItems={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
           renderItem={({ item }) =>
             item.type === "day" ? (
               <View
-                style={{ width: PAGE_WIDTH, maxWidth: "100%", height: HISTORY_HEADER, justifyContent: "flex-end", paddingBottom: 8, paddingHorizontal: 30 }}
+                style={{
+                  alignSelf: "center",
+                  width: PAGE_WIDTH,
+                  maxWidth: "100%",
+                  height: HISTORY_HEADER,
+                  justifyContent: "flex-end",
+                  paddingBottom: 8,
+                  paddingHorizontal: 30,
+                }}
               >
                 <Text style={{ fontSize: 12.5, fontWeight: "600", color: theme.textSecondary }}>{item.label}</Text>
               </View>
@@ -203,6 +210,7 @@ function HistoryRow({
     <View
       {...hoverProps}
       style={{
+        alignSelf: "center",
         width: PAGE_WIDTH,
         maxWidth: "100%",
         height: HISTORY_ROW,
