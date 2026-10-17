@@ -58,7 +58,11 @@ def main():
         def compile(sources, binary, libraries=()):
             sources = [REPO / source for source in sources]
             if windows:
-                run([compiler, "/nologo", "/EHsc", "/std:c++17", "/DNOMINMAX", "/DWIN32_LEAN_AND_MEAN", f"/I{include}", f"/Fo{root}{os.sep}", *sources, f"/Fe{binary}", "/link", *libraries])
+                # One object per source: Readers.cpp and tests/Readers.cpp would otherwise both write Readers.obj.
+                objects = [root / f"{binary.stem}-{index}-{source.stem}.obj" for index, source in enumerate(sources)]
+                for source, obj in zip(sources, objects):
+                    run([compiler, "/nologo", "/c", "/EHsc", "/std:c++17", "/DNOMINMAX", "/DWIN32_LEAN_AND_MEAN", f"/I{include}", f"/Fo{obj}", source])
+                run([compiler, "/nologo", *objects, f"/Fe{binary}", "/link", *libraries])
             else:
                 run([compiler, "-std=c++17", f"-I{include}", *sources, *libraries, "-o", binary])
         if args.suite in ("sync", "all"):
