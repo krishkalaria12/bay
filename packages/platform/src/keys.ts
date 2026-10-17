@@ -21,7 +21,7 @@ export type ShortcutStroke = {
 };
 
 /** The native modifier `mod` stands for, as the menus spell it (Menus.swift, Windows' ACCEL tables). */
-export const modNativeName = (os: PlatformOS): "command" | "control" => (os === "windows" ? "control" : "command");
+export const modNativeName = (os: PlatformOS): "command" | "control" => (os === "macos" ? "command" : "control");
 
 // The glyphs macOS hints are written with, and the modifier each stands for.
 const GLYPHS: Record<string, Modifier> = { "⌃": "ctrl", "⌥": "alt", "⇧": "shift", "⌘": "mod" };

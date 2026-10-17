@@ -2,7 +2,7 @@
   "name": "@bay/browser",
   "version": "0.0.0",
   "private": true,
-  "main": "index.js",
+  "main": "index",
   "scripts": {
     "dev": "react-native start",
     "macos": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Debug && open -n --env BAY_DATA_DIR=\"${BAY_DATA_DIR:-$HOME/Library/Application Support/Bay Dev}\" build/Build/Products/Debug/Bay.app",
@@ -10,26 +10,28 @@
     "build": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Release",
     "typecheck": "tsc -p .",
     "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\"",
-    "windows": "pwsh -File windows/build.ps1 -Run",
-    "bundle:windows": "react-native bundle --platform windows --entry-file index.windows.js --dev false --bundle-output windows/bundle/index.windows.bundle --assets-dest windows/bundle",
-    "typecheck:windows": "tsc -p tsconfig.windows.json"
+    "web": "node ../../scripts/web.mjs dev",
+    "build:web": "node ../../scripts/web.mjs build",
+    "typecheck:web": "tsc -p tsconfig.web.json"
   },
   "dependencies": {
     "@bay/core": "workspace:*",
     "@bay/import": "workspace:*",
     "@bay/nncore": "workspace:*",
+    "@bay/platform": "workspace:*",
     "@bay/shaders": "workspace:*",
     "@bay/shell": "workspace:*",
     "@bay/sync": "workspace:*",
+    "@expo/metro-runtime": "~6.1.2",
     "expo": "~54.0.37",
     "expo-modules-core": "~3.0.29",
     "react": "19.1.4",
+    "react-dom": "19.1.4",
     "react-native": "0.81.6",
     "react-native-macos": "0.81.9",
     "react-native-reanimated": "3.19.5",
-    "zustand": "^5.0.8",
-    "@bay/platform": "workspace:*",
-    "react-native-windows": "0.81.5"
+    "react-native-web": "^0.21.4",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -39,6 +41,7 @@
     "@react-native/babel-preset": "0.81.6",
     "@react-native/metro-config": "0.81.6",
     "@types/react": "~19.1.10",
+    "@types/react-dom": "~19.1.11",
     "babel-plugin-react-compiler": "^1.0.0",
     "babel-preset-expo": "~54.0.0",
     "typescript": "~5.9.2"

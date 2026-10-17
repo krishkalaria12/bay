@@ -8,6 +8,6 @@ export async function copyScreenshot(tabId: string) {
   const tab = useBrowser.getState().tabs[tabId];
   if (!tab) return;
   const png = await webviews.get(tabId)?.captureScreenshot();
-  if (png && copyImage(png)) showToast(tab.windowId, "Copied Screenshot", "The page as it's shown now.", { icon: "camera" });
+  if (png && await copyImage(png)) showToast(tab.windowId, "Copied Screenshot", "The page as it's shown now.", { icon: "camera" });
   else showToast(tab.windowId, "Couldn’t Take a Screenshot", "The page didn’t paint in time.", { icon: "camera" });
 }

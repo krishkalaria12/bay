@@ -1,7 +1,7 @@
 import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect } from "react";
-import { unstable_batchedUpdates } from "react-native";
+import { batchedUpdates } from "@bay/platform";
 import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
@@ -86,7 +86,7 @@ class ProfilePager {
     const w = s.windows[this.windowId];
     // The native order may differ from the store's by now; the index is only a fallback without one.
     const id = snapshot.profileId !== undefined ? snapshot.profileId : s.profileOrder[snapshot.selected];
-    unstable_batchedUpdates(() => {
+    batchedUpdates(() => {
       if (w && !w.incognito && id && s.profiles[id] && id !== w.profileId) {
         this.switching = true;
         try {

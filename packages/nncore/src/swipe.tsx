@@ -112,7 +112,7 @@ export const SwipeArea = forwardRef<SwipeAreaHandle, SwipeAreaProps>(function Sw
       return Module?.devSimulate(x, y, at.windowNumber, steps, options.ignorePreference ?? false);
     },
   }));
-  if (!Module) return <View style={props.style}>{props.children}</View>;
+  if (!Module) return <View style={props.style} pointerEvents={props.pointerEvents ?? "box-none"}>{props.children}</View>;
   const SwipeView = props.nativePager ? animatedNative() : Native;
   return (
     <SwipeView

@@ -6,6 +6,7 @@ export * from '../../../packages/platform/src/keys.ts';
 export const platformOS = process.env.BAY_TEST_PLATFORM === 'windows' ? 'windows' : 'macos';
 export const isMac = platformOS === 'macos';
 export const isWindows = !isMac;
+export const batchedUpdates = (update) => update();
 export const hasNativeModule = () => true;
 export const capabilities = capabilitiesFor(platformOS, hasNativeModule);
 export const modKey = (event) => !!(isMac ? event.metaKey : event.ctrlKey);

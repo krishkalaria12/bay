@@ -1,7 +1,7 @@
 import { View } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
-import { requireNativeModule } from "@bay/platform/native";
+import { requireNativeModule, nativeSnapshot } from "@bay/platform/native";
 
 
 export type MenuShortcut = {
@@ -43,9 +43,9 @@ export const setAsDefaultBrowser = () => System.setAsDefaultBrowser();
 export const launchAtLoginStatus = () => System.launchAtLoginStatus();
 export const setLaunchAtLogin = (enabled: boolean) => System.setLaunchAtLogin(enabled);
 
-export const fileExists = (path: string) => System.fileExists(path);
+export const fileExists = (path: string) => nativeSnapshot("BaySystem", "fileExists", [path], () => System.fileExists(path));
 /** ~/Downloads, as macOS names it. */
-export const downloadsFolder = (): string | null => System.downloadsFolder?.() ?? null;
+export const downloadsFolder = (): string | null => nativeSnapshot("BaySystem", "downloadsFolder", [], () => System.downloadsFolder?.() ?? null);
 export const openFile = (path: string) => System.openFile(path);
 export const revealFile = (path: string) => System.revealFile(path);
 export const moveToTrash = (path: string) => System.moveToTrash(path);

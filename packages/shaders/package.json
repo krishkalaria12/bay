@@ -16,5 +16,13 @@
   },
   "dependencies": {
     "@bay/platform": "workspace:*"
+  },
+  "browser": "./src/index.web.tsx",
+  "exports": {
+    ".": {
+      "browser": "./src/index.web.tsx",
+      "react-native": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    }
   }
 }

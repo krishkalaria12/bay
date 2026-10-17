@@ -29,15 +29,6 @@
     "./keys": "./src/keys.ts",
     "./capabilities": "./src/capabilities.ts",
     "./nativeBridge": "./nativeBridge.ts",
-    "./specs/NativeBayWindows": "./specs/NativeBayWindows.ts"
-  },
-  "codegenConfig": {
-    "name": "BayWindowsSpec",
-    "type": "modules",
-    "jsSrcsDir": "src/specs",
-    "windows": {
-      "namespace": "BayWindows",
-      "outputDirectory": "windows/codegen"
-    }
+    "./webViewHost": "./webViewHost.ts"
   }
 }

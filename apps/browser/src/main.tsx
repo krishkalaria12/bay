@@ -1,8 +1,9 @@
 // The app itself, which index.js loads once the native build matches this bundle (nativeApi.tsx).
 // First, so every native module listener the app adds applies held page reports before it runs.
 import "./lib/nativeEvents";
+import { WindowContext, batchedUpdates } from "@bay/platform";
 import { useEffect, useState } from "react";
-import { AppRegistry, unstable_batchedUpdates } from "react-native";
+import { AppRegistry } from "react-native";
 import { WindowRoot } from "./App";
 import { DevErrorBoundary } from "./DevErrorBoundary";
 import { startTranslate } from "./components/site/translate";
@@ -20,7 +21,7 @@ import { markFirstWindow } from "./telemetry/track";
 probeStore("browser", useBrowser);
 // Reports stay silent until the user shares them.
 installErrorReporting();
-setStoreBatching(unstable_batchedUpdates);
+setStoreBatching(batchedUpdates);
 startPersistence();
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabPages.ts).
 startTabPages();
@@ -37,6 +38,10 @@ if (__DEV__ || perfProbeEnabled) require("./lib/devHarness").startDevHarness();
 const devMountDelay = () => (__DEV__ ? ((globalThis as { nnDevMountDelayMs?: number }).nnDevMountDelayMs ?? 0) : 0);
 
 function Root({ windowId }: { windowId: string }) {
+  return <WindowContext.Provider value={windowId}><RootContents windowId={windowId} /></WindowContext.Provider>;
+}
+
+function RootContents({ windowId }: { windowId: string }) {
   const [delay] = useState(devMountDelay);
   const [held, setHeld] = useState(delay > 0);
   useEffect(() => {

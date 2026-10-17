@@ -1,7 +1,7 @@
 import { capabilities } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
-import { requireNativeModule, requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
+import { requireNativeModule, requireOptionalNativeModule, nativeSnapshot, nativeDocumentWrite, type EventSubscription } from "@bay/platform/native";
 
 
 export * from "./system";
@@ -249,11 +249,11 @@ const Shell = requireNativeModule<{
   prompt(options: PromptOptions): Promise<string | null>;
 }>("BayShell");
 
-export const readDocument = (name: string) => Shell.readDocument(name);
-export const writeDocument = (name: string, contents: string) => Shell.writeDocument(name, contents);
+export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => Shell.saveDocument(name, contents);
-export const removeDocument = (name: string) => Shell.removeDocument(name);
+export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
 
 export const startDictation = () => Shell.startDictation();
 export const setSwitcherCapture = (active: boolean) => void Shell.setSwitcherCapture(active);
@@ -264,8 +264,8 @@ export function copyText(text: string) {
 }
 
 /** An image (base64 PNG or JPEG) on the clipboard; false if it isn't one. */
-export function copyImage(base64: string): boolean {
-  return Shell.copyImage(base64);
+export async function copyImage(base64: string): Promise<boolean> {
+  return await Shell.copyImage(base64);
 }
 
 export function showMenu(items: MenuItem[]): Promise<string | null> {

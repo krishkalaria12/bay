@@ -63,11 +63,12 @@ export type Capabilities = {
 export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boolean): Capabilities {
   const mac = os === "macos";
   const windows = os === "windows";
+  const webDesktop = windows || os === "linux";
   return {
     liquidGlass: mac && hasModule("BayGlassEffect"),
     vibrancy: mac && hasModule("BayVisualEffect"),
     shaders: mac && hasModule("BayAreaLight") && hasModule("BayEdgeLight") && hasModule("BayPowerUp") && hasModule("BayWindowBackdrop"),
-    windowBackdrop: mac || windows,
+    windowBackdrop: mac || webDesktop,
     dock: mac && hasModule("BayApp"),
     dockSelection: mac && hasModule("BayDockSelection"),
     menuBar: mac,
@@ -78,12 +79,12 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     appleScript: mac && hasModule("BayApp"),
     handoff: mac,
     introMusic: mac && hasModule("BayApp"),
-    notifications: mac ? hasModule("BayApp") : windows && hasModule("BayNotifications"),
-    keychain: mac ? hasModule("BayKeychain") : windows && hasModule("BayKeychain"),
+    notifications: hasModule("BayApp") && (mac || hasModule("BayNotifications")),
+    keychain: hasModule("BayKeychain"),
     inlineCompletion: mac && hasModule("BayInlineCompletion"),
     windowProfiles: mac && hasModule("BayWindowProfile"),
     tooltips: mac,
-    hover: mac || windows,
+    hover: mac || webDesktop,
     focusRing: mac,
     keyDownEvents: mac,
     nativeDrag: mac,

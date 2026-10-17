@@ -24,7 +24,8 @@ jobs:
         with:
           arch: x64
       - run: pnpm typecheck
-      - run: pnpm typecheck:windows
+      - run: pnpm typecheck:web
+      - run: pnpm build:web
       - run: pnpm test
       - run: python -m unittest discover -s scripts/windows -p 'test_*.py' -v
       - name: Compile installer template

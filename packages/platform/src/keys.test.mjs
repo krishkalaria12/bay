@@ -24,3 +24,10 @@ test("Windows never advertises Apple-only features, even if a bridge shares modu
   assert.equal(mac.shaders, false);
   assert.equal(mac.keychain, false);
 });
+test("Linux desktop uses the web host without Apple services", () => {
+  const linux = capabilitiesFor("linux", () => true);
+  assert.equal(linux.windowBackdrop, true);
+  assert.equal(linux.hover, true);
+  for (const key of ["liquidGlass", "vibrancy", "shaders", "dock", "dockSelection", "calendar", "translation", "appleScript", "handoff", "introMusic", "trafficLights"]) assert.equal(linux[key], false, key);
+  assert.equal(linux.keychain, true);
+});
