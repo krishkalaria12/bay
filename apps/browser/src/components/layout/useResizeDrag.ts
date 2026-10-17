@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PanResponder, type GestureResponderHandlers } from "react-native";
-import { cancelAnimation, Easing, runOnJS, useAnimatedReaction, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import { cancelAnimation, Easing, runOnJS, useAnimatedReaction, useSharedValue, withTiming, type SharedValue } from "@bay/platform/motion";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 
 // Past its range the edge follows the pointer less and less, never more than BAND pt.

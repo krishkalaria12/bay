@@ -16,5 +16,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.6"
+  },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
   }
 }

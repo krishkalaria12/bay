@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { toAppUrl, urlForDisplay } from "@bay/core";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "./controls";

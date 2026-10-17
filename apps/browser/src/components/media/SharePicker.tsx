@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { getDisplayMediaSources, type DisplayMediaRequest, type DisplayMediaSource } from "@bay/nncore";
 import { runningAppIcon, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, ScrollView, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";

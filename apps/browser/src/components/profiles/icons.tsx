@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { Symbol, type MenuItem } from "@bay/shell";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { PROFILE_COLORS } from "../../lib/theme";
 import type { Profile } from "../../store/types";
 

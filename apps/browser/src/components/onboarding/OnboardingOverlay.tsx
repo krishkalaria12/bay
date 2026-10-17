@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import { Surface, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springs";
 import { hex } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";

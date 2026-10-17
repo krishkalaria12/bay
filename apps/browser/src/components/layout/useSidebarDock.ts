@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
+import { runOnJS, useSharedValue, withTiming } from "@bay/platform/motion";
 import { SLIDE } from "./usePeek";
 
 /**

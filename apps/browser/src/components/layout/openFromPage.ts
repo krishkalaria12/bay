@@ -15,7 +15,7 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
     if (from.tabId) s.navigate(from.tabId, url, { userInitiated: false });
     return;
   }
-  // Links stay in Small Yahu; new tabs (target=_blank, ⌘-click, split) open behind, in a main window.
+  // Links stay in Harbor; new tabs (target=_blank, ⌘-click, split) open behind, in a main window.
   if (isSmall(s, w.id) && disposition !== "window" && disposition !== "incognito") {
     return void s.newTab(w.id, { url, adoptId, openerId: from.tabId, profileId: from.profileId, background: true });
   }

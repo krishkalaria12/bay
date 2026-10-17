@@ -1,3 +1,4 @@
+import { modKey } from "@bay/platform";
 import { cleanUrl, markdownLink } from "@bay/core";
 import { copyText, prompt } from "@bay/shell";
 import { updateFolder } from "../../live/store";
@@ -11,13 +12,13 @@ const store = () => useBrowser.getState();
 
 const anchors = new Map<string, string>();
 
-export function clickTab(windowId: string, tabId: string, mods: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {}) {
+export function clickTab(windowId: string, tabId: string, mods: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {}) {
   const s = store();
-  if (mods.altKey && mods.shiftKey && !mods.metaKey && s.settings.optShiftClickOpensInGroup) return openInCurrentGroup(windowId, tabId);
+  if (mods.altKey && mods.shiftKey && !modKey(mods) && s.settings.optShiftClickOpensInGroup) return openInCurrentGroup(windowId, tabId);
   const view = viewTabIds(s, windowId);
   const active = activeTabId(s, windowId);
   const current = s.selection[windowId] ?? [];
-  if (mods.metaKey) {
+  if (modKey(mods)) {
     const base = current.length ? current : active ? [active] : [];
     const next = base.includes(tabId) ? base.filter((id) => id !== tabId) : [...base, tabId];
     anchors.set(windowId, tabId);

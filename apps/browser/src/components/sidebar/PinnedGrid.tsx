@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, DockSelection, MouseArea, Surface, Symbol } from "@bay/shell";
 import { memo, useEffect } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
 import { bouncySpring } from "../../lib/springs";
 import { closeTab } from "../../lib/actions";
 import { hex, layout, useTheme } from "../../lib/theme";

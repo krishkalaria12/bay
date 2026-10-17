@@ -1,5 +1,6 @@
+import { Pressable, View, capabilities, shortcutLabel } from "@bay/platform";
 import { Symbol } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import type { Settings } from "../../../store/settings";
@@ -16,7 +17,7 @@ export function TabsPane() {
   const settings = useBrowser((s) => s.settings);
   const update = useBrowser((s) => s.updateSettings);
   const toggle = (key: keyof Settings, title: string, description?: string) => (
-    <Row key={key} title={title} description={description}>
+    <Row key={key} title={shortcutLabel(title)} description={description ? shortcutLabel(description) : undefined}>
       <Toggle value={!!settings[key]} onChange={(v) => update({ [key]: v })} />
     </Row>
   );
@@ -52,7 +53,7 @@ export function TabsPane() {
       <Group>
         {toggle("cmdClickCreatesTabGroup", "⌘-clicking links creates tab groups")}
         {toggle("optShiftClickOpensInGroup", "⌥⇧-click opens tab in group", "⌥⇧-click a tab to open it in a group with the current tab. (⌥⇧-clicking a link opens it in a split.)")}
-        {toggle("autoGroupMeetingTabs", "Automatically group tabs for meetings")}
+        {capabilities.calendar && toggle("autoGroupMeetingTabs", "Automatically group tabs for meetings")}
       </Group>
 
       <SectionHeader

@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import { WebView, type OpenWindowRequest } from "@bay/nncore";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated from "@bay/platform/motion";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../lib/actions";
@@ -50,7 +51,7 @@ import { NavigationOverlays } from "./layout/SwipeOverlay";
 import "./layout/devExpose";
 import { closeWebNotification, showWebNotification } from "../lib/webNotifications";
 import { isSmallWindow } from "../store/small";
-import { closeSmallYahuOnEscape } from "./smallYahu/actions";
+import { closeHarborOnEscape } from "./harbor/actions";
 import { PageLoadGlow } from "./layout/PageLoadGlow";
 import { usePaneSwitch, type SwitchStyle } from "./layout/switchMotion";
 import { DEV_BAR_HEIGHT, DevBar } from "./developer/DevBar";
@@ -96,7 +97,7 @@ export function ContentCard() {
   const addressInSidebar = useAddressBarInSidebar();
   // The sidebar on the right leaves the window buttons over the page's top-left corner, open or not.
   const sidebarRight = useSidebarOnRight();
-  // Small Yahu draws its own bar above the card (components/smallYahu).
+  // Harbor draws its own bar above the card (components/harbor).
   const small = useBrowser((s) => isSmallWindow(s.windows[windowId]));
   const hideWhileScrolling = useBrowser((s) => s.settings.hideToolbarWhileScrolling);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -551,7 +552,7 @@ const TabWebView = memo(function TabWebView({ tabId, visible, warm }: { tabId: s
       onCommand={({ command, text, modifiers }) => {
         if (command === "search") searchSelection(tabId, text, modifiers);
         else if (command === "copyLinkToHighlight") void copyLinkToSelection(tabId);
-        else if (command === "escape") closeSmallYahuOnEscape(tabId);
+        else if (command === "escape") closeHarborOnEscape(tabId);
       }}
       onPageMessage={(kind, data) => {
         if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);

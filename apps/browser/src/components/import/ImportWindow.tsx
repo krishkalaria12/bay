@@ -1,8 +1,9 @@
+import { Pressable, View, capabilities, isMac } from "@bay/platform";
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportedExtension, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm, Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, AppState, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
+import { ActivityIndicator, AppState, Image, ScrollView, StyleSheet, Text } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springs";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -79,7 +80,7 @@ export function ImportWindow() {
     if (step === "safari") return setFullDiskAccess(api.safariHasFullDiskAccess());
     const list = await api.listBrowsers().catch(() => null);
     if (!list) return;
-    setBrowsers(list);
+    setBrowsers(list.filter((browser) => browser.family !== "automation" || capabilities.appleScript));
     const updated = list.find((b) => b.id === source?.id);
     if (updated && !updated.needsFullDiskAccess) {
       choose(updated);
@@ -104,8 +105,9 @@ export function ImportWindow() {
     void api
       .listBrowsers()
       .then((list) => {
-        setBrowsers(list);
-        const first = list.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ?? list[0];
+        setBrowsers(list.filter((browser) => browser.family !== "automation" || capabilities.appleScript));
+        const available = list.filter((browser) => browser.family !== "automation" || capabilities.appleScript);
+        const first = available.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ?? available[0];
         if (first) choose(first);
         setStep("choose");
       })
@@ -167,7 +169,7 @@ export function ImportWindow() {
       void run(kinds);
     } catch {
       setUnlocking(false);
-      setError(`macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`);
+      setError(isMac ? `macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.` : `Couldn't decrypt ${source.name}'s data. Try again, or skip the encrypted data.`);
     }
   };
 
@@ -461,7 +463,7 @@ export function ImportWindow() {
         {!api ? (
           <Note text={`Importing isn't available in this build of ${APP}.`} />
         ) : browsers.length === 0 ? (
-          <Note text="No other browsers with data to import were found on this Mac." />
+          <Note text="No other browsers with data to import were found on this computer." />
         ) : (
           <View style={{ gap: 6 }}>
             {browsers.map((b) => (
@@ -581,11 +583,11 @@ export function ImportWindow() {
           </View>
           <Text style={{ fontSize: 13, lineHeight: 18, textAlign: "center", color: theme.textPrimary, maxWidth: 420 }}>
             {many
-              ? `Some data is encrypted, so macOS will ask for your computer password once for each selected profile.`
-              : `Some data is encrypted, so macOS will ask for your computer password to bring it securely into ${APP}.`}
+              ? `Some data is encrypted, so ${isMac ? "macOS will ask for your computer password once for each selected profile" : "Windows may ask you to confirm access to each selected profile"}.`
+              : `Some data is encrypted, so ${isMac ? "macOS will ask for your computer password" : "Windows may ask you to confirm access"} to bring it securely into ${APP}.`}
           </Text>
           <Text style={{ fontSize: 12, lineHeight: 17, textAlign: "center", color: theme.textSecondary, maxWidth: 420 }}>
-            {`macOS may ask whether ${APP} can use “${source.name} Safe Storage” from your keychain: it's the key ${source.name} encrypts passwords, cookies and cards with. Click Allow. Your data stays on this Mac.`}
+            {isMac ? `macOS may ask whether ${APP} can use “${source.name} Safe Storage” from your keychain: it's the key ${source.name} encrypts passwords, cookies and cards with. Click Allow. Your data stays on this Mac.` : "Windows protects encrypted browser data for your account. Bay reads it locally; your data stays on this computer."}
           </Text>
         </View>
         {error && <ErrorText text={error} />}

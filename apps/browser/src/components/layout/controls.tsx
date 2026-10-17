@@ -1,15 +1,16 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, Surface, Symbol, VisualEffect, type SymbolProps } from "@bay/shell";
 import { useEffect, useRef, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from "react-native";
-import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text, type GestureResponderEvent, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
 import type { ToolbarPalette } from "./toolbarColors";
 
-export type ClickModifiers = { metaKey: boolean; altKey: boolean; shiftKey: boolean };
+export type ClickModifiers = { metaKey: boolean; ctrlKey?: boolean; altKey: boolean; shiftKey: boolean };
 export function modifiersOf(e: GestureResponderEvent | undefined): ClickModifiers {
   const n = (e?.nativeEvent ?? {}) as Partial<ClickModifiers>;
-  return { metaKey: !!n.metaKey, altKey: !!n.altKey, shiftKey: !!n.shiftKey };
+  return { metaKey: !!n.metaKey, ctrlKey: !!n.ctrlKey, altKey: !!n.altKey, shiftKey: !!n.shiftKey };
 }
 
 export function ToolbarButton({

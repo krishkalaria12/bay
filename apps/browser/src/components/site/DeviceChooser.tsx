@@ -1,3 +1,4 @@
+import { Pressable, View } from "@bay/platform";
 import {
   cancelDeviceChooser,
   onDeviceChooser,
@@ -8,7 +9,7 @@ import {
 } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text } from "react-native";
 import { create } from "zustand";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";

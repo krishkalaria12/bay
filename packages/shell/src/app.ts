@@ -1,4 +1,4 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
 
 export type UpdaterState =
   | { available: false }
@@ -102,6 +102,7 @@ export type ScriptCommand = { id: string } & (
 );
 
 type AppModule = {
+  readonly apiVersion: number;
   addListener(name: "onNotificationResponse", listener: (e: NotificationResponse) => void): EventSubscription;
   addListener(name: "onScriptCommand", listener: (e: ScriptCommand) => void): EventSubscription;
   updaterState(): Promise<UpdaterState>;

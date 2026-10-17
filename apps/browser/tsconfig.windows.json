@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleSuffixes": [
+      ".windows",
+      ""
+    ],
+    "paths": {
+      "react-native": [
+        "../../node_modules/react-native-windows"
+      ]
+    }
+  }
+}

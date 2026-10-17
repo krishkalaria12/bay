@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { breadcrumb } from "@bay/core";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "@bay/platform/motion";
 import { reduceMotion } from "../lib/reduceMotion";
 import { layout, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";

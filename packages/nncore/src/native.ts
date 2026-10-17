@@ -1,4 +1,4 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
 import type { ContentBlockerState, ContentBlockerStats } from "./contentBlocker";
 import type { DisplayMediaSource } from "./WebView";
 import type { ExternalAppAllowance } from "./externalApps";

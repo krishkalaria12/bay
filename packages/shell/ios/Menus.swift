@@ -253,9 +253,9 @@ enum MainMenu {
       cmd("New Tab in Group", "newTabInGroup", "t", [.command, .option]),
       cmd("New Window", "newWindow", "n"),
       cmd("New Incognito Window", "newIncognitoWindow", "n", [.command, .shift]),
-      cmd("New Small Yahu Window", "newSmallYahu", "n", [.command, .option]),
+      cmd("New Harbor Window", "newHarbor", "n", [.command, .option]),
       // Its title says where links from other apps will go once chosen (JS sets it from the setting).
-      cmd("Open Links from Other Apps in Main Window", "toggleOpenLinksInSmallYahu"),
+      cmd("Open Links from Other Apps in Main Window", "toggleOpenLinksInHarbor"),
       cmd("Reopen Closed Tab", "reopenClosedTab", "t", [.command, .shift]),
       cmd("Reopen Closed Window", "reopenClosedWindow"),
       cmd("Open File…", "openFile", "o"),
@@ -740,7 +740,7 @@ enum MainMenu {
     let incognito = CommandItem("New Incognito Window", "newIncognitoWindow")
     incognito.windowless = true
     menu.addItem(incognito)
-    let small = CommandItem("New Small Yahu Window", "newSmallYahu")
+    let small = CommandItem("New Harbor Window", "newHarbor")
     small.windowless = true
     menu.addItem(small)
     return menu

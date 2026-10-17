@@ -1,6 +1,7 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import { useLive } from "../../live/store";

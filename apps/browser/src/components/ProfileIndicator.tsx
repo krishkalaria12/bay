@@ -1,5 +1,6 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol, showMenu, type MenuItem } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { createProfile, switchProfile } from "../lib/actions";
 import { PROFILE_COLORS, profileNameColor, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";

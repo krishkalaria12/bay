@@ -37,7 +37,7 @@ const DOCS: Doc[] = [
     name: "session.json",
     sources: (s) => [s.profiles, s.profileOrder, s.orphanedProfileData, s.windows, s.windowOrder, s.tabs, s.groups, s.splits, s.closedTabs, s.closedWindows, s.parkedPins, s.settings, s.ui.focusedWindowId, s.closedGroups, s.deletedGroups, s.cleanedTabs],
     json: serialized((s) => {
-      // Small Yahu windows aren't restored: closing (or quitting) throws their page away.
+      // Harbor windows aren't restored: closing (or quitting) throws their page away.
       const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
       const kept = new Set(windows.map((w) => w.id));
       return {

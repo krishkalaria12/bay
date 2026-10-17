@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { displayHost } from "@bay/core";
 import { Symbol, type SymbolProps } from "@bay/shell";
 import { memo, useState } from "react";
-import { Image, Pressable, Text, View, type ViewStyle } from "react-native";
+import { Image, Text, type ViewStyle } from "react-native";
 import { markHoverProps } from "../lib/hoverShift";
 import { faviconFailed, useAppearanceDark, useFavicon, useFaviconTheme } from "../lib/favicons";
 import { bundledSiteIcon } from "../lib/siteIcons";

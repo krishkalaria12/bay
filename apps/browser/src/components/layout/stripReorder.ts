@@ -1,4 +1,4 @@
-import { cancelAnimation, withSpring, type SharedValue } from "react-native-reanimated";
+import { cancelAnimation, withSpring, type SharedValue } from "@bay/platform/motion";
 import { dragGeometry, type DragGeometry } from "./stripGroups";
 
 // Dragging along the top strip, as Dia does it: once the dragged item's leading edge passes a neighbour's centre,

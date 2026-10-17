@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import Animated, {
   cancelAnimation,
   ReduceMotion,
@@ -9,7 +10,7 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useTabLive } from "../../store/hooks";
 

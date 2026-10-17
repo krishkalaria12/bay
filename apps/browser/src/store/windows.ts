@@ -18,7 +18,7 @@ import {
 } from "./model";
 import { restoringGroup } from "./organize";
 import { adoptParkedPins, parkWindowPins } from "./parkedPins";
-import { isSmall, isSmallWindow, mainWindowFor, smallYahuProfile } from "./small";
+import { isSmall, isSmallWindow, mainWindowFor, harborProfile } from "./small";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, ParkedPins, Tab, TabGroup } from "./types";
 
@@ -63,7 +63,7 @@ function emptyWindow(id: string, profileId: string, incognito: boolean, frame: F
   return { id, profileId, incognito, tabIds: [], activeTabIds: {}, sidebarOpen: true, frame, createdAt: Date.now() };
 }
 
-// Small Yahu opens centred at its remembered size (packages/shell Windows.swift), so it keeps no frame.
+// Harbor opens centred at its remembered size (packages/shell Windows.swift), so it keeps no frame.
 const smallWindow = (id: string, profileId: string): BrowserWindow => ({ ...emptyWindow(id, profileId, false), sidebarOpen: false, kind: "small" });
 
 function withWindow(s: BrowserState, w: BrowserWindow): BrowserState {
@@ -130,7 +130,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       : o.profileId && s.profiles[o.profileId]
         ? o.profileId
         : small
-          ? smallYahuProfile(s)
+          ? harborProfile(s)
           : s.settings.defaultProfileId;
     let next = withWindow(s, small ? smallWindow(id, profileId) : emptyWindow(id, profileId, !!o.incognito, o.frame ?? null));
     if (o.tabIds?.length && !small) next = moveTabsInto(next, o.tabIds, id);
@@ -170,7 +170,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       };
       closedWindows = [...closedWindows, entry].slice(-MAX_CLOSED_WINDOWS);
     }
-    // A Small Yahu page goes to Recently Closed as a tab, so ⇧⌘T brings it back in Small Yahu.
+    // A Harbor page goes to Recently Closed as a tab, so ⇧⌘T brings it back in Harbor.
     const next = removeTabs(s, w.tabIds, small);
     set({
       ...next,
@@ -194,10 +194,10 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       if (!w || (w.frame && w.frame.every((v, i) => v === frame[i]))) return {};
       const windows = { ...s.windows, [id]: { ...w, frame } };
       if (!isSmallWindow(w)) return { windows };
-      // Small Yahu remembers its size, not its position: it always opens centred.
+      // Harbor remembers its size, not its position: it always opens centred.
       const size: [number, number] = [Math.round(frame[2]), Math.round(frame[3])];
-      const [width, height] = s.settings.smallYahuSize ?? [];
-      return size[0] === width && size[1] === height ? { windows } : { windows, settings: { ...s.settings, smallYahuSize: size } };
+      const [width, height] = s.settings.harborSize ?? [];
+      return size[0] === width && size[1] === height ? { windows } : { windows, settings: { ...s.settings, harborSize: size } };
     });
   },
 
@@ -337,7 +337,7 @@ function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null
   const closedTabs = s.closedTabs.filter((c) => c.id !== entry.id);
   if (entry.small && !isIncognitoProfile(entry.tab.profileId)) {
     const id = newId("w");
-    const profileId = s.profiles[entry.tab.profileId] ? entry.tab.profileId : smallYahuProfile(s);
+    const profileId = s.profiles[entry.tab.profileId] ? entry.tab.profileId : harborProfile(s);
     const next = withWindow({ ...s, closedTabs }, smallWindow(id, profileId));
     return withNewTab(next, id, {
       url: entry.tab.url || undefined,

@@ -154,7 +154,7 @@ test("private New Tab submissions remain in their private profile", () => {
   assert.match(S().tabs[opened].profileId, /^incognito:/);
 });
 
-test("Small Yahu sends New Tab to an existing main window and focuses it", () => {
+test("Harbor sends New Tab to an existing main window and focuses it", () => {
   reset();
   focusedWindows.length = 0;
   const main = S().createWindow({ url: "a.com" });
@@ -168,7 +168,7 @@ test("Small Yahu sends New Tab to an existing main window and focuses it", () =>
   assert.deepEqual(focusedWindows, [main]);
 });
 
-test("Small Yahu creates a main window with one reusable initial blank when needed", () => {
+test("Harbor creates a main window with one reusable initial blank when needed", () => {
   reset();
   focusedWindows.length = 0;
   const small = S().createWindow({ small: true, url: "small.com" });

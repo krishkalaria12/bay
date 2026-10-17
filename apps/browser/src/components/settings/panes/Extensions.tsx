@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { reloadExtension, type InstalledExtension } from "@bay/nncore";
 import { useEffect, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";

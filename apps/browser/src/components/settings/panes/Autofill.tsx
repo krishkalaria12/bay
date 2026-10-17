@@ -1,3 +1,4 @@
+import { View, isMac } from "@bay/platform";
 import {
   cardNetworkName,
   deleteAddress,
@@ -14,7 +15,7 @@ import {
 } from "@bay/nncore";
 import { confirm, copyText, Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";
@@ -56,7 +57,7 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
     <View>
       <SectionHeader
         title="Autofill"
-        description="Addresses and cards you save are offered when you fill in a form, separately for each profile. Card numbers are kept in your macOS Keychain."
+        description={`Addresses and cards you save are offered when you fill in a form, separately for each profile. Card numbers are kept in ${isMac ? "your macOS Keychain" : "Windows Credential Manager"}.`}
         action={
           profiles.length > 1 ? (
             <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />

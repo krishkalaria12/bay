@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "@bay/platform/motion";
 import type { Theme } from "../../lib/theme";
 
 export type ToolbarPalette = {

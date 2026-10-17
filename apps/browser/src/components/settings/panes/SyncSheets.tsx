@@ -1,7 +1,8 @@
+import { TextInput, View } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/shell";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, StyleSheet, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { enterRecoveryPhrase, stopSync } from "../../../sync/engine";
 import { Button, Checkbox, Sheet, useFormColors } from "../controls";

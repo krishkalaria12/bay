@@ -1,7 +1,8 @@
+import { TextInput, View, modKey } from "@bay/platform";
 import { displayUrl, hostOf, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { TextInput, View } from "react-native";
+
 import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
@@ -237,7 +238,8 @@ export function Omnibox({
   const openAppMenu = () => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) });
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
-    const { key, metaKey, altKey, shiftKey, ctrlKey } = e.nativeEvent;
+    const { key, altKey, shiftKey, ctrlKey } = e.nativeEvent;
+    const metaKey = modKey(e.nativeEvent);
     if (key === "Escape") {
       if (menu) return closeMenu();
       if (scope) return leaveScope(false);
@@ -271,7 +273,7 @@ export function Omnibox({
         return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
       if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return openInBackground(current.url, tabId);
-      if (metaKey || altKey || shiftKey) return choose(current, dispositionFor({ metaKey, altKey, shiftKey }));
+      if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent));
       return choose(current);
     }
   };

@@ -1,3 +1,4 @@
+import { modKey } from "@bay/platform";
 import { confirm } from "@bay/shell";
 import { create } from "zustand";
 import { focus, openWindow } from "../../lib/actions";
@@ -7,8 +8,8 @@ import { activeTabId, bookmarkProfileId, resolveWindowId, viewTabIds } from "../
 
 export type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";
 
-export function openModeFor(e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }): OpenMode {
-  if (e.metaKey || e.middle) return e.shiftKey ? "foreground" : "background";
+export function openModeFor(e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }): OpenMode {
+  if (modKey(e) || e.middle) return e.shiftKey ? "foreground" : "background";
   if (e.altKey) return "split";
   if (e.shiftKey) return "window";
   return "current";

@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { setSharing, useTelemetry } from "../../telemetry/client";
 import { SHARING_COPY } from "../../telemetry/copy";
 import { StepLayout } from "./steps";

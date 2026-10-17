@@ -4374,14 +4374,14 @@ try {
 
   await check("small-yahu", async () => {
     const before = await evalApp(`return Object.keys(nn.store.getState().windows)`);
-    await evalApp(`nn.runCommand({ command: "newSmallYahu" }); return true`);
-    const id = await until("a Small Yahu window", async () => {
+    await evalApp(`nn.runCommand({ command: "newHarbor" }); return true`);
+    const id = await until("a Harbor window", async () => {
       const w = await evalApp(`return Object.values(nn.store.getState().windows).find((w) => w.kind === "small")?.id ?? null`);
       return w;
     });
     const tabId = await until("its tab", async () => evalApp(`return nn.store.getState().windows["${id}"]?.tabIds[0] ?? null`));
     await evalApp(`nn.store.getState().navigate("${tabId}", "${base}/b?small", { userInitiated: true }); return true`);
-    await until("Page B in Small Yahu", async () => evalApp(`return nn.store.getState().tabs["${tabId}"]?.title === "Page B"`));
+    await until("Page B in Harbor", async () => evalApp(`return nn.store.getState().tabs["${tabId}"]?.title === "Page B"`));
     return { window: id, tab: tabId };
   });
 

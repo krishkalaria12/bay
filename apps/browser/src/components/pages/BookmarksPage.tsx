@@ -1,8 +1,9 @@
+import { Pressable, View, modKey } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { PanResponder, ScrollView, StyleSheet, Text } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { bookmarkAncestors, folderChildren, folderLinks, type RemovedBookmarks } from "../../store/bookmarks";
@@ -57,14 +58,14 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
   const ids = useMemo(() => (listKey ? listKey.split(",") : []), [listKey]);
   const searching = !!query.trim();
 
-  const select = (id: string, e: { metaKey?: boolean; shiftKey?: boolean }) => {
+  const select = (id: string, e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean }) => {
     if (e.shiftKey && anchor.current && ids.includes(anchor.current)) {
       const [a, b] = [ids.indexOf(anchor.current), ids.indexOf(id)].sort((x, y) => x - y);
       setSelected(ids.slice(a!, b! + 1));
       return;
     }
     anchor.current = id;
-    if (e.metaKey) setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    if (modKey(e)) setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     else setSelected([id]);
   };
 
@@ -195,7 +196,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
               onKeyDown={(e) => {
                 const key = e.nativeEvent.key;
                 if (key === "Backspace" || key === "Delete") remove(selected);
-                if (key === "a") setSelected(ids);
+                if (key.toLowerCase() === "a" && modKey(e.nativeEvent)) setSelected(ids);
               }}
               contentContainerStyle={{ padding: 6 }}
             >
@@ -273,7 +274,7 @@ function BookmarkRow({
   selected: boolean;
   highlighted: boolean;
   targetRef: (v: View | null) => void;
-  onSelect: (e: { metaKey?: boolean; shiftKey?: boolean }) => void;
+  onSelect: (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean }) => void;
   onOpenFolder: (folder?: string) => void;
   onDelete: () => void;
   onDragStart: () => void;
@@ -362,7 +363,7 @@ function BookmarkRow({
     >
       <ContextMenuArea onContextMenu={() => void menu()}>
         <MouseArea onMiddleClick={() => open("background")}>
-          <Pressable onPress={(e) => onSelect(e.nativeEvent as unknown as { metaKey?: boolean; shiftKey?: boolean })}>
+          <Pressable onPress={(e) => onSelect(e.nativeEvent as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean })}>
             <View
               onDoubleClick={() => (node.kind === "folder" ? onOpenFolder() : void open("current"))}
               style={{

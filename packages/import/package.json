@@ -14,5 +14,8 @@
   "peerDependencies": {
     "expo": "*",
     "react-native": "*"
+  },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
   }
 }

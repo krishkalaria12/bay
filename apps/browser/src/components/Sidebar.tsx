@@ -1,7 +1,8 @@
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { ScrollView, StyleSheet, Text } from "react-native";
+import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { layout, ThemeScope, useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
@@ -428,7 +429,7 @@ function DownloadsButton({ windowId }: { windowId: string }) {
       size={14}
       box={SIDEBAR_FOOTER_DOWNLOADS.size}
       radius={8}
-      tooltip="Downloads (⇧⌘J)"
+      tooltip={`Downloads (${shortcutForCommand("downloads", "⇧⌘J")})`}
       onPress={() => {
         const s = useBrowser.getState();
         s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);

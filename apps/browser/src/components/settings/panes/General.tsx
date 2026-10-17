@@ -1,3 +1,4 @@
+import { View, isMac, shortcutLabel } from "@bay/platform";
 import {
   checkForUpdates,
   isDefaultBrowser,
@@ -11,7 +12,7 @@ import {
   type UpdaterState,
 } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { AppState, Text, View } from "react-native";
+import { AppState, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { SHARING_COPY } from "../../../telemetry/copy";
@@ -43,27 +44,27 @@ export function GeneralPane() {
             onChange={(on) => void setLaunchAtLogin(on).catch(() => {}).finally(refreshLogin)}
           />
         </Row>
-        <Row title="Warn before quitting" description={`Asks before ${APP} quits with ⌘Q.`}>
+        <Row title="Warn before quitting" description={isMac ? `Asks before ${APP} quits with ⌘Q.` : `Asks before ${APP} quits.`}>
           <Toggle value={settings.warnBeforeQuitting} onChange={(v) => update({ warnBeforeQuitting: v })} />
         </Row>
-        <Row title="Warn before closing a window with multiple tabs" description="Asks before ⇧⌘W or the close button closes its tabs.">
+        <Row title="Warn before closing a window with multiple tabs" description={shortcutLabel("Asks before ⇧⌘W or the close button closes its tabs.")}>
           <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => update({ warnBeforeClosingWindow: v })} />
         </Row>
         <Row
           title="Open links from other apps in"
           description={
-            settings.openLinksInSmallYahu
-              ? `A link from Discord, Slack or Mail opens in Small Yahu, a small window of its own. ⌘O moves it into ${APP}; closing it throws it away.`
+            settings.openLinksInHarbor
+              ? shortcutLabel(`A link from Discord, Slack or Mail opens in Harbor, a small window of its own. ⌘O moves it into ${APP}; closing it throws it away.`)
               : `A link from Discord, Slack or Mail opens as a new tab in your ${APP} window, in the default space.`
           }
         >
           <PopUp
-            value={settings.openLinksInSmallYahu ? "small" : "tab"}
+            value={settings.openLinksInHarbor ? "small" : "tab"}
             options={[
-              { value: "small", title: "Small Yahu" },
+              { value: "small", title: "Harbor" },
               { value: "tab", title: "A new tab" },
             ]}
-            onChange={(v) => update({ openLinksInSmallYahu: v === "small" })}
+            onChange={(v) => update({ openLinksInHarbor: v === "small" })}
             minWidth={190}
           />
         </Row>

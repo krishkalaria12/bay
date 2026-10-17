@@ -1,9 +1,10 @@
+import { Pressable, View, shortcutForCommand, modKey } from "@bay/platform";
 import { breadcrumb, urlForDisplay } from "@bay/core";
 import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text, type ViewStyle } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { layout, useTheme } from "../lib/theme";
 import { webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
@@ -87,7 +88,7 @@ export function Toolbar({
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
   const top = 21.2 - layout.toolbarButton / 2;
   const sidebarToggle = (style: ViewStyle) => (
-    <ToolbarButton style={style} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
+    <ToolbarButton style={style} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`} />
   );
 
   return (
@@ -142,7 +143,7 @@ export const ReloadButton = memo(function ReloadButton({
       onPress={(m) => {
         onFocus();
         if (loading) return void web()?.stopLoading();
-        if (m.metaKey) return void useBrowser.getState().newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id });
+        if (modKey(m)) return void useBrowser.getState().newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id });
         void (m.shiftKey ? web()?.forceReload() : web()?.reload());
       }}
       tooltip={loading ? "Stop Loading This Page" : "Refresh (⌘R)"}
@@ -208,7 +209,7 @@ export const HistoryButton = memo(function HistoryButton({
         onPress={onPress}
         onLongPress={openMenu}
         onContextMenu={openMenu}
-        tooltip={direction < 0 ? "Go Back (⌘[)" : "Go Forward (⌘])"}
+        tooltip={direction < 0 ? `Go Back (${shortcutForCommand("back", "⌘[")})` : `Go Forward (${shortcutForCommand("forward", "⌘]")})`}
       />
     </MouseArea>
   );

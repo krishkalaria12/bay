@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import { engineHost, type SearchEngine } from "@bay/core";
 import { Symbol } from "@bay/shell";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { controllingSearchExtension, defaultSearchEngine, searchEngines } from "../../../store/settings";

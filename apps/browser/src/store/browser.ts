@@ -5,7 +5,7 @@ import { createHistorySlice, type HistorySlice } from "./history";
 import { IDLE_LIVE, isIncognitoProfile, pinnedFirst } from "./model";
 import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, type OrganizeSlice } from "./organize";
 import { createProfilesSlice, DEFAULT_PROFILE, engineIdOf, type ProfilesSlice } from "./profiles";
-import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
+import { createSettingsSlice, restoreSettings, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
 import { activated, apply, createTabsSlice, type TabsSlice } from "./tabs";
 import type { BrowserWindow, Tab } from "./types";
@@ -85,7 +85,7 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
       ...(data.profileOrder ?? []).filter((id) => profiles[id]),
       ...Object.keys(profiles).filter((id) => !data.profileOrder?.includes(id)),
     ];
-    const settings = { ...DEFAULT_SETTINGS, ...data.settings };
+    const settings = restoreSettings(data.settings);
     if (!profiles[settings.defaultProfileId]) settings.defaultProfileId = profileOrder[0]!;
 
     const rawWindows = data.windows ?? {};

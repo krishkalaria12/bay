@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { useEffect, useState } from "react";
-import { Text, View, type TextStyle } from "react-native";
-import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
+import { Text, type TextStyle } from "react-native";
+import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from "@bay/platform/motion";
 
 const SPEED = 30;
 const PAUSE_MS = 1500;

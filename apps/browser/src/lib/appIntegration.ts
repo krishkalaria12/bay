@@ -1,3 +1,4 @@
+import { capabilities, isMac } from "@bay/platform";
 import * as cef from "@bay/nncore";
 import {
   confirm,
@@ -35,8 +36,8 @@ export function startAppIntegration() {
     if (tabId && s.tabs[tabId]) switchToTab(tabId);
     else if (windowId && s.windows[windowId]) focus(windowId);
   });
-  startHandoff();
-  startScripting();
+  if (capabilities.handoff) startHandoff();
+  if (capabilities.appleScript) startScripting();
   const updated = trackAppVersion();
   maybeStartOnboarding();
   if (updated) openReleaseNotesAfterUpdate();
@@ -84,7 +85,7 @@ export async function diagnostics(): Promise<string> {
   return [
     `${app.appName} ${app.appVersion} (${app.appBuild}) — ${app.configuration}`,
     engine ? `Engine: NNCore, Chromium ${engine.chromiumVersion}` : "Engine: unavailable",
-    `macOS ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
+    `${isMac ? "macOS" : "Windows"} ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
     `Bundle: ${app.bundleId}, locale ${app.locale}`,
     `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, profiles: ${s.profileOrder.length}`,
     !updates?.available

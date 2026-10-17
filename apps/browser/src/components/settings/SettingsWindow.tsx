@@ -1,6 +1,7 @@
+import { Pressable, View, capabilities } from "@bay/platform";
 import { Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { trackSettingsSection } from "../../telemetry/track";
@@ -57,7 +58,7 @@ export function SettingsWindow() {
         <VisualEffect material="sidebar" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
         <WindowDragRegion style={{ height: TOOLBAR }} />
         <ScrollView contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 12, gap: 1 }}>
-          {PANES.map((p) => (
+          {PANES.filter((p) => p.id !== "calendar" || capabilities.calendar).map((p) => (
             <SidebarItem key={p.id} title={p.title} icon={p.icon} selected={nav.pane === p.id} onPress={() => nav.go(p.id)} />
           ))}
         </ScrollView>
@@ -108,7 +109,7 @@ function Pane({ pane, profileId }: { pane: SettingsPane; profileId: string | nul
     case "liveFolders":
       return <LiveFoldersPane />;
     case "calendar":
-      return <CalendarPane />;
+      return capabilities.calendar ? <CalendarPane /> : <GeneralPane />;
     case "advanced":
       return <AdvancedPane />;
   }

@@ -1,7 +1,8 @@
+import { Pressable, View, modKey } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from "@bay/platform/motion";
 import { bouncySpring } from "../../lib/springs";
 import { useShallow } from "zustand/react/shallow";
 import { closeTab } from "../../lib/actions";
@@ -332,7 +333,7 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
           <Pressable
             onPress={(e) => {
               dismissHover();
-              openLiveItem(windowId, folderId, item, { background: clickMods(e).metaKey });
+              openLiveItem(windowId, folderId, item, { background: modKey(clickMods(e)) });
             }}
           >
             {({ pressed }) => (

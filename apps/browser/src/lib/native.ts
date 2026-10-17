@@ -26,8 +26,8 @@ import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/urls";
 import { sidebarMenuState } from "../components/sidebar/commands";
 import { openWindow as createWindow } from "./actions";
-import { openExternalUrls } from "../components/smallYahu/actions";
-import { SMALL_YAHU_DISABLED_COMMANDS } from "../components/smallYahu/menu";
+import { openExternalUrls } from "../components/harbor/actions";
+import { HARBOR_DISABLED_COMMANDS } from "../components/harbor/menu";
 import { runCommand } from "./commands";
 import { flushPersistence, resumePersistence } from "./persist";
 import { startWindowCloseGuard } from "./windowClose";
@@ -97,7 +97,7 @@ export function startNativeSync() {
         open.add(id);
         titles.set(id, windowTitle(s, id));
         const profile = engineProfile(w.profileId);
-        const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.smallYahuSize } : {};
+        const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.harborSize } : {};
         void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus: id === s.ui.focusedWindowId, profile, ...small });
       }
     }
@@ -259,14 +259,14 @@ export function menuState(s: BrowserState): MenuState {
     titles.bookmarkPage = "Edit Bookmark…";
   }
 
-  if (!s.settings.openLinksInSmallYahu) titles.toggleOpenLinksInSmallYahu = "Open Links from Other Apps in Small Yahu";
+  if (!s.settings.openLinksInHarbor) titles.toggleOpenLinksInHarbor = "Open Links from Other Apps in Harbor";
 
   const sidebar = sidebarMenuState(s, windowId);
   disabled.push(...sidebar.disabled);
   Object.assign(titles, sidebar.titles);
   if (w?.kind === "small") {
-    disabled.push(...SMALL_YAHU_DISABLED_COMMANDS);
-    // ⌘O is Open File in a main window and Open in Bay in Small Yahu, as in Little Arc.
+    disabled.push(...HARBOR_DISABLED_COMMANDS);
+    // ⌘O is Open File in a main window and Open in Bay in Harbor, as in Little Arc.
     titles.openFile = "Open in Bay";
   }
 

@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { memo } from "react";
-import { View } from "react-native";
+
 import { hex } from "../../lib/theme";
 import { usePage } from "../layout/pageState";
 import { useSidebarTokens } from "../sidebar/tokens";

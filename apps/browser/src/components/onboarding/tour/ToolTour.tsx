@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from "@bay/platform/motion";
 import { tensionSpring } from "../../../lib/springs";
 import { hex, useTheme } from "../../../lib/theme";
 import { useWindowId } from "../../../store/hooks";

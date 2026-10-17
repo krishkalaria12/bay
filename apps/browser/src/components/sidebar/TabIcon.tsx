@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { memo } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";

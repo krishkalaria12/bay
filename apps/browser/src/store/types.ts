@@ -27,7 +27,7 @@ export type BrowserWindow = {
   tabLayout?: "sidebar" | "top";
   frame: Frame | null;
   createdAt: number;
-  // Small Yahu (Arc's Little Arc): one page, no sidebar, never saved with the session (store/small.ts).
+  // Harbor (Arc's Little Arc): one page, no sidebar, never saved with the session (store/small.ts).
   kind?: "small";
 };
 

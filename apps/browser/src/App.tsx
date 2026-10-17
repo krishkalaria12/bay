@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { setTrafficLightsOnHover, Surface } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
 import { CommandPanel } from "./components/CommandPanel";
 import { ContentCard } from "./components/ContentCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
@@ -24,7 +25,7 @@ import { useSidebarDock } from "./components/layout/useSidebarDock";
 import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/layout/windowLayout";
 import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
-import { SmallYahuWindow } from "./components/smallYahu/SmallYahuWindow";
+import { HarborWindow } from "./components/harbor/HarborWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
@@ -49,7 +50,7 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <SmallYahuWindow /> : <BrowserWindow />}</ThemeScope>
+      <ThemeScope>{small ? <HarborWindow /> : <BrowserWindow />}</ThemeScope>
     </WindowContext.Provider>
   );
 }

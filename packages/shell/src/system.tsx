@@ -1,5 +1,7 @@
-import { requireNativeModule, requireNativeViewManager } from "expo-modules-core";
-import { View, type ViewProps } from "react-native";
+import type { ViewProps } from "@bay/platform";
+import { requireNativeViewManager } from "./nativeViews";
+import { requireNativeModule } from "@bay/platform/native";
+import {View} from "react-native";
 
 export type MenuShortcut = {
   id: string;

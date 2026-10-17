@@ -1,6 +1,7 @@
+import { Pressable, View, capabilities } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
@@ -29,7 +30,7 @@ export function HoverCard({ windowId, windowWidth }: { windowId: string; windowW
   if (!hover) return null;
   if (hover.kind === "live") return <LiveItemCard id={hover.id} windowId={windowId} anchor={hover.anchor} />;
   if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} windowWidth={windowWidth} />;
-  if (hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+  if (capabilities.calendar && hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
   return hover.kind === "tab" ? <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} /> : <GroupPeek groupId={hover.id} windowId={windowId} anchor={hover.anchor} />;
 }
 

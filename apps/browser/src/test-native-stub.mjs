@@ -1,3 +1,5 @@
+import { nativeContracts } from "../../../packages/platform/src/nativeContracts.ts";
+
 export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
 export const writeDocument = (name, contents) => docs.set(name, contents);
@@ -36,7 +38,31 @@ export const profileDataLeft = new Map();
 export const deleteProfileData = (profile) => (deletedProfileData.push(profile), Promise.resolve(profileDataLeft.get(profile) ?? []));
 
 // expo-modules-core: a test installs native modules on globalThis.nnTestNativeModules.
-export const requireOptionalNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? null;
+/** Validate injected native mocks against the same contracts used by the Windows dispatcher. */
+export function assertNativeStub(name, stub, { partial = false } = {}) {
+  const contract = nativeContracts.modules[name];
+  if (!contract) throw new Error(`Unknown native stub ${name}`);
+  if (!stub || typeof stub !== "object") throw new TypeError(`${name} must be an object`);
+  for (const [method, spec] of Object.entries(contract.methods)) {
+    if (partial && !(method in stub)) continue;
+    if (spec.optional && stub[method] == null) continue;
+    if (typeof stub[method] !== "function") throw new TypeError(`${name}.${method} must be a function`);
+  }
+  for (const [key, type] of Object.entries(contract.constants)) {
+    if (partial && !(key in stub)) continue;
+    if (["number", "string", "boolean"].includes(type) && typeof stub[key] !== type) {
+      throw new TypeError(`${name}.${key} must be ${type}`);
+    }
+  }
+  if (!partial && contract.events.length && typeof stub.addListener !== "function") {
+    throw new TypeError(`${name}.addListener must be a function`);
+  }
+  return stub;
+}
+export const requireOptionalNativeModule = (name) => {
+  const stub = globalThis.nnTestNativeModules?.[name] ?? null;
+  return stub == null ? null : assertNativeStub(name, stub, { partial: true });
+};
 export const requireNativeModule = () => ({});
 // Saved passwords, one store per simulated device (sync tests).
 export const passwordStores = new Map();
@@ -224,3 +250,6 @@ export const chromeBookmarkEdit = (profile, ops) => {
 export const extensionAnswers = { actionStates: async () => ({}), sidePanelUrl: async () => null };
 export const extensionActionStates = (browserId, ids) => extensionAnswers.actionStates(browserId, ids);
 export const extensionSidePanelUrl = (browserId, extensionId) => extensionAnswers.sidePanelUrl(browserId, extensionId);
+
+export const prompt = () => Promise.resolve(null);
+export const copyText = () => {};

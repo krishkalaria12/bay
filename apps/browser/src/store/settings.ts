@@ -63,8 +63,8 @@ export type Settings = {
 
   shortcuts: Record<string, string[]>;
 
-  openLinksInSmallYahu: boolean;
-  smallYahuSize: [number, number];
+  openLinksInHarbor: boolean;
+  harborSize: [number, number];
 };
 
 export const DEFAULT_PROFILE_ID = "default";
@@ -106,9 +106,32 @@ export const DEFAULT_SETTINGS: Settings = {
   addressBar: "sidebar",
   defaultProfileId: DEFAULT_PROFILE_ID,
   shortcuts: {},
-  openLinksInSmallYahu: true,
-  smallYahuSize: [900, 640],
+  openLinksInHarbor: true,
+  harborSize: [900, 640],
 };
+
+/** Read pre-Harbor profiles without resetting their external-link or window-size preferences. */
+export function restoreSettings(saved: Partial<Settings> & {
+  openLinksInSmallYahu?: boolean;
+  smallYahuSize?: [number, number];
+} = {}): Settings {
+  const { openLinksInSmallYahu, smallYahuSize, ...current } = saved;
+  const settings = { ...DEFAULT_SETTINGS, ...current };
+  if (current.openLinksInHarbor === undefined && typeof openLinksInSmallYahu === "boolean") {
+    settings.openLinksInHarbor = openLinksInSmallYahu;
+  }
+  if (current.harborSize === undefined && Array.isArray(smallYahuSize) && smallYahuSize.length === 2 && smallYahuSize.every((n) => Number.isFinite(n) && n > 0)) {
+    settings.harborSize = [...smallYahuSize];
+  }
+  // Custom menu bindings persist command ids too.
+  const shortcuts = { ...settings.shortcuts };
+  for (const [legacy, name] of [["newSmallYahu", "newHarbor"], ["toggleOpenLinksInSmallYahu", "toggleOpenLinksInHarbor"]]) {
+    if (shortcuts[legacy!] && !shortcuts[name!]) shortcuts[name!] = shortcuts[legacy!]!;
+    delete shortcuts[legacy!];
+  }
+  settings.shortcuts = shortcuts;
+  return settings;
+}
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
 const NO_EXTENSION_ENGINES: ExtensionSearchEngine[] = [];

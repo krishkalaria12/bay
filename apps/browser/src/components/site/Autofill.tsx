@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { showAutofillSuggestions, type CardNetwork } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { browserIdOf } from "../extensions/state";

@@ -1,7 +1,8 @@
+import type { ViewProps } from "@bay/platform";
 import { toAppUrl, toEngineUrl } from "@bay/core";
-import { requireNativeViewManager } from "expo-modules-core";
+import NativeWebView from "./NativeWebView";
 import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
-import type { NativeSyntheticEvent, ViewProps } from "react-native";
+import {NativeSyntheticEvent} from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
 
@@ -47,7 +48,7 @@ export type OpenWindowRequest = {
 export type BlockedPopup = { id: string; url: string; origin: string };
 
 export type FindResult = { count: number; active: number; final: boolean };
-// "escape": an Esc the page left alone, outside a text field (Small Yahu closes on it).
+// "escape": an Esc the page left alone, outside a text field (Harbor closes on it).
 // `modifiers`: the keys held when the menu item was picked ("search").
 export type PageCommand = {
   command: "search" | "ask" | "copyLinkToHighlight" | "escape";
@@ -281,7 +282,7 @@ type NativeEvents = {
   onExternalApp: ExternalAppRequest;
 };
 type Handlers = keyof NativeEvents;
-type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
+export type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
 
 const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<WebViewProps[K]>> } = {
   onNavigationChange: (e) => [{ ...e, url: toAppUrl(e.url) }],
@@ -319,7 +320,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onExternalApp: (e) => [e],
 };
 
-type NativeHandle = Omit<
+export type NativeHandle = Omit<
   WebViewHandle,
   "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"
 > & {
@@ -329,8 +330,6 @@ type NativeHandle = Omit<
   resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;
   discard(unload: boolean): Promise<DiscardOutcome>;
 };
-
-const NativeWebView = requireNativeViewManager<NativeProps>("BayCEF");
 
 const VIEW_RETRIES = 3;
 // Expo's view functions reject with this cause when the view tag has no registered view.
@@ -424,7 +423,6 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
 
   return (
     <NativeWebView
-      // @ts-expect-error expo view managers accept a ref to their AsyncFunctions
       ref={native}
       {...(nativeProps as NativeProps)}
     />

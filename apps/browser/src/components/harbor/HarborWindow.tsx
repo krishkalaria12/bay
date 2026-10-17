@@ -1,9 +1,10 @@
+import { Pressable, View } from "@bay/platform";
 import { breadcrumb } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
 import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
@@ -28,7 +29,7 @@ const FIELD_LEFT = 84;
 const FIELD_HEIGHT = 28;
 const BUTTON = 28;
 
-export function SmallYahuWindow() {
+export function HarborWindow() {
   const theme = useTheme();
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
@@ -38,7 +39,7 @@ export function SmallYahuWindow() {
         <ContentCard />
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
-        <SmallYahuBar />
+        <HarborBar />
       </View>
       <CommandPanel windowWidth={size.width} windowHeight={size.height} />
       <DownloadsPanel windowWidth={size.width} windowHeight={size.height} />
@@ -46,7 +47,7 @@ export function SmallYahuWindow() {
   );
 }
 
-function SmallYahuBar() {
+function HarborBar() {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const panelOpen = useWindowUi().panel.open;

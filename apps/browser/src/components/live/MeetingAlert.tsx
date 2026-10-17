@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
 import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";

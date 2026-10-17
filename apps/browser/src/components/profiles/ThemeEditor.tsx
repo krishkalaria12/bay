@@ -1,6 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useRef, useState } from "react";
-import { Image, PanResponder, Pressable, Text, View, type GestureResponderEvent } from "react-native";
+import { Image, PanResponder, Text, type GestureResponderEvent } from "react-native";
 import { create } from "zustand";
 import { editableTheme, MAX_THEME_COLORS, spectrumColor, spectrumPosition, THEME_PRESETS } from "../../lib/spaceTheme";
 import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";

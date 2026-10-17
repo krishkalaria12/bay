@@ -1,6 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { MouseArea, Symbol } from "@bay/shell";
 import { useEffect, useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { openModeFor, openUrl } from "../bookmarks/actions";
@@ -18,7 +19,7 @@ export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; wi
   useEffect(() => () => void (useHistoryMenu.getState().menu?.tabId === tabId && closeHistoryMenu()), [tabId]);
   if (!menu) return null;
 
-  const open = (item: HistoryItem, e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => {
+  const open = (item: HistoryItem, e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => {
     const mode = openModeFor(e);
     if (mode === "current" || mode === "split" || !item.url) {
       closeHistoryMenu();
@@ -75,7 +76,7 @@ function Row({
 }: {
   item: HistoryItem;
   favicon: string | null;
-  onOpen: (e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => void;
+  onOpen: (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) => void;
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();

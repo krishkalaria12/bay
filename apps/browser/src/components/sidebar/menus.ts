@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import { showMenu, type MenuItem } from "@bay/shell";
 import { closeTab, moveTabToProfile, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
 import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
@@ -108,7 +109,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
           { id: "backToPin", title: "Back to Pinned URL", symbol: "arrow.uturn.backward", enabled: away, ...hint("\r", "command") },
           { id: "replacePin", title: "Replace Pin with Current Page", symbol: "pin", enabled: away },
           { id: "editPin", title: "Edit Pinned Page…", symbol: "pencil" },
-          ...(isCalendarUrl(tab.pinnedUrl ?? tab.url) ? [calendarMenuItem()] : []),
+          ...(capabilities.calendar && isCalendarUrl(tab.pinnedUrl ?? tab.url) ? [calendarMenuItem()] : []),
           sep,
         ]
       : []),

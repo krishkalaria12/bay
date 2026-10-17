@@ -1,8 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { displayUrl, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
+import { ScrollView, StyleSheet, Text } from "react-native";
+import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { tourAnchorRef } from "../onboarding/tour/anchors";

@@ -1,5 +1,7 @@
-import { requireNativeModule, requireNativeViewManager, type EventSubscription } from "expo-modules-core";
-import type { ViewProps } from "react-native";
+import type { ViewProps } from "@bay/platform";
+import { requireNativeViewManager } from "./nativeViews";
+import { requireNativeModule, requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
+
 
 export * from "./system";
 export * from "./app";
@@ -9,8 +11,8 @@ export type BrowserCommand =
   | "newTab"
   | "newWindow"
   | "newIncognitoWindow"
-  | "newSmallYahu"
-  | "toggleOpenLinksInSmallYahu"
+  | "newHarbor"
+  | "toggleOpenLinksInHarbor"
   | "reopenClosedTab"
   | "reopenClosedWindow"
   | "restoreClosed"
@@ -163,7 +165,7 @@ export type OpenWindowOptions = {
   focus?: boolean;
   kind?: "browser" | "small" | "settings" | "import" | "taskManager";
   profile?: string;
-  // Small Yahu: its remembered size; the window opens centred on the active screen.
+  // Harbor: its remembered size; the window opens centred on the active screen.
   size?: [number, number];
 };
 
@@ -417,20 +419,20 @@ export type GlassEffectProps = ViewProps & {
   dark?: boolean;
 };
 
-const GlassEffectModule = requireNativeModule<{ isLiquidGlass(): boolean }>("BayGlassEffect");
+const GlassEffectModule = requireOptionalNativeModule<{ isLiquidGlass(): boolean }>("BayGlassEffect");
 
-export const isLiquidGlass = (): boolean => GlassEffectModule.isLiquidGlass();
+export const isLiquidGlass = (): boolean => GlassEffectModule?.isLiquidGlass() ?? false;
 
 export const GlassEffect = requireNativeViewManager<GlassEffectProps>("BayGlassEffect");
 
 export type IconTheme = { kind: "blur" } | { kind: "template"; fill: string; stroke?: string };
 
-const DockSelectionModule = requireNativeModule<{
+const DockSelectionModule = requireOptionalNativeModule<{
   iconTheme(uri: string | null, emoji: string | null): Promise<IconTheme | null>;
 }>("BayDockSelection");
 
 export const iconTheme = (source: { uri: string } | { emoji: string }): Promise<IconTheme | null> =>
-  DockSelectionModule.iconTheme("uri" in source ? source.uri : null, "emoji" in source ? source.emoji : null);
+  DockSelectionModule?.iconTheme("uri" in source ? source.uri : null, "emoji" in source ? source.emoji : null) ?? Promise.resolve(null);
 
 export type DockSelectionProps = ViewProps & {
   image?: string;
@@ -447,14 +449,14 @@ export type DockSelectionProps = ViewProps & {
 
 export const DockSelection = requireNativeViewManager<DockSelectionProps>("BayDockSelection");
 
-const InlineCompletionModule = requireNativeModule<{
+const InlineCompletionModule = requireOptionalNativeModule<{
   complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;
 }>("BayInlineCompletion");
 
 export type InlineWrite = 0 | 1 | 2;
 
 export const completeInline = (tag: number, typed: string, completion: string) =>
-  InlineCompletionModule.complete(tag, typed, completion);
+  InlineCompletionModule?.complete(tag, typed, completion) ?? Promise.resolve(0 as InlineWrite);
 
 type TranslationModule = {
   readonly available: boolean;
@@ -467,7 +469,7 @@ type TranslationModule = {
   translate(source: string, target: string, texts: string[]): Promise<string[]>;
   translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;
 };
-const TranslationNative = requireNativeModule<TranslationModule>("BayTranslate");
+const TranslationNative = requireOptionalNativeModule<TranslationModule>("BayTranslate");
 
 // Null before macOS 26, which has no translation API for apps.
-export const translation: Omit<TranslationModule, "available"> | null = TranslationNative.available ? TranslationNative : null;
+export const translation: Omit<TranslationModule, "available"> | null = TranslationNative?.available ? TranslationNative : null;

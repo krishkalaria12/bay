@@ -1,6 +1,13 @@
 {
-  "platforms": ["apple"],
+  "platforms": [
+    "macos"
+  ],
   "apple": {
-    "modules": ["CefModule", "ExtensionsModule", "SwipeModule", "ChromeUIModule"]
+    "modules": [
+      "CefModule",
+      "ExtensionsModule",
+      "SwipeModule",
+      "ChromeUIModule"
+    ]
   }
 }

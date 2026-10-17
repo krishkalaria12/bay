@@ -1,6 +1,10 @@
 {
-  "platforms": ["apple"],
+  "platforms": [
+    "macos"
+  ],
   "apple": {
-    "modules": ["ImportModule"]
+    "modules": [
+      "ImportModule"
+    ]
   }
 }

@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { View } from "react-native";
-import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+
+import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "@bay/platform/motion";
 
 // Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in about 150 ms, fast at first.
 const FOLD_MS = 150;

@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
-import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
 import { bouncySpring } from "../../lib/springs";
 import { useTheme } from "../../lib/theme";
 import { useCalendar, useNow } from "../../live/calendar";

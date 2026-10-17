@@ -1,3 +1,4 @@
+import { isMac } from "@bay/platform";
 import { engineInfo } from "@bay/nncore";
 import { launchEnvironment, readDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
 import { create } from "zustand";
@@ -87,7 +88,7 @@ function context(): Record<string, unknown> {
     $app_name: "Bay",
     $app_version: info.appVersion,
     $app_build: info.appBuild,
-    $os: "macOS",
+    $os: isMac ? "macOS" : "Windows",
     $os_version: info.osVersion,
     arch: info.arch,
     engine_version: engineVersion,

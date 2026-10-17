@@ -1,3 +1,4 @@
+import { View } from "@bay/platform";
 import {
   clearSiteData,
   getContentBlocker,
@@ -23,7 +24,7 @@ import {
 } from "@bay/nncore";
 import { confirm } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Image, ScrollView, Text, View } from "react-native";
+import { Image, ScrollView, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { useProfiles } from "../../../store/hooks";

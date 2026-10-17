@@ -17,9 +17,9 @@ function compilerGlobalSymbol({ types: t }) {
 }
 
 module.exports = function (api) {
-  api.cache(true);
+  const windows = api.caller((caller) => caller?.platform === "windows");
   return {
-    presets: ["babel-preset-expo"],
+    presets: [windows ? "module:@react-native/babel-preset" : "babel-preset-expo"],
     overrides: [
       {
         // The React Compiler memoizes our components and hooks (the app's and the workspace packages'), not
@@ -28,7 +28,7 @@ module.exports = function (api) {
         plugins: [["babel-plugin-react-compiler", { target: "19" }], compilerGlobalSymbol],
       },
       // Reanimated turns worklets into UI-thread code, its own included: every file, and last (overrides apply in order).
-      { plugins: ["react-native-reanimated/plugin"] },
+      ...(!windows ? [{ plugins: ["react-native-reanimated/plugin"] }] : []),
     ],
   };
 };

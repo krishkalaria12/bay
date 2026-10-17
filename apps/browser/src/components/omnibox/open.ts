@@ -1,10 +1,11 @@
+import { modKey } from "@bay/platform";
 import { openWindow, switchToTab } from "../../lib/actions";
 import { useBrowser } from "../../store/browser";
 
 export type Disposition = "current" | "newTab" | "newWindow";
 
-export function dispositionFor(mods: { metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }): Disposition {
-  if (mods.metaKey || mods.altKey) return "newTab";
+export function dispositionFor(mods: { metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }): Disposition {
+  if (modKey(mods) || mods.altKey) return "newTab";
   if (mods.shiftKey) return "newWindow";
   return "current";
 }

@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { displayUrl, type Suggestion } from "@bay/core";
 import { Symbol } from "@bay/shell";
 import { memo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Favicon, IconButton, useHover } from "../primitives";
 

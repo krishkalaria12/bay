@@ -1,3 +1,4 @@
+import { Pressable, View, shortcutForCommand, capabilities, shortcutLabel } from "@bay/platform";
 import {
   addToDock,
   fileExists,
@@ -10,7 +11,7 @@ import {
   Symbol,
 } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text } from "react-native";
 import { PROFILE_COLORS, themeFor, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon, useHover } from "../primitives";
@@ -66,7 +67,7 @@ type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean 
 async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
   if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser()) && choice.trial) recordDefaultBrowserTrial();
   if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
-  if (choice.dock && !system.inDock) await addToDock();
+  if (capabilities.dock && choice.dock && !system.inDock) await addToDock();
 }
 
 export function DefaultBrowserStep() {
@@ -79,7 +80,7 @@ export function DefaultBrowserStep() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void Promise.all([isDefaultBrowser(), isInDock(), launchAtLoginStatus()]).then(([isDefault, inDock, login]) => {
+    void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(([isDefault, inDock, login]) => {
       setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
       if (login === "enabled") setLogin(true);
     });
@@ -121,7 +122,7 @@ export function DefaultBrowserStep() {
             onChange={setTrial}
           />
         ) : null}
-        {system && !system.inDock ? (
+        {capabilities.dock && system && !system.inDock ? (
           <CheckRow icon="dock.rectangle" title="Add Bay to Dock" subtitle="Quick access to Bay whenever you need it" value={dock} onChange={setDock} />
         ) : null}
         <CheckRow icon="power" title="Open Bay at login" subtitle="Automatically open Bay when you sign in" value={login} onChange={setLogin} />
@@ -159,7 +160,7 @@ function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: b
       <Image source={ICON} style={{ width: 132, height: 132 }} />
       <View style={{ gap: 8, alignItems: "center" }}>
         {chip(isDefault, "globe", "Default browser")}
-        {chip(dock, "dock.rectangle", "In your Dock")}
+        {capabilities.dock && chip(dock, "dock.rectangle", "In your Dock")}
         {chip(login, "power", "Opens at login")}
       </View>
     </View>
@@ -308,7 +309,7 @@ export function ImportStep() {
           subtitle={
             opened
               ? "Finish up in the import window, then continue here. You can import more any time from the Bay menu."
-              : "Import bookmarks, history, passwords and tabs from the browser you use now, and stay signed in to your sites. It all stays on this Mac."
+              : "Import bookmarks, history, passwords and tabs from the browser you use now, and stay signed in to your sites. It all stays on this computer."
           }
         />
       </Reveal>
@@ -457,11 +458,11 @@ export function OutroStep() {
         {[
           ["⌘T", "Open a new tab"],
           ["⌘L", "Go anywhere from the command bar"],
-          ["⌘S", "Hide the sidebar for more room"],
+          [shortcutForCommand("toggleSidebar", "⌘S"), "Hide the sidebar for more room"],
         ].map(([keys, label]) => (
           <View key={keys} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <View style={{ minWidth: 38, height: 24, paddingHorizontal: 7, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: colors.button }}>
-              <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{keys}</Text>
+              <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{shortcutLabel(keys ?? "")}</Text>
             </View>
             <Text style={{ fontSize: 13, color: colors.subtitle }}>{label}</Text>
           </View>

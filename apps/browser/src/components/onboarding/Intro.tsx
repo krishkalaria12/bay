@@ -1,8 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { DIA_SPECTRUM, PowerUp } from "@bay/shaders";
 import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol, type IntroMusicCues } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
+import { Image, StyleSheet, Text } from "react-native";
+import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springs";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";

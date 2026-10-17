@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { SwipeArea, swipeHaptic, type SwipeAreaHandle, type SwipeEvent } from "@bay/nncore";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon, NewTabIcon } from "../primitives";

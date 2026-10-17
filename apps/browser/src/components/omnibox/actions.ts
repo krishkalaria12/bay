@@ -1,3 +1,4 @@
+import { shortcutForCommand } from "@bay/platform";
 import type { CommandAction } from "@bay/core";
 import type { BrowserCommand } from "@bay/shell";
 import { runCommand } from "../../lib/commands";
@@ -107,7 +108,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
       id: actionId(d),
       title: typeof d.title === "string" ? d.title : d.title(c),
       icon: d.icon,
-      ...(d.hint ? { hint: d.hint } : {}),
+      ...(d.hint ? { hint: shortcutForCommand(d.command, d.hint) } : {}),
       ...(d.keywords ? { keywords: d.keywords } : {}),
     });
   }

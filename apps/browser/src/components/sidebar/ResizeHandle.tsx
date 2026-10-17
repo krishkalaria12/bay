@@ -1,4 +1,5 @@
-import { View } from "react-native";
+import { View } from "@bay/platform";
+
 import { useBrowser } from "../../store/browser";
 import { useResizeDrag } from "../layout/useResizeDrag";
 import { useSidebarOnRight } from "../layout/windowLayout";

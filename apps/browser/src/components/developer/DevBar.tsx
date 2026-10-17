@@ -1,6 +1,7 @@
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { layout, useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
@@ -83,7 +84,7 @@ export function DevBar({
       <Hatch width={width} height={height} color={theme.dark ? "rgba(255,255,255,0.055)" : "rgba(0,0,0,0.05)"} />
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       {navigation && geometry.sidebarButton !== null ? (
-        <ToolbarButton style={at(geometry.sidebarButton)} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip="Auto-Hide Tabs (⌘S)" />
+        <ToolbarButton style={at(geometry.sidebarButton)} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`} />
       ) : null}
       {navigation ? (
         <>
@@ -95,7 +96,7 @@ export function DevBar({
       <View pointerEvents="box-none" style={{ position: "absolute", left: navigation ? geometry.urlLeft : geometry.urlLeft - 2, right: 6, top: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 2 }}>
         <Address url={tab.url} tabId={tabId} windowId={windowId} onFocus={focus} />
         {button("ruler", inspecting ? "Stop Inspecting (esc)" : "Inspect Elements", () => toggleInspecting(tabId), inspecting)}
-        {button("chevron.left.forwardslash.chevron.right", "Developer Tools (⌥⌘I)", () => void webviews.get(tabId)?.showDevTools("toggle"))}
+        {button("chevron.left.forwardslash.chevron.right", `Developer Tools (${shortcutForCommand("devTools", "⌥⌘I")})`, () => void webviews.get(tabId)?.showDevTools("toggle"))}
         {button("link", "Copy Link", () => void copyPageUrl(tabId))}
         {button("camera", "Copy Screenshot", () => void copyScreenshot(tabId))}
         {button("slider.horizontal.3", "Site Controls", () => setPopover(tabId, controlsOpen ? null : "siteControls"), controlsOpen)}
@@ -105,7 +106,7 @@ export function DevBar({
             {button("xmark", "Close Pane", () => closePane(tabId))}
           </>
         ) : null}
-        {navigation && geometry.sidebarButtonEnd ? button(sidebarSymbol, "Auto-Hide Tabs (⌘S)", () => useBrowser.getState().toggleSidebar(windowId)) : null}
+        {navigation && geometry.sidebarButtonEnd ? button(sidebarSymbol, `Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`, () => useBrowser.getState().toggleSidebar(windowId)) : null}
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} />
       {loading && <TabProgressBar tabId={tabId} color={theme.accent} />}

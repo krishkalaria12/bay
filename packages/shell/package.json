@@ -12,5 +12,8 @@
     "expo": "*",
     "react": "*",
     "react-native": "*"
+  },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
   }
 }

@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { FadeLabel, Surface } from "@bay/shell";
-import { Text, View } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { useAnimatedStyle } from "@bay/platform/motion";
 import { hex, layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { groupLabel } from "../../store/organize";

@@ -1,7 +1,7 @@
 import { hapticTick } from "@bay/shell";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { PanResponder, type ScrollView, type View } from "react-native";
-import Animated, { cancelAnimation, Easing, makeMutable, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, makeMutable, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { layout, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";

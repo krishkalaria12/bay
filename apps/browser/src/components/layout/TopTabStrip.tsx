@@ -1,6 +1,7 @@
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { findNodeHandle, PanResponder, ScrollView, StyleSheet, Text } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, layout, ThemeScope, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
@@ -20,7 +21,7 @@ import { ProfileSwipeArea } from "./ProfileSwipe";
 import { openNewTabInSplit } from "./splitActions";
 import { setMeasuredWidth, useMeasuredWidths } from "./measuredWidths";
 import { usePeek } from "./usePeek";
-import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "@bay/platform/motion";
 import {
   dragGeometry,
   dragRange,
@@ -125,7 +126,7 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
             size={16}
             box={DOWNLOADS_BOX}
             radius={10}
-            tooltip="Downloads (⇧⌘J)"
+            tooltip={`Downloads (${shortcutForCommand("downloads", "⇧⌘J")})`}
             onPress={() => {
               const s = useBrowser.getState();
               s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);

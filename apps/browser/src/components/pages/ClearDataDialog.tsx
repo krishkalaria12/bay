@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { clearBrowsingData, type BrowsingDataType } from "@bay/nncore";
 import { Surface } from "@bay/shell";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { create } from "zustand";
 import { pruneProfileFavicons } from "../../lib/favicons";
 import { hex, useTheme } from "../../lib/theme";

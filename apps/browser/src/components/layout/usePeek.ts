@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming, type WithTimingConfig } from "react-native-reanimated";
+import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming, type WithTimingConfig } from "@bay/platform/motion";
 
 export const SLIDE_MS = 180;
 // The sidebar's and tab strip's slides: the peek's and the docked sidebar's. Instant under Reduce Motion.

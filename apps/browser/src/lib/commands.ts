@@ -41,7 +41,7 @@ import { toggleDeveloperMode } from "../components/developer/devMode";
 import { openProfileMenu } from "../components/ProfileIndicator";
 import { groupOf } from "../store/organize";
 import { isSmall, mainWindowFor } from "../store/small";
-import { closeSmallYahu, openInMainWindow, openSmallYahu } from "../components/smallYahu/actions";
+import { closeHarbor, openInMainWindow, openHarbor } from "../components/harbor/actions";
 
 export function runCommand({ command, arg, windowId: requested }: CommandEvent) {
   const s = useBrowser.getState();
@@ -50,7 +50,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     if (command === "closeTab") return void closeNativeWindow(requested!);
     requested = null;
   }
-  if (isSmall(s, requested) && runSmallYahuCommand(command, requested!)) return;
+  if (isSmall(s, requested) && runHarborCommand(command, requested!)) return;
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
   switch (command) {
@@ -58,10 +58,10 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void openWindow({ profileId: arg ?? undefined });
     case "newIncognitoWindow":
       return void openWindow({ incognito: true });
-    case "newSmallYahu":
-      return void openSmallYahu();
-    case "toggleOpenLinksInSmallYahu":
-      return s.updateSettings({ openLinksInSmallYahu: !s.settings.openLinksInSmallYahu });
+    case "newHarbor":
+      return void openHarbor();
+    case "toggleOpenLinksInHarbor":
+      return s.updateSettings({ openLinksInHarbor: !s.settings.openLinksInHarbor });
     case "reopenClosedWindow":
       return s.reopenClosedWindow();
     case "setAppearance":
@@ -98,8 +98,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     }
   }
 
-  // From Small Yahu, tabs, windows and the sidebar's commands act on the main window.
-  if (isSmall(s, requested) && !SMALL_YAHU_PAGE_COMMANDS.has(command)) {
+  // From Harbor, tabs, windows and the sidebar's commands act on the main window.
+  if (isSmall(s, requested) && !HARBOR_PAGE_COMMANDS.has(command)) {
     requested = mainWindowFor(s, s.windows[requested!]!.profileId) ?? null;
     if (requested) focus(requested);
   }
@@ -287,9 +287,9 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
   }
 }
 
-// What Small Yahu runs on its own page; everything else goes to the main window (menuState disables the tab and
+// What Harbor runs on its own page; everything else goes to the main window (menuState disables the tab and
 // sidebar commands that make no sense from there).
-const SMALL_YAHU_PAGE_COMMANDS = new Set<string>([
+const HARBOR_PAGE_COMMANDS = new Set<string>([
   "print", "printWithSystemDialog", "savePage", "caretBrowsing", "emailPageLocation", "stop", "share", "copyUrl",
   "copyUrlAsMarkdown", "findInPage", "findAndReplace", "jumpToSelection", "useSelectionForFind", "findNext", "findPrevious",
   "reload", "forceReload", "zoomIn", "zoomOut", "zoomReset", "devTools", "toggleDevTools", "inspectElements",
@@ -297,16 +297,16 @@ const SMALL_YAHU_PAGE_COMMANDS = new Set<string>([
   "cast", "openExtension", "addExtension", "autofill", "reopenClosedTab", "restoreClosed", "downloads",
 ]);
 
-function runSmallYahuCommand(command: string, windowId: string): boolean {
+function runHarborCommand(command: string, windowId: string): boolean {
   const s = useBrowser.getState();
   const tabId = activeTabId(s, windowId);
   const tab = tabId ? s.tabs[tabId] : undefined;
   switch (command) {
     case "closeTab":
-      // A blank Small Yahu (⌘⌥N, nothing typed yet) closes with its field open.
+      // A blank Harbor (⌘⌥N, nothing typed yet) closes with its field open.
       if (s.windowUi[windowId]?.panel.open && tab?.url) s.closePanel(windowId);
       else if (tabId && s.find[tabId]?.open) closeFind(tabId);
-      else closeSmallYahu(windowId);
+      else closeHarbor(windowId);
       return true;
     case "focusCommandBar":
       s.openPanel(windowId, tab?.url ?? "");

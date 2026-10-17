@@ -1,6 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, prompt, showMenu, Symbol } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
-import Animated from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { createProfile, deleteProfile, switchProfile } from "../../lib/actions";
 import { layout, PROFILE_COLORS, useTheme } from "../../lib/theme";

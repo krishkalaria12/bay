@@ -1,8 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { memo, useMemo, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, View, type LayoutRectangle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { PanResponder, StyleSheet, Text, type LayoutRectangle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
@@ -206,7 +207,7 @@ function BarItem({
     [dx, dragMove, dragEnd],
   );
   if (!node) return null;
-  const open = (e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>
+  const open = (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>
     node.kind === "url" ? openUrl(node.url, windowId, openModeFor(e)) : void openFolderMenu(windowId, node.children, undefined, node.id);
 
   return (
@@ -232,7 +233,7 @@ function BarItem({
   );
 }
 
-type ClickMods = { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+type ClickMods = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
 
 function BarButton({
   title,

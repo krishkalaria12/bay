@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { useBrowser } from "../../store/browser";
 import { bookmarkProfileId } from "../../store/model";
 import { BookmarksPage } from "./BookmarksPage";

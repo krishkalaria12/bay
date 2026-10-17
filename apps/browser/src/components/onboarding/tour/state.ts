@@ -1,3 +1,4 @@
+import { shortcutForCommand, shortcutLabel, capabilities } from "@bay/platform";
 import { systemInfo } from "@bay/shell";
 import { create } from "zustand";
 import { openUrls } from "../../../lib/actions";
@@ -20,7 +21,7 @@ export const TOUR_STOPS: TourStop[] = [
   {
     id: "commandBar",
     title: "Search or go anywhere",
-    body: "Type a question, an address or the name of an open tab. ⌘L brings the command bar up from any page, and ⌘T opens a new tab.",
+    body: shortcutLabel("Type a question, an address or the name of an open tab. ⌘L brings the command bar up from any page, and ⌘T opens a new tab."),
     anchor: "commandBar",
     placement: "below",
     radius: 20,
@@ -38,7 +39,7 @@ export const TOUR_STOPS: TourStop[] = [
   {
     id: "sidebar",
     title: "Room to focus",
-    body: "⌘S hides the sidebar. Move the pointer to the window's left edge to peek at your tabs while it's hidden.",
+    body: `${shortcutForCommand("toggleSidebar", "⌘S")} hides the sidebar. Move the pointer to the window's left edge to peek at your tabs while it's hidden.`,
     anchor: "sidebarButton",
     placement: "below",
     radius: 9,
@@ -47,7 +48,7 @@ export const TOUR_STOPS: TourStop[] = [
   {
     id: "split",
     title: "Two pages, side by side",
-    body: "Drag a tab onto the page to split the window, or press ⌃⇧=. ⌃⇧] and ⌃⇧[ move between the panes.",
+    body: shortcutLabel("Drag a tab onto the page to split the window, or press ⌃⇧=. ⌃⇧] and ⌃⇧[ move between the panes."),
     anchor: "page",
     placement: "inside",
     radius: 10,
@@ -56,7 +57,7 @@ export const TOUR_STOPS: TourStop[] = [
   {
     id: "done",
     title: "You're all set",
-    body: "Everything else is in the menu bar and in Settings (⌘,). You can take this tour again from the Help menu.",
+    body: capabilities.menuBar ? "Everything else is in the menu bar and in Settings (⌘,). You can take this tour again from the Help menu." : shortcutLabel("Everything else is in the Bay menu and in Settings (⌘,). You can take this tour again from Settings."),
   },
 ];
 

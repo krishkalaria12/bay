@@ -9,7 +9,10 @@
     "pods": "cd macos && pod install",
     "build": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Release",
     "typecheck": "tsc -p .",
-    "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\""
+    "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\"",
+    "windows": "react-native run-windows --sln windows/Bay.sln --arch x64",
+    "bundle:windows": "react-native bundle --platform windows --entry-file index.windows.js --dev false --bundle-output windows/bundle/index.windows.bundle --assets-dest windows/bundle",
+    "typecheck:windows": "tsc -p tsconfig.windows.json"
   },
   "dependencies": {
     "@bay/core": "workspace:*",
@@ -24,7 +27,9 @@
     "react-native": "0.81.6",
     "react-native-macos": "0.81.9",
     "react-native-reanimated": "3.19.5",
-    "zustand": "^5.0.8"
+    "zustand": "^5.0.8",
+    "@bay/platform": "workspace:*",
+    "react-native-windows": "0.81.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
