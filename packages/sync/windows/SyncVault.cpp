@@ -3,7 +3,10 @@
 #include <chrono>
 #include <fstream>
 #include <iterator>
+#include <mutex>
+#include <thread>
 #ifdef _WIN32
+#include <cfapi.h>
 #include <windows.h>
 #endif
 namespace bay::sync {
@@ -47,6 +50,68 @@ bool pendingFile(const fs::path &path) {
 #else
   (void)path;
   return false;
+#endif
+}
+void requestHydration(const fs::path &path) {
+#ifdef _WIN32
+  struct Hydrations {
+    std::mutex mutex;
+    std::set<fs::path> paths;
+  };
+  // Process-lifetime state remains valid while provider callbacks finish at
+  // shutdown.
+  static auto *hydrations = new Hydrations;
+  {
+    std::lock_guard<std::mutex> lock(hydrations->mutex);
+    if (hydrations->paths.size() >= 8 || !hydrations->paths.insert(path).second)
+      return;
+  }
+  try {
+    std::thread([path] {
+      auto library =
+          LoadLibraryExW(L"CldApi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+      if (library) {
+        auto hydrate = reinterpret_cast<decltype(&CfHydratePlaceholder)>(
+            GetProcAddress(library, "CfHydratePlaceholder"));
+        HANDLE file = CreateFileW(
+            path.c_str(), FILE_READ_DATA,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+            OPEN_EXISTING, FILE_FLAG_OVERLAPPED | FILE_FLAG_OPEN_NO_RECALL,
+            nullptr);
+        if (hydrate && file != INVALID_HANDLE_VALUE) {
+          OVERLAPPED operation{};
+          operation.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+          if (operation.hEvent) {
+            LARGE_INTEGER start{}, length{};
+            length.QuadPart = CF_EOF;
+            auto result =
+                hydrate(file, start, length, CF_HYDRATE_FLAG_NONE, &operation);
+            if (result == HRESULT_FROM_WIN32(ERROR_IO_PENDING)) {
+              DWORD transferred = 0;
+              if (!GetOverlappedResultEx(file, &operation, &transferred, 30000,
+                                         FALSE)) {
+                CancelIoEx(file, &operation);
+                // The OVERLAPPED buffer must survive until cancellation
+                // completes.
+                GetOverlappedResult(file, &operation, &transferred, TRUE);
+              }
+            }
+            CloseHandle(operation.hEvent);
+          }
+        }
+        if (file != INVALID_HANDLE_VALUE)
+          CloseHandle(file);
+        FreeLibrary(library);
+      }
+      std::lock_guard<std::mutex> lock(hydrations->mutex);
+      hydrations->paths.erase(path);
+    }).detach();
+  } catch (...) {
+    std::lock_guard<std::mutex> lock(hydrations->mutex);
+    hydrations->paths.erase(path);
+  }
+#else
+  (void)path;
 #endif
 }
 Bytes readFile(const fs::path &path) {
@@ -170,6 +235,7 @@ Listing Vault::read(const std::string &scope,
     if (known.count(id))
       continue;
     if (pendingFile(file)) {
+      requestHydration(file);
       listing.pending.push_back(id);
       continue;
     }

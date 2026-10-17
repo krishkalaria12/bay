@@ -30,6 +30,7 @@ Json history(const Path &profile, bool firefox, const Options &options,
              int &count);
 Json chromiumTabs(const Path &profile, const std::atomic_bool &cancelled);
 Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled);
+Json arcSidebar(const Path &file);
 Json extensions(const Path &profile);
 Json chromiumLogins(const Path &profile, const Bytes &key,
                     const std::atomic_bool &cancelled, int &blocked);
@@ -46,7 +47,17 @@ struct SensitiveImport {
   SensitiveImport(const SensitiveImport &) = delete;
   SensitiveImport &operator=(const SensitiveImport &) = delete;
   SensitiveImport(SensitiveImport &&) noexcept = default;
-  SensitiveImport &operator=(SensitiveImport &&) noexcept = default;
+  SensitiveImport &operator=(SensitiveImport &&other) noexcept {
+    if (this != &other) {
+      wipeJson(cookies);
+      wipeJson(addresses);
+      wipeJson(cards);
+      cookies = std::move(other.cookies);
+      addresses = std::move(other.addresses);
+      cards = std::move(other.cards);
+    }
+    return *this;
+  }
   ~SensitiveImport() {
     wipeJson(cookies);
     wipeJson(addresses);
@@ -88,6 +99,11 @@ using ImportWriter =
                        const SensitiveImport &)>;
 void SetImportWriter(ImportWriter writer);
 Json readEnginePasswords(const Path &root, const Path &profile);
+inline constexpr char kModuleName[] = "BayImport";
+const std::vector<std::string> &MethodNames();
+bool RequiresUIThread(const std::string &method);
+std::string InvokeEnvelope(const std::string &method,
+                           const std::string &argsJson);
 std::string Invoke(const std::string &module, const std::string &method,
                    const std::string &argsJson);
 } // namespace bay::importer

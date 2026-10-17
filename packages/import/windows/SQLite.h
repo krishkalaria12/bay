@@ -7,19 +7,77 @@
 #include <sqlite3.h>
 #endif
 #include <chrono>
+#include <map>
 #include <thread>
 namespace bay::importer {
-// SQLite's backup API includes committed WAL data and leaves the source profile
-// untouched.
+// Copy the source database and WAL before SQLite opens either file. Even a
+// read-only SQLite connection may create -shm in the original profile.
 class Snapshot {
   sqlite3 *db_ = nullptr;
 
 public:
   explicit Snapshot(const Path &path) {
+    auto temporary =
+        std::filesystem::temp_directory_path() /
+        std::filesystem::u8path("bay-import-" +
+                                bay::sync::base32(bay::sync::randomBytes(16)));
+    bay::sync::createPrivateDirectory(temporary);
+    struct RemoveCopy {
+      Path path;
+      ~RemoveCopy() {
+        std::error_code ignored;
+        std::filesystem::remove_all(path, ignored);
+      }
+    } remove{temporary};
+    auto copy = temporary / "snapshot.sqlite";
+    auto stamp = [](const Path &file) {
+      std::error_code error;
+      auto modified = std::filesystem::last_write_time(file, error);
+      auto size = error ? 0 : std::filesystem::file_size(file, error);
+      return std::pair{error ? std::filesystem::file_time_type::min()
+                             : modified,
+                       error ? std::uintmax_t(0) : size};
+    };
+    bool stable = false;
+    for (unsigned attempt = 0; attempt < 3 && !stable; ++attempt) {
+      try {
+        auto before = stamp(path);
+        if (before.first == std::filesystem::file_time_type::min())
+          throw Failure("notFound", "Source database is unavailable");
+        std::map<std::string, decltype(before)> sidecars;
+        for (auto suffix : {"-wal", "-journal"})
+          sidecars[suffix] = stamp(Path(path.u8string() + suffix));
+        std::filesystem::copy_file(
+            path, copy, std::filesystem::copy_options::overwrite_existing);
+        std::filesystem::permissions(copy,
+                                     std::filesystem::perms::owner_read |
+                                         std::filesystem::perms::owner_write,
+                                     std::filesystem::perm_options::replace);
+        for (auto suffix : {"-wal", "-journal"}) {
+          auto original = Path(path.u8string() + suffix),
+               destination = Path(copy.u8string() + suffix);
+          std::error_code ignored;
+          std::filesystem::remove(destination, ignored);
+          if (sidecars[suffix].first != std::filesystem::file_time_type::min())
+            std::filesystem::copy_file(
+                original, destination,
+                std::filesystem::copy_options::overwrite_existing);
+        }
+        stable = before == stamp(path);
+        for (auto &sidecar : sidecars)
+          stable = stable && sidecar.second ==
+                                 stamp(Path(path.u8string() + sidecar.first));
+      } catch (const std::filesystem::filesystem_error &) {
+        stable = false;
+      }
+    }
+    if (!stable)
+      throw Failure("unreadable", "The source database changed while copying. "
+                                  "Close the browser and try again");
     sqlite3 *source = nullptr;
-    auto text = path.u8string();
+    auto text = copy.u8string();
     if (sqlite3_open_v2(text.c_str(), &source,
-                        SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX,
+                        SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX,
                         nullptr) != SQLITE_OK) {
       if (source)
         sqlite3_close(source);
@@ -73,6 +131,23 @@ public:
         return;
     if (status != SQLITE_DONE)
       throw Failure("unreadable", "Could not read the source database");
+  }
+  void writeTo(const Path &path) const {
+    sqlite3 *destination = nullptr;
+    if (sqlite3_open_v2(path.u8string().c_str(), &destination,
+                        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
+                        nullptr) != SQLITE_OK) {
+      if (destination)
+        sqlite3_close(destination);
+      throw Failure("unreadable", "Could not copy the Firefox key database");
+    }
+    auto backup = sqlite3_backup_init(destination, "main", db_, "main");
+    int status = backup ? sqlite3_backup_step(backup, -1) : SQLITE_ERROR;
+    if (backup)
+      sqlite3_backup_finish(backup);
+    sqlite3_close(destination);
+    if (status != SQLITE_DONE)
+      throw Failure("unreadable", "Could not copy the Firefox key database");
   }
   bool table(const std::string &name) const {
     bool found = false;

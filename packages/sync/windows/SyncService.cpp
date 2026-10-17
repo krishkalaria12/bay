@@ -1,15 +1,17 @@
-#include "SyncModule.h"
+#include "SyncService.h"
 #include "../../import/windows/ImportCore.h"
+#include "RecoveryKit.h"
 #include "SyncVault.h"
 #include <fstream>
 #include <memory>
 #include <mutex>
 #include <sstream>
 #ifdef _WIN32
+#include <windows.h>
+
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
-#include <windows.h>
 #include <wrl/client.h>
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")
@@ -21,6 +23,13 @@ namespace {
 std::mutex stateMutex;
 Bytes entropy;
 std::unique_ptr<Keys> keys;
+struct SecretText {
+  std::string value;
+  ~SecretText() {
+    volatile char *bytes = value.empty() ? nullptr : value.data();
+    for (std::size_t index = 0; index < value.size(); ++index) bytes[index] = 0;
+  }
+};
 void setEntropy(Bytes next) {
   erase(entropy);
   entropy = std::move(next);
@@ -89,63 +98,6 @@ std::string deviceName() {
     return fs::path(name).u8string();
 #endif
   return "This Windows device";
-}
-std::string phrase() {
-  auto words = recoveryWords(entropy);
-  std::string value;
-  for (auto &word : words) {
-    if (!value.empty())
-      value += ' ';
-    value += word;
-  }
-  return value;
-}
-std::string recoveryText() {
-  return "Bay recovery kit\r\n\r\nKeep these 24 words private. Anyone with "
-         "them and your sync folder can read your data.\r\n\r\n" +
-         phrase() + "\r\n\r\nDevice: " + deviceName() +
-         "\r\n\r\nStore this kit somewhere safe. Bay cannot recover these "
-         "words for you.\r\n";
-}
-std::string recoveryPDF() {
-  std::string content =
-      "BT /F1 20 Tf 50 760 Td (Bay recovery kit) Tj /F1 11 Tf 0 -36 Td (Keep "
-      "these words private. They unlock your synced browser data.) Tj";
-  auto words = recoveryWords(entropy);
-  for (std::size_t i = 0; i < words.size(); i += 3) {
-    content += " 0 -28 Td (";
-    for (std::size_t j = i; j < std::min(i + 3, words.size()); ++j)
-      content += std::to_string(j + 1) + ". " + words[j] + "       ";
-    content += ") Tj";
-  }
-  content += " 0 -40 Td (Store this kit somewhere safe. Bay cannot recover "
-             "these words.) Tj ET";
-  std::vector<std::string> objects = {
-      "<< /Type /Catalog /Pages 2 0 R >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << "
-      "/Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-      "<< /Length " + std::to_string(content.size()) + " >>\nstream\n" +
-          content + "\nendstream"};
-  std::string pdf = "%PDF-1.4\n";
-  std::vector<std::size_t> offsets{0};
-  for (std::size_t i = 0; i < objects.size(); ++i) {
-    offsets.push_back(pdf.size());
-    pdf += std::to_string(i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
-  }
-  auto xref = pdf.size();
-  pdf += "xref\n0 6\n0000000000 65535 f \n";
-  for (std::size_t i = 1; i < offsets.size(); ++i) {
-    std::ostringstream line;
-    line.width(10);
-    line.fill('0');
-    line << offsets[i];
-    pdf += line.str() + " 00000 n \n";
-  }
-  pdf += "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" +
-         std::to_string(xref) + "\n%%EOF\n";
-  return pdf;
 }
 Json choose(bool folder, const fs::path &current = {}, bool text = false) {
 #ifdef _WIN32
@@ -366,10 +318,29 @@ std::string Invoke(const std::string &, const std::string &method,
     result = recoveryWords(entropy);
   } else if (method == "qrCode" || method == "recoveryKitPreview") {
     unlocked();
-    result = nullptr;
-  } else if (method == "copyRecoveryPhrase" || method == "copyRecoveryKit") {
+    unsigned width =
+        method == "recoveryKitPreview"
+            ? static_cast<unsigned>(
+                  std::clamp(args.at(0).get<double>(), 84.0, 612.0) * 2)
+            : 0;
+    auto png = method == "qrCode"
+                   ? recoveryQrPNG(entropy)
+                   : recoveryKitPreviewPNG(entropy, deviceName(), width);
+    result = "data:image/png;base64," + bay::importer::encodeBase64(png);
+    erase(png);
+  } else if (method == "copyRecoveryPhrase") {
     unlocked();
-    clipboard(method == "copyRecoveryPhrase" ? phrase() : recoveryText());
+    auto text = recoveryPhrase(entropy);
+    clipboard(text);
+    std::fill(text.begin(), text.end(), '\0');
+  } else if (method == "copyRecoveryKit") {
+    unlocked();
+#ifdef _WIN32
+    copyRecoveryKitFile(
+        temporaryRecoveryKit(entropy, deviceName(), dataDirectory()));
+#else
+    throw Failure("unsupported", "Recovery kit clipboard requires Windows");
+#endif
   } else if (method == "saveRecoveryKit") {
     unlocked();
     bool text = args.at(0) == "text";
@@ -377,15 +348,16 @@ std::string Invoke(const std::string &, const std::string &method,
     if (!path.is_null()) {
       std::ofstream stream(fs::u8path(path.get<std::string>()),
                            std::ios::binary | std::ios::trunc);
-      auto content = text ? recoveryText() : recoveryPDF();
-      stream.write(content.data(), content.size());
+      SecretText content{text ? recoveryKitText(entropy, deviceName())
+                              : recoveryKitPDF(entropy, deviceName())};
+      stream.write(content.value.data(), content.value.size());
       if (!stream)
         throw Failure("save", "Could not save the recovery kit");
     }
     result = path;
   } else if (method == "shareRecoveryKit") {
-    unlocked();
-    clipboard(recoveryText());
+    throw Failure("unavailable", "Native sharing is unavailable in this build. "
+                                 "Save the recovery kit as a PDF instead");
   } else if (method == "revealFolder") {
 #ifdef _WIN32
     auto path = fs::u8path(args.at(0).get<std::string>());
@@ -410,5 +382,64 @@ std::string Invoke(const std::string &, const std::string &method,
   } else
     throw Failure("unsupported", "Unknown Windows sync method");
   return result.dump();
+}
+const std::vector<std::string> &MethodNames() {
+  static const std::vector<std::string> methods = {"folderInfo",
+                                                   "chooseFolder",
+                                                   "newDeviceId",
+                                                   "deviceName",
+                                                   "createPhrase",
+                                                   "enterPhrase",
+                                                   "unlock",
+                                                   "forget",
+                                                   "chainStatus",
+                                                   "createChain",
+                                                   "write",
+                                                   "read",
+                                                   "remove",
+                                                   "deleteChain",
+                                                   "sealLocal",
+                                                   "openLocal",
+                                                   "recoveryWords",
+                                                   "qrCode",
+                                                   "recoveryKitPreview",
+                                                   "saveRecoveryKit",
+                                                   "copyRecoveryKit",
+                                                   "copyRecoveryPhrase",
+                                                   "revealFolder",
+                                                   "readPasswords"};
+  return methods;
+}
+bool RequiresUIThread(const std::string &method) {
+  static const std::vector<std::string> methods = {
+      "chooseFolder", "saveRecoveryKit", "copyRecoveryKit",
+      "copyRecoveryPhrase"};
+  return std::find(methods.begin(), methods.end(), method) != methods.end();
+}
+std::string InvokeEnvelope(const std::string &method,
+                           const std::string &argsJson) {
+  try {
+    auto &methods = MethodNames();
+    if (std::find(methods.begin(), methods.end(), method) == methods.end())
+      throw Failure("unsupported",
+                    "This native method is unavailable on Windows");
+    if (!Json::parse(argsJson).is_array())
+      throw Failure("invalid_arguments",
+                    "Native method arguments must be a JSON array");
+    return Json{{"value", Json::parse(Invoke(kModuleName, method, argsJson))}}
+        .dump();
+  } catch (const Failure &error) {
+    return Json{{"error", {{"code", error.code}, {"message", error.what()}}}}
+        .dump();
+  } catch (const Json::exception &) {
+    return Json{{"error",
+                 {{"code", "invalid_arguments"},
+                  {"message", "Invalid native method arguments"}}}}
+        .dump();
+  } catch (const std::exception &error) {
+    return Json{
+        {"error", {{"code", "native_failure"}, {"message", error.what()}}}}
+        .dump();
+  }
 }
 } // namespace bay::sync

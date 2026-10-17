@@ -62,7 +62,7 @@ def main():
             else:
                 run([compiler, "-std=c++17", f"-I{include}", *sources, *libraries, "-o", binary])
         if args.suite in ("sync", "all"):
-            sources = ["packages/sync/windows/SyncCrypto.cpp", "packages/sync/windows/SyncVault.cpp", "packages/sync/windows/tests/Compatibility.cpp"]
+            sources = ["packages/sync/windows/SyncCrypto.cpp", "packages/sync/windows/SyncVault.cpp", "packages/sync/windows/RecoveryKit.cpp", "packages/sync/windows/tests/Compatibility.cpp"]
             libraries = ["bcrypt.lib", "crypt32.lib", "advapi32.lib"]
             if not windows:
                 sources.append("packages/sync/windows/tests/OpenSSLBackend.cpp")
@@ -72,7 +72,12 @@ def main():
             run([binary, REPO / "packages/sync/windows/tests/golden.json", root / "vault"])
         if args.suite in ("import", "all"):
             binary = root / ("import-test.exe" if windows else "import-test")
-            compile(["packages/import/windows/Readers.cpp", "packages/import/windows/Sessions.cpp", "packages/import/windows/tests/Readers.cpp"], binary, ["winsqlite3.lib"] if windows else ["-lsqlite3"])
+            sources = ["packages/import/windows/Readers.cpp", "packages/import/windows/Sessions.cpp", "packages/import/windows/Arc.cpp", "packages/import/windows/Secrets.cpp", "packages/sync/windows/SyncCrypto.cpp", "packages/import/windows/tests/Readers.cpp"]
+            libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib"]
+            if not windows:
+                sources.append("packages/sync/windows/tests/OpenSSLBackend.cpp")
+                libraries = ["-lsqlite3", *shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))]
+            compile(sources, binary, libraries)
             run([binary, REPO / "packages/import/fixtures", root / "import-db"])
 
 

@@ -259,11 +259,26 @@ Json parseNetscapeBookmarks(const std::string &html) {
                                                          : (*a)[4].str());
     auto pos = static_cast<std::size_t>(match.position() + match.length());
     auto tail = clean.substr(pos);
-    auto next = std::sregex_iterator(tail.begin(), tail.end(), tag);
-    auto title = trim(entities(
-        next == end
-            ? tail
-            : tail.substr(0, static_cast<std::size_t>((*next).position()))));
+    std::string titleText;
+    std::size_t consumed = 0;
+    for (auto next = std::sregex_iterator(tail.begin(), tail.end(), tag);
+         next != end; ++next) {
+      auto token = *next;
+      auto tokenStart = static_cast<std::size_t>(token.position());
+      titleText += tail.substr(consumed, tokenStart - consumed);
+      consumed = tokenStart + static_cast<std::size_t>(token.length());
+      auto tagName = lower(token[2]);
+      bool closing = !token[1].str().empty();
+      if ((closing && tagName == name) ||
+          (!closing && (tagName == "a" || tagName == "h3" || tagName == "dl" ||
+                        tagName == "dt")))
+        break;
+      if (std::next(next) == end)
+        titleText += tail.substr(consumed);
+    }
+    if (consumed == 0)
+      titleText = tail;
+    auto title = trim(entities(titleText));
     Json node;
     if (name == "h3") {
       flush();

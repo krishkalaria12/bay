@@ -1,3 +1,4 @@
+#include "../RecoveryKit.h"
 #include "../SyncCrypto.h"
 #include "../SyncVault.h"
 #include <fstream>
@@ -66,6 +67,38 @@ int main(int argc, char **argv) {
             "recovery phrase round trip failed");
     std::filesystem::path folder(argv[2]);
     std::filesystem::create_directories(folder);
+    auto qr = recoveryQrPNG(entropy);
+    const Bytes signature{137, 80, 78, 71, 13, 10, 26, 10};
+    require(qr.size() > 32 &&
+                std::equal(signature.begin(), signature.end(), qr.begin()),
+            "QR image is not a PNG");
+    auto dimension = [&](unsigned start) {
+      unsigned value = 0;
+      for (unsigned i = start; i < start + 4; ++i)
+        value = value * 256 + qr[i];
+      return value;
+    };
+    require(dimension(16) == dimension(20) && dimension(16) >= 200,
+            "QR image dimensions are invalid");
+    {
+      std::ofstream png(folder / "recovery-qr.png", std::ios::binary);
+      png.write(reinterpret_cast<const char *>(qr.data()), qr.size());
+    }
+    auto pdf = recoveryKitPDF(entropy, "Windows test device");
+    require(pdf.rfind("%PDF-1.4", 0) == 0 &&
+                pdf.find("xref\n0 6\n") != std::string::npos,
+            "Recovery kit is not a PDF");
+    for (auto &word : words)
+      require(pdf.find(word) != std::string::npos,
+              "Recovery PDF lost a phrase word");
+    require(pdf.find("re f\n") != std::string::npos &&
+                recoveryKitText(entropy, "test").find("Windows") !=
+                    std::string::npos,
+            "Recovery kit is missing its QR or desktop instructions");
+    {
+      std::ofstream file(folder / "recovery-kit.pdf", std::ios::binary);
+      file << pdf;
+    }
     Vault vault(folder, keys);
     auto id = vault.write("p:default", payload);
     auto listing = vault.read("p:default", {});
@@ -79,7 +112,7 @@ int main(int argc, char **argv) {
     vault.deleteChain();
     require(!vault.chainExists(), "chain removal failed");
     std::cout << "Sync format matches Swift; tampering, profile binding, "
-                 "recovery and vault tests passed\n";
+                 "recovery, QR/PDF and vault tests passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

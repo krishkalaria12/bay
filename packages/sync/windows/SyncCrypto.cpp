@@ -5,10 +5,12 @@
 #include <cctype>
 #include <limits>
 #ifdef _WIN32
+#include <windows.h>
+
 #include <bcrypt.h>
+#include <sddl.h>
 #include <wincred.h>
 #include <wincrypt.h>
-#include <windows.h>
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "advapi32.lib")
@@ -190,6 +192,43 @@ void deleteSecret(const std::string &account) {
   CredDeleteW(target(account).c_str(), CRED_TYPE_GENERIC, 0);
 }
 #endif
+void createPrivateDirectory(const std::filesystem::path &path) {
+#ifdef _WIN32
+  HANDLE token = nullptr;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+    throw Failure("folder", "Could not protect a private folder");
+  DWORD size = 0;
+  GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+  Bytes info(size);
+  bool read =
+      GetTokenInformation(token, TokenUser, info.data(), size, &size) != FALSE;
+  CloseHandle(token);
+  if (!read)
+    throw Failure("folder", "Could not read the Windows user identity");
+  LPWSTR sid = nullptr;
+  if (!ConvertSidToStringSidW(
+          reinterpret_cast<TOKEN_USER *>(info.data())->User.Sid, &sid))
+    throw Failure("folder", "Could not protect a private folder");
+  std::wstring sddl =
+      L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;" + std::wstring(sid) + L")";
+  LocalFree(sid);
+  PSECURITY_DESCRIPTOR descriptor = nullptr;
+  if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+          sddl.c_str(), SDDL_REVISION_1, &descriptor, nullptr))
+    throw Failure("folder", "Could not protect a private folder");
+  SECURITY_ATTRIBUTES attributes{sizeof(SECURITY_ATTRIBUTES), descriptor,
+                                 FALSE};
+  bool created = CreateDirectoryW(path.c_str(), &attributes) != FALSE;
+  LocalFree(descriptor);
+  if (!created)
+    throw Failure("folder", "Could not create a private folder");
+#else
+  if (!std::filesystem::create_directory(path))
+    throw Failure("folder", "Private folder already exists");
+  std::filesystem::permissions(path, std::filesystem::perms::owner_all,
+                               std::filesystem::perm_options::replace);
+#endif
+}
 std::string base32(const Bytes &input) {
   static constexpr char alphabet[] = "abcdefghijklmnopqrstuvwxyz234567";
   std::string result;

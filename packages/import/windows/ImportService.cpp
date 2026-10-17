@@ -6,8 +6,9 @@
 #include <set>
 #include <sstream>
 #ifdef _WIN32
-#include <shobjidl.h>
 #include <windows.h>
+
+#include <shobjidl.h>
 #include <wrl/client.h>
 #endif
 namespace bay::importer {
@@ -19,6 +20,7 @@ ImportWriter importWriter;
 std::map<std::string, Bytes> browserKeys;
 std::map<std::string, std::string> firefoxPasswords;
 std::map<std::string, std::shared_ptr<std::atomic_bool>> jobs;
+std::set<std::string> cancelledJobs;
 struct Entry {
   SensitiveImport data;
   std::chrono::steady_clock::time_point time;
@@ -188,6 +190,53 @@ Json profiles(const Browser &browser) {
       out.push_back(profile);
     }
   }
+  if (browser.id == "arc" &&
+      fs::exists(browser.root.parent_path() / "StorableSidebar.json")) {
+    try {
+      auto sidebar =
+          arcSidebar(browser.root.parent_path() / "StorableSidebar.json");
+      std::function<unsigned(const Json &)> links = [&](const Json &node) {
+        if (node.value("type", "") == "url")
+          return 1u;
+        unsigned count = 0;
+        for (auto &child : node.value("children", Json::array()))
+          count += links(child);
+        return count;
+      };
+      for (auto &profile : out) {
+        Json spaces = Json::array();
+        bool favorites =
+            sidebar["favorites"].contains(profile["id"].get<std::string>());
+        for (auto &space : sidebar["spaces"])
+          if (space["profileId"] == profile["id"]) {
+            Json summary = {{"id", space["id"]},
+                            {"name", space["name"]},
+                            {"tabCount", space["tabs"].size()}};
+            unsigned count = 0;
+            for (auto &node : space["pinned"])
+              count += links(node);
+            summary["pinnedCount"] = count;
+            for (auto key : {"color", "emoji", "icon"})
+              if (space.contains(key))
+                summary[key] = space[key];
+            spaces.push_back(summary);
+          }
+        if (!spaces.empty()) {
+          profile["spaces"] = spaces;
+          for (auto kind : {"spaces", "pinnedTabs", "tabs"})
+            if (std::find(profile["available"].begin(),
+                          profile["available"].end(),
+                          kind) == profile["available"].end())
+              profile["available"].push_back(kind);
+        }
+        if (favorites)
+          profile["available"].push_back("favorites");
+      }
+    } catch (
+        const std::exception &) { /* Ordinary Chromium data can still be
+                                     imported if Arc's sidebar is unreadable. */
+    }
+  }
   std::stable_sort(out.begin(), out.end(), [](const Json &a, const Json &b) {
     return a.value("isDefault", false) && !b.value("isDefault", false);
   });
@@ -243,6 +292,8 @@ Json import(const Json &args) {
   {
     std::lock_guard<std::mutex> lock(stateMutex);
     jobs[job] = cancelled;
+    if (cancelledJobs.erase(job))
+      cancelled->store(true);
     if (browserKeys.count(id))
       key = browserKeys[id];
     if (firefoxPasswords.count(id))
@@ -259,6 +310,7 @@ Json import(const Json &args) {
         p[i] = 0;
       std::lock_guard<std::mutex> lock(stateMutex);
       jobs.erase(job);
+      cancelledJobs.erase(job);
     }
   } cleanup{job, key, primary};
   auto observer = [&](Json event) {
@@ -304,6 +356,40 @@ Json import(const Json &args) {
         result["history"] = history(path, browser.firefox, options, observer,
                                     *cancelled, count);
         result["historyCount"] = count;
+      } else if (browser.id == "arc" &&
+                 (kind == "spaces" || kind == "pinnedTabs" || kind == "tabs" ||
+                  kind == "favorites")) {
+        auto sidebar =
+            arcSidebar(browser.root.parent_path() / "StorableSidebar.json");
+        if (kind == "favorites")
+          result["favorites"] =
+              sidebar["favorites"].value(profileId, Json::array());
+        else {
+          Json spaces = Json::array();
+          for (auto space : sidebar["spaces"]) {
+            if (space["profileId"] != profileId)
+              continue;
+            if (settings.contains("spaceIds") &&
+                settings["spaceIds"].is_array() &&
+                std::find(settings["spaceIds"].begin(),
+                          settings["spaceIds"].end(),
+                          space["id"]) == settings["spaceIds"].end())
+              continue;
+            if (std::find(kinds.begin(), kinds.end(), "pinnedTabs") ==
+                kinds.end())
+              space["pinned"] = Json::array();
+            if (std::find(kinds.begin(), kinds.end(), "tabs") == kinds.end())
+              space["tabs"] = Json::array();
+            spaces.push_back(space);
+          }
+          result["spaces"] = spaces;
+          if (kind == "tabs") {
+            result["tabs"] = Json::array();
+            for (auto &space : spaces)
+              for (auto &tab : space["tabs"])
+                result["tabs"].push_back(tab);
+          }
+        }
       } else if (kind == "tabs") {
         auto tabs = browser.firefox ? firefoxTabs(path, *cancelled)
                                     : chromiumTabs(path, *cancelled);
@@ -316,6 +402,8 @@ Json import(const Json &args) {
           int blocked = 0;
           result["credentials"] =
               chromiumLogins(path, key, *cancelled, blocked);
+          if (blocked && result["credentials"].empty())
+            result["failed"].push_back(kind);
           if (blocked)
             result["warnings"].push_back(
                 {{"kind", kind},
@@ -429,7 +517,7 @@ std::string Invoke(const std::string &, const std::string &method,
                                     : browser.id == "arc" ? "arc"
                                                           : "chromium"},
                          {"requiresExport", false},
-                         {"needsKeychain", false},
+                         {"needsKeychain", !browser.firefox},
                          {"profiles", found}});
     }
     result = sources.dump();
@@ -440,6 +528,8 @@ std::string Invoke(const std::string &, const std::string &method,
     auto it = jobs.find(args.at(0).get<std::string>());
     if (it != jobs.end())
       it->second->store(true);
+    else if (cancelledJobs.size() < 1024)
+      cancelledJobs.insert(args.at(0).get<std::string>());
   } else if (method == "unlockBrowser") {
     auto id = args.at(0).get<std::string>();
     bool found = false;
@@ -530,5 +620,43 @@ std::string Invoke(const std::string &, const std::string &method,
     throw Failure("unsupported",
                   "This import method is unavailable on Windows");
   return result.dump();
+}
+const std::vector<std::string> &MethodNames() {
+  static const std::vector<std::string> methods = {
+      "listBrowsers",        "importData",         "cancelImport",
+      "unlockBrowser",       "isBrowserUnlocked",  "forgetUnlockedKeys",
+      "writeImported",       "discardImported",    "listExtensions",
+      "importBookmarksHTML", "importPasswordsCSV", "chooseImportFile"};
+  return methods;
+}
+bool RequiresUIThread(const std::string &method) {
+  static const std::vector<std::string> methods = {"chooseImportFile"};
+  return std::find(methods.begin(), methods.end(), method) != methods.end();
+}
+std::string InvokeEnvelope(const std::string &method,
+                           const std::string &argsJson) {
+  try {
+    auto &methods = MethodNames();
+    if (std::find(methods.begin(), methods.end(), method) == methods.end())
+      throw Failure("unsupported",
+                    "This native method is unavailable on Windows");
+    if (!Json::parse(argsJson).is_array())
+      throw Failure("invalid_arguments",
+                    "Native method arguments must be a JSON array");
+    return Json{{"value", Json::parse(Invoke(kModuleName, method, argsJson))}}
+        .dump();
+  } catch (const Failure &error) {
+    return Json{{"error", {{"code", error.code}, {"message", error.what()}}}}
+        .dump();
+  } catch (const Json::exception &) {
+    return Json{{"error",
+                 {{"code", "invalid_arguments"},
+                  {"message", "Invalid native method arguments"}}}}
+        .dump();
+  } catch (const std::exception &error) {
+    return Json{
+        {"error", {{"code", "native_failure"}, {"message", error.what()}}}}
+        .dump();
+  }
 }
 } // namespace bay::importer
