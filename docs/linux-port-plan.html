@@ -1,0 +1,2513 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay for Linux</title>
+    <meta
+      name="description"
+      content="Phased plan for porting Bay to Linux: machine prerequisites and engine build commands, distro support, the hosting decision, phases with exit criteria, module and patch maps, lessons from Helium and Zen, risks and open decisions."
+    />
+    <style>
+      :root {
+        --bg: #fbfaf8;
+        --surface: #ffffff;
+        --sunken: #f3f1ed;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --faint: #8a857c;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --accent-soft: #e8eefc;
+        --ok: #1f7a4d;
+        --ok-soft: #e3f3ea;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --risk: #b0362c;
+        --risk-soft: #fbe7e4;
+        --mac: #6b4fbb;
+        --mac-soft: #efeafb;
+        --lnx: #a8481a;
+        --lnx-soft: #fbeadf;
+        --code-bg: #f6f4f0;
+        --radius: 10px;
+        --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", "Cantarell", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --sunken: #232321;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --faint: #85817a;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --accent-soft: #1f2a46;
+          --ok: #6fd1a0;
+          --ok-soft: #173327;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+          --risk: #f08a80;
+          --risk-soft: #3d1d1a;
+          --mac: #b7a2f5;
+          --mac-soft: #2a2340;
+          --lnx: #f4a77c;
+          --lnx-soft: #3d2416;
+          --code-bg: #121211;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #151514;
+        --surface: #1c1c1b;
+        --sunken: #232321;
+        --ink: #ecebe7;
+        --muted: #b1ada4;
+        --faint: #85817a;
+        --line: #34332f;
+        --accent: #8aa8ff;
+        --accent-soft: #1f2a46;
+        --ok: #6fd1a0;
+        --ok-soft: #173327;
+        --warn: #f0b45c;
+        --warn-soft: #3a2c14;
+        --risk: #f08a80;
+        --risk-soft: #3d1d1a;
+        --mac: #b7a2f5;
+        --mac-soft: #2a2340;
+        --lnx: #f4a77c;
+        --lnx-soft: #3d2416;
+        --code-bg: #121211;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      code,
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.88em;
+      }
+      code {
+        background: var(--sunken);
+        padding: 0.08em 0.35em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.9rem, 4vw, 2.6rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.45rem;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.9rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin: 1.4rem 0 0.5rem;
+      }
+      h4 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 1.1rem 0 0.4rem;
+      }
+      p {
+        margin: 0 0 0.8rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 0.9rem;
+        padding-left: 1.25rem;
+      }
+      li {
+        margin: 0.18rem 0;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      .skip {
+        position: absolute;
+        left: -999px;
+        top: 0;
+        background: var(--surface);
+        padding: 8px 12px;
+      }
+      .skip:focus {
+        left: 16px;
+        top: 16px;
+        z-index: 10;
+      }
+
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+      header.top {
+        padding: 48px 0 28px;
+        border-bottom: 1px solid var(--line);
+      }
+      .eyebrow {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.6rem;
+      }
+      .lede {
+        font-size: 1.12rem;
+        color: var(--muted);
+        max-width: 72ch;
+        margin-top: 0.9rem;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin-top: 1.1rem;
+        font-size: 0.86rem;
+        color: var(--faint);
+        align-items: center;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 32px;
+        padding: 28px 16px 80px;
+      }
+      @media (min-width: 1000px) {
+        .layout {
+          grid-template-columns: 220px minmax(0, 1fr);
+          gap: 48px;
+        }
+        nav.toc {
+          position: sticky;
+          top: 20px;
+          align-self: start;
+          max-height: calc(100vh - 40px);
+          overflow: auto;
+        }
+      }
+      nav.toc {
+        font-size: 0.9rem;
+      }
+      nav.toc h2 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
+      }
+      nav.toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      nav.toc li {
+        margin: 0;
+      }
+      nav.toc a {
+        display: block;
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      nav.toc a:hover {
+        background: var(--sunken);
+      }
+      nav.toc a.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      nav.toc .sub a {
+        padding-left: 20px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      @media (max-width: 999px) {
+        nav.toc {
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          padding: 12px;
+        }
+        nav.toc .sub {
+          display: none;
+        }
+      }
+
+      main {
+        min-width: 0;
+      }
+      main section {
+        margin-bottom: 56px;
+        scroll-margin-top: 16px;
+      }
+      .prose {
+        max-width: 78ch;
+      }
+
+      .callout {
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        margin: 0 0 1rem;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+      }
+      .callout.risk {
+        border-left-color: var(--risk);
+      }
+      .callout.ok {
+        border-left-color: var(--ok);
+      }
+      .callout.lnx {
+        border-left-color: var(--lnx);
+      }
+      .callout > :last-child {
+        margin-bottom: 0;
+      }
+
+      .grid2 {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 760px) {
+        .grid2 {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        min-width: 0;
+      }
+      .card h3 {
+        margin-top: 0;
+      }
+      .card > :last-child {
+        margin-bottom: 0;
+      }
+
+      .chip {
+        display: inline-block;
+        font-size: 0.74rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        vertical-align: 1px;
+      }
+      .chip.mac {
+        background: var(--mac-soft);
+        color: var(--mac);
+      }
+      .chip.win {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .chip.lnx {
+        background: var(--lnx-soft);
+        color: var(--lnx);
+      }
+      .chip.ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .chip.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .chip.risk {
+        background: var(--risk-soft);
+        color: var(--risk);
+      }
+      .chip.gate {
+        background: var(--ink);
+        color: var(--bg);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0 0 1rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-weight: 600;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        position: sticky;
+        top: 0;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      caption {
+        caption-side: top;
+        text-align: left;
+        padding: 10px 12px 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      /* prerequisite steps + code */
+      .steps {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1rem;
+        counter-reset: step;
+      }
+      .steps > li {
+        counter-increment: step;
+        position: relative;
+        padding: 16px 18px 6px 58px;
+        margin: 0 0 12px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      .steps > li::before {
+        content: counter(step);
+        position: absolute;
+        left: 16px;
+        top: 15px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--lnx-soft);
+        color: var(--lnx);
+        font-weight: 700;
+        font-size: 0.9rem;
+        display: grid;
+        place-items: center;
+        font-family: var(--mono);
+      }
+      .steps > li h3 {
+        margin: 2px 0 0.35rem;
+      }
+      .where {
+        font-size: 0.78rem;
+        color: var(--faint);
+        font-family: var(--mono);
+        margin-left: 6px;
+        font-weight: 400;
+      }
+      .code {
+        position: relative;
+        margin: 0.4rem 0 0.9rem;
+      }
+      .code pre {
+        margin: 0;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+        overflow-x: auto;
+        font: 0.84rem/1.55 var(--mono);
+        color: var(--ink);
+        tab-size: 2;
+      }
+      .code pre .c {
+        color: var(--faint);
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        font: 600 0.72rem var(--sans);
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 3px 9px;
+        cursor: pointer;
+      }
+      .copy:hover {
+        color: var(--ink);
+      }
+      .copy.done {
+        color: var(--ok);
+        border-color: var(--ok);
+      }
+
+      /* flow of phases */
+      .flow {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr;
+        margin: 0 0 1.2rem;
+        padding: 0;
+        list-style: none;
+      }
+      @media (min-width: 760px) {
+        .flow {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (min-width: 1180px) {
+        .flow {
+          grid-template-columns: repeat(5, 1fr);
+        }
+      }
+      .flow li {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        font-size: 0.88rem;
+      }
+      .flow li strong {
+        display: block;
+        font-size: 0.95rem;
+      }
+      .flow li .chip {
+        margin-top: 6px;
+      }
+      .flow li.gate {
+        border-color: var(--ink);
+        border-width: 2px;
+      }
+
+      /* phase cards */
+      .phase {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px 22px 8px;
+        margin-bottom: 18px;
+        scroll-margin-top: 16px;
+      }
+      .phase.gate {
+        border: 2px solid var(--ink);
+      }
+      .phase-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px 12px;
+        margin-bottom: 0.4rem;
+      }
+      .phase-num {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        color: var(--faint);
+      }
+      .phase-head h3 {
+        margin: 0;
+        font-size: 1.2rem;
+      }
+      .phase .goal {
+        color: var(--muted);
+        max-width: 80ch;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px 18px;
+        font-size: 0.86rem;
+        margin: 0.6rem 0 0.4rem;
+        padding: 10px 12px;
+        background: var(--sunken);
+        border-radius: 8px;
+      }
+      @media (min-width: 760px) {
+        .facts {
+          grid-template-columns: max-content 1fr;
+        }
+      }
+      .facts dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .facts dd {
+        margin: 0;
+      }
+      .checks li::marker {
+        content: "✓  ";
+        color: var(--ok);
+      }
+      .cols {
+        display: grid;
+        gap: 0 28px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 900px) {
+        .cols {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      /* hosting diagram */
+      .stack {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+        margin: 0.4rem 0 1rem;
+      }
+      @media (min-width: 860px) {
+        .stack {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      .stack figure {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px;
+        min-width: 0;
+      }
+      .stack figure.pick {
+        border: 2px solid var(--ok);
+      }
+      .stack figcaption {
+        font-size: 0.86rem;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .layer {
+        border-radius: 7px;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        margin-top: 6px;
+        border: 1px dashed var(--line);
+        background: var(--sunken);
+      }
+      .layer.top {
+        background: var(--accent-soft);
+        border-style: solid;
+        border-color: transparent;
+        color: var(--ink);
+      }
+      .layer.chrome {
+        background: var(--ok-soft);
+        border-style: solid;
+        border-color: transparent;
+      }
+      .layer.native {
+        background: var(--lnx-soft);
+        border-style: solid;
+        border-color: transparent;
+      }
+      .layer b {
+        font-weight: 600;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0 0 10px;
+      }
+      details > summary {
+        cursor: pointer;
+        padding: 11px 14px;
+        font-weight: 600;
+        list-style-position: inside;
+      }
+      details[open] > summary {
+        border-bottom: 1px solid var(--line);
+      }
+      details > .inner {
+        padding: 10px 14px 6px;
+      }
+
+      .sources li {
+        overflow-wrap: anywhere;
+        font-size: 0.9rem;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 20px 0 40px;
+        color: var(--faint);
+        font-size: 0.85rem;
+      }
+      .theme-toggle {
+        margin-left: auto;
+        font: inherit;
+        font-size: 0.82rem;
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 12px;
+        cursor: pointer;
+      }
+      @media print {
+        nav.toc,
+        .theme-toggle,
+        .copy {
+          display: none;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        details {
+          border: 0;
+        }
+        details > summary {
+          list-style: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top">
+      <div class="wrap">
+        <div class="eyebrow">Bay · Port plan · <span class="mono">feat/linux</span> (after <span class="mono">feat/windows</span>)</div>
+        <h1>Bay for Linux</h1>
+        <p class="lede">
+          Linux is the third desktop target, and it differs from the other two in one important way: React Native has no usable Linux platform. Linux shares the
+          Windows plan's host: Bay's React UI runs on react-native-web as a Chrome WebUI page, tabs are SurfaceEmbed elements in it, and the engine is NNCore,
+          Chrome plus Bay's layer. Zen and Vivaldi are both built this way. The plan begins with what the Linux machine needs, including the commands to build
+          the pinned Chromium. The phases follow.
+        </p>
+        <div class="meta">
+          <span>Drafted 17 Oct 2026</span>
+          <span>Engine: Chromium 154.0.8037.58 + NNCore</span>
+          <span>UI: React 19.1 · RN 0.81 · Expo 54 → react-native-web on Linux</span>
+          <span>Build box: Arch Linux, x86_64</span>
+          <button class="theme-toggle" type="button" id="themeToggle" aria-label="Toggle colour theme">Theme</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap layout">
+      <nav class="toc" aria-label="Contents">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#summary">Summary</a></li>
+          <li><a href="#prereqs">Prerequisites & engine build</a></li>
+          <li class="sub"><a href="#machine">Machine</a></li>
+          <li class="sub"><a href="#commands">Commands, step by step</a></li>
+          <li><a href="#distros">Distro support</a></li>
+          <li><a href="#scope">Scope</a></li>
+          <li><a href="#inherit">What Linux inherits</a></li>
+          <li><a href="#lessons">Lessons from Helium & Zen</a></li>
+          <li><a href="#hosting">The hosting decision</a></li>
+          <li><a href="#phases">Phases</a></li>
+          <li class="sub"><a href="#p0">0 · Groundwork</a></li>
+          <li class="sub"><a href="#p1">1 · Linux engine build</a></li>
+          <li class="sub"><a href="#p2">2 · Hosting spike (gate)</a></li>
+          <li class="sub"><a href="#p3">3 · Engine: NNCore on Linux</a></li>
+          <li class="sub"><a href="#p4">4 · UI on web + bridge</a></li>
+          <li class="sub"><a href="#p5">5 · Linux shell & UX</a></li>
+          <li class="sub"><a href="#p6">6 · Data: import, sync, secrets</a></li>
+          <li class="sub"><a href="#p7">7 · Packaging & updates</a></li>
+          <li class="sub"><a href="#p8">8 · Hardening & beta</a></li>
+          <li><a href="#modules">Native module map</a></li>
+          <li><a href="#patches">Patch series map</a></li>
+          <li><a href="#risks">Risks</a></li>
+          <li><a href="#decisions">Decisions needed</a></li>
+          <li><a href="#sources">Sources</a></li>
+        </ol>
+      </nav>
+
+      <main id="main">
+        <!-- ============================== SUMMARY ============================== -->
+        <section id="summary" aria-labelledby="summary-h">
+          <h2 id="summary-h">Summary</h2>
+          <div class="prose">
+            <div class="callout ok">
+              <p>
+                <strong>Yes, Bay can run on Linux, on the same host as Windows.</strong> Since 17 October 2026 the Windows plan renders Bay's UI inside the
+                engine: the React UI runs on react-native-web as a Chrome WebUI page (<code>chrome://bay</code>), each tab is an
+                <code>&lt;embed&gt;</code> backed by Chromium's <strong>SurfaceEmbed</strong>, and the engine is NNCore, which is Chrome plus Bay's layer, as on
+                macOS. Linux uses that host unchanged. Only the window frame, the backdrop and system integration are Linux code.
+              </p>
+            </div>
+            <p>
+              <strong>Why this fits Linux.</strong> Meta ships no React Native for Linux, and the community projects are early: <em>react-native-linux</em> says
+              "pre-alpha, M0 done", and <em>react-native-gtkx</em> has no releases. Neither can embed a Chromium surface. A UI drawn by the engine needs
+              neither, and Chrome's own window code already runs on Wayland and X11 through Ozone. This is the model Zen uses on Gecko: about 178k lines of UI
+              JS/CSS, of which only 18 references are Linux-specific.
+            </p>
+            <p>
+              <strong>Upstream is building it.</strong> Chromium's <em>WebUI Browser</em> (<code>kWebium</code>) and <code>components/surface_embed</code>
+              are both in Bay's pinned tag, 154.0.8037.58, switched off by default. One caution for Linux: upstream's SurfaceEmbed render test is disabled on
+              Linux (crbug.com/534291359) while it runs on Windows and macOS. Phase&nbsp;2 tests painting on Wayland and X11 before anything else.
+            </p>
+            <p>
+              <strong>Shared with Windows:</strong> the web build of the UI, the <code>@bay/platform</code> web wrappers, the asynchronous bridge over Mojo, the
+              NNCore <code>.mm</code> split, the Bay window class and <code>chrome://bay</code>. Each is written once, in the Windows plan's phases, and Linux
+              adds its frame, backdrop, secrets and packaging. The prerequisite steps below build stock Chrome from the pinned tree, which is the baseline both
+              platforms start from.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============================== PREREQS ============================== -->
+        <section id="prereqs" aria-labelledby="prereqs-h">
+          <h2 id="prereqs-h">Prerequisites & engine build</h2>
+          <div class="callout lnx prose">
+            <p>
+              <strong>Do this first on the Arch box.</strong> Steps 1–3 prepare the host. Steps 4–8 run inside an Ubuntu 24.04 <code>distrobox</code> that
+              shares your home directory, so the 100+ GB tree lives on the host disk. Ubuntu is the distro CEF documents, the one
+              <code>install-build-deps.sh</code> supports, and the one GitHub's Linux runners use. Helium builds the same way, but in a Debian trixie container.
+              Chromium's Debian <strong>sysroot</strong> (<code>use_sysroot=true</code>) makes the binaries independent of the build host's libraries, so an
+              engine built here also runs on older distros.
+            </p>
+            <p>
+              The build in Steps 4–8 is a <strong>stock Chrome baseline with the exact pins</strong> from <code>engine/patches/build/engine-lock.json</code>. It
+              proves the machine and toolchain work. The Bay-patched build uses the same checkout once Phase&nbsp;1 adds <code>linux</code> to the series and
+              the engine script (Step&nbsp;9).
+            </p>
+          </div>
+
+          <h3 id="machine">Machine</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Resource</th>
+                  <th scope="col">Minimum</th>
+                  <th scope="col">Recommended</th>
+                  <th scope="col">Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>CPU</td>
+                  <td>x86_64, 8 threads</td>
+                  <td>16+ threads</td>
+                  <td>Chromium doesn't support x86 (32-bit) builds on Linux. The first build takes many hours on 8 threads.</td>
+                </tr>
+                <tr>
+                  <td>RAM</td>
+                  <td>16 GB + 16 GB swap</td>
+                  <td>32–64 GB</td>
+                  <td>Chromium asks for 8 GB and recommends &gt;16 GB. CEF asks for 16 GB (32 GB+ recommended). The link steps are the peak.</td>
+                </tr>
+                <tr>
+                  <td>Disk</td>
+                  <td>150 GB free, SSD</td>
+                  <td>250 GB free, NVMe</td>
+                  <td>CEF quotes about 120 GB for a Debug tree. Release with <code>symbol_level=1</code> plus a second output directory needs room to grow.</td>
+                </tr>
+                <tr>
+                  <td>Kernel</td>
+                  <td>Unprivileged user namespaces</td>
+                  <td>Stock <code>linux</code> / <code>linux-zen</code></td>
+                  <td>Chrome's namespace sandbox. <code>linux-hardened</code> turns these off, which needs the SUID fallback in Step&nbsp;8.</td>
+                </tr>
+                <tr>
+                  <td>Session</td>
+                  <td>Wayland or X11</td>
+                  <td>Wayland + XWayland</td>
+                  <td>Test both. GNOME and KDE default to Wayland.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="commands">Commands, step by step</h3>
+          <ol class="steps">
+            <li>
+              <h3>Check the machine <span class="where">host · Arch</span></h3>
+              <div class="code">
+                <pre>nproc; free -h; df -h "$HOME"            <span class="c"># threads, RAM + swap, free disk</span></pre>
+              </div>
+              <p>
+                Under 32 GB of RAM, add swap before the Chromium build, or its link steps get killed for running out of memory. On btrfs, create the file with
+                <code>sudo btrfs filesystem mkswapfile --size 16g /swapfile</code> instead of the first line.
+              </p>
+              <div class="code">
+                <pre>
+sudo fallocate -l 16G /swapfile &amp;&amp; sudo chmod 600 /swapfile
+sudo mkswap /swapfile &amp;&amp; sudo swapon /swapfile</pre>
+              </div>
+            </li>
+
+            <li>
+              <h3>Install host packages <span class="where">host · Arch</span></h3>
+              <p>No compiler here: Chromium brings its own clang, and the container provides the rest.</p>
+              <div class="code">
+                <pre>sudo pacman -Syu --needed base-devel git python podman distrobox nodejs npm
+sudo npm install -g pnpm@11.1.3          <span class="c"># matches packageManager in package.json</span></pre>
+              </div>
+            </li>
+
+            <li>
+              <h3>Clone Bay and run the JS checks <span class="where">host · Arch</span></h3>
+              <div class="code">
+                <pre>
+git clone https://github.com/krishkalaria12/bay.git "$HOME/code/bay"
+cd "$HOME/code/bay"
+git switch feat/windows &amp;&amp; git switch -c feat/linux
+pnpm install --frozen-lockfile
+pnpm typecheck &amp;&amp; pnpm test</pre>
+              </div>
+            </li>
+
+            <li>
+              <h3>Create the build container <span class="where">host → container</span></h3>
+              <div class="code">
+                <pre>distrobox create --name bay-engine --image docker.io/library/ubuntu:24.04 \
+  --additional-packages "git curl file lsb-release procps python3 python3-pip sudo xz-utils zstd"
+distrobox enter bay-engine               <span class="c"># same $HOME, same user; run Steps 5–7 in here</span></pre>
+              </div>
+              <details>
+                <summary>Alternative: build directly on Arch, without a container</summary>
+                <div class="inner">
+                  <p>
+                    This works because the sysroot supplies the target libraries, but Chromium doesn't officially support it and rolling-release Python or tools
+                    can break older build scripts. Use the package list from Chromium's Linux build instructions in place of <code>install-build-deps.sh</code>,
+                    then run Steps 5–7 on the host and skip the <code>install-build-deps</code> line in Step&nbsp;6.
+                  </p>
+                  <div class="code">
+                    <pre>
+sudo pacman -S --needed base-devel python perl gperf nss alsa-lib glib2 gtk3 \
+  nspr freetype2 cairo dbus xorg-server-xvfb xorg-xdpyinfo lsb-release</pre>
+                  </div>
+                </div>
+              </details>
+            </li>
+
+            <li>
+              <h3>Fetch the pinned tools <span class="where">container</span></h3>
+              <p>Every pin is copied from <code>engine-lock.json</code>, the same pins the Windows engine script uses.</p>
+              <div class="code">
+                <pre>export CB="$HOME/chromium-build"
+mkdir -p "$CB/automate" "$CB/chromium_git" "$CB/logs"
+
+git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$CB/depot_tools"
+git -C "$CB/depot_tools" checkout --detach ccecefb58648ac0a416756b0a4591ec8905a7f55
+
+git clone https://github.com/ungoogled-software/ungoogled-chromium.git "$CB/ungoogled"
+git -C "$CB/ungoogled" checkout --detach 800d0bb5078472e4442c1fd73373172754a60939   <span class="c"># 154.0.8037.57-1</span>
+
+curl -fL --retry 3 -o "$CB/automate/automate-git.py" \
+  https://raw.githubusercontent.com/chromiumembedded/cef/564dd6c4aafff558154bd3176eb5d13551db6734/tools/automate/automate-git.py
+
+cat &gt; "$CB/env-linux.sh" &lt;&lt;'EOF'
+export CB="$HOME/chromium-build"
+export PATH="$CB/depot_tools:$PATH"
+export DEPOT_TOOLS_UPDATE=0 DEPOT_TOOLS_METRICS=0
+export CEF_USE_GN=1 GN_OUT_CONFIGS=Release_GN_x64
+export GN_DEFINES='is_official_build=false is_debug=false is_component_build=false target_cpu="x64" use_sysroot=true is_cfi=false use_thin_lto=false chrome_pgo_phase=0 dcheck_always_on=false symbol_level=1 blink_symbol_level=0 v8_symbol_level=0 proprietary_codecs=true ffmpeg_branding="Chrome" enable_widevine=true enable_mse_mpeg2ts_stream_parser=true use_vaapi=true rtc_use_pipewire=true treat_warnings_as_errors=false fatal_linker_warnings=false disable_fieldtrial_testing_config=true enable_hangout_services_extension=false enable_remoting=false use_official_google_api_keys=false google_api_key="" google_default_client_id="" google_default_client_secret="" enable_updater=false'
+EOF
+source "$CB/env-linux.sh"
+"$CB/depot_tools/ensure_bootstrap"      <span class="c"># one-time cipd/python bootstrap, no self-update</span></pre>
+              </div>
+              <p>
+                The GN args mirror <code>gn_defines.sh</code> (macOS) and <code>GN_ARGS</code> in <code>scripts/windows/engine.py</code>, plus Helium's Linux
+                choices (<code>use_sysroot</code>, <code>use_vaapi</code>, <code>rtc_use_pipewire</code>). <code>branding_file_path</code> is left out because
+                the stock tree doesn't have Bay's branding file yet.
+              </p>
+            </li>
+
+            <li>
+              <h3>Download CEF + Chromium, then the build deps <span class="where">container · 1–3 h, network-bound</span></h3>
+              <div class="code">
+                <pre>source "$HOME/chromium-build/env-linux.sh"
+python3 "$CB/automate/automate-git.py" \
+  --download-dir="$CB/chromium_git" --depot-tools-dir="$CB/depot_tools" \
+  --branch=8037 --checkout=564dd6c4aafff558154bd3176eb5d13551db6734 \
+  --no-chromium-history --x64-build --no-debug-build --no-build --no-distrib \
+  2&gt;&amp;1 | tee "$CB/logs/linux-sync.log"
+
+<span class="c"># Chromium's own dependency installer lives in the tree, so it runs after the sync</span>
+sudo "$CB/chromium_git/chromium/src/build/install-build-deps.sh" --no-arm --no-chromeos-fonts --no-nacl
+
+<span class="c"># Verify the pins</span>
+cd "$CB/chromium_git/chromium/src"
+grep -E '^(MAJOR|MINOR|BUILD|PATCH)=' chrome/VERSION | cut -d= -f2 | paste -sd.   <span class="c"># 154.0.8037.58</span>
+git -C cef rev-parse HEAD                                                     <span class="c"># 564dd6c4aafff558…</span>
+ls build/linux | grep sysroot                                                 <span class="c"># the Debian sysroot gclient fetched</span></pre>
+              </div>
+              <p>
+                An interrupted first fetch can't resume. Do what <code>scripts/download-engine</code> does on macOS: move the half-made <code>src</code> aside
+                and rerun.
+              </p>
+            </li>
+
+            <li>
+              <h3>Generate and build the stock baseline <span class="where">container · hours, CPU/RAM-bound</span></h3>
+              <div class="code">
+                <pre>source "$HOME/chromium-build/env-linux.sh"
+cd "$CB/chromium_git/chromium/src/cef" &amp;&amp; ./cef_create_projects.sh
+cd "$CB/chromium_git/chromium/src"
+
+<span class="c"># About 2 GB of RAM per job keeps the link steps out of swap</span>
+JOBS=$(( $(awk '/MemTotal/ {print int($2/1048576)}' /proc/meminfo) / 2 ))
+[ "$JOBS" -gt "$(nproc)" ] &amp;&amp; JOBS=$(nproc)
+autoninja -C out/Release_GN_x64 -j "$JOBS" chrome chrome_sandbox \
+  2&gt;&amp;1 | tee "$CB/logs/linux-build.log"</pre>
+              </div>
+              <p>
+                The baseline is stock Chrome from the pinned tree. Bay's engine on every platform is Chrome plus Bay's layer, so this is what Phase&nbsp;1
+                patches. CEF's tooling only fetched and generated the tree; nothing here links <code>libcef</code>.
+              </p>
+            </li>
+
+            <li>
+              <h3>Run it on your desktop <span class="where">host · exit the container</span></h3>
+              <div class="code">
+                <pre>OUT="$HOME/chromium-build/chromium_git/chromium/src/out/Release_GN_x64"
+P="$HOME/.cache/bay-baseline"                                            <span class="c"># a throwaway profile</span>
+"$OUT/chrome" --user-data-dir="$P" https://www.chromium.org/              <span class="c"># auto-selects the platform</span>
+"$OUT/chrome" --user-data-dir="$P" --ozone-platform=wayland chrome://gpu  <span class="c"># Wayland, check GPU</span>
+"$OUT/chrome" --user-data-dir="$P" --ozone-platform=x11 chrome://sandbox  <span class="c"># X11/XWayland, check sandbox</span>
+<span class="c"># The host Bay builds on: upstream's WebUI browser with SurfaceEmbed tabs</span>
+"$OUT/chrome" --user-data-dir="$P" --enable-features=Webium,SurfaceEmbed https://www.chromium.org/
+
+<span class="c"># glibc floor of the build (decides the oldest distro Bay can support)</span>
+objdump -T "$OUT/chrome" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1</pre>
+              </div>
+              <details>
+                <summary>If you see "No usable sandbox"</summary>
+                <div class="inner">
+                  <p>
+                    Stock Arch kernels allow user namespaces, so this usually means <code>linux-hardened</code> or a sysctl. For local testing only, use
+                    Chromium's SUID helper. Never use <code>--no-sandbox</code>.
+                  </p>
+                  <div class="code">
+                    <pre>
+sudo chown root:root "$OUT/chrome_sandbox" &amp;&amp; sudo chmod 4755 "$OUT/chrome_sandbox"
+export CHROME_DEVEL_SANDBOX="$OUT/chrome_sandbox"</pre>
+                  </div>
+                </div>
+              </details>
+            </li>
+
+            <li>
+              <h3>Bay-patched engine, once Phase&nbsp;1 lands <span class="where">container · planned interface</span></h3>
+              <p>
+                This command shape is planned and doesn't work yet: Phase&nbsp;0 generalises <code>scripts/windows/engine.py</code> into one script with a
+                platform profile, and Phase&nbsp;1 adds the <code>linux</code> series lines. It reuses the checkout from Step&nbsp;6 and keeps the Windows
+                script's safety rules: pinned revisions, no resets, and a <code>series.py check</code> before every build.
+              </p>
+              <div class="code">
+                <pre>cd "$HOME/code/bay"
+python3 scripts/engine.py --platform linux prepare   <span class="c"># checkout → ungoogled → domain subst. → chromium series → Bay layers → gn gen</span>
+python3 scripts/engine.py --platform linux build     <span class="c"># chrome (as bay) with Bay's layer, chrome_sandbox</span>
+python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engine-154.0.8037.58-linux-x64-&lt;digest&gt;.tar.zst + symbols</span></pre>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <!-- ============================== DISTROS ============================== -->
+        <section id="distros" aria-labelledby="distros-h">
+          <h2 id="distros-h">Distro support</h2>
+          <p class="prose">
+            "Most distros, not all" becomes three tiers. Glibc is the hard floor: Phase&nbsp;1 reads it from the built <code>chrome</code> binary (Step&nbsp;8).
+            CEF documents Ubuntu 20.04+ and Debian 10+ as build hosts. Treat the oldest LTS rows below as provisional until the floor is known.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Tier</th>
+                  <th scope="col">Distros</th>
+                  <th scope="col">Package</th>
+                  <th scope="col">Promise</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="chip ok">Tier 1</span></td>
+                  <td>Ubuntu 24.04 LTS, 26.04 LTS · Debian 13 · Fedora (current two releases) · Arch</td>
+                  <td>.deb + APT repo · .rpm + repo · AUR <code>bay-bin</code></td>
+                  <td>Tested in VMs before every release, on GNOME and KDE Plasma 6, Wayland and X11</td>
+                </tr>
+                <tr>
+                  <td><span class="chip warn">Tier 2</span></td>
+                  <td>
+                    Linux Mint, Pop!_OS, Zorin, Ubuntu 22.04 (if the glibc floor allows), Debian 12, openSUSE Tumbleweed / Leap, Manjaro, EndeavourOS, CachyOS
+                  </td>
+                  <td>Same packages (Ubuntu/Debian/Fedora/AUR family), or tarball / AppImage</td>
+                  <td>Expected to work. Smoke-launched in containers in CI, with community reports</td>
+                </tr>
+                <tr>
+                  <td><span class="chip warn">Tier 2</span></td>
+                  <td>wlroots and other compositors: Sway, Hyprland, niri, Cosmic · X11-only desktops: Xfce, Cinnamon, MATE</td>
+                  <td>Any</td>
+                  <td>Expected to work. Bugs fixed, but no release blockers</td>
+                </tr>
+                <tr>
+                  <td><span class="chip risk">Not supported</span></td>
+                  <td>
+                    32-bit, musl (Alpine, Void-musl), NixOS-native packaging (community may package), Fedora Silverblue / Bazzite / SteamOS until a Flatpak
+                    exists
+                  </td>
+                  <td>—</td>
+                  <td>No builds. The tarball may work at the user's own risk</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============================== SCOPE ============================== -->
+        <section id="scope" aria-labelledby="scope-h">
+          <h2 id="scope-h">Scope</h2>
+          <div class="grid2">
+            <div class="card">
+              <h3>In scope for the first Linux release</h3>
+              <ul>
+                <li>The sidebar and tabs model: spaces, pinned and split panes, command panel, find bar, downloads, settings, developer bar and inspector</li>
+                <li>
+                  Chrome features through the engine: extensions and the Web Store, passwords and autofill, permissions, PiP, casting, DevTools, site settings,
+                  history, bookmarks
+                </li>
+                <li>Content blocker, favicons, zoom, profiles, screen sharing through PipeWire</li>
+                <li>Import from Chrome, Chromium, Brave, Vivaldi, Opera, Edge and Helium for Linux, Firefox (native, snap and Flatpak profiles) and Zen</li>
+                <li>Encrypted folder sync, readable by the Mac, Windows and Linux apps</li>
+                <li>Packages, repo-based updates, default-browser registration, x86_64</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Out of scope</h3>
+              <ul>
+                <li>Liquid Glass and vibrancy. There's no portable compositor blur. KDE's blur protocol may come later</li>
+                <li>The four Metal shader views at launch. Because the UI runs in Chrome, a WebGL/WebGPU port is possible later</li>
+                <li>Dock tile, Dock selection, alternate app icons, the global menu bar</li>
+                <li>AppleScript, Handoff, Apple Translation, EventKit calendar</li>
+                <li>Importing from Safari, Dia and Arc (none exist on Linux)</li>
+                <li>Flatpak at launch (see <a href="#decisions">decisions</a>), arm64 at launch</li>
+              </ul>
+            </div>
+          </div>
+          <h3>macOS feature → Linux decision</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">macOS feature</th>
+                  <th scope="col">Linux</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Glass / vibrancy surfaces</td>
+                  <td>
+                    Solid window background. Inside the window, CSS translucency works, and <code>backdrop-filter</code> over pages is tested in Phase&nbsp;2
+                  </td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Metal shaders</td>
+                  <td>Static fallback (as on Windows); a WebGL port is possible later</td>
+                  <td><span class="chip risk">Drop</span> for now</td>
+                </tr>
+                <tr>
+                  <td>SF Symbols (<code>BaySymbol</code>)</td>
+                  <td>Reuse the Windows Fluent icon mapping (Fluent System Icons are MIT), rendered as an icon font in the DOM</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Global menu bar</td>
+                  <td>In-window app menu, as on Windows (Alt or F10)</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Traffic lights</td>
+                  <td>Client-side decorations: Bay draws caption buttons following the desktop's button layout (left or right)</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Sparkle updates</td>
+                  <td>The package manager (APT/DNF/AUR) owns updates. Tarball and AppImage get an in-app notice, with zsync for AppImage</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Keychain</td>
+                  <td>Secret Service through libsecret (GNOME Keyring, KWallet 6, KeePassXC)</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>UserNotifications</td>
+                  <td><code>org.freedesktop.Notifications</code> or the notification portal (Chrome already has a Linux bridge)</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Launch at login</td>
+                  <td>An XDG autostart <code>.desktop</code> file in <code>~/.config/autostart</code></td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Set as default browser</td>
+                  <td>
+                    <code>xdg-settings set default-web-browser bay.desktop</code>, which Chrome's <code>shell_integration_linux</code> already wraps. Bundle
+                    <code>xdg-settings</code> as Helium does
+                  </td>
+                  <td><span class="chip ok">Free-ish</span></td>
+                </tr>
+                <tr>
+                  <td>Trackpad swipe (<code>NNSwipe</code>)</td>
+                  <td>Chrome's touchpad overscroll history navigation (Wayland gestures). Check that it's on in M154</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Calendar, Translate, AppleScript, Handoff, Dock</td>
+                  <td>—</td>
+                  <td><span class="chip risk">Drop</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============================== INHERIT ============================== -->
+        <section id="inherit" aria-labelledby="inherit-h">
+          <h2 id="inherit-h">What Linux inherits</h2>
+          <p class="prose">
+            From the current <code>feat/windows</code> working tree. Linux is the third consumer of each seam, so most rows are about generalising a seam, not
+            starting from nothing.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Already there</th>
+                  <th scope="col">Where</th>
+                  <th scope="col">On Linux</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>React UI, 46k lines</td>
+                  <td><code>apps/browser/src</code></td>
+                  <td>
+                    <span class="chip ok">Reuse</span> through react-native-web. macOS-only props are already funnelled through <code>@bay/platform</code> views
+                  </td>
+                </tr>
+                <tr>
+                  <td>Capability table + OS seam</td>
+                  <td><code>packages/platform/src/capabilities.ts</code>, <code>os.ts</code></td>
+                  <td><span class="chip ok">Extend</span>: add <code>"linux"</code> to <code>PlatformOS</code>; the web OS layer is shared with Windows</td>
+                </tr>
+                <tr>
+                  <td>Ctrl shortcut table, motion seam</td>
+                  <td><code>shortcuts.ts</code>, <code>keys.ts</code>, <code>motion.ts</code></td>
+                  <td><span class="chip ok">Reuse</span>; Linux shares the Windows key table with a few differences, and Reanimated runs on the web on both</td>
+                </tr>
+                <tr>
+                  <td>Native contracts: 15 modules, 237 methods, 17 views</td>
+                  <td><code>nativeContracts.ts</code>, <code>native-contracts.mjs</code></td>
+                  <td><span class="chip ok">Reuse</span> as the spec the Linux bridge is tested against</td>
+                </tr>
+                <tr>
+                  <td>JSON envelope bridge</td>
+                  <td><code>nativeBridge.ts</code> (<code>bindWindowsModule</code>, <code>decodeNativeResult</code>)</td>
+                  <td><span class="chip ok">Reuse</span>: transport-neutral, with the Mojo transport the Windows plan adds</td>
+                </tr>
+                <tr>
+                  <td>The web host</td>
+                  <td>Windows plan: <code>BayWebUIBrowserWindow</code>, <code>chrome://bay</code>, SurfaceEmbed tabs, Mojo bridge</td>
+                  <td><span class="chip ok">Share</span>: written once; Linux adds its frame view and backdrop</td>
+                </tr>
+                <tr>
+                  <td>NNCore engine, ~10k lines</td>
+                  <td><code>engine/nncore/src/bay/core</code> (about 9.2k lines are Chrome C++ in <code>.mm</code> files)</td>
+                  <td>
+                    <span class="chip warn">Split</span> once in Phase&nbsp;0 for Windows and Linux; the CEF host in <code>win/</code> is Windows-only and being
+                    retired
+                  </td>
+                </tr>
+                <tr>
+                  <td>Portable .cc moved out of .mm</td>
+                  <td>
+                    <code>nn_devtools_call.cc</code>, <code>nn_desktop_capture.cc</code>, <code>nn_host_visibility.cc</code>, <code>nn_external_apps.cc</code>
+                  </td>
+                  <td><span class="chip ok">Reuse</span></td>
+                </tr>
+                <tr>
+                  <td>Platform services split</td>
+                  <td>
+                    <code>nn_downloads_win.cc</code>, <code>nn_external_apps_win.cc</code>, <code>pip/nn_pip_win.cc</code>, <code>nn_pip_platform.h</code>
+                  </td>
+                  <td><span class="chip warn">Add</span> <code>_linux.cc</code> siblings</td>
+                </tr>
+                <tr>
+                  <td>Sync crypto + vault (C++)</td>
+                  <td><code>packages/sync/windows</code> (CNG)</td>
+                  <td><span class="chip warn">Split</span>: the vault is shared and served over Mojo; crypto backend is BoringSSL on Linux</td>
+                </tr>
+                <tr>
+                  <td>Import readers (C++)</td>
+                  <td><code>packages/import/windows</code>: Readers, Sessions, SQLite are portable; Secrets uses DPAPI</td>
+                  <td><span class="chip warn">Split</span>: shared readers, Linux secrets via libsecret/KWallet</td>
+                </tr>
+                <tr>
+                  <td>Series platform column</td>
+                  <td><code>engine/patches/series</code>, <code>series.py</code> (<code>host_platform()</code> already returns <code>linux</code>)</td>
+                  <td><span class="chip warn">Extend</span>: accept <code>linux</code> in the column (it's rejected today)</td>
+                </tr>
+                <tr>
+                  <td>Engine script + lock</td>
+                  <td><code>scripts/windows/engine.py</code>, <code>engine-lock.json</code> (<code>"platform": "windows"</code>)</td>
+                  <td><span class="chip warn">Generalise</span>: one script, a lock section per platform</td>
+                </tr>
+                <tr>
+                  <td>Ungoogled step</td>
+                  <td><code>engine/patches/build/03-ungoogled.py</code> skips two patches as "Linux-only"</td>
+                  <td>
+                    <span class="chip warn">Revisit</span>: <code>0016-chromium-sandbox-pie</code> and
+                    <code>remove-disable-setuid-sandbox-as-bad-flag</code> apply on Linux
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============================== LESSONS ============================== -->
+        <section id="lessons" aria-labelledby="lessons-h">
+          <h2 id="lessons-h">Lessons from Helium & Zen</h2>
+          <div class="grid2">
+            <div class="card">
+              <h3>Helium <span class="chip ok">Chromium · ungoogled</span></h3>
+              <p class="prose">The closest engine match: an ungoogled-chromium base with its own patch series.</p>
+              <ul>
+                <li>
+                  <strong>Builds in a container.</strong> <code>scripts/docker-build.sh</code> builds a <code>debian:trixie-slim</code> image with a fixed
+                  package list, then runs <code>build.sh</code> in it. The README warns that the bare script only works on Debian with every dependency
+                  installed.
+                </li>
+                <li>
+                  <strong>GN flags</strong> (<code>flags.linux.gn</code>): <code>use_sysroot=true</code>, <code>symbol_level=1</code>,
+                  <code>use_vaapi=true</code>, <code>rtc_use_pipewire=true</code>, <code>is_official_build=true</code>, <code>use_siso=true</code>, with sccache
+                  or ccache when available.
+                </li>
+                <li>
+                  <strong>Few Linux patches:</strong> six of its own (branding, binary rename, default theme rather than GTK, middle-click paste flag,
+                  missing-desktop-file error, tab strokes) plus one from portablelinux.
+                </li>
+                <li>
+                  <strong>Packaging:</strong> one tarball becomes AppImage (zsync updates), <code>.deb</code> through a signed APT repo with stable and
+                  prerelease channels, and <code>.rpm</code> through COPR. Before packaging, <code>ldd</code> checks for unresolved libraries. Everything is
+                  GPG-signed. x86_64 and arm64.
+                </li>
+                <li>
+                  <strong>Sandbox:</strong> it ships an AppArmor profile (<code>userns</code> for <code>/opt/helium/helium</code>) that the package installs,
+                  and its AppImage <code>AppRun</code> offers to install one on Ubuntu 24.04+. No SUID helper in the tarball.
+                </li>
+                <li><strong>No Flatpak</strong>, "as long as it's impossible to package Chromium without breaking its sandbox".</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Zen <span class="chip mac">Firefox · Gecko</span></h3>
+              <p class="prose">The closest product match (spaces, split view, glance, compact mode), on a different engine.</p>
+              <ul>
+                <li>
+                  <strong>The UI runs in the engine.</strong> <code>src/zen/*</code> is about 178k lines of JS/CSS in Gecko's own UI layer, with only 18
+                  Linux-specific references. Linux costs Zen almost nothing in UI code. That's the argument for the hosting choice below.
+                </li>
+                <li>
+                  <strong>Glass is off on Linux.</strong> Zen uses vibrancy on macOS and Mica on Windows, but
+                  <code>zen.widget.linux.transparency</code> defaults to false (<code>prefs/zen/gtk.yaml</code>). Its frosted URL bar and compact sidebar use
+                  CSS <code>backdrop-filter</code>, which can blur pages only because Gecko draws pages and UI in one document. Bay's overlay is a separate
+                  view, so the same CSS can't see the page.
+                </li>
+                <li>
+                  <strong>Wayland hides the global pointer.</strong> Zen's compact mode can't track the mouse outside the window on Linux
+                  (<code>ZenMouseTrackerInternal.h</code>: "Wayland doesn't expose it at all") and falls back to timeouts. Bay's edge peek and auto-hide toolbar
+                  have the same limit.
+                </li>
+                <li><strong>CI:</strong> Linux builds on Ubuntu 24.04 runners (x86_64 and aarch64), with PGO on x86_64.</li>
+                <li>
+                  <strong>Old-distro compatibility</strong> is set on purpose: <code>MOZ_STDCXX_COMPAT=1</code> keeps glibc 2.28 systems working. Bay gets the
+                  equivalent from Chromium's sysroot.
+                </li>
+                <li>
+                  <strong>Packaging:</strong> a tarball with Mozilla's MAR updater, plus AppImage (uruntime, zsync). Flatpak is maintained separately on
+                  Flathub.
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>What Bay takes from them:</strong> build in a pinned container with the Chromium sysroot. Ship tarball, AppImage, deb and rpm from one
+              staged directory, with AUR on top. Install an AppArmor <code>userns</code> profile. GPG-sign everything. Keep a prerelease channel. Keep the Linux
+              UI code close to zero by rendering the UI in the engine.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============================== HOSTING ============================== -->
+        <section id="hosting" aria-labelledby="hosting-h">
+          <h2 id="hosting-h">The hosting decision</h2>
+          <div class="prose">
+            <p>
+              <strong>Decided 17 October 2026, together with Windows:</strong> the web-rendered host (L‑W). Two constraints ruled out the alternatives. There's
+              no maintained React Native for Linux that can host a Chromium surface, and embedding a browser in a third-party Wayland window isn't upstream in
+              CEF (issue #2804, open since 2019). A UI that Chrome draws in Chrome's own window avoids both.
+            </p>
+          </div>
+          <div class="stack">
+            <figure class="pick">
+              <div class="layer top"><b>L‑W · Web-rendered host</b> (chosen, shared with Windows)</div>
+              <div class="layer native"><code>BayWebUIBrowserWindow</code>: Views widget, Bay's frame (CSD on Wayland)</div>
+              <div class="layer top"><code>chrome://bay</code>: Bay's React UI on react-native-web, overlays as DOM</div>
+              <div class="layer chrome"><code>&lt;embed&gt;</code> per pane through SurfaceEmbed, one WebContents each</div>
+              <div class="layer native">NNCore: Chrome + Bay's layer; Mojo bridge</div>
+              <figcaption>
+                One window, one compositor, one document for the UI. Overlays over pages are ordinary DOM, so there's no hit-mask patch and no rect syncing. The
+                tab's output is a layer in the UI page's compositor tree, so CSS <code>backdrop-filter</code> should blur pages (Phase&nbsp;2 checks).
+                Reanimated runs through its web support.
+              </figcaption>
+            </figure>
+            <figure>
+              <div class="layer top"><b>L‑A · Views overlay host</b> (fallback)</div>
+              <div class="layer top">Transparent overlay UI view with a masked hit test</div>
+              <div class="layer chrome">Tab BrowserViews at pane rects sent from JS</div>
+              <div class="layer top">Base UI view (react-native-web)</div>
+              <figcaption>
+                The earlier Linux design, kept as the fallback if SurfaceEmbed fails on Linux. It needs a masked hit-test patch
+                (<code>cef-overlay-hit-mask</code>), rect syncing, and a separate blur patch, because the overlay's CSS can only see its own view.
+              </figcaption>
+            </figure>
+            <figure>
+              <div class="layer top"><b>L‑B / L‑C · Native toolkit or wait</b></div>
+              <div class="layer native">GTK4 + react-native-gtkx, or react-native-linux later</div>
+              <figcaption>
+                Rejected for now: both React Native Linux projects are pre-release, with no TurboModules, Reanimated or way to embed foreign surfaces. Track
+                react-native-linux; the shared JS keeps a later move possible.
+              </figcaption>
+            </figure>
+          </div>
+          <div class="callout warn">
+            <p>
+              <strong>Linux-specific risk:</strong> upstream disabled <code>SurfaceEmbedRendersRedRect</code> on Linux
+              (<code>webui_browser_browsertest.cc</code>, crbug.com/534291359). If painting fails on Wayland or X11 and the bug isn't fixed by then, try
+              upstream's <code>GuestContents</code> path in the same window first, then L‑A.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============================== PHASES ============================== -->
+        <section id="phases" aria-labelledby="phases-h">
+          <h2 id="phases-h">Phases</h2>
+          <p class="prose">
+            Phases run in order unless noted. Phase&nbsp;2 is the go/no-go gate. Phases 3 and 4 can run in parallel once it passes, and so can 5 and 6.
+            Phase&nbsp;0 needs no Linux machine and can start on the Mac today. The prerequisite steps above can run in parallel with it.
+          </p>
+          <ol class="flow" aria-label="Phase order">
+            <li><strong>0 · Groundwork</strong>Shared with Windows Phase&nbsp;0<br /><span class="chip mac">Mac or Linux</span></li>
+            <li><strong>1 · Engine build</strong>Chrome target on Linux<br /><span class="chip lnx">Arch box</span></li>
+            <li class="gate"><strong>2 · Hosting spike</strong>WebUI + SurfaceEmbed<br /><span class="chip gate">Gate</span></li>
+            <li><strong>3 · Engine</strong>NNCore on Linux<br /><span class="chip lnx">Arch box</span></li>
+            <li><strong>4 · UI on web</strong>Shared bridge + DOM views<br /><span class="chip lnx">Mostly shared</span></li>
+            <li><strong>5 · Shell & UX</strong>CSD, portals, Wayland rules<br /><span class="chip lnx">Linux</span></li>
+            <li><strong>6 · Data</strong>Import, sync, secrets<br /><span class="chip mac">Parsers anywhere</span></li>
+            <li><strong>7 · Ship</strong>deb, rpm, AUR, AppImage<br /><span class="chip lnx">Linux + CI</span></li>
+            <li><strong>8 · Hardening</strong>GPUs, IME, a11y, beta<br /><span class="chip lnx">Linux + VMs</span></li>
+          </ol>
+
+          <!-- Phase 0 -->
+          <article class="phase" id="p0" aria-labelledby="p0-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 0</span>
+              <h3 id="p0-h">Groundwork</h3>
+              <span class="chip mac">Runs on Mac or Linux, now</span>
+            </div>
+            <p class="goal">
+              The Windows plan's Phase&nbsp;0, with Linux added wherever the code asks "which platform?". The Mac app behaves exactly as before.
+            </p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Nothing; it is the same work as <a href="windows-port-plan.html#p0">Windows Phase&nbsp;0</a></dd>
+            </dl>
+            <div class="cols">
+              <div>
+                <h4>Shared with Windows</h4>
+                <ul>
+                  <li>Boot <code>App.tsx</code> on the web with Metro (Expo&nbsp;54) against stub native modules, and list every react-native-web gap.</li>
+                  <li>
+                    <code>.web.tsx</code> versions of the <code>@bay/platform</code> view wrappers: hover → pointer events, <code>tooltip</code> →
+                    <code>title</code>, focus ring → <code>:focus-visible</code>, <code>draggedTypes</code> → HTML5 drag, <code>mouseDownCanMoveWindow</code> →
+                    <code>app-region: drag</code>.
+                  </li>
+                  <li>Convert the 26 synchronous native methods to async, snapshots or optional.</li>
+                  <li>Put a transport interface under the JSON envelopes so a Mojo transport can replace the TurboModule one.</li>
+                  <li>Split NNCore's <code>.mm</code> files into portable <code>.cc</code> and small <code>_mac.mm</code> files.</li>
+                </ul>
+              </div>
+              <div>
+                <h4>Linux additions</h4>
+                <ul>
+                  <li>
+                    Add <code>"linux"</code> to <code>PlatformOS</code> and a Linux column to <code>capabilitiesFor</code>: hover, tooltips, focus ring and drag
+                    are true; glass, vibrancy, shaders, dock, menu bar and traffic lights are false. The host passes the OS in its constants.
+                  </li>
+                  <li>
+                    <code>series</code>: accept <code>linux</code> and comma lists such as <code>mac,win</code> in the platform column; mark the
+                    <code>cef-*</code> patches <code>mac,win</code>, since Linux doesn't build CEF.
+                  </li>
+                  <li>
+                    Generalise <code>scripts/windows/engine.py</code> into <code>scripts/engine.py --platform win|linux</code> with a lock section per platform.
+                  </li>
+                  <li>
+                    Split <code>packages/sync/windows</code> crypto into backends (CNG on Windows, BoringSSL on Linux) and
+                    <code>packages/import/windows</code> secrets into DPAPI and libsecret/KWallet versions.
+                  </li>
+                  <li>
+                    CI: a <code>linux-checks.yml</code> on <code>ubuntu-24.04</code> running typecheck, tests, the web bundle and
+                    <code>series.py files --platform linux</code>.
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The Mac test scripts and the Windows checks pass unchanged.</li>
+              <li><code>App.tsx</code> renders in desktop Chrome with stubbed natives, and every web incompatibility is fixed or listed.</li>
+              <li>No synchronous native call remains in the contracts.</li>
+              <li>The Linux CI job is green.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 1 -->
+          <article class="phase" id="p1" aria-labelledby="p1-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 1</span>
+              <h3 id="p1-h">Linux engine build</h3>
+              <span class="chip lnx">Arch box (distrobox)</span>
+            </div>
+            <p class="goal">Build Chrome from the pinned tree with Bay's series and layer on Linux x64, from one command, and archive it.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Prerequisite steps 1–8; Phase&nbsp;0's series column and engine script (helpful, not blocking)</dd>
+              <dt>References</dt>
+              <dd>
+                <code>helium-linux</code> (container, flags, packaging), <code>ungoogled-chromium-portablelinux</code>, the Windows <code>engine.py</code>
+                flow
+              </dd>
+            </dl>
+            <ul>
+              <li>
+                Run the macOS order on Linux: checkout through CEF's tooling → <code>03-ungoogled.py</code> → domain substitution → the
+                <code>chromium</code> series for <code>linux</code> → the NNCore and Bay layers → <code>gn gen</code>. CEF is only the checkout tool; nothing
+                links <code>libcef</code>.
+              </li>
+              <li>
+                <code>03-ungoogled.py</code>: stop skipping the two "Linux-only" patches on Linux, and consider portablelinux's
+                <code>use-oauth2-client-switches-as-default.patch</code>.
+              </li>
+              <li>
+                <code>chromium-bay-layer-linux.patch</code>: link <code>//chrome/browser/bay</code> and <code>//bay/core</code> into the
+                <code>chrome</code> binary, as the Windows patch does for <code>chrome.dll</code>.
+              </li>
+              <li>Brand the binary as <code>bay</code>; keep <code>chrome_sandbox</code> and <code>chrome_crashpad_handler</code>.</li>
+              <li>
+                Launch with <code>--enable-features=Webium,SurfaceEmbed</code> on Wayland and X11 and check upstream's WebUI browser: tabs paint in
+                <code>&lt;embed&gt;</code>, typing, IME and Orca reach the page.
+              </li>
+              <li>Record the glibc floor (<code>objdump</code>, Step&nbsp;8) and the sysroot in the lock file. Finalise the distro tiers from it.</li>
+              <li>Archive the runtime and symbols separately; add <code>ccache</code>/<code>sccache</code> as Helium does.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>A clean checkout builds the patched Chrome with <code>scripts/engine.py --platform linux</code>, and <code>series.py check</code> passes.</li>
+              <li>Upstream's WebUI browser runs SurfaceEmbed tabs on Wayland and X11, or the failure is recorded for Phase&nbsp;2.</li>
+              <li>The engine artifact and symbols are archived, versioned and checksummed.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 2 -->
+          <article class="phase gate" id="p2" aria-labelledby="p2-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 2</span>
+              <h3 id="p2-h">Hosting spike</h3>
+              <span class="chip gate">Go / no-go gate</span><span class="chip lnx">Arch box</span>
+            </div>
+            <p class="goal">The Windows spike, run on Linux desktops. The output is a short decision record.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase&nbsp;1</dd>
+              <dt>Setup</dt>
+              <dd>
+                Upstream's <code>WebUIBrowserWindow</code> pointed at a small <code>chrome://bay</code> page: a react-native-web sidebar, two tab embeds, a
+                translucent overlay panel, a minimal Mojo bridge
+              </dd>
+            </dl>
+            <div class="table-wrap">
+              <table>
+                <caption>
+                  Run on GNOME (Mutter) and KDE Plasma 6 on Wayland, and once on X11. Add Hyprland or Sway if time allows.
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Test</th>
+                    <th scope="col">Passes when</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Painting</td>
+                    <td>Both embeds paint and update on Wayland and X11 (upstream's render test is disabled on Linux, so this comes first)</td>
+                  </tr>
+                  <tr>
+                    <td>Overlay</td>
+                    <td>A rounded, translucent panel draws over a playing video with no flicker while the window moves and resizes</td>
+                  </tr>
+                  <tr>
+                    <td>Blur over pages</td>
+                    <td>CSS <code>backdrop-filter</code> on the panel blurs the page and video behind it at 60 fps, or the failure is recorded</td>
+                  </tr>
+                  <tr>
+                    <td>Input</td>
+                    <td>Clicks, wheel, hover, text selection and drag reach the page around the panel; drag-and-drop works between the UI and a page</td>
+                  </tr>
+                  <tr>
+                    <td>Keyboard & focus</td>
+                    <td>Ctrl shortcuts reach the UI while a page has focus; page shortcuts still work; F6 cycles sidebar → address → page</td>
+                  </tr>
+                  <tr>
+                    <td>IME</td>
+                    <td>fcitx5 and IBus (Japanese/Chinese) in a page field and a UI field, on Wayland (text-input-v3) and X11</td>
+                  </tr>
+                  <tr>
+                    <td>Accessibility</td>
+                    <td>Orca reads the UI, then the page, in order (SurfaceEmbed stitches the trees)</td>
+                  </tr>
+                  <tr>
+                    <td>Scaling</td>
+                    <td>100/125/150/200% fractional scaling and mixed-DPI monitors; nothing blurs or misaligns</td>
+                  </tr>
+                  <tr>
+                    <td>Decorations</td>
+                    <td>Bay's frame: drag regions, resize edges, double-click maximize, GNOME edge tiling and KDE quick tile</td>
+                  </tr>
+                  <tr>
+                    <td>Edge peek</td>
+                    <td>
+                      With the sidebar hidden, the pointer at the window edge over a page reveals the peek; leaving the window, including fast exits on a
+                      maximized window and past CSD borders, hides it within the delay; no code reads a global pointer position
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Motion</td>
+                    <td>Sidebar and peek animations hold 60 fps with three panes loading, using Reanimated on web</td>
+                  </tr>
+                  <tr>
+                    <td>Bridge</td>
+                    <td>p95 Mojo round trip under 2 ms; 60 Hz tab events cause no UI jank; tabs cannot reach the bridge</td>
+                  </tr>
+                  <tr>
+                    <td>Cost</td>
+                    <td>The UI renderer's memory and cold start are measured and acceptable next to the Mac app's</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <h4>Outcomes</h4>
+            <ul>
+              <li><strong>All pass:</strong> L‑W on Linux, same as Windows. Proceed to Phases 3 and 4.</li>
+              <li><strong>Painting or input fails:</strong> try upstream's <code>GuestContents</code> path in the same window, then L‑A.</li>
+              <li>
+                <strong>Performance fails:</strong> profile first (compiler output, layout thrash, Reanimated's web path), then move hot animations to CSS.
+              </li>
+            </ul>
+          </article>
+
+          <!-- Phase 3 -->
+          <article class="phase" id="p3" aria-labelledby="p3-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 3</span>
+              <h3 id="p3-h">Engine: NNCore on Linux</h3>
+              <span class="chip lnx">Arch box</span>
+            </div>
+            <p class="goal">Bay's engine, window and WebUI run on Linux, sharing the Windows host code.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase&nbsp;2; the NNCore split from Phase&nbsp;0</dd>
+              <dt>Runs alongside</dt>
+              <dd>Phase&nbsp;4</dd>
+            </dl>
+            <ul>
+              <li>
+                Shared with Windows Phase&nbsp;3: <code>BayWebUIBrowserWindow</code>, <code>chrome://bay</code> with its CSP and Mojo receiver, the SurfaceEmbed
+                allowlist, NNCore tab strips with <code>SurfaceEmbedHandle</code> ids, and the engine calls behind the dispatcher.
+              </li>
+              <li>
+                Linux frame view: client-side decorations on Wayland, caption buttons drawn by the UI in the desktop's button layout, resize edges and drag
+                regions mapped to the right hit-test codes.
+              </li>
+              <li>
+                <strong>Secrets (load-bearing):</strong> os_crypt keeps its key in Secret Service or KWallet, chosen by desktop or
+                <code>--password-store</code>, and falls back to <code>basic</code>, a fixed key. Give Bay its own application name so its key never collides
+                with Chromium's, pin it as the macOS series comment does, and warn the user when only <code>basic</code> is available.
+              </li>
+              <li>
+                Platform services: <code>nn_downloads_linux.cc</code> (Chrome already writes <code>user.xdg.origin.url</code>),
+                <code>nn_external_apps_linux.cc</code> (GIO or the OpenURI portal), <code>pip/nn_pip_linux.cc</code>, desktop capture through PipeWire and the
+                ScreenCast portal.
+              </li>
+              <li>Prompts and menus keep their JSON events; only the anchoring geometry is per platform.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Bay's window opens on Linux with real tabs, split panes, popups, extensions, permission and password prompts, PiP and DevTools.</li>
+              <li>Engine calls return the same JSON as on Mac and Windows for the same profile operations.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 4 -->
+          <article class="phase" id="p4" aria-labelledby="p4-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 4</span>
+              <h3 id="p4-h">UI on web + native bridge</h3>
+              <span class="chip lnx">Mostly shared</span><span class="chip mac">JS parts anywhere</span>
+            </div>
+            <p class="goal">
+              The real <code>App.tsx</code> runs in <code>chrome://bay</code> on Linux, with every module from the <a href="#modules">module map</a>
+              answered or reported missing so the UI falls back.
+            </p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>
+                Phase&nbsp;0 (web target), Phase&nbsp;3 for engine-backed modules; <a href="windows-port-plan.html#p4">Windows Phase&nbsp;4</a> builds the same
+                pieces
+              </dd>
+            </dl>
+            <ul>
+              <li>The Mojo transport in <code>@bay/platform</code>; contract tests run against it.</li>
+              <li><code>BayCEF</code> becomes an <code>&lt;embed&gt;</code> component with the same props and handle as today's web view.</li>
+              <li>
+                <code>BaySymbol</code> through bundled SVG icons (Segoe Fluent Icons isn't available on Linux); <code>BaySurface</code>,
+                <code>BayFadeLabel</code>, <code>BayActivitySpinner</code>, <code>BayContextMenuArea</code>, <code>BayWindowProfile</code> as web components;
+                <code>BayFileDrag</code> through HTML5 drag-out.
+              </li>
+              <li>
+                Release builds serve the web bundle from the build's resources with a strict CSP. Debug builds set <code>BAY_DEV=1</code> to load Metro with hot
+                reload, matching <code>pnpm dev:app</code> on macOS.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The real <code>App.tsx</code> boots on Linux from Metro with hot reload, and from the packed bundle in Release.</li>
+              <li>
+                Ports of <code>apps/browser/scripts/*-test.mjs</code> (shortcuts, windowing, tab drag, zoom-scroll) pass against a hidden Linux instance
+                (<code>BAY_DATA_DIR</code>, <code>BAY_BACKGROUND</code>) under <code>xvfb-run</code> and headless Weston (<code
+                  >pacman -S xorg-server-xvfb weston</code
+                >; raise <code>fs.inotify.max_user_watches</code> for Metro).
+              </li>
+            </ul>
+          </article>
+
+          <!-- Phase 5 -->
+          <article class="phase" id="p5" aria-labelledby="p5-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 5</span>
+              <h3 id="p5-h">Linux shell & UX</h3>
+              <span class="chip lnx">Linux</span>
+            </div>
+            <p class="goal">Make it feel at home on GNOME and KDE, and respect Wayland's rules rather than fighting them.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase&nbsp;4</dd>
+              <dt>Runs alongside</dt>
+              <dd>Phase&nbsp;6</dd>
+            </dl>
+            <div class="cols">
+              <div>
+                <ul>
+                  <li>
+                    <strong>Frame:</strong> client-side decorations everywhere (GNOME has no server-side ones). Caption buttons follow the desktop's button
+                    layout (portal <code>org.gnome.desktop.wm.preferences</code> <code>button-layout</code>, or GTK's decoration layout), on the left or right.
+                    Check the right-docked sidebar (<code>850c7ff</code>) against right-hand buttons.
+                  </li>
+                  <li>
+                    <strong>Theme:</strong> follow the Settings portal's <code>color-scheme</code>, <code>accent-color</code> and <code>contrast</code>. Decide
+                    whether Chrome-drawn dialogs use the default theme or GTK (Helium patches Chrome to the default theme).
+                  </li>
+                  <li>
+                    <strong>Menus & shortcuts:</strong> the Windows app menu and Ctrl table, plus Ctrl+Q to quit and F11. Never bind Super, which the compositor
+                    owns. Use the GlobalShortcuts portal only if Bay adds global shortcuts. Chrome's portal trigger has caused repeated KDE/GNOME dialogs.
+                  </li>
+                  <li>
+                    <strong>Type & icons:</strong> the system UI font through fontconfig (<code>system-ui</code> in CSS), Inter as fallback, Fluent icons.
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <ul>
+                  <li>
+                    <strong>Wayland window rules:</strong> apps can't place windows at absolute positions or steal focus. Tab drag-out lets the compositor place
+                    the window, session restore keeps size and maximized state only, and activation from other apps uses xdg-activation tokens. Adapt the
+                    windowing tests to match.
+                  </li>
+                  <li>
+                    <strong>System:</strong> notifications, an XDG autostart entry, default browser through bundled <code>xdg-settings</code>, single instance
+                    and URL forwarding (Chrome's ProcessSingleton), file chooser (GTK or portal), trash (FreeDesktop Trash spec), reveal in folder
+                    (<code>org.freedesktop.FileManager1.ShowItems</code>).
+                  </li>
+                  <li><strong>Gestures:</strong> touchpad back/forward through Chrome's overscroll; pinch to zoom.</li>
+                </ul>
+              </div>
+            </div>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Snapping and tiling work on GNOME, KDE and one wlroots compositor; fractional scaling and multi-monitor are correct.</li>
+              <li>Every Mac shortcut has a Linux counterpart, and the shortcuts test passes.</li>
+              <li>The app is usable with high contrast on and animations reduced.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 6 -->
+          <article class="phase" id="p6" aria-labelledby="p6-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 6</span>
+              <h3 id="p6-h">Data: import, sync, secrets</h3>
+              <span class="chip mac">Parsers & vectors anywhere</span><span class="chip lnx">Integration on Linux</span>
+            </div>
+            <p class="goal">
+              Someone switching from Chrome, Firefox or Zen on Linux lands in Bay with their data, and a Mac or Windows sync folder opens on Linux.
+            </p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase&nbsp;0's C++ split; Phase&nbsp;4 for integration</dd>
+            </dl>
+            <ul>
+              <li>
+                <strong>Profiles:</strong> <code>~/.config/{google-chrome, chromium, BraveSoftware/Brave-Browser, vivaldi, opera, microsoft-edge}</code>;
+                Firefox in <code>~/.mozilla/firefox</code>, <code>~/snap/firefox/common/.mozilla/firefox</code> and
+                <code>~/.var/app/org.mozilla.firefox/.mozilla/firefox</code>; Flatpak Chromium-family apps under <code>~/.var/app/*/config</code>; Zen's own and
+                Flatpak profiles. Find Helium's and Zen's exact profile directories in their packages.
+              </li>
+              <li>
+                <strong>Chromium secrets on Linux:</strong> <code>v10</code> uses a fixed key (basic store), and <code>v11</code> uses a key held in the Secret
+                Service or KWallet under the browser's "Safe Storage" item. Linux has no app-bound encryption, so passwords and cookies can be imported after
+                the user consents and the keyring unlocks. Firefox logins use the NSS <code>key4.db</code> reader that already exists.
+              </li>
+              <li><strong>Zen import:</strong> reuse the Firefox reader, then map Zen workspaces to Bay spaces (a later stretch goal).</li>
+              <li>
+                <strong>Sync:</strong> the shared vault with a BoringSSL backend. Golden vectors from the Mac Swift tests must give byte-identical output.
+                <code>SyncKeyStore</code> uses libsecret, and if no Secret Service is running, Bay asks for the recovery phrase each session rather than writing
+                the key to disk.
+              </li>
+              <li>
+                <strong>Folder sync:</strong> check Nextcloud, Syncthing, Dropbox, rclone/FUSE mounts and SMB/NFS for rename atomicity and inotify limits.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The <code>packages/import/fixtures</code> give identical results on Linux.</li>
+              <li>One shared fixture vault opens on Mac, Windows and Linux.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 7 -->
+          <article class="phase" id="p7" aria-labelledby="p7-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 7</span>
+              <h3 id="p7-h">Packaging & updates</h3>
+              <span class="chip lnx">Linux + CI</span>
+            </div>
+            <p class="goal">
+              One staged <code>/opt/bay</code> tree becomes every format, installs cleanly on Tier&nbsp;1, keeps the Chromium sandbox on, and updates through
+              the user's package manager.
+            </p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase&nbsp;4 (an app to ship); the repos and the signing key can be set up at any time</dd>
+            </dl>
+            <div class="cols">
+              <div>
+                <ul>
+                  <li>
+                    <strong>Layout:</strong> <code>/opt/bay/{bay, bay-wrapper, chrome_sandbox, chrome_crashpad_handler, resources…}</code>, with
+                    <code>/usr/bin/bay</code> pointing at the wrapper. The wrapper sets <code>CHROME_WRAPPER</code> and the library path, as Helium's does.
+                  </li>
+                  <li>
+                    <strong>Formats:</strong> <code>.tar.xz</code>, AppImage (zsync updates), <code>.deb</code> through a signed APT repo with
+                    <code>stable</code> and <code>prerelease</code> components, <code>.rpm</code> through a DNF repo or COPR, and an AUR
+                    <code>bay-bin</code> PKGBUILD bumped by CI.
+                  </li>
+                  <li>
+                    <strong>Sandbox:</strong> the deb/rpm postinst installs an AppArmor profile granting <code>userns</code> to
+                    <code>/opt/bay/bay</code> (needed since Ubuntu 24.04). Keep <code>chrome_sandbox</code> as the SUID fallback. The AppImage's
+                    <code>AppRun</code> offers to install the profile.
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <ul>
+                  <li>
+                    <strong>Desktop integration:</strong> <code>bay.desktop</code> (http/https/html/pdf MIME types, New Window and New Private Window actions),
+                    AppStream metainfo, hicolor icons, native messaging host directories (<code>~/.config/Bay/NativeMessagingHosts</code>,
+                    <code>/etc/bay/native-messaging-hosts</code>).
+                  </li>
+                  <li><strong>Trust:</strong> GPG-sign the repos, tarball and AppImage. Linux has no OS code signing.</li>
+                  <li>
+                    <strong>Release script:</strong> <code>scripts/linux/release.sh</code>, the counterpart of <code>scripts/release.sh</code>. It stages, runs
+                    the <code>ldd</code> unresolved-library check in distro containers, packs every format, and reads notes from
+                    <code>release-notes/&lt;version&gt;.md</code>.
+                  </li>
+                  <li><strong>Crashes:</strong> Crashpad minidumps to Bay's crash directory, plus a symbols archive per release.</li>
+                </ul>
+              </div>
+            </div>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>
+                Clean VMs (Ubuntu 24.04, Debian 13, Fedora, Arch, openSUSE Tumbleweed) install, launch, become the default browser, update to the next build and
+                uninstall cleanly.
+              </li>
+              <li><code>chrome://sandbox</code> shows the namespace sandbox on every Tier&nbsp;1 distro, including Ubuntu with its AppArmor restriction on.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 8 -->
+          <article class="phase" id="p8" aria-labelledby="p8-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 8</span>
+              <h3 id="p8-h">Hardening & beta</h3>
+              <span class="chip lnx">Linux + VMs</span>
+            </div>
+            <p class="goal">Quality on par with the Mac app, then a beta on the prerelease channel.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phases 5–7</dd>
+            </dl>
+            <ul>
+              <li>
+                <strong>GPU:</strong> Mesa (Intel, AMD) and NVIDIA's proprietary driver on Wayland (explicit sync); VA-API decode on each; Vulkan versus GL;
+                software rendering fallback.
+              </li>
+              <li><strong>Input & a11y:</strong> fcitx5 and IBus, touchpad and touchscreen, Orca across the UI and pages, keyboard-only use.</li>
+              <li><strong>Displays:</strong> fractional scaling, mixed DPI, 4K, monitor hot-plug.</li>
+              <li>
+                <strong>Performance:</strong> cold start, memory with 50 tabs, animation frame times, compared with <code>scripts/perf</code> numbers on Mac.
+              </li>
+              <li>
+                <strong>CI:</strong> JS checks from Phase&nbsp;0; an app build from the archived engine on every PR; engine rebuilds only when the pin or series
+                changes; smoke launches in distro containers.
+              </li>
+              <li><strong>arm64:</strong> a second output directory once x64 is stable (Helium and Zen both ship aarch64).</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Every Mac test script has a Linux CI run.</li>
+              <li>No known crash in the prerelease channel for one release cycle.</li>
+            </ul>
+          </article>
+        </section>
+
+        <!-- ============================== MODULE MAP ============================== -->
+        <section id="modules" aria-labelledby="modules-h">
+          <h2 id="modules-h">Native module map</h2>
+          <p class="prose">
+            From <code>nativeContracts.ts</code>: 15 modules, 237 methods, 26 of them synchronous, and 17 views. On Linux, as on Windows, every module is C++ in
+            the browser process behind the Mojo bridge, and every view is a DOM component.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Module / view</th>
+                  <th scope="col">Linux implementation</th>
+                  <th scope="col">Sync methods to rework</th>
+                  <th scope="col">Phase</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>BayCEF</code> (62 methods)</td>
+                  <td>NNCore tab strips in the Bay layer, shared with Windows</td>
+                  <td><code>prepareTransfer</code>, <code>releaseTransfer</code></td>
+                  <td class="num">3–4</td>
+                </tr>
+                <tr>
+                  <td><code>BayChromeUI</code>, <code>BayExtensions</code></td>
+                  <td>Shared C++ with Windows; native messaging directories as above</td>
+                  <td>—</td>
+                  <td class="num">4</td>
+                </tr>
+                <tr>
+                  <td><code>BayShell</code> (32)</td>
+                  <td>
+                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), dialogs, clipboard (Chrome's <code>ui::Clipboard</code>), documents in
+                    <code>BAY_DATA_DIR</code>
+                  </td>
+                  <td>
+                    <code>copyText</code>, <code>copyImage</code>, <code>readDocument</code>, <code>writeDocument</code>, <code>removeDocument</code>;
+                    <code>startDictation</code> → optional
+                  </td>
+                  <td class="num">4</td>
+                </tr>
+                <tr>
+                  <td><code>BayApp</code> (32)</td>
+                  <td>Notifications, autostart, default browser, appearance; Dock and AppleScript absent</td>
+                  <td><code>systemInfo</code>, <code>launchEnvironment</code> → snapshot</td>
+                  <td class="num">4–5</td>
+                </tr>
+                <tr>
+                  <td><code>BaySystem</code> (15)</td>
+                  <td>GIO/portal open and reveal, Trash spec, file icons from the icon theme, <code>xdg-user-dir DOWNLOAD</code></td>
+                  <td><code>fileExists</code> → async; <code>downloadsFolder</code> → snapshot; <code>hapticTick</code> → none</td>
+                  <td class="num">4</td>
+                </tr>
+                <tr>
+                  <td><code>BaySwipe</code> (7)</td>
+                  <td>Chrome overscroll navigation; the module reports itself missing</td>
+                  <td><code>haptic</code>, <code>pagerState</code></td>
+                  <td class="num">5</td>
+                </tr>
+                <tr>
+                  <td><code>BayKeychain</code></td>
+                  <td>libsecret</td>
+                  <td>—</td>
+                  <td class="num">6</td>
+                </tr>
+                <tr>
+                  <td><code>BaySync</code> (25)</td>
+                  <td>Shared vault + BoringSSL + libsecret</td>
+                  <td><code>newDeviceId</code>, <code>deviceName</code> → snapshot</td>
+                  <td class="num">6</td>
+                </tr>
+                <tr>
+                  <td><code>BayImport</code> (21)</td>
+                  <td>Shared readers + Linux paths + libsecret/KWallet</td>
+                  <td>
+                    <code>cancelImport</code>, <code>isBrowserUnlocked</code>, <code>forgetUnlockedKeys</code>, <code>discardImported</code> → async;
+                    <code>safariHasFullDiskAccess</code> → none
+                  </td>
+                  <td class="num">6</td>
+                </tr>
+                <tr>
+                  <td><code>BayInlineCompletion</code></td>
+                  <td>Pure DOM in JS (selection-range completion), no native code</td>
+                  <td>—</td>
+                  <td class="num">4</td>
+                </tr>
+                <tr>
+                  <td><code>BayTranslate</code>, <code>BayCalendar</code>, <code>BayDockSelection</code>, <code>BayGlassEffect</code></td>
+                  <td>Not implemented; JS sees them as missing (<code>userLanguages</code> can come from <code>navigator.languages</code>)</td>
+                  <td>n/a</td>
+                  <td class="num">—</td>
+                </tr>
+                <tr>
+                  <td>View <code>BayCEF</code></td>
+                  <td><code>&lt;embed&gt;</code> through SurfaceEmbed, shared with Windows</td>
+                  <td></td>
+                  <td class="num">4</td>
+                </tr>
+                <tr>
+                  <td>
+                    Views <code>BaySymbol</code>, <code>BaySurface</code>, <code>BayFadeLabel</code>, <code>BayActivitySpinner</code>,
+                    <code>BayContextMenuArea</code>, <code>BayWindowProfile</code>, <code>BayShell</code>
+                  </td>
+                  <td>react-native-web components (bundled SVG icons for symbols)</td>
+                  <td></td>
+                  <td class="num">4</td>
+                </tr>
+                <tr>
+                  <td>View <code>BayFileDrag</code></td>
+                  <td>HTML5 drag-out</td>
+                  <td></td>
+                  <td class="num">4</td>
+                </tr>
+                <tr>
+                  <td>
+                    Views <code>BayVisualEffect</code>, <code>BayGlassEffect</code>, <code>BayDockSelection</code>, <code>BaySwipe</code>,
+                    <code>BayAreaLight</code>, <code>BayEdgeLight</code>, <code>BayPowerUp</code>, <code>BayWindowBackdrop</code>
+                  </td>
+                  <td>Not implemented; Surface fallback. Shaders could come back as WebGL later</td>
+                  <td></td>
+                  <td class="num">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============================== PATCH MAP ============================== -->
+        <section id="patches" aria-labelledby="patches-h">
+          <h2 id="patches-h">Patch series map</h2>
+          <p class="prose">
+            From the current <code>engine/patches/series</code> (50 lines: 18 <code>cef</code>, 30 <code>chromium</code>, 2 layers). "Portable" still means it
+            must apply cleanly and build in Phase&nbsp;1.
+          </p>
+          <div class="grid2">
+            <div class="card">
+              <h3>Portable, expected to work <span class="chip ok">most</span></h3>
+              <p class="prose">
+                Every <code>chromium all</code> line not listed on the right: tab model hooks, DevTools, media, extensions, autofill, password, cast, device
+                chooser, side panel, PiP, tab sharing, branding, extension import, file chooser.
+              </p>
+              <h3>Skip on Linux <span class="chip risk">mac / win only</span></h3>
+              <ul>
+                <li>
+                  <code>chromium-autofill-card-touchbar</code>, <code>chromium-icloud-keychain-window</code>,
+                  <code>chromium-devtools-redock-display</code> (mac)
+                </li>
+                <li><code>chromium-bay-layer</code> (mac framework), <code>chromium-bay-layer-win</code> (chrome.dll)</li>
+                <li>All 18 <code>cef-*</code> patches: Linux doesn't build CEF (mark them <code>mac,win</code>)</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Needs Linux work <span class="chip warn">rework</span></h3>
+              <ul>
+                <li><code>chromium-window-docked-devtools</code>: Views docking</li>
+                <li><code>chromium-safe-storage-name</code>: <strong>add a Linux version</strong> (Secret Service / KWallet naming)</li>
+                <li>
+                  <code>chromium-window-hosted</code>, <code>chromium-webview-native-hosted</code>: host Chrome's views inside the macOS app; not needed with
+                  the web host. Mark them <code>mac</code>
+                </li>
+              </ul>
+              <h3>New for Linux <span class="chip lnx">add</span></h3>
+              <ul>
+                <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
+                <li>
+                  Shared with Windows: <code>chromium-bay-webui-window</code>, <code>chromium-surface-embed-bay</code>, and the SurfaceEmbed backports from
+                  trunk
+                </li>
+                <li>Fallback only (L‑A): <code>cef-overlay-hit-mask</code> and <code>cef-overlay-backdrop-blur</code></li>
+                <li>Candidates from Helium: default theme rather than GTK for Chrome-drawn UI; a clear error when the <code>.desktop</code> file is missing</li>
+                <li>From portablelinux: <code>use-oauth2-client-switches-as-default</code> (only if Bay keeps sign-in features)</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================== RISKS ============================== -->
+        <section id="risks" aria-labelledby="risks-h">
+          <h2 id="risks-h">Risks</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Risk</th>
+                  <th scope="col">Impact</th>
+                  <th scope="col">Mitigation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>react-native-web gaps against the macOS RN UI (layout, text, macOS-only props, Reanimated web path)</td>
+                  <td><span class="chip risk">High</span></td>
+                  <td>
+                    The Phase&nbsp;0 browser boot surfaces them on the Mac before any Linux work; fixes go in the <code>@bay/platform</code> wrappers, not in
+                    components; screenshot diffs against Mac
+                  </td>
+                </tr>
+                <tr>
+                  <td>SurfaceEmbed on Linux: upstream's render test is disabled on Linux (crbug.com/534291359), and the feature is off by default in M154</td>
+                  <td><span class="chip risk">High</span></td>
+                  <td>
+                    Phase&nbsp;1 smoke test and the Phase&nbsp;2 painting test come first; carry upstream fixes as backports; GuestContents, then L‑A, as
+                    fallbacks
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Blur over pages: CSS <code>backdrop-filter</code> over an <code>&lt;embed&gt;</code> is expected to work, since the tab is a layer in the
+                    UI's compositor tree, but it is unverified
+                  </td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Phase&nbsp;2 blur test; if it fails or costs too much, translucent panels without blur, as Zen ships on Linux by default</td>
+                </tr>
+                <tr>
+                  <td>
+                    Wayland exposes no global pointer position: hover-to-reveal (sidebar peek, auto-hide toolbar peek) can't see the pointer once it leaves the
+                    window, and macOS-style queries (<code>mouseLocationOutsideOfEventStream</code> for traffic-light fades,
+                    <code>NSEvent.mouseLocation</code> to pick the screen for a small window) have no equivalent
+                  </td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>
+                    Drive peek only from in-window enter, move and leave events plus the existing hide delay (Zen falls back to timeouts too); edge strips are
+                    DOM above the embeds, so they get hover over pages; let the compositor choose the screen; Phase&nbsp;2 edge-peek test
+                  </td>
+                </tr>
+                <tr>
+                  <td>The 26 synchronous native calls</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Converted in Phase&nbsp;0 (async, snapshot or optional), which also lightens the Windows bridge</td>
+                </tr>
+                <tr>
+                  <td>Wayland forbids absolute window placement and focus stealing</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Design for it in Phase&nbsp;5; windowing tests assert behaviour, not coordinates, on Wayland</td>
+                </tr>
+                <tr>
+                  <td>Sandbox blocked: Ubuntu 24.04+ AppArmor userns restriction, hardened kernels, AppImage without SUID</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>
+                    AppArmor profile in packages (Helium's pattern), SUID <code>chrome_sandbox</code> fallback, AppRun helper; never <code>--no-sandbox</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>GPU and driver variety (NVIDIA on Wayland, VA-API, old Mesa)</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Phase&nbsp;8 matrix; rely on Chrome's GPU blocklist; ship the bundled SwiftShader/ANGLE</td>
+                </tr>
+                <tr>
+                  <td>Bridge security: a privileged frame next to untrusted tabs</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>
+                    The Mojo interface is bound only for <code>chrome://bay</code>; SurfaceEmbed gives pages no script access to the UI; strict CSP; no remote
+                    URLs in Release
+                  </td>
+                </tr>
+                <tr>
+                  <td>Three platforms to keep in step on every Chromium rebase</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>
+                    Platform column in series; Linux CI on every engine bump; <code>_linux.cc</code> files, not <code>#if</code> soup; one engine and one host
+                    for Windows and Linux
+                  </td>
+                </tr>
+                <tr>
+                  <td>Widevine and other component-updater features under ungoogled domain substitution</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Match whatever the Mac build does; test DRM sites in Phase&nbsp;1</td>
+                </tr>
+                <tr>
+                  <td>Glibc floor excludes an older LTS users expect</td>
+                  <td><span class="chip ok">Low</span></td>
+                  <td>Measured in Phase&nbsp;1; the tiers follow it; AppImage carries no extra glibc promise</td>
+                </tr>
+                <tr>
+                  <td>Build cost on one Arch box (disk, RAM, hours)</td>
+                  <td><span class="chip ok">Low</span></td>
+                  <td>Container with sysroot, ccache/sccache, archive the artifacts, rebuild only when the pin or series changes</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============================== DECISIONS ============================== -->
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">Decisions needed</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Recommendation</th>
+                  <th scope="col">Needed by</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>UI hosting on Linux</td>
+                  <td><strong>Decided 17 Oct 2026:</strong> the web-rendered host shared with Windows (L‑W); L‑A as the fallback</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td>Branching</td>
+                  <td><code>feat/linux</code> from <code>feat/windows</code>, rebased onto <code>main</code> once the Windows PR merges</td>
+                  <td>Now</td>
+                </tr>
+                <tr>
+                  <td>Engine build environment</td>
+                  <td>Ubuntu 24.04 distrobox on the Arch box with <code>use_sysroot=true</code>; the same image in CI</td>
+                  <td>Phase&nbsp;1</td>
+                </tr>
+                <tr>
+                  <td>Wayland and X11</td>
+                  <td>Wayland first-class, X11 supported (Tier&nbsp;2 desktops); Ozone picks at runtime</td>
+                  <td>Phase&nbsp;2</td>
+                </tr>
+                <tr>
+                  <td>Tier&nbsp;1 distros</td>
+                  <td>Ubuntu 24.04/26.04, Debian 13, Fedora (current two), Arch; final list after the glibc floor is known</td>
+                  <td>Phase&nbsp;1</td>
+                </tr>
+                <tr>
+                  <td>Formats at launch</td>
+                  <td>tar.xz + AppImage + deb (APT repo) + rpm (repo/COPR) + AUR <code>bay-bin</code></td>
+                  <td>Phase&nbsp;7</td>
+                </tr>
+                <tr>
+                  <td>Flatpak</td>
+                  <td>
+                    Not at launch. Helium refuses it because zypak weakens Chromium's sandbox; Zen ships one. Revisit after the beta if immutable distros ask
+                    for it
+                  </td>
+                  <td>After beta</td>
+                </tr>
+                <tr>
+                  <td>Icons</td>
+                  <td>Bundled SVG icons behind one <code>Symbol</code> component; Segoe Fluent Icons on Windows only, since Linux doesn't ship the font</td>
+                  <td>Phase&nbsp;4</td>
+                </tr>
+                <tr>
+                  <td>Sync crypto backend</td>
+                  <td>BoringSSL on Linux; consider moving Windows from CNG too, for one implementation</td>
+                  <td>Phase&nbsp;6</td>
+                </tr>
+                <tr>
+                  <td>Chrome-drawn UI theme</td>
+                  <td>Chrome's default theme, as Helium does, so prompts match Bay rather than the GTK theme</td>
+                  <td>Phase&nbsp;5</td>
+                </tr>
+                <tr>
+                  <td>Branch order</td>
+                  <td>Engine and host work lands on <code>feat/windows</code> first; Linux-only changes on <code>feat/linux</code>, stacked on it</td>
+                  <td>Now</td>
+                </tr>
+                <tr>
+                  <td>arm64</td>
+                  <td>After x64 is stable</td>
+                  <td>Phase&nbsp;8</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Assumptions in this plan</h3>
+          <ul class="prose">
+            <li>
+              SurfaceEmbed paints and takes input on Wayland and X11 at M154, despite upstream's disabled Linux render test. Phase&nbsp;1 checks it before any
+              Linux host work.
+            </li>
+            <li>
+              <code>install-build-deps.sh</code> at the pinned Chromium still takes <code>--no-nacl</code>, as CEF's current quick start uses it. If it has been
+              removed, drop the flag.
+            </li>
+            <li>
+              Reanimated 3.19 runs acceptably on the web without the worklet runtime. The Phase&nbsp;0 boot and the Phase&nbsp;2 motion test confirm this.
+            </li>
+            <li>Expo&nbsp;54's Metro web export can bundle the app with the existing macOS/Windows platform resolution untouched.</li>
+          </ul>
+        </section>
+
+        <!-- ============================== SOURCES ============================== -->
+        <section id="sources" aria-labelledby="sources-h">
+          <h2 id="sources-h">Sources</h2>
+          <h3>Reference browsers</h3>
+          <ul class="sources">
+            <li>
+              <a href="https://github.com/imputnet/helium-linux">imputnet/helium-linux</a>: <code>flags.linux.gn</code>, <code>docker/build.Dockerfile</code>,
+              <code>scripts/package.sh</code>, <code>package/apparmor.cfg</code>, <code>package/helium-bin.spec</code>, <code>patches/series</code>
+            </li>
+            <li>
+              <a href="https://github.com/ungoogled-software/ungoogled-chromium-portablelinux">ungoogled-chromium-portablelinux</a> ·
+              <a href="https://github.com/ungoogled-software/ungoogled-chromium-archlinux">ungoogled-chromium-archlinux</a>
+            </li>
+            <li>
+              <a href="https://github.com/zen-browser/desktop">zen-browser/desktop</a>: <code>configs/linux/mozconfig</code>,
+              <code>.github/workflows/linux-release-build.yml</code>, <code>build.yml</code> (AppImage), <code>src/zen</code>
+            </li>
+          </ul>
+          <h3>Chromium & CEF</h3>
+          <ul class="sources">
+            <li><a href="windows-port-plan.html">Bay for Windows</a>: the shared web-rendered host</li>
+            <li>
+              <a href="https://github.com/chromium/chromium/tree/154.0.8037.58/chrome/browser/ui/webui_browser">chrome/browser/ui/webui_browser</a> at
+              154.0.8037.58 (Webium)
+            </li>
+            <li>
+              <a href="https://github.com/chromium/chromium/tree/154.0.8037.58/components/surface_embed">components/surface_embed</a> at 154.0.8037.58, and its
+              <a href="https://github.com/chromium/chromium/blob/main/components/surface_embed/USER_GUIDE.md">user guide</a>
+            </li>
+            <li>
+              <a href="https://github.com/chromium/chromium/blob/154.0.8037.58/chrome/browser/ui/webui_browser/webui_browser_browsertest.cc"
+                >webui_browser_browsertest.cc</a
+              >
+              (the SurfaceEmbed render test disabled on Linux)
+            </li>
+          </ul>
+          <ul class="sources">
+            <li>
+              <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/linux/build_instructions.md">Checking out and building Chromium on Linux</a>
+              (requirements, Arch/Fedora/openSUSE package lists, faster-build args)
+            </li>
+            <li>
+              <a href="https://chromiumembedded.github.io/cef/master_build_quick_start">CEF Master Build Quick Start</a> (Linux setup, sysroot vs local
+              packages, cefclient limit)
+            </li>
+            <li><a href="https://chromiumembedded.github.io/cef/branches_and_building">CEF Branches and Building</a> (Linux build requirements per branch)</li>
+            <li>
+              <a href="https://github.com/chromiumembedded/cef/issues/2804">CEF #2804: embedded Ozone/Wayland windows</a> (open; Views works on Wayland;
+              embedding patches from Aug 2026)
+            </li>
+            <li>
+              <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/linux/password_storage.md">Chromium Linux password storage</a> (libsecret,
+              KWallet 4/5/6, basic)
+            </li>
+          </ul>
+          <h3>React Native on Linux</h3>
+          <ul class="sources">
+            <li><a href="https://github.com/react-native-linux/react-native-linux">react-native-linux</a> (pre-alpha, Fabric + Skia/Vulkan, Wayland)</li>
+            <li>
+              <a href="https://github.com/itsmepetrov/react-native-gtkx">react-native-gtkx</a> · <a href="https://github.com/gtkx-org/gtkx">gtkx</a> ·
+              <a href="https://github.com/eugeniodepalo/react-native-gtk4">react-native-gtk4 (deprecated)</a>
+            </li>
+          </ul>
+          <h3>Distro integration & packaging</h3>
+          <ul class="sources">
+            <li>
+              <a href="https://documentation.ubuntu.com/release-notes/24.04/">Ubuntu 24.04 release notes</a> ·
+              <a href="https://discourse.ubuntu.com/t/understanding-apparmor-user-namespace-restriction/58007"
+                >Understanding AppArmor user namespace restriction</a
+              >
+              · <a href="https://gitlab.com/apparmor/apparmor/-/issues/394">AppArmor #394 (Chromium sandbox)</a>
+            </li>
+            <li>
+              <a href="https://github.com/refi64/zypak">zypak</a> ·
+              <a href="https://discuss.privacyguides.net/t/does-flatpak-weaken-chromium-firefoxs-sandbox/13373/7">Does Flatpak weaken Chromium's sandbox?</a>
+            </li>
+            <li>
+              <a href="https://discourse.flathub.org/t/portals-1-16-0-release-is-out/3404">xdg-desktop-portal 1.16 (GlobalShortcuts)</a> ·
+              <a href="https://releases.electronjs.org/pr/52228">Electron backport on GlobalShortcutsPortal</a> ·
+              <a href="https://discuss.kde.org/t/kde-shortcut-settings-popup-appears-every-chromium-launch-after-update/32697"
+                >KDE shortcut popup on Chromium launch</a
+              >
+            </li>
+          </ul>
+          <h3>In this repo</h3>
+          <ul class="sources">
+            <li>
+              <code>docs/windows-port-plan.html</code>, <code>apps/browser/windows/README.md</code>, <code>scripts/windows/engine.py</code>,
+              <code>engine/patches/build/{engine-lock.json, gn_defines.sh, 03-ungoogled.py}</code>, <code>engine/patches/series{,.py}</code>,
+              <code>engine/nncore/src/bay/core/public/nncore_c.h</code>, <code>packages/platform/src/{capabilities,nativeBridge,nativeContracts}.ts</code>
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
+
+    <footer>
+      <div class="wrap">Bay · Linux port plan · Lives in <code>docs/linux-port-plan.html</code>, alongside <code>docs/windows-port-plan.html</code>.</div>
+    </footer>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var btn = document.getElementById("themeToggle");
+        try {
+          var saved = localStorage.getItem("bay-plan-theme");
+          if (saved) root.setAttribute("data-theme", saved);
+        } catch (e) {}
+        btn.addEventListener("click", function () {
+          var dark = root.getAttribute("data-theme") === "dark" || (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+          var next = dark ? "light" : "dark";
+          root.setAttribute("data-theme", next);
+          try {
+            localStorage.setItem("bay-plan-theme", next);
+          } catch (e) {}
+        });
+
+        // Copy buttons on every command block (comments are kept; the shell ignores them).
+        Array.prototype.forEach.call(document.querySelectorAll(".code"), function (block) {
+          var pre = block.querySelector("pre");
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "copy";
+          b.textContent = "Copy";
+          b.setAttribute("aria-label", "Copy commands");
+          b.addEventListener("click", function () {
+            var text = pre.innerText;
+            var done = function () {
+              b.textContent = "Copied";
+              b.classList.add("done");
+              setTimeout(function () {
+                b.textContent = "Copy";
+                b.classList.remove("done");
+              }, 1400);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(done, function () {});
+            } else {
+              var r = document.createRange();
+              r.selectNodeContents(pre);
+              var s = getSelection();
+              s.removeAllRanges();
+              s.addRange(r);
+              try {
+                document.execCommand("copy");
+                done();
+              } catch (e) {}
+              s.removeAllRanges();
+            }
+          });
+          block.appendChild(b);
+        });
+
+        var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a"));
+        var targets = links
+          .map(function (a) {
+            return document.querySelector(a.getAttribute("href"));
+          })
+          .filter(Boolean);
+        if (!("IntersectionObserver" in window)) return;
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (!e.isIntersecting) return;
+              links.forEach(function (a) {
+                var on = a.getAttribute("href") === "#" + e.target.id;
+                a.classList.toggle("active", on);
+                if (on) a.setAttribute("aria-current", "location");
+                else a.removeAttribute("aria-current");
+              });
+            });
+          },
+          { rootMargin: "0px 0px -70% 0px" },
+        );
+        targets.forEach(function (t) {
+          io.observe(t);
+        });
+      })();
+    </script>
+  </body>
+</html>
