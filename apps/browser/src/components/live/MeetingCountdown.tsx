@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Text } from "react-native";
-import { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
+import { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useNow } from "../../live/calendar";
 import { timeRemaining } from "../../live/meetings";

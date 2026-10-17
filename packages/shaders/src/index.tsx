@@ -1,5 +1,5 @@
-import { requireNativeViewManager } from "expo-modules-core";
-import type { ViewProps } from "react-native";
+import type { ViewProps } from "@bay/platform";
+import { requireNativeViewManager } from "@bay/platform/native";
 
 export const DIA_SPECTRUM = ["#0358F7", "#5092C7", "#E1E1FE", "#FFD400", "#FA3D1D", "#FD02F5"];
 

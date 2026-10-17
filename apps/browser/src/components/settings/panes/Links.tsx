@@ -1,5 +1,6 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { APP_NAME } from "../../../lib/constants";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";

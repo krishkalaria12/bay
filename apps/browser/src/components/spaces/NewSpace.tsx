@@ -1,7 +1,8 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { layout } from "../../lib/constants";
 import { onEscapeKey } from "../../lib/escapeKey";
 import { hex, setPreviewLook, useTheme } from "../../lib/theme";

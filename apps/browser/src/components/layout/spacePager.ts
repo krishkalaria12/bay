@@ -2,7 +2,7 @@ import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect } from "react";
 import { unstable_batchedUpdates } from "react-native";
-import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser } from "../../store/browser";

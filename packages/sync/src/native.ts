@@ -1,4 +1,4 @@
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "@bay/platform/native";
 import type { Listing, Transport } from "./scope.ts";
 
 export type FolderInfo = {

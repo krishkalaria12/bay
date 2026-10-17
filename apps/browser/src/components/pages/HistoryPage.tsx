@@ -1,8 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/shell";
 import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import type { HistoryEntry } from "../../store/types";
@@ -239,7 +240,7 @@ function HistoryRow({
           <MouseArea style={{ flex: 1 }} onMiddleClick={() => openUrl(entry.url, windowId, "background")}>
             <Pressable
               onPress={(e) => {
-                const ev = e.nativeEvent as unknown as { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+                const ev = e.nativeEvent as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
                 if (selecting) return onToggle(!!ev.shiftKey);
                 openUrl(entry.url, windowId, openModeFor(ev));
               }}

@@ -37,6 +37,9 @@ importers:
       '@bay/nncore':
         specifier: workspace:*
         version: link:../../packages/nncore
+      '@bay/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
       '@bay/shaders':
         specifier: workspace:*
         version: link:../../packages/shaders
@@ -108,19 +111,44 @@ importers:
         specifier: ^24.13.6
         version: 24.13.6
 
-  packages/import: {}
+  packages/import:
+    dependencies:
+      '@bay/platform':
+        specifier: workspace:*
+        version: link:../platform
 
   packages/nncore:
     dependencies:
       '@bay/core':
         specifier: workspace:*
         version: link:../core
+      '@bay/platform':
+        specifier: workspace:*
+        version: link:../platform
 
-  packages/shaders: {}
+  packages/platform:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.6
+        version: 24.13.6
 
-  packages/shell: {}
+  packages/shaders:
+    dependencies:
+      '@bay/platform':
+        specifier: workspace:*
+        version: link:../platform
+
+  packages/shell:
+    dependencies:
+      '@bay/platform':
+        specifier: workspace:*
+        version: link:../platform
 
   packages/sync:
+    dependencies:
+      '@bay/platform':
+        specifier: workspace:*
+        version: link:../platform
     devDependencies:
       '@types/node':
         specifier: ^24.13.6

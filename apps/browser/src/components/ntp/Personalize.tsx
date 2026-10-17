@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
 import { create } from "zustand";
 import { hex, useTheme } from "../../lib/theme";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "../onboarding/personalize";

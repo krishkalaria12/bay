@@ -1,7 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/shell";
-import { Pressable, View } from "react-native";
 import { useEffect } from "react";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { deleteSpace, switchSpace } from "../../lib/actions";
 import { layout } from "../../lib/constants";

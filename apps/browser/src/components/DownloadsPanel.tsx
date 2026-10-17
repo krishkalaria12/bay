@@ -1,8 +1,10 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, TextInput, View, isMac, modKey } from "@bay/platform";
 import { cancelDownload, engineCall, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { ContextMenuArea, copyText, downloadsFolder, fileExists, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { isEscapeKey } from "../lib/escapeKey";
 import { useTheme } from "../lib/theme";
@@ -238,7 +240,8 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
   const move = (delta: 1 | -1) => ids.length && setSelected((i) => (Math.min(i, ids.length - 1) + delta + ids.length) % ids.length);
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
-    const { key, metaKey, shiftKey, ctrlKey } = e.nativeEvent;
+    const { key, shiftKey, ctrlKey } = e.nativeEvent;
+    const metaKey = modKey(e.nativeEvent);
     if (key === "Escape") {
       if (menu) return closeMenu();
       if (query) return setQuery("");
@@ -439,7 +442,7 @@ function downloadActions(d: Download): PaletteMenuAction[] {
     ...(exists
       ? [
           { id: "open", title: "Open", icon: "arrow.up.forward.app", hint: "↩", run: () => openFile(d.path) },
-          { id: "reveal", title: "Show in Finder", icon: "finder", hint: "⌘↩", run: () => revealFile(d.path) },
+          { id: "reveal", title: isMac ? "Show in Finder" : "Show in File Explorer", icon: "finder", hint: "⌘↩", run: () => revealFile(d.path) },
           { id: "copyFile", title: "Copy File", icon: "doc.on.doc", run: () => copyDownloadFile(d) },
         ]
       : []),
@@ -505,7 +508,7 @@ function EmptyState({ filtered, onOpenFolder }: { filtered: boolean; onOpenFolde
           </View>
           <Text style={{ marginTop: 18, fontSize: 17, fontWeight: "600", color: theme.textPrimary }}>Nothing downloaded yet</Text>
           <Text style={{ marginTop: 6, fontSize: 13, lineHeight: 17, textAlign: "center", color: theme.textSecondary, maxWidth: 320 }}>
-            Files you download land in Downloads and are listed here, one Return from the Finder.
+            {`Files you download land in Downloads and are listed here, one Enter from ${isMac ? "Finder" : "File Explorer"}.`}
           </Text>
           <View {...hoverProps} style={{ marginTop: 18 }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Open Downloads Folder" onPress={onOpenFolder}>

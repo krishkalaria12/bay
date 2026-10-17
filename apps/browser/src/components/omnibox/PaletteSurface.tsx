@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { GlassEffect, Surface, VisualEffect } from "@bay/shell";
 import type { ReactNode } from "react";
-import { StyleSheet, View, type ViewStyle } from "react-native";
+import { StyleSheet, type ViewStyle } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { liquidGlass } from "../glass";
 

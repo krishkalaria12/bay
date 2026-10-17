@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel } from "@bay/shell";
 import { useEffect } from "react";
-import { Pressable, Text, View } from "react-native";
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { joinEvent } from "../../live/alerts";
 import { connectCalendar, refreshCalendar, useCalendar, useNow } from "../../live/calendar";

@@ -1,7 +1,8 @@
+import { View, isMac } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/shell";
 import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { Linking, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useSpaces } from "../../../store/hooks";
 import {
@@ -194,7 +195,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       { id: "copy", title: "Copy Recovery Code", symbol: "doc.on.doc" },
       { separator: true },
       { id: "now", title: "Sync Now", symbol: "arrow.triangle.2.circlepath" },
-      { id: "reveal", title: "Show Sync Folder in Finder", symbol: "folder", enabled: !!info?.exists },
+      { id: "reveal", title: isMac ? "Show Sync Folder in Finder" : "Show Sync Folder in File Explorer", symbol: "folder", enabled: !!info?.exists },
       { separator: true },
       { id: "stop", title: "Stop Syncing…", symbol: "xmark.circle" },
     ]);

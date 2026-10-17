@@ -1,7 +1,9 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, TextInput, View, modKey, shortcutLabel } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { Keycaps } from "./Keycaps";
 import { PaletteSurface } from "./PaletteSurface";
@@ -41,7 +43,7 @@ const KEY_GLYPHS: Record<string, string> = { Enter: "↩", Backspace: "⌫" };
 
 // A key event as the keycap hint actions show, e.g. "⇧⌘C".
 export function hintOf({ key, metaKey, shiftKey, altKey, ctrlKey }: KeyEvent): string {
-  return `${ctrlKey ? "⌃" : ""}${altKey ? "⌥" : ""}${shiftKey ? "⇧" : ""}${metaKey ? "⌘" : ""}${KEY_GLYPHS[key] ?? key.toUpperCase()}`;
+  return shortcutLabel(`${ctrlKey ? "⌃" : ""}${altKey ? "⌥" : ""}${shiftKey ? "⇧" : ""}${metaKey ? "⌘" : ""}${KEY_GLYPHS[key] ?? key.toUpperCase()}`);
 }
 
 // Runs the action: null once done, else what went wrong.
@@ -227,14 +229,15 @@ export function PaletteActionMenu({
             keyDownEvents={query ? MENU_KEYS : EMPTY_MENU_KEYS}
             onKeyPress={onEscapeKey(onClose)}
             onKeyDown={(event) => {
-              const { key, shiftKey, metaKey } = event.nativeEvent;
+              const { key, shiftKey } = event.nativeEvent;
+              const metaKey = modKey(event.nativeEvent);
               if (key === "Escape" || (metaKey && (key.toLowerCase() === "k" || key === "/"))) {
                 onClose();
                 return;
               }
               // ⌘ shortcuts always reach their action; ⇧⌫ only once the search field is empty.
               if (metaKey || (shiftKey && key === "Backspace" && !query)) {
-                const action = actions.find((item) => item.hint === hintOf(event.nativeEvent));
+                const action = actions.find((item) => item.hint && shortcutLabel(item.hint) === hintOf(event.nativeEvent));
                 if (action) void run(action);
                 return;
               }

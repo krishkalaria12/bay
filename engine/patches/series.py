@@ -20,7 +20,9 @@ Environment: CHROMIUM_SRC (default ~/chromium-build/chromium_git/chromium/src), 
 
 import argparse
 import filecmp
+import json
 import os
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -34,8 +36,9 @@ BASE = os.environ.get("NN_SERIES_BASE", os.path.expanduser("~/chromium-build/ser
 
 
 class Step:
-    def __init__(self, kind, name, line):
+    def __init__(self, kind, name, line, platforms="all"):
         self.kind, self.name, self.line = kind, name, line
+        self.platforms = platforms
 
     def __repr__(self):
         return f"{self.kind} {self.name}"
@@ -54,7 +57,7 @@ class Step:
         if self.kind not in ("cef", "chromium"):
             return set()
         out, new = set(), False
-        for line in open(self.patch, encoding="utf-8", errors="surrogateescape"):
+        for line in Path(self.patch).read_text(encoding="utf-8", errors="surrogateescape").splitlines():
             if line.startswith("--- "):
                 new = line.strip() == "--- /dev/null"
             m = re.match(r"^\+\+\+ (?:b/)?(\S+)", line)
@@ -66,12 +69,12 @@ class Step:
         """(path relative to chromium/src, is_dir) for everything the step writes."""
         if self.kind in ("cef", "chromium"):
             out = []
-            for line in open(self.patch, encoding="utf-8", errors="surrogateescape"):
+            for line in Path(self.patch).read_text(encoding="utf-8", errors="surrogateescape").splitlines():
                 m = re.match(r"^\+\+\+ (?:b/)?(\S+)", line)
                 if m and m.group(1) != "/dev/null":
                     out.append((os.path.join(self.root, m.group(1)), False))
             return dedupe(out)
-        return layer_paths(os.path.join(REPO, self.name))
+        return layer_paths(os.path.join(REPO, self.name), self.target)
 
 
 def dedupe(items):
@@ -83,9 +86,14 @@ def dedupe(items):
     return out
 
 
-def layer_paths(layer):
+def layer_paths(layer, target=None):
     """What a layer's apply.sh writes: the directories it mirrors from <layer>/src (copied whole) and each
     Chromium file it hooks (`"$src/<path>"`)."""
+    portable = os.path.join(layer, "apply.py")
+    if os.path.isfile(portable):
+        result = run([sys.executable, portable, "--list-paths"], REPO,
+                     dict(os.environ, BAY_ENGINE_PLATFORM=target or host_platform()), check=True)
+        return [tuple(item) for item in json.loads(result.stdout)]
     script = open(os.path.join(layer, "apply.sh")).read()
     out = []
     m = re.search(r"^owned=\(([^)]*)\)", script, re.M)
@@ -99,27 +107,44 @@ def layer_paths(layer):
     return dedupe([(d, True) for d in dirs] + out)
 
 
-def read_series():
+def host_platform():
+    return "win" if sys.platform == "win32" else "mac" if sys.platform == "darwin" else "linux"
+
+
+def read_series(target=None):
     steps = []
-    for n, raw in enumerate(open(os.path.join(HERE, "series")), 1):
+    for n, raw in enumerate(Path(HERE, "series").read_text(encoding="utf-8").splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
-        kind, _, name = line.partition(" ")
-        name = name.strip()
-        if kind not in ("cef", "chromium", "layer") or not name:
-            sys.exit(f"series:{n}: expected `cef|chromium|layer <name>`: {raw.rstrip()}")
-        step = Step(kind, name, n)
+        fields = line.split()
+        if len(fields) != 3:
+            sys.exit(f"series:{n}: expected `cef|chromium|layer all|mac|win <name>`: {raw.rstrip()}")
+        kind, platforms, name = fields
+        if kind not in ("cef", "chromium", "layer") or platforms not in ("all", "mac", "win"):
+            sys.exit(f"series:{n}: invalid kind or platform: {raw.rstrip()}")
+        step = Step(kind, name, n, platforms)
+        step.target = target or host_platform()
         if kind != "layer" and not os.path.isfile(step.patch):
             sys.exit(f"series:{n}: no such patch {name}")
-        if kind == "layer" and not os.path.isfile(os.path.join(REPO, name, "apply.sh")):
+        if kind == "layer" and not any(os.path.isfile(os.path.join(REPO, name, f"apply.{extension}")) for extension in ("sh", "py")):
             sys.exit(f"series:{n}: no {name}/apply.sh")
         steps.append(step)
     names = [s.name for s in steps if s.kind != "layer"]
     unlisted = sorted(set(f for f in os.listdir(HERE) if f.endswith(".patch")) - set(names))
     if unlisted:
         sys.exit("patches missing from series: " + ", ".join(unlisted))
-    return steps
+    return [step for step in steps if target is None or step.platforms in ("all", target)]
+
+
+def layer_command(step):
+    layer = os.path.join(REPO, step.name)
+    script = os.path.join(layer, "apply.py")
+    if os.path.isfile(script):
+        return [sys.executable, script]
+    if sys.platform == "win32":
+        sys.exit(f"{step.name}: a cross-platform apply.py is required on Windows")
+    return [os.path.join(layer, "apply.sh")]
 
 
 def run(cmd, cwd, env=None, check=False):
@@ -133,8 +158,8 @@ def apply_step(step, tree, strict=True):
     """Applies one step to `tree` (a chromium/src or a scratch copy of its touched files). Returns an error or
     None. strict: git apply (exact context, offsets allowed, no fuzz)."""
     if step.kind == "layer":
-        env = dict(os.environ, CHROMIUM_SRC=tree)
-        p = run([os.path.join(REPO, step.name, "apply.sh")], REPO, env)
+        env = dict(os.environ, CHROMIUM_SRC=tree, BAY_ENGINE_PLATFORM=step.target)
+        p = run(layer_command(step), REPO, env)
         return None if p.returncode == 0 else (p.stderr or p.stdout).strip()
     cwd = os.path.join(tree, step.root)
     p = run(["git", "apply", "--whitespace=nowarn", step.patch], cwd)
@@ -153,7 +178,7 @@ def apply_step(step, tree, strict=True):
 
 def is_applied(step, tree):
     if step.kind == "layer":
-        p = run([os.path.join(REPO, step.name, "apply.sh"), "--check"], REPO, dict(os.environ, CHROMIUM_SRC=tree))
+        p = run([*layer_command(step), "--check"], REPO, dict(os.environ, CHROMIUM_SRC=tree, BAY_ENGINE_PLATFORM=step.target))
         return p.returncode == 0
     cwd = os.path.join(tree, step.root)
     return run(["git", "apply", "--check", "-R", step.patch], cwd).returncode == 0 or \
@@ -202,14 +227,14 @@ def base_from_git(path, out):
 
 
 def cmd_files(args):
-    for step in read_series():
+    for step in read_series(args.platform):
         print(f"{step}:")
         for path, is_dir in step.paths():
             print(f"  {path}{'/' if is_dir else ''}")
 
 
 def cmd_apply(args):
-    for step in read_series():
+    for step in read_series(args.platform):
         if args.phase and phase_of(step) != args.phase:
             continue
         if step.kind != "layer" and is_applied(step, SRC):
@@ -222,7 +247,7 @@ def cmd_apply(args):
 
 
 def cmd_capture_base(args):
-    steps = [s for s in read_series() if not args.phase or phase_of(s) == args.phase]
+    steps = [s for s in read_series(args.platform) if not args.phase or phase_of(s) == args.phase]
     created = set().union(*(s.created() for s in steps))
     count = 0
     for path, is_dir in touched(steps):
@@ -259,7 +284,7 @@ def materialize(steps, out, until=None, report=None):
 
 
 def cmd_materialize(args):
-    steps = read_series()
+    steps = read_series(args.platform)
     if args.until not in [s.name for s in steps]:
         sys.exit(f"{args.until} isn't in series")
     os.makedirs(args.dir, exist_ok=True)
@@ -270,7 +295,7 @@ def cmd_materialize(args):
 def cmd_check(args):
     if not os.path.isdir(BASE):
         sys.exit(f"no base at {BASE}: run `series.py capture-base` on a tree before its series is applied")
-    steps = read_series()
+    steps = read_series(args.platform)
     scratch = args.keep or tempfile.mkdtemp(prefix="nn-series-")
     os.makedirs(scratch, exist_ok=True)
     try:
@@ -324,6 +349,9 @@ def main():
     p.add_argument("--until", required=True)
     p.add_argument("dir")
     sub.add_parser("files")
+    # Put --platform after the subcommand, like --phase.
+    for command_parser in sub.choices.values():
+        command_parser.add_argument("--platform", choices=["mac", "win", "linux"], default=host_platform())
     args = parser.parse_args()
     handler = {"apply": cmd_apply, "check": cmd_check, "capture-base": cmd_capture_base,
                "materialize": cmd_materialize, "files": cmd_files}[args.command]

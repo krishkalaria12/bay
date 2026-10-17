@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, hapticTick, showMenu, Symbol } from "@bay/shell";
 import { useLayoutEffect, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
+import { PanResponder, StyleSheet, Text } from "react-native";
+import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "@bay/platform/motion";
 import { createSpace, deleteSpace } from "../../../lib/actions";
 import { hex, SPACE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser, type BrowserState } from "../../../store/browser";

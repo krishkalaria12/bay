@@ -1,5 +1,6 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, Surface, Symbol } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useHover } from "../primitives";

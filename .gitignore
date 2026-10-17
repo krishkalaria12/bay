@@ -65,3 +65,16 @@ dist/
 # Notarization API key settings (scripts/release.sh)
 scripts/.notary.env
 *.p8
+
+# Python and Windows build output
+__pycache__/
+*.py[cod]
+.vs/
+**/windows/x64/
+**/windows/ARM64/
+**/windows/Win32/
+**/windows/Generated Files/
+**/windows/packages/
+**/windows/bundle/
+*.VC.db
+*.VC.opendb

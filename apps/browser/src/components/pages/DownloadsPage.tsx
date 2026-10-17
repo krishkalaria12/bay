@@ -1,7 +1,8 @@
+import { Pressable, View, isMac } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { ContextMenuArea, fileExists, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -115,7 +116,7 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
                 <Button title="Cancel" onPress={() => void cancelDownload(d.id)} />
               </View>
             ) : done ? (
-              <Button title="Show in Finder" onPress={() => void revealFile(d.path)} />
+              <Button title={isMac ? "Show in Finder" : "Show in File Explorer"} onPress={() => void revealFile(d.path)} />
             ) : null}
             <IconButton icon="ellipsis" size={13} box={26} radius={6} onPress={() => void downloadMenu(d, windowId)} tooltip="More actions" />
             {d.state !== "downloading" && (

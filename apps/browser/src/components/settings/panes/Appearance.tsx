@@ -1,6 +1,7 @@
+import { Pressable, View, capabilities } from "@bay/platform";
 import { appIcons, currentAppIcon, setAppearance, setAppIcon, Symbol, type AppIcon } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import type { Settings } from "../../../store/settings";
@@ -36,10 +37,10 @@ export function AppearancePane() {
         ))}
       </View>
       <DensityPicker />
-      <MaterialPicker />
+      {capabilities.vibrancy && <MaterialPicker />}
       <SidebarPositionPicker />
       <AddressBarPicker />
-      <AppIconPicker />
+      {capabilities.dock && <AppIconPicker />}
     </View>
   );
 }

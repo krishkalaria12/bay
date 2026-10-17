@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, type ReactNode } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { layout } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";

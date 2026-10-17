@@ -1,5 +1,5 @@
-import { Pressable, View } from "react-native";
-import Animated from "react-native-reanimated";
+import { Pressable, View } from "@bay/platform";
+import Animated from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { switchSpace } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";

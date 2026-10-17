@@ -1,7 +1,8 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
-import { Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
-import Animated from "react-native-reanimated";
+import { type GestureResponderEvent } from "react-native";
+import Animated from "@bay/platform/motion";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser, type BrowserState } from "../../store/browser";
@@ -24,8 +25,8 @@ import { isDeveloperTab } from "../developer/sites";
 import { DEVELOPER_YELLOW } from "../developer/constants";
 
 export const clickMods = (e: GestureResponderEvent) => {
-  const n = e.nativeEvent as unknown as { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
-  return { metaKey: !!n.metaKey, shiftKey: !!n.shiftKey, altKey: !!n.altKey };
+  const n = e.nativeEvent as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+  return { metaKey: !!n.metaKey, ctrlKey: !!n.ctrlKey, shiftKey: !!n.shiftKey, altKey: !!n.altKey };
 };
 
 const selectionOf = (windowId: string) => () => useBrowser.getState().selection[windowId] ?? [];

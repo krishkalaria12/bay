@@ -1,6 +1,7 @@
+import { type ScrollView, type View } from "@bay/platform";
 import { hapticTick } from "@bay/shell";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
-import { PanResponder, type ScrollView, type View } from "react-native";
+import { PanResponder } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -11,7 +12,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { armSidebarMoveUndo } from "../../lib/folderUndo";
 import { useTheme } from "../../lib/theme";

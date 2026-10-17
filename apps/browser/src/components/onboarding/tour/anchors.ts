@@ -1,4 +1,4 @@
-import type { View } from "react-native";
+import { type View } from "@bay/platform";
 import { layout } from "../../../lib/constants";
 import { useBrowser } from "../../../store/browser";
 import { activeTabId } from "../../../store/model";

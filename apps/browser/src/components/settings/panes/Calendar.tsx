@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import type { SystemCalendar } from "@bay/shell";
-import { Linking, Text, View } from "react-native";
+import { Linking, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { connectCalendar, setCalendarHidden, useCalendar } from "../../../live/calendar";
 import { ALERT_LEADS } from "../../../live/meetings";

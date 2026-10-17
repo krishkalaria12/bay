@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { terminateCastRoute, type ActionState, type CastRoute, type InstalledExtension } from "@bay/nncore";
 import { ContextMenuArea, showMenu, Symbol } from "@bay/shell";
 import { memo, useRef, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { toggleCastPicker, useCastRoutes } from "../media/cast";

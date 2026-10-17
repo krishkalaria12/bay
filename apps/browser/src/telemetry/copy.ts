@@ -23,8 +23,8 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
   {
     title: "With everything",
     items: [
-      "A random install ID, made on this Mac (a new one each time sharing is turned back on)",
-      "App version and build, macOS version, chip (arm64 or x86_64), engine version",
+      "A random install ID, made on this computer (a new one each time sharing is turned back on)",
+      "App version and build, operating system version, processor architecture, engine version",
       "Whether it's a test build",
     ],
   },

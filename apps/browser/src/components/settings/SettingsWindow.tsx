@@ -1,6 +1,7 @@
+import { Pressable, ScrollView, TextInput, View, capabilities } from "@bay/platform";
 import { Symbol, WindowDragRegion } from "@bay/shell";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { trackSettingsSection } from "../../telemetry/track";
@@ -53,6 +54,8 @@ const SECTIONS: Item[][] = [
 ];
 
 const ITEMS = SECTIONS.flat();
+// Panes whose native side the platform lacks (Calendar on Windows) stay out of the sidebar.
+const VISIBLE_SECTIONS = SECTIONS.map((section) => section.filter((i) => i.id !== "calendar" || capabilities.calendar));
 const itemOf = (pane: SettingsPane) => ITEMS.find((i) => i.id === pane) ?? ITEMS[0]!;
 
 export function SettingsWindow() {
@@ -109,7 +112,9 @@ function SettingsSidebar() {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   // A search lists the panes it names first, then a few of the settings in them.
-  const sections = q ? [ITEMS.filter((i) => i.title.toLowerCase().includes(q) || i.words.includes(q))] : SECTIONS;
+  const sections = q
+    ? [ITEMS.filter((i) => i.title.toLowerCase().includes(q) || (i.words.includes(q) && (i.id !== "calendar" || capabilities.calendar)))]
+    : VISIBLE_SECTIONS;
   const settings = findSettings(q);
   // Passwords and Autofill keep the space they were opened for.
   const open = (pane: SettingsPane, highlight?: string) => nav.go(pane, pane === "passwords" || pane === "autofill" ? nav.spaceId : null, highlight);
@@ -292,7 +297,7 @@ function Pane({ pane, spaceId }: { pane: SettingsPane; spaceId: string | null })
     case "liveFolders":
       return <LiveFoldersPane />;
     case "calendar":
-      return <CalendarPane />;
+      return capabilities.calendar ? <CalendarPane /> : <GeneralPane />;
     case "advanced":
       return <AdvancedPane />;
   }

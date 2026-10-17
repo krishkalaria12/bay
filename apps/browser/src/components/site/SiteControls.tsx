@@ -1,3 +1,5 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import {
   getContentBlocker,
   getSiteSettings,
@@ -14,7 +16,7 @@ import {
 import { cleanUrl, displayHost, markdownLink } from "@bay/core";
 import { confirm, copyText, sharePage, showMenu, Symbol, translation, type MenuItem } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";

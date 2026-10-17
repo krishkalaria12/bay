@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { PanResponder, StyleSheet, Text } from "react-native";
+import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { withAlpha } from "../sidebar/tokens";

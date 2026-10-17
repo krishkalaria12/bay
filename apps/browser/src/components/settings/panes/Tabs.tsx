@@ -1,6 +1,7 @@
+import { Pressable, View, capabilities } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, SettingToggle, TextField, Toggle, useFormColors } from "../controls";
@@ -44,9 +45,7 @@ export function TabsPane() {
       </Group>
 
       <SectionHeader title="Tab groups" />
-      <Group>
-        <SettingToggle setting="autoGroupMeetingTabs" title="Automatically group tabs for meetings" />
-      </Group>
+      <Group>{capabilities.calendar && <SettingToggle setting="autoGroupMeetingTabs" title="Automatically group tabs for meetings" />}</Group>
 
       <AwakeSites />
 
@@ -56,7 +55,7 @@ export function TabsPane() {
       />
       <Group>
         <SettingToggle setting="previewFolders" title="Folders and groups" description="Their tabs." />
-        <CalendarPreviewToggle />
+        {capabilities.calendar && <CalendarPreviewToggle />}
         <SettingToggle setting="previewGmail" title="Gmail" description="Unread mail, and Compose." />
         <SettingToggle
           setting="previewGithub"

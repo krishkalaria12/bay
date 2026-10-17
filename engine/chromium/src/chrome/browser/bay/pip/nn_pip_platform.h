@@ -3,8 +3,8 @@
 // The macOS side of Dia's video Picture in Picture window: where the user last
 // left it, and its Core Animation fade out.
 
-#ifndef CHROME_BROWSER_BAY_PIP_NN_PIP_MAC_H_
-#define CHROME_BROWSER_BAY_PIP_NN_PIP_MAC_H_
+#ifndef CHROME_BROWSER_BAY_PIP_NN_PIP_PLATFORM_H_
+#define CHROME_BROWSER_BAY_PIP_NN_PIP_PLATFORM_H_
 
 #include <optional>
 
@@ -26,4 +26,4 @@ void FadeOutBayPictureInPicture(gfx::NativeWindow window,
                                       base::TimeDelta duration);
 void ResetBayPictureInPictureFade(gfx::NativeWindow window);
 
-#endif  // CHROME_BROWSER_BAY_PIP_NN_PIP_MAC_H_
+#endif  // CHROME_BROWSER_BAY_PIP_NN_PIP_PLATFORM_H_

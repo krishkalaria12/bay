@@ -1,5 +1,6 @@
+import { Pressable, ScrollView, View } from "@bay/platform";
 import { useEffect, useRef } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { switchToTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";

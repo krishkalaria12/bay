@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/shell";
 import { create } from "zustand";
 import { useBrowser } from "../../store/browser";
@@ -22,7 +23,7 @@ type OnboardingState = {
 
 export const useOnboarding = create<OnboardingState>((set, get) => ({
   windowId: null,
-  step: "intro",
+  step: capabilities.introMusic ? "intro" : "defaultBrowser",
   leaving: false,
   session: 0,
   tourAfter: false,
@@ -79,7 +80,13 @@ export function startOnboarding(windowId?: string | null, step: OnboardingStep =
   const id = resolveWindowId(useBrowser.getState(), windowId);
   if (!id) return;
   endToolTour();
-  useOnboarding.setState((s) => ({ windowId: id, step, leaving: false, tourAfter: false, session: s.session + 1 }));
+  useOnboarding.setState((s) => ({
+    windowId: id,
+    step: step === "intro" && !capabilities.introMusic ? "defaultBrowser" : step,
+    leaving: false,
+    tourAfter: false,
+    session: s.session + 1,
+  }));
 }
 
 export function finishOnboarding(options: { tour?: boolean } = {}) {
@@ -92,7 +99,7 @@ export function finishOnboarding(options: { tour?: boolean } = {}) {
 export function dismissOnboarding(session: number) {
   const { session: current, windowId, tourAfter } = useOnboarding.getState();
   if (current !== session) return;
-  useOnboarding.setState({ windowId: null, step: "intro", leaving: false, tourAfter: false });
+  useOnboarding.setState({ windowId: null, step: capabilities.introMusic ? "intro" : "defaultBrowser", leaving: false, tourAfter: false });
   if (tourAfter && windowId) startToolTour(windowId);
 }
 

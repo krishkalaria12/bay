@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { validateLinkPattern, type ExternalLinkRule, type LinkDestination } from "../../../lib/externalLinkRules";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";

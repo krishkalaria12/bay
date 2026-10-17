@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { hapticTick, Surface, Symbol } from "@bay/shell";
 import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useRef, useState } from "react";
-import { Image, PanResponder, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { Image, PanResponder, StyleSheet, Text, type GestureResponderEvent } from "react-native";
 import { create } from "zustand";
 import {
   defaultHarmony,

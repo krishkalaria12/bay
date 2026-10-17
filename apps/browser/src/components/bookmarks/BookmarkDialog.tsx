@@ -1,6 +1,8 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import { prompt, Surface } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";

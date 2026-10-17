@@ -9,6 +9,9 @@
     "typecheck": "tsc -p .",
     "shaders:check": "node scripts/check-shaders.mjs"
   },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
+  },
   "peerDependencies": {
     "expo": "*",
     "react": "*",

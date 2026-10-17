@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { View } from "@bay/platform";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useResizeDrag } from "../layout/useResizeDrag";

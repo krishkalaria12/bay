@@ -1,8 +1,9 @@
+import { View, isMac } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { copyFile, copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
-import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { Image, StyleSheet } from "react-native";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
 import { useBrowser } from "../store/browser";
@@ -74,7 +75,7 @@ export async function downloadMenu(d: Download, windowId: string) {
         ]
       : [
           { id: "open", title: "Open", enabled: exists },
-          { id: "reveal", title: "Show in Finder", enabled: exists },
+          { id: "reveal", title: isMac ? "Show in Finder" : "Show in File Explorer", enabled: exists },
           { id: "copyFile", title: "Copy File", enabled: exists },
           { id: "copyPath", title: "Copy Path", enabled: d.state === "finished" && !!d.path },
         ];

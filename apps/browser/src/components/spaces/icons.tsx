@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { SPACE_COLORS } from "../../lib/theme";
 import type { Space } from "../../store/types";
 import { SYMBOL_PREFIX } from "../../lib/constants";

@@ -1,3 +1,4 @@
+import { isMac } from "@bay/platform";
 import { checkForUpdates, confirm, setAsDefaultBrowser, systemInfo } from "@bay/shell";
 import { sendFeedback } from "../../lib/appIntegration";
 import { openReleaseNotesPage, releaseNotesUrl } from "../../lib/releaseNotesPage";
@@ -37,7 +38,7 @@ export function appPaletteActions(windowId: string, onDismiss: () => void): Pale
       run: () =>
         confirm({
           title: `About ${app.appName}`,
-          message: `${app.appName} ${app.appVersion}\nBuild ${app.appBuild}\nmacOS ${app.osVersion}`,
+          message: `${app.appName} ${app.appVersion}\nBuild ${app.appBuild}\n${isMac ? "macOS" : "Windows"} ${app.osVersion}`,
           confirmTitle: "OK",
           windowId,
         }),

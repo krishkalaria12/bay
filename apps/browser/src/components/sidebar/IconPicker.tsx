@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
-import { Pressable, Text, View } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { layout } from "../../lib/constants";
 import { hex, useTheme } from "../../lib/theme";
 import { useSidebarOnRight } from "../layout/windowLayout";

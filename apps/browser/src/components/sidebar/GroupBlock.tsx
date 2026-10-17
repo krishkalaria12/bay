@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
 import { memo } from "react";
-import { Pressable, Text, View } from "react-native";
-import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import { Text } from "react-native";
+import Animated, { useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";

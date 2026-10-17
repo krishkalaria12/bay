@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useWindowId, useWindowUi } from "../store/hooks";

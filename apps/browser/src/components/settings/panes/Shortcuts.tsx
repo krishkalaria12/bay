@@ -1,6 +1,7 @@
+import { Pressable, View, shortcutLabel } from "@bay/platform";
 import { cancelShortcutRecording, menuShortcuts, recordShortcut, Symbol, type MenuShortcut } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { IconButton, useHover } from "../../primitives";
@@ -38,7 +39,7 @@ export function formatShortcut({ key, modifiers }: Combo): string {
     .join("");
   const code = key.charCodeAt(0);
   const name = KEY_NAMES[key] ?? (code >= 0xf704 && code <= 0xf717 ? `F${code - 0xf703}` : key.toUpperCase());
-  return mods + name;
+  return shortcutLabel(mods + name);
 }
 
 const comboId = (c: Combo) => (c.key ? `${[...c.modifiers].sort().join("+")}+${c.key.toLowerCase()}` : "");

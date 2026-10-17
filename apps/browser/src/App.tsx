@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { setTrafficLightsOnHover, Surface, WindowDragRegion } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
 import { CommandPanel } from "./components/CommandPanel";
 import { ContentCard } from "./components/ContentCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";

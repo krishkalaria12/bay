@@ -1,0 +1,33 @@
+{
+  "name": "@bay/platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "One place the app asks what platform it is on and what the platform can do: OS, capabilities, the Mod key, shortcut labels and the macOS-only view props",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./native": "./native.ts",
+    "./motion": "./motion.ts",
+    "./keys": "./src/keys.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./nativeBridge": "./nativeBridge.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "node --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\"",
+    "contracts:check": "node scripts/native-contracts.mjs --check",
+    "contracts:generate": "node scripts/native-contracts.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "expo-modules-core": "*",
+    "react": "*",
+    "react-native": "*",
+    "react-native-reanimated": "*"
+  }
+}

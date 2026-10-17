@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import { WebView, type OpenWindowRequest } from "@bay/nncore";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
-import Animated from "react-native-reanimated";
+import { StyleSheet, TextInput } from "react-native";
+import Animated from "@bay/platform/motion";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../lib/actions";

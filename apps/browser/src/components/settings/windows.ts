@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import { openWindow } from "@bay/shell";
 import { create } from "zustand";
 import { TASK_MANAGER_WINDOW_ID } from "../taskManager/window";
@@ -43,6 +44,7 @@ export const useSettingsNav = create<Nav>((set, get) => ({
   forward: [],
   highlight: null,
   go(pane, spaceId = null, highlight = null) {
+    if (pane === "calendar" && !capabilities.calendar) pane = "general";
     const { pane: from, spaceId: fromProfile, back } = get();
     if (from === pane && fromProfile === spaceId) return set({ highlight });
     set({ pane, spaceId, highlight, back: [...back, { pane: from, spaceId: fromProfile }].slice(-30), forward: [] });

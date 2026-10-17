@@ -1,16 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, Pressable, Text, View } from "react-native";
-import Animated, {
-  cancelAnimation,
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import { Image, Text } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { openLiveItem } from "../../live/engine";
 import { summarizeChecks } from "../../live/github";

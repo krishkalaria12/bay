@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { useSidebarMetrics } from "./tokens";
 import { FadeLabel } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { View } from "react-native";
-import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+
+import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { reduceMotion } from "../../lib/reduceMotion";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";

@@ -1,6 +1,7 @@
+import { Pressable, View, modKey } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -11,7 +12,7 @@ import Animated, {
   withRepeat,
   withSpring,
   withTiming,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { closeTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
@@ -409,7 +410,7 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
           <Pressable
             onPress={(e) => {
               dismissHover();
-              openLiveItem(windowId, folderId, item, { background: clickMods(e).metaKey });
+              openLiveItem(windowId, folderId, item, { background: modKey(clickMods(e)) });
             }}
           >
             {({ pressed }) => (

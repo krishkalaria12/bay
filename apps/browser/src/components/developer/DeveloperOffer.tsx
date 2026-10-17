@@ -1,6 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Popover } from "../layout/controls";
 import { useHover } from "../primitives";

@@ -1,6 +1,7 @@
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { useRef } from "react";
 import { FadeLabel } from "@bay/shell";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
@@ -36,7 +37,7 @@ export function SidebarHeaderTools({ width }: { width: number }) {
           palette={palette}
           icon={sidebarSymbol}
           onPress={() => useBrowser.getState().toggleSidebar(windowId)}
-          tooltip="Auto-Hide Tabs (⌘S)"
+          tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}
       <View style={{ position: "absolute", top, right: ADDRESS_EDGE, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>

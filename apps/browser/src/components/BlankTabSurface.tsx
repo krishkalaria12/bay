@@ -1,6 +1,7 @@
+import { Pressable, View, shortcutLabel } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../lib/theme";
 import { useBrowser } from "../store/browser";
 import { useWindowId } from "../store/hooks";
@@ -58,7 +59,7 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
           >
             <Symbol name="magnifyingglass" size={14} color={theme.textSecondary} style={{ width: 18, height: 18 }} />
             <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Open search</Text>
-            <Text style={{ color: theme.textTertiary, fontSize: 12, marginLeft: 10 }}>⌘L</Text>
+            <Text style={{ color: theme.textTertiary, fontSize: 12, marginLeft: 10 }}>{shortcutLabel("⌘L")}</Text>
           </Pressable>
         </View>
       </View>

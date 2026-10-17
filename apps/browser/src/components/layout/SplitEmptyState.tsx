@@ -1,6 +1,7 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";

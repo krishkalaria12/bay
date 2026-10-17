@@ -1,3 +1,4 @@
+import { capabilities, isMac } from "@bay/platform";
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
@@ -21,6 +22,9 @@ import {
 } from "./apply";
 import { DIA_LAUNCH_MS, DIA_POLL_MS, DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
 import { importModule } from "./module";
+
+// Dia's tabs come over AppleScript, which only macOS has.
+const importable = (list: BrowserSource[]) => list.filter((browser) => browser.family !== "automation" || capabilities.appleScript);
 
 export type Step = "loading" | "choose" | "profiles" | "safari" | "access" | "unlock" | "dia" | "progress" | "done";
 export type Status = "pending" | "active" | "done" | "failed";
@@ -58,7 +62,7 @@ export function useImportFlow() {
     if (step === "safari") return setFullDiskAccess(api.safariHasFullDiskAccess());
     const list = await api.listBrowsers().catch(() => null);
     if (!list) return;
-    setBrowsers(list);
+    setBrowsers(importable(list));
     const updated = list.find((b) => b.id === source?.id);
     if (updated && !updated.needsFullDiskAccess) {
       choose(updated);
@@ -125,7 +129,11 @@ export function useImportFlow() {
       void run(kinds);
     } catch {
       setUnlocking(false);
-      setError(`macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`);
+      setError(
+        isMac
+          ? `macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`
+          : `Couldn't decrypt ${source.name}'s data. Try again, or skip the encrypted data.`,
+      );
     }
   };
 
@@ -457,8 +465,9 @@ export function useImportFlow() {
     void api
       .listBrowsers()
       .then((list) => {
-        setBrowsers(list);
-        const first = list.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ?? list[0];
+        const shown = importable(list);
+        setBrowsers(shown);
+        const first = shown.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ?? shown[0];
         if (first) choose(first);
         setStep("choose");
       })

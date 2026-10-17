@@ -1,6 +1,7 @@
+import { type TextInput } from "@bay/platform";
 import { completeInline } from "@bay/shell";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { findNodeHandle, type TextInput } from "react-native";
+import { findNodeHandle } from "react-native";
 import { completionToWrite, fieldChange, withoutFirst, type FieldChange, type Inline, type PendingInline } from "./inline";
 
 export function useInlineCompletion(input: RefObject<TextInput | null>, typed: string, wanted: string) {

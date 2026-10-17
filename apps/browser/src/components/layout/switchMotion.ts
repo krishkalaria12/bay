@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from "react";
 import type { ViewStyle } from "react-native";
-import { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { reduceMotion } from "../../lib/reduceMotion";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";

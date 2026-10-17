@@ -1,6 +1,7 @@
+import { View } from "@bay/platform";
 import { copyText, focusWindow } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../../lib/theme";
 import { deleteLiveFolder, refreshFolder, statusText } from "../../../live/engine";

@@ -1,6 +1,7 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { create } from "zustand";
 import { onEscapeKey } from "../lib/escapeKey";
 import { hex, useTheme } from "../lib/theme";

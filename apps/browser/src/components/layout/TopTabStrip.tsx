@@ -1,6 +1,8 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
-import { findNodeHandle, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { findNodeHandle, PanResponder, StyleSheet, Text } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
@@ -31,7 +33,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import {
   dragGeometry,
   dragRange,
@@ -141,7 +143,7 @@ export function TopTabStrip({
             size={16}
             box={STRIP_DOWNLOADS_BOX}
             radius={10}
-            tooltip="Downloads (⇧⌘J)"
+            tooltip={`Downloads (${shortcutForCommand("downloads", "⇧⌘J")})`}
             onPress={() => {
               const s = useBrowser.getState();
               s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);

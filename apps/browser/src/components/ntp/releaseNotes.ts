@@ -1,3 +1,4 @@
+import { shortcutLabel } from "@bay/platform";
 import { launchEnvironment, readDocument, systemInfo, writeDocument } from "@bay/shell";
 import { create } from "zustand";
 import { POSTCARD_SECONDS, RELEASE_NOTES_DOC } from "./constants";
@@ -17,7 +18,10 @@ export const RELEASE_NOTES: ReleaseNotes[] = [
     title: "Hello, Bay",
     summary: "The first release: a calm, fast browser that keeps your tabs, your pages and your focus in one place.",
     items: [
-      { title: "A command bar for everything", body: "Search, type an address or jump to an open tab from the New Tab page, or from any page with ⌘L." },
+      {
+        title: "A command bar for everything",
+        body: shortcutLabel("Search, type an address or jump to an open tab from the New Tab page, or from any page with ⌘L."),
+      },
       { title: "Split view", body: "Drag a tab onto the page to see two or three side by side, stacked or in columns." },
       { title: "Tab groups and pinned tabs", body: "Group related tabs, pin the ones you live in, and let Clean Up Tabs tidy the rest." },
       { title: "Picture in Picture that stays out of the way", body: "Stash a video at the edge of the screen; click its site name to jump back to the tab." },

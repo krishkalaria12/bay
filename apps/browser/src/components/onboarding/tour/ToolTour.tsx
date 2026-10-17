@@ -1,6 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -14,7 +15,7 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { hex, useTheme } from "../../../lib/theme";
 import { useWindowId } from "../../../store/hooks";
 import type { Rect } from "../../layout/geometry";

@@ -1,3 +1,4 @@
+import { View, isMac, shortcutLabel } from "@bay/platform";
 import {
   checkForUpdates,
   isDefaultBrowser,
@@ -11,7 +12,7 @@ import {
   type UpdaterState,
 } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { AppState, Text, View } from "react-native";
+import { AppState, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { SHARING_COPY } from "../../../telemetry/copy";
@@ -46,10 +47,10 @@ export function GeneralPane() {
             }
           />
         </Row>
-        <Row title="Warn before quitting" description={`Asks before ${APP_NAME} quits with ⌘Q.`}>
+        <Row title="Warn before quitting" description={isMac ? `Asks before ${APP_NAME} quits with ⌘Q.` : `Asks before ${APP_NAME} quits.`}>
           <Toggle value={settings.warnBeforeQuitting} onChange={(v) => update({ warnBeforeQuitting: v })} />
         </Row>
-        <Row title="Warn before closing a window with multiple tabs" description="Asks before ⇧⌘W or the close button closes its tabs.">
+        <Row title="Warn before closing a window with multiple tabs" description={shortcutLabel("Asks before ⇧⌘W or the close button closes its tabs.")}>
           <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => update({ warnBeforeClosingWindow: v })} />
         </Row>
       </Group>

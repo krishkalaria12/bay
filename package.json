@@ -17,7 +17,11 @@
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt:check": "oxfmt --check",
+    "windows:engine": "node scripts/windows/run-python.mjs engine.py",
+    "windows:package": "pwsh -File scripts/windows/package.ps1",
+    "test:windows-build": "node scripts/windows/run-python.mjs -m unittest discover -s scripts/windows -p \"test_*.py\"",
+    "test:windows-native": "node scripts/windows/run-python.mjs test-native.py"
   },
   "devDependencies": {
     "oxfmt": "0.72.0",

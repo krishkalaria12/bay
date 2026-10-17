@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { DIA_SPECTRUM, PowerUp } from "@bay/shaders";
 import { playIntroMusic, setIntroMusicMuted, stopIntroMusic, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -13,7 +14,7 @@ import Animated, {
   withDelay,
   withSpring,
   withTiming,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
 import { introMusicMuted, saveIntroMusicMuted } from "./state";

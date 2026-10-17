@@ -1,6 +1,7 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";

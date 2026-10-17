@@ -1,7 +1,8 @@
+import type { ViewProps } from "@bay/platform";
 import { toAppUrl, toEngineUrl } from "@bay/core";
-import { requireNativeViewManager } from "expo-modules-core";
+import NativeWebView from "./NativeWebView";
 import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
-import type { NativeSyntheticEvent, ViewProps } from "react-native";
+import { NativeSyntheticEvent } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
 
@@ -285,7 +286,7 @@ type NativeEvents = {
   onExternalApp: ExternalAppRequest;
 };
 type Handlers = keyof NativeEvents;
-type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
+export type NativeProps = Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> };
 
 const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<WebViewProps[K]>> } = {
   onNavigationChange: (e) => [{ ...e, url: toAppUrl(e.url) }],
@@ -324,15 +325,13 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onExternalApp: (e) => [e],
 };
 
-type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"> & {
+export type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"> & {
   evaluate(code: string): Promise<string | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
   loadUrl(url: string, userInitiated?: boolean): Promise<void>;
   resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;
   discard(unload: boolean): Promise<DiscardOutcome>;
 };
-
-const NativeWebView = requireNativeViewManager<NativeProps>("BayCEF");
 
 const VIEW_RETRIES = 3;
 // Expo's view functions reject with this cause when the view tag has no registered view.
@@ -420,11 +419,5 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       map && typeof value === "function" ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent)) : value;
   }
 
-  return (
-    <NativeWebView
-      // @ts-expect-error expo view managers accept a ref to their AsyncFunctions
-      ref={native}
-      {...(nativeProps as NativeProps)}
-    />
-  );
+  return <NativeWebView ref={native} {...(nativeProps as NativeProps)} />;
 });
