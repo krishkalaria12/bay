@@ -55,12 +55,12 @@ Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Bay\Capabilities\FileAss
 Root: HKCU; Subkey: "Software\Classes\Bay.HTML"; ValueType: string; ValueData: "Bay HTML Document"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Bay.HTML"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\Bay.HTML\DefaultIcon"; ValueType: string; ValueData: "{app}\Bay.exe,0"
-Root: HKCU; Subkey: "Software\Classes\Bay.HTML\shell\open\command"; ValueType: string; ValueData: """{app}\Bay.exe"" "%1""
+Root: HKCU; Subkey: "Software\Classes\Bay.HTML\shell\open\command"; ValueType: string; ValueData: """{app}\Bay.exe"" ""%1"""
 Root: HKCU; Subkey: "Software\Classes\Bay.PDF"; ValueType: string; ValueData: "Bay PDF Document"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Bay.PDF\DefaultIcon"; ValueType: string; ValueData: "{app}\Bay.exe,0"
-Root: HKCU; Subkey: "Software\Classes\Bay.PDF\shell\open\command"; ValueType: string; ValueData: """{app}\Bay.exe"" "%1""
+Root: HKCU; Subkey: "Software\Classes\Bay.PDF\shell\open\command"; ValueType: string; ValueData: """{app}\Bay.exe"" ""%1"""
 Root: HKCU; Subkey: "Software\Classes\Applications\Bay.exe"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Applications\Bay.exe\shell\open\command"; ValueType: string; ValueData: """{app}\Bay.exe"" "%1""
+Root: HKCU; Subkey: "Software\Classes\Applications\Bay.exe\shell\open\command"; ValueType: string; ValueData: """{app}\Bay.exe"" ""%1"""
 Root: HKCU; Subkey: "Software\Classes\.html\OpenWithProgids"; ValueType: string; ValueName: "Bay.HTML"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\.htm\OpenWithProgids"; ValueType: string; ValueName: "Bay.HTML"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "Bay.PDF"; ValueData: ""; Flags: uninsdeletevalue

@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $AppPath = (Resolve-Path $AppPath).Path
 $directory = Split-Path $AppPath -Parent
-foreach ($name in @('Bay.dll', 'nncore.dll', 'nncore_subprocess.exe', 'nncore_subprocess.dll', 'libcef.dll', 'chrome_elf.dll', 'icudtl.dat', 'resources.pak')) {
+foreach ($name in @('chrome.dll', 'chrome_elf.dll', 'icudtl.dat', 'resources.pak', 'bay-ui/index.html', 'bay-ui/native_host.mojom-webui.js')) {
     if (-not (Test-Path (Join-Path $directory $name))) { throw "Missing runtime file $name" }
 }
 $data = Join-Path ([IO.Path]::GetTempPath()) ('Bay-smoke-' + [guid]::NewGuid())
@@ -15,7 +15,7 @@ $previousData = $env:BAY_DATA_DIR
 $process = $null
 try {
     $env:BAY_DATA_DIR = $data
-    $process = Start-Process -FilePath $AppPath -ArgumentList 'about:blank' -WorkingDirectory $directory -PassThru
+    $process = Start-Process -FilePath $AppPath -ArgumentList "--user-data-dir=`"$data`"", '--enable-features=Webium,SurfaceEmbed', 'chrome://bay' -WorkingDirectory $directory -PassThru
     $deadline = (Get-Date).AddSeconds($StartupSeconds)
     $windowAppeared = $false
     while ((Get-Date) -lt $deadline) {
