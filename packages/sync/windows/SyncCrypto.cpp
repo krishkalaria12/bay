@@ -5,10 +5,11 @@
 #include <cctype>
 #include <limits>
 #ifdef _WIN32
+// First: bcrypt, wincred and wincrypt use its types.
+#include <windows.h>
 #include <bcrypt.h>
 #include <wincred.h>
 #include <wincrypt.h>
-#include <windows.h>
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "advapi32.lib")
