@@ -24,7 +24,8 @@ try {
   & $msbuild (Join-Path $PSScriptRoot 'Bay.sln') /restore /m "/p:Configuration=$Configuration" /p:Platform=x64
   if ($LASTEXITCODE) { throw 'Windows host build failed.' }
   New-Item -ItemType Directory -Force $output | Out-Null
-  Copy-Item (Join-Path $engine '*') $output -Recurse -Force
+  & python (Join-Path $repo 'scripts/windows/stage-engine.py') --engine $engineRoot --destination $output
+  if ($LASTEXITCODE) { throw 'Engine artifact verification or staging failed.' }
   Copy-Item (Join-Path $engine 'bootstrap.exe') (Join-Path $output 'Bay.exe') -Force
   if ($Configuration -eq 'Release') {
     $bundle = Join-Path $output 'Bundle'

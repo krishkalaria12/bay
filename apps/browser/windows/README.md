@@ -4,6 +4,10 @@ Bay uses React Native Windows 0.81.5 with Fabric, Hermes and Windows App SDK.
 The project starts from Microsoft's `cpp-app` template and hosts one React Native
 island per browser window. It supports x64 desktop Windows only.
 
+Windows App SDK is deployed with the app. The DLL explicitly enables
+[registration-free WinRT initialization](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps)
+because the CEF launcher does not initialize it.
+
 The host is `Bay.dll`, loaded by the CEF 154 sandbox bootstrap distributed as
 `Bay.exe`. Do not replace that executable with an ordinary WinMain wrapper and do
 not disable the Chromium sandbox. The bootstrap invokes the exported `RunWinMain`
