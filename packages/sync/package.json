@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
-    "test": "bash ../../scripts/swift-test.sh --scratch-path \"${TMPDIR:-/tmp}/bay-sync-swiftpm\" && node --test \"src/**/*.test.ts\""
+    "test": "node ../../scripts/test-native.mjs sync && node --test \"src/**/*.test.ts\""
   },
   "peerDependencies": {
     "expo": "*",
