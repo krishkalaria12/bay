@@ -323,7 +323,7 @@ NN_ENGINE_CALL(nn_extensions_install) {
         reply.Send(base::DictValue().Set("id", extension->id()));
       },
       call.TakeReply()));
-  installer->Load(base::FilePath(path));
+  installer->Load(base::FilePath::FromUTF8Unsafe(path));
 }
 
 NN_ENGINE_CALL(nn_extensions_install_crx) {
@@ -359,7 +359,7 @@ NN_ENGINE_CALL(nn_extensions_install_crx) {
                                          : installer->expected_id()));
       },
       call.TakeReply(), installer));
-  installer->InstallCrx(base::FilePath(path));
+  installer->InstallCrx(base::FilePath::FromUTF8Unsafe(path));
 }
 
 NN_ENGINE_CALL(nn_extensions_set_enabled) {

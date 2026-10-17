@@ -5,7 +5,9 @@
 # is NNCore: //chrome's services plus our BrowserWindow, window host and ObjC API.
 # A host app links the framework and drives it through public/NNCore.h.
 
-assert(is_mac)
+assert(is_mac || is_win)
+
+if (is_mac) {
 
 config("exports") {
   # Chrome's framework exports only ChromeMain; keep our API visible too.
@@ -28,9 +30,9 @@ source_set("core") {
     "nn_context_menu.h",
     "nn_context_menu.mm",
     "nn_desktop_capture.h",
-    "nn_desktop_capture.mm",
+    "nn_desktop_capture.cc",
     "nn_devtools_call.h",
-    "nn_devtools_call.mm",
+    "nn_devtools_call.cc",
     "nn_device_chooser.h",
     "nn_device_chooser.mm",
     "nn_extension_view.h",
@@ -40,7 +42,7 @@ source_set("core") {
     "nn_fake_media.h",
     "nn_fake_media.mm",
     "nn_host_visibility.h",
-    "nn_host_visibility.mm",
+    "nn_host_visibility.cc",
     "nn_icon_fetch.mm",
     "nn_installed_bubble.h",
     "nn_installed_bubble.mm",
@@ -137,4 +139,36 @@ source_set("core") {
     "AppKit.framework",
     "Foundation.framework",
   ]
+}
+
+} else if (is_win) {
+  # CEF's sandbox bootstrap loads the RNW application DLL. NNCore has a C ABI
+  # and only links the public CEF wrapper, keeping Chromium types out of RNW.
+  shared_library("nncore") {
+    testonly = true
+    sources = [ "public/nncore_c.h", "win/nncore_win.cc" ]
+    defines = [ "CEF_USE_BOOTSTRAP" ]
+    deps = [ "//cef:libcef", "//cef:libcef_dll_wrapper_dll" ]
+    libs = [ "user32.lib" ]
+  }
+
+  shared_library("nncore_subprocess_dll") {
+    testonly = true
+    output_name = "nncore_subprocess"
+    sources = [ "win/nncore_subprocess.cc" ]
+    defines = [ "CEF_USE_BOOTSTRAP" ]
+    deps = [ "//cef:bootstrap", "//cef:libcef", "//cef:libcef_dll_wrapper_dll" ]
+  }
+
+  copy("nncore_subprocess") {
+    testonly = true
+    sources = [ "$root_out_dir/bootstrap.exe" ]
+    outputs = [ "$root_out_dir/nncore_subprocess.exe" ]
+    deps = [ "//cef:bootstrap", ":nncore_subprocess_dll" ]
+  }
+
+  group("core") {
+    testonly = true
+    deps = [ ":nncore", ":nncore_subprocess" ]
+  }
 }

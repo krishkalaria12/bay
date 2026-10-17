@@ -11,7 +11,14 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "shaders:check": "turbo run shaders:check",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "windows": "pnpm --filter @bay/browser windows",
+    "windows:bundle": "pnpm --filter @bay/browser bundle:windows",
+    "windows:engine": "node scripts/windows/run-python.mjs engine.py",
+    "windows:package": "pwsh -File scripts/windows/package.ps1",
+    "typecheck:windows": "pnpm --filter @bay/browser typecheck:windows",
+    "test:windows-build": "node scripts/windows/run-python.mjs -m unittest discover -s scripts/windows -p \"test_*.py\"",
+    "test:windows-native": "node scripts/windows/run-python.mjs test-native.py"
   },
   "devDependencies": {
     "turbo": "^2.11.3",

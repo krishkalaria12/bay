@@ -1,0 +1,38 @@
+name: Windows engine artifact
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - engine/**
+      - scripts/windows/engine.py
+      - .github/workflows/windows-engine.yml
+permissions:
+  contents: read
+concurrency:
+  group: windows-engine
+  cancel-in-progress: false
+jobs:
+  engine:
+    # Large Windows 11 x64 machine with VS 2026, ATL/MFC, SDK 28000.2270,
+    # at least 64 GiB RAM and 300 GiB free NTFS storage. Never run untrusted PRs.
+    runs-on: [self-hosted, Windows, X64, bay-engine]
+    timeout-minutes: 1440
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build in a fresh versioned root
+        shell: pwsh
+        run: |
+          $engineRoot = Join-Path $env:RUNNER_TEMP "bay-engine-${{ github.run_id }}-${{ github.run_attempt }}"
+          python scripts/windows/engine.py all --root $engineRoot --output dist/engine
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Archive engine and matching PDBs
+        uses: actions/upload-artifact@v4
+        with:
+          name: bay-engine-windows-x64-${{ github.sha }}
+          path: dist/engine/*
+          if-no-files-found: error
+          retention-days: 90

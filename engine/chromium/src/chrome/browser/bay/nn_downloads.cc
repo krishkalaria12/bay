@@ -86,8 +86,8 @@ base::DictValue Describe(DownloadItem* item) {
   return base::DictValue()
       .Set("id", item->GetGuid())
       .Set("url", item->GetOriginalUrl().spec())
-      .Set("filename", name.value())
-      .Set("path", path.value())
+      .Set("filename", name.AsUTF8Unsafe())
+      .Set("path", path.AsUTF8Unsafe())
       .Set("state", StateName(*item))
       .Set("paused", item->IsPaused())
       .Set("received", static_cast<double>(item->GetReceivedBytes()))
@@ -147,7 +147,7 @@ class DownloadsState : public ProfileState {
     }
     if (const char* dir = getenv("BAY_DOWNLOADS_DIR"); dir && *dir) {
       DownloadPrefs::FromBrowserContext(profile)->SetDownloadPath(
-          base::FilePath(dir));
+          base::FilePath::FromUTF8Unsafe(dir));
     }
     watches_.push_back(std::make_unique<Watch>(this, profile));
     for (Profile* off_the_record : profile->GetAllOffTheRecordProfiles()) {

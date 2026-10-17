@@ -13,11 +13,12 @@ Run once on a fresh (CEF-patched) tree.
 Usage: 03-ungoogled.py [--dry-run]
 """
 import pathlib
+import os
 import subprocess
 import sys
 
-CB = pathlib.Path.home() / 'chromium-build'
-SRC = CB / 'chromium_git/chromium/src'
+CB = pathlib.Path(os.environ.get('CB', pathlib.Path.home() / 'chromium-build'))
+SRC = pathlib.Path(os.environ.get('CHROMIUM_SRC', CB / 'chromium_git/chromium/src'))
 UG = CB / 'ungoogled'
 UGMAC = CB / 'ungoogled-macos'
 REPORT = CB / 'logs/ungoogled-patches.tsv'
@@ -90,7 +91,8 @@ def series():
         line = line.strip()
         if line and not line.startswith('#'):
             yield UG / 'patches', line
-    yield UGMAC / 'patches', 'ungoogled-chromium/macos/fix-disabling-safebrowsing.patch'
+    if sys.platform == 'darwin':
+        yield UGMAC / 'patches', 'ungoogled-chromium/macos/fix-disabling-safebrowsing.patch'
 
 
 def run(cmd):
@@ -111,9 +113,20 @@ for base, rel in series():
         rows.append((rel, 'partial' if ok else 'FAILED', 'without ' + ', '.join(PARTIAL_EXCLUDE[rel])))
         continue
     if rel in PARTIAL_FUZZY:
+        result = run(['patch', '-p1', '-F2', '--dry-run', '--forward', '-i', path])
+        # The CEF-stubbed Start hunk is the only accepted reject. Never hide
+        # additional conflicts as a successful partial application.
+        rejects = [line for line in result.stdout.splitlines() if 'FAILED at' in line]
+        expected = len(rejects) == 1 and 'Hunk #1 FAILED at' in rejects[0]
+        if result.returncode != 0 and not expected:
+            rows.append((rel, 'FAILED', result.stdout + result.stderr))
+            continue
         if not dry:
-            run(['patch', '-p1', '-F2', '--forward', '--no-backup-if-mismatch', '-r', '-', '-i', path])
-        rows.append((rel, 'partial', 'dropped: ' + PARTIAL_FUZZY[rel]))
+            applied = run(['patch', '-p1', '-F2', '--forward', '--no-backup-if-mismatch', '-r', '-', '-i', path])
+            if applied.returncode not in ((0, 1) if expected else (0,)):
+                rows.append((rel, 'FAILED', applied.stdout + applied.stderr))
+                continue
+        rows.append((rel, 'partial', 'dropped: ' + PARTIAL_FUZZY[rel] if expected else 'applied exactly'))
         continue
     if run(['git', 'apply', '--check', '-p1', path]).returncode == 0:
         if not dry:
@@ -137,6 +150,7 @@ if not dry:
             assert s.count(old) == 1, f'fixup anchor missing in {rel}'
             f.write_text(s.replace(old, new, 1))
 
+REPORT.parent.mkdir(parents=True, exist_ok=True)
 REPORT.write_text('patch\tstatus\tdetail\n' + ''.join('\t'.join(r) + '\n' for r in rows))
 for r in rows:
     if r[1] != 'applied':
