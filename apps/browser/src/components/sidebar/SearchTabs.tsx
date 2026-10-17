@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, TextInput, View } from "@bay/platform";
 import { displayUrl, fuzzyScore } from "@bay/core";
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useMemo, useRef, useState } from "react";
-import { ScrollView, Text } from "react-native";
+import { Text } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser, type BrowserState } from "../../store/browser";

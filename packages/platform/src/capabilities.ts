@@ -78,7 +78,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     appleScript: mac && hasModule("BayApp"),
     handoff: mac,
     introMusic: mac && hasModule("BayApp"),
-    notifications: hasModule("BayApp") || (windows && hasModule("BayNotifications")),
+    notifications: mac ? hasModule("BayApp") : windows && hasModule("BayNotifications"),
     keychain: mac ? hasModule("BayKeychain") : windows && hasModule("BayKeychain"),
     inlineCompletion: mac && hasModule("BayInlineCompletion"),
     windowProfiles: mac && hasModule("BayWindowProfile"),

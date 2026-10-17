@@ -1,7 +1,8 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { layout, ThemeScope, useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";

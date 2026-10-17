@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
 import { requireNativeModule, requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
@@ -283,9 +284,9 @@ export const closeWindow = (id: string) => Shell.closeWindow(id);
 export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
 export const setTrafficLightsCenter = (id: string, center: [number, number] | null) =>
-  Shell.setTrafficLightsCenter(id, center);
+  capabilities.trafficLights ? Shell.setTrafficLightsCenter(id, center) : Promise.resolve();
 /** The window's buttons shown only while the pointer is over the window's top (always in full screen). */
-export const setTrafficLightsOnHover = (id: string, on: boolean) => Shell.setTrafficLightsOnHover(id, on);
+export const setTrafficLightsOnHover = (id: string, on: boolean) => capabilities.trafficLights ? Shell.setTrafficLightsOnHover(id, on) : Promise.resolve();
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›

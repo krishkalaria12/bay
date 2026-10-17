@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireOptionalNativeModule, requireNativeViewManager } from "@bay/platform/native";
 import { forwardRef, useImperativeHandle, useRef } from "react";
-import {View, type NativeSyntheticEvent} from "react-native";
+import { type NativeSyntheticEvent } from "react-native";
 import Animated from "@bay/platform/motion";
 
 export type SwipeEvent = {

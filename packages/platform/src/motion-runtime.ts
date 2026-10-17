@@ -43,7 +43,8 @@ let clock: FrameClock = {
 /** Install the host clock once, or a deterministic clock in tests. */
 export function configureMotionClock(value: FrameClock): void { clock = value; }
 let collecting: Set<Observable> | null = null;
-type Observable = { subscribe(listener: () => void): () => void };
+type Observable = { subscribe(listener: () => void): () => void; version(): number };
+let revision = 0;
 export function collectMotion<T>(read: () => T): { value: T; dependencies: Set<Observable> } {
   const previous = collecting;
   const dependencies = new Set<Observable>();
@@ -152,12 +153,14 @@ export function cancelAnimation<T>(value: SharedValue<T>): void {
 }
 export function makeMutable<T>(initial: T): SharedValue<T> {
   let current = initial;
+  let changedAt = 0;
   const listeners = new Map<number, (value: T) => void>();
   const subscribers = new Set<() => void>();
   const read = () => { collecting?.add(observable); return current; };
   const write = (value: T) => {
     if (Object.is(current, value)) return;
     current = value;
+    changedAt = ++revision;
     for (const listener of [...listeners.values()]) listener(value);
     for (const listener of [...subscribers]) listener();
   };
@@ -177,6 +180,7 @@ export function makeMutable<T>(initial: T): SharedValue<T> {
     addListener: (id, listener) => { listeners.set(id, listener); },
     removeListener: (id) => { listeners.delete(id); },
     modify: (modifier) => { if (modifier) observable.set(modifier(current)); },
+    version: () => changedAt,
     subscribe(listener) { subscribers.add(listener); return () => { subscribers.delete(listener); }; },
   };
   return observable;

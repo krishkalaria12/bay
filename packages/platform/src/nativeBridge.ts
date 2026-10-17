@@ -5,6 +5,7 @@ export type WindowsBridge = {
   contractVersion: number;
   modules: readonly string[];
   views: readonly string[];
+  optionalMethods?: readonly string[];
   constantsJSON: string;
   invoke(module: string, method: string, argsJSON: string): Promise<string>;
   invokeSync(module: string, method: string, argsJSON: string): string;
@@ -66,7 +67,7 @@ export function bindWindowsModule<T>(
         return listen;
       }
       const method = contract.methods[key];
-      if (!method) return undefined;
+      if (!method || (method.optional && !bridge.optionalMethods?.includes(`${name}.${key}`))) return undefined;
       const call = (...args: unknown[]) => {
         const json = JSON.stringify(args);
         return method.async

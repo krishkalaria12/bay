@@ -1,23 +1,15 @@
-import { forwardRef, type ComponentRef } from "react";
+import { forwardRef, useRef, type ComponentRef } from "react";
 import {
-  Pressable as NativePressable,
-  View as NativeView,
-  TextInput as NativeTextInput,
-  type PressableProps,
-  type ViewProps,
-  type TextInputProps,
+  Pressable as NativePressable, View as NativeView, TextInput as NativeTextInput, ScrollView as NativeScrollView,
+  StyleSheet,
+  type PressableProps, type ViewProps, type TextInputProps, type ScrollViewProps,
+  type StyleProp, type ViewStyle, type TextStyle, type GestureResponderEvent,
 } from "react-native";
 import { isMac } from "./os";
 import { shortcutLabel, platformKeyEvents } from "./shortcuts";
 
-export type KeyDownEventSpec = {
-  key: string;
-  shiftKey?: boolean;
-  metaKey?: boolean;
-  altKey?: boolean;
-  ctrlKey?: boolean;
-  charactersIgnoringModifiers?: string;
-};
+export type KeyDownEventSpec = { key: string; shiftKey?: boolean; metaKey?: boolean; altKey?: boolean; ctrlKey?: boolean; charactersIgnoringModifiers?: string };
+type DropEvent = { nativeEvent: { dataTransfer?: { files?: { uri: string }[] } } };
 export type MacOnlyProps = {
   tooltip?: string;
   enableFocusRing?: boolean;
@@ -26,35 +18,66 @@ export type MacOnlyProps = {
   draggedTypes?: string[];
   onMouseEnter?: (...args: any[]) => void;
   onMouseLeave?: (...args: any[]) => void;
+  onDoubleClick?: () => void;
+  onDragEnter?: (event: DropEvent) => void;
+  onDragLeave?: (event: DropEvent) => void;
+  onDrop?: (event: DropEvent) => void;
 };
-export type CompatViewProps = ViewProps & MacOnlyProps;
-export type CompatPressableProps = PressableProps & MacOnlyProps;
-export type CompatTextInputProps = TextInputProps & MacOnlyProps;
+type DesktopViewStyle = Omit<ViewStyle, "cursor"> & { cursor?: ViewStyle["cursor"] | "col-resize" | "row-resize" };
+type DesktopTextStyle = Omit<TextStyle, "cursor"> & { cursor?: DesktopViewStyle["cursor"] };
+type DesktopProps<P> = Omit<P, keyof MacOnlyProps | "style"> & MacOnlyProps;
+export type CompatViewProps = DesktopProps<ViewProps> & { style?: StyleProp<DesktopViewStyle> };
+export type CompatPressableProps = DesktopProps<PressableProps> & { style?: StyleProp<DesktopViewStyle> | ((state: { pressed: boolean }) => StyleProp<DesktopViewStyle>) };
+export type CompatTextInputProps = DesktopProps<TextInputProps> & { style?: StyleProp<DesktopTextStyle> };
+export type CompatScrollViewProps = DesktopProps<ScrollViewProps> & { style?: StyleProp<DesktopViewStyle> };
 
-/** Keep AppKit props on macOS; map keyboard, hover and accessibility to RNW props. */
-function platformProps<T extends MacOnlyProps>(props: T): T {
-  const label = props.tooltip ? shortcutLabel(props.tooltip) : undefined;
-  if (isMac) return { ...props, tooltip: label };
-  const { tooltip, enableFocusRing, keyDownEvents, mouseDownCanMoveWindow, draggedTypes, onMouseEnter, onMouseLeave, ...rest } = props;
-  return {
-    ...rest,
-    ...(label ? { accessibilityHint: label } : {}),
-    ...(keyDownEvents ? { keyDownEvents: platformKeyEvents(keyDownEvents) } : {}),
-    ...(onMouseEnter ? { onPointerEnter: onMouseEnter } : {}),
-    ...(onMouseLeave ? { onPointerLeave: onMouseLeave } : {}),
-  } as T;
+const KEY_CODES: Record<string, string> = { " ": "Space", Left: "ArrowLeft", Right: "ArrowRight", Up: "ArrowUp", Down: "ArrowDown", "/": "Slash", ",": "Comma", ".": "Period", "[": "BracketLeft", "]": "BracketRight", "-": "Minus", "=": "Equal" };
+export function keyCode(key: string): string {
+  return KEY_CODES[key] ?? (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : /^\d$/.test(key) ? `Digit${key}` : key);
+}
+function nativeStyle(style: unknown): unknown {
+  if (typeof style === "function") return (state: { pressed: boolean }) => nativeStyle(style(state));
+  const flat = StyleSheet.flatten(style as StyleProp<DesktopViewStyle>);
+  if (flat?.cursor === "col-resize" || flat?.cursor === "row-resize") return { ...flat, cursor: "auto" };
+  return style;
 }
 
+/** Both desktop targets support hover, tooltips and focus rings. RNW intercepts physical key codes. */
+function usePlatformProps<P extends MacOnlyProps & { style?: unknown; onTouchEnd?: (event: GestureResponderEvent) => void }>(props: P) {
+  const lastClick = useRef<{ time: number; x: number; y: number } | null>(null);
+  const label = props.tooltip ? shortcutLabel(props.tooltip) : undefined;
+  if (isMac) return { ...props, tooltip: label };
+  const { keyDownEvents, mouseDownCanMoveWindow, draggedTypes, onDoubleClick, onDragEnter, onDragLeave, onDrop, ...rest } = props;
+  return {
+    ...rest,
+    tooltip: label,
+    style: nativeStyle(props.style),
+    ...(keyDownEvents ? { keyDownEvents: platformKeyEvents(keyDownEvents).map(({ key, ...event }) => ({ ...event, code: keyCode(key), handledEventPhase: 3 })) } : {}),
+    ...(onDoubleClick ? { onTouchEnd: (event: GestureResponderEvent) => {
+      props.onTouchEnd?.(event);
+      const { timestamp: time, pageX: x, pageY: y } = event.nativeEvent;
+      const previous = lastClick.current;
+      if (previous && time - previous.time <= 400 && Math.hypot(x - previous.x, y - previous.y) <= 4) {
+        lastClick.current = null;
+        onDoubleClick();
+      } else lastClick.current = { time, x, y };
+    } } : {}),
+  };
+}
+
+// Cast only at the native boundary: the adapter translates our shared desktop props to each target's shape.
 export const View = forwardRef<ComponentRef<typeof NativeView>, CompatViewProps>(function View(props, ref) {
-  return <NativeView ref={ref} {...platformProps(props)} />;
+  return <NativeView ref={ref} {...usePlatformProps(props) as ViewProps} />;
 });
 export const Pressable = forwardRef<ComponentRef<typeof NativeView>, CompatPressableProps>(function Pressable(props, ref) {
-  return <NativePressable ref={ref} {...platformProps(props)} />;
+  return <NativePressable ref={ref} {...usePlatformProps(props) as PressableProps} />;
 });
 export const TextInput = forwardRef<ComponentRef<typeof NativeTextInput>, CompatTextInputProps>(function TextInput(props, ref) {
-  return <NativeTextInput ref={ref} {...platformProps(props)} />;
+  return <NativeTextInput ref={ref} {...usePlatformProps(props) as TextInputProps} />;
 });
-
-// Match RN's component instance types for existing useRef<View>/useRef<TextInput> call sites.
+export const ScrollView = forwardRef<ComponentRef<typeof NativeScrollView>, CompatScrollViewProps>(function ScrollView(props, ref) {
+  return <NativeScrollView ref={ref} {...usePlatformProps(props) as ScrollViewProps} />;
+});
 export type View = ComponentRef<typeof NativeView>;
 export type TextInput = ComponentRef<typeof NativeTextInput>;
+export type ScrollView = ComponentRef<typeof NativeScrollView>;

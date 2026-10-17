@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View, modKey } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, ScrollView, StyleSheet, Text } from "react-native";
+import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";

@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
 import { requireNativeModule } from "@bay/platform/native";
-import {View} from "react-native";
+
 
 export type MenuShortcut = {
   id: string;

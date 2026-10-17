@@ -1,7 +1,8 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View, capabilities } from "@bay/platform";
 import { Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, type ReactNode } from "react";
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { trackSettingsSection } from "../../telemetry/track";

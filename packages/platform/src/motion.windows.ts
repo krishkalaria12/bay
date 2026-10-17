@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useReducer, useRef, type ComponentType } from "react";
-import { AccessibilityInfo, Easing, Image, ScrollView, Text, processColor } from "react-native";
+import { useEffect, useLayoutEffect, useSyncExternalStore, useRef, type ComponentType } from "react";
+import { AccessibilityInfo, Easing, Image, ScrollView, Text, processColor, type ViewStyle, type TextStyle, type ImageStyle } from "react-native";
 import { View } from "./views";
 import { cancelAnimation, collectMotion, configureMotionClock, interpolate, makeMutable, type SharedValue } from "./motion-runtime";
 export * from "./motion-runtime";
@@ -25,13 +25,17 @@ export function useSharedValue<T>(initial: T): SharedValue<T> {
 }
 
 /** Shared-value reads subscribe the component; updates use ordinary RNW styles. */
-export function useAnimatedStyle<T extends object>(updater: () => T, _dependencies?: readonly unknown[]): T {
-  const [, update] = useReducer((version: number) => version + 1, 0);
+export function useAnimatedStyle<T extends ViewStyle | TextStyle | ImageStyle>(updater: () => T, _dependencies?: readonly unknown[]): T {
   const result = collectMotion(updater);
-  useLayoutEffect(() => {
-    const cleanups = [...result.dependencies].map((value) => value.subscribe(update));
+  const snapshot = () => {
+    let version = 0;
+    for (const dependency of result.dependencies) version = Math.max(version, dependency.version());
+    return version;
+  };
+  useSyncExternalStore((notify) => {
+    const cleanups = [...result.dependencies].map((value) => value.subscribe(notify));
     return () => { for (const cleanup of cleanups) cleanup(); };
-  });
+  }, snapshot, snapshot);
   return result.value;
 }
 

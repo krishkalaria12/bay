@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, TextInput, View, isMac, modKey } from "@bay/platform";
 import { cancelDownload, engineCall, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { ContextMenuArea, copyText, downloadsFolder, fileExists, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { isEscapeKey } from "../lib/escapeKey";

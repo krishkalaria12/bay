@@ -1,7 +1,8 @@
+import { View } from "@bay/platform";
 import NativeBayWindows from "@bay/platform/specs/NativeBayWindows";
 import { decodeNativeResult } from "@bay/platform/nativeBridge";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { NativeEventEmitter, View } from "react-native";
+import { NativeEventEmitter } from "react-native";
 import type { NativeHandle, NativeProps } from "./WebView";
 
 let nextTag = 1;

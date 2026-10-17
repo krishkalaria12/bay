@@ -114,8 +114,8 @@ export const DEFAULT_SETTINGS: Settings = {
 export function restoreSettings(saved: Partial<Settings> & {
   openLinksInSmallYahu?: boolean;
   smallYahuSize?: [number, number];
-} = {}): Settings {
-  const { openLinksInSmallYahu, smallYahuSize, ...current } = saved;
+} | null = {}): Settings {
+  const { openLinksInSmallYahu, smallYahuSize, ...current } = saved ?? {};
   const settings = { ...DEFAULT_SETTINGS, ...current };
   if (current.openLinksInHarbor === undefined && typeof openLinksInSmallYahu === "boolean") {
     settings.openLinksInHarbor = openLinksInSmallYahu;

@@ -48,3 +48,14 @@ test("interpolation handles segments, extrapolation and clamps", () => {
   assert.equal(interpolate(-5, [0, 10], [0, 100], "clamp"), 0);
   assert.equal(interpolate(-5, [0, 10], [0, 100]), -50);
 });
+
+test("a shared value records changes made before subscription", () => {
+  const value = makeMutable(1);
+  const dependency = [...collectMotion(() => value.get()).dependencies][0];
+  const before = dependency.version();
+  value.set(2);
+  assert.ok(dependency.version() > before);
+  const after = dependency.version();
+  value.set(2);
+  assert.equal(dependency.version(), after);
+});

@@ -1,7 +1,8 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { findNodeHandle, PanResponder, ScrollView, StyleSheet, Text } from "react-native";
+import { findNodeHandle, PanResponder, StyleSheet, Text } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, layout, ThemeScope, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";

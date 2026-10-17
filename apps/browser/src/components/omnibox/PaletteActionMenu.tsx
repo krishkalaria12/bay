@@ -1,7 +1,8 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, TextInput, View, modKey, shortcutLabel } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text } from "react-native";
+import { Text } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { Keycaps } from "./Keycaps";

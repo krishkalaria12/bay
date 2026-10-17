@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import { killTask, listTasks, type EngineTask } from "@bay/nncore";
 import { Symbol, WindowDragRegion } from "@bay/shell";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text } from "react-native";
+import { Image, StyleSheet, Text } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";

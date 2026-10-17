@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import { permissionWarnings, WebView, type InstalledExtension, type WebViewHandle } from "@bay/nncore";
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, ScrollView, StyleSheet, Text, useWindowDimensions } from "react-native";
+import { Image, StyleSheet, Text, useWindowDimensions } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";

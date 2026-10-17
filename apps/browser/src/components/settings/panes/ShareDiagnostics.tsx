@@ -1,5 +1,6 @@
+import { ScrollView } from "@bay/platform";
 import { View } from "@bay/platform";
-import { ScrollView, Text } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { setSharing, useTelemetry } from "../../../telemetry/client";
 import { SHARING_COPY, WHATS_SENT } from "../../../telemetry/copy";

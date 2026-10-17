@@ -3,17 +3,17 @@ import { decodeNativeResult } from "@bay/platform/nativeBridge";
 import { View, Pressable } from "@bay/platform";
 import NativeBayWindows from "@bay/platform/specs/NativeBayWindows";
 import { forwardRef, type ComponentType } from "react";
-import {ActivityIndicator, Image, Text, type ViewStyle} from "react-native";
+import { ActivityIndicator, Image, Text, type ViewStyle, type TextStyle, type StyleProp } from "react-native";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
 import type { MouseAreaProps } from "./system";
 import { fluentSymbol } from "./symbols.windows";
 
 const weights = { light: "300", regular: "400", medium: "500", semibold: "600", bold: "700" } as const;
 function Symbol({ name, size = 16, weight = "regular", color, style, ...props }: SymbolProps) {
-  return <Text {...props} accessible={false} style={[{ fontFamily: "Segoe Fluent Icons", fontSize: size, color, fontWeight: weights[weight], lineHeight: size + 3 }, style]}>{fluentSymbol(name)}</Text>;
+  return <Text {...props} accessible={false} style={[{ fontFamily: "Segoe Fluent Icons", fontSize: size, color, fontWeight: weights[weight], lineHeight: size + 3 }, style as StyleProp<TextStyle>]}>{fluentSymbol(name)}</Text>;
 }
 function FadeLabel({ text, fontSize, weight = "regular", color, fadeWidth: _fade, style, ...props }: FadeLabelProps) {
-  return <Text {...props} numberOfLines={1} ellipsizeMode="tail" style={[{ fontSize, fontWeight: weights[weight], color }, style]}>{text}</Text>;
+  return <Text {...props} numberOfLines={1} ellipsizeMode="tail" style={[{ fontSize, fontWeight: weights[weight], color }, style as StyleProp<TextStyle>]}>{text}</Text>;
 }
 function Surface({ fill, cornerRadius, borderColor, borderWidth, style, children, ...props }: SurfaceProps & Record<string, unknown>) {
   // Per-edge colors and the macOS surface shadow are optional decoration.

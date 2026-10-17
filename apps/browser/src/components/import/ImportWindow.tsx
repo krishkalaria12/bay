@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View, capabilities, isMac } from "@bay/platform";
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportedExtension, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm, Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, AppState, Image, ScrollView, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, AppState, Image, StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springs";
 import { useTheme } from "../../lib/theme";

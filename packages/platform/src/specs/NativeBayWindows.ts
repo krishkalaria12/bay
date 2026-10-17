@@ -7,6 +7,7 @@ export interface Spec extends TurboModule {
     contractVersion: number;
     modules: string[];
     views: string[];
+    optionalMethods: string[];
     constantsJSON: string;
   };
   invoke(module: string, method: string, argsJSON: string): Promise<string>;

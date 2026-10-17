@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import { CastMode, preferredCastMode, startCasting, stopCasting, type CastSink } from "@bay/nncore";
 import { openExternalURL, showMenu, Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, Text } from "react-native";
+import { ActivityIndicator, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Popover, PromptButton } from "../layout/controls";
 import { useHover } from "../primitives";

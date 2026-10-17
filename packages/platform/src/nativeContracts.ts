@@ -8,161 +8,225 @@ export const nativeContracts = {
         "showMenu": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "showMenu(items: MenuItem[]): Promise<string | null>;"
         },
         "copyText": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "copyText(text: string): void;"
         },
         "copyImage": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "copyImage(base64: string): boolean;"
         },
         "setSwitcherCapture": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setSwitcherCapture(active: boolean): Promise<void>;"
         },
         "startDictation": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "startDictation(): void;"
         },
         "pickFiles": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "pickFiles(): Promise<string[]>;"
         },
         "readDocument": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "readDocument(name: string): string | null;"
         },
         "writeDocument": {
           "async": false,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "writeDocument(name: string, contents: string): void;"
         },
         "saveDocument": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "saveDocument(name: string, contents: string): Promise<void>;"
         },
         "removeDocument": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "removeDocument(name: string): void;"
         },
         "openWindow": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "openWindow(id: string, options: OpenWindowOptions): Promise<void>;"
         },
         "closeWindow": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "closeWindow(id: string): Promise<void>;"
         },
         "focusWindow": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "focusWindow(id: string): Promise<void>;"
         },
         "setTrafficLightsCenter": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "setTrafficLightsCenter(id: string, center: [number, number] | null): Promise<void>;"
         },
         "setTrafficLightsOnHover": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "setTrafficLightsOnHover(id: string, on: boolean): Promise<void>;"
         },
         "dragPreviewBegin": {
           "async": true,
           "optional": true,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "dragPreviewBegin?(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;"
         },
         "dragPreviewPage": {
           "async": true,
           "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "dragPreviewPage?(base64: string, frame: Rect4): Promise<void>;"
         },
         "dragPreviewUpdate": {
           "async": true,
           "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "dragPreviewUpdate?(shape: DragPreviewShape, point: [number, number]): Promise<void>;"
         },
         "dragPreviewCancel": {
           "async": true,
           "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "dragPreviewCancel?(): Promise<void>;"
         },
         "raiseView": {
           "async": true,
           "optional": true,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "raiseView?(tag: number, levels: number, raised: boolean): Promise<void>;"
         },
         "dragPreviewPlaceholder": {
           "async": true,
           "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "dragPreviewPlaceholder?(title: string, favicon: string | null): Promise<void>;"
         },
         "windowFrame": {
           "async": true,
           "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "windowFrame?(id: string): Promise<Rect4 | null>;"
         },
         "dragPreviewEnd": {
           "async": true,
           "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "dragPreviewEnd?(windowId: string | null, frame: Rect4 | null): Promise<void>;"
         },
         "setWindowTitle": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "setWindowTitle(id: string, title: string): Promise<void>;"
         },
         "windowIds": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "windowIds(): Promise<string[]>;"
         },
         "setAppearance": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setAppearance(mode: \"auto\" | \"light\" | \"dark\"): Promise<void>;"
         },
         "isDarkAppearance": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "isDarkAppearance(): Promise<boolean>;"
         },
         "setMenuState": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;"
         },
         "setMenuBookmarks": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setMenuBookmarks(bookmarks: Pick<MenuState, MenuBookmarkKey>): Promise<void>;"
         },
         "replyToTerminate": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "replyToTerminate(ok: boolean): Promise<void>;"
         },
         "confirm": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "confirm(options: ConfirmOptions): Promise<{ confirmed: boolean; suppressed: boolean }>;"
         },
         "prompt": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "prompt(options: PromptOptions): Promise<string | null>;"
         }
       },
@@ -180,6 +244,8 @@ export const nativeContracts = {
         "isLiquidGlass": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "isLiquidGlass(): boolean"
         }
       },
@@ -192,6 +258,8 @@ export const nativeContracts = {
         "iconTheme": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "iconTheme(uri: string | null, emoji: string | null): Promise<IconTheme | null>;"
         }
       },
@@ -204,6 +272,8 @@ export const nativeContracts = {
         "complete": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;"
         }
       },
@@ -216,41 +286,57 @@ export const nativeContracts = {
         "userLanguages": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "userLanguages(): string[];"
         },
         "languageName": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "languageName(identifier: string): string;"
         },
         "detect": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "detect(text: string): Promise<string | null>;"
         },
         "status": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "status(source: string, target: string): Promise<\"installed\" | \"supported\" | \"unsupported\">;"
         },
         "supportedLanguages": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "supportedLanguages(): Promise<string[]>;"
         },
         "prepare": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "prepare(source: string, target: string): Promise<void>;"
         },
         "translate": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "translate(source: string, target: string, texts: string[]): Promise<string[]>;"
         },
         "translateBlocks": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;"
         }
       },
@@ -265,161 +351,225 @@ export const nativeContracts = {
         "updaterState": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "updaterState(): Promise<UpdaterState>;"
         },
         "checkForUpdates": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "checkForUpdates(): Promise<void>;"
         },
         "setAutomaticUpdateChecks": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setAutomaticUpdateChecks(on: boolean): Promise<void>;"
         },
         "setAutomaticUpdateDownloads": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setAutomaticUpdateDownloads(on: boolean): Promise<void>;"
         },
         "setWindowActivity": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;"
         },
         "share": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "share(url: string, title: string | null, windowId: string | null): Promise<void>;"
         },
         "isInDock": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "isInDock(): Promise<boolean>;"
         },
         "addToDock": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "addToDock(): Promise<boolean>;"
         },
         "appIcons": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "appIcons(size: number): Promise<AppIcon[]>;"
         },
         "appIcon": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "appIcon(): Promise<string>;"
         },
         "setAppIcon": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setAppIcon(id: string): Promise<void>;"
         },
         "notificationPermission": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "notificationPermission(): Promise<NotificationPermission>;"
         },
         "requestNotificationPermission": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "requestNotificationPermission(): Promise<boolean>;"
         },
         "postNotification": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "postNotification(options: NotificationOptions): Promise<string | null>;"
         },
         "removeNotifications": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "removeNotifications(ids: string[]): Promise<void>;"
         },
         "openNotificationSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "openNotificationSettings(): Promise<void>;"
         },
         "setScriptState": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setScriptState(state: ScriptState): Promise<void>;"
         },
         "replyToScript": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;"
         },
         "systemInfo": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "systemInfo(): SystemInfo;"
         },
         "openExternalURL": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "openExternalURL(url: string): Promise<boolean>;"
         },
         "launchEnvironment": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "launchEnvironment(name: string): string | null;"
         },
         "playIntroMusic": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;"
         },
         "setIntroMusicMuted": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setIntroMusicMuted(muted: boolean): Promise<void>;"
         },
         "stopIntroMusic": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "stopIntroMusic(fade: number): Promise<void>;"
         },
         "devRenderIntroMusic": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;"
         },
         "devRunAppleScript": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;"
         },
         "devSnapshotWindow": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 3,
           "signature": "devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;"
         },
         "devMenuCommand": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "devMenuCommand(command: string, arg: string | null): Promise<void>;"
         },
         "devTypeKeys": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;"
         },
         "devKeyEquivalent": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;"
         },
         "crashReports": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "crashReports(since: number): Promise<CrashReport[]>;"
         },
         "devCrash": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 1,
           "signature": "devCrash(kind?: \"exception\"): Promise<void>;"
         }
       },
@@ -437,76 +587,106 @@ export const nativeContracts = {
         "isDefaultBrowser": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "isDefaultBrowser(): Promise<boolean>;"
         },
         "setAsDefaultBrowser": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "setAsDefaultBrowser(): Promise<boolean>;"
         },
         "launchAtLoginStatus": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "launchAtLoginStatus(): Promise<LaunchAtLoginStatus>;"
         },
         "setLaunchAtLogin": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setLaunchAtLogin(enabled: boolean): Promise<void>;"
         },
         "fileExists": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "fileExists(path: string): boolean;"
         },
         "downloadsFolder": {
           "async": false,
           "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "downloadsFolder?(): string | null;"
         },
         "openFile": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "openFile(path: string): Promise<boolean>;"
         },
         "revealFile": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "revealFile(path: string): Promise<boolean>;"
         },
         "moveToTrash": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "moveToTrash(path: string): Promise<boolean>;"
         },
         "fileIcon": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "fileIcon(path: string, size: number): Promise<string | null>;"
         },
         "appIcon": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "appIcon(pid: number, size: number): Promise<string | null>;"
         },
         "hapticTick": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "hapticTick(): void;"
         },
         "menuShortcuts": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "menuShortcuts(): Promise<MenuShortcut[]>;"
         },
         "recordShortcut": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "recordShortcut(): Promise<{ key: string; modifiers: ShortcutModifier[] } | null>;"
         },
         "cancelRecording": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "cancelRecording(): Promise<void>;"
         }
       },
@@ -519,21 +699,29 @@ export const nativeContracts = {
         "authorizationStatus": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "authorizationStatus(): CalendarAuthorization;"
         },
         "requestAccess": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "requestAccess(): Promise<boolean>;"
         },
         "calendars": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "calendars(): Promise<SystemCalendar[]>;"
         },
         "events": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "events(start: number, end: number, calendarIds: string[]): Promise<SystemCalendarEvent[]>;"
         }
       },
@@ -548,16 +736,22 @@ export const nativeContracts = {
         "get": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "get(account: string): Promise<string | null>;"
         },
         "set": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "set(account: string, secret: string): Promise<boolean>;"
         },
         "delete": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "delete(account: string): Promise<boolean>;"
         }
       },
@@ -570,311 +764,435 @@ export const nativeContracts = {
         "engineInfo": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "engineInfo(): Promise<EngineInfo>;"
         },
         "chromeWindows": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "chromeWindows(): Promise<ChromeWindowState[]>;"
         },
         "prepareTransfer": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "prepareTransfer(key: string): void;"
         },
         "releaseTransfer": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "releaseTransfer(key: string): void;"
         },
         "tabStripCommand": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "tabStripCommand(id: number, command: TabStripCommand): Promise<void>;"
         },
         "tabStrips": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "tabStrips(): Promise<TabStripTransaction>;"
         },
         "devWindow": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "devWindow(windowNumber: number, action: string): Promise<string>;"
         },
         "components": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "components(): Promise<EngineComponent[]>;"
         },
         "beginTracing": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "beginTracing(): Promise<boolean>;"
         },
         "endTracing": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "endTracing(keep: boolean): Promise<string | null>;"
         },
         "isTracing": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "isTracing(): Promise<boolean>;"
         },
         "setDisplayMediaPicker": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setDisplayMediaPicker(enabled: boolean): Promise<void>;"
         },
         "setAutoPictureInPicture": {
           "async": true,
           "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setAutoPictureInPicture?(enabled: boolean): Promise<void>;"
         },
         "setSearchEngineName": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setSearchEngineName(name: string): Promise<void>;"
         },
         "displayMediaSources": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "displayMediaSources(): Promise<DisplayMediaSource[]>;"
         },
         "listTasks": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "listTasks(): Promise<EngineTask[]>;"
         },
         "killTask": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "killTask(id: number): Promise<boolean>;"
         },
         "systemState": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "systemState(): Promise<SystemState>;"
         },
         "cancelDownload": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "cancelDownload(id: string): Promise<void>;"
         },
         "pauseDownload": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "pauseDownload(id: string): Promise<void>;"
         },
         "resumeDownload": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "resumeDownload(id: string): Promise<void>;"
         },
         "resolvePermission": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 3,
           "signature": "resolvePermission(id: string, result: PermissionResult, remember?: boolean): Promise<void>;"
         },
         "resolveExternalApp": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;"
         },
         "getExternalAppAllowances": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "getExternalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;"
         },
         "removeExternalAppAllowance": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;"
         },
         "clearBrowsingData": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;"
         },
         "fetchFavicon": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "fetchFavicon(url: string, profile: string): Promise<FaviconImage | null>;"
         },
         "removeLegacyFavicons": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "removeLegacyFavicons(profile: string): Promise<void>;"
         },
         "engineCall": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "engineCall(name: string, profile: string, args: string | null): Promise<string>;"
         },
         "releaseProfile": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "releaseProfile(profile: string): Promise<void>;"
         },
         "deleteProfileData": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "deleteProfileData(profile: string): Promise<{ remaining: string[] }>;"
         },
         "getContentBlocker": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "getContentBlocker(): Promise<ContentBlockerState>;"
         },
         "setContentBlockerEnabled": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "setContentBlockerEnabled(enabled: boolean): Promise<void>;"
         },
         "setFilterListEnabled": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "setFilterListEnabled(id: string, enabled: boolean): Promise<void>;"
         },
         "isContentBlockerAllowed": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "isContentBlockerAllowed(host: string): Promise<boolean>;"
         },
         "setContentBlockerAllowed": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "setContentBlockerAllowed(host: string, allowed: boolean): Promise<void>;"
         },
         "setSiteSetting": {
           "async": true,
           "optional": false,
+          "minArgs": 4,
+          "maxArgs": 4,
           "signature": "setSiteSetting(profile: string, origin: string, type: SiteSettingType, value: SiteSettingValue): Promise<void>;"
         },
         "getSiteSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "getSiteSettings(profile: string, origin: string): Promise<SiteSettings>;"
         },
         "getSiteSettingsOrigins": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "getSiteSettingsOrigins(profile: string): Promise<string[]>;"
         },
         "resetSiteSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "resetSiteSettings(profile: string, origin: string): Promise<void>;"
         },
         "clearSiteData": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "clearSiteData(profile: string, origin: string): Promise<ClearSiteDataResult>;"
         },
         "setZoom": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "setZoom(profile: string, host: string, zoom: number): Promise<void>;"
         },
         "getZoomLevels": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "getZoomLevels(profile: string): Promise<Record<string, number>>;"
         },
         "listPasswords": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "listPasswords(profile: string): Promise<Result<{ passwords: SavedPassword[] }>>;"
         },
         "unlockPasswords": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "unlockPasswords(profile: string): Promise<Result<{ unlocked: boolean }>>;"
         },
         "getPassword": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "getPassword(profile: string, origin: string, username: string): Promise<Result<{ password: string | null }>>;"
         },
         "savePassword": {
           "async": true,
           "optional": false,
+          "minArgs": 4,
+          "maxArgs": 4,
           "signature": "savePassword(profile: string, origin: string, username: string, password: string): Promise<Result<{ ok: true }>>;"
         },
         "updatePassword": {
           "async": true,
           "optional": false,
+          "minArgs": 5,
+          "maxArgs": 5,
           "signature": "updatePassword( profile: string, origin: string, username: string, newUsername: string | null, newPassword: string | null, ): Promise<Result<{ ok: true }>>;"
         },
         "deletePassword": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "deletePassword(profile: string, origin: string, username: string): Promise<Result<{ ok: true }>>;"
         },
         "getNeverSavePasswordOrigins": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "getNeverSavePasswordOrigins(profile: string): Promise<Result<{ origins: string[] }>>;"
         },
         "allowSavingPasswords": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "allowSavingPasswords(profile: string, origin: string): Promise<Result<{ ok: true }>>;"
         },
         "exportPasswords": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "exportPasswords(profile: string): Promise<Result<{ status: PasswordExportStatus; path?: string }>>;"
         },
         "getPasswordAutofill": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "getPasswordAutofill(profile: string): Promise<boolean>;"
         },
         "setPasswordAutofill": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "setPasswordAutofill(profile: string, enabled: boolean): Promise<void>;"
         },
         "getAutofillSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "getAutofillSettings(profile: string): Promise<{ addresses: boolean; cards: boolean }>;"
         },
         "setAutofillSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "setAutofillSettings(profile: string, addresses: boolean | null, cards: boolean | null): Promise<void>;"
         },
         "listAddresses": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "listAddresses(profile: string): Promise<Result<{ addresses: SavedAddress[] }>>;"
         },
         "saveAddress": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "saveAddress(profile: string, address: AddressInput): Promise<Result<{ id: string }>>;"
         },
         "listCards": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "listCards(profile: string): Promise<Result<{ cards: SavedCard[] }>>;"
         },
         "saveCard": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "saveCard(profile: string, card: CardInput, number: string | null): Promise<Result<{ id: string }>>;"
         },
         "deleteAutofillEntry": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "deleteAutofillEntry(profile: string, id: string): Promise<Result<{ ok: true }>>;"
         },
         "revealCardNumber": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "revealCardNumber(profile: string, id: string): Promise<Result<{ number?: string | null }>>;"
         }
       },
@@ -895,76 +1213,106 @@ export const nativeContracts = {
         "selectDevice": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "selectDevice(id: number, index: number): Promise<void>;"
         },
         "cancelDeviceChooser": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "cancelDeviceChooser(id: number): Promise<void>;"
         },
         "refreshDeviceChooser": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "refreshDeviceChooser(id: number): Promise<void>;"
         },
         "openBluetoothSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "openBluetoothSettings(id: number): Promise<void>;"
         },
         "showCastDialog": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "showCastDialog(browserId: number): Promise<boolean>;"
         },
         "startCasting": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "startCasting(id: number, sink: string, mode: number): Promise<void>;"
         },
         "stopCasting": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "stopCasting(id: number, route: string): Promise<void>;"
         },
         "closeCastDialog": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "closeCastDialog(id: number): Promise<void>;"
         },
         "watchCastRoutes": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "watchCastRoutes(profile: string): Promise<void>;"
         },
         "terminateCastRoute": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "terminateCastRoute(route: string): Promise<void>;"
         },
         "actionStates": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "actionStates(browserId: number, ids: string[]): Promise<Record<string, NativeActionState>>;"
         },
         "sidePanelURL": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "sidePanelURL(browserId: number, extensionId: string): Promise<string | null>;"
         },
         "changeCaptureSource": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "changeCaptureSource(capturer: number, target: number): Promise<boolean>;"
         },
         "stopCapture": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "stopCapture(capturer: number): Promise<boolean>;"
         },
         "showAutofillSuggestions": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "showAutofillSuggestions(browserId: number, passwords: boolean): Promise<boolean>;"
         }
       },
@@ -982,51 +1330,71 @@ export const nativeContracts = {
         "resolveInstallPrompt": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "resolveInstallPrompt(requestId: string, accepted: boolean): Promise<void>;"
         },
         "list": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "list(profile: string): Promise<Result<{ extensions: InstalledExtension[] }>>;"
         },
         "inspectUnpacked": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "inspectUnpacked(path: string): Promise<Result<ExtensionPackage>>;"
         },
         "install": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "install(path: string, profile: string): Promise<Result<{ id: string }>>;"
         },
         "setEnabled": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "setEnabled(id: string, profile: string, enabled: boolean): Promise<Result<{ ok: true }>>;"
         },
         "uninstall": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "uninstall(id: string, profile: string): Promise<Result<{ ok: true }>>;"
         },
         "reload": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "reload(id: string, profile: string): Promise<Result<{ ok: true }>>;"
         },
         "configure": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "configure(id: string, profile: string, options: Record<string, unknown>): Promise<Result<{ ok: true }>>;"
         },
         "searchEngineList": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "searchEngineList(profile: string): Promise<Result<{ list: unknown }>>;"
         },
         "chooseFolder": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "chooseFolder(): Promise<string | null>;"
         }
       },
@@ -1043,36 +1411,50 @@ export const nativeContracts = {
         "haptic": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "haptic(pattern: string): void;"
         },
         "switchPager": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 3,
           "signature": "switchPager(key: string, index: number, order?: string): Promise<boolean>;"
         },
         "stepPager": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 4,
           "signature": "stepPager(key: string, delta: number, wrap: boolean, order?: string): Promise<boolean>;"
         },
         "selectPager": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "selectPager(key: string, profileId: string, order: string): Promise<boolean>;"
         },
         "pagerState": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "pagerState(key: string): PagerSnapshot | null;"
         },
         "devPagerState": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "devPagerState(key: string): Promise<unknown>;"
         },
         "devSimulate": {
           "async": true,
           "optional": false,
+          "minArgs": 5,
+          "maxArgs": 5,
           "signature": "devSimulate(x: number, y: number, windowNumber: number, steps: SwipeStep[], ignorePreference: boolean): Promise<unknown>;"
         }
       },
@@ -1085,126 +1467,176 @@ export const nativeContracts = {
         "folderInfo": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "folderInfo(path: string | null): Promise<FolderInfo>;"
         },
         "chooseFolder": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "chooseFolder(current: string | null): Promise<string | null>;"
         },
         "newDeviceId": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "newDeviceId(): string;"
         },
         "deviceName": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "deviceName(): string;"
         },
         "createPhrase": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "createPhrase(account: string): Promise<boolean>;"
         },
         "enterPhrase": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "enterPhrase(account: string, text: string, folder: string): Promise<PhraseResult>;"
         },
         "unlock": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "unlock(account: string): Promise<boolean>;"
         },
         "forget": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "forget(account: string): Promise<void>;"
         },
         "chainStatus": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "chainStatus(folder: string): Promise<\"ok\" | \"missing\" | \"unavailable\">;"
         },
         "createChain": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "createChain(folder: string): Promise<void>;"
         },
         "write": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "write(folder: string, scope: string, payload: string): Promise<string>;"
         },
         "read": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "read(folder: string, scope: string, known: string[]): Promise<Listing>;"
         },
         "remove": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "remove(folder: string, scope: string, ids: string[]): Promise<void>;"
         },
         "deleteChain": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "deleteChain(folder: string): Promise<void>;"
         },
         "sealLocal": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "sealLocal(text: string): Promise<string>;"
         },
         "openLocal": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "openLocal(sealed: string): Promise<string | null>;"
         },
         "recoveryWords": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "recoveryWords(): Promise<string[]>;"
         },
         "qrCode": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "qrCode(): Promise<string | null>;"
         },
         "recoveryKitPreview": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "recoveryKitPreview(width: number): Promise<string | null>;"
         },
         "saveRecoveryKit": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "saveRecoveryKit(format: \"pdf\" | \"text\"): Promise<string | null>;"
         },
         "copyRecoveryKit": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "copyRecoveryKit(): Promise<void>;"
         },
         "shareRecoveryKit": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "shareRecoveryKit(): Promise<void>;"
         },
         "copyRecoveryPhrase": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "copyRecoveryPhrase(): Promise<void>;"
         },
         "revealFolder": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "revealFolder(path: string): Promise<void>;"
         },
         "readPasswords": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "readPasswords(engineProfile: string): Promise<SavedLogin[] | null>;"
         }
       },
@@ -1217,106 +1649,148 @@ export const nativeContracts = {
         "listBrowsers": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "listBrowsers(): Promise<string>;"
         },
         "importData": {
           "async": true,
           "optional": false,
+          "minArgs": 5,
+          "maxArgs": 5,
           "signature": "importData(jobId: string, browserId: string, profileId: string, kinds: ImportKind[], options: object): Promise<string>;"
         },
         "cancelImport": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "cancelImport(jobId: string): void;"
         },
         "unlockBrowser": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "unlockBrowser(browserId: string, primaryPassword: string | null): Promise<null>;"
         },
         "isBrowserUnlocked": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "isBrowserUnlocked(browserId: string): boolean;"
         },
         "forgetUnlockedKeys": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "forgetUnlockedKeys(): void;"
         },
         "writeImported": {
           "async": true,
           "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
           "signature": "writeImported(token: string, profile: string, kinds: string[]): Promise<string>;"
         },
         "discardImported": {
           "async": false,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "discardImported(token: string): void;"
         },
         "listExtensions": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "listExtensions(browserId: string, profileId: string): Promise<string>;"
         },
         "importSafariExport": {
           "async": true,
           "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
           "signature": "importSafariExport(jobId: string, path: string): Promise<string>;"
         },
         "safariHasFullDiskAccess": {
           "async": false,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "safariHasFullDiskAccess(): boolean;"
         },
         "openFullDiskAccessSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "openFullDiskAccessSettings(): Promise<null>;"
         },
         "importSafariDirect": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "importSafariDirect(jobId: string): Promise<string>;"
         },
         "importBookmarksHTML": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "importBookmarksHTML(path: string): Promise<string>;"
         },
         "importPasswordsCSV": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "importPasswordsCSV(path: string): Promise<string>;"
         },
         "chooseImportFile": {
           "async": true,
           "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
           "signature": "chooseImportFile(kind: \"safariExport\" | \"bookmarksHTML\" | \"passwordsCSV\"): Promise<string | null>;"
         },
         "diaAutomationStatus": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "diaAutomationStatus(): Promise<string>;"
         },
         "requestDiaAutomation": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "requestDiaAutomation(): Promise<string>;"
         },
         "openAutomationSettings": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "openAutomationSettings(): Promise<null>;"
         },
         "openDia": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "openDia(): Promise<null>;"
         },
         "readDiaTabs": {
           "async": true,
           "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
           "signature": "readDiaTabs(): Promise<string>;"
         }
       },

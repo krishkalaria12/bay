@@ -1,8 +1,9 @@
+import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Image, ScrollView, StyleSheet, Text } from "react-native";
+import { AccessibilityInfo, Image, StyleSheet, Text } from "react-native";
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springs";
 import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";

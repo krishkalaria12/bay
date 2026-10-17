@@ -53,3 +53,12 @@ test("contracts describe core synchronous boot methods and overloaded engine eve
   assert.ok(nativeContracts.modules.BayShell.events.includes("onAppEvent"));
   assert.ok(nativeContracts.views.BayCEF);
 });
+
+test("optional methods exist only when the Windows host advertises them", async () => {
+  const native = bridge();
+  const shell = bindWindowsModule(native, "BayShell", () => ({ remove() {} }));
+  assert.equal(shell.windowFrame, undefined);
+  native.optionalMethods = ["BayShell.windowFrame"];
+  const supported = bindWindowsModule(native, "BayShell", () => ({ remove() {} }));
+  assert.equal(typeof supported.windowFrame, "function");
+});

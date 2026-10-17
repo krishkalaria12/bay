@@ -2,7 +2,7 @@ import type { ViewProps } from "@bay/platform";
 import { toAppUrl, toEngineUrl } from "@bay/core";
 import NativeWebView from "./NativeWebView";
 import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
-import {NativeSyntheticEvent} from "react-native";
+import { NativeSyntheticEvent } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
 
