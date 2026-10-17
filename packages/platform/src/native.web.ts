@@ -3,6 +3,10 @@ import { bindNativeModule, getNativeTransport, getNativeHostInfo, decodeNativeRe
 export { getNativeHostInfo, readNativeSnapshot, invokeNative, subscribeNativeEvent } from "./nativeBridge";
 export type { EventSubscription } from "./nativeBridge";
 
+export function nativeRandomUUID(_fallback: () => string): string {
+  return globalThis.crypto.randomUUID();
+}
+
 export function requireOptionalNativeModule<T = unknown>(name: string): T | null {
   return bindNativeModule<T>(getNativeTransport(), name);
 }

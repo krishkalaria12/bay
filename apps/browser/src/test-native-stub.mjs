@@ -64,6 +64,8 @@ export const requireOptionalNativeModule = (name) => {
   return stub == null ? null : assertNativeStub(name, stub, { partial: true });
 };
 export const requireNativeModule = () => ({});
+export const nativeRandomUUID = (fallback) => fallback();
+export const nativeSnapshot = (_module, _method, _args, fallback) => fallback();
 // Saved passwords, one store per simulated device (sync tests).
 export const passwordStores = new Map();
 export const current = { device: null };

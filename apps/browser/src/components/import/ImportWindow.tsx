@@ -67,6 +67,8 @@ export function ImportWindow() {
   const [asking, setAsking] = useState(false);
   const diaLaunched = useRef(0);
   const abort = useRef<AbortController | null>(null);
+  const choice = useRef(0);
+  const checkingUnlock = useRef(false);
 
   useEffect(() => {
     if (!api || !((step === "safari" && !fullDiskAccess) || step === "access")) return;
@@ -78,7 +80,7 @@ export function ImportWindow() {
 
   const recheckAccess = async () => {
     if (!api) return;
-    if (step === "safari") return setFullDiskAccess(api.safariHasFullDiskAccess());
+    if (step === "safari") return setFullDiskAccess(await api.safariHasFullDiskAccess());
     const list = await api.listBrowsers().catch(() => null);
     if (!list) return;
     setBrowsers(list.filter((browser) => browser.family !== "automation" || capabilities.appleScript));
@@ -120,6 +122,7 @@ export function ImportWindow() {
   }, []);
 
   const choose = (b: BrowserSource) => {
+    const selected = ++choice.current;
     setSource(b);
     const defaults = b.profiles.filter((p) => p.isDefault);
     setSourceProfiles((defaults.length ? defaults : b.profiles.slice(0, 1)).map((p) => p.id));
@@ -130,7 +133,9 @@ export function ImportWindow() {
         ? ["tabs", "pinnedTabs"]
         : [...new Set(b.profiles.flatMap((p) => p.available))];
     setKinds(new Set(available));
-    if (b.family === "safari" && api) setFullDiskAccess(api.safariHasFullDiskAccess());
+    if (b.family === "safari" && api) void api.safariHasFullDiskAccess().then(value => {
+      if (choice.current === selected) setFullDiskAccess(value);
+    }, () => { if (choice.current === selected) setFullDiskAccess(false); });
     setDia(null);
     setExtensions({ profileId: "", list: [] });
     setNotes([]);
@@ -141,24 +146,34 @@ export function ImportWindow() {
   const isArc = source?.family === "arc";
   const isDiaTabs = source?.family === "automation";
 
-  const next = () => {
-    if (!source) return;
-    setError(null);
-    if (step === "choose" && isDiaTabs) {
-      setDiaStatus("checking");
-      setStep("dia");
-      return void refreshDia();
+  const next = async () => {
+    if (!source || checkingUnlock.current) return;
+    const selected = choice.current;
+    checkingUnlock.current = true;
+    try {
+      setError(null);
+      if (step === "choose" && isDiaTabs) {
+        setDiaStatus("checking");
+        setStep("dia");
+        return void refreshDia();
+      }
+      if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
+      if (step === "choose") {
+        if (source.needsFullDiskAccess) return setStep("access");
+        if (source.requiresExport) return setStep("safari");
+        if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
+      }
+      if ((step === "choose" || step === "profiles") && ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && api) {
+        const unlocked = await api.isBrowserUnlocked(source.id);
+        if (choice.current !== selected) return;
+        if (!unlocked) return setStep("unlock");
+      }
+      void run(kinds);
+    } catch {
+      if (choice.current === selected) setError(`Couldn't check access to ${source.name}. Try again.`);
+    } finally {
+      checkingUnlock.current = false;
     }
-    if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
-    if (step === "choose") {
-      if (source.needsFullDiskAccess) return setStep("access");
-      if (source.requiresExport) return setStep("safari");
-      if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
-    }
-    if ((step === "choose" || step === "profiles") && ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && api && !api.isBrowserUnlocked(source.id)) {
-      return setStep("unlock");
-    }
-    void run(kinds);
   };
 
   const unlock = async () => {
@@ -209,7 +224,7 @@ export function ImportWindow() {
     const left: string[] = [];
     let extensionsProfile = "";
     // Firefox keeps no keychain key: without a primary password its logins open as they are.
-    if (source.family === "firefox" && requested.includes("passwords") && !api.isBrowserUnlocked(source.id)) {
+    if (source.family === "firefox" && requested.includes("passwords") && !await api.isBrowserUnlocked(source.id)) {
       await api.unlockBrowser(source.id).catch(() => {});
     }
 
@@ -392,7 +407,7 @@ export function ImportWindow() {
           ? "Bay still doesn't have Full Disk Access. Grant it above, or use the export file below."
           : "Couldn't read Safari's data. Try the export file below.",
       );
-      setFullDiskAccess(api.safariHasFullDiskAccess());
+      setFullDiskAccess(await api.safariHasFullDiskAccess());
     }
   };
 
