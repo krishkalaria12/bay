@@ -19,6 +19,14 @@ packages/
   core/               Pure TS: omnibox input → URL, suggestions, breadcrumbs (tested)
 ```
 
+## Windows port
+
+Bay targets desktop macOS and Windows 11 x64. The Windows port is in progress;
+see [implementation status and Windows commands](docs/windows-implementation-status.md)
+for completed checks, native gaps and the required Windows validation. Mobile
+application targets are disabled. Native macOS code remains in packages' existing
+`ios` source directories.
+
 ## Run it
 
 Requires Xcode 26+, CocoaPods, Node 22+, pnpm 11.
