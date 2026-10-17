@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version,
-    [string]$AppDirectory,
+    [Parameter(Mandatory)][string]$AppDirectory,
     [string]$OutputDirectory,
     [ValidateSet('stable', 'beta')][string]$Channel = 'beta',
     [string]$FeedUrl = $env:BAY_WINDOWS_UPDATE_FEED,
@@ -11,7 +11,6 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-if (-not $AppDirectory) { $AppDirectory = Join-Path $repo 'apps/browser/windows/x64/Release/Bay' }
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repo 'dist/windows' }
 $AppDirectory = (Resolve-Path $AppDirectory).Path
 if (-not (Test-Path (Join-Path $AppDirectory 'Bay.exe'))) { throw "Missing Bay.exe in $AppDirectory" }

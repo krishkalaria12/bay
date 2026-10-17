@@ -8,10 +8,9 @@ const config = mergeConfig(getDefaultConfig(projectRoot), {
   watchFolders: [workspaceRoot],
   resolver: {
     nodeModulesPaths: [path.resolve(workspaceRoot, "node_modules")],
-    blockList: [/[/\\]windows[/\\](?:x64|ARM64|Generated Files|packages|bundle)[/\\]/, /\.ProjectImports\.zip$/],
     resolveRequest(context, moduleName, platform) {
-      if ((platform === "macos" || platform === "windows") && (moduleName === "react-native" || moduleName.startsWith("react-native/"))) {
-        moduleName = moduleName.replace(/^react-native/, platform === "macos" ? "react-native-macos" : "react-native-windows");
+      if (platform === "macos" && (moduleName === "react-native" || moduleName.startsWith("react-native/"))) {
+        moduleName = moduleName.replace(/^react-native/, "react-native-macos");
       }
       // The render benchmark (scripts/perf/js-bench.mjs bundle --profiling) bundles React's profiling renderer:
       // production code that also times each component's render.

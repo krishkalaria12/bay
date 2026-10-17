@@ -18,11 +18,8 @@
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "windows": "pnpm --filter @bay/browser windows",
-    "windows:bundle": "pnpm --filter @bay/browser bundle:windows",
     "windows:engine": "node scripts/windows/run-python.mjs engine.py",
     "windows:package": "pwsh -File scripts/windows/package.ps1",
-    "typecheck:windows": "pnpm --filter @bay/browser typecheck:windows",
     "test:windows-build": "node scripts/windows/run-python.mjs -m unittest discover -s scripts/windows -p \"test_*.py\"",
     "test:windows-native": "node scripts/windows/run-python.mjs test-native.py"
   },

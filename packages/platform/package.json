@@ -12,8 +12,7 @@
     "./motion": "./motion.ts",
     "./keys": "./src/keys.ts",
     "./capabilities": "./src/capabilities.ts",
-    "./nativeBridge": "./nativeBridge.ts",
-    "./specs/NativeBayWindows": "./specs/NativeBayWindows.ts"
+    "./nativeBridge": "./nativeBridge.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",
@@ -30,14 +29,5 @@
     "react": "*",
     "react-native": "*",
     "react-native-reanimated": "*"
-  },
-  "codegenConfig": {
-    "name": "BayWindowsSpec",
-    "type": "modules",
-    "jsSrcsDir": "src/specs",
-    "windows": {
-      "namespace": "BayWindows",
-      "outputDirectory": "windows/codegen"
-    }
   }
 }

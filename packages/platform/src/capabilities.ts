@@ -1,6 +1,6 @@
 // What the platform can do, as data. This is the one place the app asks "is this available?" —
 // call sites never branch on the OS themselves. Pure: the caller passes the OS and a module probe,
-// so this is testable under plain Node and the bound values live in os.ts / os.windows.ts.
+// so this is testable under plain Node and the bound values live in os.ts.
 
 import type { PlatformOS } from "./types";
 
