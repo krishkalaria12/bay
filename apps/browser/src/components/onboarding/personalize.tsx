@@ -1,10 +1,11 @@
 import { Pressable, View } from "@bay/platform";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
-import { PROFILE_COLORS } from "../../lib/theme";
+import { SPACE_COLORS } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import type { ProfileColor } from "../../store/types";
+import { DEFAULT_SPACE } from "../../store/spaces";
+import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
 import { useOnboardingColors } from "./ui";
 
@@ -14,24 +15,44 @@ export const PERSONALIZE_COPY = {
   layouts: "Choose how you would like to view your tabs:",
 } as const;
 
-const COLORS = Object.keys(PROFILE_COLORS) as ProfileColor[];
+const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
+
+// The first space starts on Twilight (store/spaces.ts DEFAULT_SPACE): it leads the choices, and a plain color replaces it.
+const TWILIGHT = DEFAULT_SPACE.theme!;
+const isTwilight = (theme: SpaceTheme | null | undefined) => !!theme && theme.colors.join() === TWILIGHT.colors.join();
 
 export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; size?: number }) {
-  const profileId = useBrowser((s) => s.windows[windowId]?.profileId);
-  const current = useBrowser((s) => (profileId ? s.profiles[profileId]?.color : undefined));
+  const spaceId = useBrowser((s) => s.windows[windowId]?.spaceId);
+  const current = useBrowser((s) => (spaceId ? s.spaces[spaceId]?.color : undefined));
+  const twilight = useBrowser((s) => (spaceId ? isTwilight(s.spaces[spaceId]?.theme) : false));
+  const themed = useBrowser((s) => (spaceId ? !!s.spaces[spaceId]?.theme : false));
   const incognito = useBrowser((s) => !!s.windows[windowId]?.incognito);
-  if (!profileId || incognito) return null;
+  if (!spaceId || incognito) return null;
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 8 : 6 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: size >= 30 ? 5 : 4 }} accessibilityRole="radiogroup" accessibilityLabel="Theme color">
+      <ColorButton
+        name="Twilight"
+        colors={TWILIGHT.colors}
+        size={size}
+        selected={twilight}
+        onPress={() => useBrowser.getState().updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } })}
+      />
       {COLORS.map((c) => (
-        <ColorButton key={c} color={c} size={size} selected={current === c} onPress={() => useBrowser.getState().updateProfile(profileId, { color: c })} />
+        <ColorButton
+          key={c}
+          name={SPACE_COLORS[c].name}
+          colors={[SPACE_COLORS[c].swatch]}
+          size={size}
+          selected={!themed && current === c}
+          onPress={() => useBrowser.getState().updateSpace(spaceId, { color: c, theme: null })}
+        />
       ))}
     </View>
   );
 }
 
-function ColorButton({ color, size, selected, onPress }: { color: ProfileColor; size: number; selected: boolean; onPress: () => void }) {
-  const { swatch, name } = PROFILE_COLORS[color];
+function ColorButton({ name, colors, size, selected, onPress }: { name: string; colors: string[]; size: number; selected: boolean; onPress: () => void }) {
+  const swatch = colors[0]!;
   const { hovered, hoverProps } = useHover();
   const t = useSharedValue(selected ? 1 : 0);
   useEffect(() => {
@@ -49,22 +70,33 @@ function ColorButton({ color, size, selected, onPress }: { color: ProfileColor; 
         {({ pressed }) => (
           <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", transform: [{ scale: pressed ? 0.94 : 1 }] }}>
             <Animated.View
-              style={[{
-                position: "absolute",
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                borderWidth: 2,
-                borderColor: swatch,
-              }, ring]}
+              style={[
+                {
+                  position: "absolute",
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  borderWidth: 2,
+                  borderColor: swatch,
+                },
+                ring,
+              ]}
             />
             <Animated.View
-              style={[{
-                borderRadius: size / 2,
-                backgroundColor: swatch,
-                opacity: hovered || selected ? 1 : 0.85,
-              }, dot]}
-            />
+              style={[
+                {
+                  borderRadius: size / 2,
+                  overflow: "hidden",
+                  flexDirection: "row",
+                  opacity: hovered || selected ? 1 : 0.85,
+                },
+                dot,
+              ]}
+            >
+              {colors.map((c) => (
+                <View key={c} style={{ flex: 1, backgroundColor: c }} />
+              ))}
+            </Animated.View>
           </View>
         )}
       </Pressable>
@@ -85,7 +117,19 @@ export function TabLayoutPicker({ windowId }: { windowId: string }) {
   );
 }
 
-function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sidebar" | "top"; title: string; subtitle: string; selected: boolean; onPress: () => void }) {
+function LayoutButton({
+  kind,
+  title,
+  subtitle,
+  selected,
+  onPress,
+}: {
+  kind: "sidebar" | "top";
+  title: string;
+  subtitle: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
   const bar = { backgroundColor: colors.progressTrack, borderRadius: 2 };
@@ -104,7 +148,18 @@ function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sid
               transform: [{ scale: pressed ? 0.98 : 1 }],
             }}
           >
-            <View style={{ height: 64, borderRadius: 7, padding: 5, gap: 4, backgroundColor: colors.preview, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.previewBorder, flexDirection: kind === "sidebar" ? "row" : "column" }}>
+            <View
+              style={{
+                height: 64,
+                borderRadius: 7,
+                padding: 5,
+                gap: 4,
+                backgroundColor: colors.preview,
+                borderWidth: StyleSheet.hairlineWidth * 2,
+                borderColor: colors.previewBorder,
+                flexDirection: kind === "sidebar" ? "row" : "column",
+              }}
+            >
               {kind === "sidebar" ? (
                 <View style={{ width: "26%", gap: 3, paddingTop: 7 }}>
                   {[1, 0.8, 0.9].map((w, i) => (
@@ -118,7 +173,9 @@ function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sid
                   ))}
                 </View>
               )}
-              <View style={{ flex: 1, borderRadius: 4, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.previewBorder }} />
+              <View
+                style={{ flex: 1, borderRadius: 4, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.previewBorder }}
+              />
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Radio on={selected} />
@@ -137,6 +194,15 @@ function LayoutButton({ kind, title, subtitle, selected, onPress }: { kind: "sid
 function Radio({ on }: { on: boolean }) {
   const colors = useOnboardingColors();
   return (
-    <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: on ? 5 : 1.5, borderColor: on ? colors.checkboxOn : colors.checkboxBorder, backgroundColor: colors.checkbox }} />
+    <View
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        borderWidth: on ? 5 : 1.5,
+        borderColor: on ? colors.checkboxOn : colors.checkboxBorder,
+        backgroundColor: colors.checkbox,
+      }}
+    />
   );
 }

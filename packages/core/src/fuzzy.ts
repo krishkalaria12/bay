@@ -6,7 +6,11 @@ export type ActionMatch<T extends ActionCandidate> = {
   exact: boolean;
 };
 
-const words = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+const words = (text: string) =>
+  text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 
 function isSubsequence(needle: string, haystack: string): boolean {
   let i = 0;

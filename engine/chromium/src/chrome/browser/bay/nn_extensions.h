@@ -10,10 +10,17 @@
 //       description, enabled, state, icon, permissions: [message],
 //       siteAccess: "ON_CLICK" | "ON_SPECIFIC_SITES" | "ON_ALL_SITES" | null,
 //       sites: [granted host], optionsUrl, location, path, homepageUrl,
-//       incognito, fileAccess, pinned, mayModify, errors: [message]}]}
+//       incognito, incognitoAllowed, fileAccess, pinned, mayModify,
+//       errors: [message]}]}
 //       Extensions only (no apps or themes), disabled and terminated
 //       included. state and location are developerPrivate's names
 //       ("ENABLED", "FROM_STORE"…).
+//   nn_extensions_import       {id?, sourceId, sourceProfilePath, path?,
+//       store, enabled, pinned, source?: "chromium" | "firefox"} ->
+//       {id, installed, storageImported, warnings, updateMode: "store" | "local"}
+//       Signed Web Store installs or prepared local copies; code stays
+//       disabled until storage has been merged. Existing installs are kept.
+//       A failure may contain retainsPath if the supplied local path is in use.
 //   nn_extensions_install      {path} -> {id}: loads an unpacked extension
 //       (turns developer mode on, as Chrome keeps unpacked ones off without)
 //   nn_extensions_install_crx  {path} -> {id}: installs a CRX3 file as one
@@ -34,6 +41,7 @@
 
 #include "chrome/browser/bay/nn_engine.h"
 
+NN_ENGINE_CALL(nn_extensions_import);
 NN_ENGINE_CALL(nn_extensions_list);
 NN_ENGINE_CALL(nn_extensions_install);
 NN_ENGINE_CALL(nn_extensions_install_crx);

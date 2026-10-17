@@ -6,10 +6,9 @@ import { useSync } from "../sync/engine";
 import { capture, endSession, flush, isSharing, startClient } from "./client";
 import { reportNativeCrashes } from "./errors";
 import { takeOmniboxLatency } from "./track";
+import { EXTENSION_SETTLE_MS, FIRST_MEMORY_SAMPLE_MS } from "./config";
 
 const HOUR_MS = 60 * 60_000;
-const FIRST_MEMORY_SAMPLE_MS = 10 * 60_000;
-const EXTENSION_SETTLE_MS = 20_000;
 
 const startedAt = Date.now();
 let counts = { tabs: 0, windows: 0 };
@@ -38,7 +37,7 @@ function watchStore() {
       for (const id in s.windows) {
         const w = s.windows[id]!;
         const before = prev.windows[id];
-        if (before && before.profileId !== w.profileId && !w.incognito) profileSwitched(size(s.profiles));
+        if (before && before.spaceId !== w.spaceId && !w.incognito) profileSwitched(size(s.spaces));
       }
     }
     if (s.splits !== prev.splits) {

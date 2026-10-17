@@ -1,4 +1,6 @@
-// Install before page scripts.
+// Install before page scripts. The script's value is this function: the renderer runs it and calls what it returns
+// (NNPageObserver::DidCreateScriptContext), so the expression below is used, by the engine.
+// oxlint-disable-next-line no-unused-expressions
 (function (post) {
   "use strict";
   if (!/^(https?|file):$/.test(location.protocol)) return () => {};
@@ -27,13 +29,12 @@
   };
   const serialize = (data) => toJSON(plain(data, 0));
   const send = (kind, data) => post(kind, serialize(data));
-  const onReady = (fn) =>
-    document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn, { once: true }) : fn();
+  const onReady = (fn) => (document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn, { once: true }) : fn());
   const guard = (fn) =>
     function () {
       try {
         return apply(fn, this, arguments);
-      } catch (e) {}
+      } catch {}
     };
   const later = (fn, ms) => {
     let queued = false;
@@ -63,10 +64,21 @@
   const session = navigator.mediaSession;
   const actions = new Map();
   let positionState = null;
+  // Now playing is media the user has heard, as in Chrome's media controls: never a muted autoplay (X's feed), and
+  // never a sound effect (chess.com's moves) shorter than Chrome's 5 s floor for a media session.
+  const heard = new WeakSet();
+  const SOUND_EFFECT_S = 5;
+  const hear = (m) => {
+    if (heard.has(m) || !audible(m)) return false;
+    heard.add(m);
+    return true;
+  };
+  const showable = (m) => heard.has(m) && m.duration >= SOUND_EFFECT_S;
   const pickMedia = () => {
     const all = [...document.querySelectorAll("video,audio")];
     if (active && !all.includes(active)) all.push(active);
-    return all.find((m) => !m.paused && !m.ended) || active || null;
+    const shown = all.filter(showable);
+    return shown.find((m) => !m.paused && !m.ended) || (shown.includes(active) ? active : null);
   };
   const absolute = (src) => {
     try {
@@ -78,7 +90,13 @@
   const artworkOf = (metadata) => {
     const art = metadata && metadata.artwork;
     if (!art || !art.length) return null;
-    const size = (a) => Math.max(0, ...String(a.sizes || "0x0").split(/\s+/).map((s) => parseInt(s, 10) || 0));
+    const size = (a) =>
+      Math.max(
+        0,
+        ...String(a.sizes || "0x0")
+          .split(/\s+/)
+          .map((s) => parseInt(s, 10) || 0),
+      );
     return absolute([...art].sort((a, b) => size(b) - size(a))[0].src);
   };
   let lastNowPlaying = "";
@@ -86,23 +104,23 @@
     const el = pickMedia();
     const md = session && session.metadata;
     let state = null;
-    if (el || md) {
-      const duration = positionState?.duration ?? el?.duration;
+    if (el) {
+      const duration = positionState?.duration ?? el.duration;
       const sessionState = session ? session.playbackState : "none";
+      const elementState = el.paused || el.ended ? "paused" : "playing";
       state = {
         frame,
         title: md?.title || document.title || "",
         artist: md?.artist || "",
         album: md?.album || "",
         artwork: artworkOf(md),
-        playbackState: sessionState !== "none" ? sessionState : el ? (el.paused || el.ended ? "paused" : "playing") : "none",
-        position: positionState?.position ?? el?.currentTime ?? 0,
+        playbackState: sessionState !== "none" ? sessionState : elementState,
+        position: positionState?.position ?? el.currentTime,
         duration: Number.isFinite(duration) ? duration : null,
-        playbackRate: positionState?.playbackRate ?? el?.playbackRate ?? 1,
-        hasVideo: !!el && el.tagName === "VIDEO" && el.videoWidth > 0,
+        playbackRate: positionState?.playbackRate ?? el.playbackRate,
+        hasVideo: el.tagName === "VIDEO" && el.videoWidth > 0,
         actions: [...actions.keys()],
       };
-      if (!state.title && !el) state = null;
     }
     const json = serialize(state && { ...state, position: Math.round(state.position) });
     if (json === lastNowPlaying) return;
@@ -118,11 +136,13 @@
       return;
     }
     if (e.type === "play" || e.type === "playing") active = m;
+    // Unmuting a playing video is when it's first heard.
+    const firstHeard = hear(m);
     reportAudible();
-    if (e.type !== "volumechange") reportNowPlaying();
+    if (e.type !== "volumechange" || firstHeard) reportNowPlaying();
   };
-  document.addEventListener("enterpictureinpicture", (e) => send("pip", { active: true, kind: "video" }), true);
-  document.addEventListener("leavepictureinpicture", (e) => send("pip", { active: false, kind: "video" }), true);
+  document.addEventListener("enterpictureinpicture", () => send("pip", { active: true, kind: "video" }), true);
+  document.addEventListener("leavepictureinpicture", () => send("pip", { active: false, kind: "video" }), true);
   const mediaEvents = ["play", "playing", "pause", "ended", "volumechange", "emptied", "seeked", "ratechange", "loadedmetadata"];
   for (const e of mediaEvents) document.addEventListener(e, onMediaEvent, true);
   const play = HTMLMediaElement.prototype.play;
@@ -223,14 +243,15 @@
     const playing = session?.playbackState === "playing" || (el && !el.paused);
     switch (action) {
       case "play":
-        call("play") || el?.play();
+        if (!call("play")) el?.play();
         break;
       case "pause":
-        call("pause") || el?.pause();
+        if (!call("pause")) el?.pause();
         break;
       case "toggle":
-        if (playing) call("pause") || el?.pause();
-        else call("play") || el?.play();
+        if (playing) {
+          if (!call("pause")) el?.pause();
+        } else if (!call("play")) el?.play();
         break;
       case "next":
         call("nexttrack");
@@ -247,7 +268,7 @@
         if (!call("seekto", { seekTime: seconds }) && el) el.currentTime = seconds;
         break;
       case "stop":
-        call("stop") || el?.pause();
+        if (!call("stop")) el?.pause();
         break;
       case "enterpictureinpicture":
         call("enterpictureinpicture");
@@ -257,7 +278,7 @@
   };
 
   // MARK: Password reveal — an eye button in a focused password field the user
-// Reveal only user-typed passwords; never expose saved passwords.
+  // Reveal only user-typed passwords; never expose saved passwords.
   const typedByUser = new WeakSet();
   let revealedField = null;
   let eyeField = null;
@@ -271,7 +292,12 @@
   const hasOwnToggle = (el) => {
     for (let n = el.parentElement, depth = 0; n && depth < 3 && n.querySelectorAll("input").length === 1; n = n.parentElement, depth++)
       for (const c of n.querySelectorAll('button, [role="button"], [aria-label], [title], [class*="eye" i], [class*="toggle" i]'))
-        if (c !== el && /show|hide|reveal|toggle|visib|eye|peek|afficher|mostrar|anzeigen/i.test((c.getAttribute("aria-label") || "") + " " + (c.getAttribute("title") || "") + " " + (c.getAttribute("class") || "")))
+        if (
+          c !== el &&
+          /show|hide|reveal|toggle|visib|eye|peek|afficher|mostrar|anzeigen/i.test(
+            (c.getAttribute("aria-label") || "") + " " + (c.getAttribute("title") || "") + " " + (c.getAttribute("class") || ""),
+          )
+        )
           return true;
     return false;
   };
@@ -378,13 +404,13 @@
   addEventListener("pagehide", conceal);
 
   // MARK: Notifications — shown by the app (macOS notifications that open the
-// Wait a microtask so Blink installs Notification before page scripts.
+  // Wait a microtask so Blink installs Notification before page scripts.
   const installNotifications = () => {
     const NativeNotification = window.Notification;
     if (!NativeNotification || NativeNotification.__nn) return !!NativeNotification;
     const live = new Map();
     let seq = 0;
-    const show = (title, options, fire) => {
+    const show = (title, options) => {
       options = options || {};
       const id = frame + ":" + ++seq;
       const icon = options.icon ? absolute(String(options.icon)) : null;
@@ -411,9 +437,17 @@
         if (arguments.length < 1) throw new TypeError("Failed to construct 'Notification': 1 argument required, but only 0 present.");
         super();
         options = options || {};
-        const fields = { title: String(title), body: String(options.body ?? ""), tag: String(options.tag ?? ""),
-          icon: String(options.icon ?? ""), data: options.data ?? null, silent: !!options.silent,
-          requireInteraction: !!options.requireInteraction, dir: options.dir || "auto", lang: options.lang || "" };
+        const fields = {
+          title: String(title),
+          body: String(options.body ?? ""),
+          tag: String(options.tag ?? ""),
+          icon: String(options.icon ?? ""),
+          data: options.data ?? null,
+          silent: !!options.silent,
+          requireInteraction: !!options.requireInteraction,
+          dir: options.dir || "auto",
+          lang: options.lang || "",
+        };
         for (const [k, v] of Object.entries(fields)) Object.defineProperty(this, k, { value: v, enumerable: true });
         this.onclick = this.onshow = this.onclose = this.onerror = null;
         Object.defineProperty(this, "_fire", {
@@ -440,9 +474,15 @@
         send("notificationClose", { id: this._id });
         setTimeout(() => this._fire("close"), 0);
       }
-      static get permission() { return NativeNotification.permission; }
-      static requestPermission(callback) { return NativeNotification.requestPermission(callback); }
-      static get maxActions() { return NativeNotification.maxActions || 0; }
+      static get permission() {
+        return NativeNotification.permission;
+      }
+      static requestPermission(callback) {
+        return NativeNotification.requestPermission(callback);
+      }
+      static get maxActions() {
+        return NativeNotification.maxActions || 0;
+      }
     }
     Object.defineProperty(PageNotification, "name", { value: "Notification" });
     Object.defineProperty(PageNotification, "__nn", { value: true });
@@ -450,8 +490,7 @@
     const Registration = window.ServiceWorkerRegistration;
     if (Registration && Registration.prototype.showNotification) {
       Registration.prototype.showNotification = function (title, options) {
-        if (NativeNotification.permission !== "granted")
-          return Promise.reject(new TypeError("No notification permission has been granted for this origin."));
+        if (NativeNotification.permission !== "granted") return Promise.reject(new TypeError("No notification permission has been granted for this origin."));
         show(title, options);
         return Promise.resolve();
       };
@@ -504,7 +543,9 @@
       apply(getUserMedia, request.self, [
         {
           audio: tabAudio ? { mandatory: { chromeMediaSource: "desktop" } } : false,
-          video: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: sourceId, maxWidth: 3840, maxHeight: 2160, maxFrameRate: +frameRate || 30 } },
+          video: {
+            mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: sourceId, maxWidth: 3840, maxHeight: 2160, maxFrameRate: +frameRate || 30 },
+          },
         },
       ]).then(request.resolve, request.reject);
     };
@@ -528,7 +569,12 @@
     if (!m || m.length < 3) return null;
     return { r: +m[0], g: +m[1], b: +m[2], a: m[3] === undefined ? 1 : +m[3] };
   };
-  const hex = (c) => "#" + [c.r, c.g, c.b].map((n) => Math.round(n).toString(16).padStart(2, "0")).join("").toUpperCase();
+  const hex = (c) =>
+    "#" +
+    [c.r, c.g, c.b]
+      .map((n) => Math.round(n).toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
   const normalize = (value) => {
     const probe = document.createElement("span");
     probe.style.color = value;
@@ -698,8 +744,19 @@
   // forth while a real scroll still counts. Sent on a change, and "down" again at the start of a gesture (the app
   // shows the bar on its own: tab switch, navigation, a click on the strip).
   const scrollDirection = () => {
-    const DOWN = 24, UP = 12, MIN_RANGE = 120, SETTLE = 300, GESTURE = 300;
-    let anchor = 0, last = 0, lastAt = -1e9, settleUntil = -1e9, budget = 0, height = 0, sent = null, gestureSent = false;
+    const DOWN = 24,
+      UP = 12,
+      MIN_RANGE = 120,
+      SETTLE = 300,
+      GESTURE = 300;
+    let anchor = 0,
+      last = 0,
+      lastAt = -1e9,
+      settleUntil = -1e9,
+      budget = 0,
+      height = 0,
+      sent = null,
+      gestureSent = false;
     const resized = (viewport, now) => {
       if (now >= settleUntil) budget = 0;
       if (height && viewport !== height) {
@@ -777,4 +834,4 @@
   addEventListener("resize", () => direction.resized(innerHeight, performance.now()));
 
   return receive;
-})
+});

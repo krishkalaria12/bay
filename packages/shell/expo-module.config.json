@@ -1,7 +1,5 @@
 {
-  "platforms": [
-    "macos"
-  ],
+  "platforms": ["apple"],
   "apple": {
     "modules": [
       "ShellModule",

@@ -1,10 +1,9 @@
 import { View } from "@bay/platform";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "@bay/platform/motion";
+import { FOLD_MS } from "./constants";
 
-// Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in about 150 ms, fast at first.
-const FOLD_MS = 150;
+// Dia 1.50.1 (owner recording, 60 fps): a group opens or closes in FOLD_MS, fast at first.
 const FOLD_EASING = Easing.bezier(0.2, 0.9, 0.3, 1);
 
 export type FoldState = { open: SharedValue<number>; moving: boolean };
@@ -36,7 +35,7 @@ export function useFold(collapsed: boolean): FoldState {
   return { open, moving: running || settled !== collapsed };
 }
 
-export type FoldEntry = { key: string; node: ReactNode };
+export type FoldEntry = { key: string; node: ReactNode; height?: number };
 
 /**
  * The members of a sidebar group or live folder, opening and closing on `fold`. Closed, the block shows nothing, or
@@ -69,11 +68,11 @@ export function Fold({
   footer?: ReactNode;
 }) {
   const { open, moving } = fold;
-  const measuring = rowHeight === undefined;
+  const measuring = rowHeight === undefined && entries.some((e) => e.height === undefined);
   const [measured, setMeasured] = useState<Record<string, number>>({});
   const kept = keep && entries.some((e) => e.key === keep) ? keep : null;
   const folding = !!kept && (collapsed || moving);
-  const heightOf = (key: string) => rowHeight ?? measured[key] ?? 0;
+  const heightOf = (key: string) => entries.find((e) => e.key === key)?.height ?? rowHeight ?? measured[key] ?? 0;
   const total = entries.reduce((sum, e) => sum + heightOf(e.key), 0) + gap * Math.max(0, entries.length - 1) + padTop + padBottom;
   // The block: its own height while folding around a kept entry (the entries fold instead) or open, else from
   // nothing to all of it.
@@ -85,12 +84,24 @@ export function Fold({
     <Animated.View style={outer} pointerEvents={collapsed ? "box-none" : "auto"}>
       {/* Measured entries lay out at their own height while the block is closed: a view in a clipped, zero-height
           parent reports a height of 0. */}
-      <View style={[{ gap, paddingTop: padTop, paddingBottom: padBottom }, measuring && outerMode === "closed" ? { position: "absolute", left: 0, right: 0, top: 0 } : null]}>
+      <View
+        style={[
+          { gap, paddingTop: padTop, paddingBottom: padBottom },
+          measuring && outerMode === "closed" ? { position: "absolute", left: 0, right: 0, top: 0 } : null,
+        ]}
+      >
         {entries.map(({ key, node }) => {
           const stays = key === kept;
           if (!stays && !mountAll) return null;
           return (
-            <FoldItem key={key} open={open} mode={folding && !stays ? (moving ? "moving" : "closed") : "free"} height={heightOf(key)} gap={gap} pointerEvents={collapsed && !stays ? "none" : "auto"}>
+            <FoldItem
+              key={key}
+              open={open}
+              mode={folding && !stays ? (moving ? "moving" : "closed") : "free"}
+              height={heightOf(key)}
+              gap={gap}
+              pointerEvents={collapsed && !stays ? "none" : "auto"}
+            >
               {measuring ? (
                 <View
                   onLayout={(e) => {
@@ -133,7 +144,21 @@ function useFoldStyle(open: SharedValue<number>, mode: FoldMode, height: number,
 }
 
 // An entry, folding with the block: shrinking to nothing, the gap after it cancelled.
-function FoldItem({ open, mode, height, gap, pointerEvents, children }: { open: SharedValue<number>; mode: FoldMode; height: number; gap: number; pointerEvents: "none" | "auto"; children: ReactNode }) {
+function FoldItem({
+  open,
+  mode,
+  height,
+  gap,
+  pointerEvents,
+  children,
+}: {
+  open: SharedValue<number>;
+  mode: FoldMode;
+  height: number;
+  gap: number;
+  pointerEvents: "none" | "auto";
+  children: ReactNode;
+}) {
   const style = useFoldStyle(open, mode, height, gap);
   return (
     <Animated.View style={style} pointerEvents={pointerEvents}>

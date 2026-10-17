@@ -165,11 +165,17 @@ function takePicture({ chip, grab }: Picture, windowId: string) {
   // shows the window's page.
   const s = useBrowser.getState();
   const w = s.windows[windowId];
-  const active = w?.activeTabIds[w.profileId];
+  const active = w?.activeTabIds[w.spaceId];
   const shown = tabId ?? active;
   // Only a page on screen is painted: a background tab would wait out the capture's deadline.
   const onScreen = !!shown && (shown === active || !!splitOf(s, active)?.tabIds.includes(shown));
-  const live = (onScreen && webviews.get(shown)?.capturePicture(0.35).catch(() => null)) || Promise.resolve(null);
+  const live =
+    (onScreen &&
+      webviews
+        .get(shown)
+        ?.capturePicture(0.35)
+        .catch(() => null)) ||
+    Promise.resolve(null);
   void live.then((page) => {
     if (drag !== dragSeq || !useTabDrag.getState().tabIds.length) return;
     if (page) return dragPreview.page(page.data, page.frame);

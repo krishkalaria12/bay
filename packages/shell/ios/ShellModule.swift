@@ -2,12 +2,17 @@ import AppKit
 import ExpoModulesCore
 
 public enum OpenURLInbox {
-  static var pending: [String] = []
-  static var deliver: (([String]) -> Void)?
+  struct Batch {
+    let urls: [String]
+    let sourceApp: String?
+  }
 
-  public static func receive(_ urls: [URL]) {
-    let strings = urls.map { $0.isFileURL ? $0.absoluteString : $0.absoluteString }
-    if let deliver { deliver(strings) } else { pending += strings }
+  static var pending: [Batch] = []
+  static var deliver: ((Batch) -> Void)?
+
+  public static func receive(_ urls: [URL], sourceApp: String? = nil) {
+    let batch = Batch(urls: urls.map(\.absoluteString), sourceApp: sourceApp)
+    if let deliver { deliver(batch) } else { pending.append(batch) }
   }
 }
 
@@ -186,11 +191,15 @@ public class ShellModule: Module {
 
     OnStartObserving("onOpenURLs") {
       DispatchQueue.main.async { [weak self] in
-        OpenURLInbox.deliver = { urls in self?.sendEvent("onOpenURLs", ["urls": urls]) }
+        OpenURLInbox.deliver = { batch in
+          var event: [String: Any] = ["urls": batch.urls]
+          if let sourceApp = batch.sourceApp { event["sourceApp"] = sourceApp }
+          self?.sendEvent("onOpenURLs", event)
+        }
         if !OpenURLInbox.pending.isEmpty {
-          let urls = OpenURLInbox.pending
+          let batches = OpenURLInbox.pending
           OpenURLInbox.pending = []
-          OpenURLInbox.deliver?(urls)
+          for batch in batches { OpenURLInbox.deliver?(batch) }
         }
       }
     }
@@ -305,6 +314,9 @@ public class ShellModule: Module {
     AsyncFunction("setMenuState") { (state: [String: Any]) in
       MenuState.current = MenuState(state)
       MainMenu.refresh()
+    }.runOnQueue(.main)
+    AsyncFunction("setSidebarMoveUndo") { (windowId: String, available: Bool, focus: Bool) in
+      SidebarMoveUndoView.set(windowId: windowId, available: available, focus: focus)
     }.runOnQueue(.main)
     // The bookmark lists, sent only when they change (the menu state then leaves them out).
     AsyncFunction("setMenuBookmarks") { (bookmarks: [String: Any]) in
@@ -680,6 +692,7 @@ public class SymbolModule: Module {
       Prop("size") { (view: SymbolView, size: Double) in view.pointSize = size }
       Prop("weight") { (view: SymbolView, weight: String) in view.weight = weight }
       Prop("color") { (view: SymbolView, hex: String) in view.tint = NSColor(hex: hex) }
+      Prop("rendering") { (view: SymbolView, rendering: String) in view.rendering = rendering }
     }
   }
 }
@@ -799,7 +812,10 @@ final class SymbolView: ExpoView {
   var name = "questionmark" { didSet { update() } }
   var pointSize: Double = 14 { didSet { update() } }
   var weight = "regular" { didSet { update() } }
-  var tint: NSColor? { didSet { imageView.contentTintColor = tint } }
+  var tint: NSColor? { didSet { update() } }
+  // "monochrome" (the tint, flat), "hierarchical" (the tint, its secondary layers lighter) or "multicolor" (the
+  // symbol's own colours where it has them, the tint elsewhere).
+  var rendering = "monochrome" { didSet { update() } }
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -820,7 +836,13 @@ final class SymbolView: ExpoView {
     let weights: [String: NSFont.Weight] = [
       "light": .light, "regular": .regular, "medium": .medium, "semibold": .semibold, "bold": .bold,
     ]
-    let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weights[weight] ?? .regular)
+    var config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weights[weight] ?? .regular)
+    if rendering == "hierarchical", let tint {
+      config = config.applying(NSImage.SymbolConfiguration(hierarchicalColor: tint))
+    } else if rendering == "multicolor" {
+      config = config.applying(NSImage.SymbolConfiguration.preferringMulticolor())
+    }
+    imageView.contentTintColor = tint
     imageView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
   }
 }
@@ -838,7 +860,15 @@ extension NSColor {
 }
 
 let installTextFieldSelectAll: Void = {
-  let block: @convention(block) (NSTextField, Any?) -> Void = { field, sender in field.selectText(sender) }
+  // A field already being edited selects in its editor: selectText(_:) ends the editing first, which React Native reads
+  // as a blur, so a field that selects its text on focus (the sidebar's rename) committed and closed as it opened.
+  let block: @convention(block) (NSTextField, Any?) -> Void = { field, sender in
+    if let editor = field.currentEditor() {
+      editor.selectAll(sender)
+    } else {
+      field.selectText(sender)
+    }
+  }
   class_addMethod(NSTextField.self, #selector(NSText.selectAll(_:)), imp_implementationWithBlock(block), "v@:@")
 }()
 

@@ -1,0 +1,44 @@
+# Every push to main and every pull request: formatting, lint, types and the JavaScript tests, on Linux.
+# The app itself needs the Chromium engine (a two-hour build), so CI checks its code without building it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Format, lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Format (oxfmt)
+        run: pnpm fmt:check
+      - name: Lint (oxlint)
+        run: pnpm lint
+      - name: Types
+        run: pnpm typecheck
+      # The Swift suites run on macOS (swift.yml); here, every JavaScript suite.
+      - name: Tests
+        run: |
+          pnpm turbo run test --filter=@bay/core --filter=@bay/browser
+          pnpm --filter @bay/sync exec node --test "src/**/*.test.ts"
+      - name: React Compiler
+        run: pnpm compiler:check

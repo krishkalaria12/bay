@@ -18,9 +18,9 @@ function chromeTree(profile = "") {
   };
   return { bar: walk("bar"), other: walk("other") };
 }
-function storeTree(profileId = "default") {
+function storeTree(spaceId = "default") {
   const b = S().bookmarks;
-  const roots = b.roots[profileId];
+  const roots = b.roots[spaceId];
   const walk = (id) => {
     const n = b.nodes[id];
     return n.kind === "url" ? `${n.title}=${n.url}` : { [n.title]: n.children.map(walk) };
@@ -29,7 +29,8 @@ function storeTree(profileId = "default") {
 }
 
 function legacyFile() {
-  const bar = "bm-bar1", other = "bm-other1";
+  const bar = "bm-bar1",
+    other = "bm-other1";
   const node = (id, parentId, extra) => ({ id, parentId, addedAt: 5, ...extra });
   return {
     version: 2,
@@ -53,7 +54,10 @@ test("bookmarks.json moves into Chrome once, each bookmark under the UUID sync r
   stub.bookmarkDbs.clear();
   stub.docs.set("bookmarks.json", JSON.stringify(legacyFile()));
   assert.equal(await migrateBookmarksFile({ keepMs: 0 }), "moved");
-  const expected = { bar: { "Bookmarks Bar": ["A=https://a.example/", { F: ["B=https://b.example/"] }] }, other: { "Other Bookmarks": ["C=https://c.example/"] } };
+  const expected = {
+    bar: { "Bookmarks Bar": ["A=https://a.example/", { F: ["B=https://b.example/"] }] },
+    other: { "Other Bookmarks": ["C=https://c.example/"] },
+  };
   assert.deepEqual(chromeTree(), expected);
   assert.ok(stub.chromeBookmarks("").has(bookmarkUuidFor("bm-b")), "the UUID its old id maps to");
   assert.equal(stub.chromeBookmarks("").get(bookmarkUuidFor("bm-b")).key, "bm-b", "the old id stays its sync key");
@@ -78,10 +82,10 @@ test("the store's tree and Chrome's stay alike: the app's edits go as ops, an ex
   assert.ok(S().bookmarksReady.default);
   const same = () => assert.deepEqual(chromeTree(), storeTree());
 
-  const a = S().addBookmark({ profileId: "default", url: "https://a.example/", title: "A" });
-  const f = S().addBookmarkFolder({ profileId: "default", title: "F" });
-  const g = S().addBookmarkFolder({ profileId: "default", title: "G", parentId: f });
-  const b = S().addBookmark({ profileId: "default", url: "https://b.example/", title: "B", parentId: g });
+  const a = S().addBookmark({ spaceId: "default", url: "https://a.example/", title: "A" });
+  const f = S().addBookmarkFolder({ spaceId: "default", title: "F" });
+  const g = S().addBookmarkFolder({ spaceId: "default", title: "G", parentId: f });
+  const b = S().addBookmark({ spaceId: "default", url: "https://b.example/", title: "B", parentId: g });
   await settle();
   same();
   S().moveBookmark(a, f, 0);
@@ -104,7 +108,9 @@ test("the store's tree and Chrome's stay alike: the app's edits go as ops, an ex
 
   // An extension adds a bookmark (chrome.bookmarks): it shows in the store, and nothing echoes back.
   const sent = stub.bookmarkOpsSent.length;
-  stub.chromeBookmarkEdit("", [{ op: "add", id: "0f0f0f0f-0000-4000-8000-000000000001", k: "u", t: "Ext", u: "https://ext.example/", a: 1, parent: "bar", index: 1 }]);
+  stub.chromeBookmarkEdit("", [
+    { op: "add", id: "0f0f0f0f-0000-4000-8000-000000000001", k: "u", t: "Ext", u: "https://ext.example/", a: 1, parent: "bar", index: 1 },
+  ]);
   await settle();
   await reloadBookmarks();
   same();
@@ -117,8 +123,10 @@ test("an edit made at launch, before Chrome's tree is read, reaches Chrome and s
   S().hydrate({ bookmarks: { nodes: {}, roots: {} } });
   stub.docs.clear();
   stub.bookmarkDbs.clear();
-  stub.chromeBookmarkEdit("", [{ op: "add", id: "0f0f0f0f-0000-4000-8000-0000000000a1", k: "u", t: "In Chrome", u: "https://chrome.example/", a: 1, parent: "bar" }]);
-  S().addBookmark({ profileId: "default", url: "https://early.example/", title: "Early" });
+  stub.chromeBookmarkEdit("", [
+    { op: "add", id: "0f0f0f0f-0000-4000-8000-0000000000a1", k: "u", t: "In Chrome", u: "https://chrome.example/", a: 1, parent: "bar" },
+  ]);
+  S().addBookmark({ spaceId: "default", url: "https://early.example/", title: "Early" });
   const stop = startBookmarks();
   await reloadBookmarks();
   assert.deepEqual(chromeTree().bar, { "Bookmarks Bar": ["Early=https://early.example/", "In Chrome=https://chrome.example/"] });
@@ -132,9 +140,9 @@ test("ops Chrome can't apply (an extension moved things meanwhile) stop there: n
   stub.bookmarkDbs.clear();
   const stop = startBookmarks();
   await reloadBookmarks();
-  const b = S().addBookmarkFolder({ profileId: "default", title: "B" });
-  const f = S().addBookmarkFolder({ profileId: "default", title: "F" });
-  const a = S().addBookmarkFolder({ profileId: "default", title: "A", parentId: f });
+  const b = S().addBookmarkFolder({ spaceId: "default", title: "B" });
+  const f = S().addBookmarkFolder({ spaceId: "default", title: "F" });
+  const a = S().addBookmarkFolder({ spaceId: "default", title: "A", parentId: f });
   await reloadBookmarks();
   // An extension puts B inside A; before the app hears of it, the app moves A into B and deletes F.
   const db = stub.chromeBookmarks("");
@@ -156,11 +164,19 @@ test("at launch the bar shows the last tree read from Chrome until Chrome's load
   stub.chromeBookmarkEdit("", [{ op: "add", id: "0f0f0f0f-0000-4000-8000-0000000000c1", k: "u", t: "Now", u: "https://now.example/", a: 1, parent: "bar" }]);
   const node = (id, parentId, x) => ({ id, parentId, addedAt: 1, ...x });
   const gone = "0f0f0f0f-0000-4000-8000-0000000000c2";
-  stub.docs.set("bookmarks-cache.json", JSON.stringify({ version: 1, trees: { "": [
-    node("bar@default", null, { kind: "folder", title: "Bookmarks Bar", children: [gone] }),
-    node("other@default", null, { kind: "folder", title: "Other Bookmarks", children: [] }),
-    node(gone, "bar@default", { kind: "url", title: "Deleted since", url: "https://gone.example/", favicon: null }),
-  ] } }));
+  stub.docs.set(
+    "bookmarks-cache.json",
+    JSON.stringify({
+      version: 1,
+      trees: {
+        "": [
+          node("bar@default", null, { kind: "folder", title: "Bookmarks Bar", children: [gone] }),
+          node("other@default", null, { kind: "folder", title: "Other Bookmarks", children: [] }),
+          node(gone, "bar@default", { kind: "url", title: "Deleted since", url: "https://gone.example/", favicon: null }),
+        ],
+      },
+    }),
+  );
   const stop = startBookmarks();
   assert.deepEqual(storeTree().bar, { "Bookmarks Bar": ["Deleted since=https://gone.example/"] }, "the cache shows at once");
   assert.ok(!S().bookmarksReady.default, "sync waits for Chrome's tree");

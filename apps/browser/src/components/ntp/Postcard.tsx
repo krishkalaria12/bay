@@ -2,44 +2,53 @@ import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AccessibilityInfo, Image, StyleSheet, Text } from "react-native";
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
-import { tensionSpring } from "../../lib/springs";
-import { hex, PROFILE_COLORS, useTheme } from "../../lib/theme";
+import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { useHover } from "../primitives";
 import type { ReleaseNotes } from "./releaseNotes";
-
-const ICON = require("../../../assets/app-icon.png");
-
-const CARD = { width: 320, height: 200, overhangRight: 40, overhangTop: 30, tilt: 2, radius: 10 };
-const HOVER_SLOP = 24;
-const TOOLTIP = { height: 28, gap: 4 };
-const PAPER = "#FCFCFA";
-const INK = "#1D1B1A";
+import { APP_ICON } from "../../lib/assets";
+import { POSTCARD, POSTCARD_HOVER_SLOP, POSTCARD_INK, POSTCARD_PAGE_SPRING, POSTCARD_PAPER, POSTCARD_TOOLTIP } from "./constants";
 
 const cardFrame = (size: { width: number }) => ({
-  x: size.width + CARD.overhangRight - CARD.width,
-  y: -CARD.overhangTop,
-  width: CARD.width,
-  height: CARD.height,
+  x: size.width + POSTCARD.overhangRight - POSTCARD.width,
+  y: -POSTCARD.overhangTop,
+  width: POSTCARD.width,
+  height: POSTCARD.height,
 });
 
 function useArtworkColors(): [string, string] {
   const windowId = useWindowId();
-  const color = useBrowser((s) => s.profiles[s.windows[windowId]?.profileId ?? ""]?.color ?? "plum");
-  const swatch = PROFILE_COLORS[color]?.swatch ?? PROFILE_COLORS.plum.swatch;
+  const color = useBrowser((s) => s.spaces[s.windows[windowId]?.spaceId ?? ""]?.color ?? "plum");
+  const swatch = SPACE_COLORS[color]?.swatch ?? SPACE_COLORS.plum.swatch;
   return [mix(swatch, "#FFFFFF", 0.45), mix(swatch, "#10121A", 0.5)];
 }
 
 function mix(a: string, b: string, t: number) {
   const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
-  return `#${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, "0")).join("")}`;
+  return `#${[0, 1, 2]
+    .map((i) =>
+      Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
-export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes: ReleaseNotes; size: { width: number; height: number }; onOpen: () => void; onDismiss: () => void }) {
+export function ReleaseNotesPostcard({
+  notes,
+  size,
+  onOpen,
+  onDismiss,
+}: {
+  notes: ReleaseNotes;
+  size: { width: number; height: number };
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
   const { hovered, hoverProps } = useHover();
   const drop = useSharedValue(1);
   const opacity = useSharedValue(0);
@@ -51,8 +60,8 @@ export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes
     let cancelled = false;
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (cancelled) return;
-      if (reduce) return drop.set(0), opacity.set(1);
-      const stiffness = (2 * Math.PI / 0.65) ** 2;
+      if (reduce) return (drop.set(0), opacity.set(1));
+      const stiffness = ((2 * Math.PI) / 0.65) ** 2;
       drop.set(withSpring(0, { stiffness, damping: 2 * Math.sqrt(stiffness), mass: 1 }));
       opacity.set(withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) }));
     });
@@ -76,7 +85,7 @@ export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes
     );
   };
   const dropStyle = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: drop.get() * -280 }] }));
-  const cardStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${CARD.tilt}deg` }, { scale: scale.get() }] }));
+  const cardStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${POSTCARD.tilt}deg` }, { scale: scale.get() }] }));
   const tooltipStyle = useAnimatedStyle(() => ({ opacity: tooltip.get() }));
   if (size.height < 420 || size.width < 560) return null;
 
@@ -87,34 +96,37 @@ export function ReleaseNotesPostcard({ notes, size, onOpen, onDismiss }: { notes
       style={[
         {
           position: "absolute",
-          left: card.x - HOVER_SLOP,
-          top: card.y - HOVER_SLOP,
-          width: card.width + HOVER_SLOP * 2,
-          height: card.height + HOVER_SLOP + TOOLTIP.gap + TOOLTIP.height,
+          left: card.x - POSTCARD_HOVER_SLOP,
+          top: card.y - POSTCARD_HOVER_SLOP,
+          width: card.width + POSTCARD_HOVER_SLOP * 2,
+          height: card.height + POSTCARD_HOVER_SLOP + POSTCARD_TOOLTIP.gap + POSTCARD_TOOLTIP.height,
         },
         dropStyle,
       ]}
     >
       <View {...hoverProps} style={StyleSheet.absoluteFill}>
         <Animated.View
-          style={[{ position: "absolute", left: HOVER_SLOP, top: HOVER_SLOP, width: card.width, height: card.height }, cardStyle]}
+          style={[{ position: "absolute", left: POSTCARD_HOVER_SLOP, top: POSTCARD_HOVER_SLOP, width: card.width, height: card.height }, cardStyle]}
         >
           <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel="What's new in Bay" style={{ flex: 1 }}>
             <Surface
               style={StyleSheet.absoluteFill}
-              cornerRadius={CARD.radius}
+              cornerRadius={POSTCARD.radius}
               fill="#00000000"
               shadowColor="#000000"
               shadowOpacity={0.3}
               shadowRadius={20}
               shadowOffset={[0, -6]}
             />
-            <Artwork notes={notes} radius={CARD.radius} titleSize={40} hidden={{ top: CARD.overhangTop, right: CARD.overhangRight }} />
+            <Artwork notes={notes} radius={POSTCARD.radius} titleSize={40} hidden={{ top: POSTCARD.overhangTop, right: POSTCARD.overhangRight }} />
           </Pressable>
         </Animated.View>
         <Animated.View
           pointerEvents={hovered ? "box-none" : "none"}
-          style={[{ position: "absolute", left: 0, right: 0, top: HOVER_SLOP + card.height + TOOLTIP.gap, alignItems: "center" }, tooltipStyle]}
+          style={[
+            { position: "absolute", left: 0, right: 0, top: POSTCARD_HOVER_SLOP + card.height + POSTCARD_TOOLTIP.gap, alignItems: "center" },
+            tooltipStyle,
+          ]}
         >
           <Tooltip text="Latest Release Notes" onOpen={onOpen} onClose={dismiss} />
         </Animated.View>
@@ -127,7 +139,17 @@ function Tooltip({ text, onOpen, onClose }: { text: string; onOpen: () => void; 
   const theme = useTheme();
   return (
     <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={text}>
-      <View style={{ height: TOOLTIP.height, borderRadius: 6, overflow: "hidden", flexDirection: "row", alignItems: "center", paddingLeft: 8, paddingRight: 3 }}>
+      <View
+        style={{
+          height: POSTCARD_TOOLTIP.height,
+          borderRadius: 6,
+          overflow: "hidden",
+          flexDirection: "row",
+          alignItems: "center",
+          paddingLeft: 8,
+          paddingRight: 3,
+        }}
+      >
         <VisualEffect material="contentBackground" blendingMode="withinWindow" cornerRadius={6} style={StyleSheet.absoluteFill} />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.8)" }]} />
         <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "500", color: "rgba(255,255,255,0.85)", marginRight: 9 }}>
@@ -178,15 +200,12 @@ function Artwork({ notes, radius, titleSize, hidden }: { notes: ReleaseNotes; ra
   );
 }
 
-// Animated's old spring: tension 55, friction 9.
-const PAGE_SPRING = tensionSpring(55, 9);
-
 export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes; size: { width: number; height: number }; onClose: () => void }) {
   const theme = useTheme();
   const t = useSharedValue(0);
   const [closing, setClosing] = useState(false);
   useEffect(() => {
-    t.set(withSpring(1, PAGE_SPRING));
+    t.set(withSpring(1, POSTCARD_PAGE_SPRING));
     return onClose;
   }, []);
   const close = () => {
@@ -212,8 +231,8 @@ export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes
       transform: [
         { translateX: interpolate(p, [0, 1], [from.x, 0]) },
         { translateY: interpolate(p, [0, 1], [from.y, 0]) },
-        { scale: interpolate(p, [0, 1], [CARD.width / width, 1]) },
-        { rotate: `${interpolate(p, [0, 1], [CARD.tilt, -1])}deg` },
+        { scale: interpolate(p, [0, 1], [POSTCARD.width / width, 1]) },
+        { rotate: `${interpolate(p, [0, 1], [POSTCARD.tilt, -1])}deg` },
       ],
     };
   }, [from.x, from.y, width]);
@@ -229,7 +248,7 @@ export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes
         <Animated.View style={[{ width, height }, page]}>
           <Surface
             style={StyleSheet.absoluteFill}
-            fill={PAPER}
+            fill={POSTCARD_PAPER}
             cornerRadius={6}
             borderColor="#00000014"
             borderWidth={0.5}
@@ -244,14 +263,19 @@ export function ReleaseNotesPage({ notes, size, onClose }: { notes: ReleaseNotes
             </View>
             <View style={{ flex: 1, paddingTop: 10, paddingRight: 8 }}>
               <Stamp />
-              <Text style={{ fontSize: 11, fontWeight: "600", letterSpacing: 1.2, color: `${INK}80`, marginRight: 116 }}>{notes.date.toUpperCase()}</Text>
-              <Text style={{ fontSize: 26, fontWeight: "300", letterSpacing: -0.5, color: INK, marginTop: 6, marginRight: 116 }}>{notes.title}</Text>
-              <Text style={{ fontSize: 13, lineHeight: 19, color: `${INK}B3`, marginTop: 8, marginRight: 116 }}>{notes.summary}</Text>
+              <Text style={{ fontSize: 11, fontWeight: "600", letterSpacing: 1.2, color: `${POSTCARD_INK}80`, marginRight: 116 }}>
+                {notes.date.toUpperCase()}
+              </Text>
+              <Text style={{ fontSize: 26, fontWeight: "300", letterSpacing: -0.5, color: POSTCARD_INK, marginTop: 6, marginRight: 116 }}>{notes.title}</Text>
+              <Text style={{ fontSize: 13, lineHeight: 19, color: `${POSTCARD_INK}B3`, marginTop: 8, marginRight: 116 }}>{notes.summary}</Text>
               <ScrollView style={{ flex: 1, marginTop: 14 }} contentContainerStyle={{ gap: 12, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
                 {notes.items.map((item) => (
-                  <View key={item.title} style={{ gap: 2, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth * 2, borderBottomColor: `${INK}14` }}>
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: INK }}>{item.title}</Text>
-                    <Text style={{ fontSize: 12.5, lineHeight: 18, color: `${INK}99` }}>{item.body}</Text>
+                  <View
+                    key={item.title}
+                    style={{ gap: 2, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth * 2, borderBottomColor: `${POSTCARD_INK}14` }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: POSTCARD_INK }}>{item.title}</Text>
+                    <Text style={{ fontSize: 12.5, lineHeight: 18, color: `${POSTCARD_INK}99` }}>{item.body}</Text>
                   </View>
                 ))}
               </ScrollView>
@@ -296,8 +320,20 @@ function PageCloseButton({ onPress }: { onPress: () => void }) {
 function Stamp() {
   return (
     <View style={{ position: "absolute", right: 0, top: 0, width: 110, height: 86 }} pointerEvents="none">
-      <View style={{ position: "absolute", right: 0, top: 0, padding: 4, borderWidth: 1.5, borderStyle: "dashed", borderColor: `${INK}33`, borderRadius: 3, backgroundColor: "#FFFFFF" }}>
-        <Image source={ICON} style={{ width: 54, height: 54 }} />
+      <View
+        style={{
+          position: "absolute",
+          right: 0,
+          top: 0,
+          padding: 4,
+          borderWidth: 1.5,
+          borderStyle: "dashed",
+          borderColor: `${POSTCARD_INK}33`,
+          borderRadius: 3,
+          backgroundColor: "#FFFFFF",
+        }}
+      >
+        <Image source={APP_ICON} style={{ width: 54, height: 54 }} />
       </View>
       <View
         style={{
@@ -308,13 +344,13 @@ function Stamp() {
           height: 58,
           borderRadius: 29,
           borderWidth: 1.2,
-          borderColor: `${INK}59`,
+          borderColor: `${POSTCARD_INK}59`,
           alignItems: "center",
           justifyContent: "center",
           transform: [{ rotate: "-14deg" }],
         }}
       >
-        <Text style={{ fontSize: 6.5, fontWeight: "700", letterSpacing: 0.6, color: `${INK}80` }}>{"WHAT'S NEW"}</Text>
+        <Text style={{ fontSize: 6.5, fontWeight: "700", letterSpacing: 0.6, color: `${POSTCARD_INK}80` }}>{"WHAT'S NEW"}</Text>
       </View>
     </View>
   );

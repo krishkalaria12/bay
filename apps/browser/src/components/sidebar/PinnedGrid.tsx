@@ -3,11 +3,11 @@ import { ContextMenuArea, DockSelection, MouseArea, Surface, Symbol } from "@bay
 import { memo, useEffect } from "react";
 import { StyleSheet } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
-import { bouncySpring } from "../../lib/springs";
 import { closeTab } from "../../lib/actions";
-import { hex, layout, useTheme } from "../../lib/theme";
+import { hex, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
-import { GlassFill, liquidGlass } from "../glass";
+import { GlassFill, useLiquidGlass } from "../glass";
 import { listTopGap, useSidebarFieldShown } from "../layout/windowLayout";
 import { useBrowser } from "../../store/browser";
 import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
@@ -21,20 +21,13 @@ import { registerRow } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { clickMods } from "./TabRow";
-import { useSidebarTokens } from "./tokens";
+import { useSidebarMetrics, useSidebarTokens } from "./tokens";
+import { MIN_PINNED_TILE, PINNED_BADGE_SPRING, PINNED_GLASS_RIM, PINNED_SELECTION_STROKE, PINNED_TILE_GAP } from "./constants";
 
-const GAP = 6;
-const MIN_TILE = 50;
-// Dia: 3pt stroke.
-const SELECTION_STROKE = 3;
-const GLASS_RIM = 1;
-// The back-to-pinned badge pops in and out on Animated's old spring (speed 18, bounciness 8).
-const BADGE_SPRING = bouncySpring(18, 8);
-
-export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: number }) {
+export function PinnedGrid({ tabs, innerWidth }: { tabs: string[]; innerWidth: number }) {
   const controller = useDragController();
-  const columns = Math.max(1, Math.min(tabs.length || 1, Math.floor((innerWidth + GAP) / (MIN_TILE + GAP))));
-  const width = Math.floor(((innerWidth - GAP * (columns - 1)) / columns) * 2) / 2;
+  const columns = Math.max(1, Math.min(tabs.length || 1, Math.floor((innerWidth + PINNED_TILE_GAP) / (MIN_PINNED_TILE + PINNED_TILE_GAP))));
+  const width = Math.floor(((innerWidth - PINNED_TILE_GAP * (columns - 1)) / columns) * 2) / 2;
   const { ref: tailRef } = useDragItem("tail:tiles", { kind: "tail", tabIds: [], section: "tiles" });
   const topGap = listTopGap(useSidebarFieldShown());
   // With no pinned tabs a drag's pin target is an overlay that takes no room (PinDropZone): nothing here.
@@ -44,7 +37,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs:
       ref={(v) => {
         controller?.regions.set("tiles", v);
       }}
-      style={{ marginTop: topGap, flexDirection: "row", flexWrap: "wrap", rowGap: GAP, columnGap: GAP }}
+      style={{ marginTop: topGap, flexDirection: "row", flexWrap: "wrap", rowGap: PINNED_TILE_GAP, columnGap: PINNED_TILE_GAP }}
     >
       {tabs.map((id) => (
         <PinnedTile key={id} tabId={id} width={width} />
@@ -52,7 +45,7 @@ export const PinnedGrid = memo(function PinnedGrid({ tabs, innerWidth }: { tabs:
       <Animated.View ref={tailRef} style={{ position: "absolute", right: 0, bottom: 0, width: 0, height: 0 }} />
     </View>
   );
-});
+}
 
 /**
  * The pin target while a tab is dragged and nothing is pinned yet: laid over the sidebar in room it already has (the
@@ -93,6 +86,7 @@ export function PinDropZone({ top, height, cover }: { top: number; height: numbe
 }
 
 const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; width: number }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const windowId = useWindowId();
@@ -101,24 +95,25 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
   const selected = useBrowser((s) => (s.selection[windowId] ?? []).includes(tabId));
   const playing = useTabLive(tabId, (l) => l.playingAudio);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
-  const { ref, style, handle } = useDragItem(`t:${tabId}`, { kind: "tile", tabIds: [tabId], section: "tiles" }, () => useBrowser.getState().selection[windowId] ?? []);
+  const { ref, style, handle } = useDragItem(
+    `t:${tabId}`,
+    { kind: "tile", tabIds: [tabId], section: "tiles" },
+    () => useBrowser.getState().selection[windowId] ?? [],
+  );
   const away = !!tab && awayFromPin(tab);
-  const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.profileId ?? "");
+  const tileTheme = useTileTheme(tab?.url ?? "", tab?.favicon, tab?.customIcon, tab?.spaceId ?? "");
   const badge = useSharedValue(away ? 1 : 0);
   useEffect(() => {
-    badge.set(withSpring(away ? 1 : 0, BADGE_SPRING));
+    badge.set(withSpring(away ? 1 : 0, PINNED_BADGE_SPRING));
   }, [away]);
   const badgeStyle = useAnimatedStyle(() => ({ opacity: badge.get(), transform: [{ scale: interpolate(badge.get(), [0, 1], [0.4, 1]) }] }));
+  const glass = useLiquidGlass();
   if (!tab) return null;
   const radius = 10;
 
   return (
     <Animated.View ref={ref} style={style} {...handle}>
-      <View
-        ref={(v) => registerRow(windowId, tabId, v)}
-        {...hoverProps}
-        onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
-      >
+      <View ref={(v) => registerRow(windowId, tabId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}>
         <MouseArea onMiddleClick={() => void closeTab(tabId)}>
           <ContextMenuArea
             onContextMenu={() => {
@@ -133,7 +128,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
               }}
             >
               {({ pressed }) =>
-                liquidGlass ? (
+                glass ? (
                   <GlassTile tabId={tabId} width={width} active={active} selected={selected} hovered={hovered} pressed={pressed} tileTheme={tileTheme} />
                 ) : active && tileTheme ? (
                   <DockSelection
@@ -143,9 +138,9 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
                     fill={tileTheme.theme.kind === "template" ? tileTheme.theme.fill : undefined}
                     stroke={tileTheme.theme.kind === "template" ? tileTheme.theme.stroke : undefined}
                     cornerRadius={radius}
-                    strokeWidth={SELECTION_STROKE}
+                    strokeWidth={PINNED_SELECTION_STROKE}
                     dark={theme.dark}
-                    style={{ width, height: layout.pinnedHeight, alignItems: "center", justifyContent: "center" }}
+                    style={{ width, height: metrics.pinnedHeight, alignItems: "center", justifyContent: "center" }}
                   >
                     <View>
                       {tileTheme.theme.kind === "template" ? (
@@ -164,7 +159,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
                     shadowOpacity={theme.dark ? 0.15 : 0.12}
                     shadowRadius={1.5}
                     shadowOffset={[0, 0.5]}
-                    style={{ width, height: layout.pinnedHeight, padding: 1 }}
+                    style={{ width, height: metrics.pinnedHeight, padding: 1 }}
                   >
                     <View
                       style={{
@@ -187,7 +182,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
                   <View
                     style={{
                       width,
-                      height: layout.pinnedHeight,
+                      height: metrics.pinnedHeight,
                       borderRadius: radius,
                       borderWidth: selected ? 1 : 0.5,
                       borderColor: selected ? tokens.dragBorder : theme.pinnedRestingStroke,
@@ -206,10 +201,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
             </Pressable>
           </ContextMenuArea>
         </MouseArea>
-        <Animated.View
-          pointerEvents={away ? "auto" : "none"}
-          style={[{ position: "absolute", top: 3, right: 3 }, badgeStyle]}
-        >
+        <Animated.View pointerEvents={away ? "auto" : "none"} style={[{ position: "absolute", top: 3, right: 3 }, badgeStyle]}>
           <Pressable onPress={() => useBrowser.getState().returnToPinnedUrl(tabId)} tooltip="Back to Pinned URL (⌘↩)">
             <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: tokens.badge, alignItems: "center", justifyContent: "center" }}>
               <Symbol name="arrow.uturn.backward" size={7} weight="bold" color={tokens.badgeGlyph} style={{ width: 10, height: 10 }} />
@@ -244,6 +236,7 @@ function GlassTile({
   pressed: boolean;
   tileTheme: TileTheme | null;
 }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const tokens = useSidebarTokens();
   const tab = useTab(tabId);
@@ -251,7 +244,7 @@ function GlassTile({
   const radius = 10;
   const fill = active ? theme.pinnedSelectedFill : pressed ? theme.tabPressed : hovered || selected ? theme.tabHover : theme.pinnedResting;
   return (
-    <View style={{ width, height: layout.pinnedHeight, alignItems: "center", justifyContent: "center" }}>
+    <View style={{ width, height: metrics.pinnedHeight, alignItems: "center", justifyContent: "center" }}>
       <GlassFill radius={radius} fill={fill} raised={active && !pressed} />
       {active ? (
         <DockSelection
@@ -260,7 +253,7 @@ function GlassTile({
           theme={tileTheme?.theme.kind}
           fill={tileTheme?.theme.kind === "template" ? tileTheme.theme.fill : undefined}
           cornerRadius={radius}
-          strokeWidth={GLASS_RIM}
+          strokeWidth={PINNED_GLASS_RIM}
           dark={theme.dark}
           glass
           style={StyleSheet.absoluteFill}

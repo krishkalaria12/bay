@@ -408,6 +408,9 @@ NNCORE_EXPORT
 - (void)tab:(NNCoreTab*)tab rendererGone:(NSString*)status code:(int)code;
 - (void)tab:(NNCoreTab*)tab didFailLoad:(NSString*)url code:(int)code description:(NSString*)text;
 - (void)tab:(NNCoreTab*)tab didChangeStatusText:(NSString*)text;  // hovered link
+// Arc's Peek: in a tab with peeksLinks, the user clicked a link to another site (or it redirected
+// there). The tab didn't navigate; the host shows `url` over it (nn_peek_links.h).
+- (void)tab:(NNCoreTab*)tab wantsPeekOfURL:(NSString*)url;
 // A page of Chrome's (chrome:, devtools:) navigated its main frame to, or opened, an app URL
 // (bay:…). NNCore cancelled it; the host routes it (as `openWindow` with disposition
 // "current" in the app). Web pages' bay: navigations are dropped silently.
@@ -532,6 +535,9 @@ NNCORE_EXPORT
 @property(readonly, nullable) NSString* themeColor;  // #rrggbb from <meta name=theme-color>
 @property(readonly) BOOL audible;
 @property(nonatomic) BOOL muted;
+// Arc's Peek: a link the user clicks to another site goes to tab:wantsPeekOfURL: instead of
+// navigating this tab (the host's pinned tabs and favourites). Off by default.
+@property(nonatomic) BOOL peeksLinks;
 @property(readonly) int browserId;  // stable per tab for the app's lifetime (never reused)
 - (void)loadURL:(NSString*)url userInitiated:(BOOL)userInitiated;
 - (void)goToOffset:(int)offset;

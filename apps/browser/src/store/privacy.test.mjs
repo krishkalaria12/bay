@@ -9,6 +9,11 @@ const drop = await import("../components/layout/windowDrop.ts");
 const stub = await import("../test-native-stub.mjs");
 
 const S = () => useBrowser.getState();
+// These cases read lists in the order their tabs opened: new tabs go to the bottom.
+(await import("./settings.ts")).DEFAULT_SETTINGS.newTabPosition = "bottom";
+const tabLists = await import("./model.ts");
+// A window's list: its space's tabs, in sidebar order (store/model.ts).
+const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const HOUR = 3_600_000;
 const OLD = () => Date.now() - 13 * HOUR;
 const saved = () => stub.docs.get("session.json") ?? "";
@@ -21,16 +26,15 @@ function privateWindowWith(...urls) {
   return { w, ids };
 }
 
-
 test("incognito window: own profile, closing records nothing, history ignored", () => {
   S().hydrate({});
   const w = S().createWindow({ incognito: true, url: "secret.com" });
   const tab = S().tabs[model.activeTabId(S(), w)];
-  assert.equal(tab.profileId, `incognito:${w}`);
+  assert.equal(tab.spaceId, `incognito:${w}`);
   stub.historyDbs.clear();
-  assert.equal(S().importHistory(tab.profileId, [{ url: "https://secret.com/", title: "S", visits: 1, lastVisit: Date.now() }]), 0);
-  S().removeHistory(tab.profileId, ["https://secret.com/"]);
-  assert.equal(S().history[tab.profileId], undefined);
+  assert.equal(S().importHistory(tab.spaceId, [{ url: "https://secret.com/", title: "S", visits: 1, lastVisit: Date.now() }]), 0);
+  S().removeHistory(tab.spaceId, ["https://secret.com/"]);
+  assert.equal(S().history[tab.spaceId], undefined);
   assert.equal(stub.historyDbs.size, 0, "nothing reaches Chrome's history, not even the default profile's");
   S().newTab(w, { url: "x.com" });
   S().closeTab(model.viewTabIds(S(), w)[1]);
@@ -46,7 +50,10 @@ test("cleaning up a private window keeps its tabs in memory, out of session.json
   S().hydrate({});
   const stop = startPersistence();
   const normal = S().createWindow({ url: "https://public.example/" });
-  const { w, ids: [, stale, dupe] } = privateWindowWith("https://secret.example/a", "https://secret.example/old", "https://secret.example/a");
+  const {
+    w,
+    ids: [, stale, dupe],
+  } = privateWindowWith("https://secret.example/a", "https://secret.example/old", "https://secret.example/a");
   S().activate(model.viewTabIds(S(), w)[0]);
   S().updateTab(stale, { lastActiveAt: OLD() });
   assert.equal(S().cleanUpTabs(w), 2);
@@ -67,7 +74,7 @@ test("cleaning up a private window keeps its tabs in memory, out of session.json
   S().restoreCleaned(undefined, w);
   assert.equal(cleanedTabsFor(S(), w).length, 0);
   assert.equal(model.viewTabIds(S(), w).length, 3);
-  assert.ok(model.viewTabIds(S(), w).every((id) => model.isIncognitoProfile(S().tabs[id].profileId)));
+  assert.ok(model.viewTabIds(S(), w).every((id) => model.isIncognitoSpace(S().tabs[id].spaceId)));
 
   S().updateTab(model.viewTabIds(S(), w)[1], { lastActiveAt: OLD() });
   S().cleanUpTabs(w);
@@ -82,19 +89,57 @@ test("cleaning up a private window keeps its tabs in memory, out of session.json
 test("private entries an older build saved are dropped when the session loads, and never written again", () => {
   stub.docs.clear();
   const privateEntry = {
-    kind: "tab", id: "ct-old", windowId: "w-private", index: 0, group: null, closedAt: 1,
-    tab: { url: "https://secret.example/", title: "Secret", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, profileId: "incognito:w-private" },
+    kind: "tab",
+    id: "ct-old",
+    windowId: "w-private",
+    index: 0,
+    group: null,
+    closedAt: 1,
+    tab: {
+      url: "https://secret.example/",
+      title: "Secret",
+      favicon: null,
+      pinned: false,
+      muted: false,
+      zoom: 1,
+      customTitle: null,
+      customIcon: null,
+      spaceId: "incognito:w-private",
+    },
   };
-  const publicEntry = { ...privateEntry, id: "ct-ok", tab: { ...privateEntry.tab, url: "https://public.example/", profileId: "default" } };
-  stub.docs.set("session.json", JSON.stringify({ version: 2, profiles: {}, profileOrder: [], settings: {}, windows: [], windowOrder: [], focusedWindowId: null, tabs: [], groups: [], splits: [], closedTabs: [], closedWindows: [], cleanedTabs: [privateEntry, publicEntry] }));
+  const publicEntry = { ...privateEntry, id: "ct-ok", tab: { ...privateEntry.tab, url: "https://public.example/", spaceId: "default" } };
+  stub.docs.set(
+    "session.json",
+    JSON.stringify({
+      version: 2,
+      profiles: {},
+      spaceOrder: [],
+      settings: {},
+      windows: [],
+      windowOrder: [],
+      focusedWindowId: null,
+      tabs: [],
+      groups: [],
+      splits: [],
+      closedTabs: [],
+      closedWindows: [],
+      cleanedTabs: [privateEntry, publicEntry],
+    }),
+  );
   const stop = startPersistence();
-  assert.deepEqual(S().cleanedTabs.map((c) => c.id), ["ct-ok"]);
+  assert.deepEqual(
+    S().cleanedTabs.map((c) => c.id),
+    ["ct-ok"],
+  );
   S().createWindow({ url: "https://public.example/" });
   flushPersistence();
   assert.ok(!saved().includes("secret.example"));
   stop();
   const data = loadSession();
-  assert.deepEqual(data.cleanedTabs.map((c) => c.id), ["ct-ok"]);
+  assert.deepEqual(
+    data.cleanedTabs.map((c) => c.id),
+    ["ct-ok"],
+  );
 });
 
 test("session.json filters private tabs out of every closed and parked list", () => {
@@ -102,12 +147,43 @@ test("session.json filters private tabs out of every closed and parked list", ()
   S().hydrate({});
   const stop = startPersistence();
   S().createWindow({ url: "https://public.example/" });
-  const snap = { url: "https://secret.example/", title: "", favicon: null, pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, profileId: "incognito:w-x" };
+  const snap = {
+    url: "https://secret.example/",
+    title: "",
+    favicon: null,
+    pinned: false,
+    muted: false,
+    zoom: 1,
+    customTitle: null,
+    customIcon: null,
+    spaceId: "incognito:w-x",
+  };
   useBrowser.setState({
     closedTabs: [{ kind: "tab", id: "c1", tab: snap, windowId: "w-x", index: 0, group: null, closedAt: 1 }],
-    closedWindows: [{ kind: "window", id: "c2", window: { profileId: "incognito:w-x", sidebarOpen: true, frame: null }, tabs: [{ ...snap, active: true }], groups: [], closedAt: 1 }],
-    closedGroups: [{ kind: "group", id: "c3", group: { id: "g", name: "", icon: null, color: null, pinned: false }, tabs: [snap], windowId: "w-x", index: 0, closedAt: 1 }],
-    deletedGroups: [{ kind: "group", id: "c4", group: { id: "g", name: "", icon: null, color: null, pinned: false }, tabs: [snap], windowId: "w-x", index: 0, closedAt: Date.now() }],
+    closedWindows: [
+      {
+        kind: "window",
+        id: "c2",
+        window: { spaceId: "incognito:w-x", sidebarOpen: true, frame: null },
+        tabs: [{ ...snap, active: true }],
+        groups: [],
+        closedAt: 1,
+      },
+    ],
+    closedGroups: [
+      { kind: "group", id: "c3", group: { id: "g", name: "", icon: null, color: null, pinned: false }, tabs: [snap], windowId: "w-x", index: 0, closedAt: 1 },
+    ],
+    deletedGroups: [
+      {
+        kind: "group",
+        id: "c4",
+        group: { id: "g", name: "", icon: null, color: null, pinned: false },
+        tabs: [snap],
+        windowId: "w-x",
+        index: 0,
+        closedAt: Date.now(),
+      },
+    ],
     parkedPins: { "incognito:w-x": { tabs: [{ ...snap, id: "t", groupId: null }], groups: [] } },
   });
   flushPersistence();
@@ -137,21 +213,33 @@ test("incognito downloads never reach downloads.json and leave with their window
   const stop = startPersistence();
   const normal = S().createWindow();
   const incognito = S().createWindow({ incognito: true });
-  const privateProfile = S().windows[incognito].profileId;
+  const privateProfile = S().windows[incognito].spaceId;
   S().upsertDownload(download("1", ""));
   S().upsertDownload(download("2", privateProfile, "downloading"));
   flushPersistence();
   const savedDownloads = JSON.parse(stub.docs.get("downloads.json")).downloads;
-  assert.deepEqual(savedDownloads.map((d) => d.id), ["1"]);
+  assert.deepEqual(
+    savedDownloads.map((d) => d.id),
+    ["1"],
+  );
 
   S().closeWindow(incognito);
-  assert.deepEqual(S().downloads.map((d) => d.id), ["1"]);
+  assert.deepEqual(
+    S().downloads.map((d) => d.id),
+    ["1"],
+  );
   assert.ok(S().windows[normal]);
   S().upsertDownload(download("2", privateProfile, "cancelled"));
-  assert.deepEqual(S().downloads.map((d) => d.id), ["1"]);
+  assert.deepEqual(
+    S().downloads.map((d) => d.id),
+    ["1"],
+  );
 
   const data = loadSession();
-  assert.deepEqual(data.downloads.map((d) => d.id), ["saved-0"]);
+  assert.deepEqual(
+    data.downloads.map((d) => d.id),
+    ["saved-0"],
+  );
   stop();
 });
 
@@ -162,9 +250,9 @@ test("favicons: incognito icons stay in memory and in their own profile; nothing
   const stop = startPersistence();
   const normal = S().createWindow({ url: "https://site.example/a" });
   const incognito = S().createWindow({ incognito: true, url: "https://secret.example/x" });
-  const [normalTab] = S().windows[normal].tabIds;
-  const [privateTab] = S().windows[incognito].tabIds;
-  const privateProfile = S().windows[incognito].profileId;
+  const [normalTab] = tabsOf(normal);
+  const [privateTab] = tabsOf(incognito);
+  const privateProfile = S().windows[incognito].spaceId;
   const handle = (uri) => ({ downloadFavicon: () => Promise.resolve({ uri, width: 32, height: 32 }) });
   webviews.set(normalTab, handle("data:image/png;base64,SITE"));
   webviews.set(privateTab, handle("data:image/png;base64,AAAA"));
@@ -208,7 +296,13 @@ test("clearing a time range removes visits, not pages", () => {
   const t0 = 1_700_000_000_000;
   const entry = (url, times) => ({ url, title: url, favicon: null, visits: times.length, lastVisit: times.at(-1), visitTimes: times });
   S().hydrate({ history: { default: [entry("https://b.com/", [t0 - 5 * 60_000]), entry("https://a.com/", [t0 - 5 * HOUR, t0 - 10 * 60_000])] } });
-  assert.deepEqual(S().history.default.map((h) => [h.url, h.visits]), [["https://b.com/", 1], ["https://a.com/", 2]]);
+  assert.deepEqual(
+    S().history.default.map((h) => [h.url, h.visits]),
+    [
+      ["https://b.com/", 1],
+      ["https://a.com/", 2],
+    ],
+  );
 
   S().clearHistory("default", t0 - HOUR);
   const [a, ...rest] = S().history.default;
@@ -225,24 +319,24 @@ test("clearing a time range removes visits, not pages", () => {
 // 0.2.11: deleting "Personal" removed it from the sidebar but kept its history, cookies and passwords on disk.
 test("deleting the original profile queues Chrome's default profile for deletion", () => {
   S().hydrate({});
-  const work = S().createProfile({ name: "Work" });
-  S().deleteProfile("default");
+  const work = S().createSpace({ name: "Work" });
+  S().deleteSpace("default");
   assert.deepEqual(S().orphanedProfileData, [""]);
-  S().deleteProfile(work);
+  S().deleteSpace(work);
   assert.deepEqual(S().orphanedProfileData, [""], "the last profile can't be deleted");
 });
 
-test("a profile sharing another's data leaves nothing to delete until the last one goes", () => {
+test("each deleted space queues only its own native data", () => {
   S().hydrate({});
-  const shared = S().createProfile({ name: "Shared", shareWith: "default" });
-  const other = S().createProfile({ name: "Other" });
-  S().deleteProfile("default");
-  assert.deepEqual(S().orphanedProfileData, []);
-  S().deleteProfile(shared);
+  const independent = S().createSpace({ name: "Independent" });
+  const other = S().createSpace({ name: "Other" });
+  S().deleteSpace("default");
   assert.deepEqual(S().orphanedProfileData, [""]);
-  S().createProfile({ name: "New" });
-  S().deleteProfile(other);
-  assert.deepEqual(S().orphanedProfileData, ["", other]);
+  S().deleteSpace(independent);
+  assert.deepEqual(S().orphanedProfileData, ["", independent]);
+  S().createSpace({ name: "New" });
+  S().deleteSpace(other);
+  assert.deepEqual(S().orphanedProfileData, ["", independent, other]);
 });
 
 test("queued profile data is deleted once, and stays queued in session.json until that succeeds", async () => {
@@ -251,9 +345,9 @@ test("queued profile data is deleted once, and stays queued in session.json unti
   stub.profileDataLeft.set("", ["passwords"]);
   S().hydrate({});
   const stop = startPersistence();
-  const work = S().createProfile({ name: "Work" });
-  S().createWindow({ profileId: work, url: "https://work.example/" });
-  S().deleteProfile("default");
+  const work = S().createSpace({ name: "Work" });
+  S().createWindow({ spaceId: work, url: "https://work.example/" });
+  S().deleteSpace("default");
   await settle();
   assert.deepEqual(stub.deletedProfileData, [""]);
   assert.deepEqual(S().orphanedProfileData, [""], "a failed deletion stays queued");
@@ -272,19 +366,24 @@ test("queued profile data is deleted once, and stays queued in session.json unti
   again();
 });
 
-test("deleting a profile keeps the data others share", () => {
+test("deleting a space removes only its own history and bookmarks", () => {
   S().hydrate({});
-  const a = S().createProfile({ name: "A" });
+  const a = S().createSpace({ name: "A" });
   S().importHistory(a, [{ url: "https://a.com/", title: "A", visits: 1, lastVisit: 2 }]);
-  const bookmark = S().addBookmark({ profileId: a, url: "https://b.com/", title: "B" });
-  const b = S().createProfile({ name: "B", shareWith: a });
-  S().deleteProfile(a);
-  assert.equal(S().profiles[a], undefined);
-  assert.equal(model.engineProfile(b), a, "still on A's engine context");
-  assert.ok(S().bookmarks.nodes[bookmark], "shared bookmarks stay");
-  assert.deepEqual(S().history[b].map((h) => h.url), ["https://a.com/"]);
+  const bookmark = S().addBookmark({ spaceId: a, url: "https://b.com/", title: "B" });
+  const b = S().createSpace({ name: "B" });
   S().importHistory(b, [{ url: "https://c.com/", title: "C", visits: 1, lastVisit: 3 }]);
-  assert.equal(S().history[b].length, 2);
-  S().deleteProfile(b);
+  const kept = S().addBookmark({ spaceId: b, url: "https://d.com/", title: "D" });
+  S().deleteSpace(a);
+  assert.equal(S().spaces[a], undefined);
+  assert.equal(model.engineProfile(b), b);
   assert.equal(S().bookmarks.nodes[bookmark], undefined);
+  assert.ok(S().bookmarks.nodes[kept]);
+  assert.equal(S().history[a], undefined);
+  assert.deepEqual(
+    S().history[b].map((h) => h.url),
+    ["https://c.com/"],
+  );
+  S().deleteSpace(b);
+  assert.equal(S().bookmarks.nodes[kept], undefined);
 });

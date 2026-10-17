@@ -67,7 +67,7 @@ struct BayWindows {
                       "BaySystem.downloadsFolder", "BaySystem.hapticTick",
                       "BayApp.systemInfo", "BayApp.launchEnvironment"});
     constants.Add(L"constantsJSON",
-                  std::string(R"({"BayApp":{"apiVersion":9}})"));
+                  std::string(R"({"BayApp":{"apiVersion":10}})"));
   }
   REACT_SYNC_METHOD(InvokeSync, L"invokeSync")
   std::string InvokeSync(std::string const &module, std::string const &method,

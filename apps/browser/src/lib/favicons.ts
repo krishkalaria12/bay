@@ -3,9 +3,10 @@ import { iconTheme, readDocument, removeDocument, type IconTheme } from "@bay/sh
 import { useEffect } from "react";
 import { create } from "zustand";
 import { batchStoreUpdates, useBrowser, type BrowserState } from "../store/browser";
-import { engineProfile, isIncognitoProfile } from "../store/model";
-import { DEFAULT_PROFILE_ID } from "../store/settings";
+import { engineProfile, isIncognitoSpace } from "../store/model";
+import { DEFAULT_SPACE_ID } from "../store/constants";
 import { webviews } from "./webviews";
+import { APPEARANCE_SWAP_MS, FAVICON_FLUSH_MS, FAVICON_LOOKUP_BATCH, FAVICON_LOOKUP_DELAY_MS, MAX_FAVICONS } from "./constants";
 
 // Favicons are Chrome's (FaviconService): Chrome saves a page's icon when the page shows it and drops it with the
 // page's history. This is the app's in-memory cache of them, by page, plus what Chrome doesn't keep:
@@ -23,11 +24,6 @@ type Icons = {
 };
 
 const EMPTY: Icons = { pages: {}, srcs: {}, appearances: {} };
-const APPEARANCE_SWAP_MS = 5000;
-const MAX_ICONS = 3000;
-const LOOKUP_DELAY_MS = 16;
-// Per engine call (nn_favicons_get answers up to 500).
-const LOOKUP_BATCH = 200;
 let appearanceChangedAt = -Infinity;
 
 type Favicons = {
@@ -38,7 +34,7 @@ type Favicons = {
 
 export const useFavicons = create<Favicons>(() => ({ profiles: {}, themes: {} }));
 
-const cacheKey = (profileId: string) => (isIncognitoProfile(profileId) ? profileId : engineProfile(profileId));
+const cacheKey = (spaceId: string) => (isIncognitoSpace(spaceId) ? spaceId : engineProfile(spaceId));
 export const pageKey = (url: string) => url.replace(/#.*$/, "");
 
 // MARK: Writing
@@ -47,14 +43,13 @@ export const pageKey = (url: string) => url.replace(/#.*$/, "");
 // wait for the next frame and land together, in order: one store update and one commit. A change that gives back
 // what it got changes nothing, and no icon re-renders for it.
 type Change = (f: Favicons) => Favicons;
-const FLUSH_MS = 16;
 const changes: Change[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
 function queue(change: Change, now = false) {
   changes.push(change);
   if (now) flush();
-  else flushTimer ??= setTimeout(flush, FLUSH_MS);
+  else flushTimer ??= setTimeout(flush, FAVICON_FLUSH_MS);
 }
 
 function flush() {
@@ -75,8 +70,8 @@ function update(key: string, change: (icons: Icons) => Icons, now = false) {
 }
 
 // Bounded: past MAX_ICONS a map starts over (Chrome still has every icon; pages ask again).
-const capped = <T,>(map: Record<string, T>, key: string, value: T): Record<string, T> =>
-  Object.keys(map).length >= MAX_ICONS ? { [key]: value } : { ...map, [key]: value };
+const capped = <T>(map: Record<string, T>, key: string, value: T): Record<string, T> =>
+  Object.keys(map).length >= MAX_FAVICONS ? { [key]: value } : { ...map, [key]: value };
 
 // The pages whose answer the queued changes may change, for the icons waiting on one (onFavicons); null: any page.
 let watching = false;
@@ -91,11 +86,11 @@ const asked = new Set<string>();
 let lookupTimer: ReturnType<typeof setTimeout> | undefined;
 
 function ask(key: string, page: string) {
-  if (isIncognitoProfile(key) || asked.has(`${key}|${page}`)) return;
+  if (isIncognitoSpace(key) || asked.has(`${key}|${page}`)) return;
   asked.add(`${key}|${page}`);
   if (!queued.has(key)) queued.set(key, new Set());
   queued.get(key)!.add(page);
-  lookupTimer ??= setTimeout(lookUp, LOOKUP_DELAY_MS);
+  lookupTimer ??= setTimeout(lookUp, FAVICON_LOOKUP_DELAY_MS);
 }
 
 function lookUp() {
@@ -104,25 +99,29 @@ function lookUp() {
   queued.clear();
   for (const [key, pages] of batches) {
     const all = [...pages];
-    for (let i = 0; i < all.length; i += LOOKUP_BATCH) lookUpPages(key, all.slice(i, i + LOOKUP_BATCH));
+    for (let i = 0; i < all.length; i += FAVICON_LOOKUP_BATCH) lookUpPages(key, all.slice(i, i + FAVICON_LOOKUP_BATCH));
   }
 }
 
 function lookUpPages(key: string, list: string[]) {
   void faviconsFor(key, list)
     .then((found) =>
-      update(key, (icons) => {
-        let next: Record<string, string | null> | undefined;
-        for (const page of list) {
-          const uri = found.pages.get(page)?.uri ?? null;
-          if (icons.pages[page] === uri) continue;
-          next ??= { ...icons.pages };
-          next[page] = uri;
-          touch(page);
-        }
-        return next ? { ...icons, pages: next } : icons;
-        // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
-      }, true),
+      update(
+        key,
+        (icons) => {
+          let next: Record<string, string | null> | undefined;
+          for (const page of list) {
+            const uri = found.pages.get(page)?.uri ?? null;
+            if (icons.pages[page] === uri) continue;
+            next ??= { ...icons.pages };
+            next[page] = uri;
+            touch(page);
+          }
+          return next ? { ...icons, pages: next } : icons;
+          // One answer is already a batch (up to LOOKUP_BATCH pages): it lands at once, not on another timer.
+        },
+        true,
+      ),
     )
     .catch((error) => {
       // Asked again next time it's shown.
@@ -139,7 +138,7 @@ const inflight = new Map<string, Promise<string | null>>();
 export function noteFavicon(tabId: string, src: string) {
   const tab = useBrowser.getState().tabs[tabId];
   if (!tab?.url || !src) return;
-  const key = cacheKey(tab.profileId);
+  const key = cacheKey(tab.spaceId);
   const page = pageKey(tab.url);
   const known = useFavicons.getState().profiles[key]?.srcs[src];
   if (known) return remember(key, page, src, known);
@@ -170,7 +169,7 @@ function remember(key: string, page: string, src: string, uri: string) {
     let appearances = icons.appearances;
     if (swapped && previous && previous !== uri) appearances = { ...appearances, [page]: dark ? [previous, uri] : [uri, previous] };
     // As `capped`; a map that starts over forgets every other page.
-    const startsOver = Object.keys(icons.pages).length >= MAX_ICONS;
+    const startsOver = Object.keys(icons.pages).length >= MAX_FAVICONS;
     if (startsOver) touchAll();
     else touch(page);
     const pages = startsOver ? { [page]: uri } : { ...icons.pages, [page]: uri };
@@ -182,9 +181,9 @@ const failedFetches = new Set<string>();
 
 // An icon Chrome doesn't have for a page the app names with one (an imported bookmark never visited): fetched
 // without cookies and handed to Chrome, which keeps it as an on-demand icon.
-function fetchMissing(profileId: string, url: string, src: string) {
-  const key = cacheKey(profileId);
-  if (isIncognitoProfile(profileId) || !/^https?:/i.test(src)) return;
+function fetchMissing(spaceId: string, url: string, src: string) {
+  const key = cacheKey(spaceId);
+  if (isIncognitoSpace(spaceId) || !/^https?:/i.test(src)) return;
   const id = `${key}|${src}`;
   if (inflight.has(id) || failedFetches.has(id)) return;
   const pending = fetchFavicon(src, key, pageKey(url))
@@ -198,8 +197,8 @@ function fetchMissing(profileId: string, url: string, src: string) {
   });
 }
 
-export function faviconFailed(profileId: string, uri: string) {
-  update(cacheKey(profileId), (icons) => {
+export function faviconFailed(spaceId: string, uri: string) {
+  update(cacheKey(spaceId), (icons) => {
     if (!Object.values(icons.pages).includes(uri) && !Object.values(icons.srcs).includes(uri)) return icons;
     touchAll();
     return {
@@ -212,7 +211,7 @@ export function faviconFailed(profileId: string, uri: string) {
 
 // MARK: Lookup
 
-export type ResolvedFavicon = { uri: string; profileId: string };
+export type ResolvedFavicon = { uri: string; spaceId: string };
 
 function lookupIn(key: string, url: string, src: string | null | undefined): string | undefined {
   const icons = useFavicons.getState().profiles[key];
@@ -224,16 +223,16 @@ function lookupIn(key: string, url: string, src: string | null | undefined): str
 }
 
 // Where to look: the profile's own icons; a private window's (or no profile's) also the others'.
-function lookupOrder(profileId?: string): string[] {
-  if (profileId && !isIncognitoProfile(profileId)) return [profileId];
-  return [...new Set([...(profileId ? [profileId] : []), DEFAULT_PROFILE_ID, ...useBrowser.getState().profileOrder])];
+function lookupOrder(spaceId?: string): string[] {
+  if (spaceId && !isIncognitoSpace(spaceId)) return [spaceId];
+  return [...new Set([...(spaceId ? [spaceId] : []), DEFAULT_SPACE_ID, ...useBrowser.getState().spaceOrder])];
 }
 
-export function resolveFavicon(url: string, src?: string | null, profileId?: string): ResolvedFavicon | null {
+export function resolveFavicon(url: string, src?: string | null, spaceId?: string): ResolvedFavicon | null {
   if (!url) return null;
-  for (const id of lookupOrder(profileId)) {
+  for (const id of lookupOrder(spaceId)) {
     const uri = lookupIn(cacheKey(id), url, src);
-    if (uri) return { uri, profileId: id };
+    if (uri) return { uri, spaceId: id };
   }
   return null;
 }
@@ -243,31 +242,31 @@ export function resolveFavicon(url: string, src?: string | null, profileId?: str
 export const useAppearanceDark = () => useBrowser((s) => s.ui.appDark);
 
 // Whether every profile the lookup reads has Chrome's answer for the page (an icon, or none).
-function answered(url: string, profileId?: string): boolean {
+function answered(url: string, spaceId?: string): boolean {
   const { profiles } = useFavicons.getState();
   const page = pageKey(url);
-  return lookupOrder(profileId).every((id) => isIncognitoProfile(id) || profiles[cacheKey(id)]?.pages[page] !== undefined);
+  return lookupOrder(spaceId).every((id) => isIncognitoSpace(id) || profiles[cacheKey(id)]?.pages[page] !== undefined);
 }
 
 // Icons with nothing to show yet, by page: one store subscriber for all of them (a long sidebar has hundreds), and only
 // the ones whose page a change touched are looked at again.
-type Watcher = { url: string; src?: string | null; profileId?: string; known?: boolean };
+type Watcher = { url: string; src?: string | null; spaceId?: string; known?: boolean };
 const watchers = new Map<string, Set<Watcher>>();
 
 function check(w: Watcher) {
-  const known = answered(w.url, w.profileId);
+  const known = answered(w.url, w.spaceId);
   if (known === w.known) return;
   w.known = known;
-  if (!known) for (const id of lookupOrder(w.profileId)) ask(cacheKey(id), pageKey(w.url));
+  if (!known) for (const id of lookupOrder(w.spaceId)) ask(cacheKey(id), pageKey(w.url));
   // This runs before React re-renders for an icon that just came: only "none" fetches.
-  else if (w.src && w.profileId && !resolveFavicon(w.url, w.src, w.profileId)) fetchMissing(w.profileId, w.url, w.src);
+  else if (w.src && w.spaceId && !resolveFavicon(w.url, w.src, w.spaceId)) fetchMissing(w.spaceId, w.url, w.src);
 }
 
 function onFavicons(f: Favicons, prev: Favicons) {
   const pages = touched;
   touched = new Set();
   if (f.profiles === prev.profiles) return;
-  for (const page of pages ?? [...watchers.keys()]) for (const w of [...(watchers.get(page) ?? [])]) check(w);
+  for (const page of pages ?? Array.from(watchers.keys())) for (const w of Array.from(watchers.get(page) ?? [])) check(w);
 }
 
 function watch(w: Watcher) {
@@ -286,27 +285,27 @@ function watch(w: Watcher) {
   };
 }
 
-export function useFavicon(url: string, src?: string | null, profileId?: string): ResolvedFavicon | null {
+export function useFavicon(url: string, src?: string | null, spaceId?: string): ResolvedFavicon | null {
   const key = useFavicons(() => {
-    const found = resolveFavicon(url, src, profileId);
-    return found ? `${found.profileId} ${found.uri}` : null;
+    const found = resolveFavicon(url, src, spaceId);
+    return found ? `${found.spaceId} ${found.uri}` : null;
   });
   // No icon yet: ask Chrome, and when it has none, fetch the one the app names. Watched outside React: Chrome
   // answering "none" changes nothing on screen, so it doesn't re-render the icon.
   const missing = !!url && !key;
   // Without a profile the lookup reads every profile: one added since asks too, on the next render.
-  const order = missing ? lookupOrder(profileId).join(" ") : "";
-  useEffect(() => (missing ? watch({ url, src, profileId }) : undefined), [missing, order, profileId, url, src]);
+  const order = missing ? lookupOrder(spaceId).join(" ") : "";
+  useEffect(() => (missing ? watch({ url, src, spaceId }) : undefined), [missing, order, spaceId, url, src]);
   const split = key?.indexOf(" ") ?? -1;
-  return key ? { profileId: key.slice(0, split), uri: key.slice(split + 1) } : null;
+  return key ? { spaceId: key.slice(0, split), uri: key.slice(split + 1) } : null;
 }
 
 // MARK: Themes
 
 const theming = new Set<string>();
 
-export function useFaviconTheme(url: string, src?: string | null, profileId?: string): IconTheme | null | undefined {
-  const uri = useFavicons(() => resolveFavicon(url, src, profileId)?.uri ?? null);
+export function useFaviconTheme(url: string, src?: string | null, spaceId?: string): IconTheme | null | undefined {
+  const uri = useFavicons(() => resolveFavicon(url, src, spaceId)?.uri ?? null);
   const theme = useFavicons((f) => (uri ? f.themes[uri] : undefined));
   const pending = !!uri && theme === undefined;
   useEffect(() => {
@@ -323,22 +322,22 @@ export function useFaviconTheme(url: string, src?: string | null, profileId?: st
 // MARK: Housekeeping
 
 function forget(key: string) {
-  for (const id of [...asked]) if (id.startsWith(`${key}|`)) asked.delete(id);
+  for (const id of Array.from(asked)) if (id.startsWith(`${key}|`)) asked.delete(id);
   touchAll();
   update(key, () => EMPTY, true);
 }
 
 /** Clear Data deleted the profile's icons from Chrome: forget what's cached. */
-export const pruneProfileFavicons = (profileId: string) => forget(cacheKey(profileId));
+export const pruneProfileFavicons = (spaceId: string) => forget(cacheKey(spaceId));
 
 // Before Chrome kept them: an index per profile (favicons-<profile>.json) and a folder of PNGs per engine profile.
-function removeLegacyFiles(s: Pick<BrowserState, "profiles">) {
-  for (const id of Object.keys(s.profiles)) {
+function removeLegacyFiles(s: Pick<BrowserState, "spaces">) {
+  for (const id of Object.keys(s.spaces)) {
     const doc = `favicons-${id}.json`;
     try {
       if (readDocument(doc) === null) continue;
       removeDocument(doc);
-      if (!isIncognitoProfile(id)) void removeLegacyFavicons(engineProfile(id)).catch(() => {});
+      if (!isIncognitoSpace(id)) void removeLegacyFavicons(engineProfile(id)).catch(() => {});
     } catch (error) {
       console.warn(`[favicons] couldn't remove ${doc}`, error);
     }
@@ -362,12 +361,12 @@ export function startFavicons() {
   const stop = useBrowser.subscribe((s, prev) => {
     if (s.ui.appDark !== prev.ui.appDark) appearanceChangedAt = Date.now();
     // Private profiles' icons go with their last window: nothing to look at while none are kept or queued.
-    if (s.windows !== prev.windows && (changes.length || Object.keys(useFavicons.getState().profiles).some(isIncognitoProfile))) {
-      const open = new Set(Object.values(s.windows).map((w) => w.profileId));
-      for (const t of Object.values(s.tabs)) open.add(t.profileId);
+    if (s.windows !== prev.windows && (changes.length || Object.keys(useFavicons.getState().profiles).some(isIncognitoSpace))) {
+      const open = new Set(Object.values(s.windows).map((w) => w.spaceId));
+      for (const t of Object.values(s.tabs)) open.add(t.spaceId);
       // After what's queued, which may still hold the window's icons.
       queue((f) => {
-        const gone = Object.keys(f.profiles).filter((id) => isIncognitoProfile(id) && !open.has(id));
+        const gone = Object.keys(f.profiles).filter((id) => isIncognitoSpace(id) && !open.has(id));
         if (gone.length) touchAll();
         return gone.length ? { ...f, profiles: Object.fromEntries(Object.entries(f.profiles).filter(([id]) => !gone.includes(id))) } : f;
       }, true);

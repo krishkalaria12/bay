@@ -5,6 +5,7 @@ import { useBrowser } from "../../store/browser";
 import { resolveWindowId } from "../../store/model";
 import { pinSites } from "./sites";
 import { endToolTour, startToolTour } from "./tour/state";
+import { ONBOARDING_DOC } from "./constants";
 
 export type OnboardingStep = "intro" | "defaultBrowser" | "personalize" | "import" | "pinnedTabs" | "privacy" | "outro";
 
@@ -35,7 +36,6 @@ export const useOnboarding = create<OnboardingState>((set, get) => ({
   },
 }));
 
-const DOC = "onboarding.json";
 type Saved = {
   version: 1;
   startedAt?: number;
@@ -47,7 +47,7 @@ type Saved = {
 
 function readSaved(): Saved | null {
   try {
-    const json = readDocument(DOC);
+    const json = readDocument(ONBOARDING_DOC);
     return json ? (JSON.parse(json) as Saved) : null;
   } catch {
     return null;
@@ -56,7 +56,7 @@ function readSaved(): Saved | null {
 
 function save(patch: Partial<Saved>) {
   try {
-    writeDocument(DOC, JSON.stringify({ version: 1, completedAt: null, ...readSaved(), ...patch } satisfies Saved));
+    writeDocument(ONBOARDING_DOC, JSON.stringify({ version: 1, completedAt: null, ...readSaved(), ...patch } satisfies Saved));
   } catch (error) {
     console.warn("Couldn't save onboarding state", error);
   }
@@ -80,7 +80,13 @@ export function startOnboarding(windowId?: string | null, step: OnboardingStep =
   const id = resolveWindowId(useBrowser.getState(), windowId);
   if (!id) return;
   endToolTour();
-  useOnboarding.setState((s) => ({ windowId: id, step: step === "intro" && !capabilities.introMusic ? "defaultBrowser" : step, leaving: false, tourAfter: false, session: s.session + 1 }));
+  useOnboarding.setState((s) => ({
+    windowId: id,
+    step: step === "intro" && !capabilities.introMusic ? "defaultBrowser" : step,
+    leaving: false,
+    tourAfter: false,
+    session: s.session + 1,
+  }));
 }
 
 export function finishOnboarding(options: { tour?: boolean } = {}) {
@@ -107,7 +113,8 @@ export function maybeStartOnboarding() {
   startOnboarding();
 }
 
-if (__DEV__) (globalThis as { nnOnboarding?: unknown }).nnOnboarding = {
+if (__DEV__)
+  (globalThis as { nnOnboarding?: unknown }).nnOnboarding = {
     store: useOnboarding,
     start: startOnboarding,
     finish: finishOnboarding,

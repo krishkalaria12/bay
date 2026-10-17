@@ -2,7 +2,7 @@ import { ScrollView } from "@bay/platform";
 import { Pressable, View, modKey } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, showMenu, Symbol, type MenuItem } from "@bay/shell";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
@@ -19,17 +19,17 @@ import { Button, useFormColors } from "../settings/controls";
 import { openImport } from "../settings/windows";
 import { DropTargets } from "./dropTargets";
 import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
-
-const ROW = 36;
+import { BOOKMARK_ROW } from "./constants";
+import { useResetOn } from "../../lib/useResetOn";
 
 type Target = { kind: "folder"; id: string } | { kind: "row"; id: string; index: number; folder: boolean };
 type Drop = { into: string } | { parentId: string; index: number };
 
-export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: string }) {
+export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: string }) {
   const theme = useTheme();
   const colors = useFormColors();
   const windowId = useBrowser((s) => s.tabs[tabId]?.windowId ?? "");
-  const roots = useBrowser((s) => s.bookmarks.roots[profileId]);
+  const roots = useBrowser((s) => s.bookmarks.roots[spaceId]);
   const [folderId, setFolderId] = useState<string | null>(roots?.bar ?? null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -42,7 +42,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
   useEffect(() => {
     if (!folderExists && roots) setFolderId(roots.bar);
   }, [folderExists, roots]);
-  useEffect(() => setSelected([]), [folderId, query]);
+  useResetOn(`${folderId}|${query}`, () => setSelected([]));
 
   const folderTitle = useBrowser((s) => (folderId ? (s.bookmarks.nodes[folderId]?.title ?? "") : ""));
   const listKey = useBrowser((s) => {
@@ -56,7 +56,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
     const folder = folderId ? s.bookmarks.nodes[folderId] : undefined;
     return folder?.kind === "folder" ? folder.children.join(",") : "";
   });
-  const ids = useMemo(() => (listKey ? listKey.split(",") : []), [listKey]);
+  const ids = listKey ? listKey.split(",") : [];
   const searching = !!query.trim();
 
   const select = (id: string, e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean }) => {
@@ -125,8 +125,8 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
       { id: "import", title: "Import Bookmarks…" },
     ]);
     const parentId = folderId ?? undefined;
-    if (choice === "bookmark") editBookmark(null, windowId, { profileId, parentId });
-    if (choice === "folder") editBookmark(null, windowId, { profileId, parentId, folder: true });
+    if (choice === "bookmark") editBookmark(null, windowId, { spaceId, parentId });
+    if (choice === "folder") editBookmark(null, windowId, { spaceId, parentId, folder: true });
     if (choice === "import") openImport();
   };
 
@@ -148,7 +148,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
       <View style={{ flex: 1, flexDirection: "row", paddingHorizontal: 16, paddingBottom: 16, gap: 16 }}>
         <ScrollView style={{ width: 230, flexGrow: 0 }} contentContainerStyle={{ paddingVertical: 4 }}>
           <FolderTree
-            profileId={profileId}
+            spaceId={spaceId}
             selectedId={searching ? null : folderId}
             onSelect={(id) => {
               setQuery("");
@@ -179,9 +179,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
               {searching ? `Results for “${query.trim()}”` : folderTitle}
             </Text>
-            {!searching && folderId && (
-              <Button title="Open All" onPress={() => void openFolder(folderId, windowId)} disabled={!ids.length} />
-            )}
+            {!searching && folderId && <Button title="Open All" onPress={() => void openFolder(folderId, windowId)} disabled={!ids.length} />}
           </View>
           <View style={{ height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />
           {ids.length === 0 ? (
@@ -208,7 +206,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
                     id={id}
                     index={index}
                     windowId={windowId}
-                    profileId={profileId}
+                    spaceId={spaceId}
                     showPath={searching}
                     selected={selected.includes(id)}
                     highlighted={!!drop && "into" in drop && drop.into === id}
@@ -253,9 +251,8 @@ function DropLine({ color }: { color: string }) {
 
 function BookmarkRow({
   id,
-  index,
   windowId,
-  profileId,
+  spaceId,
   showPath,
   selected,
   highlighted,
@@ -270,7 +267,7 @@ function BookmarkRow({
   id: string;
   index: number;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   showPath: boolean;
   selected: boolean;
   highlighted: boolean;
@@ -285,7 +282,14 @@ function BookmarkRow({
   const theme = useTheme();
   const colors = useFormColors();
   const node = useBrowser((s) => s.bookmarks.nodes[id]);
-  const path = useBrowser((s) => (showPath ? bookmarkAncestors(s.bookmarks, id).map((a) => a.title).reverse().join(" › ") : ""));
+  const path = useBrowser((s) =>
+    showPath
+      ? bookmarkAncestors(s.bookmarks, id)
+          .map((a) => a.title)
+          .reverse()
+          .join(" › ")
+      : "",
+  );
   const { hovered, hoverProps } = useHover();
   const dy = useSharedValue(0);
   const dyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dy.get() }] }));
@@ -293,30 +297,29 @@ function BookmarkRow({
   const dragStart = useEffectEvent(onDragStart);
   const dragMove = useEffectEvent(onDragMove);
   const dragEnd = useEffectEvent(onDragEnd);
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4 || Math.abs(g.dx) > 8,
-        onPanResponderGrant: () => {
-          setDragging(true);
-          dragStart();
-        },
-        onPanResponderMove: (_, g) => {
-          dy.set(g.dy);
-          dragMove(g.moveX, g.moveY);
-        },
-        onPanResponderRelease: (_, g) => {
-          dy.set(0);
-          setDragging(false);
-          dragEnd(g.moveX, g.moveY);
-        },
-        onPanResponderTerminate: () => {
-          dy.set(0);
-          setDragging(false);
-          dragEnd(-1, -1);
-        },
-      }),
-    [dy, dragStart, dragMove, dragEnd],
+  // One responder for the row's life: a new one mid-gesture would drop the gesture.
+  const [responder] = useState(() =>
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4 || Math.abs(g.dx) > 8,
+      onPanResponderGrant: () => {
+        setDragging(true);
+        dragStart();
+      },
+      onPanResponderMove: (_, g) => {
+        dy.set(g.dy);
+        dragMove(g.moveX, g.moveY);
+      },
+      onPanResponderRelease: (_, g) => {
+        dy.set(0);
+        setDragging(false);
+        dragEnd(g.moveX, g.moveY);
+      },
+      onPanResponderTerminate: () => {
+        dy.set(0);
+        setDragging(false);
+        dragEnd(-1, -1);
+      },
+    }),
   );
   if (!node) return null;
 
@@ -348,7 +351,7 @@ function BookmarkRow({
     if (choice === "incognito") open("incognito");
     if (choice === "split") open("split");
     if (choice === "copy" && node.kind === "url") copyText(cleanUrl(node.url));
-    if (choice === "edit") editBookmark(node.id, windowId, { profileId });
+    if (choice === "edit") editBookmark(node.id, windowId, { spaceId });
     if (choice === "openAll") void openFolder(node.id, windowId);
     if (choice === "openAllWindow") void openFolder(node.id, windowId, "window");
     if (choice === "show" && node.parentId) onOpenFolder(node.parentId);
@@ -368,17 +371,23 @@ function BookmarkRow({
             <View
               onDoubleClick={() => (node.kind === "folder" ? onOpenFolder() : void open("current"))}
               style={{
-                height: ROW,
+                height: BOOKMARK_ROW,
                 borderRadius: 7,
                 flexDirection: "row",
                 alignItems: "center",
                 paddingHorizontal: 10,
                 gap: 10,
-                backgroundColor: selected ? `${colors.accent}${theme.dark ? "59" : "33"}` : highlighted ? `${colors.accent}40` : hovered ? theme.rowHover : undefined,
+                backgroundColor: selected
+                  ? `${colors.accent}${theme.dark ? "59" : "33"}`
+                  : highlighted
+                    ? `${colors.accent}40`
+                    : hovered
+                      ? theme.rowHover
+                      : undefined,
               }}
             >
               {node.kind === "url" ? (
-                <Favicon url={node.url} favicon={node.favicon} profileId={profileId} />
+                <Favicon url={node.url} favicon={node.favicon} spaceId={spaceId} />
               ) : (
                 <Symbol name="folder" size={14} color={theme.icon} style={{ width: 16, height: 16 }} />
               )}

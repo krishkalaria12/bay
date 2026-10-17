@@ -1,0 +1,26 @@
+---
+// A sticky note, slightly crooked, as on a real desk.
+interface Props {
+  color?: "yellow" | "pink" | "green" | "blue";
+  tilt?: number;
+  class?: string;
+}
+const { color = "yellow", tilt = -2, class: className } = Astro.props;
+const bg = {
+  yellow: "bg-note-yellow",
+  pink: "bg-note-pink",
+  green: "bg-note-green",
+  blue: "bg-note-blue",
+}[color];
+---
+
+<div
+  class:list={[
+    bg,
+    "font-hand text-ink shadow-[0_14px_24px_-12px_rgba(40,30,0,0.35),0_2px_4px_rgba(0,0,0,0.06)]",
+    className,
+  ]}
+  style={`transform: rotate(${tilt}deg)`}
+>
+  <slot />
+</div>

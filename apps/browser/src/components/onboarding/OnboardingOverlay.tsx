@@ -1,6 +1,6 @@
 import { View } from "@bay/platform";
 import { Surface, VisualEffect, WindowDragRegion } from "@bay/shell";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { tensionSpring } from "../../lib/springs";
@@ -12,8 +12,7 @@ import { DefaultBrowserStep, ImportStep, OutroStep, PersonalizeStep, PinnedTabsS
 import { PrivacyStep } from "./privacyStep";
 import { ToolTour } from "./tour/ToolTour";
 import { useOnboardingColors } from "./ui";
-
-const CARD = { width: 880, height: 560, margin: 40 };
+import { ONBOARDING_CARD } from "./constants";
 
 export function OnboardingOverlay() {
   const windowId = useWindowId();
@@ -60,8 +59,8 @@ function Overlay({ session }: { session: number }) {
     transform: [{ translateY: interpolate(card.get(), [0, 1, 2], [24, 0, 0]) }, { scale: interpolate(card.get(), [0, 1, 2], [0.97, 1, 1.03]) }],
   }));
 
-  const width = Math.min(CARD.width, Math.max(0, size.width - CARD.margin * 2));
-  const height = Math.min(CARD.height, Math.max(0, size.height - CARD.margin * 2));
+  const width = Math.min(ONBOARDING_CARD.width, Math.max(0, size.width - ONBOARDING_CARD.margin * 2));
+  const height = Math.min(ONBOARDING_CARD.height, Math.max(0, size.height - ONBOARDING_CARD.margin * 2));
 
   return (
     <Animated.View

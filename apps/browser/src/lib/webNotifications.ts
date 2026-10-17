@@ -11,6 +11,7 @@ import {
 import { useBrowser } from "../store/browser";
 import { focus, switchToTab } from "./actions";
 import { webviews } from "./webviews";
+import { NOTIFICATION_ICON_PIXELS, NOTIFICATION_ICON_TIMEOUT_MS } from "./constants";
 
 const shown = new Map<string, string>();
 
@@ -48,15 +49,12 @@ export function showWebNotification(tabId: string, n: WebNotification) {
   });
 }
 
-const ICON_PIXELS = 128;
-const ICON_TIMEOUT_MS = 3000;
-
 // Load icons through the page tab's request context.
 async function iconFor(tabId: string, url: string): Promise<string | undefined> {
   const view = webviews.get(tabId);
   if (!view) return undefined;
-  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), ICON_TIMEOUT_MS));
-  const image = await Promise.race([view.downloadImage(url, ICON_PIXELS).catch(() => null), timeout]);
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), NOTIFICATION_ICON_TIMEOUT_MS));
+  const image = await Promise.race([view.downloadImage(url, NOTIFICATION_ICON_PIXELS).catch(() => null), timeout]);
   return image?.uri ?? undefined;
 }
 

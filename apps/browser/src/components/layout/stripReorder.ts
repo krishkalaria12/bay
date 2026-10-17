@@ -1,14 +1,13 @@
 import { cancelAnimation, withSpring, type SharedValue } from "@bay/platform/motion";
 import { dragGeometry, type DragGeometry } from "./stripGroups";
+import { STRIP_SLIDE } from "./constants";
 
 // Dragging along the top strip, as Dia does it: once the dragged item's leading edge passes a neighbour's centre,
 // that neighbour slides into the place it leaves, while the drag goes on; let go, the item settles into its place.
 // Measured from the owner's recording of Dia (2026-10-02, 60 fps): a neighbour covers 91 % of its way in 43 ms,
-// 97 % in 60 and all of it by 76: a critically damped spring of ~0.07 s (ω ≈ 90 rad/s). The dragged tab, opaque,
-// keeps its place under the pointer.
+// 97 % in 60 and all of it by 76: a critically damped spring of ~0.07 s (ω ≈ 90 rad/s), STRIP_SLIDE. The dragged
+// tab, opaque, keeps its place under the pointer.
 // The drop moves the slots in the store and zeroes their offsets as React commits them there.
-// It comes to rest within a quarter point, so a settle that has nowhere to go ends at once.
-export const SLIDE = { stiffness: 8100, damping: 180, mass: 1, restDisplacementThreshold: 0.25, restSpeedThreshold: 2 } as const;
 
 // Every item of every strip that can trade places: its row (`geometry`, the object its strip rendered it with), its
 // index there, and the offset it slides by.
@@ -27,7 +26,10 @@ export function reorderOffsets({ slots: row, lefts }: DragGeometry, from: number
   const gap = row.length > 1 ? lefts[1]! - lefts[0]! - row[0]!.width - (row[0]!.marginRight ?? 0) - (row[1]!.marginLeft ?? 0) : 0;
   const order = row.map((_, i) => i).filter((i) => i !== from);
   order.splice(to, 0, from);
-  const moved = dragGeometry(order.map((i) => row[i]!), gap);
+  const moved = dragGeometry(
+    order.map((i) => row[i]!),
+    gap,
+  );
   const out: number[] = [];
   order.forEach((i, k) => (out[i] = moved.lefts[k]! - lefts[i]!));
   return out;
@@ -42,7 +44,7 @@ export function makeRoom(geometry: DragGeometry, from: number, to: number) {
     const target = offsets[i] ?? 0;
     if (slot.to === target) continue;
     slot.to = target;
-    slot.shift.set(withSpring(target, SLIDE));
+    slot.shift.set(withSpring(target, STRIP_SLIDE));
   }
 }
 

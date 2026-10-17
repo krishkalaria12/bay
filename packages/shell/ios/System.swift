@@ -66,6 +66,14 @@ public class SystemModule: Module {
       return true
     }.runOnQueue(.main)
 
+    AsyncFunction("copyFile") { (path: String) -> Bool in
+      // Check before clearing so a removed download leaves the clipboard alone.
+      guard path.hasPrefix("/"), FileManager.default.fileExists(atPath: path) else { return false }
+      let url = URL(fileURLWithPath: path) as NSURL
+      NSPasteboard.general.clearContents()
+      return NSPasteboard.general.writeObjects([url])
+    }.runOnQueue(.main)
+
     AsyncFunction("moveToTrash") { (path: String) -> Bool in
       guard FileManager.default.fileExists(atPath: path) else { return false }
       do {

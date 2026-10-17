@@ -7,7 +7,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 name="BayDockTile"
-bundle_id="${PRODUCT_BUNDLE_IDENTIFIER:-com.bay.browser}.DockTilePlugIn"
+bundle_id="${PRODUCT_BUNDLE_IDENTIFIER:-in.krishkalaria.bay}.DockTilePlugIn"
 plugin="$TARGET_BUILD_DIR/${PLUGINS_FOLDER_PATH:-$CONTENTS_FOLDER_PATH/PlugIns}/$name.plugin"
 work="${DERIVED_FILE_DIR:-$here/build}/docktile"
 identity="${EXPANDED_CODE_SIGN_IDENTITY:--}"

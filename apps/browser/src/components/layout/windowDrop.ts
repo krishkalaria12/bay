@@ -1,6 +1,6 @@
 import { useBrowser, type BrowserState } from "../../store/browser";
 import type { Frame } from "../../store/types";
-
+import { viewTabIds } from "../../store/model";
 
 // `live`: the window's frame now, when the store's isn't (it keeps the restored frame in full screen).
 export function screenPoint(s: BrowserState, windowId: string, x: number, y: number, live?: Frame | null): [number, number] | null {
@@ -42,9 +42,9 @@ export function dropTabsOutside(
     return overWindow;
   }
   const point = screenPoint(s, source, x, y, live);
-  if (!point || from.tabIds.every((id) => tabIds.includes(id))) return null;
+  if (!point || viewTabIds(s, from.id).every((id) => tabIds.includes(id))) return null;
   const [, , width, height] = from.frame ?? [0, 0, 1200, 800];
   const frame: Frame = [Math.round(point[0] - 90), Math.round(point[1] - height + 70), width, height];
   onNewWindow?.(frame);
-  return s.createWindow({ profileId: s.tabs[tabIds[0]!]?.profileId, tabIds, frame });
+  return s.createWindow({ spaceId: s.tabs[tabIds[0]!]?.spaceId, tabIds, frame });
 }

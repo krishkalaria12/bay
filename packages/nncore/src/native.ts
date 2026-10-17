@@ -3,7 +3,17 @@ import type { ContentBlockerState, ContentBlockerStats } from "./contentBlocker"
 import type { DisplayMediaSource } from "./WebView";
 import type { ExternalAppAllowance } from "./externalApps";
 import type { FaviconImage } from "./favicons";
-import type { BrowsingDataType, Download, EngineComponent, EngineInfo, EngineTask, ChromeWindowState, PermissionRequest, PermissionResult, SystemState } from "./module";
+import type {
+  BrowsingDataType,
+  Download,
+  EngineComponent,
+  EngineInfo,
+  EngineTask,
+  ChromeWindowState,
+  PermissionRequest,
+  PermissionResult,
+  SystemState,
+} from "./module";
 import type { PasswordExportStatus, SavedPassword } from "./passwords";
 import type { TabStripCommand, TabStripTransaction } from "./tabStrip";
 import type { AddressInput, CardInput, SavedAddress, SavedCard } from "./autofill";
@@ -80,13 +90,7 @@ export const Cef = requireNativeModule<{
   unlockPasswords(profile: string): Promise<Result<{ unlocked: boolean }>>;
   getPassword(profile: string, origin: string, username: string): Promise<Result<{ password: string | null }>>;
   savePassword(profile: string, origin: string, username: string, password: string): Promise<Result<{ ok: true }>>;
-  updatePassword(
-    profile: string,
-    origin: string,
-    username: string,
-    newUsername: string | null,
-    newPassword: string | null,
-  ): Promise<Result<{ ok: true }>>;
+  updatePassword(profile: string, origin: string, username: string, newUsername: string | null, newPassword: string | null): Promise<Result<{ ok: true }>>;
   deletePassword(profile: string, origin: string, username: string): Promise<Result<{ ok: true }>>;
   getNeverSavePasswordOrigins(profile: string): Promise<Result<{ origins: string[] }>>;
   allowSavingPasswords(profile: string, origin: string): Promise<Result<{ ok: true }>>;

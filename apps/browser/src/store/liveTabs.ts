@@ -1,10 +1,10 @@
 import type { StripGroup, StripState, StripTab } from "@bay/nncore";
 import type { BrowserState } from "./browser";
-import { engineProfile, pinnedFirst } from "./model";
+import { engineProfile, listIds, listOfTab, tabListKey, windowTabIds } from "./model";
 import { forgetOpeners, switchKeepsOpeners } from "./openers";
 import { groupOf, placing, withGroup } from "./organize";
 import { splitOf } from "./splits";
-import { activated, apply, removeTabs } from "./tabs";
+import { activated, apply, successors } from "./tabs";
 
 // One writer per fact. The store owns the workspace; Chrome owns its tab strips:
 // which tabs it has, their order, the active one, pins. Between them:
@@ -44,8 +44,7 @@ export function chromeChanged(
   const firstFromChrome = (t: Keyed) => !stayed(t) && !seen.has(t.key) && madeByChrome(s, t.key);
   // An extension moving a tab to another window: it arrives in a strip of another app window.
   const home = homeWindow(s, after, siblings, stayed);
-  const movedIn = (t: Keyed) =>
-    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.profileId) === after.profile;
+  const movedIn = (t: Keyed) => !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.spaceId) === after.profile;
   const taken = new Set(now.filter((t) => firstFromChrome(t) || movedIn(t)).map((t) => t.key));
 
   for (const t of now) if (movedIn(t)) s = intoWindow(s, t.key, home!);
@@ -93,8 +92,7 @@ export function chromeChanged(
     // successor rule (store/openers.ts) picks the one the app shows. A tab activated explicitly (an extension's
     // tabs.update, even in the same task as the close) is a switch. Engines that don't say which it was: any
     // activation that comes with the active tab leaving is taken as the pick.
-    const left =
-      after.activePickedOnClose ?? (!!previous && !after.tabs.some((t) => t.browser === previous.browser));
+    const left = after.activePickedOnClose ?? (!!previous && !after.tabs.some((t) => t.browser === previous.browser));
     if (known(s, active) && taken.has(active.key)) s = show(s, active.key);
     else if (known(s, active) && stayed(active) && active.browser !== previous?.browser && !left) s = show(s, active.key);
     else if (known(s, active)) {
@@ -159,7 +157,7 @@ function groupsChanged(
 
 // Moves a tab into a group, or out of its own, where it is.
 function regroupInPlace(s: BrowserState, key: string, groupId: string | null): BrowserState {
-  const w = s.windows[s.tabs[key]!.windowId];
+  const w = listOfTab(s, key);
   if (!w) return s;
   const beforeId = w.tabIds[w.tabIds.indexOf(key) + 1] ?? null;
   return placing(s, [key], { pinned: false, beforeId, groupId });
@@ -220,7 +218,7 @@ function homeWindow(s: BrowserState, strip: StripState, siblings: StripState[], 
 
 const shownIn = (s: BrowserState, key: string) => {
   const tab = s.tabs[key]!;
-  return s.windows[tab.windowId]?.activeTabIds[tab.profileId] === key;
+  return s.windows[tab.windowId]?.activeTabIds[tab.spaceId] === key;
 };
 
 // The tabs that kept their relative order: the heaviest run of increasing old indexes; the others moved. Which tab of
@@ -258,14 +256,17 @@ function placeLike(
   kept: ReadonlySet<string>,
   group?: string | null,
 ): BrowserState {
-  const w = s.windows[s.tabs[key]!.windowId];
+  const w = listOfTab(s, key);
   if (!w) return s;
   const panes = splitOf(s, key)?.tabIds ?? [key];
   const moving = w.tabIds.filter((id) => panes.includes(id));
   const i = strip.findIndex((t) => t.key === key);
-  const other = (t: Keyed) => !!s.tabs[t.key] && !panes.includes(t.key) && s.tabs[t.key]!.windowId === w.id;
+  const other = (t: Keyed) => !!s.tabs[t.key] && !panes.includes(t.key) && w.tabIds.includes(t.key);
   const next = strip.slice(i + 1).find((t) => other(t) && settled.has(t.key))?.key;
-  const prior = strip.slice(0, i).reverse().find((t) => other(t) && kept.has(t.key))?.key;
+  const prior = strip
+    .slice(0, i)
+    .reverse()
+    .find((t) => other(t) && kept.has(t.key))?.key;
   const rowStart = (id: string) => w.tabIds.find((t) => splitOf(s, id)?.tabIds.includes(t)) ?? id;
   const rowAfter = (id: string) => {
     const row = splitOf(s, id)?.tabIds ?? [id];
@@ -282,23 +283,15 @@ function placeLike(
   return placing(s, moving, { pinned, beforeId, groupId });
 }
 
-// An extension moved the tab to another window: it changes window as it is, page, live state and all (its view
-// takes the same browser over there: lib/chromeTabs.ts announceMoves).
+// An extension moved the tab to another window: its page is there now, as it is, live state and all (its view takes
+// the same browser over there: lib/chromeTabs.ts announceMoves). It stays in its space's list.
 function intoWindow(s: BrowserState, key: string, to: string): BrowserState {
   const tab = s.tabs[key]!;
-  const live = s.live[key];
   if (!s.windows[to] || tab.windowId === to) return s;
-  let next = removeTabs(s, [key], false);
-  const w = next.windows[to];
-  if (!w) return s;
-  const tabs = { ...next.tabs, [key]: { ...tab, windowId: to } };
-  next = {
-    ...next,
-    tabs,
-    live: live ? { ...next.live, [key]: live } : next.live,
-    windows: { ...next.windows, [to]: { ...w, tabIds: pinnedFirst([...w.tabIds, key], tabs) } },
-  };
-  return next;
+  const windows = { ...s.windows };
+  for (const w of Object.values(s.windows))
+    if (w.id !== to && w.activeTabIds[tab.spaceId] === key) windows[w.id] = { ...w, activeTabIds: successors(s, w, new Set([key])) };
+  return { ...s, windows, tabs: { ...s.tabs, [key]: { ...tab, windowId: to } } };
 }
 
 // Shows `key` as the store's activate does, for the profile its window shows (a profile in the background keeps
@@ -306,29 +299,31 @@ function intoWindow(s: BrowserState, key: string, to: string): BrowserState {
 function show(s: BrowserState, key: string): BrowserState {
   const tab = s.tabs[key]!;
   const w = s.windows[tab.windowId];
-  if (!w || w.profileId !== tab.profileId) return s;
-  const shown = w.activeTabIds[tab.profileId];
+  if (!w || w.spaceId !== tab.spaceId) return s;
+  const shown = w.activeTabIds[tab.spaceId];
   if (shown === key || (shown && splitOf(s, shown)?.tabIds.includes(key))) return s;
-  let next = apply(s, activated(s, key));
-  if (shown && !switchKeepsOpeners(s, shown, key)) next = forgetOpeners(next, w.id);
+  let next = apply(s, activated(s, key, w.id));
+  if (shown && !switchKeepsOpeners(s, shown, key)) next = forgetOpeners(next, tabListKey(s, tab));
   return next;
 }
 
 export type StripPlan = { keys: string[]; pinned: number; active: string | null };
 
-/** What the store wants Chrome's strip to be: the store's tabs in it in the window's order, pinned ones first, and
+/** What the store wants Chrome's strip to be: the store's tabs in it in their list's order, pinned ones first, and
  *  the tab the window shows for the profile in it. Null when none of its tabs is the store's. */
 export function stripPlan(s: BrowserState, strip: StripState): StripPlan | null {
   const mine = strip.tabs.filter((t): t is Keyed => known(s, t));
   if (!mine.length) return null;
-  const windowId = s.tabs[(mine.find((t) => t.active) ?? mine[0]!).key]!.windowId;
-  const w = s.windows[windowId];
+  const lead = s.tabs[(mine.find((t) => t.active) ?? mine[0]!).key]!;
+  const w = s.windows[lead.windowId];
   if (!w) return null;
   const inStrip = new Set(mine.map((t) => t.key));
-  const keys = w.tabIds.filter((id) => inStrip.has(id));
+  // A strip's tabs are one profile's: its list's order (any others after, in their lists').
+  const order = listIds(s, tabListKey(s, lead));
+  const keys = [...order.filter((id) => inStrip.has(id)), ...windowTabIds(s, w.id).filter((id) => inStrip.has(id) && !order.includes(id))];
   const pinned = keys.filter((id) => s.tabs[id]!.pinned);
   // Profiles sharing their engine data share a strip: the one the window shows wins.
-  const profiles = [w.profileId, ...new Set(keys.map((id) => s.tabs[id]!.profileId))];
+  const profiles = [w.spaceId, ...new Set(keys.map((id) => s.tabs[id]!.spaceId))];
   const active = profiles.map((p) => w.activeTabIds[p]).find((id) => !!id && inStrip.has(id)) ?? null;
   return { keys: [...pinned, ...keys.filter((id) => !s.tabs[id]!.pinned)], pinned: pinned.length, active };
 }

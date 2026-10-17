@@ -24,24 +24,31 @@ export default forwardRef<NativeHandle, NativeProps>(function NativeWebView(prop
   const pending = useRef(Promise.resolve());
   const enqueue = (method: string, args: unknown[]) => {
     const call = pending.current.then(() => invoke(method, args));
-    pending.current = call.then(() => undefined, error => console.error(`[BayCEF.${method}]`, error));
+    pending.current = call.then(
+      () => undefined,
+      (error) => console.error(`[BayCEF.${method}]`, error),
+    );
     return call;
   };
-  const layout = () => view.current?.measureInWindow((x, y, width, height) => {
-    if (!alive.current || !width || !height) return;
-    const current = latest.current;
-    const extra = Object.fromEntries(Object.entries(current).filter(([key, value]) => key !== "style" && typeof value !== "function"));
-    if (!mounted.current) {
-      mounted.current = true;
-      lastProps.current = JSON.stringify(extra);
-      void enqueue("mount", [tag.current, current.url ?? "about:blank", current.profile ?? "", x, y, width, height, extra]);
-    } else void enqueue("bounds", [tag.current, x, y, width, height]);
-  });
-  useImperativeHandle(ref, () => new Proxy({} as NativeHandle, {
-    get: (_target, method) => typeof method === "string"
-      ? (...args: unknown[]) => enqueue("viewCall", [tag.current, method, args])
-      : undefined,
-  }), []);
+  const layout = () =>
+    view.current?.measureInWindow((x, y, width, height) => {
+      if (!alive.current || !width || !height) return;
+      const current = latest.current;
+      const extra = Object.fromEntries(Object.entries(current).filter(([key, value]) => key !== "style" && typeof value !== "function"));
+      if (!mounted.current) {
+        mounted.current = true;
+        lastProps.current = JSON.stringify(extra);
+        void enqueue("mount", [tag.current, current.url ?? "about:blank", current.profile ?? "", x, y, width, height, extra]);
+      } else void enqueue("bounds", [tag.current, x, y, width, height]);
+    });
+  useImperativeHandle(
+    ref,
+    () =>
+      new Proxy({} as NativeHandle, {
+        get: (_target, method) => (typeof method === "string" ? (...args: unknown[]) => enqueue("viewCall", [tag.current, method, args]) : undefined),
+      }),
+    [],
+  );
   useEffect(() => {
     alive.current = true;
     if (!NativeBayWindows) return;

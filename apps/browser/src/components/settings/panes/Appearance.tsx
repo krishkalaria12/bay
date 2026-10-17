@@ -7,6 +7,7 @@ import { useBrowser } from "../../../store/browser";
 import type { Settings } from "../../../store/settings";
 import { useHover } from "../../primitives";
 import { SectionHeader, useFormColors } from "../controls";
+import { APP_ICON_CHOICE_SIZE } from "../constants";
 
 const MODES: { value: Settings["appearance"]; title: string; description: string }[] = [
   { value: "auto", title: "Automatic", description: "Follow the system appearance setting" },
@@ -25,9 +26,17 @@ export function AppearancePane() {
       <SectionHeader title="Appearance Theme" description="Also in View › Appearance. Incognito windows are always dark." />
       <View style={{ flexDirection: "row", gap: 14 }}>
         {MODES.map((m) => (
-          <ModeChoice key={m.value} mode={m.value} title={m.title} description={m.description} selected={appearance === m.value} onPress={() => choose(m.value)} />
+          <ModeChoice
+            key={m.value}
+            mode={m.value}
+            title={m.title}
+            description={m.description}
+            selected={appearance === m.value}
+            onPress={() => choose(m.value)}
+          />
         ))}
       </View>
+      <DensityPicker />
       {capabilities.vibrancy && <MaterialPicker />}
       <SidebarPositionPicker />
       <AddressBarPicker />
@@ -36,12 +45,48 @@ export function AppearancePane() {
   );
 }
 
+function DensityPicker() {
+  const density = useBrowser((s) => s.settings.density);
+  const theme = useTheme();
+  const colors = useFormColors();
+  return (
+    <>
+      <SectionHeader title="Density" description="Resize sidebar rows, pinned tiles and the address field together." />
+      <View style={{ flexDirection: "row", gap: 14 }}>
+        {(["comfortable", "compact"] as const).map((value) => (
+          <Pressable
+            key={value}
+            onPress={() => useBrowser.getState().updateSettings({ density: value })}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: density === value }}
+            style={{
+              flex: 1,
+              padding: 12,
+              borderRadius: 9,
+              borderWidth: density === value ? 2 : 1,
+              borderColor: density === value ? colors.accent : colors.groupBorder,
+            }}
+          >
+            <Text style={{ fontSize: 13, color: theme.textPrimary }}>{value === "comfortable" ? "Comfortable" : "Compact"}</Text>
+            <Text style={{ marginTop: 4, fontSize: 12, color: theme.textSecondary }}>
+              {value === "comfortable" ? "36-point rows, 16-point icons" : "30-point rows, 14-point icons"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </>
+  );
+}
+
 function MaterialPicker() {
   const material = useBrowser((s) => s.settings.windowMaterial);
   const choose = (value: Settings["windowMaterial"]) => useBrowser.getState().updateSettings({ windowMaterial: value });
   return (
     <>
-      <SectionHeader title="Window" description="Solid fills the sidebar with your space’s colour. Glass lets the desktop show through it." />
+      <SectionHeader
+        title="Window"
+        description="Solid fills the window with the page’s colour, or your space’s when it has none. Glass lets the desktop show through it."
+      />
       <View style={{ flexDirection: "row", gap: 14 }}>
         <MaterialChoice value="solid" title="Solid" selected={material === "solid"} onPress={() => choose("solid")} />
         <MaterialChoice value="glass" title="Glass" selected={material === "glass"} onPress={() => choose("glass")} />
@@ -74,7 +119,16 @@ function MaterialChoice({ value, title, selected, onPress }: { value: Settings["
           <>
             <View style={{ position: "absolute", left: -18, top: -20, width: 90, height: 90, borderRadius: 45, backgroundColor: "#E58BB0", opacity: 0.45 }} />
             <View style={{ position: "absolute", left: 30, bottom: -36, width: 90, height: 90, borderRadius: 45, backgroundColor: "#6FA8F2", opacity: 0.4 }} />
-            <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: theme.dark ? "rgba(30,30,33,0.45)" : "rgba(235,235,237,0.45)" }} />
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                backgroundColor: theme.dark ? "rgba(30,30,33,0.45)" : "rgba(235,235,237,0.45)",
+              }}
+            />
           </>
         )}
         <View style={{ flex: 1, padding: 6, flexDirection: "row", gap: 5 }}>
@@ -116,7 +170,17 @@ function SidebarPositionPicker() {
   );
 }
 
-function SidebarPositionChoice({ value, title, selected, onPress }: { value: Settings["sidebarPosition"]; title: string; selected: boolean; onPress: () => void }) {
+function SidebarPositionChoice({
+  value,
+  title,
+  selected,
+  onPress,
+}: {
+  value: Settings["sidebarPosition"];
+  title: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   const theme = useTheme();
   const colors = useFormColors();
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
@@ -210,7 +274,9 @@ function AddressBarChoice({ value, title, selected, onPress }: { value: Settings
         </View>
         <View style={{ flex: 1, borderRadius: 4, backgroundColor: page, overflow: "hidden" }}>
           {!sidebar && (
-            <View style={{ height: 13, flexDirection: "row", alignItems: "center", paddingHorizontal: 5, gap: 5, borderBottomWidth: 1, borderBottomColor: field }}>
+            <View
+              style={{ height: 13, flexDirection: "row", alignItems: "center", paddingHorizontal: 5, gap: 5, borderBottomWidth: 1, borderBottomColor: field }}
+            >
               <View style={{ width: 14, height: 4, borderRadius: 2, backgroundColor: bar }} />
               <View style={{ flex: 1, height: 7, borderRadius: 2.5, backgroundColor: field, borderWidth: 1, borderColor: colors.accent }} />
             </View>
@@ -229,7 +295,7 @@ function AppIconPicker() {
   const [icons, setIcons] = useState<AppIcon[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
   useEffect(() => {
-    void Promise.all([appIcons(ICON_SIZE), currentAppIcon()]).then(([list, id]) => {
+    void Promise.all([appIcons(APP_ICON_CHOICE_SIZE), currentAppIcon()]).then(([list, id]) => {
       setIcons(list);
       setCurrent(id);
     });
@@ -251,8 +317,6 @@ function AppIconPicker() {
   );
 }
 
-const ICON_SIZE = 56;
-
 function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: boolean; onPress: () => void }) {
   const theme = useTheme();
   const colors = useFormColors();
@@ -271,7 +335,7 @@ function IconChoice({ icon, selected, onPress }: { icon: AppIcon; selected: bool
           backgroundColor: hovered && !selected ? colors.selected : "transparent",
         }}
       >
-        {icon.preview ? <Image source={{ uri: icon.preview }} style={{ width: ICON_SIZE, height: ICON_SIZE }} /> : null}
+        {icon.preview ? <Image source={{ uri: icon.preview }} style={{ width: APP_ICON_CHOICE_SIZE, height: APP_ICON_CHOICE_SIZE }} /> : null}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         {selected && <Symbol name="checkmark.circle.fill" size={11} color={colors.accent} style={{ width: 13, height: 13 }} />}
@@ -298,16 +362,6 @@ function ModeChoice({
 }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const window = (dark: boolean) => (
-    <View style={{ flex: 1, backgroundColor: dark ? "#2B2226" : "#EDE6EA", padding: 6, flexDirection: "row", gap: 5 }}>
-      <View style={{ width: "24%", gap: 3, paddingTop: 8 }}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)" }} />
-        ))}
-      </View>
-      <View style={{ flex: 1, borderRadius: 4, backgroundColor: dark ? "#1A1618" : "#FFFFFF" }} />
-    </View>
-  );
   return (
     <Pressable onPress={onPress} style={{ flex: 1, alignItems: "center", gap: 7 }} tooltip={description}>
       <View
@@ -323,11 +377,11 @@ function ModeChoice({
       >
         {mode === "auto" ? (
           <>
-            {window(false)}
-            {window(true)}
+            <MiniWindow dark={false} />
+            <MiniWindow dark />
           </>
         ) : (
-          window(mode === "dark")
+          <MiniWindow dark={mode === "dark"} />
         )}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
@@ -335,5 +389,19 @@ function ModeChoice({
         <Text style={{ fontSize: 12, color: selected ? theme.textPrimary : theme.textSecondary }}>{title}</Text>
       </View>
     </Pressable>
+  );
+}
+
+// A window in miniature, light or dark: a sidebar's rows beside a page.
+function MiniWindow({ dark }: { dark: boolean }) {
+  return (
+    <View style={{ flex: 1, backgroundColor: dark ? "#2B2226" : "#EDE6EA", padding: 6, flexDirection: "row", gap: 5 }}>
+      <View style={{ width: "24%", gap: 3, paddingTop: 8 }}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={{ height: 5, borderRadius: 2.5, backgroundColor: dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)" }} />
+        ))}
+      </View>
+      <View style={{ flex: 1, borderRadius: 4, backgroundColor: dark ? "#1A1618" : "#FFFFFF" }} />
+    </View>
   );
 }

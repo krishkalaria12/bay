@@ -1,0 +1,8 @@
+# Cloudflare reads this from dist/ and doesn't serve it.
+
+# Download: the latest release's DMG (each release carries a copy named Bay.dmg).
+/download https://github.com/krishkalaria12/bay/releases/latest/download/Bay.dmg 302
+/download/ https://github.com/krishkalaria12/bay/releases/latest/download/Bay.dmg 302
+
+# The update feed in the app's Info.plist (SUFeedURL): the latest release's.
+/appcast.xml https://github.com/krishkalaria12/bay/releases/latest/download/appcast.xml 302

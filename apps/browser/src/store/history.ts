@@ -1,8 +1,9 @@
 import { deleteHistoryUrls, importHistoryRows } from "@bay/nncore";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { engineProfile, isIncognitoProfile } from "./model";
+import { engineProfile, isIncognitoSpace } from "./model";
 import type { HistoryEntry } from "./types";
+import { MAX_HISTORY } from "./constants";
 
 // History is Chrome's (HistoryService): Chrome records every visit itself and keeps it. `history` is the app's
 // in-memory view of it, one entry per URL, newest first, filled and kept current by lib/history.ts; nothing here
@@ -14,14 +15,11 @@ export type HistorySlice = {
   // Visits at or before this may be missing from a profile's view (it holds Chrome's newest MAX_HISTORY URLs).
   historyFloor: Record<string, number>;
 
-  removeHistory(profileId: string, urls: string[]): void;
+  removeHistory(spaceId: string, urls: string[]): void;
   // The view only: Clear Browsing Data deletes from Chrome (clearBrowsingData's "history").
-  clearHistory(profileId: string, since?: number): void;
-  importHistory(profileId: string, entries: Omit<HistoryEntry, "favicon">[]): number;
+  clearHistory(spaceId: string, since?: number): void;
+  importHistory(spaceId: string, entries: Omit<HistoryEntry, "favicon">[]): number;
 };
-
-export const MAX_HISTORY = 5000;
-export const MAX_VISIT_TIMES = 50;
 
 export function withoutVisitsSince(entry: HistoryEntry, since: number): HistoryEntry | null {
   if (entry.lastVisit < since) return entry;
@@ -38,18 +36,18 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
   historyReady: {},
   historyFloor: {},
 
-  removeHistory(profileId, urls) {
-    if (!urls.length || isIncognitoProfile(profileId)) return;
-    set((s) => ({ history: { ...s.history, [profileId]: (s.history[profileId] ?? []).filter((h) => !urls.includes(h.url)) } }));
-    void deleteHistoryUrls(engineProfile(profileId), urls).catch(failed("delete"));
+  removeHistory(spaceId, urls) {
+    if (!urls.length || isIncognitoSpace(spaceId)) return;
+    set((s) => ({ history: { ...s.history, [spaceId]: (s.history[spaceId] ?? []).filter((h) => !urls.includes(h.url)) } }));
+    void deleteHistoryUrls(engineProfile(spaceId), urls).catch(failed("delete"));
   },
 
-  importHistory(profileId, entries) {
-    if (isIncognitoProfile(profileId)) return 0;
+  importHistory(spaceId, entries) {
+    if (isIncognitoSpace(spaceId)) return 0;
     const rows = entries.filter((e) => /^(https?|file):/.test(e.url));
     let added = 0;
     set((s) => {
-      const byUrl = new Map((s.history[profileId] ?? []).map((h) => [h.url, h]));
+      const byUrl = new Map((s.history[spaceId] ?? []).map((h) => [h.url, h]));
       for (const e of rows) {
         const existing = byUrl.get(e.url);
         if (existing) continue;
@@ -57,17 +55,17 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
         byUrl.set(e.url, { url: e.url, title: e.title, favicon: null, visits: Math.max(1, e.visits), lastVisit: e.lastVisit, visitTimes: [e.lastVisit] });
       }
       const merged = [...byUrl.values()].sort((a, b) => b.lastVisit - a.lastVisit).slice(0, MAX_HISTORY);
-      return { history: { ...s.history, [profileId]: merged } };
+      return { history: { ...s.history, [spaceId]: merged } };
     });
-    void importHistoryRows(engineProfile(profileId), rows).catch(failed("import"));
+    void importHistoryRows(engineProfile(spaceId), rows).catch(failed("import"));
     return added;
   },
 
-  clearHistory(profileId, since) {
+  clearHistory(spaceId, since) {
     set((s) => {
-      if (since === undefined) return { history: { ...s.history, [profileId]: [] } };
-      const kept = (s.history[profileId] ?? []).map((h) => withoutVisitsSince(h, since)).filter((h): h is HistoryEntry => !!h);
-      return { history: { ...s.history, [profileId]: kept.sort((a, b) => b.lastVisit - a.lastVisit) } };
+      if (since === undefined) return { history: { ...s.history, [spaceId]: [] } };
+      const kept = (s.history[spaceId] ?? []).map((h) => withoutVisitsSince(h, since)).filter((h): h is HistoryEntry => !!h);
+      return { history: { ...s.history, [spaceId]: kept.sort((a, b) => b.lastVisit - a.lastVisit) } };
     });
   },
 });

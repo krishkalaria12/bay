@@ -7,8 +7,8 @@ public class AppModule: Module {
     Name("BayApp")
     // The JS/native contract: NATIVE_API_VERSION in apps/browser/src/nativeApi.tsx, which a JS bundle checks before it
     // loads the app. Bump both together whenever JS starts needing native code that older builds lack.
-    Constant("apiVersion") { () -> Int in 9 }
-    Events("onNotificationResponse", "onScriptCommand")
+    Constant("apiVersion") { () -> Int in 10 }
+    Events("onNotificationResponse", "onScriptCommand", "onUpdatePending")
 
     OnCreate {
       DispatchQueue.main.async {
@@ -29,6 +29,12 @@ public class AppModule: Module {
       }
     }
 
+    OnStartObserving("onUpdatePending") {
+      DispatchQueue.main.async { [weak self] in
+        AppUpdater.shared.onPendingChange = { pending in self?.sendEvent("onUpdatePending", ["pending": pending as Any]) }
+      }
+    }
+
     OnStartObserving("onScriptCommand") {
       DispatchQueue.main.async { [weak self] in
         ShellScripting.send = { body in self?.sendEvent("onScriptCommand", body) }
@@ -39,8 +45,17 @@ public class AppModule: Module {
 
     AsyncFunction("updaterState") { () -> [String: Any] in AppUpdater.shared.state }.runOnQueue(.main)
     AsyncFunction("checkForUpdates") { AppUpdater.shared.checkForUpdates(nil) }.runOnQueue(.main)
+    AsyncFunction("installPendingUpdate") { AppUpdater.shared.installPendingUpdate() }.runOnQueue(.main)
     AsyncFunction("setAutomaticUpdateChecks") { (on: Bool) in AppUpdater.shared.setAutomaticChecks(on) }.runOnQueue(.main)
     AsyncFunction("setAutomaticUpdateDownloads") { (on: Bool) in AppUpdater.shared.setAutomaticDownloads(on) }.runOnQueue(.main)
+
+    // MARK: Clear
+
+    // The sidebar's Clear: the rows (window content points, from its top-left) break into their pixels and blow away.
+    AsyncFunction("disintegrate") { (windowId: String, rects: [[Double]]) in
+      guard let window = WindowManager.shared.windows[windowId] else { return }
+      Disintegrate.run(window: window, rects: rects.compactMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil })
+    }.runOnQueue(.main)
 
     // MARK: Handoff and sharing
 
@@ -279,7 +294,8 @@ public class AppModule: Module {
           guard let event = NSEvent.keyEvent(
             with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
             windowNumber: target.windowNumber, context: nil, characters: keys[i], charactersIgnoringModifiers: keys[i],
-            isARepeat: false, keyCode: 0) else { continue }
+            // Return and Esc as their keys, so a field submits or cancels on them.
+            isARepeat: false, keyCode: keys[i] == "\r" ? 36 : keys[i] == "\u{1b}" ? 53 : 0) else { continue }
           if toKeyWindow { NSApp.sendEvent(event) }
           else if type == .keyDown { target.firstResponder?.keyDown(with: event) } else { target.firstResponder?.keyUp(with: event) }
         }

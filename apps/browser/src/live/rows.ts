@@ -1,3 +1,4 @@
+import { LIVE_PAGE_SIZE } from "./constants";
 import type { LiveFolder, LiveItem, PullRequestSection } from "./types";
 
 export type FolderRow =
@@ -12,9 +13,7 @@ export const SECTION_TITLES: Record<PullRequestSection, string | null> = {
   team: "Team Review Requests",
 };
 
-export const PAGE_SIZE = 8;
-
-export function folderRows(folder: Pick<LiveFolder, "id" | "kind">, items: LiveItem[], showAll: Record<string, boolean>, page = PAGE_SIZE): FolderRow[] {
+export function folderRows(folder: Pick<LiveFolder, "id" | "kind">, items: LiveItem[], showAll: Record<string, boolean>, page = LIVE_PAGE_SIZE): FolderRow[] {
   const sections: [string, LiveItem[]][] =
     folder.kind === "pullRequests"
       ? (["authored", "review", "team"] as const).map((s) => [s, items.filter((it) => (it.section ?? "authored") === s)])

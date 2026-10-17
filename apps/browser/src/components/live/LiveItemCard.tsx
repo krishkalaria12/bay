@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Image, Text } from "react-native";
 import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
@@ -69,7 +69,17 @@ export function Avatar({ uri, name, size = 20 }: { uri: string | null; name: str
     .map((p) => p[0]!.toUpperCase())
     .join("");
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: "hidden", backgroundColor: theme.dark ? "#4A4A4F" : "#D5D5DA", alignItems: "center", justifyContent: "center" }}>
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        overflow: "hidden",
+        backgroundColor: theme.dark ? "#4A4A4F" : "#D5D5DA",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
       <Text style={{ fontSize: size * 0.42, fontWeight: "600", color: theme.textPrimary }}>{initials || "?"}</Text>
       {uri && !failed ? <Image source={{ uri }} onError={() => setFailed(true)} style={{ position: "absolute", width: size, height: size }} /> : null}
     </View>
@@ -129,7 +139,15 @@ function PullRequestPreview({ item, folderId, windowId }: { item: LiveItem; fold
         <StatusLine
           symbol={pr.review === "approved" ? "checkmark.seal.fill" : pr.review === "changesRequested" ? "arrow.uturn.backward.circle.fill" : "eye"}
           color={pr.review === "approved" ? colors.success : pr.review === "changesRequested" ? colors.failure : theme.textSecondary}
-          text={pr.review === "approved" ? "Approved" : pr.review === "changesRequested" ? "Changes Requested" : item.section === "authored" ? "Review required" : "Needs your review"}
+          text={
+            pr.review === "approved"
+              ? "Approved"
+              : pr.review === "changesRequested"
+                ? "Changes Requested"
+                : item.section === "authored"
+                  ? "Review required"
+                  : "Needs your review"
+          }
         />
       ) : null}
 
@@ -187,7 +205,17 @@ function FailingCheckRow({ check, colors, onPress }: { check: PullRequestCheck; 
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
-        <View style={{ height: 24, borderRadius: 6, flexDirection: "row", alignItems: "center", paddingHorizontal: 5, gap: 6, backgroundColor: hovered ? theme.rowHover : undefined }}>
+        <View
+          style={{
+            height: 24,
+            borderRadius: 6,
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 5,
+            gap: 6,
+            backgroundColor: hovered ? theme.rowHover : undefined,
+          }}
+        >
           <Symbol name="xmark" size={9} weight="bold" color={colors.failure} style={{ width: 12, height: 12 }} />
           <FadeLabel text={check.name} fontSize={12} color={theme.textPrimary} style={{ flex: 1, height: 16 }} />
           {hovered ? <Symbol name="arrow.up.forward" size={9} color={theme.textSecondary} style={{ width: 12, height: 12 }} /> : null}
@@ -217,7 +245,19 @@ function Chip({ text, color }: { text: string; color: string }) {
   );
 }
 
-export function SmallButton({ title, onPress, primary, icon, height = 24 }: { title: string; onPress(): void; primary?: boolean; icon?: string; height?: number }) {
+export function SmallButton({
+  title,
+  onPress,
+  primary,
+  icon,
+  height = 24,
+}: {
+  title: string;
+  onPress(): void;
+  primary?: boolean;
+  icon?: string;
+  height?: number;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const fg = primary ? (theme.dark ? "#000000" : "#FFFFFF") : theme.textPrimary;

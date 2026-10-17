@@ -117,8 +117,7 @@ function markApplied(state: ScopeState, device: string, seq: number) {
   else delete state.extra[device];
 }
 
-const isApplied = (state: ScopeState, [device, seq]: Origin) =>
-  covered(state.vv, [device, seq]) || (state.extra[device]?.includes(seq) ?? false);
+const isApplied = (state: ScopeState, [device, seq]: Origin) => covered(state.vv, [device, seq]) || (state.extra[device]?.includes(seq) ?? false);
 
 function see(state: ScopeState, device: string, at: number) {
   if (!(device in state.seen) || at > state.seen[device]!) state.seen[device] = at;
@@ -318,7 +317,12 @@ export async function applyAdapter(state: ScopeState, adapter: Adapter, keys: Se
 export async function compact(state: ScopeState, transport: Transport, scope: string, device: string, now: number, options: ScopeOptions = {}, force = false) {
   const o = { ...DEFAULTS, ...options };
   const count = Object.keys(state.files).length;
-  const newestSnapshot = Math.max(state.snapshotAt, ...Object.values(state.files).filter((f) => f.k === "snapshot").map((f) => f.at));
+  const newestSnapshot = Math.max(
+    state.snapshotAt,
+    ...Object.values(state.files)
+      .filter((f) => f.k === "snapshot")
+      .map((f) => f.at),
+  );
   if (!force && (count <= o.compactAfterFiles || now - newestSnapshot < o.compactInterval)) return false;
   await flush(state, transport, scope, device, now, options);
   const records: Record<string, SyncRecord> = {};

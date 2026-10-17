@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { CalendarEvent } from "./meetings";
 import { live, updateCalendarSettings, useLive } from "./store";
+import { CALENDAR_HORIZON_MS } from "./constants";
 
 type CalendarData = {
   access: CalendarAuthorization | "fixture";
@@ -31,8 +32,6 @@ export const useCalendar = create<CalendarData>()(() => ({
   error: null,
   lastFetch: null,
 }));
-
-const HORIZON_MS = 36 * 3_600_000;
 
 type Fixture = {
   calendars: SystemCalendar[];
@@ -85,7 +84,7 @@ export function refreshCalendar(): Promise<void> {
       const ids = visible(calendars);
       const start = new Date();
       start.setHours(0, 0, 0, 0);
-      const events = ids.length ? await systemCalendarEvents(start.getTime(), Date.now() + HORIZON_MS, ids) : [];
+      const events = ids.length ? await systemCalendarEvents(start.getTime(), Date.now() + CALENDAR_HORIZON_MS, ids) : [];
       useCalendar.setState({ access, calendars, events: events.sort((a, b) => a.start - b.start), error: null, lastFetch: Date.now() });
     } catch (error) {
       useCalendar.setState({ error: String((error as Error)?.message ?? error) });

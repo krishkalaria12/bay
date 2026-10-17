@@ -1,0 +1,81 @@
+---
+import "@fontsource/caveat/latin-600.css";
+import "../styles/global.css";
+import handFont from "@fontsource/caveat/files/caveat-latin-600-normal.woff2?url";
+import { graph, site } from "../site";
+import { ClientRouter } from "astro:transitions";
+import PostHog from "../components/PostHog.astro";
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  imageAlt?: string;
+  type?: "website" | "article";
+  noindex?: boolean;
+  /** This page's own JSON-LD nodes; the site's Organization, WebSite and app are added to the same graph. */
+  schema?: Record<string, unknown>[];
+}
+
+const {
+  title = site.title,
+  description = site.description,
+  image = "/og.png",
+  imageAlt = "Bay: your tabs, finally in order",
+  type = "website",
+  noindex = false,
+  schema = [],
+} = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, Astro.site ?? site.url).href;
+const ogImage = new URL(image, Astro.site ?? site.url).href;
+const jsonLd = { "@context": "https://schema.org", "@graph": [...graph, ...schema] };
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex, nofollow" /> : <link rel="canonical" href={canonical} />}
+    {!noindex && <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />}
+
+    <!-- The handwriting is above the fold on every page: fetch it with the HTML, not after the CSS. -->
+    <link rel="preload" href={handFont} as="font" type="font/woff2" crossorigin />
+
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="Bay, for language models" />
+    <meta name="theme-color" content="#edeef1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="application-name" content={site.name} />
+    <meta name="apple-mobile-web-app-title" content={site.name} />
+
+    <meta property="og:type" content={type} />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image:alt" content={imageAlt} />
+
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <!-- Links between pages swap in place with a view transition (fade), prefetched on hover. -->
+    <ClientRouter />
+    <PostHog />
+  </head>
+  <body class="min-h-dvh overflow-x-clip">
+    <slot />
+  </body>
+</html>

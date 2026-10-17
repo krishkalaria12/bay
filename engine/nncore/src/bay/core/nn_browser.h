@@ -388,6 +388,11 @@ class TabBridge : public content::WebContentsObserver,
   // even when the request then fails with ERR_BLOCKED_BY_CLIENT too.
   void NoteRuleMatched(bool block, const GURL& url);
 
+  // Arc's Peek (nn_peek_links.h): the host's mark that a link the user clicks to another site
+  // goes to it as tab:wantsPeekOfURL: instead of navigating this tab.
+  bool peeks_links() const { return peeks_links_; }
+  void set_peeks_links(bool on) { peeks_links_ = on; }
+
   // The host closed it (-[NNCoreTab close]): no tabWillClose.
   void set_closed_by_host() { closed_by_host_ = true; }
   // Reports tabWillClose once, for a close the host didn't ask for.
@@ -449,6 +454,7 @@ class TabBridge : public content::WebContentsObserver,
   raw_ptr<zoom::ZoomController> zoom_ = nullptr;
   raw_ptr<blocked_content::PopupBlockerTabHelper> popups_ = nullptr;
   bool host_focusing_ = false;
+  bool peeks_links_ = false;
   bool discarded_ = false;
   bool frozen_ = false;
   NSDictionary* __strong media_access_;

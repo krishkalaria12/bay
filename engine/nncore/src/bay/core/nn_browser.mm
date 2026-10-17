@@ -224,6 +224,14 @@ namespace {
 // the others go inactive first, and one already flagged active is flagged again so Chrome
 // hears of it.
 void ActivateExclusively(Browser* browser) {
+  // Ordering out a closing NSWindow can make another closing window key. Its
+  // Browser may already be unregistered while the host still tears it down;
+  // Chrome's active-browser collection must not hear that late activation.
+  if (!browser || browser->capabilities()->IsAttemptingToCloseBrowser() ||
+      GlobalBrowserCollection::GetInstance()->FindBrowserWithID(
+          browser->GetSessionID()) != browser) {
+    return;
+  }
   for (WindowHost* host : WindowHost::All()) {
     for (Browser* other : host->browsers()) {
       if (other != browser) {

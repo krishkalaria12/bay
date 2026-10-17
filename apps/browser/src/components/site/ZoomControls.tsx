@@ -6,7 +6,7 @@ import { webviews } from "../../lib/webviews";
 import { useTab } from "../../store/hooks";
 import { Popover, PromptButton, ToolbarButton } from "../layout/controls";
 import { setPopover, usePages } from "../layout/pageState";
-import { type ToolbarPalette } from "../layout/toolbarColors";
+import type { ToolbarPalette } from "../layout/toolbarColors";
 import { useHover } from "../primitives";
 
 // Chrome's zoom icon: in the address field whenever the page isn't at 100%, opening − / + / Reset.
@@ -49,7 +49,9 @@ export function ZoomStepper({ tabId, zoom, percent = true }: { tabId: string; zo
       <StepButton icon="minus" tooltip="Zoom Out (⌘-)" onPress={() => void webviews.get(tabId)?.zoomStep(-1)} />
       {percent ? (
         <Pressable onPress={() => void webviews.get(tabId)?.zoomStep(0)} tooltip="Reset to 100%">
-          <Text style={{ width: 44, textAlign: "center", fontSize: 12, fontVariant: ["tabular-nums"], color: zoom === 1 ? theme.textSecondary : theme.textPrimary }}>
+          <Text
+            style={{ width: 44, textAlign: "center", fontSize: 12, fontVariant: ["tabular-nums"], color: zoom === 1 ? theme.textSecondary : theme.textPrimary }}
+          >
             {Math.round(zoom * 100)}%
           </Text>
         </Pressable>
@@ -66,7 +68,16 @@ function StepButton({ icon, tooltip, onPress }: { icon: string; tooltip: string;
     <View {...hoverProps} tooltip={tooltip}>
       <Pressable onPress={onPress}>
         {({ pressed }) => (
-          <View style={{ width: 24, height: 22, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }}>
+          <View
+            style={{
+              width: 24,
+              height: 22,
+              borderRadius: 6,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+            }}
+          >
             <Symbol name={icon} size={10} weight="semibold" color={theme.icon} style={{ width: 14, height: 14 }} />
           </View>
         )}

@@ -53,13 +53,7 @@ export function IconButton({
               backgroundColor: disabled ? undefined : pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : undefined,
             }}
           >
-            <Symbol
-              name={icon}
-              size={size}
-              weight={weight}
-              color={color ?? (disabled ? theme.iconDisabled : theme.icon)}
-              style={{ width: box, height: box }}
-            />
+            <Symbol name={icon} size={size} weight={weight} color={color ?? (disabled ? theme.iconDisabled : theme.icon)} style={{ width: box, height: box }} />
           </View>
         )}
       </Pressable>
@@ -72,20 +66,20 @@ export const Favicon = memo(function Favicon({
   url,
   favicon,
   size = 16,
-  profileId,
+  spaceId,
   direct,
 }: {
   url: string;
   favicon?: string | null;
   size?: number;
-  profileId?: string;
+  spaceId?: string;
   direct?: boolean;
 }) {
   const theme = useTheme();
   useAppearanceDark();
-  const cached = useFavicon(url, direct ? null : favicon, profileId);
-  const resolved = direct && favicon ? { uri: favicon, profileId: "" } : cached;
-  const shape = useFaviconTheme(theme.dark || direct ? "" : url, favicon, profileId);
+  const cached = useFavicon(url, direct ? null : favicon, spaceId);
+  const resolved = direct && favicon ? { uri: favicon, spaceId: "" } : cached;
+  const shape = useFaviconTheme(theme.dark || direct ? "" : url, favicon, spaceId);
   const white = shape?.kind === "template" && !!shape.stroke;
   const [broken, setBroken] = useState<string | null>(null);
   if (!url && !resolved) return <NewTabIcon size={size} />;
@@ -96,7 +90,7 @@ export const Favicon = memo(function Favicon({
       source={{ uri: resolved.uri }}
       onError={() => {
         setBroken(resolved.uri);
-        if (resolved.profileId) faviconFailed(resolved.profileId, resolved.uri);
+        if (resolved.spaceId) faviconFailed(resolved.spaceId, resolved.uri);
       }}
       style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3, tintColor: white ? theme.textPrimary : undefined }}
     />
@@ -104,7 +98,7 @@ export const Favicon = memo(function Favicon({
 });
 
 // Before Chrome has the page's icon: the one the app ships for the site (lib/siteIcons), else the host's initial.
-export const FaviconFallback = memo(function FaviconFallback({ url, size = 16 }: { url: string; size?: number }) {
+export function FaviconFallback({ url, size = 16 }: { url: string; size?: number }) {
   const theme = useTheme();
   const bundled = bundledSiteIcon(url, theme.dark);
   if (bundled !== undefined) return <Image source={bundled} style={{ width: size, height: size, borderRadius: size > 18 ? 4 : 3 }} />;
@@ -128,7 +122,7 @@ export const FaviconFallback = memo(function FaviconFallback({ url, size = 16 }:
       </View>
     </View>
   );
-});
+}
 
 function hostInitial(url: string): string {
   const host = /^(?:https?|ftp):\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec(url)?.[1];

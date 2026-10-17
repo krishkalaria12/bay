@@ -1,4 +1,3 @@
-
 export type Passage = [number, [number, string][]];
 
 const INSTALL = String.raw`

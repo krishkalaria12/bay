@@ -4,7 +4,7 @@ import type { BrowserCommand } from "@bay/shell";
 import { runCommand } from "../../lib/commands";
 import { isBookmarked } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTab, bookmarkProfileId } from "../../store/model";
+import { activeTab, bookmarkSpaceId } from "../../store/model";
 import { isDeveloperUrl, siteKey } from "../developer/sites";
 import type { Tab } from "../../store/types";
 
@@ -17,7 +17,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "profiles";
+  needs?: "page" | "site" | "tab" | "spaces";
 };
 
 const page = "page" as const;
@@ -43,14 +43,20 @@ const DEFS: ActionDef[] = [
   { command: "newGroupWithTabs", title: "New Group with Tab", icon: "folder.badge.plus", hint: "⌃⌘N", keywords: ["tab group"], needs: "tab" },
   { command: "reload", title: "Reload Page", icon: "arrow.clockwise", hint: "⌘R", keywords: ["refresh"], needs: page },
   { command: "forceReload", title: "Force Reload Page", icon: "arrow.clockwise", hint: "⇧⌘R", keywords: ["hard reload", "hard refresh"], needs: page },
-  { command: "toggleMute", title: ({ tab }) => (tab?.muted ? "Unmute Site" : "Mute Site"), icon: "speaker.slash", keywords: ["mute", "unmute", "silence"], needs: page },
+  {
+    command: "toggleMute",
+    title: ({ tab }) => (tab?.muted ? "Unmute Site" : "Mute Site"),
+    icon: "speaker.slash",
+    keywords: ["mute", "unmute", "silence"],
+    needs: page,
+  },
   { command: "copyUrl", title: "Copy URL", icon: "link", hint: "⇧⌘C", keywords: ["copy link"], needs: page },
   { command: "copyUrlAsMarkdown", title: "Copy URL as Markdown", icon: "link", hint: "⌥⇧⌘C", keywords: ["markdown link"], needs: page },
   { command: "findInPage", title: "Find in Page", icon: "text.magnifyingglass", hint: "⌘F", needs: page },
   {
     command: "bookmarkPage",
     title: ({ s, windowId, tab }) =>
-      tab?.url && isBookmarked(s.bookmarks, bookmarkProfileId(s, s.windows[windowId]), tab.url) ? "Remove Bookmark" : "Bookmark This Page",
+      tab?.url && isBookmarked(s.bookmarks, bookmarkSpaceId(s, s.windows[windowId]), tab.url) ? "Remove Bookmark" : "Bookmark This Page",
     icon: "bookmark",
     hint: "⌘D",
     keywords: ["add bookmark", "bookmark"],
@@ -76,7 +82,13 @@ const DEFS: ActionDef[] = [
     keywords: ["sidebar position", "sidebar side", "right sidebar", "left sidebar", "flip sidebar"],
   },
   { command: "toggleFullUrl", title: ({ s }) => (s.settings.showFullUrl ? "Hide Full URL" : "Show Full URL"), icon: "text.alignleft" },
-  { command: "toggleSidebar", title: "Auto-Hide Tabs", icon: "sidebar.left", hint: "⌘S", keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"] },
+  {
+    command: "toggleSidebar",
+    title: "Auto-Hide Tabs",
+    icon: "sidebar.left",
+    hint: "⌘S",
+    keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"],
+  },
   { command: "toggleBookmarksBar", title: "Toggle Bookmarks Bar", icon: "menubar.rectangle", hint: "⇧⌘B", keywords: ["bookmarks bar"] },
   { command: "downloads", title: "Downloads", icon: "arrow.down.circle", hint: "⇧⌘J", keywords: ["show downloads", "dl"] },
   { command: "showHistory", title: "History", icon: "clock", hint: "⌘Y", keywords: ["show history"] },
@@ -85,8 +97,8 @@ const DEFS: ActionDef[] = [
   { command: "clearBrowsingData", title: "Clear Browsing Data", icon: "trash", keywords: ["clear history", "clear cache", "clear cookies"] },
   { command: "importBrowserData", title: "Import Browser Data", icon: "square.and.arrow.down", keywords: ["import bookmarks", "import passwords"] },
   { command: "keyboardShortcuts", title: "Keyboard Shortcuts", icon: "keyboard", keywords: ["shortcuts", "hotkeys"] },
-  { command: "mergeAllWindows", title: "Merge All Windows", icon: "rectangle.stack", needs: "profiles" },
-  { command: "newProfile", title: "New Space", icon: "plus.square.on.square", keywords: ["create space", "new profile", "create profile"], needs: "profiles" },
+  { command: "mergeAllWindows", title: "Merge All Windows", icon: "rectangle.stack", needs: "spaces" },
+  { command: "newSpace", title: "New Space", icon: "plus.square.on.square", keywords: ["create space", "new profile", "create profile"], needs: "spaces" },
   { command: "setAppearance", arg: "dark", title: "Dark Appearance", icon: "moon", keywords: ["dark mode"] },
   { command: "setAppearance", arg: "light", title: "Light Appearance", icon: "sun.max", keywords: ["light mode"] },
   { command: "setAppearance", arg: "auto", title: "Use System Appearance", icon: "circle.lefthalf.filled", keywords: ["auto appearance", "system appearance"] },
@@ -103,7 +115,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     if (d.needs === "page" && !tab?.url) continue;
     if (d.needs === "tab" && !tab) continue;
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
-    if (d.needs === "profiles" && w?.incognito) continue;
+    if (d.needs === "spaces" && w?.incognito) continue;
     out.push({
       id: actionId(d),
       title: typeof d.title === "string" ? d.title : d.title(c),
@@ -113,10 +125,16 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     });
   }
   if (w && !w.incognito) {
-    s.profileOrder.forEach((id, i) => {
-      if (id === w.profileId) return;
-      const name = s.profiles[id]?.name ?? "";
-      out.push({ id: `switchProfile:${id}`, title: `Switch to ${name}`, icon: "person.crop.circle", hint: i < 9 ? `⌃${i + 1}` : undefined, keywords: [name, "profile"] });
+    s.spaceOrder.forEach((id, i) => {
+      if (id === w.spaceId) return;
+      const name = s.spaces[id]?.name ?? "";
+      out.push({
+        id: `switchSpace:${id}`,
+        title: `Switch to ${name}`,
+        icon: "person.crop.circle",
+        hint: i < 9 ? `⌃${i + 1}` : undefined,
+        keywords: [name, "profile"],
+      });
     });
   }
   return out;

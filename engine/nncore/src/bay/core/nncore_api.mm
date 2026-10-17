@@ -86,6 +86,7 @@
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/unpacked_installer.h"
 #include "extensions/common/extension.h"
 #include "bay/core/nn_autofill_prompt.h"
@@ -1844,6 +1845,16 @@ std::optional<bool> RunPageCommand(content::WebContents* contents, int command) 
   }
 }
 
+- (BOOL)peeksLinks {
+  return _contents && nncore::TabBridge::GetOrCreate(_contents)->peeks_links();
+}
+
+- (void)setPeeksLinks:(BOOL)peeksLinks {
+  if (_contents) {
+    nncore::TabBridge::GetOrCreate(_contents)->set_peeks_links(peeksLinks);
+  }
+}
+
 - (void)loadURL:(NSString*)url userInitiated:(BOOL)userInitiated {
   if (!_contents) {
     return;
@@ -1997,7 +2008,9 @@ std::optional<bool> RunPageCommand(content::WebContents* contents, int command) 
           ->enabled_extensions()
           .GetByID(base::SysNSStringToUTF8(extensionId));
   auto* runner = extensions::ExtensionActionRunner::GetForWebContents(_contents);
-  if (!extension || !runner) {
+  if (!extension || !runner ||
+      (_contents->GetBrowserContext()->IsOffTheRecord() &&
+       !extensions::util::IsIncognitoEnabled(extension, _contents->GetBrowserContext()))) {
     return @"none";
   }
   // As a click on its toolbar button (grants activeTab); the host shows what it asks for.
@@ -2024,6 +2037,10 @@ std::optional<bool> RunPageCommand(content::WebContents* contents, int command) 
     const extensions::Extension* extension =
         extensions::ExtensionRegistry::Get(context)->enabled_extensions().GetByID(
             base::SysNSStringToUTF8(extensionId));
+    if (extension && context->IsOffTheRecord() &&
+        !extensions::util::IsIncognitoEnabled(extension, context)) {
+      continue;
+    }
     extensions::ExtensionAction* action =
         extension ? extensions::ExtensionActionManager::Get(context)
                         ->GetExtensionAction(*extension)
@@ -2058,6 +2075,10 @@ std::optional<bool> RunPageCommand(content::WebContents* contents, int command) 
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(context)->enabled_extensions().GetByID(
           base::SysNSStringToUTF8(extensionId));
+  if (extension && context->IsOffTheRecord() &&
+      !extensions::util::IsIncognitoEnabled(extension, context)) {
+    return nil;
+  }
   auto* service = extension ? extensions::SidePanelService::Get(context) : nullptr;
   if (!service) {
     return nil;

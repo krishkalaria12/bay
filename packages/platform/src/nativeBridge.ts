@@ -70,9 +70,7 @@ export function bindWindowsModule<T>(
       if (!method || (method.optional && !bridge.optionalMethods?.includes(`${name}.${key}`))) return undefined;
       const call = (...args: unknown[]) => {
         const json = JSON.stringify(args);
-        return method.async
-          ? bridge.invoke(name, key, json).then(decodeNativeResult)
-          : decodeNativeResult(bridge.invokeSync(name, key, json));
+        return method.async ? bridge.invoke(name, key, json).then(decodeNativeResult) : decodeNativeResult(bridge.invokeSync(name, key, json));
       };
       functions.set(key, call);
       return call;

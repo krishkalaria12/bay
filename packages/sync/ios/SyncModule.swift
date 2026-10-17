@@ -269,7 +269,7 @@ public class SyncModule: Module {
   static func profileDirectory(_ engineProfile: String) -> URL {
     let root = dataDirectory?.appendingPathComponent("Chromium", isDirectory: true)
       ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-      .appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.bay.browser", isDirectory: true)
+      .appendingPathComponent(Bundle.main.bundleIdentifier ?? "in.krishkalaria.bay", isDirectory: true)
       .appendingPathComponent("Chromium", isDirectory: true)
     return root.appendingPathComponent(engineProfile.isEmpty ? "Default" : "Profile \(engineProfile)", isDirectory: true)
   }

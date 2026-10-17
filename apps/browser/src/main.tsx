@@ -4,6 +4,7 @@ import "./lib/nativeEvents";
 import { useEffect, useState } from "react";
 import { AppRegistry, unstable_batchedUpdates } from "react-native";
 import { WindowRoot } from "./App";
+import { quietLaunchTabs } from "./components/BlankTabSurface";
 import { DevErrorBoundary } from "./DevErrorBoundary";
 import { startTranslate } from "./components/site/translate";
 import { startAppIntegration } from "./lib/appIntegration";
@@ -25,6 +26,8 @@ startPersistence();
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabPages.ts).
 startTabPages();
 startNativeSync();
+// After the first window is made: the tab each window starts on doesn't open the command bar.
+quietLaunchTabs();
 startAppIntegration();
 startTabLifecycle();
 startTranslate();

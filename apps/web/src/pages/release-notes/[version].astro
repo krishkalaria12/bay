@@ -1,0 +1,82 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Header from "../../components/Header.astro";
+import Footer from "../../components/Footer.astro";
+import Circled from "../../components/Circled.astro";
+import Day from "../../components/Day.astro";
+import { inline, longDate, releases, type Release } from "../../releases";
+import { ids, downloadLink, site } from "../../site";
+
+export function getStaticPaths() {
+  const all = releases();
+  return all.map((release, i) => ({ params: { version: release.version }, props: { release, latest: i === 0 } }));
+}
+
+interface Props {
+  release: Release;
+  latest: boolean;
+}
+const { release, latest } = Astro.props;
+const url = `${site.url}/release-notes/${release.version}/`;
+const title = `Bay ${release.version}: what’s new`;
+const description = release.headline;
+
+const schema = [
+  {
+    "@type": "WebPage",
+    "@id": `${url}#webpage`,
+    url,
+    name: title,
+    description,
+    datePublished: release.date,
+    isPartOf: { "@id": ids.site },
+    about: { "@id": ids.app },
+    inLanguage: "en",
+  },
+];
+---
+
+<Layout title={title} description={description} type="article" schema={schema}>
+  <Header />
+
+  <main class="mx-auto max-w-4xl px-5 pt-10 pb-24 sm:pt-14">
+    <a href="/release-notes/" class="inline-flex items-center gap-1.5 text-[14px] font-medium text-muted hover:text-ink">
+      <span aria-hidden="true">‹</span> All versions
+    </a>
+
+    <header transition:name={latest ? `release-card-${release.version}` : undefined} class="release-glow mt-5 animate-rise rounded-3xl border border-line px-7 py-9 shadow-[0_24px_48px_-32px_rgba(30,32,60,0.35)] sm:px-10 sm:py-12">
+      {latest && <p class="hand text-[24px]">the latest</p>}
+      <div class="mt-1 flex items-baseline gap-4">
+        <h1 transition:name={`release-title-${release.version}`} class="w-fit text-[44px] leading-tight font-bold tracking-[-0.04em] sm:text-[56px]">
+          Bay <Circled>{release.version}</Circled>
+        </h1>
+        <Day date={release.date} class="hand hidden text-[22px] sm:inline" />
+      </div>
+      <p class="mt-2 text-[14px] text-muted"><time datetime={release.date}>{longDate(release.date)}</time></p>
+      <h2 class="mt-6 max-w-xl text-[22px] leading-snug font-semibold tracking-[-0.01em] text-pretty sm:text-[26px]">{release.headline}</h2>
+    </header>
+
+    {
+      release.sections.map((section) => (
+        <section class="mt-14" aria-label={section.title || "What’s in it"}>
+          <h3 class="hand text-[32px]">{section.title || "What’s in it"}</h3>
+          <ul class="mt-6 grid gap-x-12 gap-y-9 sm:grid-cols-2">
+            {section.items.map((item) => (
+              <li>
+                {item.title && <p class="text-[17px] font-semibold" set:html={inline(item.title)} />}
+                <p class="mt-1.5 text-[15px] leading-relaxed text-muted text-pretty" set:html={inline(item.body)} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))
+    }
+
+    <div class="mt-16 flex flex-wrap items-center gap-3 border-t border-line pt-8">
+      <a href={site.downloadUrl} {...downloadLink} data-download-location="release-notes" class="btn">Download Bay {release.version}</a>
+      <p class="text-[13px] text-muted">For {site.requirement}. Already have Bay? It updates itself.</p>
+    </div>
+  </main>
+
+  <Footer />
+</Layout>

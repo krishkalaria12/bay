@@ -1,4 +1,6 @@
-import { layout, useTheme } from "../../lib/theme";
+import { sidebarMetrics } from "../../lib/sidebarDensity";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import type { GroupColor } from "../../store/types";
 import { useSidebarUi } from "./state";
@@ -24,6 +26,11 @@ const DARK = {
   upsellButtonHover: "rgba(255,255,255,0.11)",
   newTabLabel: "#FFFFFF8C", // secondaryLabelColor
   newTabIcon: "#FFFFFF40", // tertiaryLabelColor
+  // Fainter than a tab's hover (tabHover read milky beside the dark selected tab); the label brightens instead.
+  newTabHover: "rgba(255,255,255,0.07)",
+  newTabPressed: "rgba(255,255,255,0.11)",
+  newTabLabelHover: "#FFFFFFC7",
+  newTabIconHover: "#FFFFFF8C",
 };
 
 const LIGHT: typeof DARK = {
@@ -47,6 +54,10 @@ const LIGHT: typeof DARK = {
   upsellButtonHover: "rgba(0,0,0,0.11)",
   newTabLabel: "#00000080",
   newTabIcon: "#00000042",
+  newTabHover: "rgba(255,255,255,0.35)",
+  newTabPressed: "rgba(255,255,255,0.5)",
+  newTabLabelHover: "#000000B3",
+  newTabIconHover: "#00000073",
 };
 
 export type SidebarTokens = typeof DARK;
@@ -100,11 +111,12 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
-export const SIDEBAR_MIN_WIDTH = 160;
-export const SIDEBAR_MAX_WIDTH = 400;
-
 export function useSidebarWidth(windowId: string): number {
   const saved = useBrowser((s) => s.settings.sidebarWidth ?? layout.sidebarWidth);
   const dragging = useSidebarUi((u) => u.dragWidth[windowId]);
   return dragging ?? saved;
+}
+
+export function useSidebarMetrics() {
+  return useBrowser((s) => sidebarMetrics(s.settings.density));
 }

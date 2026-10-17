@@ -10,7 +10,8 @@
 //   <scratch dir>    data/ is BAY_DATA_DIR and home/ the fake Chrome home (both wiped by the import phase);
 //                    result-<phase>.json lists each phase's failures
 //   import           a private profile is refused; the UI imports 5 cookies, 1 address and
-//                    1 card; refused/expired cookies stay out; the site gets the session cookie; a re-import adds nothing
+//                    1 card; refused/expired cookies stay out; the site gets the session cookie; a re-import replaces
+//                    the sites' cookies (one of another session goes)
 //   restart          relaunches on the same data dir: the persistent cookie survives
 //   all              (default) import, then restart
 //   --keep           leaves the last instance running (poke it with scripts/agent/nn eval <scratch dir>/data '<js>')
@@ -29,8 +30,14 @@ const args = process.argv.slice(2);
 const keep = args.includes("--keep");
 const [appArg, scratchArg, phaseArg = "all"] = args.filter((a) => !a.startsWith("--"));
 if (args.includes("--help") || args.includes("-h") || !appArg || !scratchArg || !["import", "restart", "all"].includes(phaseArg)) {
-  const lines = fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(1);
-  const header = lines.slice(0, lines.findIndex((l) => !l.startsWith("//")));
+  const lines = fs
+    .readFileSync(new URL(import.meta.url), "utf8")
+    .split("\n")
+    .slice(1);
+  const header = lines.slice(
+    0,
+    lines.findIndex((l) => !l.startsWith("//")),
+  );
   console.log(header.map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(args.includes("--help") || args.includes("-h") ? 0 : 64);
 }
@@ -144,11 +151,16 @@ async function importPhase(ok) {
   ok(done.counts.cookies === 5, `5 cookies imported (got ${done.counts.cookies})`);
   ok(done.counts.addresses === 1 && done.counts.cards === 1, "1 address and 1 card imported");
   ok(done.failures.length === 0, "no failures");
-  ok(done.notes?.some((n) => n.includes("1 cookie couldn't be decrypted")), `undecryptable note shown: ${JSON.stringify(done.notes)}`);
+  ok(
+    done.notes?.some((n) => n.includes("1 cookie couldn't be decrypted")),
+    `undecryptable note shown: ${JSON.stringify(done.notes)}`,
+  );
 
   const by = Object.fromEntries((await fixtureCookies()).map((c) => [c.name, c]));
-  ok(by.nn_sid?.value === "s3ss10n-e2e" && by.nn_sid.secure && by.nn_sid.httpOnly && by.nn_sid.sameSite === "Lax" && by.nn_sid.priority === "High",
-    "nn_sid: host-hashed v10 value, Secure, HttpOnly, Lax, High");
+  ok(
+    by.nn_sid?.value === "s3ss10n-e2e" && by.nn_sid.secure && by.nn_sid.httpOnly && by.nn_sid.sameSite === "Lax" && by.nn_sid.priority === "High",
+    "nn_sid: host-hashed v10 value, Secure, HttpOnly, Lax, High",
+  );
   ok(!by.nn_legacy, "a v24 row without its host hash is refused, as Chrome refuses it");
   ok(by.nn_session?.session === true && by.nn_session.value === "until-quit", "session cookie stays a session cookie");
   ok(!by.nn_expired, "expired cookie skipped");
@@ -163,16 +175,27 @@ async function importPhase(ok) {
 
   // The site sees the cookies on its next request.
   await evaluate(`nn.actions.openUrls(["http://localhost:${SERVER_PORT}/"]); return true`);
-  for (const deadline = Date.now() + 20_000; !seen.length && Date.now() < deadline; ) await sleep(250);
+  for (const deadline = Date.now() + 20_000; !seen.length && Date.now() < deadline;) await sleep(250);
   const header = seen[0]?.cookie ?? "";
   note("server saw:", JSON.stringify(seen));
   ok(header.includes("nn_session=until-quit"), "fixture server got the imported session cookie");
   ok(!header.includes("nn_other_path") && !header.includes("nn_expired"), "path-scoped and expired cookies not sent");
 
-  // Importing again keeps what's there.
+  // Importing again replaces each site's cookies with the source's: one the profile set meanwhile for the session
+  // cookie's site goes too, so a sign-in never mixes two sessions (Google reads a mix as signed out).
+  const host = by.nn_sid.domain.replace(/^\./, "");
+  await cdp("Storage.setCookies", {
+    cookies: [{ name: "nn_stale", value: "other-session", url: `https://${host}/`, secure: true, expires: Date.now() / 1000 + 3600 }],
+  });
+  ok(
+    (await fixtureCookies()).some((c) => c.name === "nn_stale"),
+    "a cookie of another session is set for the site",
+  );
   const again = await evaluate(nativeImport("e2e-again", ""));
   note("again:", JSON.stringify(again.w));
-  ok(again.w.cookies === 0 && again.w.cookiesExisting === 5, "a second import keeps the profile's cookies");
+  const after = Object.fromEntries((await fixtureCookies()).map((c) => [c.name, c]));
+  ok(again.w.cookies === 5 && again.w.cookiesReplaced === 6, `a second import replaces the sites' cookies (${JSON.stringify(again.w)})`);
+  ok(!after.nn_stale && after.nn_sid?.value === "s3ss10n-e2e", "the other session's cookie is gone; the source's stays");
 }
 
 async function restartPhase(ok) {

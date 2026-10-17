@@ -128,8 +128,7 @@ export function extensionEnginesFromChrome(profile: string, list: unknown): Exte
         name: typeof e.name === "string" && e.name ? e.name : String(ext.name ?? ""),
         keyword: typeof e.keyword === "string" ? e.keyword : "",
         url: withoutPlaceholders(e.url),
-        suggestUrl:
-          typeof e.suggestionsUrl === "string" && e.suggestionsUrl.includes("%s") ? withoutPlaceholders(e.suggestionsUrl) : undefined,
+        suggestUrl: typeof e.suggestionsUrl === "string" && e.suggestionsUrl.includes("%s") ? withoutPlaceholders(e.suggestionsUrl) : undefined,
         isDefault: e.default === true,
       });
     }
@@ -143,8 +142,7 @@ export function engineById(engines: readonly SearchEngine[], id: string | undefi
 
 export const searchUrl = (engine: Pick<SearchEngine, "url">, query: string) => searchUrlFor(engine.url, query);
 
-export const suggestRequestUrl = (engine: SearchEngine, query: string) =>
-  engine.suggestUrl && query.trim() ? searchUrlFor(engine.suggestUrl, query) : null;
+export const suggestRequestUrl = (engine: SearchEngine, query: string) => (engine.suggestUrl && query.trim() ? searchUrlFor(engine.suggestUrl, query) : null);
 
 export const engineHost = (engine: Pick<SearchEngine, "url">) => hostOf(engine.url.replace(/%s/g, "q"));
 

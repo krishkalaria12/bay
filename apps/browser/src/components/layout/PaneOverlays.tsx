@@ -1,13 +1,14 @@
 import { View } from "@bay/platform";
 import { toAppUrl, urlForDisplay } from "@bay/core";
 import { Surface, Symbol } from "@bay/shell";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "./controls";
 import { patchPage, usePage } from "./pageState";
+import { useBrowser } from "../../store/browser";
 
 export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
   const theme = useTheme();
@@ -61,13 +62,37 @@ function displayUrl(url: string) {
   return out;
 }
 
+/** The tab's page is in another window (as Arc's, a space's tab shows in one window at a time): Show Here brings it. */
+export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: string }) {
+  const theme = useTheme();
+  const elsewhere = useBrowser((s) => {
+    const shownIn = s.tabs[tabId]?.windowId;
+    return !!shownIn && shownIn !== windowId && !!s.windows[shownIn];
+  });
+  if (!elsewhere) return null;
+  return (
+    <View
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
+    >
+      <Symbol name="macwindow.on.rectangle" size={30} weight="light" color={theme.textSecondary} style={{ width: 44, height: 40, marginBottom: 14 }} />
+      <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>Open in another window</Text>
+      <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 340, marginBottom: 18 }}>
+        This tab is showing in another window. Show it here to move it, as it is.
+      </Text>
+      <PromptButton title="Show Here" primary onPress={() => useBrowser.getState().activate(tabId, windowId)} />
+    </View>
+  );
+}
+
 export function SadTab({ tabId }: { tabId: string }) {
   const theme = useTheme();
   const crashed = usePage(tabId, (p) => !!p.crashed);
   const unresponsive = usePage(tabId, (p) => p.unresponsive);
   if (crashed) {
     return (
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}>
+      <View
+        style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#1C1A1B" : "#F6F5F6", alignItems: "center", justifyContent: "center", padding: 24 }]}
+      >
         <Symbol name="exclamationmark.triangle" size={30} weight="light" color={theme.textSecondary} style={{ width: 44, height: 40, marginBottom: 14 }} />
         <Text style={{ fontSize: 17, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>This tab needs to reload</Text>
         <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 340, marginBottom: 18 }}>
@@ -86,7 +111,12 @@ export function SadTab({ tabId }: { tabId: string }) {
   }
   if (!unresponsive) return null;
   return (
-    <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.12)" }]}>
+    <View
+      style={[
+        StyleSheet.absoluteFill,
+        { alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.12)" },
+      ]}
+    >
       <Surface
         fill={hex(theme.panel)}
         cornerRadius={14}

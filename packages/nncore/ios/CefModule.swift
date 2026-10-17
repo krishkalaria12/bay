@@ -224,6 +224,7 @@ public class CefModule: Module {
       Prop("autoPictureInPicture") { (view: CefWebView, enabled: Bool?) in
         view.browser.autoPictureInPicture = enabled ?? false
       }
+      Prop("peekLinks") { (view: CefWebView, enabled: Bool?) in view.browser.peekLinks = enabled ?? false }
 
       AsyncFunction("loadUrl") { (view: CefWebView, url: String, userInitiated: Bool?) in
         view.browser.loadURL(url, userInitiated: userInitiated ?? false)
@@ -339,6 +340,7 @@ final class CefWebView: ExpoView, NNCoreWebViewDelegate {
     "onFindResult",
     "onFullscreen",
     "onStatus",
+    "onPeekLink",
     "onCrashed",
     "onUnresponsive",
     "onResponsive",
@@ -377,6 +379,7 @@ final class CefWebView: ExpoView, NNCoreWebViewDelegate {
   let onFindResult = EventDispatcher()
   let onFullscreen = EventDispatcher()
   let onStatus = EventDispatcher()
+  let onPeekLink = EventDispatcher()
   let onCrashed = EventDispatcher()
   let onUnresponsive = EventDispatcher()
   let onResponsive = EventDispatcher()
@@ -438,6 +441,7 @@ final class CefWebView: ExpoView, NNCoreWebViewDelegate {
     case "find": onFindResult(payload)
     case "fullscreen": onFullscreen(payload)
     case "status": onStatus(payload)
+    case "peekLink": onPeekLink(payload)
     case "crashed": onCrashed(payload)
     case "unresponsive": onUnresponsive(payload)
     case "responsive": onResponsive(payload)

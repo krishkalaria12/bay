@@ -21,15 +21,27 @@ export function appPaletteActions(windowId: string, onDismiss: () => void): Pale
     { id: "shortcuts", title: "Keyboard Shortcuts", icon: "command", run: () => openSettings("shortcuts") },
     ...(app.updates ? [{ id: "updates", title: "Check for Updates", icon: "clock.arrow.circlepath", separator: true, run: checkForUpdates }] : []),
     {
-      id: "default-browser", title: `Make ${app.appName} the Default Browser`, icon: "globe", separator: !app.updates,
+      id: "default-browser",
+      title: `Make ${app.appName} the Default Browser`,
+      icon: "globe",
+      separator: !app.updates,
       run: async () => {
         if (!(await setAsDefaultBrowser())) throw new Error("The default browser wasn't changed. Try again.");
       },
     },
     { id: "setup", title: `Set up ${app.appName}`, icon: "checklist", run: () => startOnboarding(windowId) },
     {
-      id: "about", title: `About ${app.appName}`, icon: "info.circle", separator: true,
-      run: () => confirm({ title: `About ${app.appName}`, message: `${app.appName} ${app.appVersion}\nBuild ${app.appBuild}\n${isMac ? "macOS" : "Windows"} ${app.osVersion}`, confirmTitle: "OK", windowId }),
+      id: "about",
+      title: `About ${app.appName}`,
+      icon: "info.circle",
+      separator: true,
+      run: () =>
+        confirm({
+          title: `About ${app.appName}`,
+          message: `${app.appName} ${app.appVersion}\nBuild ${app.appBuild}\n${isMac ? "macOS" : "Windows"} ${app.osVersion}`,
+          confirmTitle: "OK",
+          windowId,
+        }),
     },
     { id: "settings", title: "Settings", icon: "gearshape", hint: "⌘,", run: () => openSettings() },
   ];

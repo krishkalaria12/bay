@@ -1,15 +1,6 @@
 import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
 
-export type ImportKind =
-  | "bookmarks"
-  | "history"
-  | "tabs"
-  | "passwords"
-  | "cookies"
-  | "autofill"
-  | "spaces"
-  | "pinnedTabs"
-  | "favorites";
+export type ImportKind = "bookmarks" | "history" | "tabs" | "passwords" | "cookies" | "autofill" | "extensions" | "spaces" | "pinnedTabs" | "favorites";
 
 export type BrowserFamily = "chromium" | "firefox" | "safari" | "arc" | "automation";
 
@@ -45,6 +36,13 @@ export type BrowserSource = {
   needsKeychain: boolean;
   needsFullDiskAccess?: boolean;
   profiles: BrowserProfile[];
+};
+
+export type BrowserApplication = {
+  id: string;
+  name: string;
+  appPath: string;
+  iconPath?: string;
 };
 
 export type BookmarkRole = "toolbar" | "other" | "mobile" | "menu" | "readingList";
@@ -126,6 +124,7 @@ export type ImportResult = {
   vaultToken?: string;
   spaces: SpaceSuggestion[];
   favorites: ImportedTab[];
+  extensions: ImportedExtension[];
   failed: ImportKind[];
   warnings: ImportWarning[];
 };
@@ -141,12 +140,13 @@ export type SafariExport = {
   warnings: ImportWarning[];
 };
 
-/** What `writeImported` wrote. Cookies the profile already had stay as they are (`cookiesExisting`); `cookiesFailed` /
+/** What `writeImported` wrote. The imported cookies replace the profile's for the same sites (`cookiesReplaced`, the
+ * profile's cookies they took the place of); `cookiesFailed` /
  * `autofillFailed` are set when the engine refused the kind (a private profile, say), with its `error`. */
 export type WrittenCounts = {
   cookies: number;
   cookiesRejected: number;
-  cookiesExisting: number;
+  cookiesReplaced: number;
   addresses: number;
   cards: number;
   cookiesFailed?: 1;
@@ -154,8 +154,28 @@ export type WrittenCounts = {
   error?: string;
 };
 
-/** An extension the source profile installed from the Chrome Web Store. */
-export type ImportedExtension = { id: string; name: string; webStoreUrl: string };
+/** A user-installed Chromium extension, with its source profile's enabled and pinned settings. */
+export type ImportedExtension = {
+  id: string;
+  name: string;
+  webStoreUrl?: string;
+  path?: string;
+  enabled: boolean;
+  pinned: boolean;
+  source: "chromium" | "firefox";
+  compatibility?: { status: "compatible" | "unsupported"; reasons: string[] };
+  destinationId?: string;
+  updateMode?: "store" | "local";
+  warnings: string[];
+};
+
+export type WrittenExtension = {
+  id: string;
+  installed: boolean;
+  storageImported: number;
+  warnings: string[];
+  updateMode: "store" | "local";
+};
 
 export type ImportProgress = {
   kind: ImportKind;
@@ -201,13 +221,12 @@ export class ImportError extends Error {
   }
 }
 
-type ImportEvent =
-  | ({ jobId: string; type: "progress" } & ImportProgress)
-  | { jobId: string; type: "history"; entries: string };
+type ImportEvent = ({ jobId: string; type: "progress" } & ImportProgress) | { jobId: string; type: "history"; entries: string };
 
 const Native = requireNativeModule<{
   addListener(name: "onImportEvent", listener: (e: ImportEvent) => void): EventSubscription;
   listBrowsers(): Promise<string>;
+  listInstalledBrowsers(): Promise<string>;
   importData(jobId: string, browserId: string, profileId: string, kinds: ImportKind[], options: object): Promise<string>;
   cancelImport(jobId: string): void;
   unlockBrowser(browserId: string, primaryPassword: string | null): Promise<null>;
@@ -216,6 +235,7 @@ const Native = requireNativeModule<{
   writeImported(token: string, profile: string, kinds: string[]): Promise<string>;
   discardImported(token: string): void;
   listExtensions(browserId: string, profileId: string): Promise<string>;
+  writeExtension(browserId: string, profileId: string, id: string, profile: string): Promise<string>;
   importSafariExport(jobId: string, path: string): Promise<string>;
   safariHasFullDiskAccess(): boolean;
   openFullDiskAccessSettings(): Promise<null>;
@@ -262,6 +282,9 @@ async function job<T>(options: ImportOptions, start: (jobId: string) => Promise<
 
 export const listBrowsers = () => call<BrowserSource[]>(Native.listBrowsers());
 
+/** Installed browser apps, including ones with no importable browsing data yet. */
+export const listInstalledBrowsers = () => call<BrowserApplication[]>(Native.listInstalledBrowsers());
+
 export function importData(browserId: string, profileId: string, kinds: ImportKind[], options: ImportOptions = {}) {
   const native = {
     historyLimit: options.historyLimit,
@@ -287,8 +310,12 @@ export const writeImported = (token: string, profile: string, kinds: ("cookies" 
 
 export const discardImported = (token: string) => Native.discardImported(token);
 
-/** A Chromium-family profile's Chrome Web Store extensions (empty for other browsers). */
+/** A Chromium-family profile's user-installed extensions (empty for other browsers). */
 export const listExtensions = (browserId: string, profileId: string) => call<ImportedExtension[]>(Native.listExtensions(browserId, profileId));
+
+/** Copies and installs an extension into an engine profile, preserving an existing installation on retries. */
+export const writeExtension = (browserId: string, profileId: string, id: string, profile: string) =>
+  call<WrittenExtension>(Native.writeExtension(browserId, profileId, id, profile));
 
 export const importSafariExport = (path: string, options: Pick<ImportOptions, "signal"> = {}) =>
   job<SafariExport>(options, (jobId) => Native.importSafariExport(jobId, path));
@@ -297,8 +324,7 @@ export const safariHasFullDiskAccess = () => Native.safariHasFullDiskAccess();
 
 export const openFullDiskAccessSettings = () => call<void>(Native.openFullDiskAccessSettings());
 
-export const importSafariDirect = (options: Pick<ImportOptions, "signal"> = {}) =>
-  job<SafariExport>(options, (jobId) => Native.importSafariDirect(jobId));
+export const importSafariDirect = (options: Pick<ImportOptions, "signal"> = {}) => job<SafariExport>(options, (jobId) => Native.importSafariDirect(jobId));
 
 export const importBookmarksHTML = (path: string) => call<BookmarkNode>(Native.importBookmarksHTML(path));
 

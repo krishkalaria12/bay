@@ -7,8 +7,15 @@ export { Easing };
 export type WithTimingConfig = import("./motion-runtime").TimingConfig;
 
 let reduced = false;
-void AccessibilityInfo.isReduceMotionEnabled().then((value) => { reduced = value; }, () => {});
-AccessibilityInfo.addEventListener("reduceMotionChanged", (value) => { reduced = value; });
+void AccessibilityInfo.isReduceMotionEnabled().then(
+  (value) => {
+    reduced = value;
+  },
+  () => {},
+);
+AccessibilityInfo.addEventListener("reduceMotionChanged", (value) => {
+  reduced = value;
+});
 configureMotionClock({
   request: (callback) => requestAnimationFrame(callback),
   cancel: (id) => cancelAnimationFrame(id),
@@ -32,10 +39,16 @@ export function useAnimatedStyle<T extends ViewStyle | TextStyle | ImageStyle>(u
     for (const dependency of result.dependencies) version = Math.max(version, dependency.version());
     return version;
   };
-  useSyncExternalStore((notify) => {
-    const cleanups = [...result.dependencies].map((value) => value.subscribe(notify));
-    return () => { for (const cleanup of cleanups) cleanup(); };
-  }, snapshot, snapshot);
+  useSyncExternalStore(
+    (notify) => {
+      const cleanups = [...result.dependencies].map((value) => value.subscribe(notify));
+      return () => {
+        for (const cleanup of cleanups) cleanup();
+      };
+    },
+    snapshot,
+    snapshot,
+  );
   return result.value;
 }
 
@@ -56,16 +69,22 @@ export function useAnimatedReaction<T>(prepare: () => T, react: (value: T, previ
           previous.current = result.value;
           react(result.value, old);
         }
-      } finally { running = false; }
+      } finally {
+        running = false;
+      }
     };
     run();
-    return () => { for (const cleanup of cleanups) cleanup(); };
+    return () => {
+      for (const cleanup of cleanups) cleanup();
+    };
   });
 }
 
-export function runOnJS<Args extends unknown[], Result>(callback: (...args: Args) => Result): (...args: Args) => Result { return callback; }
+export function runOnJS<Args extends unknown[], Result>(callback: (...args: Args) => Result): (...args: Args) => Result {
+  return callback;
+}
 export function useEvent<T>(handler: (event: T) => void, _eventNames?: string[], _rebuild?: boolean): (event: T | { nativeEvent: T }) => void {
-  return (event) => handler(event && typeof event === "object" && "nativeEvent" in event ? event.nativeEvent : event as T);
+  return (event) => handler(event && typeof event === "object" && "nativeEvent" in event ? event.nativeEvent : (event as T));
 }
 export function useAnimatedScrollHandler(handler: (event: { contentOffset: { x: number; y: number } }) => void) {
   return useEvent(handler);
@@ -77,7 +96,13 @@ export function interpolateColor(value: number, input: number[], colors: string[
     if (typeof processed !== "number") throw new Error(`Windows motion needs a static color: ${color}`);
     return [(processed >>> 16) & 255, (processed >>> 8) & 255, processed & 255, (processed >>> 24) / 255];
   });
-  const component = (index: number) => interpolate(value, input, channels.map((color) => color[index]!), "clamp");
+  const component = (index: number) =>
+    interpolate(
+      value,
+      input,
+      channels.map((color) => color[index]!),
+      "clamp",
+    );
   return `rgba(${Math.round(component(0))}, ${Math.round(component(1))}, ${Math.round(component(2))}, ${component(3)})`;
 }
 

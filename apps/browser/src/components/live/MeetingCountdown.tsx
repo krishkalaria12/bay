@@ -3,11 +3,12 @@ import { Text } from "react-native";
 import { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useNow } from "../../live/calendar";
-import { timeRemaining, WIGGLE_MARKS_MIN } from "../../live/meetings";
+import { timeRemaining } from "../../live/meetings";
+import { WIGGLE_MARKS_MIN } from "../../live/constants";
 import { useLive } from "../../live/store";
 import { useLiveColors } from "./colors";
+import { COUNTDOWN_WITHIN_MIN } from "./constants";
 
-const SHOW_WITHIN_MIN = 10;
 const wiggled = new Set<string>();
 
 export function useMeetingCountdown(groupId: string) {
@@ -28,7 +29,7 @@ export function useMeetingCountdown(groupId: string) {
     wiggle.set(withSequence(step(1), step(-1, 110), step(0.8, 110), step(-0.6, 110), step(0.3, 100), step(0, 90)));
   }, [minutesLeft === null ? null : Math.ceil(minutesLeft * 12)]);
 
-  const label = end && minutesLeft !== null && minutesLeft <= SHOW_WITHIN_MIN ? timeRemaining(end, now) : null;
+  const label = end && minutesLeft !== null && minutesLeft <= COUNTDOWN_WITHIN_MIN ? timeRemaining(end, now) : null;
   const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.get() * 4}deg` }] }));
   return { label, urgent: minutesLeft !== null && minutesLeft <= 2, wiggleStyle };
 }
@@ -36,5 +37,9 @@ export function useMeetingCountdown(groupId: string) {
 export function MeetingTimeLabel({ label, urgent }: { label: string; urgent: boolean }) {
   const theme = useTheme();
   const colors = useLiveColors();
-  return <Text style={{ fontSize: 11, fontWeight: "600", fontVariant: ["tabular-nums"], color: urgent ? colors.now : theme.textSecondary, marginRight: 4 }}>{label}</Text>;
+  return (
+    <Text style={{ fontSize: 11, fontWeight: "600", fontVariant: ["tabular-nums"], color: urgent ? colors.now : theme.textSecondary, marginRight: 4 }}>
+      {label}
+    </Text>
+  );
 }

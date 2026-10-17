@@ -21,9 +21,9 @@ appearing does not establish feature parity.
 - Both platform TypeScript configurations pass. Both production JavaScript
   bundles have been built on macOS. Browser, platform, core, sync and import
   tests run through `pnpm test`.
-- Harbor replaces Small Yahu in code, native menus and visible text. Existing
-  settings and custom command bindings migrate. Both native targets expose
-  application API version 9, so old native builds require rebuilding.
+- Little Bay (main's name for Arc's Little Arc) is used in code, native menus
+  and visible text. Both native targets expose application API version 10, so
+  old native builds require rebuilding.
 - Windows import readers parse Chromium and Firefox bookmarks, history and
   sessions, Netscape HTML and password CSV. Portable C++ tests exercise CSV
   quoting, bookmark entities, Chromium sessions, committed SQLite WAL data and

@@ -1,13 +1,13 @@
 import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
-import { bouncySpring } from "../../lib/springs";
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { withAlpha } from "../sidebar/tokens";
 import { useBrowser } from "../../store/browser";
+import { viewTabIds } from "../../store/model";
 import type { SplitView } from "../../store/types";
 import { resize, type Divider, type Rect } from "./geometry";
 import { useHover } from "../primitives";
@@ -15,6 +15,7 @@ import { hideToast, useToasts } from "./splitActions";
 import { useWindowId } from "../../store/hooks";
 import { zoneHit, zoneRect, type ZoneStage } from "./splitDrop";
 import { setDropTarget, setOnPage, setTargetResolver, useTabDrag } from "./tabDrag";
+import { SPLIT_TOAST_SPRING, ZONE_SLIDE_MS, ZONE_SPRING } from "./constants";
 
 export function SplitDividers({ split, dividers, width, height }: { split: SplitView; dividers: Divider[]; width: number; height: number }) {
   return (
@@ -47,16 +48,15 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
     }
   });
 
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => grant(),
-        onPanResponderMove: (_, g) => move(g.dx, g.dy),
-        onPanResponderRelease: () => setDragging(false),
-        onPanResponderTerminate: () => setDragging(false),
-      }),
-    [grant, move],
+  // One responder for the handle's life: a new one mid-gesture would drop the gesture.
+  const [responder] = useState(() =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => grant(),
+      onPanResponderMove: (_, g) => move(g.dx, g.dy),
+      onPanResponderRelease: () => setDragging(false),
+      onPanResponderTerminate: () => setDragging(false),
+    }),
   );
 
   const { rect, vertical } = divider;
@@ -106,7 +106,7 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   const fallback = useBrowser((s) => {
     if (!dragging || Object.keys(panes).length !== 1 || !panes[dragging]) return null;
     const tab = s.tabs[dragging];
-    const others = (s.windows[windowId]?.tabIds ?? []).map((id) => s.tabs[id]!).filter((t) => t && t.id !== dragging && t.profileId === tab?.profileId);
+    const others = (tab ? viewTabIds(s, windowId, tab.spaceId) : []).map((id) => s.tabs[id]!).filter((t) => t.id !== dragging);
     return others.sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]?.id ?? null;
   });
   // Memoized by hand: an effect keeps it (the zones mounted for their slide out), so a new one each render would loop.
@@ -133,7 +133,8 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   const ready = !!dragging && !!origin && !full && candidates.length > 0 && grown && lifted !== false;
   const resolve = useEffectEvent((x: number, y: number, current: Parameters<typeof zoneHit>[3], outside: boolean) => {
     if (!ready || outside || !origin) return null;
-    const px = x - origin.x, py = y - origin.y;
+    const px = x - origin.x,
+      py = y - origin.y;
     if (!Object.values(panes).some((r) => px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height)) return null;
     return zoneHit(candidates, px, py, current);
   });
@@ -177,13 +178,21 @@ export function DropTargets({ panes, origin }: { panes: Record<string, Rect>; or
   );
 }
 
-const ZONE_SLIDE_MS = 110;
-// Dia's targets settle in about 0.12 s with no overshoot: a 0.2 s response, 0.9 damping.
-const ZONE_SPRING = { stiffness: 987, damping: 56.5, mass: 1 } as const;
-// The toast pops up on Animated's old spring (speed 18, bounciness 6).
-const TOAST_SPRING = bouncySpring(18, 6);
-
-function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect; side: "left" | "right"; shown: boolean; stage: ZoneStage; pointerX: number; onHidden(): void }) {
+function DropZone({
+  pane,
+  side,
+  shown,
+  stage,
+  pointerX,
+  onHidden,
+}: {
+  pane: Rect;
+  side: "left" | "right";
+  shown: boolean;
+  stage: ZoneStage;
+  pointerX: number;
+  onHidden(): void;
+}) {
   const theme = useTheme();
   const rect = zoneRect(pane, side, stage, pointerX);
   const x = useSharedValue(rect.x);
@@ -256,14 +265,20 @@ function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect
           borderColor: active ? theme.accent : dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
         }}
       />
-      <Symbol name={side === "left" ? "rectangle.lefthalf.filled" : "rectangle.righthalf.filled"} size={18} color={active ? theme.accent : rest} style={{ width: 24, height: 20 }} />
-      <Text style={{ marginTop: 11, fontSize: 13, fontWeight: "600", color: active ? theme.accent : rest }}>{side === "left" ? "Add left split" : "Add right split"}</Text>
+      <Symbol
+        name={side === "left" ? "rectangle.lefthalf.filled" : "rectangle.righthalf.filled"}
+        size={18}
+        color={active ? theme.accent : rest}
+        style={{ width: 24, height: 20 }}
+      />
+      <Text style={{ marginTop: 11, fontSize: 13, fontWeight: "600", color: active ? theme.accent : rest }}>
+        {side === "left" ? "Add left split" : "Add right split"}
+      </Text>
     </Animated.View>
   );
 }
 
-// Memoized: the content card re-renders on every tab switch.
-export const SplitToast = memo(function SplitToast({ windowId }: { windowId: string }) {
+export function SplitToast({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const toast = useToasts((s) => s.toasts[windowId] ?? null);
   const appear = useSharedValue(0);
@@ -281,16 +296,19 @@ export const SplitToast = memo(function SplitToast({ windowId }: { windowId: str
     if (!toast) return;
     setShown(toast);
     appear.set(0);
-    appear.set(withSpring(1, TOAST_SPRING));
+    appear.set(withSpring(1, SPLIT_TOAST_SPRING));
     if (toast.sticky) return;
-    const timer = setTimeout(() => {
-      appear.set(
-        fadeOut(() => {
-          setShown(null);
-          hideToast(windowId, toast.id);
-        }),
-      );
-    }, toast.action ? 4000 : 2600);
+    const timer = setTimeout(
+      () => {
+        appear.set(
+          fadeOut(() => {
+            setShown(null);
+            hideToast(windowId, toast.id);
+          }),
+        );
+      },
+      toast.action ? 4000 : 2600,
+    );
     return () => clearTimeout(timer);
   }, [toast?.id]);
   const appearStyle = useAnimatedStyle(() => ({
@@ -332,7 +350,7 @@ export const SplitToast = memo(function SplitToast({ windowId }: { windowId: str
       </Animated.View>
     </View>
   );
-});
+}
 
 function ToastAction({ title, onPress }: { title: string; onPress(): void }) {
   const theme = useTheme();
@@ -340,7 +358,15 @@ function ToastAction({ title, onPress }: { title: string; onPress(): void }) {
   return (
     <Pressable {...hoverProps} onPress={onPress}>
       {({ pressed }) => (
-        <View style={{ height: 24, paddingHorizontal: 10, borderRadius: 7, justifyContent: "center", backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.urlPill }}>
+        <View
+          style={{
+            height: 24,
+            paddingHorizontal: 10,
+            borderRadius: 7,
+            justifyContent: "center",
+            backgroundColor: pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : theme.urlPill,
+          }}
+        >
           <Text style={{ fontSize: 12, fontWeight: "500", color: theme.textPrimary }}>{title}</Text>
         </View>
       )}

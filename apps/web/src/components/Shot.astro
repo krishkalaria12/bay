@@ -1,0 +1,24 @@
+---
+import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
+
+// A real screenshot of Bay, in the same white board as the mockups.
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+}
+const { src, alt } = Astro.props;
+---
+
+<figure class="card relative p-2 shadow-[0_30px_60px_-30px_rgba(30,32,60,0.35)] sm:p-3">
+  <Image
+    src={src}
+    alt={alt}
+    widths={[640, 960, 1360, 1800]}
+    sizes="(min-width: 1024px) 640px, 100vw"
+    class="h-auto w-full rounded-xl"
+    loading="lazy"
+    decoding="async"
+  />
+  <slot />
+</figure>

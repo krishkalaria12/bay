@@ -13,20 +13,17 @@ import { useBrowser, type BrowserState } from "../store/browser";
 import { useWindowId, useWindowUi } from "../store/hooks";
 import { activeTabId, engineProfile } from "../store/model";
 import { downloadsIn } from "../store/ui";
-import { downloadStatus, FileIcon, isOpenWhenDone, toggleOpenWhenDone, trashDownload } from "./Downloads";
+import { copyDownloadFile, downloadStatus, FileIcon, isOpenWhenDone, toggleOpenWhenDone, trashDownload } from "./Downloads";
 import { Keycaps } from "./omnibox/Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./omnibox/PaletteActionMenu";
 import { FooterButton, useMenuPresence } from "./omnibox/PaletteContent";
 import { PaletteSurface } from "./omnibox/PaletteSurface";
-import { usePointerHover } from "./omnibox/usePointerHover";
+import { usePointerHover, type PointerHoverEvent } from "./omnibox/usePointerHover";
 import { hostLabel, matchesQuery } from "./pages/PageLayout";
 import { IconButton, useHover } from "./primitives";
+import { DOWNLOADS_LIST_TOP, DOWNLOADS_ROW_HEIGHT, PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT } from "./omnibox/constants";
 
 // The downloads, as a palette: search, a file-type filter, ↩ for the selected file and ⌘K for the rest.
-const FIELD_HEIGHT = 58;
-const FOOTER_HEIGHT = 44;
-const ROW_HEIGHT = 44;
-const LIST_TOP = 4;
 
 // MARK: Filters
 
@@ -43,7 +40,28 @@ const FILTERS: { id: Filter; title: string; icon: string }[] = [
 
 const EXTENSIONS: Record<Exclude<Filter, "all">, string[]> = {
   images: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "avif", "svg", "bmp", "tif", "tiff", "ico", "raw"],
-  documents: ["pdf", "doc", "docx", "pages", "txt", "rtf", "md", "csv", "xls", "xlsx", "numbers", "ppt", "pptx", "key", "odt", "ods", "odp", "epub", "json", "html"],
+  documents: [
+    "pdf",
+    "doc",
+    "docx",
+    "pages",
+    "txt",
+    "rtf",
+    "md",
+    "csv",
+    "xls",
+    "xlsx",
+    "numbers",
+    "ppt",
+    "pptx",
+    "key",
+    "odt",
+    "ods",
+    "odp",
+    "epub",
+    "json",
+    "html",
+  ],
   archives: ["zip", "dmg", "pkg", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "iso"],
   videos: ["mp4", "mov", "m4v", "webm", "mkv", "avi"],
   audio: ["mp3", "m4a", "wav", "aac", "flac", "ogg", "aiff", "opus"],
@@ -79,7 +97,7 @@ async function openDownloadsFolder(windowId: string) {
 }
 
 const ASK_PREF = "download.prompt_for_download";
-const enginePrefsProfile = (windowId: string) => engineProfile(useBrowser.getState().windows[windowId]?.profileId ?? "");
+const enginePrefsProfile = (windowId: string) => engineProfile(useBrowser.getState().windows[windowId]?.spaceId ?? "");
 
 type Primary = "open" | "pause" | "resume" | "remove" | "folder";
 
@@ -154,8 +172,13 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
   useEffect(() => {
     const visible = viewport.current;
     if (!visible.height) return;
-    const top = LIST_TOP + selectedIndex * ROW_HEIGHT;
-    const y = top < visible.y ? top : top + ROW_HEIGHT > visible.y + visible.height ? top + ROW_HEIGHT - visible.height + LIST_TOP : visible.y;
+    const top = DOWNLOADS_LIST_TOP + selectedIndex * DOWNLOADS_ROW_HEIGHT;
+    const y =
+      top < visible.y
+        ? top
+        : top + DOWNLOADS_ROW_HEIGHT > visible.y + visible.height
+          ? top + DOWNLOADS_ROW_HEIGHT - visible.height + DOWNLOADS_LIST_TOP
+          : visible.y;
     if (y !== visible.y) {
       visible.y = y;
       scroll.current?.scrollTo({ y, animated: false });
@@ -197,16 +220,18 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
       { id: "folder", title: "Open Downloads Folder", icon: "folder", hint: d ? undefined : "↩", separator: !!d, run: () => openDownloadsFolder(windowId) },
       ...(askWhere === null
         ? []
-        : [{
-            id: "ask",
-            title: "Ask Where to Save Each File",
-            icon: "folder.badge.questionmark",
-            checked: askWhere,
-            run: async () => {
-              await engineCall("nn_prefs_set", enginePrefsProfile(windowId), { name: ASK_PREF, value: !askWhere });
-              setAskWhere(!askWhere);
+        : [
+            {
+              id: "ask",
+              title: "Ask Where to Save Each File",
+              icon: "folder.badge.questionmark",
+              checked: askWhere,
+              run: async () => {
+                await engineCall("nn_prefs_set", enginePrefsProfile(windowId), { name: ASK_PREF, value: !askWhere });
+                setAskWhere(!askWhere);
+              },
             },
-          }]),
+          ]),
       ...(clearable ? [{ id: "clear", title: "Clear Downloads", icon: "clear", run: () => useBrowser.getState().clearDownloads(windowId) }] : []),
     );
     setMenu({ kind: "actions", title: d?.filename || "Downloads", actions });
@@ -242,11 +267,26 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal>
-      <Pressable accessibilityLabel="Close downloads" onPress={dismiss} style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]} />
-      <Animated.View style={[{ position: "absolute", width, height, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2) }, appearStyle]}>
+      <Pressable
+        accessibilityLabel="Close downloads"
+        onPress={dismiss}
+        style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]}
+      />
+      <Animated.View
+        style={[{ position: "absolute", width, height, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2) }, appearStyle]}
+      >
         <PaletteSurface style={{ flex: 1 }}>
-          <View style={{ height: FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingLeft: 10, paddingRight: 10, gap: 6 }}>
-            <IconButton icon="chevron.left" size={14} weight="semibold" box={30} radius={8} color={theme.textSecondary} tooltip="Close (Esc)" onPress={dismiss} />
+          <View style={{ height: PALETTE_FIELD_HEIGHT, flexDirection: "row", alignItems: "center", paddingLeft: 10, paddingRight: 10, gap: 6 }}>
+            <IconButton
+              icon="chevron.left"
+              size={14}
+              weight="semibold"
+              box={30}
+              radius={8}
+              color={theme.textSecondary}
+              tooltip="Close (Esc)"
+              onPress={dismiss}
+            />
             <TextInput
               ref={input}
               autoFocus
@@ -275,7 +315,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
             <ScrollView
               ref={scroll}
               style={{ flex: 1 }}
-              contentContainerStyle={{ paddingHorizontal: 7, paddingTop: LIST_TOP, paddingBottom: 6 }}
+              contentContainerStyle={{ paddingHorizontal: 7, paddingTop: DOWNLOADS_LIST_TOP, paddingBottom: 6 }}
               keyboardShouldPersistTaps="always"
               onLayout={(e) => {
                 viewport.current.height = e.nativeEvent.layout.height;
@@ -305,7 +345,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
             </ScrollView>
           )}
 
-          <View style={{ height: FOOTER_HEIGHT, paddingHorizontal: 7, paddingBottom: 7, flexDirection: "row", alignItems: "center" }}>
+          <View style={{ height: PALETTE_FOOTER_HEIGHT, paddingHorizontal: 7, paddingBottom: 7, flexDirection: "row", alignItems: "center" }}>
             <View
               style={{
                 height: 30,
@@ -349,10 +389,10 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
                 title={presence.shown.title}
                 actions={presence.shown.actions}
                 side="right"
-                top={presence.shown.kind === "filter" ? FIELD_HEIGHT - 8 : undefined}
+                top={presence.shown.kind === "filter" ? PALETTE_FIELD_HEIGHT - 8 : undefined}
                 placeholder={presence.shown.kind === "filter" ? "Search filters…" : undefined}
                 width={Math.min(presence.shown.kind === "filter" ? 280 : 320, width - 16)}
-                maxHeight={height - 16 - (presence.shown.kind === "filter" ? FIELD_HEIGHT : 0)}
+                maxHeight={height - 16 - (presence.shown.kind === "filter" ? PALETTE_FIELD_HEIGHT : 0)}
                 onClose={closeMenu}
                 progress={presence.progress}
                 closing={presence.closing}
@@ -366,10 +406,21 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
 }
 
 const FIELD_KEYS = [
-  { key: "Escape" }, { key: "Enter" }, { key: "ArrowUp" }, { key: "ArrowDown" }, { key: "Tab" }, { key: "Tab", shiftKey: true },
-  { key: "n", ctrlKey: true }, { key: "p", ctrlKey: true },
-  { key: "k", metaKey: true }, { key: "K", metaKey: true }, { key: "p", metaKey: true }, { key: "P", metaKey: true },
-  { key: "Enter", metaKey: true }, { key: "c", metaKey: true, shiftKey: true }, { key: "C", metaKey: true, shiftKey: true },
+  { key: "Escape" },
+  { key: "Enter" },
+  { key: "ArrowUp" },
+  { key: "ArrowDown" },
+  { key: "Tab" },
+  { key: "Tab", shiftKey: true },
+  { key: "n", ctrlKey: true },
+  { key: "p", ctrlKey: true },
+  { key: "k", metaKey: true },
+  { key: "K", metaKey: true },
+  { key: "p", metaKey: true },
+  { key: "P", metaKey: true },
+  { key: "Enter", metaKey: true },
+  { key: "c", metaKey: true, shiftKey: true },
+  { key: "C", metaKey: true, shiftKey: true },
 ];
 // ⇧⌫ removes the selected download only while the search field is empty, so it still deletes text.
 const EMPTY_FIELD_KEYS = [...FIELD_KEYS, { key: "Backspace", shiftKey: true }];
@@ -392,11 +443,20 @@ function downloadActions(d: Download): PaletteMenuAction[] {
       ? [
           { id: "open", title: "Open", icon: "arrow.up.forward.app", hint: "↩", run: () => openFile(d.path) },
           { id: "reveal", title: isMac ? "Show in Finder" : "Show in File Explorer", icon: "finder", hint: "⌘↩", run: () => revealFile(d.path) },
+          { id: "copyFile", title: "Copy File", icon: "doc.on.doc", run: () => copyDownloadFile(d) },
         ]
       : []),
+    ...(d.state === "finished" && d.path ? [{ id: "copyPath", title: "Copy Path", icon: "text.alignleft", run: () => copyText(d.path) }] : []),
     copy,
     ...(exists ? [{ id: "trash", title: "Move to Trash", icon: "trash", separator: true, run: () => trashDownload(d) }] : []),
-    { id: "remove", title: "Remove from List", icon: "minus.circle", hint: exists ? "⇧⌫" : "↩", separator: !exists, run: () => useBrowser.getState().removeDownload(d.id) },
+    {
+      id: "remove",
+      title: "Remove from List",
+      icon: "minus.circle",
+      hint: exists ? "⇧⌫" : "↩",
+      separator: !exists,
+      run: () => useBrowser.getState().removeDownload(d.id),
+    },
   ];
 }
 
@@ -408,7 +468,17 @@ function FilterButton({ icon, title, onPress }: { icon: string; title: string; o
   return (
     <View {...hoverProps} tooltip="Filter (⌘P)">
       <Pressable accessibilityRole="button" accessibilityLabel={`Show ${title}`} onPress={onPress}>
-        <View style={{ height: 30, borderRadius: 8, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: hovered ? theme.rowHover : undefined }}>
+        <View
+          style={{
+            height: 30,
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            backgroundColor: hovered ? theme.rowHover : undefined,
+          }}
+        >
           <Symbol name={icon} size={14} color={theme.textSecondary} style={{ width: 17, height: 17 }} />
           <Text style={{ fontSize: 14, color: theme.textSecondary }}>{title}</Text>
           <Symbol name="chevron.down" size={9} weight="semibold" color={theme.textTertiary} style={{ width: 12, height: 12 }} />
@@ -455,7 +525,16 @@ function EmptyState({ filtered, onOpenFolder }: { filtered: boolean; onOpenFolde
                 }}
               >
                 <Text style={{ fontSize: 13, fontWeight: "500", color: theme.dark ? "#1C1C1E" : "#FFFFFF" }}>Open Downloads Folder</Text>
-                <View style={{ height: 22, minWidth: 22, borderRadius: 5, alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "#0000001A" : "#FFFFFF26" }}>
+                <View
+                  style={{
+                    height: 22,
+                    minWidth: 22,
+                    borderRadius: 5,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: theme.dark ? "#0000001A" : "#FFFFFF26",
+                  }}
+                >
                   <Text style={{ fontSize: 12, color: theme.dark ? "#1C1C1E99" : "#FFFFFFB3" }}>↩</Text>
                 </View>
               </View>
@@ -467,10 +546,16 @@ function EmptyState({ filtered, onOpenFolder }: { filtered: boolean; onOpenFolde
   );
 }
 
-const PanelRow = memo(function PanelRow({ id, selected, onHover, onPress, onMenu }: {
+const PanelRow = memo(function PanelRow({
+  id,
+  selected,
+  onHover,
+  onPress,
+  onMenu,
+}: {
   id: string;
   selected: boolean;
-  onHover(e: { nativeEvent: { pageX: number; pageY: number } }): void;
+  onHover(e: PointerHoverEvent): void;
   onPress(d: Download): void;
   onMenu(d: Download): void;
 }) {
@@ -486,13 +571,29 @@ const PanelRow = memo(function PanelRow({ id, selected, onHover, onPress, onMenu
       <MouseArea path={done ? d.path : null}>
         <ContextMenuArea onContextMenu={() => onMenu(d)}>
           <Pressable accessibilityRole="button" accessibilityLabel={d.filename || "Download"} accessibilityState={{ selected }} onPress={() => onPress(d)}>
-            <View style={{ height: ROW_HEIGHT, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 9, paddingHorizontal: 10, backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined }}>
+            <View
+              style={{
+                height: DOWNLOADS_ROW_HEIGHT,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 11,
+                borderRadius: 9,
+                paddingHorizontal: 10,
+                backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined,
+              }}
+            >
               <View style={{ opacity: exists ? 1 : 0.45 }}>
                 <FileIcon path={d.path || d.filename} size={26} />
               </View>
               <Text
                 numberOfLines={1}
-                style={{ flexShrink: 1, maxWidth: "50%", fontSize: 13, color: exists ? theme.textPrimary : theme.textSecondary, textDecorationLine: exists ? "none" : "line-through" }}
+                style={{
+                  flexShrink: 1,
+                  maxWidth: "50%",
+                  fontSize: 13,
+                  color: exists ? theme.textPrimary : theme.textSecondary,
+                  textDecorationLine: exists ? "none" : "line-through",
+                }}
               >
                 {d.filename || "Preparing…"}
               </Text>
@@ -501,7 +602,14 @@ const PanelRow = memo(function PanelRow({ id, selected, onHover, onPress, onMenu
               </Text>
               {d.state === "downloading" ? (
                 <View style={{ width: 72, height: 4, borderRadius: 2, backgroundColor: theme.dark ? "#FFFFFF1F" : "#0000001A" }}>
-                  <View style={{ width: `${Math.max(progress, 0.03) * 100}%`, height: 4, borderRadius: 2, backgroundColor: d.paused ? theme.textTertiary : theme.accent }} />
+                  <View
+                    style={{
+                      width: `${Math.max(progress, 0.03) * 100}%`,
+                      height: 4,
+                      borderRadius: 2,
+                      backgroundColor: d.paused ? theme.textTertiary : theme.accent,
+                    }}
+                  />
                 </View>
               ) : (
                 <Text numberOfLines={1} style={{ fontSize: 12, color: theme.textTertiary }}>

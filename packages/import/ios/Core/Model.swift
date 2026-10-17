@@ -3,6 +3,7 @@ import Foundation
 public enum ImportKind: String, Codable, CaseIterable, Sendable {
   case bookmarks, history, tabs, passwords, cookies
   case autofill
+  case extensions
   case spaces
   case pinnedTabs
   case favorites
@@ -239,6 +240,7 @@ public struct ImportResult: Codable, Equatable, Sendable {
   public var credentials: [Credential] = []
   public var spaces: [SpaceSuggestion] = []
   public var favorites: [ImportedTab] = []
+  public var extensions: [ImportedExtension] = []
   public var failed: [ImportKind] = []
   public var warnings: [ImportWarning] = []
   public var vaultToken: String?
@@ -252,7 +254,7 @@ public struct ImportResult: Codable, Equatable, Sendable {
   public private(set) var cardCount = 0
 
   enum CodingKeys: String, CodingKey {
-    case browserId, profileId, profile, bookmarks, history, historyCount, tabs, tabGroups, credentials, spaces, favorites,
+    case browserId, profileId, profile, bookmarks, history, historyCount, tabs, tabGroups, credentials, spaces, favorites, extensions,
          failed, warnings, vaultToken, cookieCount, addressCount, cardCount
   }
 

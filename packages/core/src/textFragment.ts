@@ -1,4 +1,3 @@
-
 export type TextFragment = { prefix?: string; start: string; end?: string; suffix?: string };
 
 export type SelectionContext = {
@@ -38,7 +37,10 @@ function toWordBoundaries({ selected, before, after, pageText }: SelectionContex
 
 export function chooseTextFragment(context: SelectionContext): TextFragment | null {
   const { selected, before, after, pageText } = toWordBoundaries(context);
-  const blocks = selected.split(/\s*\n\s*/).map(normalize).filter(Boolean);
+  const blocks = selected
+    .split(/\s*\n\s*/)
+    .map(normalize)
+    .filter(Boolean);
   if (!blocks.length) return null;
   const page = normalize(pageText).toLowerCase();
   const count = (text: string) => occurrences(page, text.toLowerCase());
@@ -53,8 +55,7 @@ export function chooseTextFragment(context: SelectionContext): TextFragment | nu
       const prefix = beforeWords.slice(-n).join(" ");
       const suffix = afterWords.slice(0, n).join(" ");
       const exhausted = n >= MAX_CONTEXT_WORDS || n >= Math.max(beforeWords.length, afterWords.length);
-      if (exhausted || count([prefix, start, suffix].filter(Boolean).join(" ")) <= 1)
-        return { ...(prefix && { prefix }), start, ...(suffix && { suffix }) };
+      if (exhausted || count([prefix, start, suffix].filter(Boolean).join(" ")) <= 1) return { ...(prefix && { prefix }), start, ...(suffix && { suffix }) };
     }
   }
   const first = wordsOf(blocks[0]!);

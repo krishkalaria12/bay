@@ -9,7 +9,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { useWindowId } from "../../store/hooks";
-import { openFromPage, pageProfileId } from "../layout/openFromPage";
+import { openFromPage, pageSpaceId } from "../layout/openFromPage";
 import { PromptButton } from "../layout/controls";
 import { Checkbox } from "../settings/controls";
 import { extensionPopupGeometry } from "./geometry";
@@ -23,6 +23,7 @@ import {
   useWindowExtensions,
   type InstallRequest,
 } from "./state";
+import { POPUP_MAX_SIZE, POPUP_MIN_SIZE } from "./constants";
 
 export function ExtensionOverlays() {
   const windowId = useWindowId();
@@ -48,9 +49,6 @@ export function InstallDialogHost({ windowId, onClosed }: { windowId: string; on
 
 // MARK: Action popup
 
-const MIN = { width: 25, height: 25 };
-const MAX = { width: 800, height: 600 };
-
 const MEASURE = `
 const measure = () => {
   const d = document.documentElement, b = document.body;
@@ -73,7 +71,18 @@ if (!last || last.w !== now.w || last.h !== now.h) {
   if (document.body) ro.observe(document.body);
 }`;
 
-function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string; pageProfile: string; extensionId: string; url: string; anchor: { x: number; y: number; width: number; height: number } }) {
+function ActionPopup({
+  windowId,
+  pageProfile,
+  url,
+  anchor,
+}: {
+  windowId: string;
+  pageProfile: string;
+  extensionId: string;
+  url: string;
+  anchor: { x: number; y: number; width: number; height: number };
+}) {
   const theme = useTheme();
   const web = useRef<WebViewHandle>(null);
   const window = useWindowDimensions();
@@ -100,8 +109,8 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
     void web.current?.evaluate<{ w: number; h: number }>(MEASURE).then((m) => {
       if (!alive.current || !m) return;
       const next = {
-        width: Math.min(MAX.width, Math.max(MIN.width, m.w)),
-        height: Math.min(MAX.height, Math.max(MIN.height, m.h)),
+        width: Math.min(POPUP_MAX_SIZE.width, Math.max(POPUP_MIN_SIZE.width, m.w)),
+        height: Math.min(POPUP_MAX_SIZE.height, Math.max(POPUP_MIN_SIZE.height, m.h)),
       };
       setSize((prev) => {
         if (!prev) appear.set(withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic) }));
@@ -111,7 +120,7 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
     });
   };
 
-  const { width, height, left, top } = extensionPopupGeometry(anchor, size ?? MIN, window);
+  const { width, height, left, top } = extensionPopupGeometry(anchor, size ?? POPUP_MIN_SIZE, window);
 
   return (
     <>
@@ -144,7 +153,7 @@ function ActionPopup({ windowId, pageProfile, url, anchor }: { windowId: string;
               }}
               onWindowClose={closeExtensionPopup}
               onOpenWindow={(request) => {
-                openFromPage(request, { windowId, profileId: pageProfileId(windowId, pageProfile) });
+                openFromPage(request, { windowId, spaceId: pageSpaceId(windowId, pageProfile) });
                 if (request.disposition !== "background") closeExtensionPopup();
               }}
             />

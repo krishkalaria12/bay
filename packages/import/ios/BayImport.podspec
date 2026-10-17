@@ -15,6 +15,6 @@ Pod::Spec.new do |s|
   s.libraries      = 'sqlite3'
   # Core/ is plain Swift with no Expo dependency; it's also built and tested on its own by
   # ../Package.swift (`pnpm --filter @bay/import test`).
-  s.source_files   = 'ImportModule.swift', 'ImportWriter.swift', 'Core/**/*.swift'
+  s.source_files   = 'ImportModule.swift', 'ImportWriter.swift', 'ExtensionImportWriter.swift', 'Core/**/*.swift'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
 end

@@ -1,16 +1,19 @@
 import { View, isMac } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
-import { copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/shell";
+import { copyFile, copyText, fileExists, fileIcon, moveToTrash, openFile, revealFile, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
 import { Image, StyleSheet } from "react-native";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
-import { layout, useTheme } from "../lib/theme";
+import { useTheme } from "../lib/theme";
+import { layout } from "../lib/constants";
 import { useBrowser } from "../store/browser";
 import { useSidebarOpen, useWindowId } from "../store/hooks";
 import { downloadVisibleIn } from "../store/ui";
-import { SIDEBAR_FOOTER_DOWNLOADS, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
+import { useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
+import { SIDEBAR_FOOTER_DOWNLOADS } from "./layout/constants";
 import { openInternalPage } from "./pages/urls";
 import { useSidebarWidth } from "./sidebar/tokens";
+import { showToast } from "./layout/splitActions";
 
 // MARK: Formatting
 
@@ -73,6 +76,8 @@ export async function downloadMenu(d: Download, windowId: string) {
       : [
           { id: "open", title: "Open", enabled: exists },
           { id: "reveal", title: isMac ? "Show in Finder" : "Show in File Explorer", enabled: exists },
+          { id: "copyFile", title: "Copy File", enabled: exists },
+          { id: "copyPath", title: "Copy Path", enabled: d.state === "finished" && !!d.path },
         ];
   items.push(
     { separator: true },
@@ -89,10 +94,22 @@ export async function downloadMenu(d: Download, windowId: string) {
   if (choice === "cancel") void cancelDownload(d.id);
   if (choice === "open") void openFile(d.path);
   if (choice === "reveal") void revealFile(d.path);
+  if (choice === "copyFile") {
+    try {
+      await copyDownloadFile(d);
+    } catch (error) {
+      showToast(windowId, "Couldn't copy file", error instanceof Error ? error.message : "Try again.");
+    }
+  }
+  if (choice === "copyPath") copyText(d.path);
   if (choice === "copy") copyText(d.url);
   if (choice === "page") openInternalPage("downloads", windowId);
   if (choice === "trash") void trashDownload(d);
   if (choice === "remove") useBrowser.getState().removeDownload(d.id);
+}
+
+export async function copyDownloadFile(d: Download) {
+  if (!(await copyFile(d.path))) throw new Error("The file may have been moved or deleted.");
 }
 
 export async function trashDownload(d: Download) {
@@ -158,7 +175,10 @@ export function DownloadMagnet() {
   const sidebar = !topStrip && sidebarOpen ? sidebarWidth : 0;
   // The sidebar's left edge: the window's, or the page's right one with the sidebar on the right.
   const sidebarLeft = right ? size.width - sidebar : 0;
-  const footer = { x: sidebarLeft + layout.sidebarInset + SIDEBAR_FOOTER_DOWNLOADS.size / 2, y: size.height - SIDEBAR_FOOTER_DOWNLOADS.bottom - SIDEBAR_FOOTER_DOWNLOADS.size / 2 };
+  const footer = {
+    x: sidebarLeft + layout.sidebarInset + SIDEBAR_FOOTER_DOWNLOADS.size / 2,
+    y: size.height - SIDEBAR_FOOTER_DOWNLOADS.bottom - SIDEBAR_FOOTER_DOWNLOADS.size / 2,
+  };
   const target = topStrip ? { x: size.width - 25, y: 21 } : sidebarOpen ? footer : { x: 24, y: 24 };
   const start = { x: (right ? 0 : sidebar) + (size.width - sidebar) / 2, y: size.height * 0.45 };
   const icon = 44;
@@ -169,7 +189,11 @@ export function DownloadMagnet() {
     const p = t.get();
     return {
       opacity: interpolate(p, [0, 0.1, 0.8, 1], [0, 1, 1, 0]),
-      transform: [{ translateX: interpolate(p, steps, xs) }, { translateY: interpolate(p, steps, ys) }, { scale: interpolate(p, [0, 0.15, 1], [0.6, 1.1, 0.3]) }],
+      transform: [
+        { translateX: interpolate(p, steps, xs) },
+        { translateY: interpolate(p, steps, ys) },
+        { scale: interpolate(p, [0, 0.15, 1], [0.6, 1.1, 0.3]) },
+      ],
     };
   }, [xs.join(), ys.join()]);
 

@@ -72,6 +72,12 @@ export function SearchPane() {
           <Toggle value={settings.searchSuggestions} onChange={(v) => useBrowser.getState().updateSettings({ searchSuggestions: v })} />
         </Row>
       </Group>
+      <SectionHeader title="Command bar" />
+      <Group>
+        <Row title="Calculator" description="Show answers for math, unit conversions and currency conversions. Currency rates require an internet connection.">
+          <Toggle value={settings.calculatorEnabled} onChange={(v) => useBrowser.getState().updateSettings({ calculatorEnabled: v })} />
+        </Row>
+      </Group>
     </View>
   );
 }
@@ -86,9 +92,7 @@ function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngin
       : engine.keyword;
   return (
     <Row icon={<Favicon url={`https://${engineHost(engine)}`} />} title={engine.name} description={description}>
-      {editable && (
-        <IconButton icon="pencil" size={11} box={24} radius={6} onPress={() => showSettingsSheet(<EngineSheet engine={engine} />)} tooltip="Edit" />
-      )}
+      {editable && <IconButton icon="pencil" size={11} box={24} radius={6} onPress={() => showSettingsSheet(<EngineSheet engine={engine} />)} tooltip="Edit" />}
       {selected ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 5, minWidth: 92, justifyContent: "flex-end" }}>
           <Symbol name="checkmark" size={11} weight="semibold" color={colors.accent} style={{ width: 14, height: 14 }} />

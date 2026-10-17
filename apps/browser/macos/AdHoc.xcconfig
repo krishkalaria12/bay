@@ -1,4 +1,4 @@
-// Ad-hoc signing, for machines without the U5L5T3NGVV signing identities:
+// Ad-hoc signing, for machines without the GP328GJT66 signing identities:
 //   xcodebuild … -xcconfig macos/AdHoc.xcconfig
 // No provisioning profile, so none of the restricted entitlements (keychain groups:
 // Chrome-profile passkeys) and no hardened runtime (library validation rejects

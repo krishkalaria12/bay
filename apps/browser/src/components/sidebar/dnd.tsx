@@ -1,25 +1,44 @@
+import { type ScrollView, type View } from "@bay/platform";
 import { hapticTick } from "@bay/shell";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
-import { PanResponder, type ScrollView, type View } from "react-native";
-import Animated, { cancelAnimation, Easing, makeMutable, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "@bay/platform/motion";
+import { PanResponder } from "react-native";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  makeMutable,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from "@bay/platform/motion";
 import { create, useStore } from "zustand";
-import { layout, useTheme } from "../../lib/theme";
+import { armSidebarMoveUndo } from "../../lib/folderUndo";
+import { useTheme } from "../../lib/theme";
+import { sidebarMetrics } from "../../lib/sidebarDensity";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
 import { useEffectEvent } from "../../lib/useEffectEvent";
+import { canMoveFolder, folderDepth } from "../../store/folders";
 import type { TabPlacement } from "../../store/organize";
-import { SLIDE } from "../layout/stripReorder";
+import { STRIP_SLIDE } from "../layout/constants";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, updateTabDrag, useTabDrag } from "../layout/tabDrag";
+import { folderDragItemVisible } from "./geometry";
 import { suppressHover } from "./hover";
+import { DRAG_SCROLL_EDGE, PINNED_TILE_GAP } from "./constants";
 
 type Frame = { x: number; y: number; w: number; h: number };
-type Section = "tiles" | "pinnedGroups" | "list";
+type Section = "tiles" | "pinned" | "pinnedGroups" | "list";
 
 export type ItemSpec = {
-  kind: "tile" | "row" | "group" | "split" | "tail";
+  kind: "tile" | "row" | "group" | "folder" | "split" | "tail";
   tabIds: string[];
   section: Section;
   groupId?: string;
+  folderId?: string;
+  // The group or pinned folder a row is in.
   parentGroup?: string;
   collapsed?: boolean;
 };
@@ -37,23 +56,27 @@ type Item = ItemSpec & {
 type Drop =
   | { type: "tabs"; placement: TabPlacement }
   | { type: "group"; placement: { pinned: boolean; beforeId?: string | null } }
+  | { type: "folder"; folderId: string; beforeId: string | null; parentId: string | null }
   | { type: "none" };
 
 // `landing`: let go, it settles into the item's place while the item stays hidden.
-export type Ghost = { item: Item; count: number; width: number; height: number; position: { x: SharedValue<number>; y: SharedValue<number> }; landing?: boolean };
+export type Ghost = {
+  item: Item;
+  count: number;
+  width: number;
+  height: number;
+  position: { x: SharedValue<number>; y: SharedValue<number> };
+  landing?: boolean;
+};
 
 // The list stacks rows with `gap`; a zero-height tail cancels its gap with this negative margin.
 const ROW_GAP = layout.rowGap;
-const TILE_GAP = 6;
-const EDGE = 28;
 // Rows make room and close up with Dia's slide (stripReorder.ts): gaps and sizes are margins, widths and heights.
-const spring = (value: SharedValue<number>, toValue: number) => value.set(withSpring(toValue, SLIDE));
+const spring = (value: SharedValue<number>, toValue: number) => value.set(withSpring(toValue, STRIP_SLIDE));
 
 const inside = (f: Frame, x: number, y: number, slop = 0) => x >= f.x - slop && x <= f.x + f.w + slop && y >= f.y - slop && y <= f.y + f.h + slop;
 const measure = (view: View | null): Promise<Frame | null> =>
-  view
-    ? new Promise((resolve) => view.measureInWindow((x, y, w, h) => resolve(w || h ? { x, y, w, h } : null)))
-    : Promise.resolve(null);
+  view ? new Promise((resolve) => view.measureInWindow((x, y, w, h) => resolve(w || h ? { x, y, w, h } : null))) : Promise.resolve(null);
 
 type Marks = { sources: Set<string>; dropInto: string | null; landing: string | null; pins: boolean };
 const NO_MARKS: Marks = { sources: new Set(), dropInto: null, landing: null, pins: false };
@@ -81,8 +104,7 @@ class DragController {
   private pointer = { x: 0, y: 0 };
   private ghost: Ghost | null = null;
   private gapKey: string | null = null;
-  // The room open at gapKey, and the collapsed group the drop goes into.
-  private pitch = 0;
+  // The collapsed group the drop goes into.
   private into: string | null = null;
   private dropKey = "";
   private drop: Drop = { type: "none" };
@@ -91,10 +113,24 @@ class DragController {
   private token: object | null = null;
   landed: { key: string; x: number; y: number } | null = null;
 
-  constructor(private setGhost: (ghost: Ghost | null) => void) {}
+  constructor(
+    private setGhost: (ghost: Ghost | null) => void,
+    private windowId: string,
+  ) {}
 
   create(key: string): Item {
-    return { key, kind: "row", tabIds: [], section: "list", view: null, header: null, gap: makeMutable(0), size: makeMutable(0), frame: null, headerFrame: null };
+    return {
+      key,
+      kind: "row",
+      tabIds: [],
+      section: "list",
+      view: null,
+      header: null,
+      gap: makeMutable(0),
+      size: makeMutable(0),
+      frame: null,
+      headerFrame: null,
+    };
   }
 
   /** The views an item's frames are measured from. */
@@ -129,7 +165,7 @@ class DragController {
     const frame = item.frame ?? { x, y, w: 176, h: 33 };
     this.grab = { x: x - frame.x, y: y - frame.y };
     const count = new Set(this.sources.flatMap((s) => s.tabIds)).size;
-    const height = item.kind === "group" ? Math.min(frame.h, item.headerFrame?.h ?? 33) : frame.h;
+    const height = item.kind === "group" || item.kind === "folder" ? Math.min(frame.h, item.headerFrame?.h ?? 33) : frame.h;
     // Its picture, taken if it leaves the sidebar: the ghost, where it is by then.
     if (seq) setDragPicture(seq, () => [this.pointer.x - this.grab.x, this.pointer.y - this.grab.y, frame.w, height], [x, y]);
     this.ghost = {
@@ -195,11 +231,13 @@ class DragController {
       !splitDrop && this.measured && ghost && sources.length === 1 && sources[0]!.kind !== "tile" && !this.into
         ? this.landingSpot(commit ? drop : { type: "none" })
         : null;
+    const undoBefore = useBrowser.getState().folderMoveUndo;
     if (commit && !splitDrop && this.measured && sources.length) {
       const s = useBrowser.getState();
       const ids = sources.flatMap((i) => i.tabIds);
       if (drop.type === "tabs") s.placeTabs(ids, drop.placement);
       else if (drop.type === "group" && sources[0]!.groupId) s.moveGroup(sources[0]!.groupId, drop.placement);
+      else if (drop.type === "folder") s.movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId);
     }
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
     for (const i of this.items.values()) {
@@ -218,6 +256,7 @@ class DragController {
     this.setSources(new Set());
     this.setDropInto(null);
     this.marks.setState({ pins: false });
+    if (useBrowser.getState().folderMoveUndo !== undoBefore) armSidebarMoveUndo(this.windowId);
     if (!spot || !ghost) {
       this.token = null;
       this.setLanding(null);
@@ -239,9 +278,9 @@ class DragController {
       // DEV: where it landed, for the drag test to compare with the item's place.
       if (__DEV__) this.landed = at && { key: ghost.item.key, x: at.x, y: at.y };
       if (!at) return done();
-      ghost.position.x.set(withSpring(at.x - this.rootFrame.x, SLIDE));
+      ghost.position.x.set(withSpring(at.x - this.rootFrame.x, STRIP_SLIDE));
       ghost.position.y.set(
-        withSpring(at.y - this.rootFrame.y, SLIDE, () => {
+        withSpring(at.y - this.rootFrame.y, STRIP_SLIDE, () => {
           runOnJS(done)();
         }),
       );
@@ -273,7 +312,10 @@ class DragController {
     if (!emptied && source !== ref && source.frame && source.frame.y < top)
       closing += source.parentGroup ? Math.max(0, now(source.size) - ROW_GAP) + ROW_GAP : now(source.size);
     // A tail is a zero-height mark after its section's or group's last item: its x is the container's.
-    const container = ref.kind === "tail" ? [...this.items.values()].find((i) => i !== source && i.kind !== "tail" && i.frame && i.section === ref.section && i.parentGroup === ref.parentGroup) : ref;
+    const container =
+      ref.kind === "tail"
+        ? [...this.items.values()].find((i) => i !== source && i.kind !== "tail" && i.frame && i.section === ref.section && i.parentGroup === ref.parentGroup)
+        : ref;
     // Dropped nowhere, the list goes back to how it was when the drag began: its place then.
     const home = target ? null : this.at(source.frame);
     if (home) return Promise.resolve({ x: home.x, y: home.y });
@@ -285,7 +327,13 @@ class DragController {
 
   private autoScroll(y: number) {
     const v = this.viewport;
-    const speed = !v ? 0 : y < v.y + EDGE ? -Math.ceil((v.y + EDGE - y) / 4) : y > v.y + v.h - EDGE ? Math.ceil((y - (v.y + v.h - EDGE)) / 4) : 0;
+    const speed = !v
+      ? 0
+      : y < v.y + DRAG_SCROLL_EDGE
+        ? -Math.ceil((v.y + DRAG_SCROLL_EDGE - y) / 4)
+        : y > v.y + v.h - DRAG_SCROLL_EDGE
+          ? Math.ceil((y - (v.y + v.h - DRAG_SCROLL_EDGE)) / 4)
+          : 0;
     clearInterval(this.scrollTimer);
     this.scrollTimer = undefined;
     if (!speed || !this.scroll) return;
@@ -306,7 +354,20 @@ class DragController {
     const { x, y } = this.pointer;
     const source = this.sources[0]!;
     const sourceKeys = new Set(this.sources.map((s) => s.key));
-    const live = [...this.items.values()].filter((i) => !sourceKeys.has(i.key) && i.frame);
+    const state = useBrowser.getState();
+    const inSourceFolder = (i: Item) => {
+      if (source.kind !== "folder") return false;
+      const id = i.folderId ?? i.parentGroup;
+      let folder = id ? state.pinnedFolders[id] : undefined;
+      while (folder) {
+        if (folder.id === source.folderId) return true;
+        folder = folder.parentId ? state.pinnedFolders[folder.parentId] : undefined;
+      }
+      return false;
+    };
+    const live = [...this.items.values()].filter(
+      (i) => !sourceKeys.has(i.key) && i.frame && !inSourceFolder(i) && folderDragItemVisible(state, this.windowId, i),
+    );
     const cy = (i: Item) => {
       const f = this.at(i.frame)!;
       return f.y + Math.min(f.h, i.headerFrame?.h ?? f.h) / 2;
@@ -316,7 +377,10 @@ class DragController {
     const dragged = new Set(this.sources.flatMap((s) => s.tabIds));
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
-    const rowPitch = (source.kind === "group" ? (source.frame?.h ?? layout.rowHeight) : layout.rowHeight * Math.max(1, this.ghost?.count ?? 1)) + ROW_GAP;
+    const rowPitch =
+      (source.kind === "group" || source.kind === "folder"
+        ? (source.frame?.h ?? sidebarMetrics(useBrowser.getState().settings.density).rowHeight)
+        : sidebarMetrics(useBrowser.getState().settings.density).rowHeight * Math.max(1, this.ghost?.count ?? 1)) + ROW_GAP;
     let drop: Drop = { type: "none" };
     let gapKey: string | null = null;
     let pitch = rowPitch;
@@ -335,8 +399,24 @@ class DragController {
       });
       drop = { type: "tabs", placement: { pinned: true, beforeId: firstTab(before) } };
       gapKey = before?.key ?? "tail:tiles";
-      pitch = (cells[0]?.frame?.w ?? source.frame?.w ?? 50) + TILE_GAP;
+      pitch = (cells[0]?.frame?.w ?? source.frame?.w ?? 50) + PINNED_TILE_GAP;
     } else {
+      // Above the line under the Pinned section, a tab is pinned there.
+      const divider = this.at(this.regionFrames.get("divider") ?? null);
+      const pinning = tabsDrag && !!divider && y < divider.y + divider.h / 2;
+      // Onto a pinned folder's header (its middle third), or among its open rows.
+      const folderDrag = source.kind === "folder";
+      const folder =
+        tabsDrag || folderDrag
+          ? live
+              .filter((i) => i.kind === "folder" && (!folderDrag || canMoveFolder(state, source.folderId!, i.folderId!)))
+              .sort((a, b) => folderDepth(state, b.folderId!) - folderDepth(state, a.folderId!))
+              .find((f) => {
+                const header = this.at(f.headerFrame);
+                if (header && inside(header, x, y)) return Math.abs(y - (header.y + header.h / 2)) < header.h / 3;
+                return !f.collapsed && inside(this.at(f.frame)!, x, y);
+              })
+          : undefined;
       const groups = live.filter((i) => i.kind === "group");
       const box = tabsDrag
         ? groups.find((g) => {
@@ -346,7 +426,22 @@ class DragController {
             return inside(f, x, y) && (!header || y > header.y + header.h * 0.75);
           })
         : undefined;
-      if (box?.collapsed) {
+      if (folder) {
+        const header = this.at(folder.headerFrame);
+        if (header && y <= header.y + header.h) {
+          drop = folderDrag
+            ? { type: "folder", folderId: source.folderId!, parentId: folder.folderId!, beforeId: null }
+            : { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: null } };
+          into = folder.folderId!;
+        } else {
+          const members = live.filter((i) => (i.kind === "row" || i.kind === "folder") && i.parentGroup === folder.folderId).sort(byY);
+          const before = members.find((m) => cy(m) > y);
+          drop = folderDrag
+            ? { type: "folder", folderId: source.folderId!, parentId: folder.folderId!, beforeId: before?.folderId ?? firstTab(before) }
+            : { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: firstTab(before) } };
+          gapKey = before?.key ?? `tail:folder:${folder.folderId}`;
+        }
+      } else if (box?.collapsed) {
         drop = { type: "tabs", placement: { pinned: false, groupId: box.groupId!, beforeId: null } };
         into = box.groupId!;
       } else if (box) {
@@ -356,19 +451,25 @@ class DragController {
         gapKey = before?.key ?? `tail:group:${box.groupId}`;
       } else {
         const list = this.at(this.regionFrames.get("list") ?? null);
+        // A folder stays in the Pinned section; a group goes among the pinned groups or the list.
         const pinned = source.kind === "group" && !!list && y < list.y;
-        const section: Section = pinned ? "pinnedGroups" : "list";
+        let section: Section = "list";
+        if (source.kind === "folder" || pinning) section = "pinned";
+        else if (pinned) section = "pinnedGroups";
         const blocks = live.filter((i) => i.section === section && !i.parentGroup && i.kind !== "tail" && i.kind !== "tile").sort(byY);
-        // A block holding nothing but what's dragged (a group's last member) isn't a place to land before.
-        const before = blocks.find((b) => cy(b) > y && firstTab(b) !== null);
+        // A block holding nothing but what's dragged (a group's last member) isn't a place to land before; an empty
+        // folder is (its rows would land before the folders that follow, as it shows after them).
+        const before = blocks.find((b) => cy(b) > y && (firstTab(b) !== null || (b.kind === "folder" && !b.tabIds.length)));
         gapKey = before?.key ?? `tail:${section}`;
         drop =
           source.kind === "group"
             ? { type: "group", placement: { pinned, beforeId: firstTab(before) } }
-            : { type: "tabs", placement: { pinned: false, beforeId: firstTab(before) } };
+            : source.kind === "folder"
+              ? { type: "folder", folderId: source.folderId!, beforeId: before?.folderId ?? firstTab(before), parentId: null }
+              : { type: "tabs", placement: { pinned: false, row: section === "pinned", folderId: null, beforeId: firstTab(before) } };
       }
     }
-    if (source.kind === "split" && drop.type === "tabs" && (drop.placement.pinned || drop.placement.groupId)) {
+    if (source.kind === "split" && drop.type === "tabs" && (drop.placement.pinned || drop.placement.groupId || drop.placement.row)) {
       drop = { type: "none" };
       gapKey = null;
       into = null;
@@ -388,7 +489,6 @@ class DragController {
       const next = gapKey && this.items.get(gapKey);
       if (next) spring(next.gap, pitch);
       this.gapKey = gapKey;
-      this.pitch = pitch;
     }
   }
 }
@@ -396,8 +496,15 @@ class DragController {
 const DragContext = createContext<DragController | null>(null);
 
 export function DragProvider({ children }: { children: (ghost: Ghost | null, controller: DragController) => ReactNode }) {
+  const windowId = useWindowId();
+  const density = useBrowser((s) => s.settings.density);
+  const folded = useBrowser((s) => !!s.spaces[s.windows[windowId]?.spaceId ?? ""]?.folded);
   const [ghost, setGhost] = useState<Ghost | null>(null);
-  const [controller] = useState(() => new DragController(setGhost));
+  const [controller] = useState(() => new DragController(setGhost, windowId));
+  useEffect(() => {
+    // Changing density or folding the space invalidates the frames captured at drag start.
+    if (controller.active) controller.end(false);
+  }, [controller, density, folded]);
   useEffect(() => {
     if (__DEV__) (globalThis as { sidebarDrag?: DragController }).sidebarDrag = controller;
     // The sidebar going away mid-drag (its window closing, the layout switching) ends the drag and its picture.
@@ -423,17 +530,20 @@ function WindowDropHighlight() {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[{
-        position: "absolute",
-        left: 5,
-        right: 5,
-        top: 44,
-        bottom: 6,
-        borderRadius: 10,
-        borderWidth: 1.5,
-        borderColor: theme.accent,
-        backgroundColor: theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-      }, glowStyle]}
+      style={[
+        {
+          position: "absolute",
+          left: 5,
+          right: 5,
+          top: 44,
+          bottom: 6,
+          borderRadius: 10,
+          borderWidth: 1.5,
+          borderColor: theme.accent,
+          backgroundColor: theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+        },
+        glowStyle,
+      ]}
     />
   );
 }
@@ -503,7 +613,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
         motion,
         source
           ? horizontal
-            ? { marginRight: -TILE_GAP, opacity: 0, overflow: "hidden" as const }
+            ? { marginRight: -PINNED_TILE_GAP, opacity: 0, overflow: "hidden" as const }
             : { marginBottom: -ROW_GAP, opacity: 0, overflow: "hidden" as const }
           : landing
             ? { opacity: 0 }

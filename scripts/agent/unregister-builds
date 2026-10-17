@@ -1,6 +1,6 @@
 #!/bin/bash
 # Removes agents' test builds from LaunchServices. Every Bay.app an agent builds or launches registers
-# under the real bundle id (com.bay.browser), and macOS may then pick one of them when the owner opens
+# under the real bundle id (in.krishkalaria.bay), and macOS may then pick one of them when the owner opens
 # Bay or clicks a link: on 2026-10-01 the owner's browser came back up as an agent's half-finished
 # Release build, on their real data. Keeps /Applications/Bay.app and dist/*-rc/export builds (the RCs
 # the owner tries); a running app keeps running. `locked xcodebuild` runs this after every build.

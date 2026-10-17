@@ -1,3 +1,4 @@
+import { ownsProfileData } from "../store/spaces";
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import {
   Clock,
@@ -16,9 +17,9 @@ import {
 } from "@bay/sync";
 import { create } from "zustand";
 import { useBrowser } from "../store/browser";
-import { isIncognitoProfile } from "../store/model";
-import { DEFAULT_PROFILE_ID } from "../store/settings";
-import type { Profile } from "../store/types";
+import { isIncognitoSpace } from "../store/model";
+import { DEFAULT_SPACE_ID } from "../store/constants";
+import type { Space } from "../store/types";
 import {
   bookmarksAdapter,
   deviceAdapter,
@@ -33,6 +34,8 @@ import {
   type DeviceTabs,
   type ProfileRecord,
 } from "./adapters";
+import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_CYCLE_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
+import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules";
 
 export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "settings";
 
@@ -66,13 +69,6 @@ type SyncDoc = {
   seqs?: Record<string, number>;
 };
 
-const DOC = "sync.json";
-const STATE = "sync-state.nns";
-const JOURNAL = "sync-journal.nns";
-const APP_SCOPE = "app";
-const CYCLE_MS = 15_000;
-const AFTER_EDIT_MS = 3_000;
-
 const defaultTypes = (): Record<DataType, boolean> => ({ bookmarks: true, history: true, tabs: true, pinned: true, passwords: true, settings: true });
 
 const emptyDoc = (): SyncDoc => ({
@@ -93,7 +89,7 @@ export type SyncStatus = "off" | "starting" | "updating" | "updated" | "stalled"
 
 export type SyncedDevice = { id: string; name: string; lastSeen: number | null; current: boolean };
 export type RemoteTabs = { deviceId: string; name: string; tabs: { url: string; title: string }[] };
-export type RemoteProfile = { syncId: string; name: string; color: Profile["color"]; icon: string | null };
+export type RemoteProfile = { syncId: string; name: string; color: Space["color"]; icon: string | null };
 
 type SyncUi = {
   status: SyncStatus;
@@ -133,7 +129,7 @@ const passwordAdapters = new Map<string, Adapter>();
 
 function load() {
   try {
-    const json = readDocument(DOC);
+    const json = readDocument(SYNC_DOC);
     if (json) doc = { ...emptyDoc(), ...(JSON.parse(json) as SyncDoc), scopes: {} };
     savedJson = json ?? "";
   } catch (error) {
@@ -157,8 +153,8 @@ async function openSealed<T>(name: string, fallback: T): Promise<T> {
 }
 
 async function loadState() {
-  const scopes = await openSealed<SyncDoc["scopes"]>(STATE, {});
-  journal = (await openSealed<{ journal?: Journal }>(JOURNAL, {})).journal ?? {};
+  const scopes = await openSealed<SyncDoc["scopes"]>(SYNC_STATE_FILE, {});
+  journal = (await openSealed<{ journal?: Journal }>(SYNC_JOURNAL_FILE, {})).journal ?? {};
   journalOnDisk = Object.keys(journal).length > 0;
   const clock = new Clock(doc.deviceId ?? "", doc.clock);
   for (const scope of new Set([...Object.keys(doc.seqs ?? {}), ...Object.keys(journal)])) {
@@ -175,7 +171,7 @@ const persistJournal = (scope: string) => async (batches: LogFile[]) => {
   const sealed = await SyncNative!.sealLocal(JSON.stringify({ journal }));
   // The journal must be on disk before the batches are published: after a crash, it's how this device knows
   // which sequence numbers it already used.
-  await saveDocument(JOURNAL, sealed);
+  await saveDocument(SYNC_JOURNAL_FILE, sealed);
   journalOnDisk = true;
 };
 
@@ -191,7 +187,7 @@ function pruneJournal(saved: Record<string, number>) {
 function clearJournal() {
   journal = {};
   journalOnDisk = false;
-  writeDocument(JOURNAL, "");
+  writeDocument(SYNC_JOURNAL_FILE, "");
 }
 
 let savedState = "";
@@ -202,13 +198,13 @@ function save() {
   const json = JSON.stringify({ ...meta, seqs: Object.fromEntries(Object.entries(scopes).map(([k, s]) => [k, writtenSeq(s)])) });
   if (json !== savedJson) {
     savedJson = json;
-    writeDocument(DOC, json);
+    writeDocument(SYNC_DOC, json);
   }
   const state = doc.enabled ? JSON.stringify(scopes) : "";
   if (state === savedState || sealing) return;
   if (!state) {
     savedState = "";
-    writeDocument(STATE, "");
+    writeDocument(SYNC_STATE_FILE, "");
     return;
   }
   const seqs = Object.fromEntries(Object.entries(scopes).map(([k, s]) => [k, s.seq]));
@@ -217,7 +213,7 @@ function save() {
       const sealed = await SyncNative?.sealLocal(state);
       if (sealed) {
         // Only once the state is on disk may the journal entries it covers go.
-        await saveDocument(STATE, sealed);
+        await saveDocument(SYNC_STATE_FILE, sealed);
         savedState = state;
         pruneJournal(seqs);
       }
@@ -250,32 +246,32 @@ function appAdapters(retiring: boolean): Adapter[] {
   const id = doc.deviceId!;
   if (retiring) return [deviceAdapter(id, deviceName, true)];
   return [
-    ...(doc.types.settings ? [settingsAdapter] : []),
+    ...(doc.types.settings ? [settingsAdapter, linkRulesAdapter(() => doc.profiles)] : []),
     profilesAdapter(() => Object.fromEntries(Object.entries(doc.profiles).filter(([, l]) => l.enabled))),
     deviceAdapter(id, deviceName),
   ];
 }
 
-function profileAdapters(profileId: string, retiring: boolean): Adapter[] {
+function profileAdapters(spaceId: string, retiring: boolean): Adapter[] {
   const id = doc.deviceId!;
-  if (retiring) return [deviceTabsAdapter(profileId, id, deviceName, true)];
-  const s = useBrowser.getState();
-  const ownsData = !s.profiles[profileId]?.dataId;
+  if (retiring) return [deviceTabsAdapter(spaceId, id, deviceName, true)];
   const t = doc.types;
-  let passwords = passwordAdapters.get(profileId);
-  if (!passwords) passwordAdapters.set(profileId, (passwords = passwordsAdapter(profileId, () => forcePasswords)));
+  let passwords = passwordAdapters.get(spaceId);
+  if (!passwords) passwordAdapters.set(spaceId, (passwords = passwordsAdapter(spaceId, () => forcePasswords)));
+  // Spaces sharing sign-ins share one profile's bookmarks, history and passwords: one of them syncs those.
+  const owns = ownsProfileData(useBrowser.getState(), spaceId);
   return [
-    ...(t.pinned ? [pinnedAdapter(profileId)] : []),
-    ...(t.bookmarks && ownsData ? [bookmarksAdapter(profileId)] : []),
-    ...(t.history && ownsData ? [historyAdapter(profileId)] : []),
-    deviceTabsAdapter(profileId, id, deviceName, !t.tabs),
-    ...(t.passwords && ownsData ? [passwords] : []),
+    ...(t.pinned ? [pinnedAdapter(spaceId)] : []),
+    ...(t.bookmarks && owns ? [bookmarksAdapter(spaceId)] : []),
+    ...(t.history && owns ? [historyAdapter(spaceId)] : []),
+    deviceTabsAdapter(spaceId, id, deviceName, !t.tabs),
+    ...(t.passwords && owns ? [passwords] : []),
   ];
 }
 
 // MARK: The cycle
 
-export function scheduleSync(delay = AFTER_EDIT_MS) {
+export function scheduleSync(delay = SYNC_AFTER_EDIT_MS) {
   if (!doc.enabled) return;
   clearTimeout(timer);
   timer = setTimeout(() => void runCycle(), delay);
@@ -304,6 +300,7 @@ async function runCycle({ retiring = false } = {}) {
     const clock = new Clock(doc.deviceId, doc.clock);
     const device = doc.deviceId;
     const app = (doc.scopes[APP_SCOPE] ??= { ...emptyScope(), awaitRemote: doc.joining });
+    if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
     await syncScope({
       scope: APP_SCOPE,
       state: app,
@@ -314,10 +311,11 @@ async function runCycle({ retiring = false } = {}) {
       options: { persist: persistJournal(APP_SCOPE) },
     });
     if (app.joined) linkProfiles(app);
+    if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
     let pending = app.pending;
     const s = useBrowser.getState();
-    for (const [profileId, link] of Object.entries(doc.profiles)) {
-      const exists = !!s.profiles[profileId];
+    for (const [spaceId, link] of Object.entries(doc.profiles)) {
+      const exists = !!s.spaces[spaceId];
       const retire = retiring || !!link.retire || !exists;
       if (!retire && !link.enabled) continue;
       const scope = `p:${link.syncId}`;
@@ -326,7 +324,7 @@ async function runCycle({ retiring = false } = {}) {
         scope,
         state,
         transport,
-        adapters: profileAdapters(profileId, retire),
+        adapters: profileAdapters(spaceId, retire),
         clock,
         device,
         options: { expired: historyExpired, persist: persistJournal(scope) },
@@ -336,7 +334,7 @@ async function runCycle({ retiring = false } = {}) {
         delete link.retire;
         if (!exists) {
           delete doc.scopes[scope];
-          delete doc.profiles[profileId];
+          delete doc.profiles[spaceId];
         }
       }
     }
@@ -357,7 +355,7 @@ async function runCycle({ retiring = false } = {}) {
         again = false;
         scheduleSync(0);
       } else {
-        scheduleSync(CYCLE_MS);
+        scheduleSync(SYNC_CYCLE_MS);
       }
     }
   }
@@ -369,19 +367,17 @@ function linkProfiles(app: ScopeState) {
   const s = useBrowser.getState();
   const remote = [...visible(app, "prof:")].map(([k, v]) => [k.slice(5), v as ProfileRecord] as const);
   const taken = new Set(Object.values(doc.profiles).map((l) => l.syncId));
-  for (const id of s.profileOrder) {
-    const profile = s.profiles[id];
-    if (!profile || isIncognitoProfile(id) || doc.profiles[id]) continue;
-    const match = doc.joining
-      ? remote.find(([syncId, r]) => !taken.has(syncId) && (id === DEFAULT_PROFILE_ID ? r.d : r.n === profile.name))?.[0]
-      : undefined;
+  for (const id of s.spaceOrder) {
+    const profile = s.spaces[id];
+    if (!profile || isIncognitoSpace(id) || doc.profiles[id]) continue;
+    const match = doc.joining ? remote.find(([syncId, r]) => !taken.has(syncId) && (id === DEFAULT_SPACE_ID ? r.d : r.n === profile.name))?.[0] : undefined;
     const syncId = match ?? SyncNative!.newDeviceId();
     doc.profiles[id] = { syncId, enabled: true };
     taken.add(syncId);
     // Read the existing chain before publishing local sync data.
     if (match) doc.scopes[`p:${syncId}`] = { ...emptyScope(), awaitRemote: true };
   }
-  for (const [id, link] of Object.entries(doc.profiles)) if (!s.profiles[id] && !link.retire) link.retire = true;
+  for (const [id, link] of Object.entries(doc.profiles)) if (!s.spaces[id] && !link.retire) link.retire = true;
 }
 
 async function resetFromElsewhere() {
@@ -403,14 +399,18 @@ function summarize(): Pick<SyncUi, "devices" | "remoteTabs" | "remoteProfiles"> 
   const devices: SyncedDevice[] = [...names].map(([id, name]) => ({ id, name, lastSeen: lastSeen.get(id) ?? null, current: id === doc.deviceId }));
   devices.sort((a, b) => Number(b.current) - Number(a.current) || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
   const remoteTabs: Record<string, RemoteTabs[]> = {};
-  for (const [profileId, link] of Object.entries(doc.profiles)) {
+  for (const [spaceId, link] of Object.entries(doc.profiles)) {
     const scope = doc.scopes[`p:${link.syncId}`];
     if (!scope || !link.enabled) continue;
-    remoteTabs[profileId] = [...visible(scope, "tabs:")]
+    remoteTabs[spaceId] = [...visible(scope, "tabs:")]
       .map(([k, v]) => ({ deviceId: k.slice(5), value: v as DeviceTabs }))
       // A device that stopped syncing took its record away; one without a name record is on its way out.
       .filter(({ deviceId, value }) => deviceId !== doc.deviceId && names.has(deviceId) && value.tabs.length > 0)
-      .map(({ deviceId, value }) => ({ deviceId, name: names.get(deviceId) || value.n || "Unknown Device", tabs: value.tabs.map((t) => ({ url: t.u, title: t.t })) }));
+      .map(({ deviceId, value }) => ({
+        deviceId,
+        name: names.get(deviceId) || value.n || "Unknown Device",
+        tabs: value.tabs.map((t) => ({ url: t.u, title: t.t })),
+      }));
   }
   const linked = new Set(Object.values(doc.profiles).map((l) => l.syncId));
   const remoteProfiles = [...visible(app, "prof:")]
@@ -511,10 +511,10 @@ export function setTypeSynced(type: DataType, enabled: boolean) {
   scheduleSync(0);
 }
 
-export function setProfileSynced(profileId: string, enabled: boolean) {
-  const link = doc.profiles[profileId];
+export function setProfileSynced(spaceId: string, enabled: boolean) {
+  const link = doc.profiles[spaceId];
   if (!link) return;
-  doc.profiles[profileId] = enabled ? { syncId: link.syncId, enabled } : { ...link, enabled, retire: true };
+  doc.profiles[spaceId] = enabled ? { syncId: link.syncId, enabled } : { ...link, enabled, retire: true };
   save();
   publishUi();
   scheduleSync(0);
@@ -523,8 +523,10 @@ export function setProfileSynced(profileId: string, enabled: boolean) {
 export function addRemoteProfile(syncId: string): string | null {
   const record = doc.scopes[APP_SCOPE]?.records[`prof:${syncId}`]?.v as ProfileRecord | undefined;
   if (!record) return null;
-  const id = useBrowser.getState().createProfile({ name: record.n, color: record.c, icon: record.i });
+  const id = useBrowser.getState().createSpace({ name: record.n, color: record.c, icon: record.i });
+  if (typeof record.f === "boolean") useBrowser.getState().updateSpace(id, { folded: record.f });
   doc.profiles[id] = { syncId, enabled: true };
+  if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
   doc.scopes[`p:${syncId}`] = { ...emptyScope(), awaitRemote: true };
   save();
   publishUi();
@@ -548,11 +550,20 @@ export function startSync() {
   }
   useBrowser.subscribe((s, prev) => {
     if (!doc.enabled || running) return;
-    if (s.bookmarks !== prev.bookmarks || s.settings !== prev.settings || s.profiles !== prev.profiles || s.groups !== prev.groups) scheduleSync();
+    if (s.bookmarks !== prev.bookmarks || s.settings !== prev.settings || s.spaces !== prev.spaces || s.groups !== prev.groups) scheduleSync();
   });
   if (__DEV__) {
     (globalThis as { nnSync?: object }).nnSync = {
-      useSync, syncNow, turnOnSync, enterRecoveryPhrase, stopSync, setTypeSynced, setProfileSynced, addRemoteProfile, setSyncFolder, folderInfo,
+      useSync,
+      syncNow,
+      turnOnSync,
+      enterRecoveryPhrase,
+      stopSync,
+      setTypeSynced,
+      setProfileSynced,
+      addRemoteProfile,
+      setSyncFolder,
+      folderInfo,
       doc: () => doc,
       native: SyncNative,
       get menu(): typeof import("./menu") {

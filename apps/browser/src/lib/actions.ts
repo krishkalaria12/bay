@@ -1,11 +1,11 @@
 import * as cef from "@bay/nncore";
 import { listExtensions } from "@bay/nncore";
 import { confirm, focusWindow } from "@bay/shell";
-import { pageToProfile } from "../components/layout/profilePager";
-import { profileNames, requestCreateProfile, type CreateProfilePreset } from "../components/profiles/CreateProfile";
+import { pageToSpace } from "../components/layout/spacePager";
+import { requestCreateSpace, type CreateSpacePreset } from "../components/spaces/CreateSpace";
 import { useBrowser, type CreateWindowOptions } from "../store/browser";
-import { closesWindow, engineProfile, isIncognitoProfile, resolveWindowId } from "../store/model";
-import { engineIdOf, sharingProfiles } from "../store/profiles";
+import { closesWindow, isIncognitoSpace, resolveWindowId } from "../store/model";
+import { engineIdOf } from "../store/spaces";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
 import { closeWindowDialog } from "./windowClose";
@@ -21,11 +21,13 @@ export function openWindow(options?: CreateWindowOptions): string {
   return store().createWindow(options);
 }
 
-export function switchToTab(tabId: string) {
+/** Shows the tab: in the window with its page if there's one, else where store/tabs.ts windowFor puts it. */
+export function switchToTab(tabId: string, windowId?: string) {
   const tab = store().tabs[tabId];
   if (!tab) return;
-  store().activate(tabId);
-  if (tab.windowId !== store().ui.focusedWindowId) focus(tab.windowId);
+  store().activate(tabId, windowId ?? (store().windows[tab.windowId] ? tab.windowId : undefined));
+  const shown = store().tabs[tabId]!.windowId;
+  if (shown && shown !== store().ui.focusedWindowId) focus(shown);
 }
 
 export async function closeTab(tabId: string) {
@@ -51,27 +53,24 @@ export function toggleMute(tabId: string) {
   void webviews.get(tabId)?.setMuted(!tab.muted);
 }
 
-export function createProfile(windowId?: string, preset?: CreateProfilePreset): Promise<string | null> {
-  return requestCreateProfile(windowId, preset);
+export function createSpace(windowId?: string, preset?: CreateSpacePreset): Promise<string | null> {
+  return requestCreateSpace(windowId, preset);
 }
 
-export async function deleteProfile(profileId: string, windowId?: string) {
+export async function deleteSpace(spaceId: string, windowId?: string) {
   const s = store();
-  const profile = s.profiles[profileId];
-  if (!profile || s.profileOrder.length <= 1) return;
-  const sharing = sharingProfiles(s, profileId).map((id) => s.profiles[id]!.name);
+  const profile = s.spaces[spaceId];
+  if (!profile || s.spaceOrder.length <= 1) return;
   const { confirmed } = await confirm({
     title: `Delete “${profile.name}”?`,
-    message: sharing.length
-      ? `Its tabs will be closed. Its cookies, passwords, extensions, bookmarks and history stay with ${profileNames(sharing)}, which share them.`
-      : `Its tabs will be closed, and its profile and all its data (cookies, passwords, extensions, bookmarks and history) will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
+    message: `Its tabs will be closed, and its cookies, passwords, extensions, bookmarks and history will be removed. This action cannot be undone.${engineIdOf(profile) === "" ? await keptExtensionsNote() : ""}`,
     confirmTitle: "Delete Space",
     destructive: true,
     windowId,
   });
   if (!confirmed) return;
   // The store queues its engine data for deletion (lib/profileData.ts).
-  store().deleteProfile(profileId);
+  store().deleteSpace(spaceId);
 }
 
 // Chrome won't remove the original profile's extensions without asking, so they're only turned off
@@ -82,27 +81,26 @@ async function keptExtensionsNote(): Promise<string> {
     () => null,
   );
   if (names && !names.length) return "";
-  return names ? ` Its extensions (${profileNames(names)}) stay installed on this Mac, turned off.` : " Its extensions stay installed on this Mac, turned off.";
+  return names ? ` Its extensions (${names.join(", ")}) stay installed on this Mac, turned off.` : " Its extensions stay installed on this Mac, turned off.";
 }
 
-export async function moveTabToProfile(tabId: string, target: string) {
+export async function moveTabToSpace(tabId: string, target: string) {
   const tab = store().tabs[tabId];
-  if (!tab || isIncognitoProfile(tab.profileId)) return;
-  const profileId = target === "new" ? await createProfile(tab.windowId) : target;
-  if (!profileId || profileId === tab.profileId) return;
-  const shared = engineProfile(profileId) === engineProfile(tab.profileId);
-  if (store().settings.warnBeforeMovingTabsToProfile && !shared) {
+  if (!tab || isIncognitoSpace(tab.spaceId)) return;
+  const spaceId = target === "new" ? await createSpace(tab.windowId) : target;
+  if (!spaceId || spaceId === tab.spaceId) return;
+  if (store().settings.warnBeforeMovingTabsToSpace) {
     const { confirmed, suppressed } = await confirm({
       title: "Move Tab to Space?",
-      message: "This space uses a different profile, so some of the tab's site data could be lost.",
+      message: "Each space has separate logins and site data. The tab will reload using the destination space's data.",
       confirmTitle: "Move Tab",
       suppression: "Don't warn me again",
       windowId: tab.windowId,
     });
-    if (suppressed) store().updateSettings({ warnBeforeMovingTabsToProfile: false });
+    if (suppressed) store().updateSettings({ warnBeforeMovingTabsToSpace: false });
     if (!confirmed) return;
   }
-  store().moveTabToProfile(tabId, profileId);
+  store().moveTabToSpace(tabId, spaceId);
 }
 
 export function moveTabToWindow(tabId: string, target: string) {
@@ -110,28 +108,28 @@ export function moveTabToWindow(tabId: string, target: string) {
   if (windowId) focus(windowId);
 }
 
-export function switchProfile(windowId: string, profileId: string, animated = false) {
-  if (animated) pageToProfile(windowId, profileId);
-  else store().switchProfile(windowId, profileId);
+export function switchSpace(windowId: string, spaceId: string, animated = false) {
+  if (animated) pageToSpace(windowId, spaceId);
+  else store().switchSpace(windowId, spaceId);
 }
 
-export function cycleProfile(windowId: string, delta: 1 | -1) {
+export function cycleSpace(windowId: string, delta: 1 | -1) {
   if (!cycleTarget(windowId, delta)) return;
   // The native pager steps from its own selection, so rapid presses advance past a store that lags.
-  void cef.stepPager(windowId, delta, true, store().profileOrder.join("\n")).then((ok) => ok || cycleFromStore(windowId, delta));
+  void cef.stepPager(windowId, delta, true, store().spaceOrder.join("\n")).then((ok) => ok || cycleFromStore(windowId, delta));
 }
 
 function cycleFromStore(windowId: string, delta: 1 | -1) {
   const target = cycleTarget(windowId, delta);
-  if (target) switchProfile(windowId, target, true);
+  if (target) switchSpace(windowId, target, true);
 }
 
 function cycleTarget(windowId: string, delta: 1 | -1) {
   const s = store();
   const w = s.windows[windowId];
-  if (!w || w.incognito || s.profileOrder.length < 2) return null;
-  const i = s.profileOrder.indexOf(w.profileId);
-  return s.profileOrder[(i + delta + s.profileOrder.length) % s.profileOrder.length]!;
+  if (!w || w.incognito || s.spaceOrder.length < 2) return null;
+  const i = s.spaceOrder.indexOf(w.spaceId);
+  return s.spaceOrder[(i + delta + s.spaceOrder.length) % s.spaceOrder.length]!;
 }
 
 export function openUrls(urls: string[], windowId?: string | null) {

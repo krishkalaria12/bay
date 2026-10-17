@@ -29,7 +29,8 @@ const url = `http://127.0.0.1:${server.address().port}/`;
 let app;
 try {
   app = await launch(resolve(appArg), {
-    data, port,
+    data,
+    port,
     session: session({ tabs: [{ id: "t1", url, title: "tall" }] }),
     ready: "return !!globalThis.expo.modules.BayCEF.devScrollZoom",
   });
@@ -51,22 +52,33 @@ try {
     ...Array.from({ length: 3 }, () => ({ phase: "momentum", dy: 30 })),
   ];
 
-  const scrollCase = (name, steps, expectZoom) => rep.check(name, async () => {
-    await reset();
-    const zoomed = await scroll(steps);
-    await sleep(800);
-    const after = await zoom();
-    const scrolled = zoomed.every((z) => !z);
-    const detail = `zoomed per event ${JSON.stringify(zoomed)}, zoom ${after}`;
-    if (!(expectZoom ? zoomed.some(Boolean) && after > 1 : scrolled && after === 1)) throw new Error(detail);
-    return detail;
-  });
+  const scrollCase = (name, steps, expectZoom) =>
+    rep.check(name, async () => {
+      await reset();
+      const zoomed = await scroll(steps);
+      await sleep(800);
+      const after = await zoom();
+      const scrolled = zoomed.every((z) => !z);
+      const detail = `zoomed per event ${JSON.stringify(zoomed)}, zoom ${after}`;
+      if (!(expectZoom ? zoomed.some(Boolean) && after > 1 : scrolled && after === 1)) throw new Error(detail);
+      return detail;
+    });
 
   await scrollCase("⌘ + two-finger trackpad scroll scrolls (and its momentum too)", gesture(true), false);
   await scrollCase("⌘ + Magic Mouse scroll zooms", gesture(false), true);
-  await scrollCase("⌘ + wheel-mouse notches zoom", [{ phase: "wheel", dy: 1 }, { phase: "wheel", dy: 1 }], true);
-  await scrollCase("a trackpad scroll that ended doesn't stop the wheel from zooming",
-    [...gesture(true), { phase: "wheel", dy: 1 }, { phase: "wheel", dy: 1 }], true);
+  await scrollCase(
+    "⌘ + wheel-mouse notches zoom",
+    [
+      { phase: "wheel", dy: 1 },
+      { phase: "wheel", dy: 1 },
+    ],
+    true,
+  );
+  await scrollCase(
+    "a trackpad scroll that ended doesn't stop the wheel from zooming",
+    [...gesture(true), { phase: "wheel", dy: 1 }, { phase: "wheel", dy: 1 }],
+    true,
+  );
   await reset();
 } catch (error) {
   rep.record("setup", { error });

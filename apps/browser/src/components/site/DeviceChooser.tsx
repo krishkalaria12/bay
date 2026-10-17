@@ -1,15 +1,7 @@
-import { ScrollView } from "@bay/platform";
-import { Pressable, View } from "@bay/platform";
-import {
-  cancelDeviceChooser,
-  onDeviceChooser,
-  openBluetoothSettings,
-  refreshDeviceChooser,
-  selectDevice,
-  type DeviceChooser as Chooser,
-} from "@bay/nncore";
+import { Pressable, ScrollView, View } from "@bay/platform";
+import { cancelDeviceChooser, onDeviceChooser, openBluetoothSettings, refreshDeviceChooser, selectDevice, type DeviceChooser as Chooser } from "@bay/nncore";
 import { Symbol } from "@bay/shell";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Text } from "react-native";
 import { create } from "zustand";
 import { useTheme } from "../../lib/theme";
@@ -17,6 +9,7 @@ import { useBrowser } from "../../store/browser";
 import { Popover, PromptButton } from "../layout/controls";
 import { tabForBrowser } from "../layout/pageState";
 import { useHover } from "../primitives";
+import { useResetOn } from "../../lib/useResetOn";
 
 const useChoosers = create<{ byTab: Record<string, Chooser> }>()(() => ({ byTab: {} }));
 if (__DEV__) (globalThis as { nnDeviceChoosers?: unknown }).nnDeviceChoosers = { useChoosers, selectDevice, cancelDeviceChooser };
@@ -60,7 +53,21 @@ function Signal({ level, color }: { level: number; color: string }) {
   );
 }
 
-function OptionRow({ name, detail, signal, selected, onSelect, onChoose }: { name: string; detail: string | null; signal: number; selected: boolean; onSelect(): void; onChoose(): void }) {
+function OptionRow({
+  name,
+  detail,
+  signal,
+  selected,
+  onSelect,
+  onChoose,
+}: {
+  name: string;
+  detail: string | null;
+  signal: number;
+  selected: boolean;
+  onSelect(): void;
+  onChoose(): void;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   return (
@@ -94,7 +101,7 @@ export function DeviceChooser({ tabId, left, top }: { tabId: string; left: numbe
   const theme = useTheme();
   const chooser = useChoosers((s) => s.byTab[tabId]);
   const [selected, setSelected] = useState<number | null>(null);
-  useEffect(() => setSelected(null), [chooser?.id]);
+  useResetOn(chooser?.id, () => setSelected(null));
   if (!chooser) return null;
   const scanning = chooser.bothButtonsEnabled;
   const blocked = chooser.adapterOff || chooser.unauthorized;
@@ -162,8 +169,22 @@ export function DeviceChooser({ tabId, left, top }: { tabId: string; left: numbe
         style={{ padding: 14, gap: 10 }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-          <View style={{ width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)" }}>
-            <Symbol name={chooser.showSignal || scanning ? "dot.radiowaves.left.and.right" : "cable.connector"} size={14} color={theme.icon} style={{ width: 20, height: 20 }} />
+          <View
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
+            }}
+          >
+            <Symbol
+              name={chooser.showSignal || scanning ? "dot.radiowaves.left.and.right" : "cable.connector"}
+              size={14}
+              color={theme.icon}
+              style={{ width: 20, height: 20 }}
+            />
           </View>
           <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{chooser.title}</Text>
         </View>

@@ -140,9 +140,6 @@ export function timeRemaining(end: number, now: number): string {
   return min >= 60 ? `${Math.floor(min / 60)} hr ${min % 60} min left` : `${min} min left`;
 }
 
-// Dia: 5 / 2 min.
-export const WIGGLE_MARKS_MIN = [5, 2];
-
 const displayName = (p: CalendarParticipant) => p.name || p.email.split("@")[0] || "Guest";
 
 export function attendeesLabel(event: Pick<CalendarEvent, "attendees">): string {

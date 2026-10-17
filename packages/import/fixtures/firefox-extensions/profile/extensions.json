@@ -1,0 +1,60 @@
+{
+  "addons": [
+    {
+      "id": "example@tests.invalid",
+      "defaultLocale": {
+        "name": "Active Example"
+      },
+      "active": true,
+      "userDisabled": false,
+      "appDisabled": false,
+      "type": "extension",
+      "location": "app-profile",
+      "isSystem": false,
+      "path": "extensions/example@tests.invalid.xpi",
+      "signedState": 2
+    },
+    {
+      "id": "disabled@tests.invalid",
+      "defaultLocale": {
+        "name": "Disabled Example"
+      },
+      "active": false,
+      "userDisabled": true,
+      "appDisabled": false,
+      "type": "extension",
+      "location": "app-profile",
+      "isSystem": false,
+      "path": "extensions/disabled@tests.invalid.xpi",
+      "signedState": 2
+    },
+    {
+      "id": "system@tests.invalid",
+      "defaultLocale": {
+        "name": "System"
+      },
+      "active": true,
+      "userDisabled": false,
+      "appDisabled": false,
+      "type": "extension",
+      "location": "app-profile",
+      "isSystem": true,
+      "path": "extensions/system@tests.invalid.xpi",
+      "signedState": 2
+    },
+    {
+      "id": "theme@tests.invalid",
+      "defaultLocale": {
+        "name": "Theme"
+      },
+      "active": true,
+      "userDisabled": false,
+      "appDisabled": false,
+      "type": "theme",
+      "location": "app-profile",
+      "isSystem": false,
+      "path": "extensions/theme@tests.invalid.xpi",
+      "signedState": 2
+    }
+  ]
+}

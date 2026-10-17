@@ -2,14 +2,14 @@ import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import { CastMode, preferredCastMode, startCasting, stopCasting, type CastSink } from "@bay/nncore";
 import { openExternalURL, showMenu, Symbol } from "@bay/shell";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Popover, PromptButton } from "../layout/controls";
 import { useHover } from "../primitives";
 import { closeCastPicker, useCast } from "./cast";
-
-const WIDTH = 340;
+import { CAST_PICKER_WIDTH } from "./constants";
+import { useResetOn } from "../../lib/useResetOn";
 
 const SINK_ICON: Record<number, string> = { 0: "tv", 1: "hifispeaker.2", 2: "hifispeaker", 6: "display", 7: "tv" };
 
@@ -17,12 +17,12 @@ export function CastPicker({ tabId, paneWidth }: { tabId: string; paneWidth: num
   const theme = useTheme();
   const dialog = useCast((c) => c.dialogs[tabId]);
   const [screen, setScreen] = useState(false);
-  useEffect(() => setScreen(false), [dialog?.id]);
+  useResetOn(dialog?.id, () => setScreen(false));
   if (!dialog) return null;
   const close = () => closeCastPicker(tabId);
   const available = dialog.sinks.filter((s) => s.state !== "unavailable");
   const canScreen = dialog.sinks.some((s) => s.modes & CastMode.screen);
-  const width = Math.min(WIDTH, paneWidth - 24);
+  const width = Math.min(CAST_PICKER_WIDTH, paneWidth - 24);
   const cast = (sink: CastSink) => {
     const mode = screen && sink.modes & CastMode.screen ? CastMode.screen : preferredCastMode(sink.modes & ~CastMode.screen) || preferredCastMode(sink.modes);
     if (mode) void startCasting(dialog.id, sink.id, mode);
@@ -76,8 +76,28 @@ function SinkRow({ sink, onCast, onStop }: { sink: CastSink; onCast(): void; onS
   return (
     <View {...hoverProps}>
       <Pressable onPress={active || busy ? undefined : onCast}>
-        <View style={{ minHeight: 42, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: hovered && !active ? theme.rowHover : undefined }}>
-          <View style={{ width: 28, height: 28, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: active ? theme.accent : theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}>
+        <View
+          style={{
+            minHeight: 42,
+            borderRadius: 8,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            paddingHorizontal: 8,
+            paddingVertical: 5,
+            backgroundColor: hovered && !active ? theme.rowHover : undefined,
+          }}
+        >
+          <View
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 7,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: active ? theme.accent : theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+            }}
+          >
             <Symbol name={SINK_ICON[sink.icon] ?? "tv"} size={13} color={active ? "#FFFFFF" : theme.icon} style={{ width: 20, height: 20 }} />
           </View>
           <View style={{ flex: 1 }}>
@@ -111,7 +131,17 @@ function SourceButton({ screen, onChange }: { screen: boolean; onChange: (screen
   return (
     <View {...hoverProps} tooltip="Source">
       <Pressable onPress={() => void pick()}>
-        <View style={{ height: 24, borderRadius: 6, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, backgroundColor: hovered ? theme.toolbarHover : undefined }}>
+        <View
+          style={{
+            height: 24,
+            borderRadius: 6,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            paddingHorizontal: 8,
+            backgroundColor: hovered ? theme.toolbarHover : undefined,
+          }}
+        >
           <Text style={{ fontSize: 12, color: theme.textSecondary }}>Sources</Text>
           <Symbol name="chevron.down" size={8} weight="semibold" color={theme.textSecondary} style={{ width: 10, height: 10 }} />
         </View>

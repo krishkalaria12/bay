@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { MouseArea, Symbol } from "@bay/shell";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -8,14 +8,13 @@ import { openModeFor, openUrl } from "../bookmarks/actions";
 import { openInternalPage } from "../pages/urls";
 import { Favicon, NewTabIcon, useHover } from "../primitives";
 import { modifiersOf, Popover, PopoverSeparator } from "./controls";
-import { closeHistoryMenu, goToHistoryItem, historyFavicons, useHistoryMenu, type HistoryItem } from "./history";
-
-const WIDTH = 300;
+import { closeHistoryMenu, goToHistoryItem, useHistoryFavicons, useHistoryMenu, type HistoryItem } from "./history";
+import { HISTORY_POPOVER_WIDTH } from "./constants";
 
 export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; windowId: string; anchors: { back: number; forward: number } }) {
   const menu = useHistoryMenu((s) => (s.menu?.tabId === tabId ? s.menu : null));
-  const profileId = useBrowser((s) => s.tabs[tabId]?.profileId ?? "");
-  const favicons = useMemo(() => historyFavicons(profileId, menu?.items ?? []), [menu, profileId]);
+  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
+  const favicons = useHistoryFavicons(spaceId, menu?.items ?? []);
   useEffect(() => () => void (useHistoryMenu.getState().menu?.tabId === tabId && closeHistoryMenu()), [tabId]);
   if (!menu) return null;
 
@@ -30,7 +29,7 @@ export function HistoryPopover({ tabId, windowId, anchors }: { tabId: string; wi
   };
 
   return (
-    <Popover width={WIDTH} top={2} left={Math.max(6, (menu.direction < 0 ? anchors.back : anchors.forward) - 15)} onDismiss={closeHistoryMenu}>
+    <Popover width={HISTORY_POPOVER_WIDTH} top={2} left={Math.max(6, (menu.direction < 0 ? anchors.back : anchors.forward) - 15)} onDismiss={closeHistoryMenu}>
       <View style={{ paddingVertical: 5 }}>
         {menu.items.map((item) => (
           <Row key={item.key} item={item} favicon={favicons.get(item.url) ?? null} onOpen={(e) => open(item, e)} />

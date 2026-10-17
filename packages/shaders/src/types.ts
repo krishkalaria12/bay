@@ -1,6 +1,5 @@
 import type { ViewProps } from "@bay/platform";
 
-
 export type Rect = { x: number; y: number; width: number; height: number };
 
 export type AreaLightPalette = "blue" | "red" | "pink" | "orange" | "yellow" | "green" | "purple";

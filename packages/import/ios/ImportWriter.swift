@@ -51,7 +51,7 @@ enum ImportWriter {
 
   @MainActor
   static func write(_ entry: ImportVault.Entry, profile: String, kinds: Set<String>) async -> String {
-    var out: [String: Int] = ["cookies": 0, "cookiesRejected": 0, "cookiesExisting": 0, "addresses": 0, "cards": 0]
+    var out: [String: Int] = ["cookies": 0, "cookiesRejected": 0, "cookiesReplaced": 0, "addresses": 0, "cards": 0]
     var error: String?
     func add(_ key: String, _ reply: [String: Any], _ field: String) {
       out[key, default: 0] += (reply[field] as? NSNumber)?.intValue ?? 0
@@ -68,7 +68,7 @@ enum ImportWriter {
         }
         add("cookies", reply, "imported")
         add("cookiesRejected", reply, "rejected")
-        add("cookiesExisting", reply, "existing")
+        add("cookiesReplaced", reply, "replaced")
       }
       wire.batches.forEach { $0.wipe() }
     }

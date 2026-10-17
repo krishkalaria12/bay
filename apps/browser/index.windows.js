@@ -1,4 +1,4 @@
-import { AppRegistry } from "react-native";
+import "react-native";
 import { nativeApiSkew, startSkewed } from "./src/nativeApi";
 
 if (nativeApiSkew) startSkewed(nativeApiSkew);

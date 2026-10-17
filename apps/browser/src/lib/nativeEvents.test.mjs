@@ -94,7 +94,16 @@ test("a reporter that throws can't drop reports or the call that applied them", 
     __invokeCallback: (id) => log.push(`callback ${id}`),
   };
   const scheduled = [];
-  holdPageReports(bridge, createHold({ batch: (u) => u(), schedule: (c) => scheduled.push(c), report: () => { throw new Error("reporter"); } }));
+  holdPageReports(
+    bridge,
+    createHold({
+      batch: (u) => u(),
+      schedule: (c) => scheduled.push(c),
+      report: () => {
+        throw new Error("reporter");
+      },
+    }),
+  );
   bridge.__callFunction("RCTEventEmitter", "receiveEvent", [1, "topNavigationChange", { throws: true }]);
   bridge.__callFunction("RCTEventEmitter", "receiveEvent", [1, "topProgress", {}]);
   bridge.__invokeCallback(7, []);
@@ -110,15 +119,24 @@ test("a reporter that throws can't drop reports or the call that applied them", 
 });
 
 test("a native module's listener runs after the held reports, in one batch with them", () => {
-  const { log, held, scheduled, event } = setup();
+  const { log, held, event } = setup();
   const added = new Map();
   const emitter = {
     addListener(name, listener) {
       added.set(name, [...(added.get(name) ?? []), listener]);
-      return { remove: () => added.set(name, added.get(name).filter((l) => l !== listener)) };
+      return {
+        remove: () =>
+          added.set(
+            name,
+            added.get(name).filter((l) => l !== listener),
+          ),
+      };
     },
     removeListener(name, listener) {
-      added.set(name, added.get(name).filter((l) => l !== listener));
+      added.set(
+        name,
+        added.get(name).filter((l) => l !== listener),
+      );
     },
   };
   afterHeldReports(emitter, held);

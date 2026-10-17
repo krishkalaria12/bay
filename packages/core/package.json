@@ -2,13 +2,13 @@
   "name": "@bay/core",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "node --test \"src/**/*.test.ts\""
   },
-  "type": "module",
   "devDependencies": {
     "@types/node": "^24.13.6"
   }

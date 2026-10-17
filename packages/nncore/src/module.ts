@@ -18,11 +18,33 @@ export type Download = {
 };
 
 export type PermissionKind =
-  | "camera" | "microphone" | "screen" | "location" | "notifications" | "clipboard" | "midi"
-  | "multipleDownloads" | "localFonts" | "idleDetection" | "storageAccess" | "windowManagement" | "fileSystem"
-  | "keyboardLock" | "pointerLock" | "protectedMedia" | "protocolHandler" | "sensors" | "localNetwork"
-  | "vr" | "ar" | "handTracking" | "identityProvider" | "webAppInstallation" | "capturedSurfaceControl"
-  | "diskQuota" | "cameraPanTiltZoom";
+  | "camera"
+  | "microphone"
+  | "screen"
+  | "location"
+  | "notifications"
+  | "clipboard"
+  | "midi"
+  | "multipleDownloads"
+  | "localFonts"
+  | "idleDetection"
+  | "storageAccess"
+  | "windowManagement"
+  | "fileSystem"
+  | "keyboardLock"
+  | "pointerLock"
+  | "protectedMedia"
+  | "protocolHandler"
+  | "sensors"
+  | "localNetwork"
+  | "vr"
+  | "ar"
+  | "handTracking"
+  | "identityProvider"
+  | "webAppInstallation"
+  | "capturedSurfaceControl"
+  | "diskQuota"
+  | "cameraPanTiltZoom";
 
 export type PermissionRequest = { id: string; browserId: number; origin: string; permissions: PermissionKind[] };
 export type PermissionResult = "accept" | "deny" | "dismiss";
@@ -42,15 +64,36 @@ export type EngineComponent = {
   name: string;
   version: string;
   state:
-    | "new" | "checking" | "canUpdate" | "downloading" | "decompressing" | "patching" | "updating" | "updated"
-    | "upToDate" | "updateError" | "run" | "unknown";
+    | "new"
+    | "checking"
+    | "canUpdate"
+    | "downloading"
+    | "decompressing"
+    | "patching"
+    | "updating"
+    | "updated"
+    | "upToDate"
+    | "updateError"
+    | "run"
+    | "unknown";
 };
 
 export type EngineTask = {
   id: number;
   type:
-    | "browser" | "gpu" | "zygote" | "utility" | "renderer" | "extension" | "guest" | "plugin" | "sandboxHelper"
-    | "dedicatedWorker" | "sharedWorker" | "serviceWorker" | "unknown";
+    | "browser"
+    | "gpu"
+    | "zygote"
+    | "utility"
+    | "renderer"
+    | "extension"
+    | "guest"
+    | "plugin"
+    | "sandboxHelper"
+    | "dedicatedWorker"
+    | "sharedWorker"
+    | "serviceWorker"
+    | "unknown";
   title: string;
   killable: boolean;
   cpu: number;
@@ -119,14 +162,11 @@ export const pauseDownload = (id: string) => Cef.pauseDownload(id);
 export const resumeDownload = (id: string) => Cef.resumeDownload(id);
 
 export const onPermission = (listener: (p: PermissionRequest) => void) => Cef.addListener("onPermission", listener);
-export const onPermissionDismissed = (listener: (p: { id: string }) => void) =>
-  Cef.addListener("onPermissionDismissed", listener);
-export const resolvePermission = (id: string, result: PermissionResult, remember = false) =>
-  Cef.resolvePermission(id, result, remember);
+export const onPermissionDismissed = (listener: (p: { id: string }) => void) => Cef.addListener("onPermissionDismissed", listener);
+export const resolvePermission = (id: string, result: PermissionResult, remember = false) => Cef.resolvePermission(id, result, remember);
 
 export type BrowsingDataType = "history" | "siteData" | "cache" | "downloads";
-export const clearBrowsingData = (profile: string, types: BrowsingDataType[], since?: number) =>
-  Cef.clearBrowsingData(profile, types, since ?? null);
+export const clearBrowsingData = (profile: string, types: BrowsingDataType[], since?: number) => Cef.clearBrowsingData(profile, types, since ?? null);
 export const releaseProfile = (profile: string) => Cef.releaseProfile(profile);
 // Resolves with the kinds of data that couldn't be deleted (none when it all went).
 export const deleteProfileData = async (profile: string): Promise<string[]> => (await Cef.deleteProfileData(profile))?.remaining ?? ["data"];

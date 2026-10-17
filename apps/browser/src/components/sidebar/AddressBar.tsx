@@ -2,7 +2,8 @@ import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { useRef } from "react";
 import { FadeLabel } from "@bay/shell";
 import { StyleSheet } from "react-native";
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId } from "../../store/hooks";
 import { splitOf } from "../../store/splits";
@@ -10,42 +11,36 @@ import type { Tab } from "../../store/types";
 import { useHistoryAvailability } from "../layout/history";
 import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
-import { addressBarInSidebar, setUrlAnchor, SIDEBAR_FIELD, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
-import { GlassFill, liquidGlass } from "../glass";
+import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
+import { SIDEBAR_FIELD } from "../layout/constants";
+import { GlassFill, useLiquidGlass } from "../glass";
+import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
+import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
 
-const BUTTON = layout.toolbarButton;
-const GAP = 5;
-const NAV_WIDTH = 3 * BUTTON + 2 * GAP;
-// Dia: lights y26.75pt, x70.75pt; 5pt gap, 7pt inset.
-const LIGHTS_Y = 26.75;
-const TOGGLE_X = 70.75 + 27;
-const EDGE = 7;
-// On the window's right there are no window buttons to clear: the toggle starts at the edge.
-const TOGGLE_X_RIGHT = EDGE + BUTTON / 2;
-const toggleMinWidth = (x: number) => x + BUTTON / 2 + GAP + NAV_WIDTH + EDGE;
+const toggleMinWidth = (x: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + ADDRESS_EDGE;
 
 export function SidebarHeaderTools({ width }: { width: number }) {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const palette = toolbarPalette(useTheme(), null);
-  const top = LIGHTS_Y - BUTTON / 2;
+  const top = ADDRESS_LIGHTS_Y - ADDRESS_BUTTON / 2;
   const right = useSidebarOnRight();
-  const toggleX = right ? TOGGLE_X_RIGHT : TOGGLE_X;
+  const toggleX = right ? ADDRESS_TOGGLE_X_RIGHT : ADDRESS_TOGGLE_X;
   const sidebarSymbol = useSidebarSymbol();
   return (
     <>
       {width >= toggleMinWidth(toggleX) ? (
         <ToolbarButton
-          style={{ position: "absolute", top, left: toggleX - BUTTON / 2 }}
+          style={{ position: "absolute", top, left: toggleX - ADDRESS_BUTTON / 2 }}
           palette={palette}
           icon={sidebarSymbol}
           onPress={() => useBrowser.getState().toggleSidebar(windowId)}
           tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}
-      <View style={{ position: "absolute", top, right: EDGE, flexDirection: "row", gap: GAP }}>
+      <View style={{ position: "absolute", top, right: ADDRESS_EDGE, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
         {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
       </View>
     </>
@@ -67,6 +62,7 @@ function NavigationButtons({ tab, palette }: { tab: Tab; palette: ToolbarPalette
 }
 
 export function SidebarAddressRow() {
+  const metrics = useSidebarMetrics();
   const windowId = useWindowId();
   const tab = useActiveTab();
   const field = useRef<View>(null);
@@ -79,7 +75,7 @@ export function SidebarAddressRow() {
     <View
       ref={field}
       onLayout={anchor}
-      style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, top: SIDEBAR_FIELD.top, height: SIDEBAR_FIELD.height }}
+      style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, top: SIDEBAR_FIELD.top, height: metrics.addressHeight }}
     >
       {tab?.url ? <PageField tab={tab} windowId={windowId} /> : <EmptyField windowId={windowId} />}
     </View>
@@ -87,22 +83,16 @@ export function SidebarAddressRow() {
 }
 
 function PageField({ tab, windowId }: { tab: Tab; windowId: string }) {
+  const metrics = useSidebarMetrics();
   const palette = toolbarPalette(useTheme(), null);
   const inSplit = useBrowser((s) => !!splitOf(s, tab.id));
-  return (
-    <UrlField
-      tab={tab}
-      palette={palette}
-      windowId={windowId}
-      inSplit={inSplit}
-      onFocus={alreadyFocused}
-      sidebar={{ height: SIDEBAR_FIELD.height }}
-    />
-  );
+  return <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={alreadyFocused} sidebar={{ height: metrics.addressHeight }} />;
 }
 
 function EmptyField({ windowId }: { windowId: string }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
+  const glass = useLiquidGlass();
   const { hovered, hoverProps } = useHover();
   const open = () => {
     useBrowser.getState().openPanel(windowId, "");
@@ -112,16 +102,18 @@ function EmptyField({ windowId }: { windowId: string }) {
       <Pressable onPress={open}>
         <View
           style={{
-            height: SIDEBAR_FIELD.height,
+            height: metrics.addressHeight,
             borderRadius: SIDEBAR_FIELD.radius,
             borderWidth: StyleSheet.hairlineWidth * 2,
-            borderColor: liquidGlass ? "transparent" : theme.pinnedRestingStroke,
-            backgroundColor: liquidGlass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
+            borderColor: glass ? "transparent" : theme.pinnedRestingStroke,
+            backgroundColor: glass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
             justifyContent: "center",
             paddingLeft: 10,
           }}
         >
-          {liquidGlass ? <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} /> : null}
+          {glass ? (
+            <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} />
+          ) : null}
           <FadeLabel text="Search or enter address" fontSize={13} color={theme.placeholder} fadeWidth={14} style={{ height: 18, marginLeft: -2 }} />
         </View>
       </Pressable>

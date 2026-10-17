@@ -21,7 +21,7 @@ import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
-import { bookmarkProfileId, engineProfile, tabLabel } from "../../store/model";
+import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../layout/controls";
 import { toggleDeveloperMode } from "../developer/devMode";
@@ -29,7 +29,7 @@ import { useIsDeveloperTab } from "../developer/sites";
 import { patchPage, setPopover, usePage, usePages } from "../layout/pageState";
 import { showToast } from "../layout/splitActions";
 import { toggleCastPicker } from "../media/cast";
-import { useMedia, usePictureInPicture } from "../media/state";
+import { autoPictureInPictureFor, setAutoPictureInPictureForSite, useMedia, usePictureInPicture } from "../media/state";
 import { TranslateRows } from "./TranslateControls";
 import { ZoomStepper } from "./ZoomControls";
 import { activateExtension, loadUnpacked, openManageExtensions, openWebStore, useExtensions, useWindowExtensions, type Anchor } from "../extensions/state";
@@ -56,7 +56,15 @@ function originOf(url: string): string | null {
   }
 }
 
-export function SiteControls({ tabId, right, left, top, width = 306, maxHeight = 580, arrowLeft }: {
+export function SiteControls({
+  tabId,
+  right,
+  left,
+  top,
+  width = 306,
+  maxHeight = 580,
+  arrowLeft,
+}: {
   tabId: string;
   right?: number;
   left?: number;
@@ -88,11 +96,14 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
   const actions = useExtensions((e) => e.actions[browserId]);
   const origin = originOf(url);
   const host = origin ? new URL(origin).hostname : "";
-  const profile = engineProfile(tab?.profileId ?? "");
+  const profile = engineProfile(tab?.spaceId ?? "");
   const close = () => setPopover(tabId, null);
   // Document PiP may have a window without a tab session.
   const video = useMedia((m) => !!m.sessions[tabId]?.hasVideo || !!m.pipOpen[tabId]);
   const [pip, togglePip] = usePictureInPicture(tabId);
+  // Arc's per-site switch, while automatic Picture in Picture is on in Settings.
+  const autoPipEverywhere = useBrowser((s) => s.settings.autoPictureInPicture ?? true);
+  const autoPip = useBrowser((s) => autoPictureInPictureFor(s, tabId));
 
   useEffect(() => {
     if (!origin) return;
@@ -100,7 +111,10 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
     void getSiteSettings(profile, origin).then((s) => live && setSettings(s));
     void Promise.all([getContentBlocker(), isContentBlockerAllowed(host)]).then(([state, allowed]) => live && setBlocker({ enabled: state.enabled, allowed }));
     // Navigation may finish before the popover subscribes to security updates.
-    void webviews.get(tabId)?.getSecurityInfo().then((info) => live && info && patchPage(tabId, { security: info }));
+    void webviews
+      .get(tabId)
+      ?.getSecurityInfo()
+      .then((info) => live && info && patchPage(tabId, { security: info }));
     return () => {
       live = false;
     };
@@ -124,10 +138,14 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
   };
   const toggleBlocker = async (on: boolean) => {
     // A change that fails changed nothing: the toggle shows what the blocker has, and the window says so.
-    const failed = await setContentBlockerAllowed(host, !on).then(() => false, () => true);
+    const failed = await setContentBlockerAllowed(host, !on).then(
+      () => false,
+      () => true,
+    );
     const allowed = await isContentBlockerAllowed(host);
     setBlocker((b) => (b ? { ...b, allowed } : b));
-    if (failed) return showToast(tab.windowId, "Couldn't Change the Ad Blocker", `Blocking on ${host} is as it was. Try again.`, { icon: "exclamationmark.triangle" });
+    if (failed)
+      return showToast(tab.windowId, "Couldn't Change the Ad Blocker", `Blocking on ${host} is as it was. Try again.`, { icon: "exclamationmark.triangle" });
     // Reload: blocking changes affect new requests only.
     void webviews.get(tabId)?.reload();
   };
@@ -156,7 +174,11 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
     const items: MenuItem[] = [];
     if (origin) items.push({ id: "clear", title: `Clear Cookies and Data for ${displayHost(host)}…`, symbol: "trash" });
     if (origin && translation && (translate.source || translate.status !== "idle")) {
-      items.push({ id: "translate", title: translate.status !== "idle" ? "Show Original" : `Translate to ${languageName(defaultTarget())}`, symbol: "translate" });
+      items.push({
+        id: "translate",
+        title: translate.status !== "idle" ? "Show Original" : `Translate to ${languageName(defaultTarget())}`,
+        symbol: "translate",
+      });
     }
     items.push(
       { id: "markdown", title: "Copy Markdown Link", symbol: "link" },
@@ -182,6 +204,7 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
       else void loadUnpacked(tab.windowId);
     } else if (choice === "settings") setDetailsOpen((open) => !open);
   };
+  const tileWidth = Math.floor((width - 49) / 5);
   const secure = security?.level === "secure";
   const local = !security || security.level === "none" || security.level === "local";
 
@@ -223,13 +246,15 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
                 title={bookmarked ? "Remove Bookmark" : "Bookmark Page"}
                 onPress={() => {
                   const s = useBrowser.getState();
-                  s.toggleBookmark(bookmarkProfileId(s, s.windows[tab.windowId]), tab);
+                  s.toggleBookmark(bookmarkSpaceId(s, s.windows[tab.windowId]), tab);
                 }}
               />
               <ActionTile icon="plus.magnifyingglass" title="Zoom and Site Settings" onPress={() => setDetailsOpen((open) => !open)} />
             </View>
 
-            <View style={{ paddingHorizontal: 14, paddingTop: 17, paddingBottom: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View
+              style={{ paddingHorizontal: 14, paddingTop: 17, paddingBottom: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+            >
               <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Extensions</Text>
               <Pressable
                 onPress={() => {
@@ -242,12 +267,12 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
             </View>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, paddingHorizontal: 10 }}>
               {extensions.map((ext) => (
-                <ExtensionTile key={ext.id} ext={ext} state={actions?.[ext.id]} windowId={tab.windowId} width={(width - 48) / 5} onClose={close} />
+                <ExtensionTile key={ext.id} ext={ext} state={actions?.[ext.id]} windowId={tab.windowId} width={tileWidth} onClose={close} />
               ))}
               <ActionTile
                 icon="plus"
                 title="Add Extension"
-                width={(width - 48) / 5}
+                width={tileWidth}
                 onPress={() => {
                   close();
                   openWebStore(tab.windowId);
@@ -263,7 +288,9 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
                 <PopoverRow
                   icon="shield.lefthalf.filled"
                   title="Block ads and trackers"
-                  detail={!blocker ? "Loading…" : !blocker.enabled ? "Off in Settings" : blocker.allowed ? "Off" : blocked > 0 ? `On · ${blocked} blocked` : "On"}
+                  detail={
+                    !blocker ? "Loading…" : !blocker.enabled ? "Off in Settings" : blocker.allowed ? "Off" : blocked > 0 ? `On · ${blocked} blocked` : "On"
+                  }
                   accessory={blocker?.enabled ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
                 />
                 <PopoverRow
@@ -276,9 +303,7 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
             ) : null}
           </>
         ) : null}
-        {cleared ? (
-          <Text style={{ paddingHorizontal: 14, paddingTop: 5, fontSize: 11, color: theme.textSecondary }}>{cleared}</Text>
-        ) : null}
+        {cleared ? <Text style={{ paddingHorizontal: 14, paddingTop: 5, fontSize: 11, color: theme.textSecondary }}>{cleared}</Text> : null}
         {certOpen ? <ConnectionRow security={security} open={certOpen} onToggle={() => setCertOpen(false)} /> : null}
         {certOpen && security?.certificate ? <CertificateDetails security={security} /> : null}
 
@@ -286,7 +311,7 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
           <>
             <PopoverRow icon="chevron.left" title="Site controls" onPress={() => setDetailsOpen(false)} />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 13, paddingTop: 6, paddingBottom: 8 }}>
-              <Favicon url={url} favicon={tab.favicon} size={20} profileId={tab.profileId} />
+              <Favicon url={url} favicon={tab.favicon} size={20} spaceId={tab.spaceId} />
               <View style={{ flex: 1 }}>
                 <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
                   {host ? displayHost(host) : tabLabel(tab)}
@@ -312,6 +337,13 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
                 }}
               />
             ) : null}
+            {video && host && autoPipEverywhere ? (
+              <PopoverRow
+                icon="pip"
+                title="Automatic Picture in Picture"
+                accessory={<Toggle value={autoPip} onChange={(on) => setAutoPictureInPictureForSite(tabId, on)} />}
+              />
+            ) : null}
             {origin ? (
               <PopoverRow
                 icon="tv.and.mediabox"
@@ -332,7 +364,12 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
                     key={p.type}
                     icon={p.icon}
                     title={p.title}
-                    accessory={<ValueButton title={settings ? choiceTitle(p.type, settings[p.type]?.value ?? "ask") : "…"} onPress={() => void pickPermission(p.type, p.choices)} />}
+                    accessory={
+                      <ValueButton
+                        title={settings ? choiceTitle(p.type, settings[p.type]?.value ?? "ask") : "…"}
+                        onPress={() => void pickPermission(p.type, p.choices)}
+                      />
+                    }
                   />
                 ))}
               </>
@@ -348,16 +385,24 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
       <PopoverSeparator />
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10, paddingBottom: 10 }}>
         <Pressable onPress={() => setCertOpen((open) => !open)} accessibilityLabel="Connection security details">
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, height: 30, borderRadius: 10, backgroundColor: theme.toolbarHover }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              paddingHorizontal: 11,
+              height: 30,
+              borderRadius: 10,
+              backgroundColor: theme.toolbarHover,
+            }}
+          >
             <Symbol
               name={secure ? "lock" : local ? "info.circle" : "lock.open.trianglebadge.exclamationmark"}
               size={12}
               color={secure || local ? theme.textPrimary : "#FF6B63"}
               style={{ width: 14, height: 16 }}
             />
-            <Text style={{ fontSize: 12, fontWeight: "500", color: theme.textPrimary }}>
-              {secure ? "Secure" : local ? "Local Page" : "Not Secure"}
-            </Text>
+            <Text style={{ fontSize: 12, fontWeight: "500", color: theme.textPrimary }}>{secure ? "Secure" : local ? "Local Page" : "Not Secure"}</Text>
           </View>
         </Pressable>
         <View tooltip="More Site Controls">
@@ -372,7 +417,21 @@ export function SiteControls({ tabId, right, left, top, width = 306, maxHeight =
   );
 }
 
-function ActionTile({ icon, title, onPress, disabled, width, children }: { icon?: string; title: string; onPress: () => void; disabled?: boolean; width?: number; children?: ReactNode }) {
+function ActionTile({
+  icon,
+  title,
+  onPress,
+  disabled,
+  width,
+  children,
+}: {
+  icon?: string;
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  width?: number;
+  children?: ReactNode;
+}) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   return (
@@ -397,7 +456,19 @@ function ActionTile({ icon, title, onPress, disabled, width, children }: { icon?
   );
 }
 
-function ExtensionTile({ ext, state, windowId, width, onClose }: { ext: InstalledExtension; state?: ActionState; windowId: string; width: number; onClose: () => void }) {
+function ExtensionTile({
+  ext,
+  state,
+  windowId,
+  width,
+  onClose,
+}: {
+  ext: InstalledExtension;
+  state?: ActionState;
+  windowId: string;
+  width: number;
+  onClose: () => void;
+}) {
   const theme = useTheme();
   const ref = useRef<View>(null);
   const icon = state?.icon || ext.actionIcon || ext.icon;
@@ -454,7 +525,11 @@ function ConnectionRow({ security, open, onToggle }: { security: SecurityInfo | 
       title={title}
       detail={detail}
       onPress={security?.certificate ? onToggle : undefined}
-      accessory={security?.certificate ? <Symbol name={open ? "chevron.up" : "chevron.down"} size={10} color={theme.textSecondary} style={{ width: 14, height: 14 }} /> : null}
+      accessory={
+        security?.certificate ? (
+          <Symbol name={open ? "chevron.up" : "chevron.down"} size={10} color={theme.textSecondary} style={{ width: 14, height: 14 }} />
+        ) : null
+      }
     />
   );
 }
@@ -473,7 +548,17 @@ function CertificateDetails({ security }: { security: SecurityInfo }) {
     ...(cert.sha256 ? [["SHA-256", cert.sha256.replace(/(.{2})(?!$)/g, "$1 ").slice(0, 47) + "…"] as [string, string]] : []),
   ];
   return (
-    <View style={{ marginHorizontal: 13, marginTop: 2, marginBottom: 4, padding: 9, borderRadius: 8, backgroundColor: theme.dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)", gap: 3 }}>
+    <View
+      style={{
+        marginHorizontal: 13,
+        marginTop: 2,
+        marginBottom: 4,
+        padding: 9,
+        borderRadius: 8,
+        backgroundColor: theme.dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+        gap: 3,
+      }}
+    >
       {rows.map(([k, v]) => (
         <View key={k} style={{ flexDirection: "row", gap: 8 }}>
           <Text style={{ width: 82, fontSize: 11, color: theme.textSecondary }}>{k}</Text>
@@ -496,7 +581,18 @@ function ValueButton({ title, onPress }: { title: string; onPress: () => void })
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 3, height: 22, paddingLeft: 8, paddingRight: 5, borderRadius: 6, backgroundColor: hovered ? theme.toolbarHover : undefined }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 3,
+            height: 22,
+            paddingLeft: 8,
+            paddingRight: 5,
+            borderRadius: 6,
+            backgroundColor: hovered ? theme.toolbarHover : undefined,
+          }}
+        >
           <Text style={{ fontSize: 12, color: theme.textSecondary }}>{title}</Text>
           <Symbol name="chevron.up.chevron.down" size={9} color={theme.textSecondary} style={{ width: 12, height: 14 }} />
         </View>

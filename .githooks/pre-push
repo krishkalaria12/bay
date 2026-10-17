@@ -1,0 +1,14 @@
+#!/bin/bash
+# Lint (warnings fail it) and the format check, as CI runs them: either failing stops the push.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+[[ -x ./node_modules/.bin/oxlint ]] || { echo "pre-push: oxlint missing; run pnpm install" >&2; exit 1; }
+if ! ./node_modules/.bin/oxlint --deny-warnings; then
+  echo "pre-push: lint failed; fix it (pnpm lint, pnpm lint:fix) before pushing." >&2
+  exit 1
+fi
+if ! ./node_modules/.bin/oxfmt --check >/dev/null 2>&1; then
+  echo "pre-push: some files aren't formatted; run pnpm fmt and commit. They are:" >&2
+  ./node_modules/.bin/oxfmt --list-different 2>/dev/null | awk '{ print "  " $0 }' >&2 || true
+  exit 1
+fi

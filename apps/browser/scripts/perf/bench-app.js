@@ -12,7 +12,7 @@ const windowId = () => S().ui.focusedWindowId;
 const activeId = () => {
   const s = S();
   const w = s.windows[windowId()];
-  return w.activeTabIds[w.profileId];
+  return w.activeTabIds[w.spaceId];
 };
 
 // The time one batched update takes on the JS thread: store update, selectors, render, commit, layout effects.
@@ -95,7 +95,7 @@ const scenarios = {
   async switchTabs({ count = 12 } = {}) {
     const w = windowId();
     const s = S();
-    const view = s.windows[w].tabIds.filter((id) => s.tabs[id].profileId === s.windows[w].profileId && !s.tabs[id].pinned);
+    const view = s.windows[w].tabIds.filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId && !s.tabs[id].pinned);
     const ids = view.slice(30, 30 + count);
     const start = activeId();
     // First pass wakes the tabs (each loads its page); the measured pass switches between loaded tabs.
@@ -133,7 +133,7 @@ const scenarios = {
     for (let i = 0; i < count; i++) {
       let id;
       open.push(timed(() => (id = S().newTab(w, { url: `${origin}/p/new-${i}-${Date.now()}` }))));
-      ids.push(typeof id === "string" ? id : id?.id ?? activeId());
+      ids.push(typeof id === "string" ? id : (id?.id ?? activeId()));
       await sleep(150);
     }
     await quiet();
@@ -225,7 +225,7 @@ const scenarios = {
       P.reset();
       const ms = timed(() => nn.runCommand({ command, arg: null, windowId: w }));
       await sleep(settleMs);
-      out.push({ command, ms, profile: S().windows[w].profileId, stats: P.read() });
+      out.push({ command, ms, profile: S().windows[w].spaceId, stats: P.read() });
     }
     return { runs: out };
   },
@@ -294,8 +294,8 @@ const scenarios = {
     });
     let switches = 0;
     const count0 = store.subscribe((s, prev) => {
-      const a = s.windows[w]?.activeTabIds[s.windows[w].profileId];
-      const b = prev.windows[w]?.activeTabIds[prev.windows[w].profileId];
+      const a = s.windows[w]?.activeTabIds[s.windows[w].spaceId];
+      const b = prev.windows[w]?.activeTabIds[prev.windows[w].spaceId];
       if (a !== b) switches++;
     });
     const opened = [];
@@ -322,7 +322,16 @@ const scenarios = {
     return {
       history: time({ version: 2, history: s.history }),
       bookmarks: time({ version: 2, bookmarks: s.bookmarks }),
-      session: time({ version: 2, profiles: s.profiles, settings: s.settings, windows: Object.values(s.windows), tabs, groups: Object.values(s.groups), closedTabs: s.closedTabs, closedWindows: s.closedWindows }),
+      session: time({
+        version: 2,
+        spaces: s.spaces,
+        settings: s.settings,
+        windows: Object.values(s.windows),
+        tabs,
+        groups: Object.values(s.groups),
+        closedTabs: s.closedTabs,
+        closedWindows: s.closedWindows,
+      }),
       counts: { tabs: tabs.length, history: Object.values(s.history).reduce((n, h) => n + h.length, 0), bookmarks: Object.keys(s.bookmarks.nodes).length },
     };
   },
@@ -343,7 +352,7 @@ function renderScenarios() {
   const tabsInView = () => {
     const s = S();
     const w = s.windows[windowId()];
-    return w.tabIds.filter((id) => s.tabs[id]?.profileId === w.profileId);
+    return w.tabIds.filter((id) => s.tabs[id]?.spaceId === w.spaceId);
   };
   const settle = (ms = 1500) => sleep(ms).then(() => P.read());
   return {
@@ -367,7 +376,9 @@ function renderScenarios() {
     },
     async tabSwitch({ count = 10, gapMs = 300 } = {}) {
       const s = S();
-      const ids = tabsInView().filter((id) => !s.tabs[id].pinned).slice(0, count);
+      const ids = tabsInView()
+        .filter((id) => !s.tabs[id].pinned)
+        .slice(0, count);
       const start = activeId();
       await quiet(800);
       P.reset();
@@ -486,7 +497,19 @@ function renderScenarios() {
     // A download's progress as the engine reports it (onDownload → upsertDownload), ten updates a second.
     async downloads({ updates = 40, gapMs = 100 } = {}) {
       const total = 50_000_000;
-      const d = { id: `bench-${Date.now()}`, url: "http://127.0.0.1/file.zip", filename: "file.zip", path: "", state: "downloading", paused: false, received: 0, total, speed: 0, mimeType: "application/zip", profile: S().windows[windowId()].profileId };
+      const d = {
+        id: `bench-${Date.now()}`,
+        url: "http://127.0.0.1/file.zip",
+        filename: "file.zip",
+        path: "",
+        state: "downloading",
+        paused: false,
+        received: 0,
+        total,
+        speed: 0,
+        mimeType: "application/zip",
+        profile: S().windows[windowId()].spaceId,
+      };
       await quiet(800);
       P.reset();
       const steps = [];

@@ -126,7 +126,8 @@ export function calendarMenuItem(): MenuItem {
   const owned = calendars.filter((c) => c.owned);
   const others = calendars.filter((c) => !c.owned);
   const hidden = new Set(settings.hiddenCalendarIds);
-  const calendarItems = (list: typeof calendars): MenuItem[] => list.map((c) => ({ id: `cal:toggle:${c.id}`, title: c.title, swatch: c.color, checked: !hidden.has(c.id) }));
+  const calendarItems = (list: typeof calendars): MenuItem[] =>
+    list.map((c) => ({ id: `cal:toggle:${c.id}`, title: c.title, swatch: c.color, checked: !hidden.has(c.id) }));
   return {
     id: "cal",
     title: "Calendar",

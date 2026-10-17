@@ -28,7 +28,7 @@ import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { Favicon } from "../../primitives";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Sheet, Toggle } from "../controls";
@@ -48,7 +48,10 @@ const filtersText = (n: number) => `${n.toLocaleString()} ${n === 1 ? "filter" :
 
 function useContentBlocker() {
   const [state, setState] = useState<ContentBlockerState | null>(null);
-  const refresh = () => void getContentBlocker().then(setState).catch(() => {});
+  const refresh = () =>
+    void getContentBlocker()
+      .then(setState)
+      .catch(() => {});
   useEffect(() => {
     refresh();
     const sub = onContentBlockerChange(refresh);
@@ -104,10 +107,7 @@ export function PrivacyPane() {
           <Group>
             {blocker.allowedHosts.map((host) => (
               <Row key={host} icon={<Favicon url={`https://${host}`} />} title={host}>
-                <Button
-                  title="Block Again"
-                  onPress={() => void setContentBlockerAllowed(host, false).then(refresh)}
-                />
+                <Button title="Block Again" onPress={() => void setContentBlockerAllowed(host, false).then(refresh)} />
               </Row>
             ))}
           </Group>
@@ -140,7 +140,9 @@ function FilterListsSheet() {
   return (
     <Sheet width={500} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Advanced Ad Block Settings</Text>
-      <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>Block common components found across the web by using additional rules and filters.</Text>
+      <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>
+        Block common components found across the web by using additional rules and filters.
+      </Text>
       <ScrollView style={{ maxHeight: 420, marginTop: 8 }}>
         {CATEGORIES.map((c) => {
           const lists = blocker?.lists.filter((l) => l.category === c.id) ?? [];
@@ -174,11 +176,14 @@ function FilterListsSheet() {
 // MARK: Zoom levels
 
 function ZoomLevels() {
-  const profileId = useBrowser((s) => s.settings.defaultProfileId);
-  const profiles = useProfiles();
-  const [selected, setSelected] = useState(profileId);
+  const spaceId = useBrowser((s) => s.settings.defaultSpaceId);
+  const profiles = useSpaces();
+  const [selected, setSelected] = useState(spaceId);
   const [levels, setLevels] = useState<Record<string, number>>({});
-  const load = () => void getZoomLevels(engineProfile(selected)).then(setLevels).catch(() => {});
+  const load = () =>
+    void getZoomLevels(engineProfile(selected))
+      .then(setLevels)
+      .catch(() => {});
   useEffect(load, [selected]);
   const hosts = Object.keys(levels).sort();
   if (!hosts.length) return null;
@@ -231,11 +236,14 @@ const VALUE_OPTIONS: { value: SiteSettingValue; title: string }[] = [
 ];
 
 function SitePermissions() {
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => useBrowser.getState().settings.defaultProfileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
   const [origins, setOrigins] = useState<string[] | null>(null);
-  const refresh = () => void getSiteSettingsOrigins(engineProfile(profileId)).then(setOrigins).catch(() => setOrigins([]));
-  useEffect(refresh, [profileId]);
+  const refresh = () =>
+    void getSiteSettingsOrigins(engineProfile(spaceId))
+      .then(setOrigins)
+      .catch(() => setOrigins([]));
+  useEffect(refresh, [spaceId]);
 
   return (
     <>
@@ -243,9 +251,7 @@ function SitePermissions() {
         title="Site permissions"
         description="Pop-ups, camera, location and other permissions you've set for sites."
         action={
-          profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
-          ) : undefined
+          profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
@@ -257,7 +263,7 @@ function SitePermissions() {
               key={origin}
               icon={<Favicon url={origin} />}
               title={origin.replace(/^https?:\/\//, "")}
-              onPress={() => showSettingsSheet(<SiteSheet profileId={profileId} origin={origin} onChanged={refresh} />)}
+              onPress={() => showSettingsSheet(<SiteSheet spaceId={spaceId} origin={origin} onChanged={refresh} />)}
             />
           ))
         )}
@@ -267,11 +273,14 @@ function SitePermissions() {
 }
 
 function AppLinks() {
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => useBrowser.getState().settings.defaultProfileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
   const [allowed, setAllowed] = useState<ExternalAppAllowance[] | null>(null);
-  const refresh = () => void getExternalAppAllowances(engineProfile(profileId)).then(setAllowed).catch(() => setAllowed([]));
-  useEffect(refresh, [profileId]);
+  const refresh = () =>
+    void getExternalAppAllowances(engineProfile(spaceId))
+      .then(setAllowed)
+      .catch(() => setAllowed([]));
+  useEffect(refresh, [spaceId]);
 
   return (
     <>
@@ -279,9 +288,7 @@ function AppLinks() {
         title="Apps allowed to open links"
         description="Sites that open another app without asking first."
         action={
-          profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
-          ) : undefined
+          profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
@@ -295,10 +302,7 @@ function AppLinks() {
               title={a.origin.replace(/^https?:\/\//, "")}
               description={`Opens ${a.scheme}: links in ${a.app ?? "an app that's no longer installed"}`}
             >
-              <Button
-                title="Remove"
-                onPress={() => void removeExternalAppAllowance(engineProfile(profileId), a.origin, a.scheme).then(refresh)}
-              />
+              <Button title="Remove" onPress={() => void removeExternalAppAllowance(engineProfile(spaceId), a.origin, a.scheme).then(refresh)} />
             </Row>
           ))
         )}
@@ -307,12 +311,15 @@ function AppLinks() {
   );
 }
 
-function SiteSheet({ profileId, origin, onChanged }: { profileId: string; origin: string; onChanged: () => void }) {
+function SiteSheet({ spaceId, origin, onChanged }: { spaceId: string; origin: string; onChanged: () => void }) {
   const theme = useTheme();
-  const profile = engineProfile(profileId);
+  const profile = engineProfile(spaceId);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [status, setStatus] = useState("");
-  const load = () => void getSiteSettings(profile, origin).then(setSettings).catch(() => {});
+  const load = () =>
+    void getSiteSettings(profile, origin)
+      .then(setSettings)
+      .catch(() => {});
   useEffect(load, []);
   const set = async (type: SiteSettingType, value: SiteSettingValue) => {
     await setSiteSetting(profile, origin, type, value);

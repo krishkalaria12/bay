@@ -1,867 +1,2188 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bay for Windows</title>
-<meta name="description" content="Phased plan for porting Bay to Windows: what carries over, the hosting decision, phases with exit criteria, module and patch maps, risks and open decisions.">
-<style>
-:root {
-  --bg: #fbfaf8;
-  --surface: #ffffff;
-  --sunken: #f3f1ed;
-  --ink: #1d1c1a;
-  --muted: #5f5b54;
-  --faint: #8a857c;
-  --line: #e4e0d8;
-  --accent: #2f5bd3;
-  --accent-soft: #e8eefc;
-  --ok: #1f7a4d;
-  --ok-soft: #e3f3ea;
-  --warn: #9a5b00;
-  --warn-soft: #fbf0dc;
-  --risk: #b0362c;
-  --risk-soft: #fbe7e4;
-  --mac: #6b4fbb;
-  --mac-soft: #efeafb;
-  --radius: 10px;
-  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-  --sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #151514;
-    --surface: #1c1c1b;
-    --sunken: #232321;
-    --ink: #ecebe7;
-    --muted: #b1ada4;
-    --faint: #85817a;
-    --line: #34332f;
-    --accent: #8aa8ff;
-    --accent-soft: #1f2a46;
-    --ok: #6fd1a0;
-    --ok-soft: #173327;
-    --warn: #f0b45c;
-    --warn-soft: #3a2c14;
-    --risk: #f08a80;
-    --risk-soft: #3d1d1a;
-    --mac: #b7a2f5;
-    --mac-soft: #2a2340;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #151514; --surface: #1c1c1b; --sunken: #232321; --ink: #ecebe7; --muted: #b1ada4;
-  --faint: #85817a; --line: #34332f; --accent: #8aa8ff; --accent-soft: #1f2a46; --ok: #6fd1a0;
-  --ok-soft: #173327; --warn: #f0b45c; --warn-soft: #3a2c14; --risk: #f08a80; --risk-soft: #3d1d1a;
-  --mac: #b7a2f5; --mac-soft: #2a2340;
-}
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--ink);
-  font: 15.5px/1.6 var(--sans);
-}
-a { color: var(--accent); text-underline-offset: 2px; }
-code, .mono { font-family: var(--mono); font-size: 0.88em; }
-code { background: var(--sunken); padding: 0.08em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
-h1, h2, h3, h4 { line-height: 1.25; margin: 0; }
-h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.02em; }
-h2 { font-size: 1.45rem; letter-spacing: -0.01em; margin-bottom: 0.9rem; }
-h3 { font-size: 1.08rem; margin: 1.4rem 0 0.5rem; }
-h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 1.1rem 0 0.4rem; }
-p { margin: 0 0 0.8rem; }
-ul, ol { margin: 0 0 0.9rem; padding-left: 1.25rem; }
-li { margin: 0.18rem 0; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bay for Windows</title>
+    <meta
+      name="description"
+      content="Phased plan for porting Bay to Windows: what carries over, the hosting decision, phases with exit criteria, module and patch maps, risks and open decisions."
+    />
+    <style>
+      :root {
+        --bg: #fbfaf8;
+        --surface: #ffffff;
+        --sunken: #f3f1ed;
+        --ink: #1d1c1a;
+        --muted: #5f5b54;
+        --faint: #8a857c;
+        --line: #e4e0d8;
+        --accent: #2f5bd3;
+        --accent-soft: #e8eefc;
+        --ok: #1f7a4d;
+        --ok-soft: #e3f3ea;
+        --warn: #9a5b00;
+        --warn-soft: #fbf0dc;
+        --risk: #b0362c;
+        --risk-soft: #fbe7e4;
+        --mac: #6b4fbb;
+        --mac-soft: #efeafb;
+        --radius: 10px;
+        --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+        --sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #151514;
+          --surface: #1c1c1b;
+          --sunken: #232321;
+          --ink: #ecebe7;
+          --muted: #b1ada4;
+          --faint: #85817a;
+          --line: #34332f;
+          --accent: #8aa8ff;
+          --accent-soft: #1f2a46;
+          --ok: #6fd1a0;
+          --ok-soft: #173327;
+          --warn: #f0b45c;
+          --warn-soft: #3a2c14;
+          --risk: #f08a80;
+          --risk-soft: #3d1d1a;
+          --mac: #b7a2f5;
+          --mac-soft: #2a2340;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #151514;
+        --surface: #1c1c1b;
+        --sunken: #232321;
+        --ink: #ecebe7;
+        --muted: #b1ada4;
+        --faint: #85817a;
+        --line: #34332f;
+        --accent: #8aa8ff;
+        --accent-soft: #1f2a46;
+        --ok: #6fd1a0;
+        --ok-soft: #173327;
+        --warn: #f0b45c;
+        --warn-soft: #3a2c14;
+        --risk: #f08a80;
+        --risk-soft: #3d1d1a;
+        --mac: #b7a2f5;
+        --mac-soft: #2a2340;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15.5px/1.6 var(--sans);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      code,
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.88em;
+      }
+      code {
+        background: var(--sunken);
+        padding: 0.08em 0.35em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(1.9rem, 4vw, 2.6rem);
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.45rem;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.9rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin: 1.4rem 0 0.5rem;
+      }
+      h4 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 1.1rem 0 0.4rem;
+      }
+      p {
+        margin: 0 0 0.8rem;
+      }
+      ul,
+      ol {
+        margin: 0 0 0.9rem;
+        padding-left: 1.25rem;
+      }
+      li {
+        margin: 0.18rem 0;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
 
-.skip { position: absolute; left: -999px; top: 0; background: var(--surface); padding: 8px 12px; }
-.skip:focus { left: 16px; top: 16px; z-index: 10; }
+      .skip {
+        position: absolute;
+        left: -999px;
+        top: 0;
+        background: var(--surface);
+        padding: 8px 12px;
+      }
+      .skip:focus {
+        left: 16px;
+        top: 16px;
+        z-index: 10;
+      }
 
-.wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
-header.top { padding: 48px 0 28px; border-bottom: 1px solid var(--line); }
-.eyebrow { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.6rem; }
-.lede { font-size: 1.12rem; color: var(--muted); max-width: 72ch; margin-top: 0.9rem; }
-.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 1.1rem; font-size: 0.86rem; color: var(--faint); }
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+      header.top {
+        padding: 48px 0 28px;
+        border-bottom: 1px solid var(--line);
+      }
+      .eyebrow {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.6rem;
+      }
+      .lede {
+        font-size: 1.12rem;
+        color: var(--muted);
+        max-width: 72ch;
+        margin-top: 0.9rem;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin-top: 1.1rem;
+        font-size: 0.86rem;
+        color: var(--faint);
+      }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; padding: 28px 0 80px; }
-@media (min-width: 1000px) {
-  .layout { grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
-  nav.toc { position: sticky; top: 20px; align-self: start; max-height: calc(100vh - 40px); overflow: auto; }
-}
-nav.toc { font-size: 0.9rem; }
-nav.toc h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; }
-nav.toc ol { list-style: none; padding: 0; margin: 0; }
-nav.toc li { margin: 0; }
-nav.toc a { display: block; padding: 4px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; }
-nav.toc a:hover { background: var(--sunken); }
-nav.toc a.active { background: var(--accent-soft); color: var(--accent); }
-nav.toc .sub a { padding-left: 20px; color: var(--muted); font-size: 0.86rem; }
-@media (max-width: 999px) {
-  nav.toc { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px; }
-  nav.toc .sub { display: none; }
-}
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 32px;
+        padding: 28px 0 80px;
+      }
+      @media (min-width: 1000px) {
+        .layout {
+          grid-template-columns: 220px minmax(0, 1fr);
+          gap: 48px;
+        }
+        nav.toc {
+          position: sticky;
+          top: 20px;
+          align-self: start;
+          max-height: calc(100vh - 40px);
+          overflow: auto;
+        }
+      }
+      nav.toc {
+        font-size: 0.9rem;
+      }
+      nav.toc h2 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
+      }
+      nav.toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      nav.toc li {
+        margin: 0;
+      }
+      nav.toc a {
+        display: block;
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      nav.toc a:hover {
+        background: var(--sunken);
+      }
+      nav.toc a.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      nav.toc .sub a {
+        padding-left: 20px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      @media (max-width: 999px) {
+        nav.toc {
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          padding: 12px;
+        }
+        nav.toc .sub {
+          display: none;
+        }
+      }
 
-main { min-width: 0; }
-main section { margin-bottom: 56px; scroll-margin-top: 16px; }
-.prose { max-width: 78ch; }
+      main {
+        min-width: 0;
+      }
+      main section {
+        margin-bottom: 56px;
+        scroll-margin-top: 16px;
+      }
+      .prose {
+        max-width: 78ch;
+      }
 
-.callout { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: 14px 18px; margin: 0 0 1rem; }
-.callout.warn { border-left-color: var(--warn); }
-.callout.risk { border-left-color: var(--risk); }
-.callout.ok { border-left-color: var(--ok); }
-.callout > :last-child { margin-bottom: 0; }
+      .callout {
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        margin: 0 0 1rem;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+      }
+      .callout.risk {
+        border-left-color: var(--risk);
+      }
+      .callout.ok {
+        border-left-color: var(--ok);
+      }
+      .callout > :last-child {
+        margin-bottom: 0;
+      }
 
-.grid2 { display: grid; gap: 14px; grid-template-columns: 1fr; }
-@media (min-width: 760px) { .grid2 { grid-template-columns: 1fr 1fr; } }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
-.card h3 { margin-top: 0; }
-.card > :last-child { margin-bottom: 0; }
+      .grid2 {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 760px) {
+        .grid2 {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        min-width: 0;
+      }
+      .card h3 {
+        margin-top: 0;
+      }
+      .card > :last-child {
+        margin-bottom: 0;
+      }
 
-.chip { display: inline-block; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; vertical-align: 1px; }
-.chip.mac { background: var(--mac-soft); color: var(--mac); }
-.chip.win { background: var(--accent-soft); color: var(--accent); }
-.chip.ok { background: var(--ok-soft); color: var(--ok); }
-.chip.warn { background: var(--warn-soft); color: var(--warn); }
-.chip.risk { background: var(--risk-soft); color: var(--risk); }
-.chip.gate { background: var(--ink); color: var(--bg); }
+      .chip {
+        display: inline-block;
+        font-size: 0.74rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        vertical-align: 1px;
+      }
+      .chip.mac {
+        background: var(--mac-soft);
+        color: var(--mac);
+      }
+      .chip.win {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .chip.ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+      .chip.warn {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .chip.risk {
+        background: var(--risk-soft);
+        color: var(--risk);
+      }
+      .chip.gate {
+        background: var(--ink);
+        color: var(--bg);
+      }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin: 0 0 1rem; }
-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
-th { background: var(--sunken); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); position: sticky; top: 0; }
-tr:last-child td { border-bottom: 0; }
-td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-caption { caption-side: top; text-align: left; padding: 10px 12px 0; color: var(--muted); font-size: 0.85rem; }
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0 0 1rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        background: var(--sunken);
+        font-weight: 600;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        position: sticky;
+        top: 0;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      caption {
+        caption-side: top;
+        text-align: left;
+        padding: 10px 12px 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
 
-/* flow of phases */
-.flow { display: grid; gap: 8px; grid-template-columns: 1fr; margin: 0 0 1.2rem; padding: 0; list-style: none; }
-@media (min-width: 760px) { .flow { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 1180px) { .flow { grid-template-columns: repeat(5, 1fr); } }
-.flow li { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; font-size: 0.88rem; }
-.flow li strong { display: block; font-size: 0.95rem; }
-.flow li .chip { margin-top: 6px; }
-.flow li.gate { border-color: var(--ink); border-width: 2px; }
+      /* flow of phases */
+      .flow {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr;
+        margin: 0 0 1.2rem;
+        padding: 0;
+        list-style: none;
+      }
+      @media (min-width: 760px) {
+        .flow {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (min-width: 1180px) {
+        .flow {
+          grid-template-columns: repeat(5, 1fr);
+        }
+      }
+      .flow li {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        font-size: 0.88rem;
+      }
+      .flow li strong {
+        display: block;
+        font-size: 0.95rem;
+      }
+      .flow li .chip {
+        margin-top: 6px;
+      }
+      .flow li.gate {
+        border-color: var(--ink);
+        border-width: 2px;
+      }
 
-/* phase cards */
-.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 22px 8px; margin-bottom: 18px; scroll-margin-top: 16px; }
-.phase.gate { border: 2px solid var(--ink); }
-.phase-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin-bottom: 0.4rem; }
-.phase-num { font-family: var(--mono); font-size: 0.85rem; color: var(--faint); }
-.phase-head h3 { margin: 0; font-size: 1.2rem; }
-.phase .goal { color: var(--muted); max-width: 80ch; }
-.facts { display: grid; grid-template-columns: 1fr; gap: 4px 18px; font-size: 0.86rem; margin: 0.6rem 0 0.4rem; padding: 10px 12px; background: var(--sunken); border-radius: 8px; }
-@media (min-width: 760px) { .facts { grid-template-columns: max-content 1fr; } }
-.facts dt { color: var(--muted); font-weight: 600; }
-.facts dd { margin: 0; }
-.checks li::marker { content: "✓  "; color: var(--ok); }
-.cols { display: grid; gap: 0 28px; grid-template-columns: 1fr; }
-@media (min-width: 900px) { .cols { grid-template-columns: 1fr 1fr; } }
+      /* phase cards */
+      .phase {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px 22px 8px;
+        margin-bottom: 18px;
+        scroll-margin-top: 16px;
+      }
+      .phase.gate {
+        border: 2px solid var(--ink);
+      }
+      .phase-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px 12px;
+        margin-bottom: 0.4rem;
+      }
+      .phase-num {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        color: var(--faint);
+      }
+      .phase-head h3 {
+        margin: 0;
+        font-size: 1.2rem;
+      }
+      .phase .goal {
+        color: var(--muted);
+        max-width: 80ch;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px 18px;
+        font-size: 0.86rem;
+        margin: 0.6rem 0 0.4rem;
+        padding: 10px 12px;
+        background: var(--sunken);
+        border-radius: 8px;
+      }
+      @media (min-width: 760px) {
+        .facts {
+          grid-template-columns: max-content 1fr;
+        }
+      }
+      .facts dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .facts dd {
+        margin: 0;
+      }
+      .checks li::marker {
+        content: "✓  ";
+        color: var(--ok);
+      }
+      .cols {
+        display: grid;
+        gap: 0 28px;
+        grid-template-columns: 1fr;
+      }
+      @media (min-width: 900px) {
+        .cols {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
 
-/* hosting diagram */
-.stack { display: grid; gap: 14px; grid-template-columns: 1fr; margin: 0.4rem 0 1rem; }
-@media (min-width: 860px) { .stack { grid-template-columns: repeat(3, 1fr); } }
-.stack figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
-.stack figcaption { font-size: 0.86rem; color: var(--muted); margin-top: 10px; }
-.layer { border-radius: 7px; padding: 7px 10px; font-size: 0.82rem; margin-top: 6px; border: 1px dashed var(--line); background: var(--sunken); }
-.layer.top { background: var(--accent-soft); border-style: solid; border-color: transparent; color: var(--ink); }
-.layer.chrome { background: var(--ok-soft); border-style: solid; border-color: transparent; }
-.layer.win { background: var(--sunken); }
-.layer b { font-weight: 600; }
+      /* hosting diagram */
+      .stack {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+        margin: 0.4rem 0 1rem;
+      }
+      @media (min-width: 860px) {
+        .stack {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      .stack figure {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px;
+        min-width: 0;
+      }
+      .stack figcaption {
+        font-size: 0.86rem;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .layer {
+        border-radius: 7px;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+        margin-top: 6px;
+        border: 1px dashed var(--line);
+        background: var(--sunken);
+      }
+      .layer.top {
+        background: var(--accent-soft);
+        border-style: solid;
+        border-color: transparent;
+        color: var(--ink);
+      }
+      .layer.chrome {
+        background: var(--ok-soft);
+        border-style: solid;
+        border-color: transparent;
+      }
+      .layer.win {
+        background: var(--sunken);
+      }
+      .layer b {
+        font-weight: 600;
+      }
 
-details { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin: 0 0 10px; }
-details > summary { cursor: pointer; padding: 11px 14px; font-weight: 600; list-style-position: inside; }
-details[open] > summary { border-bottom: 1px solid var(--line); }
-details > .inner { padding: 4px 14px 6px; }
+      details {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        margin: 0 0 10px;
+      }
+      details > summary {
+        cursor: pointer;
+        padding: 11px 14px;
+        font-weight: 600;
+        list-style-position: inside;
+      }
+      details[open] > summary {
+        border-bottom: 1px solid var(--line);
+      }
+      details > .inner {
+        padding: 4px 14px 6px;
+      }
 
-.sources li { overflow-wrap: anywhere; font-size: 0.9rem; }
-footer { border-top: 1px solid var(--line); padding: 20px 0 40px; color: var(--faint); font-size: 0.85rem; }
-.theme-toggle { margin-left: auto; font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
-@media print {
-  nav.toc, .theme-toggle { display: none; }
-  .layout { grid-template-columns: 1fr; }
-  details { border: 0; } details > summary { list-style: none; }
-}
-</style>
-</head>
-<body>
-<a class="skip" href="#main">Skip to content</a>
+      .sources li {
+        overflow-wrap: anywhere;
+        font-size: 0.9rem;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 20px 0 40px;
+        color: var(--faint);
+        font-size: 0.85rem;
+      }
+      .theme-toggle {
+        margin-left: auto;
+        font: inherit;
+        font-size: 0.82rem;
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 12px;
+        cursor: pointer;
+      }
+      @media print {
+        nav.toc,
+        .theme-toggle {
+          display: none;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        details {
+          border: 0;
+        }
+        details > summary {
+          list-style: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
 
-<header class="top">
-  <div class="wrap">
-    <div class="eyebrow">Bay · Port plan · <span class="mono">feat/windows</span></div>
-    <h1>Bay for Windows</h1>
-    <p class="lede">Bay can ship on Windows without starting over. The React UI, the TypeScript packages and most of the Chromium patch series carry over. What has to be built for Windows is the native layer under the UI. This plan says what moves, what gets rebuilt, the one architecture question to settle first, and the phases in order. macOS-only features such as Liquid Glass, the Metal shaders and the Dock tile are deliberately left out.</p>
-    <div class="meta">
-      <span>Drafted 8 Oct 2026</span>
-      <span>Engine: CEF/Chromium 154.0.8037.58</span>
-      <span>UI: React Native 0.81 · Expo 54 · Reanimated 3.19</span>
-      <button class="theme-toggle" type="button" id="themeToggle" aria-label="Toggle colour theme">Theme</button>
-    </div>
-  </div>
-</header>
-
-<div class="wrap layout">
-  <nav class="toc" aria-label="Contents">
-    <h2>Contents</h2>
-    <ol>
-      <li><a href="#summary">Summary</a></li>
-      <li><a href="#scope">Scope</a></li>
-      <li><a href="#inventory">What carries over</a></li>
-      <li><a href="#hosting">The hosting decision</a></li>
-      <li><a href="#phases">Phases</a></li>
-      <li class="sub"><a href="#p0">0 · Groundwork on macOS</a></li>
-      <li class="sub"><a href="#p1">1 · Windows toolchain & engine</a></li>
-      <li class="sub"><a href="#p2">2 · Hosting spike (gate)</a></li>
-      <li class="sub"><a href="#p3">3 · Engine port</a></li>
-      <li class="sub"><a href="#p4">4 · Native module layer</a></li>
-      <li class="sub"><a href="#p5">5 · Windows shell & UX</a></li>
-      <li class="sub"><a href="#p6">6 · Data: import, sync, secrets</a></li>
-      <li class="sub"><a href="#p7">7 · Packaging, signing, updates</a></li>
-      <li class="sub"><a href="#p8">8 · Hardening & beta</a></li>
-      <li><a href="#modules">Native module map</a></li>
-      <li><a href="#engine">Engine file map</a></li>
-      <li><a href="#patches">Patch series map</a></li>
-      <li><a href="#risks">Risks</a></li>
-      <li><a href="#decisions">Decisions needed</a></li>
-      <li><a href="#sources">Sources</a></li>
-    </ol>
-  </nav>
-
-  <main id="main">
-
-    <div class="callout warn">
-      <p><strong>Implementation checkpoint, 17 October 2026.</strong> Shared desktop code,
-      typed contracts, Windows source and build tooling are present. Native service
-      coverage and the Windows hosting gate remain incomplete. See the
-      <a href="windows-implementation-status.md">implementation status and validation commands</a>.</p>
-    </div>
-
-    <section id="summary" aria-labelledby="summary-h">
-      <h2 id="summary-h">Summary</h2>
-      <div class="prose">
-        <div class="callout ok">
-          <p><strong>Yes, Bay can run on Windows.</strong> The approach: keep one React codebase and run it on <strong>React Native for Windows</strong>. It uses the New Architecture (Fabric), which is the only option since 0.82, and its 0.81 line matches Bay's RN version. The CEF/Chromium engine gets rebuilt for Windows with the same patch series, and the macOS native layer is rewritten in C++ against Win32 and the Windows App SDK.</p>
+    <header class="top">
+      <div class="wrap">
+        <div class="eyebrow">Bay · Port plan · <span class="mono">feat/windows</span></div>
+        <h1>Bay for Windows</h1>
+        <p class="lede">
+          Bay can ship on Windows without starting over. The React UI, the TypeScript packages and most of the Chromium patch series carry over. What has to be
+          built for Windows is the native layer under the UI. This plan says what moves, what gets rebuilt, the one architecture question to settle first, and
+          the phases in order. macOS-only features such as Liquid Glass, the Metal shaders and the Dock tile are deliberately left out.
+        </p>
+        <div class="meta">
+          <span>Drafted 8 Oct 2026</span>
+          <span>Engine: CEF/Chromium 154.0.8037.58</span>
+          <span>UI: React Native 0.81 · Expo 54 · Reanimated 3.19</span>
+          <button class="theme-toggle" type="button" id="themeToggle" aria-label="Toggle colour theme">Theme</button>
         </div>
-        <p>About <strong>46k lines</strong> of UI TypeScript (<code>apps/browser/src</code>), <code>@bay/core</code>, every package's TypeScript API, and most of the 45 engine patches can be reused. About <strong>45k lines</strong> of Swift, Objective‑C++ and Metal can't. Half of that is <code>engine/nncore</code> plus <code>packages/nncore/ios</code>, which host Chrome's tabs inside AppKit views.</p>
-        <p>One question decides how much of the macOS design survives: <strong>can React UI draw over web pages in a single Windows window?</strong> On macOS, NSView layering makes this trivial. On Windows, every pixel belongs to exactly one HWND (the "airspace" rule), and Chrome draws into its own HWND. Phase 2 is a short spike that answers this before the expensive work starts.</p>
-        <p>Building the engine on Windows needs a Windows machine with a lot of disk and RAM. As agreed, that can wait. <strong>Phase 0 runs entirely on this Mac</strong> and leaves the codebase ready for the Windows work without changing how the Mac app behaves.</p>
       </div>
-    </section>
+    </header>
 
-    <section id="scope" aria-labelledby="scope-h">
-      <h2 id="scope-h">Scope</h2>
-      <div class="grid2">
-        <div class="card">
-          <h3>In scope for the first Windows release</h3>
-          <ul>
-            <li>Everything in the sidebar and tabs model: spaces, pinned and split panes, command panel, find bar, downloads, settings, developer mode bar and inspector</li>
-            <li>Chrome features through the engine: extensions and the Web Store, passwords and autofill, permissions, PiP, casting, DevTools, site settings, history, bookmarks</li>
-            <li>Content blocker, favicons, zoom, profiles</li>
-            <li>Importing from Chrome, Edge, Brave, Vivaldi, Opera, Firefox and Arc for Windows</li>
-            <li>Encrypted folder sync, readable by the Mac app and the Windows app</li>
-            <li>Installer, auto-update, code signing, default-browser registration</li>
-          </ul>
-        </div>
-        <div class="card">
-          <h3>Out of scope (macOS-only)</h3>
-          <ul>
-            <li>Liquid Glass (<code>BayGlassEffect</code>) and <code>NSVisualEffectView</code> vibrancy, replaced by Mica/Acrylic where it fits</li>
-            <li>Metal shaders: area light, edge light, power-up and the grained OKLab backdrop (<code>@bay/shaders</code>)</li>
-            <li>Dock tile plug-in, Dock selection, alternate app icons</li>
-            <li>AppleScript dictionary (<code>Bay.sdef</code>), Handoff, Apple Translation</li>
-            <li>Touch Bar autofill and iCloud Keychain passkeys</li>
-            <li>Importing from Safari and Dia, which uses Apple Events</li>
-            <li>Calendar via EventKit (can return later through Windows APIs)</li>
-          </ul>
-        </div>
-      </div>
-      <h3>macOS feature → Windows decision</h3>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">macOS feature</th><th scope="col">Windows</th><th scope="col">Decision</th></tr></thead>
-          <tbody>
-            <tr><td>Liquid Glass / vibrancy surfaces</td><td>Mica / Mica Alt / Desktop Acrylic via <code>DWMWA_SYSTEMBACKDROP_TYPE</code> (Windows 11 22621+), solid colour on Windows 10</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Metal shaders</td><td>Static gradient or CSS-like fallback in RN; a Direct3D version is possible later</td><td><span class="chip risk">Drop</span></td></tr>
-            <tr><td>SF Symbols (<code>BaySymbol</code>)</td><td>Fluent System Icons / Segoe Fluent Icons, using a name-mapping table</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Global menu bar (<code>Menus.swift</code>)</td><td>An in-window app menu plus the same shortcuts on Ctrl; no global menu bar on Windows</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Traffic lights (<code>setTrafficLights*</code>)</td><td>Custom caption buttons; maximize answers <code>WM_NCHITTEST</code> with <code>HTMAXBUTTON</code> so Snap Layouts works</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Sparkle updates</td><td>WinSparkle (same appcast idea) or Velopack</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Keychain (<code>BayKeychain</code>)</td><td>Windows Credential Manager or DPAPI</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>UserNotifications</td><td>Windows App SDK app notifications (needs an AUMID)</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Launch at login (ServiceManagement)</td><td><code>HKCU\…\Run</code> or a StartupTask</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Set as default browser</td><td>Register ProgID + Capabilities, then open <code>ms-settings:defaultapps</code>. Windows does not let apps set this themselves</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Trackpad swipe back/forward (<code>NNSwipe</code>)</td><td>Chrome's own overscroll history navigation on precision touchpads first; custom gesture only if needed</td><td><span class="chip warn">Replace</span></td></tr>
-            <tr><td>Intro music (AVFoundation)</td><td>Media Foundation, or play it through a page</td><td><span class="chip ok">Later</span></td></tr>
-            <tr><td>Dock tile, Dock selection, app icons</td><td>Taskbar jump list and overlay badge, if wanted</td><td><span class="chip risk">Drop</span></td></tr>
-            <tr><td>AppleScript, Handoff, Translate, Calendar</td><td>—</td><td><span class="chip risk">Drop</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="inventory" aria-labelledby="inventory-h">
-      <h2 id="inventory-h">What carries over</h2>
-      <p class="prose">Line counts come from the current <code>main</code> (tests and Pods excluded).</p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Area</th><th scope="col" class="num">Lines</th><th scope="col">What it is</th><th scope="col">On Windows</th></tr></thead>
-          <tbody>
-            <tr><td><code>apps/browser/src</code></td><td class="num">46,209</td><td>React UI (167 .ts, 126 .tsx)</td><td><span class="chip ok">Reuse</span> with platform seams for keys, glass, icons and the menu bar</td></tr>
-            <tr><td><code>packages/core</code></td><td class="num">—</td><td>Pure TS: omnibox, suggestions, breadcrumbs</td><td><span class="chip ok">Reuse</span> as is</td></tr>
-            <tr><td><code>packages/*/src</code></td><td class="num">—</td><td>TS facades over native modules</td><td><span class="chip ok">Reuse</span>; the binding call changes (Expo → TurboModule on Windows)</td></tr>
-            <tr><td><code>engine/patches</code> (45 patches)</td><td class="num">—</td><td>CEF + Chromium changes</td><td><span class="chip ok">Mostly reuse</span>: 35 portable, 8 need Windows code, 2 macOS-only (<a href="#patches">map</a>)</td></tr>
-            <tr><td><code>engine/chromium</code> (<code>//chrome/browser/bay</code>)</td><td class="num">7,608</td><td>Plain-C <code>nn_*</code> JSON API over Chrome services</td><td><span class="chip ok">Mostly reuse</span>: 21 .cc are portable; 3 .mm (downloads, external apps, PiP) need Windows versions</td></tr>
-            <tr><td><code>engine/nncore</code></td><td class="num">13,619</td><td>The layer: browser, windows, tabs, prompts. 25 .mm, public API in Objective‑C (<code>NNCore.h</code>)</td><td><span class="chip warn">Split</span>: logic to .cc, hosting to <code>_win.cc</code>; a C API next to the ObjC one</td></tr>
-            <tr><td><code>packages/nncore/ios</code></td><td class="num">10,506</td><td>Expo modules + NSView hosting of tabs (<code>NNCoreWebView.mm</code> 2,171, <code>NNCoreChromeWindow.mm</code> 1,527)</td><td><span class="chip risk">Rewrite</span> as RNW Fabric component + TurboModules</td></tr>
-            <tr><td><code>packages/shell/ios</code></td><td class="num">6,077</td><td>Windows, menus, shortcuts, symbols, system services</td><td><span class="chip risk">Rewrite</span>; many parts dropped (<a href="#modules">map</a>)</td></tr>
-            <tr><td><code>packages/import</code></td><td class="num">4,531</td><td>Swift readers for browser profiles</td><td><span class="chip warn">Port</span> the Chromium/Firefox/CSV/Netscape readers; drop Safari/Dia</td></tr>
-            <tr><td><code>packages/shaders/ios</code></td><td class="num">1,631</td><td>Metal views</td><td><span class="chip risk">Drop</span>; fallback views in JS</td></tr>
-            <tr><td><code>packages/sync/ios</code></td><td class="num">983</td><td>AES‑GCM, HKDF, HMAC, SHA‑256 (CryptoKit) + Keychain</td><td><span class="chip warn">Port</span> to CNG or BoringSSL; byte-compatible with the Mac app</td></tr>
-            <tr><td><code>apps/browser/macos</code></td><td class="num">775</td><td>App delegate, window, Xcode project</td><td><span class="chip risk">Rewrite</span> as an <code>apps/browser/windows</code> RNW project</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="grid2">
-        <div class="card">
-          <h3>Already in our favour</h3>
-          <ul>
-            <li><code>nn_engine.h</code> is already <strong>plain C with JSON arguments</strong>, looked up with <code>dlsym</code>. On Windows it becomes <code>GetProcAddress</code> on <code>chrome.dll</code>, and passwords, history, bookmarks, cookies, site settings, downloads, zoom and search engines carry over with no API change.</li>
-            <li>The JS never branches on <code>Platform.OS</code> today, so adding the seams is a clean job.</li>
-            <li><code>nativeApi.tsx</code> already uses <code>requireOptionalNativeModule</code>, so the app handles a module that's missing.</li>
-            <li>Chrome runs Windows natively (Aura/Views), so prompts that Bay leaves to Chrome's Views work unchanged.</li>
-          </ul>
-        </div>
-        <div class="card">
-          <h3>Working against us</h3>
-          <ul>
-            <li><strong>Expo Modules has no Windows target.</strong> All 27 named native modules and views go through <code>requireNativeModule</code> / <code>requireNativeViewManager</code> from <code>expo-modules-core</code>.</li>
-            <li><strong>Reanimated</strong> is everywhere: 232 <code>Animated.View</code>, 172 <code>useAnimatedStyle</code>, 53 <code>runOnJS</code>, 39 <code>measure</code>. I found no confirmed Windows support.</li>
-            <li><code>NNCore.h</code> is an Objective‑C API (<code>NNCoreEngine</code>, <code>NNCoreWindow</code>, <code>NNCoreTab</code> + delegates), so a Windows host can't call it.</li>
-            <li>macOS-only RN props are used widely: <code>onMouseEnter</code> (19 files), <code>keyDownEvents</code> (14), <code>enableFocusRing</code> (14), <code>tooltip</code>, drag and drop. ⌘ appears in 39 files, and <code>Symbol</code> in 74.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <section id="hosting" aria-labelledby="hosting-h">
-      <h2 id="hosting-h">The hosting decision</h2>
-      <div class="prose">
-        <p><strong>How macOS works today</strong> (from the patches): Chrome's own window is the app window (<code>CefBrowserSettings.client_window</code>). Chrome shows no tab strip or toolbar in it and keeps it open with no tabs. The RN root view is a subview of Chrome's <code>BridgedContentView</code> and gets hit testing and accessibility first (<code>bayEmbeddedView</code>, <code>chromium-window-hosted.patch</code>). Each tab's <code>RenderWidgetHostViewMac</code> stays out of Views (<code>NativeHostedContents</code>, <code>chromium-webview-native-hosted.patch</code>), and the app places it wherever a pane is. AppKit composites everything together.</p>
-        <p><strong>Why Windows is different:</strong> Chrome on Windows draws a whole top-level window into one HWND through DirectComposition. Tab contents are Aura windows, not separate native views an app can move around. An HWND owns its pixels, so another technology can't blend semi-transparently over them. Since Windows 8, child windows can be layered, and DirectComposition can target child HWNDs, which opens some room.</p>
-      </div>
-      <div class="stack">
-        <figure>
-          <div class="layer top"><b>A · RN island over Chrome</b> (recommended to try first)</div>
-          <div class="layer top">React Native island: child HWND, transparent, hit test passes through</div>
-          <div class="layer chrome">Chrome window (client_window) · tab Aura windows laid out to pane rects</div>
-          <figcaption>The direct counterpart of macOS. The <code>client_window</code>, <code>KeepsWindowWithoutTabs</code> and popup-layout patches carry over. Needs: a transparent island, pass-through hit testing (<code>HTTRANSPARENT</code> works only on the same thread, so CEF runs on RN's UI thread with <code>external_message_pump</code>, as on macOS), and Chrome's Views layout following pane rects that JS sends.</figcaption>
-        </figure>
-        <figure>
-          <div class="layer top"><b>B · Chrome tabs inside the RN window</b> (fallback)</div>
-          <div class="layer chrome">Per-pane Chrome child HWNDs (CEF windowed, SetAsChild)</div>
-          <div class="layer win">RNW window: sidebar, toolbar, everything else</div>
-          <figcaption>The easiest to get running. But RN can't draw over a page, so everything that overlaps web content (command panel, find bar, menus, toasts, peek, the developer inspector) moves into owned popup windows. That's a sizeable UX refactor, and Chrome-style features with a native parent need checking.</figcaption>
-        </figure>
-        <figure>
-          <div class="layer top"><b>C · UI rendered by Chrome</b> (last resort)</div>
-          <div class="layer chrome">react-native-web UI in a transparent Chrome WebContents above the tabs</div>
-          <div class="layer chrome">Tab WebContents in Chrome's Views</div>
-          <figcaption>No airspace problems, since one compositor draws everything (Vivaldi's model, with React inside Chromium). Costs: a second UI runtime next to the Mac app's, native calls go through Mojo/WebUI instead of TurboModules, and RN macOS-only props need web equivalents.</figcaption>
-        </figure>
-      </div>
-      <div class="callout warn">
-        <p><strong>Ruled out:</strong> off-screen rendering into a composition surface (CEF OSR with shared D3D textures). CEF's windowless mode is tied to Alloy-style browsers. Bay depends on Chrome style (tab strip model, extensions UI, Chrome's prompts), so OSR would cost those features. <em>This comes from CEF's runtime split; confirm it against the CEF 154 headers in Phase 1.</em></p>
-      </div>
-    </section>
-
-    <section id="phases" aria-labelledby="phases-h">
-      <h2 id="phases-h">Phases</h2>
-      <p class="prose">Phases run in order unless noted. Phase 2 is a go/no-go gate: Phases 3–5 depend on which hosting option it picks. Phases 3 and 4 can run in parallel once it passes, and so can 5 and 6. Each phase shows where it can run, because the Windows machine comes later.</p>
-      <ol class="flow" aria-label="Phase order">
-        <li><strong>0 · Groundwork</strong>Seams, contracts, engine split<br><span class="chip mac">Runs on Mac</span></li>
-        <li><strong>1 · Toolchain & engine</strong>CEF + patches build on Windows<br><span class="chip win">Needs Windows</span></li>
-        <li class="gate"><strong>2 · Hosting spike</strong>Pick A, B or C<br><span class="chip gate">Gate</span></li>
-        <li><strong>3 · Engine port</strong>nncore + Windows patches<br><span class="chip win">Needs Windows</span></li>
-        <li><strong>4 · Module layer</strong>TurboModules + Fabric views<br><span class="chip win">Needs Windows</span></li>
-        <li><strong>5 · Shell & UX</strong>Title bar, menus, Mica, icons<br><span class="chip win">Mostly Windows</span></li>
-        <li><strong>6 · Data</strong>Import, sync, secrets<br><span class="chip mac">Parsers on Mac</span></li>
-        <li><strong>7 · Ship</strong>Installer, signing, updates<br><span class="chip win">Needs Windows</span></li>
-        <li><strong>8 · Hardening</strong>A11y, DPI, perf, beta<br><span class="chip win">Needs Windows</span></li>
-      </ol>
-
-      <!-- Phase 0 -->
-      <article class="phase" id="p0" aria-labelledby="p0-h">
-        <div class="phase-head"><span class="phase-num">Phase 0</span><h3 id="p0-h">Groundwork on macOS</h3><span class="chip mac">Runs on Mac, now</span></div>
-        <p class="goal">Make the shared code platform-neutral and pin down every native contract, so the Windows work becomes "implement this interface" rather than "find out what the Mac does". The Mac app must behave exactly as before.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Nothing</dd>
-          <dt>Touches</dt><dd><code>apps/browser/src</code>, <code>packages/*/src</code>, <code>engine/nncore</code>, <code>engine/patches/series*</code>, CI</dd>
-        </dl>
-        <div class="cols">
-          <div>
-            <h4>JS / TS</h4>
-            <ul>
-              <li>Add one <code>platform</code> module (<code>isMac</code>, <code>isWindows</code>, <code>capabilities</code>) and route every macOS-only call through it, never through scattered <code>Platform.OS</code> checks.</li>
-              <li>Keyboard: a <code>Mod</code> abstraction (⌘ on Mac, Ctrl on Windows) for <code>menuShortcuts</code>, <code>keyDownEvents</code>, shortcut labels (⌘ in 39 files) and <code>recordShortcut</code>. Write the Windows shortcut table (Ctrl+T, Ctrl+L, Ctrl+Shift+T, Alt+←/→, F5/Ctrl+R, Ctrl+1–8, Ctrl+Tab…).</li>
-              <li>Split <code>@bay/shell</code> exports into <em>core</em> (windows, commands, clipboard, files, dialogs, menus) and <em>mac extras</em> (Dock, AppleScript, Handoff, Translate, Calendar, app icons, intro music), with the extras optional.</li>
-              <li>Fallbacks for <code>GlassEffect</code>, <code>VisualEffect</code> and the four shader views: a plain <code>Surface</code> with theme colours whenever the capability is missing.</li>
-              <li>Icons: change <code>Symbol</code> to take a Bay icon id, and keep a table of SF Symbol name ↔ Fluent icon name. Do this now, while the full list is easy to extract from 74 files.</li>
-              <li>Wrap macOS-only RN props (<code>enableFocusRing</code>, <code>tooltip</code>, <code>draggedTypes</code>, <code>mouseDownCanMoveWindow</code>) in small components. RNW then gets equivalents in one place, not 50.</li>
-            </ul>
-          </div>
-          <div>
-            <h4>Native contracts & engine</h4>
-            <ul>
-              <li>Write a typed spec for each of the 27 Expo modules and views (methods, events, view props). Generate the RN codegen spec from it so a Windows TurboModule can be checked against the same contract. Extend <code>test-native-stub.mjs</code> to assert that the stubs match the spec.</li>
-              <li>Write a <strong>C API for NNCore</strong> (<code>nncore_c.h</code>) in the style of <code>nn_engine.h</code>: opaque handles, JSON arguments, a callback sink. Turn the ObjC <code>NNCore.h</code> into a thin wrapper over it. Then the Mac host and the Windows host share one engine surface.</li>
-              <li>Move the platform-free logic out of the .mm files (<code>nn_seams</code>, <code>nn_devtools_call</code>, <code>nn_extension_view</code>, <code>nn_installed_bubble</code>, <code>nn_desktop_capture</code>, <code>nn_host_visibility</code> and others with no Cocoa) into .cc. Leave only the AppKit code in <code>_mac.mm</code>.</li>
-              <li>Add a platform column to <code>engine/patches/series</code> (<code>all</code> / <code>mac</code> / <code>win</code>) and teach <code>series.py</code> to skip what doesn't apply.</li>
-              <li>CI: run <code>pnpm typecheck</code> and <code>pnpm test</code> on a <code>windows-latest</code> runner. They're pure Node and cheap, and they catch path and line-ending assumptions early.</li>
-              <li>Port the build scripts that must run on Windows (<code>scripts/download-engine</code>, <code>engine-build</code>, <code>apply.sh</code>) to Node or Python, which runs on both.</li>
-            </ul>
-          </div>
-        </div>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>The Mac app passes the existing test scripts (shortcuts, windowing, hover-shift, tab-drag, zoom-scroll) unchanged.</li>
-          <li>No macOS-only module is imported without a capability check.</li>
-          <li>Every native module has a written spec, and the stubs are checked against it.</li>
-          <li>The Mac host uses <code>nncore_c.h</code>, and <code>NNCore.h</code> is only a wrapper.</li>
-          <li>JS checks are green on Windows CI.</li>
-        </ul>
-      </article>
-
-      <!-- Phase 1 -->
-      <article class="phase" id="p1" aria-labelledby="p1-h">
-        <div class="phase-head"><span class="phase-num">Phase 1</span><h3 id="p1-h">Windows toolchain & engine build</h3><span class="chip win">Needs a Windows machine (deferred)</span></div>
-        <p class="goal">Get the same CEF/Chromium 154 tree, with Bay's patches, building and running on Windows x64.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phase 0's series platform column and the cross-platform scripts (helpful, not blocking)</dd>
-          <dt>Machine</dt><dd>Windows 10/11 x64; at least 100 GB free on an NTFS SSD (more for CEF plus a second output directory); Chromium asks for 8 GB RAM minimum and recommends more than 16 GB, and 32–64 GB is realistic for builds of this size; as many cores as possible. A cloud VM works.</dd>
-          <dt>Toolchain</dt><dd>The Visual Studio release named by Chromium 154's <code>windows_build_instructions.md</code>. Current docs ask for VS 2026, older ones VS 2022: read the one at our pinned revision. Install "Desktop development with C++" with MFC/ATL and the Windows 11 SDK version it lists. Add Python 3, Git and depot_tools.</dd>
-        </dl>
-        <ul>
-          <li>Run the download script on Windows (the 154.0.8037.58 pin), then CEF's patch-and-gen, ungoogled-chromium, domain substitution and our series, in the macOS order.</li>
-          <li>Use <a href="https://github.com/ungoogled-software/ungoogled-chromium-windows">ungoogled-chromium-windows</a> as the reference for the Windows-specific ungoogled steps (it builds without Google's prebuilt binaries).</li>
-          <li><code>chromium-bay-layer.patch</code> adds <code>//chrome/browser/bay:exports</code> next to <code>//chrome/browser/mac</code>, which is the macOS framework target. Add the Windows equivalent in the <code>chrome.dll</code> target, and write a <code>.def</code> or <code>__declspec(dllexport)</code> list for the <code>nn_*</code> exports.</li>
-          <li>Run the GN args: <code>is_official_build</code>, <code>target_cpu="x64"</code>, symbol level, and the CEF Chrome-style flags. Add an arm64 output directory later.</li>
-          <li>Build <code>cefclient</code>/<code>cefsimple</code> with the patches and click through tabs, extensions, passwords and DevTools.</li>
-          <li>Confirm the CEF facts the plan relies on: Chrome style vs Alloy for windowless rendering, <code>external_message_pump</code> vs <code>multi_threaded_message_loop</code> on Windows (the latter is Windows/Linux-only), and Views-hosted Chrome-style windows.</li>
-          <li>Archive the engine build output (headers, <code>.lib</code>, <code>chrome.dll</code>, resources, PDBs) so the app build can download it, not rebuild it.</li>
-        </ul>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>The patched engine builds reproducibly from a clean checkout, using one documented command.</li>
-          <li>A patched cefclient runs Chrome-style tabs with an extension installed from the Web Store.</li>
-          <li>Engine artifacts are archived and versioned.</li>
-        </ul>
-      </article>
-
-      <!-- Phase 2 -->
-      <article class="phase gate" id="p2" aria-labelledby="p2-h">
-        <div class="phase-head"><span class="phase-num">Phase 2</span><h3 id="p2-h">Hosting spike</h3><span class="chip gate">Go / no-go gate</span><span class="chip win">Needs Windows</span></div>
-        <p class="goal">A throwaway app that answers the hosting question and the two library questions before the main port starts. The output is a short decision record, not shipping code.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phase 1</dd>
-          <dt>Setup</dt><dd>A fresh RNW 0.81 C++ app (Fabric, Hermes, Windows App SDK). Link the Phase 1 engine. One Fabric component, one tab.</dd>
-        </dl>
-        <div class="table-wrap">
-          <table>
-            <caption>Test matrix: run it for option A first, and for B only if A fails</caption>
-            <thead><tr><th scope="col">Test</th><th scope="col">Passes when</th></tr></thead>
-            <tbody>
-              <tr><td>Overlay</td><td>An RN panel with rounded corners and partial transparency draws over a playing video page with no flicker, while dragging and resizing</td></tr>
-              <tr><td>Hit testing</td><td>Clicks, the wheel and hover go to RN where RN has views and to the page everywhere else. Text selection and drag in the page work up to the panel's edge</td></tr>
-              <tr><td>Keyboard & focus</td><td>Ctrl shortcuts reach RN first when the page has focus (the counterpart of <code>cef-window-keys</code>); page shortcuts still work; Tab moves between RN and the page</td></tr>
-              <tr><td>IME</td><td>Japanese/Chinese IME works in a page field and in an RN <code>TextInput</code></td></tr>
-              <tr><td>Accessibility</td><td>Narrator reads RN's UI, then the page, in a sensible order</td></tr>
-              <tr><td>DPI</td><td>At 100/150/200% and when moving between monitors with different scales, nothing renders at the wrong size (cf. RNW #16383)</td></tr>
-              <tr><td>Resize performance</td><td>Live window resize stays smooth with three panes</td></tr>
-              <tr><td>Reanimated</td><td><code>react-native-reanimated</code> 3.19 builds on RNW 0.81 and runs <code>withTiming</code>, <code>withSpring</code>, <code>measure</code> and <code>runOnJS</code> on the UI thread</td></tr>
-              <tr><td>Expo shim</td><td>Pick a binding route: (a) a small <code>expo-modules-core</code> shim for Windows that maps <code>requireNativeModule</code> to TurboModules, or (b) per-package <code>.windows.ts</code> files that import codegen modules</td></tr>
-              <tr><td>Backdrop</td><td>Mica behind the sidebar with the frame extended into the client area and readable text</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <h4>Outcomes</h4>
-        <ul>
-          <li><strong>A passes:</strong> keep the macOS design. Phase 3 brings <code>client_window</code> to Windows.</li>
-          <li><strong>A fails but B passes:</strong> Phase 5 grows a task to move overlapping UI into owned popup windows (command panel, find bar, toasts, peek, inspector, context menus).</li>
-          <li><strong>Reanimated fails:</strong> wrap it in <code>lib/motion</code> with two backends, Reanimated on Mac and RN <code>Animated</code> or Composition animations on Windows. The 232 call sites stay unchanged.</li>
-          <li><strong>A and B both fail the bar:</strong> run a short spike on option C before committing to anything.</li>
-        </ul>
-      </article>
-
-      <!-- Phase 3 -->
-      <article class="phase" id="p3" aria-labelledby="p3-h">
-        <div class="phase-head"><span class="phase-num">Phase 3</span><h3 id="p3-h">Engine port</h3><span class="chip win">Needs Windows</span></div>
-        <p class="goal">Bring the NNCore layer and the eight host-specific patches to Windows behind the Phase 0 C API.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phase 2's decision; Phase 0's C API and .cc split</dd>
-          <dt>Runs alongside</dt><dd>Phase 4</dd>
-        </dl>
-        <ul>
-          <li><strong>Window hosting</strong> (<code>nn_browser_window</code>, <code>nn_host_visibility</code>, <code>nn_lifetime</code>): <code>client_window</code> on <code>DesktopWindowTreeHostWin</code>; tab placement from pane rects; occlusion and visibility; quit, beforeunload and the downloads prompt.</li>
-          <li><strong>Patches with macOS halves</strong>: <code>cef-window-client</code> and <code>chromium-window-hosted</code> (the <code>BridgedContentView</code> hit-test and a11y hooks become HWND/Aura ones), <code>cef-window-keys</code> (accelerator routing on Windows), <code>cef-window-translucent</code>, <code>chromium-webview-native-hosted</code> and <code>chromium-window-docked-devtools</code> (rethink what "hosted outside Views" means on Aura), and <code>chromium-devtools-redock-display</code> (probably not needed: it fixes an NSView display bridge).</li>
-          <li><strong>Message pump</strong>: <code>cef-idle-pump</code> and <code>cef-pump-wake</code> were written for macOS's external pump. Check them against the Windows pump and RN's DispatcherQueue (nested loops on Windows are a known external-pump weak spot).</li>
-          <li><strong>Prompts and menus</strong> (<code>nn_context_menu</code>, <code>nn_password_prompt</code>, <code>nn_autofill_prompt</code>, <code>nn_device_chooser</code>, <code>nn_cast_dialog</code>, <code>nn_permissions</code>): keep their JSON events; replace only the bits that show NSMenus or AppKit sheets.</li>
-          <li><strong>Platform services</strong>: <code>nn_external_apps</code> (<code>AssocQueryString</code>/<code>ShellExecuteEx</code>), <code>nn_downloads_mac</code> → Windows (Chrome already applies Mark-of-the-Web and attachment scanning), <code>nn_pip_mac</code> → Views PiP window, <code>nn_reauth</code> → Windows Hello (<code>UserConsentVerifier</code>).</li>
-          <li><strong>Secrets</strong>: <code>chromium-safe-storage-name</code> is Keychain-only. On Windows, os_crypt keeps its key in <code>Local State</code> under DPAPI. Make sure Bay's user-data dir is its own so the key never collides with another Chromium's.</li>
-          <li><strong>Skip</strong>: <code>chromium-autofill-card-touchbar</code>, <code>chromium-icloud-keychain-window</code>.</li>
-        </ul>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>A small C++ test host drives the engine through <code>nncore_c.h</code>: windows, tabs, split panes, popups, extensions, permission and password prompts, PiP, DevTools docked and undocked.</li>
-          <li>The <code>nn_*</code> calls return the same JSON on Windows and Mac for the same profile operations.</li>
-        </ul>
-      </article>
-
-      <!-- Phase 4 -->
-      <article class="phase" id="p4" aria-labelledby="p4-h">
-        <div class="phase-head"><span class="phase-num">Phase 4</span><h3 id="p4-h">Native module layer on React Native Windows</h3><span class="chip win">Needs Windows</span></div>
-        <p class="goal">Get the real app UI running on Windows: every module in the <a href="#modules">module map</a> either implemented in C++ against its Phase 0 spec, or reported missing so the UI falls back.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phase 2 (binding route, hosting), Phase 3 for the engine-backed modules</dd>
-          <dt>Lives in</dt><dd><code>apps/browser/windows/</code> (RNW app project), <code>packages/*/windows/</code> (C++ modules)</dd>
-        </dl>
+    <div class="wrap layout">
+      <nav class="toc" aria-label="Contents">
+        <h2>Contents</h2>
         <ol>
-          <li><strong>The browser first</strong>: <code>BayCEF</code> (the web view component), the <code>nncore</code> native module, the tab strip, favicons. Goal: browse with tabs in the real UI.</li>
-          <li><strong>Windows & commands</strong>: <code>BayShell</code> (open, close and focus windows, frame, commands, the menu model, confirm/prompt dialogs) and <code>BayApp</code>.</li>
-          <li><strong>Chrome UI and extensions</strong>: <code>BayChromeUI</code>, <code>BayExtensions</code>, native messaging (registry-based hosts on Windows), the content blocker.</li>
-          <li><strong>System</strong>: <code>BaySystem</code> (file picker, open/reveal, recycle bin, clipboard text and images, file icons, downloads folder), <code>BayFileDrag</code>, notifications, launch at login, default browser.</li>
-          <li><strong>Views</strong>: <code>BaySurface</code>, <code>BayActivitySpinner</code>, <code>BayFadeLabel</code>, <code>BayContextMenuArea</code>, <code>BayWindowProfile</code>, and <code>BaySymbol</code> over the Fluent icon font.</li>
-          <li><strong>Inline completion, keychain, sync, import</strong>: last, once the data work in Phase 6 has landed.</li>
+          <li><a href="#summary">Summary</a></li>
+          <li><a href="#scope">Scope</a></li>
+          <li><a href="#inventory">What carries over</a></li>
+          <li><a href="#hosting">The hosting decision</a></li>
+          <li><a href="#phases">Phases</a></li>
+          <li class="sub"><a href="#p0">0 · Groundwork on macOS</a></li>
+          <li class="sub"><a href="#p1">1 · Windows toolchain & engine</a></li>
+          <li class="sub"><a href="#p2">2 · Hosting spike (gate)</a></li>
+          <li class="sub"><a href="#p3">3 · Engine port</a></li>
+          <li class="sub"><a href="#p4">4 · Native module layer</a></li>
+          <li class="sub"><a href="#p5">5 · Windows shell & UX</a></li>
+          <li class="sub"><a href="#p6">6 · Data: import, sync, secrets</a></li>
+          <li class="sub"><a href="#p7">7 · Packaging, signing, updates</a></li>
+          <li class="sub"><a href="#p8">8 · Hardening & beta</a></li>
+          <li><a href="#modules">Native module map</a></li>
+          <li><a href="#engine">Engine file map</a></li>
+          <li><a href="#patches">Patch series map</a></li>
+          <li><a href="#risks">Risks</a></li>
+          <li><a href="#decisions">Decisions needed</a></li>
+          <li><a href="#sources">Sources</a></li>
         </ol>
-        <p class="prose">Mirror <code>nativeApi.tsx</code>'s version-skew check: the Windows modules report a contract version, and the JS refuses to start on a mismatch, as the Mac app does.</p>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>The real <code>App.tsx</code> boots on Windows from Metro with hot reload, and in Release with a Hermes bundle.</li>
-          <li>Ports of the existing <code>apps/browser/scripts/*-test.mjs</code> (shortcuts, windowing, tab drag, zoom-scroll) pass against a hidden Windows instance (<code>BAY_DATA_DIR</code>, <code>BAY_BACKGROUND</code>).</li>
-        </ul>
-      </article>
+      </nav>
 
-      <!-- Phase 5 -->
-      <article class="phase" id="p5" aria-labelledby="p5-h">
-        <div class="phase-head"><span class="phase-num">Phase 5</span><h3 id="p5-h">Windows shell & UX</h3><span class="chip win">Mostly Windows</span><span class="chip mac">Design work on Mac</span></div>
-        <p class="goal">Make it feel like a Windows app, not a Mac app in a Windows frame.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phase 4 (windows and views exist)</dd>
-          <dt>Runs alongside</dt><dd>Phase 6</dd>
-        </dl>
-        <div class="cols">
-          <ul>
-            <li><strong>Frame</strong>: a borderless window with a custom title bar; minimise/maximise/close drawn by Bay; <code>HTMAXBUTTON</code> on the maximise button so Snap Layouts appear; the drag region from <code>WindowDragRegion</code>; minimum width ≤ 500 effective px so snapping works.</li>
-            <li><strong>Backdrop</strong>: Mica or Mica Alt behind the sidebar via <code>DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)</code> with the frame extended; Acrylic for transient panels; a solid theme colour on Windows 10 and with transparency effects off.</li>
-            <li><strong>Menus</strong>: no global menu bar. The <code>MenuEntry</code> model renders as an app menu ("…" in the sidebar) plus right-click menus; Alt or F10 opens it.</li>
-            <li><strong>Sidebar on the right</strong> (recent <code>850c7ff</code>): check it against the caption buttons on the right.</li>
-          </ul>
-          <ul>
-            <li><strong>Type & icons</strong>: Segoe UI Variable; Fluent icons through the Phase 0 mapping; Windows-style focus rectangles for keyboard focus.</li>
-            <li><strong>Shortcuts</strong>: the Windows table from Phase 0; Ctrl+Tab switcher; F6 cycles focus between sidebar, address and page; Alt+Home.</li>
-            <li><strong>Taskbar</strong>: jump list (New window, New private window), download progress on the taskbar button, an overlay badge if wanted.</li>
-            <li><strong>Theme</strong>: follow the light/dark setting, accent colour and high-contrast mode.</li>
-            <li>If Phase 2 chose B: move overlapping UI into owned popup windows here.</li>
-          </ul>
+      <main id="main">
+        <div class="callout warn">
+          <p>
+            <strong>Implementation checkpoint, 17 October 2026.</strong> Shared desktop code, typed contracts, Windows source and build tooling are present.
+            Native service coverage and the Windows hosting gate remain incomplete. See the
+            <a href="windows-implementation-status.md">implementation status and validation commands</a>.
+          </p>
         </div>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>Snap Layouts, Aero Snap, multi-monitor moves and DPI changes all work on the custom frame.</li>
-          <li>Every Mac shortcut has a Windows counterpart, and the shortcuts test passes.</li>
-          <li>The app is usable with high contrast on and transparency effects off.</li>
-        </ul>
-      </article>
 
-      <!-- Phase 6 -->
-      <article class="phase" id="p6" aria-labelledby="p6-h">
-        <div class="phase-head"><span class="phase-num">Phase 6</span><h3 id="p6-h">Data: import, sync, secrets</h3><span class="chip mac">Parsers & vectors on Mac</span><span class="chip win">Integration on Windows</span></div>
-        <p class="goal">A user moving from Chrome, Edge or Arc on Windows lands in Bay with their stuff, and a Mac user's sync folder opens on Windows.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phase 4's module layer for integration; the parser and crypto work can start any time</dd>
-        </dl>
-        <h4>Import</h4>
-        <ul>
-          <li>Port the browser-agnostic readers: Chromium bookmarks, history, autofill, extensions and sessions; Firefox places, plus logins via NSS <code>key4.db</code>; Netscape HTML; passwords CSV; zip. Find Windows profile paths for Chrome, Edge, Brave, Vivaldi, Opera, Firefox and Arc for Windows (a packaged app under <code>%LOCALAPPDATA%\Packages</code>).</li>
-          <li><strong>Chromium secrets on Windows</strong>: older data (<code>v10</code>) is AES‑GCM under a key in <code>Local State</code> protected by user DPAPI, which Bay can decrypt with the user's consent. Since Chrome 127, <strong>app-bound encryption</strong> ties cookies to Chrome's own elevation service and checks the caller's path. Google has said passwords and payment data would follow. Bay must not try to get around that. <strong>Plan:</strong> don't import cookies from Chrome; import passwords directly where they're still DPAPI-only, and otherwise walk the user through Chrome's password CSV export (<code>PasswordsCSV.swift</code> already handles that format).</li>
-          <li>Decide on language: rewrite in C++ (simplest toolchain) or keep the Swift <code>Core</code> and build it with Swift for Windows (Arc's route), using swift-crypto for CryptoKit. <a href="#decisions">Decision needed.</a></li>
-        </ul>
-        <h4>Sync</h4>
-        <ul>
-          <li>Re-implement <code>SyncCrypto</code>/<code>SyncVault</code> (AES‑GCM, HKDF, HMAC‑SHA256) with Windows CNG or the BoringSSL already in the engine. Generate <strong>golden test vectors</strong> from the Swift tests on Mac now, and require byte-identical output on Windows.</li>
-          <li><code>SyncKeyStore</code> moves from Keychain to Credential Manager/DPAPI. The recovery phrase and wordlist stay unchanged.</li>
-          <li>Folder sync on Windows: check OneDrive Files On-Demand placeholders (files that aren't downloaded yet), Dropbox, and SMB shares for file-locking differences.</li>
-        </ul>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>The import fixtures in <code>packages/import/fixtures</code> give identical results on Windows.</li>
-          <li>A vault written on Mac opens on Windows and the other way round, using one shared fixture.</li>
-        </ul>
-      </article>
+        <section id="summary" aria-labelledby="summary-h">
+          <h2 id="summary-h">Summary</h2>
+          <div class="prose">
+            <div class="callout ok">
+              <p>
+                <strong>Yes, Bay can run on Windows.</strong> The approach: keep one React codebase and run it on <strong>React Native for Windows</strong>. It
+                uses the New Architecture (Fabric), which is the only option since 0.82, and its 0.81 line matches Bay's RN version. The CEF/Chromium engine
+                gets rebuilt for Windows with the same patch series, and the macOS native layer is rewritten in C++ against Win32 and the Windows App SDK.
+              </p>
+            </div>
+            <p>
+              About <strong>46k lines</strong> of UI TypeScript (<code>apps/browser/src</code>), <code>@bay/core</code>, every package's TypeScript API, and
+              most of the 45 engine patches can be reused. About <strong>45k lines</strong> of Swift, Objective‑C++ and Metal can't. Half of that is
+              <code>engine/nncore</code> plus <code>packages/nncore/ios</code>, which host Chrome's tabs inside AppKit views.
+            </p>
+            <p>
+              One question decides how much of the macOS design survives: <strong>can React UI draw over web pages in a single Windows window?</strong> On
+              macOS, NSView layering makes this trivial. On Windows, every pixel belongs to exactly one HWND (the "airspace" rule), and Chrome draws into its
+              own HWND. Phase 2 is a short spike that answers this before the expensive work starts.
+            </p>
+            <p>
+              Building the engine on Windows needs a Windows machine with a lot of disk and RAM. As agreed, that can wait.
+              <strong>Phase 0 runs entirely on this Mac</strong> and leaves the codebase ready for the Windows work without changing how the Mac app behaves.
+            </p>
+          </div>
+        </section>
 
-      <!-- Phase 7 -->
-      <article class="phase" id="p7" aria-labelledby="p7-h">
-        <div class="phase-head"><span class="phase-num">Phase 7</span><h3 id="p7-h">Packaging, signing, updates</h3><span class="chip win">Needs Windows</span></div>
-        <p class="goal">A signed per-user install that updates itself, without Defender SmartScreen scaring people off.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phase 4 (an app to ship); the signing account can be set up any time</dd>
-        </dl>
-        <ul>
-          <li><strong>Installer</strong>: per-user under <code>%LOCALAPPDATA%</code>, no admin rights (like Chrome's user-level install). Choose between a Velopack-style setup (installer + deltas) and a WiX/NSIS installer paired with WinSparkle (same appcast model as <code>scripts/release.sh</code>). MSIX is an option, but its container rules complicate browser registration and native messaging.</li>
-          <li><strong>Registration</strong>: <code>RegisteredApplications</code>, <code>StartMenuInternet\Bay\Capabilities</code>, ProgIDs for <code>http</code>/<code>https</code>/<code>.html</code>/<code>.pdf</code>, an AUMID for notifications, Start menu shortcut, uninstaller entry; native messaging host keys under <code>HKCU\Software\Bay\NativeMessagingHosts</code>.</li>
-          <li><strong>Signing</strong>: <a href="https://devclass.com/2026/01/14/code-signing-windows-apps-may-be-easier-and-more-secure-with-new-azure-artifact-service/">Azure Artifact Signing</a> (formerly Trusted Signing) costs about $9.99/month for 5,000 signatures. It's available to individuals and organisations in the US and Canada, and to organisations in the EU and UK, and it issues no EV certificates. Otherwise, buy an OV/EV certificate from a CA. Sign every PE file: <code>Bay.exe</code>, <code>chrome.dll</code>, helpers, the installer.</li>
-          <li><strong>Release script</strong>: a Windows counterpart of <code>scripts/release.sh</code> producing the installer, update package and appcast entry, with notes from the same <code>release-notes/&lt;version&gt;.md</code>.</li>
-          <li><strong>Crashes</strong>: Chromium's Crashpad already writes minidumps. Point <code>crashReports</code> at Bay's crash directory instead of macOS DiagnosticReports, and archive PDBs for every release.</li>
-        </ul>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>A clean Windows 11 VM installs, launches, sets itself as default through Settings, updates to the next build and uninstalls cleanly.</li>
-          <li>SmartScreen shows no unknown-publisher warning for a signed build.</li>
-        </ul>
-      </article>
-
-      <!-- Phase 8 -->
-      <article class="phase" id="p8" aria-labelledby="p8-h">
-        <div class="phase-head"><span class="phase-num">Phase 8</span><h3 id="p8-h">Hardening & beta</h3><span class="chip win">Needs Windows</span></div>
-        <p class="goal">Quality on par with the Mac app, then a limited beta.</p>
-        <dl class="facts">
-          <dt>Depends on</dt><dd>Phases 5–7</dd>
-        </dl>
-        <ul>
-          <li>Accessibility with Narrator and NVDA across RN UI and pages; keyboard-only use; high contrast.</li>
-          <li>Displays: mixed DPI across monitors, 4K at 150–200%, fractional scaling, HDR video.</li>
-          <li>Hardware: Intel/AMD/NVIDIA GPUs, especially for transparency and DirectComposition driver quirks; Windows on Arm through x64 emulation, then a native arm64 build.</li>
-          <li>Performance: cold start, memory with 50 tabs, resize and animation frame times compared with the Mac app's <code>scripts/perf</code> numbers.</li>
-          <li>CI: JS checks on Windows from Phase 0; an app build on Windows from archived engine artifacts on every PR; engine rebuilds only when the pin or the patches change, on a large VM.</li>
-          <li>Beta via the update channel, with crash reports turned on.</li>
-        </ul>
-        <h4>Exit criteria</h4>
-        <ul class="checks">
-          <li>Every Mac test script has a Windows run in CI.</li>
-          <li>No known crash in the beta channel for one release cycle.</li>
-        </ul>
-      </article>
-    </section>
-
-    <section id="modules" aria-labelledby="modules-h">
-      <h2 id="modules-h">Native module map</h2>
-      <p class="prose">Every module and view the JS loads through <code>expo-modules-core</code> today, and what it becomes on Windows.</p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Module / view</th><th scope="col">Package</th><th scope="col">Windows implementation</th><th scope="col">Phase</th></tr></thead>
-          <tbody>
-            <tr><td><code>BayCEF</code> (view)</td><td>nncore</td><td>Fabric component placing a tab per the hosting decision</td><td>4</td></tr>
-            <tr><td>nncore module (<code>native.ts</code>)</td><td>nncore</td><td>TurboModule over <code>nncore_c.h</code> + <code>nn_engine.h</code> via <code>GetProcAddress</code></td><td>4</td></tr>
-            <tr><td><code>BayChromeUI</code>, <code>BayExtensions</code></td><td>nncore</td><td>TurboModules; extension packaging and native messaging (registry)</td><td>4</td></tr>
-            <tr><td><code>BaySwipe</code> (module + view)</td><td>nncore</td><td>Chrome's overscroll navigation first; custom precision-touchpad handling only if needed</td><td>5</td></tr>
-            <tr><td><code>BayShell</code>, <code>BayApp</code></td><td>shell</td><td>Win32 windows, commands, app menu, dialogs, appearance</td><td>4</td></tr>
-            <tr><td><code>BaySystem</code>, <code>BayFileDrag</code></td><td>shell</td><td>IFileDialog, ShellExecute, SHFileOperation (recycle bin), clipboard, OLE drag and drop, SHGetFileInfo icons</td><td>4</td></tr>
-            <tr><td><code>BaySurface</code>, <code>BayActivitySpinner</code>, <code>BayFadeLabel</code>, <code>BayContextMenuArea</code>, <code>BayWindowProfile</code></td><td>shell</td><td>Fabric components on Composition visuals</td><td>4</td></tr>
-            <tr><td><code>BaySymbol</code></td><td>shell</td><td>Fluent icon font glyphs via the Phase 0 mapping</td><td>4</td></tr>
-            <tr><td><code>BayVisualEffect</code>, <code>BayGlassEffect</code></td><td>shell</td><td>Window-level Mica/Acrylic; in-view fallback to <code>Surface</code></td><td>5</td></tr>
-            <tr><td><code>BayInlineCompletion</code></td><td>shell</td><td>Text completion inside RNW <code>TextInput</code> (a custom component if needed)</td><td>4</td></tr>
-            <tr><td><code>BayKeychain</code></td><td>shell</td><td>Credential Manager / DPAPI</td><td>6</td></tr>
-            <tr><td><code>BayCalendar</code>, <code>BayTranslate</code>, <code>BayDockSelection</code>, AppleScript, Handoff, app icons</td><td>shell</td><td>Not implemented; JS sees them as missing</td><td>—</td></tr>
-            <tr><td><code>BayAreaLight</code>, <code>BayEdgeLight</code>, <code>BayPowerUp</code>, <code>BayWindowBackdrop</code></td><td>shaders</td><td>Not implemented; JS falls back</td><td>—</td></tr>
-            <tr><td><code>BayImport</code></td><td>import</td><td>C++ (or Swift for Windows) readers, Windows paths, DPAPI</td><td>6</td></tr>
-            <tr><td><code>BaySync</code></td><td>sync</td><td>CNG/BoringSSL crypto, byte-compatible vaults</td><td>6</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="engine" aria-labelledby="engine-h">
-      <h2 id="engine-h">Engine file map</h2>
-      <p class="prose">For each <code>.mm</code> in the engine: its length, and a rough count of Cocoa references (<code>NS*</code>/<code>CG*</code>/ObjC sends). A low count means the file is mostly C++ in an ObjC++ wrapper and can move to .cc in Phase 0.</p>
-      <details>
-        <summary>Show all 28 files</summary>
-        <div class="inner">
+        <section id="scope" aria-labelledby="scope-h">
+          <h2 id="scope-h">Scope</h2>
+          <div class="grid2">
+            <div class="card">
+              <h3>In scope for the first Windows release</h3>
+              <ul>
+                <li>
+                  Everything in the sidebar and tabs model: spaces, pinned and split panes, command panel, find bar, downloads, settings, developer mode bar and
+                  inspector
+                </li>
+                <li>
+                  Chrome features through the engine: extensions and the Web Store, passwords and autofill, permissions, PiP, casting, DevTools, site settings,
+                  history, bookmarks
+                </li>
+                <li>Content blocker, favicons, zoom, profiles</li>
+                <li>Importing from Chrome, Edge, Brave, Vivaldi, Opera, Firefox and Arc for Windows</li>
+                <li>Encrypted folder sync, readable by the Mac app and the Windows app</li>
+                <li>Installer, auto-update, code signing, default-browser registration</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Out of scope (macOS-only)</h3>
+              <ul>
+                <li>Liquid Glass (<code>BayGlassEffect</code>) and <code>NSVisualEffectView</code> vibrancy, replaced by Mica/Acrylic where it fits</li>
+                <li>Metal shaders: area light, edge light, power-up and the grained OKLab backdrop (<code>@bay/shaders</code>)</li>
+                <li>Dock tile plug-in, Dock selection, alternate app icons</li>
+                <li>AppleScript dictionary (<code>Bay.sdef</code>), Handoff, Apple Translation</li>
+                <li>Touch Bar autofill and iCloud Keychain passkeys</li>
+                <li>Importing from Safari and Dia, which uses Apple Events</li>
+                <li>Calendar via EventKit (can return later through Windows APIs)</li>
+              </ul>
+            </div>
+          </div>
+          <h3>macOS feature → Windows decision</h3>
           <div class="table-wrap">
             <table>
-              <thead><tr><th scope="col">File</th><th scope="col" class="num">Lines</th><th scope="col" class="num">Cocoa refs</th><th scope="col">Plan</th></tr></thead>
+              <thead>
+                <tr>
+                  <th scope="col">macOS feature</th>
+                  <th scope="col">Windows</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
               <tbody>
-                <tr><td><code>nncore_api.mm</code></td><td class="num">2,703</td><td class="num">213</td><td>The ObjC API. It becomes the C API (<code>nncore_c</code>) plus a thin ObjC wrapper</td></tr>
-                <tr><td><code>nn_browser.mm</code></td><td class="num">1,650</td><td class="num">87</td><td>Split: tab/browser logic to .cc, view hosting to <code>_mac</code>/<code>_win</code></td></tr>
-                <tr><td><code>nn_browser_window.mm</code></td><td class="num">743</td><td class="num">29</td><td>Host window; Windows version follows the Phase 2 decision</td></tr>
-                <tr><td><code>nn_autofill_prompt.mm</code></td><td class="num">464</td><td class="num">32</td><td>Split; the event JSON stays, anchor geometry per platform</td></tr>
-                <tr><td><code>nn_context_menu.mm</code></td><td class="num">420</td><td class="num">25</td><td>Split; the menu model is portable</td></tr>
-                <tr><td><code>nn_permissions.mm</code></td><td class="num">498</td><td class="num">10</td><td>Mostly portable; OS privacy prompts per platform</td></tr>
-                <tr><td><code>nn_device_chooser.mm</code></td><td class="num">372</td><td class="num">8</td><td>Mostly portable</td></tr>
-                <tr><td><code>nn_cast_dialog.mm</code></td><td class="num">334</td><td class="num">8</td><td>Mostly portable</td></tr>
-                <tr><td><code>nn_lifetime.mm</code></td><td class="num">307</td><td class="num">43</td><td>Quit and terminate flow per platform</td></tr>
-                <tr><td><code>nn_page_channel.mm</code></td><td class="num">301</td><td class="num">8</td><td>Mostly portable</td></tr>
-                <tr><td><code>nn_picture_in_picture.mm</code></td><td class="num">261</td><td class="num">25</td><td>Split; Views PiP on Windows</td></tr>
-                <tr><td><code>nn_extension_view.mm</code></td><td class="num">246</td><td class="num">0</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_external_apps.mm</code> (nncore)</td><td class="num">238</td><td class="num">37</td><td>Windows: <code>AssocQueryString</code>, <code>ShellExecuteEx</code></td></tr>
-                <tr><td><code>nn_navigation_hold.mm</code></td><td class="num">213</td><td class="num">2</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_seams.mm</code></td><td class="num">197</td><td class="num">0</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_icon_fetch.mm</code></td><td class="num">191</td><td class="num">10</td><td>Image encoding per platform (or Skia, which works on both)</td></tr>
-                <tr><td><code>nn_devtools_call.mm</code></td><td class="num">190</td><td class="num">0</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_autofill_trigger.mm</code></td><td class="num">179</td><td class="num">11</td><td>Mostly portable</td></tr>
-                <tr><td><code>nn_tab_info.mm</code></td><td class="num">175</td><td class="num">22</td><td>Split</td></tr>
-                <tr><td><code>nn_installed_bubble.mm</code></td><td class="num">156</td><td class="num">0</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_password_prompt.mm</code></td><td class="num">130</td><td class="num">17</td><td>Split</td></tr>
-                <tr><td><code>nn_external_apps.mm</code> (chromium)</td><td class="num">124</td><td class="num">21</td><td>Windows version</td></tr>
-                <tr><td><code>nn_test_system_permissions.mm</code></td><td class="num">114</td><td class="num">0</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_desktop_capture.mm</code></td><td class="num">102</td><td class="num">0</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_pip_mac.mm</code></td><td class="num">102</td><td class="num">20</td><td>Windows: Views PiP controls already exist (<code>nn_pip_window.cc</code>)</td></tr>
-                <tr><td><code>nn_host_visibility.mm</code></td><td class="num">82</td><td class="num">0</td><td>Rename to .cc</td></tr>
-                <tr><td><code>nn_downloads_mac.mm</code></td><td class="num">70</td><td class="num">19</td><td>Windows version (quarantine → Mark-of-the-Web is Chrome's job)</td></tr>
-                <tr><td><code>nn_fake_media.mm</code></td><td class="num">53</td><td class="num">0</td><td>Rename to .cc</td></tr>
+                <tr>
+                  <td>Liquid Glass / vibrancy surfaces</td>
+                  <td>Mica / Mica Alt / Desktop Acrylic via <code>DWMWA_SYSTEMBACKDROP_TYPE</code> (Windows 11 22621+), solid colour on Windows 10</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Metal shaders</td>
+                  <td>Static gradient or CSS-like fallback in RN; a Direct3D version is possible later</td>
+                  <td><span class="chip risk">Drop</span></td>
+                </tr>
+                <tr>
+                  <td>SF Symbols (<code>BaySymbol</code>)</td>
+                  <td>Fluent System Icons / Segoe Fluent Icons, using a name-mapping table</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Global menu bar (<code>Menus.swift</code>)</td>
+                  <td>An in-window app menu plus the same shortcuts on Ctrl; no global menu bar on Windows</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Traffic lights (<code>setTrafficLights*</code>)</td>
+                  <td>Custom caption buttons; maximize answers <code>WM_NCHITTEST</code> with <code>HTMAXBUTTON</code> so Snap Layouts works</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Sparkle updates</td>
+                  <td>WinSparkle (same appcast idea) or Velopack</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Keychain (<code>BayKeychain</code>)</td>
+                  <td>Windows Credential Manager or DPAPI</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>UserNotifications</td>
+                  <td>Windows App SDK app notifications (needs an AUMID)</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Launch at login (ServiceManagement)</td>
+                  <td><code>HKCU\…\Run</code> or a StartupTask</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Set as default browser</td>
+                  <td>Register ProgID + Capabilities, then open <code>ms-settings:defaultapps</code>. Windows does not let apps set this themselves</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Trackpad swipe back/forward (<code>NNSwipe</code>)</td>
+                  <td>Chrome's own overscroll history navigation on precision touchpads first; custom gesture only if needed</td>
+                  <td><span class="chip warn">Replace</span></td>
+                </tr>
+                <tr>
+                  <td>Intro music (AVFoundation)</td>
+                  <td>Media Foundation, or play it through a page</td>
+                  <td><span class="chip ok">Later</span></td>
+                </tr>
+                <tr>
+                  <td>Dock tile, Dock selection, app icons</td>
+                  <td>Taskbar jump list and overlay badge, if wanted</td>
+                  <td><span class="chip risk">Drop</span></td>
+                </tr>
+                <tr>
+                  <td>AppleScript, Handoff, Translate, Calendar</td>
+                  <td>—</td>
+                  <td><span class="chip risk">Drop</span></td>
+                </tr>
               </tbody>
             </table>
           </div>
-        </div>
-      </details>
-    </section>
+        </section>
 
-    <section id="patches" aria-labelledby="patches-h">
-      <h2 id="patches-h">Patch series map</h2>
-      <p class="prose">Sorted by the files each patch touches. "Portable" means its changes are in cross-platform Chrome or CEF code. It still has to apply cleanly and build on Windows in Phase 1.</p>
-      <div class="grid2">
-        <div class="card">
-          <h3><span class="chip ok">Portable</span> 35</h3>
+        <section id="inventory" aria-labelledby="inventory-h">
+          <h2 id="inventory-h">What carries over</h2>
+          <p class="prose">Line counts come from the current <code>main</code> (tests and Pods excluded).</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Area</th>
+                  <th scope="col" class="num">Lines</th>
+                  <th scope="col">What it is</th>
+                  <th scope="col">On Windows</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>apps/browser/src</code></td>
+                  <td class="num">46,209</td>
+                  <td>React UI (167 .ts, 126 .tsx)</td>
+                  <td><span class="chip ok">Reuse</span> with platform seams for keys, glass, icons and the menu bar</td>
+                </tr>
+                <tr>
+                  <td><code>packages/core</code></td>
+                  <td class="num">—</td>
+                  <td>Pure TS: omnibox, suggestions, breadcrumbs</td>
+                  <td><span class="chip ok">Reuse</span> as is</td>
+                </tr>
+                <tr>
+                  <td><code>packages/*/src</code></td>
+                  <td class="num">—</td>
+                  <td>TS facades over native modules</td>
+                  <td><span class="chip ok">Reuse</span>; the binding call changes (Expo → TurboModule on Windows)</td>
+                </tr>
+                <tr>
+                  <td><code>engine/patches</code> (45 patches)</td>
+                  <td class="num">—</td>
+                  <td>CEF + Chromium changes</td>
+                  <td><span class="chip ok">Mostly reuse</span>: 35 portable, 8 need Windows code, 2 macOS-only (<a href="#patches">map</a>)</td>
+                </tr>
+                <tr>
+                  <td><code>engine/chromium</code> (<code>//chrome/browser/bay</code>)</td>
+                  <td class="num">7,608</td>
+                  <td>Plain-C <code>nn_*</code> JSON API over Chrome services</td>
+                  <td><span class="chip ok">Mostly reuse</span>: 21 .cc are portable; 3 .mm (downloads, external apps, PiP) need Windows versions</td>
+                </tr>
+                <tr>
+                  <td><code>engine/nncore</code></td>
+                  <td class="num">13,619</td>
+                  <td>The layer: browser, windows, tabs, prompts. 25 .mm, public API in Objective‑C (<code>NNCore.h</code>)</td>
+                  <td><span class="chip warn">Split</span>: logic to .cc, hosting to <code>_win.cc</code>; a C API next to the ObjC one</td>
+                </tr>
+                <tr>
+                  <td><code>packages/nncore/ios</code></td>
+                  <td class="num">10,506</td>
+                  <td>Expo modules + NSView hosting of tabs (<code>NNCoreWebView.mm</code> 2,171, <code>NNCoreChromeWindow.mm</code> 1,527)</td>
+                  <td><span class="chip risk">Rewrite</span> as RNW Fabric component + TurboModules</td>
+                </tr>
+                <tr>
+                  <td><code>packages/shell/ios</code></td>
+                  <td class="num">6,077</td>
+                  <td>Windows, menus, shortcuts, symbols, system services</td>
+                  <td><span class="chip risk">Rewrite</span>; many parts dropped (<a href="#modules">map</a>)</td>
+                </tr>
+                <tr>
+                  <td><code>packages/import</code></td>
+                  <td class="num">4,531</td>
+                  <td>Swift readers for browser profiles</td>
+                  <td><span class="chip warn">Port</span> the Chromium/Firefox/CSV/Netscape readers; drop Safari/Dia</td>
+                </tr>
+                <tr>
+                  <td><code>packages/shaders/ios</code></td>
+                  <td class="num">1,631</td>
+                  <td>Metal views</td>
+                  <td><span class="chip risk">Drop</span>; fallback views in JS</td>
+                </tr>
+                <tr>
+                  <td><code>packages/sync/ios</code></td>
+                  <td class="num">983</td>
+                  <td>AES‑GCM, HKDF, HMAC, SHA‑256 (CryptoKit) + Keychain</td>
+                  <td><span class="chip warn">Port</span> to CNG or BoringSSL; byte-compatible with the Mac app</td>
+                </tr>
+                <tr>
+                  <td><code>apps/browser/macos</code></td>
+                  <td class="num">775</td>
+                  <td>App delegate, window, Xcode project</td>
+                  <td><span class="chip risk">Rewrite</span> as an <code>apps/browser/windows</code> RNW project</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="grid2">
+            <div class="card">
+              <h3>Already in our favour</h3>
+              <ul>
+                <li>
+                  <code>nn_engine.h</code> is already <strong>plain C with JSON arguments</strong>, looked up with <code>dlsym</code>. On Windows it becomes
+                  <code>GetProcAddress</code> on <code>chrome.dll</code>, and passwords, history, bookmarks, cookies, site settings, downloads, zoom and search
+                  engines carry over with no API change.
+                </li>
+                <li>The JS never branches on <code>Platform.OS</code> today, so adding the seams is a clean job.</li>
+                <li><code>nativeApi.tsx</code> already uses <code>requireOptionalNativeModule</code>, so the app handles a module that's missing.</li>
+                <li>Chrome runs Windows natively (Aura/Views), so prompts that Bay leaves to Chrome's Views work unchanged.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Working against us</h3>
+              <ul>
+                <li>
+                  <strong>Expo Modules has no Windows target.</strong> All 27 named native modules and views go through <code>requireNativeModule</code> /
+                  <code>requireNativeViewManager</code> from <code>expo-modules-core</code>.
+                </li>
+                <li>
+                  <strong>Reanimated</strong> is everywhere: 232 <code>Animated.View</code>, 172 <code>useAnimatedStyle</code>, 53 <code>runOnJS</code>, 39
+                  <code>measure</code>. I found no confirmed Windows support.
+                </li>
+                <li>
+                  <code>NNCore.h</code> is an Objective‑C API (<code>NNCoreEngine</code>, <code>NNCoreWindow</code>, <code>NNCoreTab</code> + delegates), so a
+                  Windows host can't call it.
+                </li>
+                <li>
+                  macOS-only RN props are used widely: <code>onMouseEnter</code> (19 files), <code>keyDownEvents</code> (14), <code>enableFocusRing</code> (14),
+                  <code>tooltip</code>, drag and drop. ⌘ appears in 39 files, and <code>Symbol</code> in 74.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="hosting" aria-labelledby="hosting-h">
+          <h2 id="hosting-h">The hosting decision</h2>
+          <div class="prose">
+            <p>
+              <strong>How macOS works today</strong> (from the patches): Chrome's own window is the app window (<code>CefBrowserSettings.client_window</code>).
+              Chrome shows no tab strip or toolbar in it and keeps it open with no tabs. The RN root view is a subview of Chrome's
+              <code>BridgedContentView</code> and gets hit testing and accessibility first (<code>bayEmbeddedView</code>,
+              <code>chromium-window-hosted.patch</code>). Each tab's <code>RenderWidgetHostViewMac</code> stays out of Views (<code>NativeHostedContents</code>,
+              <code>chromium-webview-native-hosted.patch</code>), and the app places it wherever a pane is. AppKit composites everything together.
+            </p>
+            <p>
+              <strong>Why Windows is different:</strong> Chrome on Windows draws a whole top-level window into one HWND through DirectComposition. Tab contents
+              are Aura windows, not separate native views an app can move around. An HWND owns its pixels, so another technology can't blend semi-transparently
+              over them. Since Windows 8, child windows can be layered, and DirectComposition can target child HWNDs, which opens some room.
+            </p>
+          </div>
+          <div class="stack">
+            <figure>
+              <div class="layer top"><b>A · RN island over Chrome</b> (recommended to try first)</div>
+              <div class="layer top">React Native island: child HWND, transparent, hit test passes through</div>
+              <div class="layer chrome">Chrome window (client_window) · tab Aura windows laid out to pane rects</div>
+              <figcaption>
+                The direct counterpart of macOS. The <code>client_window</code>, <code>KeepsWindowWithoutTabs</code> and popup-layout patches carry over. Needs:
+                a transparent island, pass-through hit testing (<code>HTTRANSPARENT</code> works only on the same thread, so CEF runs on RN's UI thread with
+                <code>external_message_pump</code>, as on macOS), and Chrome's Views layout following pane rects that JS sends.
+              </figcaption>
+            </figure>
+            <figure>
+              <div class="layer top"><b>B · Chrome tabs inside the RN window</b> (fallback)</div>
+              <div class="layer chrome">Per-pane Chrome child HWNDs (CEF windowed, SetAsChild)</div>
+              <div class="layer win">RNW window: sidebar, toolbar, everything else</div>
+              <figcaption>
+                The easiest to get running. But RN can't draw over a page, so everything that overlaps web content (command panel, find bar, menus, toasts,
+                peek, the developer inspector) moves into owned popup windows. That's a sizeable UX refactor, and Chrome-style features with a native parent
+                need checking.
+              </figcaption>
+            </figure>
+            <figure>
+              <div class="layer top"><b>C · UI rendered by Chrome</b> (last resort)</div>
+              <div class="layer chrome">react-native-web UI in a transparent Chrome WebContents above the tabs</div>
+              <div class="layer chrome">Tab WebContents in Chrome's Views</div>
+              <figcaption>
+                No airspace problems, since one compositor draws everything (Vivaldi's model, with React inside Chromium). Costs: a second UI runtime next to
+                the Mac app's, native calls go through Mojo/WebUI instead of TurboModules, and RN macOS-only props need web equivalents.
+              </figcaption>
+            </figure>
+          </div>
+          <div class="callout warn">
+            <p>
+              <strong>Ruled out:</strong> off-screen rendering into a composition surface (CEF OSR with shared D3D textures). CEF's windowless mode is tied to
+              Alloy-style browsers. Bay depends on Chrome style (tab strip model, extensions UI, Chrome's prompts), so OSR would cost those features.
+              <em>This comes from CEF's runtime split; confirm it against the CEF 154 headers in Phase 1.</em>
+            </p>
+          </div>
+        </section>
+
+        <section id="phases" aria-labelledby="phases-h">
+          <h2 id="phases-h">Phases</h2>
+          <p class="prose">
+            Phases run in order unless noted. Phase 2 is a go/no-go gate: Phases 3–5 depend on which hosting option it picks. Phases 3 and 4 can run in parallel
+            once it passes, and so can 5 and 6. Each phase shows where it can run, because the Windows machine comes later.
+          </p>
+          <ol class="flow" aria-label="Phase order">
+            <li><strong>0 · Groundwork</strong>Seams, contracts, engine split<br /><span class="chip mac">Runs on Mac</span></li>
+            <li><strong>1 · Toolchain & engine</strong>CEF + patches build on Windows<br /><span class="chip win">Needs Windows</span></li>
+            <li class="gate"><strong>2 · Hosting spike</strong>Pick A, B or C<br /><span class="chip gate">Gate</span></li>
+            <li><strong>3 · Engine port</strong>nncore + Windows patches<br /><span class="chip win">Needs Windows</span></li>
+            <li><strong>4 · Module layer</strong>TurboModules + Fabric views<br /><span class="chip win">Needs Windows</span></li>
+            <li><strong>5 · Shell & UX</strong>Title bar, menus, Mica, icons<br /><span class="chip win">Mostly Windows</span></li>
+            <li><strong>6 · Data</strong>Import, sync, secrets<br /><span class="chip mac">Parsers on Mac</span></li>
+            <li><strong>7 · Ship</strong>Installer, signing, updates<br /><span class="chip win">Needs Windows</span></li>
+            <li><strong>8 · Hardening</strong>A11y, DPI, perf, beta<br /><span class="chip win">Needs Windows</span></li>
+          </ol>
+
+          <!-- Phase 0 -->
+          <article class="phase" id="p0" aria-labelledby="p0-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 0</span>
+              <h3 id="p0-h">Groundwork on macOS</h3>
+              <span class="chip mac">Runs on Mac, now</span>
+            </div>
+            <p class="goal">
+              Make the shared code platform-neutral and pin down every native contract, so the Windows work becomes "implement this interface" rather than "find
+              out what the Mac does". The Mac app must behave exactly as before.
+            </p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Nothing</dd>
+              <dt>Touches</dt>
+              <dd><code>apps/browser/src</code>, <code>packages/*/src</code>, <code>engine/nncore</code>, <code>engine/patches/series*</code>, CI</dd>
+            </dl>
+            <div class="cols">
+              <div>
+                <h4>JS / TS</h4>
+                <ul>
+                  <li>
+                    Add one <code>platform</code> module (<code>isMac</code>, <code>isWindows</code>, <code>capabilities</code>) and route every macOS-only call
+                    through it, never through scattered <code>Platform.OS</code> checks.
+                  </li>
+                  <li>
+                    Keyboard: a <code>Mod</code> abstraction (⌘ on Mac, Ctrl on Windows) for <code>menuShortcuts</code>, <code>keyDownEvents</code>, shortcut
+                    labels (⌘ in 39 files) and <code>recordShortcut</code>. Write the Windows shortcut table (Ctrl+T, Ctrl+L, Ctrl+Shift+T, Alt+←/→, F5/Ctrl+R,
+                    Ctrl+1–8, Ctrl+Tab…).
+                  </li>
+                  <li>
+                    Split <code>@bay/shell</code> exports into <em>core</em> (windows, commands, clipboard, files, dialogs, menus) and
+                    <em>mac extras</em> (Dock, AppleScript, Handoff, Translate, Calendar, app icons, intro music), with the extras optional.
+                  </li>
+                  <li>
+                    Fallbacks for <code>GlassEffect</code>, <code>VisualEffect</code> and the four shader views: a plain <code>Surface</code> with theme colours
+                    whenever the capability is missing.
+                  </li>
+                  <li>
+                    Icons: change <code>Symbol</code> to take a Bay icon id, and keep a table of SF Symbol name ↔ Fluent icon name. Do this now, while the full
+                    list is easy to extract from 74 files.
+                  </li>
+                  <li>
+                    Wrap macOS-only RN props (<code>enableFocusRing</code>, <code>tooltip</code>, <code>draggedTypes</code>,
+                    <code>mouseDownCanMoveWindow</code>) in small components. RNW then gets equivalents in one place, not 50.
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <h4>Native contracts & engine</h4>
+                <ul>
+                  <li>
+                    Write a typed spec for each of the 27 Expo modules and views (methods, events, view props). Generate the RN codegen spec from it so a
+                    Windows TurboModule can be checked against the same contract. Extend <code>test-native-stub.mjs</code> to assert that the stubs match the
+                    spec.
+                  </li>
+                  <li>
+                    Write a <strong>C API for NNCore</strong> (<code>nncore_c.h</code>) in the style of <code>nn_engine.h</code>: opaque handles, JSON
+                    arguments, a callback sink. Turn the ObjC <code>NNCore.h</code> into a thin wrapper over it. Then the Mac host and the Windows host share
+                    one engine surface.
+                  </li>
+                  <li>
+                    Move the platform-free logic out of the .mm files (<code>nn_seams</code>, <code>nn_devtools_call</code>, <code>nn_extension_view</code>,
+                    <code>nn_installed_bubble</code>, <code>nn_desktop_capture</code>, <code>nn_host_visibility</code> and others with no Cocoa) into .cc. Leave
+                    only the AppKit code in <code>_mac.mm</code>.
+                  </li>
+                  <li>
+                    Add a platform column to <code>engine/patches/series</code> (<code>all</code> / <code>mac</code> / <code>win</code>) and teach
+                    <code>series.py</code> to skip what doesn't apply.
+                  </li>
+                  <li>
+                    CI: run <code>pnpm typecheck</code> and <code>pnpm test</code> on a <code>windows-latest</code> runner. They're pure Node and cheap, and
+                    they catch path and line-ending assumptions early.
+                  </li>
+                  <li>
+                    Port the build scripts that must run on Windows (<code>scripts/download-engine</code>, <code>engine-build</code>, <code>apply.sh</code>) to
+                    Node or Python, which runs on both.
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The Mac app passes the existing test scripts (shortcuts, windowing, hover-shift, tab-drag, zoom-scroll) unchanged.</li>
+              <li>No macOS-only module is imported without a capability check.</li>
+              <li>Every native module has a written spec, and the stubs are checked against it.</li>
+              <li>The Mac host uses <code>nncore_c.h</code>, and <code>NNCore.h</code> is only a wrapper.</li>
+              <li>JS checks are green on Windows CI.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 1 -->
+          <article class="phase" id="p1" aria-labelledby="p1-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 1</span>
+              <h3 id="p1-h">Windows toolchain & engine build</h3>
+              <span class="chip win">Needs a Windows machine (deferred)</span>
+            </div>
+            <p class="goal">Get the same CEF/Chromium 154 tree, with Bay's patches, building and running on Windows x64.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 0's series platform column and the cross-platform scripts (helpful, not blocking)</dd>
+              <dt>Machine</dt>
+              <dd>
+                Windows 10/11 x64; at least 100 GB free on an NTFS SSD (more for CEF plus a second output directory); Chromium asks for 8 GB RAM minimum and
+                recommends more than 16 GB, and 32–64 GB is realistic for builds of this size; as many cores as possible. A cloud VM works.
+              </dd>
+              <dt>Toolchain</dt>
+              <dd>
+                The Visual Studio release named by Chromium 154's <code>windows_build_instructions.md</code>. Current docs ask for VS 2026, older ones VS 2022:
+                read the one at our pinned revision. Install "Desktop development with C++" with MFC/ATL and the Windows 11 SDK version it lists. Add Python 3,
+                Git and depot_tools.
+              </dd>
+            </dl>
+            <ul>
+              <li>
+                Run the download script on Windows (the 154.0.8037.58 pin), then CEF's patch-and-gen, ungoogled-chromium, domain substitution and our series, in
+                the macOS order.
+              </li>
+              <li>
+                Use <a href="https://github.com/ungoogled-software/ungoogled-chromium-windows">ungoogled-chromium-windows</a> as the reference for the
+                Windows-specific ungoogled steps (it builds without Google's prebuilt binaries).
+              </li>
+              <li>
+                <code>chromium-bay-layer.patch</code> adds <code>//chrome/browser/bay:exports</code> next to <code>//chrome/browser/mac</code>, which is the
+                macOS framework target. Add the Windows equivalent in the <code>chrome.dll</code> target, and write a <code>.def</code> or
+                <code>__declspec(dllexport)</code> list for the <code>nn_*</code> exports.
+              </li>
+              <li>
+                Run the GN args: <code>is_official_build</code>, <code>target_cpu="x64"</code>, symbol level, and the CEF Chrome-style flags. Add an arm64
+                output directory later.
+              </li>
+              <li>Build <code>cefclient</code>/<code>cefsimple</code> with the patches and click through tabs, extensions, passwords and DevTools.</li>
+              <li>
+                Confirm the CEF facts the plan relies on: Chrome style vs Alloy for windowless rendering, <code>external_message_pump</code> vs
+                <code>multi_threaded_message_loop</code> on Windows (the latter is Windows/Linux-only), and Views-hosted Chrome-style windows.
+              </li>
+              <li>
+                Archive the engine build output (headers, <code>.lib</code>, <code>chrome.dll</code>, resources, PDBs) so the app build can download it, not
+                rebuild it.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The patched engine builds reproducibly from a clean checkout, using one documented command.</li>
+              <li>A patched cefclient runs Chrome-style tabs with an extension installed from the Web Store.</li>
+              <li>Engine artifacts are archived and versioned.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 2 -->
+          <article class="phase gate" id="p2" aria-labelledby="p2-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 2</span>
+              <h3 id="p2-h">Hosting spike</h3>
+              <span class="chip gate">Go / no-go gate</span><span class="chip win">Needs Windows</span>
+            </div>
+            <p class="goal">
+              A throwaway app that answers the hosting question and the two library questions before the main port starts. The output is a short decision
+              record, not shipping code.
+            </p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 1</dd>
+              <dt>Setup</dt>
+              <dd>A fresh RNW 0.81 C++ app (Fabric, Hermes, Windows App SDK). Link the Phase 1 engine. One Fabric component, one tab.</dd>
+            </dl>
+            <div class="table-wrap">
+              <table>
+                <caption>
+                  Test matrix: run it for option A first, and for B only if A fails
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Test</th>
+                    <th scope="col">Passes when</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Overlay</td>
+                    <td>
+                      An RN panel with rounded corners and partial transparency draws over a playing video page with no flicker, while dragging and resizing
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Hit testing</td>
+                    <td>
+                      Clicks, the wheel and hover go to RN where RN has views and to the page everywhere else. Text selection and drag in the page work up to
+                      the panel's edge
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Keyboard & focus</td>
+                    <td>
+                      Ctrl shortcuts reach RN first when the page has focus (the counterpart of <code>cef-window-keys</code>); page shortcuts still work; Tab
+                      moves between RN and the page
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>IME</td>
+                    <td>Japanese/Chinese IME works in a page field and in an RN <code>TextInput</code></td>
+                  </tr>
+                  <tr>
+                    <td>Accessibility</td>
+                    <td>Narrator reads RN's UI, then the page, in a sensible order</td>
+                  </tr>
+                  <tr>
+                    <td>DPI</td>
+                    <td>At 100/150/200% and when moving between monitors with different scales, nothing renders at the wrong size (cf. RNW #16383)</td>
+                  </tr>
+                  <tr>
+                    <td>Resize performance</td>
+                    <td>Live window resize stays smooth with three panes</td>
+                  </tr>
+                  <tr>
+                    <td>Reanimated</td>
+                    <td>
+                      <code>react-native-reanimated</code> 3.19 builds on RNW 0.81 and runs <code>withTiming</code>, <code>withSpring</code>,
+                      <code>measure</code> and <code>runOnJS</code> on the UI thread
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Expo shim</td>
+                    <td>
+                      Pick a binding route: (a) a small <code>expo-modules-core</code> shim for Windows that maps <code>requireNativeModule</code> to
+                      TurboModules, or (b) per-package <code>.windows.ts</code> files that import codegen modules
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Backdrop</td>
+                    <td>Mica behind the sidebar with the frame extended into the client area and readable text</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <h4>Outcomes</h4>
+            <ul>
+              <li><strong>A passes:</strong> keep the macOS design. Phase 3 brings <code>client_window</code> to Windows.</li>
+              <li>
+                <strong>A fails but B passes:</strong> Phase 5 grows a task to move overlapping UI into owned popup windows (command panel, find bar, toasts,
+                peek, inspector, context menus).
+              </li>
+              <li>
+                <strong>Reanimated fails:</strong> wrap it in <code>lib/motion</code> with two backends, Reanimated on Mac and RN <code>Animated</code> or
+                Composition animations on Windows. The 232 call sites stay unchanged.
+              </li>
+              <li><strong>A and B both fail the bar:</strong> run a short spike on option C before committing to anything.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 3 -->
+          <article class="phase" id="p3" aria-labelledby="p3-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 3</span>
+              <h3 id="p3-h">Engine port</h3>
+              <span class="chip win">Needs Windows</span>
+            </div>
+            <p class="goal">Bring the NNCore layer and the eight host-specific patches to Windows behind the Phase 0 C API.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 2's decision; Phase 0's C API and .cc split</dd>
+              <dt>Runs alongside</dt>
+              <dd>Phase 4</dd>
+            </dl>
+            <ul>
+              <li>
+                <strong>Window hosting</strong> (<code>nn_browser_window</code>, <code>nn_host_visibility</code>, <code>nn_lifetime</code>):
+                <code>client_window</code> on <code>DesktopWindowTreeHostWin</code>; tab placement from pane rects; occlusion and visibility; quit, beforeunload
+                and the downloads prompt.
+              </li>
+              <li>
+                <strong>Patches with macOS halves</strong>: <code>cef-window-client</code> and <code>chromium-window-hosted</code> (the
+                <code>BridgedContentView</code> hit-test and a11y hooks become HWND/Aura ones), <code>cef-window-keys</code> (accelerator routing on Windows),
+                <code>cef-window-translucent</code>, <code>chromium-webview-native-hosted</code> and <code>chromium-window-docked-devtools</code> (rethink what
+                "hosted outside Views" means on Aura), and <code>chromium-devtools-redock-display</code> (probably not needed: it fixes an NSView display
+                bridge).
+              </li>
+              <li>
+                <strong>Message pump</strong>: <code>cef-idle-pump</code> and <code>cef-pump-wake</code> were written for macOS's external pump. Check them
+                against the Windows pump and RN's DispatcherQueue (nested loops on Windows are a known external-pump weak spot).
+              </li>
+              <li>
+                <strong>Prompts and menus</strong> (<code>nn_context_menu</code>, <code>nn_password_prompt</code>, <code>nn_autofill_prompt</code>,
+                <code>nn_device_chooser</code>, <code>nn_cast_dialog</code>, <code>nn_permissions</code>): keep their JSON events; replace only the bits that
+                show NSMenus or AppKit sheets.
+              </li>
+              <li>
+                <strong>Platform services</strong>: <code>nn_external_apps</code> (<code>AssocQueryString</code>/<code>ShellExecuteEx</code>),
+                <code>nn_downloads_mac</code> → Windows (Chrome already applies Mark-of-the-Web and attachment scanning), <code>nn_pip_mac</code> → Views PiP
+                window, <code>nn_reauth</code> → Windows Hello (<code>UserConsentVerifier</code>).
+              </li>
+              <li>
+                <strong>Secrets</strong>: <code>chromium-safe-storage-name</code> is Keychain-only. On Windows, os_crypt keeps its key in
+                <code>Local State</code> under DPAPI. Make sure Bay's user-data dir is its own so the key never collides with another Chromium's.
+              </li>
+              <li><strong>Skip</strong>: <code>chromium-autofill-card-touchbar</code>, <code>chromium-icloud-keychain-window</code>.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>
+                A small C++ test host drives the engine through <code>nncore_c.h</code>: windows, tabs, split panes, popups, extensions, permission and password
+                prompts, PiP, DevTools docked and undocked.
+              </li>
+              <li>The <code>nn_*</code> calls return the same JSON on Windows and Mac for the same profile operations.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 4 -->
+          <article class="phase" id="p4" aria-labelledby="p4-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 4</span>
+              <h3 id="p4-h">Native module layer on React Native Windows</h3>
+              <span class="chip win">Needs Windows</span>
+            </div>
+            <p class="goal">
+              Get the real app UI running on Windows: every module in the <a href="#modules">module map</a> either implemented in C++ against its Phase 0 spec,
+              or reported missing so the UI falls back.
+            </p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 2 (binding route, hosting), Phase 3 for the engine-backed modules</dd>
+              <dt>Lives in</dt>
+              <dd><code>apps/browser/windows/</code> (RNW app project), <code>packages/*/windows/</code> (C++ modules)</dd>
+            </dl>
+            <ol>
+              <li>
+                <strong>The browser first</strong>: <code>BayCEF</code> (the web view component), the <code>nncore</code> native module, the tab strip,
+                favicons. Goal: browse with tabs in the real UI.
+              </li>
+              <li>
+                <strong>Windows & commands</strong>: <code>BayShell</code> (open, close and focus windows, frame, commands, the menu model, confirm/prompt
+                dialogs) and <code>BayApp</code>.
+              </li>
+              <li>
+                <strong>Chrome UI and extensions</strong>: <code>BayChromeUI</code>, <code>BayExtensions</code>, native messaging (registry-based hosts on
+                Windows), the content blocker.
+              </li>
+              <li>
+                <strong>System</strong>: <code>BaySystem</code> (file picker, open/reveal, recycle bin, clipboard text and images, file icons, downloads
+                folder), <code>BayFileDrag</code>, notifications, launch at login, default browser.
+              </li>
+              <li>
+                <strong>Views</strong>: <code>BaySurface</code>, <code>BayActivitySpinner</code>, <code>BayFadeLabel</code>, <code>BayContextMenuArea</code>,
+                <code>BayWindowProfile</code>, and <code>BaySymbol</code> over the Fluent icon font.
+              </li>
+              <li><strong>Inline completion, keychain, sync, import</strong>: last, once the data work in Phase 6 has landed.</li>
+            </ol>
+            <p class="prose">
+              Mirror <code>nativeApi.tsx</code>'s version-skew check: the Windows modules report a contract version, and the JS refuses to start on a mismatch,
+              as the Mac app does.
+            </p>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The real <code>App.tsx</code> boots on Windows from Metro with hot reload, and in Release with a Hermes bundle.</li>
+              <li>
+                Ports of the existing <code>apps/browser/scripts/*-test.mjs</code> (shortcuts, windowing, tab drag, zoom-scroll) pass against a hidden Windows
+                instance (<code>BAY_DATA_DIR</code>, <code>BAY_BACKGROUND</code>).
+              </li>
+            </ul>
+          </article>
+
+          <!-- Phase 5 -->
+          <article class="phase" id="p5" aria-labelledby="p5-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 5</span>
+              <h3 id="p5-h">Windows shell & UX</h3>
+              <span class="chip win">Mostly Windows</span><span class="chip mac">Design work on Mac</span>
+            </div>
+            <p class="goal">Make it feel like a Windows app, not a Mac app in a Windows frame.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 4 (windows and views exist)</dd>
+              <dt>Runs alongside</dt>
+              <dd>Phase 6</dd>
+            </dl>
+            <div class="cols">
+              <ul>
+                <li>
+                  <strong>Frame</strong>: a borderless window with a custom title bar; minimise/maximise/close drawn by Bay; <code>HTMAXBUTTON</code> on the
+                  maximise button so Snap Layouts appear; the drag region from <code>WindowDragRegion</code>; minimum width ≤ 500 effective px so snapping
+                  works.
+                </li>
+                <li>
+                  <strong>Backdrop</strong>: Mica or Mica Alt behind the sidebar via <code>DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)</code> with the
+                  frame extended; Acrylic for transient panels; a solid theme colour on Windows 10 and with transparency effects off.
+                </li>
+                <li>
+                  <strong>Menus</strong>: no global menu bar. The <code>MenuEntry</code> model renders as an app menu ("…" in the sidebar) plus right-click
+                  menus; Alt or F10 opens it.
+                </li>
+                <li><strong>Sidebar on the right</strong> (recent <code>850c7ff</code>): check it against the caption buttons on the right.</li>
+              </ul>
+              <ul>
+                <li>
+                  <strong>Type & icons</strong>: Segoe UI Variable; Fluent icons through the Phase 0 mapping; Windows-style focus rectangles for keyboard focus.
+                </li>
+                <li>
+                  <strong>Shortcuts</strong>: the Windows table from Phase 0; Ctrl+Tab switcher; F6 cycles focus between sidebar, address and page; Alt+Home.
+                </li>
+                <li>
+                  <strong>Taskbar</strong>: jump list (New window, New private window), download progress on the taskbar button, an overlay badge if wanted.
+                </li>
+                <li><strong>Theme</strong>: follow the light/dark setting, accent colour and high-contrast mode.</li>
+                <li>If Phase 2 chose B: move overlapping UI into owned popup windows here.</li>
+              </ul>
+            </div>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Snap Layouts, Aero Snap, multi-monitor moves and DPI changes all work on the custom frame.</li>
+              <li>Every Mac shortcut has a Windows counterpart, and the shortcuts test passes.</li>
+              <li>The app is usable with high contrast on and transparency effects off.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 6 -->
+          <article class="phase" id="p6" aria-labelledby="p6-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 6</span>
+              <h3 id="p6-h">Data: import, sync, secrets</h3>
+              <span class="chip mac">Parsers & vectors on Mac</span><span class="chip win">Integration on Windows</span>
+            </div>
+            <p class="goal">A user moving from Chrome, Edge or Arc on Windows lands in Bay with their stuff, and a Mac user's sync folder opens on Windows.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 4's module layer for integration; the parser and crypto work can start any time</dd>
+            </dl>
+            <h4>Import</h4>
+            <ul>
+              <li>
+                Port the browser-agnostic readers: Chromium bookmarks, history, autofill, extensions and sessions; Firefox places, plus logins via NSS
+                <code>key4.db</code>; Netscape HTML; passwords CSV; zip. Find Windows profile paths for Chrome, Edge, Brave, Vivaldi, Opera, Firefox and Arc for
+                Windows (a packaged app under <code>%LOCALAPPDATA%\Packages</code>).
+              </li>
+              <li>
+                <strong>Chromium secrets on Windows</strong>: older data (<code>v10</code>) is AES‑GCM under a key in <code>Local State</code> protected by user
+                DPAPI, which Bay can decrypt with the user's consent. Since Chrome 127, <strong>app-bound encryption</strong> ties cookies to Chrome's own
+                elevation service and checks the caller's path. Google has said passwords and payment data would follow. Bay must not try to get around that.
+                <strong>Plan:</strong> don't import cookies from Chrome; import passwords directly where they're still DPAPI-only, and otherwise walk the user
+                through Chrome's password CSV export (<code>PasswordsCSV.swift</code> already handles that format).
+              </li>
+              <li>
+                Decide on language: rewrite in C++ (simplest toolchain) or keep the Swift <code>Core</code> and build it with Swift for Windows (Arc's route),
+                using swift-crypto for CryptoKit. <a href="#decisions">Decision needed.</a>
+              </li>
+            </ul>
+            <h4>Sync</h4>
+            <ul>
+              <li>
+                Re-implement <code>SyncCrypto</code>/<code>SyncVault</code> (AES‑GCM, HKDF, HMAC‑SHA256) with Windows CNG or the BoringSSL already in the
+                engine. Generate <strong>golden test vectors</strong> from the Swift tests on Mac now, and require byte-identical output on Windows.
+              </li>
+              <li><code>SyncKeyStore</code> moves from Keychain to Credential Manager/DPAPI. The recovery phrase and wordlist stay unchanged.</li>
+              <li>
+                Folder sync on Windows: check OneDrive Files On-Demand placeholders (files that aren't downloaded yet), Dropbox, and SMB shares for file-locking
+                differences.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>The import fixtures in <code>packages/import/fixtures</code> give identical results on Windows.</li>
+              <li>A vault written on Mac opens on Windows and the other way round, using one shared fixture.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 7 -->
+          <article class="phase" id="p7" aria-labelledby="p7-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 7</span>
+              <h3 id="p7-h">Packaging, signing, updates</h3>
+              <span class="chip win">Needs Windows</span>
+            </div>
+            <p class="goal">A signed per-user install that updates itself, without Defender SmartScreen scaring people off.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phase 4 (an app to ship); the signing account can be set up any time</dd>
+            </dl>
+            <ul>
+              <li>
+                <strong>Installer</strong>: per-user under <code>%LOCALAPPDATA%</code>, no admin rights (like Chrome's user-level install). Choose between a
+                Velopack-style setup (installer + deltas) and a WiX/NSIS installer paired with WinSparkle (same appcast model as
+                <code>scripts/release.sh</code>). MSIX is an option, but its container rules complicate browser registration and native messaging.
+              </li>
+              <li>
+                <strong>Registration</strong>: <code>RegisteredApplications</code>, <code>StartMenuInternet\Bay\Capabilities</code>, ProgIDs for
+                <code>http</code>/<code>https</code>/<code>.html</code>/<code>.pdf</code>, an AUMID for notifications, Start menu shortcut, uninstaller entry;
+                native messaging host keys under <code>HKCU\Software\Bay\NativeMessagingHosts</code>.
+              </li>
+              <li>
+                <strong>Signing</strong>:
+                <a href="https://devclass.com/2026/01/14/code-signing-windows-apps-may-be-easier-and-more-secure-with-new-azure-artifact-service/"
+                  >Azure Artifact Signing</a
+                >
+                (formerly Trusted Signing) costs about $9.99/month for 5,000 signatures. It's available to individuals and organisations in the US and Canada,
+                and to organisations in the EU and UK, and it issues no EV certificates. Otherwise, buy an OV/EV certificate from a CA. Sign every PE file:
+                <code>Bay.exe</code>, <code>chrome.dll</code>, helpers, the installer.
+              </li>
+              <li>
+                <strong>Release script</strong>: a Windows counterpart of <code>scripts/release.sh</code> producing the installer, update package and appcast
+                entry, with notes from the same <code>release-notes/&lt;version&gt;.md</code>.
+              </li>
+              <li>
+                <strong>Crashes</strong>: Chromium's Crashpad already writes minidumps. Point <code>crashReports</code> at Bay's crash directory instead of
+                macOS DiagnosticReports, and archive PDBs for every release.
+              </li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>A clean Windows 11 VM installs, launches, sets itself as default through Settings, updates to the next build and uninstalls cleanly.</li>
+              <li>SmartScreen shows no unknown-publisher warning for a signed build.</li>
+            </ul>
+          </article>
+
+          <!-- Phase 8 -->
+          <article class="phase" id="p8" aria-labelledby="p8-h">
+            <div class="phase-head">
+              <span class="phase-num">Phase 8</span>
+              <h3 id="p8-h">Hardening & beta</h3>
+              <span class="chip win">Needs Windows</span>
+            </div>
+            <p class="goal">Quality on par with the Mac app, then a limited beta.</p>
+            <dl class="facts">
+              <dt>Depends on</dt>
+              <dd>Phases 5–7</dd>
+            </dl>
+            <ul>
+              <li>Accessibility with Narrator and NVDA across RN UI and pages; keyboard-only use; high contrast.</li>
+              <li>Displays: mixed DPI across monitors, 4K at 150–200%, fractional scaling, HDR video.</li>
+              <li>
+                Hardware: Intel/AMD/NVIDIA GPUs, especially for transparency and DirectComposition driver quirks; Windows on Arm through x64 emulation, then a
+                native arm64 build.
+              </li>
+              <li>
+                Performance: cold start, memory with 50 tabs, resize and animation frame times compared with the Mac app's <code>scripts/perf</code> numbers.
+              </li>
+              <li>
+                CI: JS checks on Windows from Phase 0; an app build on Windows from archived engine artifacts on every PR; engine rebuilds only when the pin or
+                the patches change, on a large VM.
+              </li>
+              <li>Beta via the update channel, with crash reports turned on.</li>
+            </ul>
+            <h4>Exit criteria</h4>
+            <ul class="checks">
+              <li>Every Mac test script has a Windows run in CI.</li>
+              <li>No known crash in the beta channel for one release cycle.</li>
+            </ul>
+          </article>
+        </section>
+
+        <section id="modules" aria-labelledby="modules-h">
+          <h2 id="modules-h">Native module map</h2>
+          <p class="prose">Every module and view the JS loads through <code>expo-modules-core</code> today, and what it becomes on Windows.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Module / view</th>
+                  <th scope="col">Package</th>
+                  <th scope="col">Windows implementation</th>
+                  <th scope="col">Phase</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>BayCEF</code> (view)</td>
+                  <td>nncore</td>
+                  <td>Fabric component placing a tab per the hosting decision</td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td>nncore module (<code>native.ts</code>)</td>
+                  <td>nncore</td>
+                  <td>TurboModule over <code>nncore_c.h</code> + <code>nn_engine.h</code> via <code>GetProcAddress</code></td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td><code>BayChromeUI</code>, <code>BayExtensions</code></td>
+                  <td>nncore</td>
+                  <td>TurboModules; extension packaging and native messaging (registry)</td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td><code>BaySwipe</code> (module + view)</td>
+                  <td>nncore</td>
+                  <td>Chrome's overscroll navigation first; custom precision-touchpad handling only if needed</td>
+                  <td>5</td>
+                </tr>
+                <tr>
+                  <td><code>BayShell</code>, <code>BayApp</code></td>
+                  <td>shell</td>
+                  <td>Win32 windows, commands, app menu, dialogs, appearance</td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td><code>BaySystem</code>, <code>BayFileDrag</code></td>
+                  <td>shell</td>
+                  <td>IFileDialog, ShellExecute, SHFileOperation (recycle bin), clipboard, OLE drag and drop, SHGetFileInfo icons</td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>BaySurface</code>, <code>BayActivitySpinner</code>, <code>BayFadeLabel</code>, <code>BayContextMenuArea</code>,
+                    <code>BayWindowProfile</code>
+                  </td>
+                  <td>shell</td>
+                  <td>Fabric components on Composition visuals</td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td><code>BaySymbol</code></td>
+                  <td>shell</td>
+                  <td>Fluent icon font glyphs via the Phase 0 mapping</td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td><code>BayVisualEffect</code>, <code>BayGlassEffect</code></td>
+                  <td>shell</td>
+                  <td>Window-level Mica/Acrylic; in-view fallback to <code>Surface</code></td>
+                  <td>5</td>
+                </tr>
+                <tr>
+                  <td><code>BayInlineCompletion</code></td>
+                  <td>shell</td>
+                  <td>Text completion inside RNW <code>TextInput</code> (a custom component if needed)</td>
+                  <td>4</td>
+                </tr>
+                <tr>
+                  <td><code>BayKeychain</code></td>
+                  <td>shell</td>
+                  <td>Credential Manager / DPAPI</td>
+                  <td>6</td>
+                </tr>
+                <tr>
+                  <td><code>BayCalendar</code>, <code>BayTranslate</code>, <code>BayDockSelection</code>, AppleScript, Handoff, app icons</td>
+                  <td>shell</td>
+                  <td>Not implemented; JS sees them as missing</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td><code>BayAreaLight</code>, <code>BayEdgeLight</code>, <code>BayPowerUp</code>, <code>BayWindowBackdrop</code></td>
+                  <td>shaders</td>
+                  <td>Not implemented; JS falls back</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td><code>BayImport</code></td>
+                  <td>import</td>
+                  <td>C++ (or Swift for Windows) readers, Windows paths, DPAPI</td>
+                  <td>6</td>
+                </tr>
+                <tr>
+                  <td><code>BaySync</code></td>
+                  <td>sync</td>
+                  <td>CNG/BoringSSL crypto, byte-compatible vaults</td>
+                  <td>6</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="engine" aria-labelledby="engine-h">
+          <h2 id="engine-h">Engine file map</h2>
+          <p class="prose">
+            For each <code>.mm</code> in the engine: its length, and a rough count of Cocoa references (<code>NS*</code>/<code>CG*</code>/ObjC sends). A low
+            count means the file is mostly C++ in an ObjC++ wrapper and can move to .cc in Phase 0.
+          </p>
           <details>
-            <summary>Show list</summary>
+            <summary>Show all 28 files</summary>
             <div class="inner">
-              <p class="mono" style="font-size:0.82rem">cef-chrome-tabs (has an Aura half, check it) · cef-tab-capture · cef-tab-state · cef-ui-surfaces · cef-ui-triggers · cef-window-devtools · cef-devtools-toolbox · cef-media-router-shutdown · cef-media-source · cef-open-url-params · cef-alloy-history · cef-extension-requests · cef-bay-layer · cef-idle-pump* · cef-pump-wake* · chromium-autofill-address-bubble-window · chromium-browser-view-hosted-fullscreen · chromium-device-chooser-hook · chromium-cast-dialog-hook · chromium-side-panel-hook · chromium-hidden-window-current-window · chromium-devtools-window-title · chromium-extension-install-prompt-hook · chromium-extension-updates · chromium-extension-window-hidden · chromium-branding · chromium-password-bubble-hook · chromium-password-generation-local · chromium-tab-strip-notify-before-insert · chromium-ui-update-before-insert · chromium-extension-installed-bubble · chromium-pip-close-keeps-playing · chromium-pip-overlay-window · chromium-tab-sharing-capturer · chromium-window-docked-devtools*</p>
-              <p style="font-size:0.85rem;color:var(--muted)">* portable code, but written around macOS behaviour: re-check in Phase 3.</p>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">File</th>
+                      <th scope="col" class="num">Lines</th>
+                      <th scope="col" class="num">Cocoa refs</th>
+                      <th scope="col">Plan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>nncore_api.mm</code></td>
+                      <td class="num">2,703</td>
+                      <td class="num">213</td>
+                      <td>The ObjC API. It becomes the C API (<code>nncore_c</code>) plus a thin ObjC wrapper</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_browser.mm</code></td>
+                      <td class="num">1,650</td>
+                      <td class="num">87</td>
+                      <td>Split: tab/browser logic to .cc, view hosting to <code>_mac</code>/<code>_win</code></td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_browser_window.mm</code></td>
+                      <td class="num">743</td>
+                      <td class="num">29</td>
+                      <td>Host window; Windows version follows the Phase 2 decision</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_autofill_prompt.mm</code></td>
+                      <td class="num">464</td>
+                      <td class="num">32</td>
+                      <td>Split; the event JSON stays, anchor geometry per platform</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_context_menu.mm</code></td>
+                      <td class="num">420</td>
+                      <td class="num">25</td>
+                      <td>Split; the menu model is portable</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_permissions.mm</code></td>
+                      <td class="num">498</td>
+                      <td class="num">10</td>
+                      <td>Mostly portable; OS privacy prompts per platform</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_device_chooser.mm</code></td>
+                      <td class="num">372</td>
+                      <td class="num">8</td>
+                      <td>Mostly portable</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_cast_dialog.mm</code></td>
+                      <td class="num">334</td>
+                      <td class="num">8</td>
+                      <td>Mostly portable</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_lifetime.mm</code></td>
+                      <td class="num">307</td>
+                      <td class="num">43</td>
+                      <td>Quit and terminate flow per platform</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_page_channel.mm</code></td>
+                      <td class="num">301</td>
+                      <td class="num">8</td>
+                      <td>Mostly portable</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_picture_in_picture.mm</code></td>
+                      <td class="num">261</td>
+                      <td class="num">25</td>
+                      <td>Split; Views PiP on Windows</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_extension_view.mm</code></td>
+                      <td class="num">246</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_external_apps.mm</code> (nncore)</td>
+                      <td class="num">238</td>
+                      <td class="num">37</td>
+                      <td>Windows: <code>AssocQueryString</code>, <code>ShellExecuteEx</code></td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_navigation_hold.mm</code></td>
+                      <td class="num">213</td>
+                      <td class="num">2</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_seams.mm</code></td>
+                      <td class="num">197</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_icon_fetch.mm</code></td>
+                      <td class="num">191</td>
+                      <td class="num">10</td>
+                      <td>Image encoding per platform (or Skia, which works on both)</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_devtools_call.mm</code></td>
+                      <td class="num">190</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_autofill_trigger.mm</code></td>
+                      <td class="num">179</td>
+                      <td class="num">11</td>
+                      <td>Mostly portable</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_tab_info.mm</code></td>
+                      <td class="num">175</td>
+                      <td class="num">22</td>
+                      <td>Split</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_installed_bubble.mm</code></td>
+                      <td class="num">156</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_password_prompt.mm</code></td>
+                      <td class="num">130</td>
+                      <td class="num">17</td>
+                      <td>Split</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_external_apps.mm</code> (chromium)</td>
+                      <td class="num">124</td>
+                      <td class="num">21</td>
+                      <td>Windows version</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_test_system_permissions.mm</code></td>
+                      <td class="num">114</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_desktop_capture.mm</code></td>
+                      <td class="num">102</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_pip_mac.mm</code></td>
+                      <td class="num">102</td>
+                      <td class="num">20</td>
+                      <td>Windows: Views PiP controls already exist (<code>nn_pip_window.cc</code>)</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_host_visibility.mm</code></td>
+                      <td class="num">82</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_downloads_mac.mm</code></td>
+                      <td class="num">70</td>
+                      <td class="num">19</td>
+                      <td>Windows version (quarantine → Mark-of-the-Web is Chrome's job)</td>
+                    </tr>
+                    <tr>
+                      <td><code>nn_fake_media.mm</code></td>
+                      <td class="num">53</td>
+                      <td class="num">0</td>
+                      <td>Rename to .cc</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </details>
-        </div>
-        <div class="card">
-          <h3><span class="chip warn">Needs Windows code</span> 8</h3>
-          <ul>
-            <li><code>cef-window-client</code>: <code>bayEmbeddedView</code> on <code>BridgedContentView</code></li>
-            <li><code>chromium-window-hosted</code>: the hit-test and a11y halves</li>
-            <li><code>cef-window-keys</code>: <code>native_widget_mac</code></li>
-            <li><code>cef-window-translucent</code>: transparency differs on Windows</li>
-            <li><code>chromium-webview-native-hosted</code>: written for <code>RenderWidgetHostViewMac</code></li>
-            <li><code>chromium-devtools-redock-display</code>: NSView bridge (may be unnecessary)</li>
-            <li><code>chromium-safe-storage-name</code>: Keychain only; DPAPI on Windows</li>
-            <li><code>chromium-bay-layer</code>: exports for the <code>chrome.dll</code> target</li>
+        </section>
+
+        <section id="patches" aria-labelledby="patches-h">
+          <h2 id="patches-h">Patch series map</h2>
+          <p class="prose">
+            Sorted by the files each patch touches. "Portable" means its changes are in cross-platform Chrome or CEF code. It still has to apply cleanly and
+            build on Windows in Phase 1.
+          </p>
+          <div class="grid2">
+            <div class="card">
+              <h3><span class="chip ok">Portable</span> 35</h3>
+              <details>
+                <summary>Show list</summary>
+                <div class="inner">
+                  <p class="mono" style="font-size: 0.82rem">
+                    cef-chrome-tabs (has an Aura half, check it) · cef-tab-capture · cef-tab-state · cef-ui-surfaces · cef-ui-triggers · cef-window-devtools ·
+                    cef-devtools-toolbox · cef-media-router-shutdown · cef-media-source · cef-open-url-params · cef-alloy-history · cef-extension-requests ·
+                    cef-bay-layer · cef-idle-pump* · cef-pump-wake* · chromium-autofill-address-bubble-window · chromium-browser-view-hosted-fullscreen ·
+                    chromium-device-chooser-hook · chromium-cast-dialog-hook · chromium-side-panel-hook · chromium-hidden-window-current-window ·
+                    chromium-devtools-window-title · chromium-extension-install-prompt-hook · chromium-extension-updates · chromium-extension-window-hidden ·
+                    chromium-branding · chromium-password-bubble-hook · chromium-password-generation-local · chromium-tab-strip-notify-before-insert ·
+                    chromium-ui-update-before-insert · chromium-extension-installed-bubble · chromium-pip-close-keeps-playing · chromium-pip-overlay-window ·
+                    chromium-tab-sharing-capturer · chromium-window-docked-devtools*
+                  </p>
+                  <p style="font-size: 0.85rem; color: var(--muted)">* portable code, but written around macOS behaviour: re-check in Phase 3.</p>
+                </div>
+              </details>
+            </div>
+            <div class="card">
+              <h3><span class="chip warn">Needs Windows code</span> 8</h3>
+              <ul>
+                <li><code>cef-window-client</code>: <code>bayEmbeddedView</code> on <code>BridgedContentView</code></li>
+                <li><code>chromium-window-hosted</code>: the hit-test and a11y halves</li>
+                <li><code>cef-window-keys</code>: <code>native_widget_mac</code></li>
+                <li><code>cef-window-translucent</code>: transparency differs on Windows</li>
+                <li><code>chromium-webview-native-hosted</code>: written for <code>RenderWidgetHostViewMac</code></li>
+                <li><code>chromium-devtools-redock-display</code>: NSView bridge (may be unnecessary)</li>
+                <li><code>chromium-safe-storage-name</code>: Keychain only; DPAPI on Windows</li>
+                <li><code>chromium-bay-layer</code>: exports for the <code>chrome.dll</code> target</li>
+              </ul>
+              <h3><span class="chip risk">macOS-only, skip</span> 2</h3>
+              <ul>
+                <li><code>chromium-autofill-card-touchbar</code></li>
+                <li><code>chromium-icloud-keychain-window</code></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="risks" aria-labelledby="risks-h">
+          <h2 id="risks-h">Risks</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Risk</th>
+                  <th scope="col">Impact</th>
+                  <th scope="col">Mitigation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>RN can't draw over Chrome in one window (airspace)</td>
+                  <td><span class="chip risk">High</span></td>
+                  <td>Phase 2 gate before any big spend; fallbacks B and C already planned</td>
+                </tr>
+                <tr>
+                  <td>Reanimated doesn't run on RNW Fabric (the old RNW request #4151 is closed with no confirmed support)</td>
+                  <td><span class="chip risk">High</span></td>
+                  <td>Test in Phase 2; a <code>lib/motion</code> wrapper keeps the 232 call sites unchanged</td>
+                </tr>
+                <tr>
+                  <td>Expo Modules has no Windows target</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Phase 0 specs + codegen; a small shim or <code>.windows.ts</code> resolution</td>
+                </tr>
+                <tr>
+                  <td>
+                    RNW trails React Native (0.84 vs RN's current line) and has fewer contributors; Fabric component bugs (DPI scaling #16383, orphaned islands
+                    breaking input)
+                  </td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>Pin RNW 0.81 to match RN 0.81; budget time to send fixes upstream; keep the Fabric components we depend on few</td>
+                </tr>
+                <tr>
+                  <td>CEF external message pump on Windows (nested loops are a known weak spot)</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>
+                    Re-validate <code>cef-idle-pump</code>/<code>cef-pump-wake</code> in Phase 3; drive modal loops (menus, dialogs, window drag) on purpose in
+                    tests
+                  </td>
+                </tr>
+                <tr>
+                  <td>Chrome's app-bound encryption blocks cookie and password import</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>No cookie import from Chrome; CSV fallback for passwords; never work around it</td>
+                </tr>
+                <tr>
+                  <td>Engine build cost (disk, RAM, hours per build); can't build on the current Mac</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>One large VM; archive artifacts; rebuild only when the pin or patches change</td>
+                </tr>
+                <tr>
+                  <td>Two platforms to keep in sync with every Chromium rebase</td>
+                  <td><span class="chip warn">Medium</span></td>
+                  <td>
+                    Platform column in <code>series</code>; Windows CI on every engine bump; keep platform code in <code>_mac</code>/<code>_win</code> files,
+                    not <code>#if</code> soup
+                  </td>
+                </tr>
+                <tr>
+                  <td>SmartScreen reputation for a new publisher</td>
+                  <td><span class="chip ok">Low</span></td>
+                  <td>Sign from the first beta; signing reputation builds up over time</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="decisions" aria-labelledby="decisions-h">
+          <h2 id="decisions-h">Decisions needed</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Recommendation</th>
+                  <th scope="col">Needed by</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Support Windows 10, or Windows 11 only?</td>
+                  <td>Windows 11 first (Mica needs 22621+; Arc also launched Windows 11-only). Windows 10 as a follow-up, with solid backgrounds</td>
+                  <td>Phase 2</td>
+                </tr>
+                <tr>
+                  <td>x64 only, or arm64 too?</td>
+                  <td>x64 first; arm64 once the x64 pipeline is stable</td>
+                  <td>Phase 1</td>
+                </tr>
+                <tr>
+                  <td>Native-module binding route on Windows</td>
+                  <td>Decide in the spike: an Expo-compatible shim if it stays small, otherwise codegen TurboModules with <code>.windows.ts</code></td>
+                  <td>Phase 2</td>
+                </tr>
+                <tr>
+                  <td>Import/sync language: C++ rewrite, or Swift on Windows?</td>
+                  <td>C++ for sync (small, crypto-critical, golden vectors); evaluate Swift for import only if a lot of the parser code would carry over</td>
+                  <td>Phase 6</td>
+                </tr>
+                <tr>
+                  <td>Installer and updater</td>
+                  <td>A per-user installer + WinSparkle keeps the appcast flow of <code>release.sh</code>; Velopack if delta updates matter more</td>
+                  <td>Phase 7</td>
+                </tr>
+                <tr>
+                  <td>Signing identity</td>
+                  <td>Azure Artifact Signing if the publisher qualifies (individuals: US/Canada only); otherwise a CA certificate</td>
+                  <td>Phase 7</td>
+                </tr>
+                <tr>
+                  <td>Windows build machine</td>
+                  <td>A cloud VM (≥ 32 vCPU, 64 GB RAM, 300 GB SSD) started only for engine builds</td>
+                  <td>Phase 1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Assumptions in this plan</h3>
+          <ul class="prose">
+            <li>That CEF's windowless (OSR) mode only works with Alloy-style browsers. This comes from CEF's runtime split and needs confirming in Phase 1.</li>
+            <li>Pinning RNW 0.81 to match RN 0.81, rather than upgrading both first. Upgrading RN on Mac is a separate decision.</li>
+            <li>The Windows app having the same features as the Mac app, minus the out-of-scope list above. No Windows-only features are planned.</li>
           </ul>
-          <h3><span class="chip risk">macOS-only, skip</span> 2</h3>
-          <ul>
-            <li><code>chromium-autofill-card-touchbar</code></li>
-            <li><code>chromium-icloud-keychain-window</code></li>
-          </ul>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section id="risks" aria-labelledby="risks-h">
-      <h2 id="risks-h">Risks</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Risk</th><th scope="col">Impact</th><th scope="col">Mitigation</th></tr></thead>
-          <tbody>
-            <tr><td>RN can't draw over Chrome in one window (airspace)</td><td><span class="chip risk">High</span></td><td>Phase 2 gate before any big spend; fallbacks B and C already planned</td></tr>
-            <tr><td>Reanimated doesn't run on RNW Fabric (the old RNW request #4151 is closed with no confirmed support)</td><td><span class="chip risk">High</span></td><td>Test in Phase 2; a <code>lib/motion</code> wrapper keeps the 232 call sites unchanged</td></tr>
-            <tr><td>Expo Modules has no Windows target</td><td><span class="chip warn">Medium</span></td><td>Phase 0 specs + codegen; a small shim or <code>.windows.ts</code> resolution</td></tr>
-            <tr><td>RNW trails React Native (0.84 vs RN's current line) and has fewer contributors; Fabric component bugs (DPI scaling #16383, orphaned islands breaking input)</td><td><span class="chip warn">Medium</span></td><td>Pin RNW 0.81 to match RN 0.81; budget time to send fixes upstream; keep the Fabric components we depend on few</td></tr>
-            <tr><td>CEF external message pump on Windows (nested loops are a known weak spot)</td><td><span class="chip warn">Medium</span></td><td>Re-validate <code>cef-idle-pump</code>/<code>cef-pump-wake</code> in Phase 3; drive modal loops (menus, dialogs, window drag) on purpose in tests</td></tr>
-            <tr><td>Chrome's app-bound encryption blocks cookie and password import</td><td><span class="chip warn">Medium</span></td><td>No cookie import from Chrome; CSV fallback for passwords; never work around it</td></tr>
-            <tr><td>Engine build cost (disk, RAM, hours per build); can't build on the current Mac</td><td><span class="chip warn">Medium</span></td><td>One large VM; archive artifacts; rebuild only when the pin or patches change</td></tr>
-            <tr><td>Two platforms to keep in sync with every Chromium rebase</td><td><span class="chip warn">Medium</span></td><td>Platform column in <code>series</code>; Windows CI on every engine bump; keep platform code in <code>_mac</code>/<code>_win</code> files, not <code>#if</code> soup</td></tr>
-            <tr><td>SmartScreen reputation for a new publisher</td><td><span class="chip ok">Low</span></td><td>Sign from the first beta; signing reputation builds up over time</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+        <section id="sources" aria-labelledby="sources-h">
+          <h2 id="sources-h">Sources</h2>
+          <ol class="sources">
+            <li>
+              <a href="https://devblogs.microsoft.com/react-native/%F0%9F%9A%80react-native-windows-v0-81-is-here/">React Native Windows v0.81 is here</a>,
+              Microsoft DevBlogs
+            </li>
+            <li><a href="https://github.com/microsoft/react-native-windows/discussions/15664">Paper (legacy) architecture deprecated in RNW 0.82</a></li>
+            <li><a href="https://github.com/Microsoft/react-native-windows/releases">react-native-windows releases</a></li>
+            <li>
+              <a href="https://www.devclass.com/development/2026/01/20/microsoft-updates-react-native-for-windows-developers-ask-why-not-use-maui/4079595"
+                >Microsoft updates React Native for Windows</a
+              >, DevClass
+            </li>
+            <li><a href="https://github.com/microsoft/react-native-windows/issues/12042">New Architecture for React Native for Windows (#12042)</a></li>
+            <li>
+              <a href="https://github.com/microsoft/react-native-windows/pull/16383"
+                >ContentIsland-hosted content renders at reduced size on scaled displays (#16383)</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/react-native-webview/react-native-webview/issues/3980">WebView2 on the new architecture: production feedback</a>
+            </li>
+            <li><a href="https://github.com/microsoft/react-native-windows/pull/16341">Fabric text on transparent composition surfaces (#16341)</a></li>
+            <li>
+              <a href="https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.content.desktopchildsitebridge"
+                >DesktopChildSiteBridge</a
+              >, Windows App SDK
+            </li>
+            <li><a href="https://github.com/microsoft/react-native-windows/issues/4151">Support react-native-reanimated (#4151)</a></li>
+            <li><a href="https://docs.swmansion.com/react-native-reanimated/docs/guides/troubleshooting/">Reanimated troubleshooting</a></li>
+            <li><a href="https://microsoft.github.io/react-native-windows/docs/native-platform">RNW native platform docs</a></li>
+            <li><a href="https://forums.expo.dev/t/react-native-window-integration/33300">Expo forum: React Native Windows integration</a></li>
+            <li><a href="https://github.com/KeplerBrowser/ServoKit/issues/6">Mounting a browser engine in an RNW Fabric view</a></li>
+            <li>
+              <a href="https://learn.microsoft.com/en-us/windows/win32/api/dcomp/nf-dcomp-idcompositiondesktopdevice-createtargetforhwnd"
+                >IDCompositionDesktopDevice::CreateTargetForHwnd</a
+              >
+            </li>
+            <li><a href="https://learn.microsoft.com/en-us/archive/blogs/nickkramer/hwnd-interop-part-2">HWND interop and airspace</a>, Nick Kramer</li>
+            <li><a href="https://redirect.github.com/cefsharp/CefSharp.Wpf.HwndHost">CefSharp.Wpf.HwndHost (airspace caveats)</a></li>
+            <li>
+              <a href="https://opendlang.org/library/arsd.webview.cef_settings_t.multi_threaded_message_loop.html"
+                >cef_settings_t.multi_threaded_message_loop</a
+              >
+              and <a href="https://opendlang.org/library/arsd.webview.cef_settings_t.external_message_pump.html">external_message_pump</a>
+            </li>
+            <li>
+              <a href="https://third-party-mirror.googlesource.com/cef/+/refs/heads/master/src/libcef/browser/browser_message_loop.cc"
+                >CEF browser_message_loop.cc</a
+              >
+            </li>
+            <li>
+              <a href="https://chromium.googlesource.com/chromium/src/+/refs/tags/132.0.6834.159/docs/windows_build_instructions.md"
+                >Checking out and building Chromium for Windows</a
+              >
+            </li>
+            <li><a href="https://github.com/ungoogled-software/ungoogled-chromium-windows">ungoogled-chromium-windows</a></li>
+            <li>
+              <a href="https://security.googleblog.com/2024/07/improving-security-of-chrome-cookies-on.html?m=1"
+                >Improving the security of Chrome cookies on Windows</a
+              >, Google Security Blog
+            </li>
+            <li>
+              <a href="https://www.cyberark.com/resources/threat-research-blog/c4-bomb-blowing-up-chromes-appbound-cookie-encryption"
+                >C4 Bomb: Chrome's app-bound cookie encryption</a
+              >, CyberArk
+            </li>
+            <li>
+              <a href="https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-snap-layout-menu"
+                >Support snap layouts for desktop apps on Windows 11</a
+              >
+            </li>
+            <li><a href="https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type">DWM_SYSTEMBACKDROP_TYPE</a></li>
+            <li>
+              <a href="https://firefox-source-docs.mozilla.org/widget/windows/shell/set-default.html">Setting the default browser on Windows</a>, Firefox source
+              docs
+            </li>
+            <li>
+              <a href="https://devclass.com/2026/01/14/code-signing-windows-apps-may-be-easier-and-more-secure-with-new-azure-artifact-service/"
+                >Azure Artifact Signing</a
+              >, DevClass
+            </li>
+            <li><a href="https://www-1.nuget.org/packages/Velopack">Velopack</a></li>
+            <li>
+              <a href="https://techcrunch.com/2024/04/30/the-browser-company-releases-arc-for-windows">Arc for Windows</a>, TechCrunch ·
+              <a href="https://speakinginswift.substack.com">Speaking in Swift</a>, The Browser Company
+            </li>
+            <li><a href="https://www.infoq.com/news/2016/04/vivaldi-1/">Vivaldi 1.0: a React UI on Chromium</a>, InfoQ</li>
+          </ol>
+        </section>
+      </main>
+    </div>
 
-    <section id="decisions" aria-labelledby="decisions-h">
-      <h2 id="decisions-h">Decisions needed</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Question</th><th scope="col">Recommendation</th><th scope="col">Needed by</th></tr></thead>
-          <tbody>
-            <tr><td>Support Windows 10, or Windows 11 only?</td><td>Windows 11 first (Mica needs 22621+; Arc also launched Windows 11-only). Windows 10 as a follow-up, with solid backgrounds</td><td>Phase 2</td></tr>
-            <tr><td>x64 only, or arm64 too?</td><td>x64 first; arm64 once the x64 pipeline is stable</td><td>Phase 1</td></tr>
-            <tr><td>Native-module binding route on Windows</td><td>Decide in the spike: an Expo-compatible shim if it stays small, otherwise codegen TurboModules with <code>.windows.ts</code></td><td>Phase 2</td></tr>
-            <tr><td>Import/sync language: C++ rewrite, or Swift on Windows?</td><td>C++ for sync (small, crypto-critical, golden vectors); evaluate Swift for import only if a lot of the parser code would carry over</td><td>Phase 6</td></tr>
-            <tr><td>Installer and updater</td><td>A per-user installer + WinSparkle keeps the appcast flow of <code>release.sh</code>; Velopack if delta updates matter more</td><td>Phase 7</td></tr>
-            <tr><td>Signing identity</td><td>Azure Artifact Signing if the publisher qualifies (individuals: US/Canada only); otherwise a CA certificate</td><td>Phase 7</td></tr>
-            <tr><td>Windows build machine</td><td>A cloud VM (≥ 32 vCPU, 64 GB RAM, 300 GB SSD) started only for engine builds</td><td>Phase 1</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <h3>Assumptions in this plan</h3>
-      <ul class="prose">
-        <li>That CEF's windowless (OSR) mode only works with Alloy-style browsers. This comes from CEF's runtime split and needs confirming in Phase 1.</li>
-        <li>Pinning RNW 0.81 to match RN 0.81, rather than upgrading both first. Upgrading RN on Mac is a separate decision.</li>
-        <li>The Windows app having the same features as the Mac app, minus the out-of-scope list above. No Windows-only features are planned.</li>
-      </ul>
-    </section>
+    <footer>
+      <div class="wrap">Bay · Windows port plan · Lives in <code>docs/windows-port-plan.html</code> on <code>feat/windows</code>.</div>
+    </footer>
 
-    <section id="sources" aria-labelledby="sources-h">
-      <h2 id="sources-h">Sources</h2>
-      <ol class="sources">
-        <li><a href="https://devblogs.microsoft.com/react-native/%F0%9F%9A%80react-native-windows-v0-81-is-here/">React Native Windows v0.81 is here</a>, Microsoft DevBlogs</li>
-        <li><a href="https://github.com/microsoft/react-native-windows/discussions/15664">Paper (legacy) architecture deprecated in RNW 0.82</a></li>
-        <li><a href="https://github.com/Microsoft/react-native-windows/releases">react-native-windows releases</a></li>
-        <li><a href="https://www.devclass.com/development/2026/01/20/microsoft-updates-react-native-for-windows-developers-ask-why-not-use-maui/4079595">Microsoft updates React Native for Windows</a>, DevClass</li>
-        <li><a href="https://github.com/microsoft/react-native-windows/issues/12042">New Architecture for React Native for Windows (#12042)</a></li>
-        <li><a href="https://github.com/microsoft/react-native-windows/pull/16383">ContentIsland-hosted content renders at reduced size on scaled displays (#16383)</a></li>
-        <li><a href="https://github.com/react-native-webview/react-native-webview/issues/3980">WebView2 on the new architecture: production feedback</a></li>
-        <li><a href="https://github.com/microsoft/react-native-windows/pull/16341">Fabric text on transparent composition surfaces (#16341)</a></li>
-        <li><a href="https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.content.desktopchildsitebridge">DesktopChildSiteBridge</a>, Windows App SDK</li>
-        <li><a href="https://github.com/microsoft/react-native-windows/issues/4151">Support react-native-reanimated (#4151)</a></li>
-        <li><a href="https://docs.swmansion.com/react-native-reanimated/docs/guides/troubleshooting/">Reanimated troubleshooting</a></li>
-        <li><a href="https://microsoft.github.io/react-native-windows/docs/native-platform">RNW native platform docs</a></li>
-        <li><a href="https://forums.expo.dev/t/react-native-window-integration/33300">Expo forum: React Native Windows integration</a></li>
-        <li><a href="https://github.com/KeplerBrowser/ServoKit/issues/6">Mounting a browser engine in an RNW Fabric view</a></li>
-        <li><a href="https://learn.microsoft.com/en-us/windows/win32/api/dcomp/nf-dcomp-idcompositiondesktopdevice-createtargetforhwnd">IDCompositionDesktopDevice::CreateTargetForHwnd</a></li>
-        <li><a href="https://learn.microsoft.com/en-us/archive/blogs/nickkramer/hwnd-interop-part-2">HWND interop and airspace</a>, Nick Kramer</li>
-        <li><a href="https://redirect.github.com/cefsharp/CefSharp.Wpf.HwndHost">CefSharp.Wpf.HwndHost (airspace caveats)</a></li>
-        <li><a href="https://opendlang.org/library/arsd.webview.cef_settings_t.multi_threaded_message_loop.html">cef_settings_t.multi_threaded_message_loop</a> and <a href="https://opendlang.org/library/arsd.webview.cef_settings_t.external_message_pump.html">external_message_pump</a></li>
-        <li><a href="https://third-party-mirror.googlesource.com/cef/+/refs/heads/master/src/libcef/browser/browser_message_loop.cc">CEF browser_message_loop.cc</a></li>
-        <li><a href="https://chromium.googlesource.com/chromium/src/+/refs/tags/132.0.6834.159/docs/windows_build_instructions.md">Checking out and building Chromium for Windows</a></li>
-        <li><a href="https://github.com/ungoogled-software/ungoogled-chromium-windows">ungoogled-chromium-windows</a></li>
-        <li><a href="https://security.googleblog.com/2024/07/improving-security-of-chrome-cookies-on.html?m=1">Improving the security of Chrome cookies on Windows</a>, Google Security Blog</li>
-        <li><a href="https://www.cyberark.com/resources/threat-research-blog/c4-bomb-blowing-up-chromes-appbound-cookie-encryption">C4 Bomb: Chrome's app-bound cookie encryption</a>, CyberArk</li>
-        <li><a href="https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-snap-layout-menu">Support snap layouts for desktop apps on Windows 11</a></li>
-        <li><a href="https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type">DWM_SYSTEMBACKDROP_TYPE</a></li>
-        <li><a href="https://firefox-source-docs.mozilla.org/widget/windows/shell/set-default.html">Setting the default browser on Windows</a>, Firefox source docs</li>
-        <li><a href="https://devclass.com/2026/01/14/code-signing-windows-apps-may-be-easier-and-more-secure-with-new-azure-artifact-service/">Azure Artifact Signing</a>, DevClass</li>
-        <li><a href="https://www-1.nuget.org/packages/Velopack">Velopack</a></li>
-        <li><a href="https://techcrunch.com/2024/04/30/the-browser-company-releases-arc-for-windows">Arc for Windows</a>, TechCrunch · <a href="https://speakinginswift.substack.com">Speaking in Swift</a>, The Browser Company</li>
-        <li><a href="https://www.infoq.com/news/2016/04/vivaldi-1/">Vivaldi 1.0: a React UI on Chromium</a>, InfoQ</li>
-      </ol>
-    </section>
-  </main>
-</div>
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var btn = document.getElementById("themeToggle");
+        try {
+          var saved = localStorage.getItem("bay-plan-theme");
+          if (saved) root.setAttribute("data-theme", saved);
+        } catch (e) {}
+        btn.addEventListener("click", function () {
+          var dark = root.getAttribute("data-theme") === "dark" || (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+          var next = dark ? "light" : "dark";
+          root.setAttribute("data-theme", next);
+          try {
+            localStorage.setItem("bay-plan-theme", next);
+          } catch (e) {}
+        });
 
-<footer>
-  <div class="wrap">Bay · Windows port plan · Lives in <code>docs/windows-port-plan.html</code> on <code>feat/windows</code>.</div>
-</footer>
-
-<script>
-(function () {
-  var root = document.documentElement;
-  var btn = document.getElementById('themeToggle');
-  try { var saved = localStorage.getItem('bay-plan-theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
-  btn.addEventListener('click', function () {
-    var dark = root.getAttribute('data-theme') === 'dark' ||
-      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
-    var next = dark ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    try { localStorage.setItem('bay-plan-theme', next); } catch (e) {}
-  });
-
-  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
-  var targets = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
-  if (!('IntersectionObserver' in window)) return;
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (!e.isIntersecting) return;
-      links.forEach(function (a) {
-        var on = a.getAttribute('href') === '#' + e.target.id;
-        a.classList.toggle('active', on);
-        if (on) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current');
-      });
-    });
-  }, { rootMargin: '0px 0px -70% 0px' });
-  targets.forEach(function (t) { io.observe(t); });
-})();
-</script>
-</body>
+        var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a"));
+        var targets = links
+          .map(function (a) {
+            return document.querySelector(a.getAttribute("href"));
+          })
+          .filter(Boolean);
+        if (!("IntersectionObserver" in window)) return;
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (!e.isIntersecting) return;
+              links.forEach(function (a) {
+                var on = a.getAttribute("href") === "#" + e.target.id;
+                a.classList.toggle("active", on);
+                if (on) a.setAttribute("aria-current", "location");
+                else a.removeAttribute("aria-current");
+              });
+            });
+          },
+          { rootMargin: "0px 0px -70% 0px" },
+        );
+        targets.forEach(function (t) {
+          io.observe(t);
+        });
+      })();
+    </script>
+  </body>
 </html>

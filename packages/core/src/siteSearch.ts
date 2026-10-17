@@ -44,7 +44,12 @@ export type ScopeSources = {
 };
 
 function normalize(text: string): string {
-  return text.trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/$/, "");
 }
 
 function siteLabel(host: string): string {

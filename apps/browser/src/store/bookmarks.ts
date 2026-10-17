@@ -8,13 +8,13 @@ export type BookmarksSlice = {
   // Profiles whose tree has been read from Chrome (until then it's empty, not "no bookmarks").
   bookmarksReady: Record<string, true>;
 
-  addBookmark(options: { profileId: string; url: string; title: string; favicon?: string | null; parentId?: string; index?: number }): string;
-  addBookmarkFolder(options: { profileId: string; title: string; parentId?: string; index?: number }): string;
+  addBookmark(options: { spaceId: string; url: string; title: string; favicon?: string | null; parentId?: string; index?: number }): string;
+  addBookmarkFolder(options: { spaceId: string; title: string; parentId?: string; index?: number }): string;
   updateBookmark(id: string, patch: { title?: string; url?: string; favicon?: string | null }): void;
   moveBookmark(id: string, parentId: string, index?: number): void;
   removeBookmark(id: string): void;
-  toggleBookmark(profileId: string, page: { url: string; title: string; favicon: string | null }): boolean;
-  addBookmarkTree(profileId: string, drafts: BookmarkDraft[], parentId?: string, index?: number): string[];
+  toggleBookmark(spaceId: string, page: { url: string; title: string; favicon: string | null }): boolean;
+  addBookmarkTree(spaceId: string, drafts: BookmarkDraft[], parentId?: string, index?: number): string[];
   removeBookmarks(ids: string[]): RemovedBookmarks;
   restoreBookmarks(removed: RemovedBookmarks): void;
 };
@@ -48,7 +48,10 @@ export const newBookmarkId = () => uuidFrom(Array.from({ length: 4 }, () => Math
 export function bookmarkUuidFor(id: string): string {
   if (isBookmarkUuid(id)) return id;
   const text = `bay-bookmark:${id}`;
-  let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+  let h1 = 1779033703,
+    h2 = 3144134277,
+    h3 = 1013904242,
+    h4 = 2773480762;
   for (let i = 0; i < text.length; i++) {
     const k = text.charCodeAt(i);
     h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
@@ -70,18 +73,23 @@ export function bookmarkUuidFor(id: string): string {
 /** An engine profile's permanent folders, as store ids. */
 export const rootIdsFor = (engine: string) => ({ bar: `bar@${engine || "default"}`, other: `other@${engine || "default"}` });
 
-export function bookmarkRoots(b: Bookmarks, profileId: string) {
-  return b.roots[profileId];
+export function bookmarkRoots(b: Bookmarks, spaceId: string) {
+  return b.roots[spaceId];
 }
 
-export function ensureRoots(b: Bookmarks, profileId: string): [Bookmarks, { bar: string; other: string }] {
-  const existing = b.roots[profileId];
+export function ensureRoots(b: Bookmarks, spaceId: string): [Bookmarks, { bar: string; other: string }] {
+  const existing = b.roots[spaceId];
   if (existing) return [b, existing];
-  const roots = rootIdsFor(engineProfile(profileId));
+  return engineRoots(b, spaceId, engineProfile(spaceId));
+}
+
+/** The profile takes the engine profile's roots, made if they aren't there. */
+export function engineRoots(b: Bookmarks, spaceId: string, engine: string): [Bookmarks, { bar: string; other: string }] {
+  const roots = rootIdsFor(engine);
   const nodes = { ...b.nodes };
   nodes[roots.bar] ??= { kind: "folder", id: roots.bar, parentId: null, title: "Bookmarks Bar", children: [], addedAt: 0 };
   nodes[roots.other] ??= { kind: "folder", id: roots.other, parentId: null, title: "Other Bookmarks", children: [], addedAt: 0 };
-  return [{ nodes, roots: { ...b.roots, [profileId]: roots } }, roots];
+  return [{ nodes, roots: { ...b.roots, [spaceId]: roots } }, roots];
 }
 
 function subtree(b: Bookmarks, ids: string[]): string[] {
@@ -96,7 +104,7 @@ function subtree(b: Bookmarks, ids: string[]): string[] {
   return out;
 }
 
-export function removeBookmarkTree(b: Bookmarks, ids: string[], profileId?: string): Bookmarks {
+export function removeBookmarkTree(b: Bookmarks, ids: string[], spaceId?: string): Bookmarks {
   const gone = new Set(subtree(b, ids));
   const nodes = without(b.nodes, gone);
   for (const node of Object.values(nodes)) {
@@ -104,27 +112,27 @@ export function removeBookmarkTree(b: Bookmarks, ids: string[], profileId?: stri
       nodes[node.id] = { ...node, children: node.children.filter((c) => !gone.has(c)) };
     }
   }
-  return { nodes, roots: profileId ? without(b.roots, [profileId]) : b.roots };
+  return { nodes, roots: spaceId ? without(b.roots, [spaceId]) : b.roots };
 }
 
 const urlIndex = new WeakMap<Bookmarks, Map<string, Map<string, string[]>>>();
 
-export function bookmarksByUrl(b: Bookmarks, profileId: string): Map<string, string[]> {
+export function bookmarksByUrl(b: Bookmarks, spaceId: string): Map<string, string[]> {
   let perProfile = urlIndex.get(b);
   if (!perProfile) urlIndex.set(b, (perProfile = new Map()));
-  let index = perProfile.get(profileId);
+  let index = perProfile.get(spaceId);
   if (index) return index;
   index = new Map();
-  const roots = b.roots[profileId];
+  const roots = b.roots[spaceId];
   for (const id of roots ? subtree(b, [roots.bar, roots.other]) : []) {
     const node = b.nodes[id];
     if (node?.kind === "url") index.set(node.url, [...(index.get(node.url) ?? []), id]);
   }
-  perProfile.set(profileId, index);
+  perProfile.set(spaceId, index);
   return index;
 }
 
-export const isBookmarked = (b: Bookmarks, profileId: string, url: string) => !!url && bookmarksByUrl(b, profileId).has(url);
+export const isBookmarked = (b: Bookmarks, spaceId: string, url: string) => !!url && bookmarksByUrl(b, spaceId).has(url);
 
 export function folderChildren(b: Bookmarks, folderId: string): BookmarkNode[] {
   const folder = b.nodes[folderId];
@@ -159,15 +167,15 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
   bookmarks: EMPTY_BOOKMARKS,
   bookmarksReady: {},
 
-  addBookmark({ profileId, url, title, favicon = null, parentId, index }) {
-    const [b, roots] = ensureRoots(get().bookmarks, profileId);
+  addBookmark({ spaceId, url, title, favicon = null, parentId, index }) {
+    const [b, roots] = ensureRoots(get().bookmarks, spaceId);
     const node: BookmarkNode = { kind: "url", id: newBookmarkId(), parentId: parentId ?? roots.bar, title, url, favicon, addedAt: Date.now() };
     set({ bookmarks: insertChild(b, node, node.parentId, index) });
     return node.id;
   },
 
-  addBookmarkFolder({ profileId, title, parentId, index }) {
-    const [b, roots] = ensureRoots(get().bookmarks, profileId);
+  addBookmarkFolder({ spaceId, title, parentId, index }) {
+    const [b, roots] = ensureRoots(get().bookmarks, spaceId);
     const node: BookmarkNode = { kind: "folder", id: newBookmarkId(), parentId: parentId ?? roots.bar, title, children: [], addedAt: Date.now() };
     set({ bookmarks: insertChild(b, node, node.parentId!, index) });
     return node.id;
@@ -203,8 +211,8 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
     });
   },
 
-  addBookmarkTree(profileId, drafts, parentId, index) {
-    let [b, roots] = ensureRoots(get().bookmarks, profileId);
+  addBookmarkTree(spaceId, drafts, parentId, index) {
+    let [b, roots] = ensureRoots(get().bookmarks, spaceId);
     const nodes = { ...b.nodes };
     const build = (d: BookmarkDraft, parent: string): string => {
       const id = newBookmarkId();
@@ -259,15 +267,15 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
     });
   },
 
-  toggleBookmark(profileId, page) {
+  toggleBookmark(spaceId, page) {
     const s = get();
     if (!page.url) return false;
-    const existing = bookmarksByUrl(s.bookmarks, profileId).get(page.url);
+    const existing = bookmarksByUrl(s.bookmarks, spaceId).get(page.url);
     if (existing?.length) {
       set({ bookmarks: removeBookmarkTree(s.bookmarks, existing) });
       return false;
     }
-    get().addBookmark({ profileId, url: page.url, title: page.title, favicon: page.favicon });
+    get().addBookmark({ spaceId, url: page.url, title: page.title, favicon: page.favicon });
     return true;
   },
 });

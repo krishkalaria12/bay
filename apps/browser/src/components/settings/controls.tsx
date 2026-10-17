@@ -1,11 +1,14 @@
 import { Pressable, TextInput, View } from "@bay/platform";
 import { showMenu, Surface, Symbol, type MenuItem } from "@bay/shell";
-import { useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme, type Theme } from "../../lib/theme";
+import { useBrowser } from "../../store/browser";
+import type { Settings } from "../../store/settings";
 import { useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
+import { useSettingsNav } from "./windows";
 
 export function formColors(theme: Theme) {
   return theme.dark
@@ -51,13 +54,19 @@ export function Toggle({ value, onChange, disabled }: { value: boolean; onChange
   useEffect(() => {
     t.set(withTiming(value ? 1 : 0, { duration: 160, easing: Easing.out(Easing.cubic) }));
   }, [value]);
-  const track = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(t.get(), [0, 1], [colors.switchOff, colors.accent]) }), [colors.switchOff, colors.accent]);
+  const track = useAnimatedStyle(
+    () => ({ backgroundColor: interpolateColor(t.get(), [0, 1], [colors.switchOff, colors.accent]) }),
+    [colors.switchOff, colors.accent],
+  );
   const knob = useAnimatedStyle(() => ({ transform: [{ translateX: t.get() * 14 }] }));
   return (
     <Pressable disabled={disabled} onPress={() => onChange(!value)} style={{ opacity: disabled ? 0.45 : 1 }}>
       <Animated.View style={[{ width: 32, height: 18, borderRadius: 9, padding: 1.5 }, track]}>
         <Animated.View
-          style={[{ width: 15, height: 15, borderRadius: 7.5, backgroundColor: "#FFFFFF", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.12)" }, knob]}
+          style={[
+            { width: 15, height: 15, borderRadius: 7.5, backgroundColor: "#FFFFFF", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.12)" },
+            knob,
+          ]}
         />
       </Animated.View>
     </Pressable>
@@ -81,7 +90,11 @@ export function Checkbox({
   const colors = useFormColors();
   const on = value || mixed;
   return (
-    <Pressable disabled={disabled} onPress={() => onChange(!value)} style={{ flexDirection: "row", alignItems: "center", gap: 7, opacity: disabled ? 0.45 : 1 }}>
+    <Pressable
+      disabled={disabled}
+      onPress={() => onChange(!value)}
+      style={{ flexDirection: "row", alignItems: "center", gap: 7, opacity: disabled ? 0.45 : 1 }}
+    >
       <View
         style={{
           width: 14,
@@ -235,7 +248,6 @@ export function SearchField({
   style?: StyleProp<ViewStyle>;
   onSubmit?: () => void;
 }) {
-
   const theme = useTheme();
   const colors = useFormColors();
   return (
@@ -341,12 +353,37 @@ export function TextField({
   );
 }
 
+// Scrolls the pane to a view in it (SettingsWindow's), for a setting chosen in the sidebar's search.
+export const SettingsScroll = createContext<((target: View) => void) | null>(null);
+
+const HIGHLIGHT_MS = 1600;
+
+// The setting chosen in the sidebar's search (search.ts), matched by its title: scrolled to, and marked for a moment.
+function useSearchHighlight(title: ReactNode) {
+  const marked = useSettingsNav((n) => typeof title === "string" && n.highlight === title);
+  const scrollTo = useContext(SettingsScroll);
+  const ref = useRef<View>(null);
+  useEffect(() => {
+    if (!marked) return;
+    // After the pane's first layout, so the row has its place.
+    const frame = requestAnimationFrame(() => ref.current && scrollTo?.(ref.current));
+    const timer = setTimeout(() => useSettingsNav.setState({ highlight: null }), HIGHLIGHT_MS);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [marked, scrollTo]);
+  return { ref, marked };
+}
+
 export function SectionHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   const theme = useTheme();
+  const colors = useFormColors();
+  const { ref, marked } = useSearchHighlight(title);
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 22, marginBottom: 8, paddingHorizontal: 2 }}>
+    <View ref={ref} style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 22, marginBottom: 8, paddingHorizontal: 2 }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{title}</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: marked ? colors.accent : theme.textPrimary }}>{title}</Text>
         {description ? <Text style={{ fontSize: 12, marginTop: 3, color: theme.textSecondary, lineHeight: 16 }}>{description}</Text> : null}
       </View>
       {action}
@@ -360,7 +397,7 @@ export function Group({ children, style }: { children: ReactNode; style?: StyleP
   return (
     <View
       style={[
-        { borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder, overflow: "hidden" },
+        { borderRadius: 12, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder, overflow: "hidden" },
         style,
       ]}
     >
@@ -390,8 +427,13 @@ export function Row({
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
+  const { ref, marked } = useSearchHighlight(title);
+  let fill: string | undefined;
+  if (marked) fill = `${colors.accent}2E`;
+  else if (onPress && hovered) fill = colors.selected;
   const body = (
     <View
+      ref={ref}
       style={{
         minHeight: 40,
         paddingHorizontal: 12,
@@ -399,7 +441,7 @@ export function Row({
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        backgroundColor: onPress && hovered ? colors.selected : undefined,
+        backgroundColor: fill,
       }}
     >
       {icon}
@@ -422,6 +464,17 @@ export function Row({
     <View {...hoverProps}>
       <Pressable onPress={onPress}>{body}</Pressable>
     </View>
+  );
+}
+
+// A row that turns one of the settings on and off.
+export function SettingToggle({ setting, title, description }: { setting: keyof Settings; title: string; description?: string }) {
+  const value = useBrowser((s) => !!s.settings[setting]);
+  const update = useBrowser((s) => s.updateSettings);
+  return (
+    <Row title={title} description={description}>
+      <Toggle value={value} onChange={(v) => update({ [setting]: v })} />
+    </Row>
   );
 }
 

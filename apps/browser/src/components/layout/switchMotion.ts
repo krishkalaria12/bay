@@ -8,6 +8,7 @@ import { splitOf } from "../../store/splits";
 import { sidebarTabOrder } from "../sidebar/entries";
 import type { Rect } from "./geometry";
 import { stripEntries } from "./stripGroups";
+import { PAGE_SETTLE_MS, PAGE_SWITCH_MS, PAGE_SWITCH_OFFSET, SWITCH_FRESH_MS } from "./constants";
 
 // A tab switch moves what it changes a little the way it went: down the sidebar (or right along the strip) the page
 // comes up from below and the selection follows the rows down; back up, the other way round. Small and quick (only a
@@ -19,8 +20,6 @@ type Axis = "x" | "y";
 // folder's row, say): a dissolve. `closed`: the tab left was closed (its row fades out on its own, RowMotion).
 type Switch = { from: string[]; to: string[]; direction: -1 | 0 | 1; axis: Axis; at: number; closed: boolean };
 
-// Panes and rows see a switch within a render or two; one showing a tab long after (full screen ending) isn't one.
-const FRESH_MS = 500;
 const switches = new Map<string, Switch>();
 
 // The tabs a tab is shown with: its split's panes, or itself.
@@ -28,9 +27,9 @@ const shownWith = (s: BrowserState, tabId: string) => splitOf(s, tabId)?.tabIds 
 
 function tabOrder(s: BrowserState, windowId: string, strip: boolean): string[] {
   if (!strip) return sidebarTabOrder(s, windowId);
-  const profileId = s.windows[windowId]?.profileId;
-  if (!profileId) return [];
-  return stripEntries(s, windowId, profileId).flatMap((entry) => {
+  const spaceId = s.windows[windowId]?.spaceId;
+  if (!spaceId) return [];
+  return stripEntries(s, windowId, spaceId).flatMap((entry) => {
     const [kind, id, tabs] = entry.split(":");
     return kind === "group" ? [] : kind === "split" ? tabs!.split(",") : [id!];
   });
@@ -55,7 +54,7 @@ useBrowser.subscribe((s, prev) => {
     if (!to || !from || to === from) continue;
     // Another space pages in with its pager; a tab dragged to another window leaves the next one shown at once.
     const movedAway = !!s.tabs[from] && s.tabs[from].windowId !== windowId;
-    if (w.profileId !== was.profileId || movedAway) {
+    if (w.spaceId !== was.spaceId || movedAway) {
       switches.delete(windowId);
       continue;
     }
@@ -68,7 +67,7 @@ useBrowser.subscribe((s, prev) => {
 // The window's latest switch, if it just happened.
 function latestSwitch(windowId: string): Switch | null {
   const sw = switches.get(windowId);
-  return sw && Date.now() - sw.at <= FRESH_MS ? sw : null;
+  return sw && Date.now() - sw.at <= SWITCH_FRESH_MS ? sw : null;
 }
 
 // The window's switch onto (or off) any of `tabIds`, if it just happened.
@@ -77,13 +76,6 @@ function recentSwitch(windowId: string, side: "from" | "to", tabIds: string[]): 
   return sw && sw[side].some((id) => tabIds.includes(id)) ? sw : null;
 }
 
-// As yab switches pages: the page left stays on screen while the one switched to fades in over it (or it fades off
-// the new one), and the new page settles a few points the way the switch went. Over in about six frames.
-export const PAGE_MS = 120;
-const PAGE_OFFSET = 4;
-// A pane faded off stays transparent this long after: its page hides a frame or two after the switch ends (native
-// views apply their props apart from React's), and at full opacity meanwhile it flashed over the page switched to.
-const SETTLE_MS = 250;
 const GONE: ViewStyle = { opacity: 0 };
 
 export type SwitchStyle = ViewStyle | ReturnType<typeof useAnimatedStyle> | (ViewStyle | ReturnType<typeof useAnimatedStyle>)[];
@@ -147,7 +139,7 @@ export function usePaneSwitch(windowId: string, panes: Record<string, Rect>, ena
     if (enabled && sw && sw !== played && entering.length && leaving.length && !leavingAt.includes(-1) && sw.to.some((id) => entering.includes(id))) {
       setPlayed(sw);
       const fadingIn = Math.max(...enteringAt) > Math.max(...leavingAt);
-      const shift = reduceMotion() ? 0 : PAGE_OFFSET * sw.direction;
+      const shift = reduceMotion() ? 0 : PAGE_SWITCH_OFFSET * sw.direction;
       const fade = fadingIn ? starting(fadeIn, { opacity: 0 }) : starting(fadeOff, { opacity: 1 });
       setPane({
         leaving: Object.fromEntries(leaving.map((id) => [id, before[id]!])),
@@ -165,7 +157,7 @@ export function usePaneSwitch(windowId: string, panes: Record<string, Rect>, ena
   useLayoutEffect(() => {
     if (!pane) return;
     if (pane.settled) {
-      const timer = setTimeout(() => setPane(null), SETTLE_MS);
+      const timer = setTimeout(() => setPane(null), PAGE_SETTLE_MS);
       return () => clearTimeout(timer);
     }
     const settle = () => {
@@ -176,7 +168,7 @@ export function usePaneSwitch(windowId: string, panes: Record<string, Rect>, ena
     distance.set(pane.shift);
     horizontal.set(pane.horizontal);
     progress.set(
-      withTiming(1, { duration: PAGE_MS, easing: SWITCH_EASING }, (finished) => {
+      withTiming(1, { duration: PAGE_SWITCH_MS, easing: SWITCH_EASING }, (finished) => {
         if (finished) runOnJS(settle)();
       }),
     );
@@ -207,9 +199,7 @@ export function useSwitchSlide(windowId: string, tabIds: string[], on: boolean, 
   const style = useAnimatedStyle(() => {
     const p = progress.get();
     const d = distance.get();
-    return coming.get()
-      ? { opacity: p, ...shiftStyle(p, d, 0, horizontal.get()) }
-      : { opacity: 1 - p, ...shiftStyle(p, 0, -d, horizontal.get()) };
+    return coming.get() ? { opacity: p, ...shiftStyle(p, d, 0, horizontal.get()) } : { opacity: 1 - p, ...shiftStyle(p, 0, -d, horizontal.get()) };
   });
   const [was, setWas] = useState(() => on && !recentSwitch(windowId, "to", tabIds));
   // The slide playing: its first frame (in the commit that turns it) and where it goes from there.

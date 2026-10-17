@@ -1,0 +1,157 @@
+--- a/extensions/browser/disable_reason.h
++++ b/extensions/browser/disable_reason.h
+@@ -68,8 +68,10 @@
+   // Disabled because the extension failed cloud policy-related checks. See also
+   // ExtensionInstallCloudPolicyChecksEnabled policy.
+   DISABLE_BLOCKED_BY_CLOUD_POLICY_CHECK = 1 << 26,
++  // Bay: imported settings must be hydrated before code can execute.
++  DISABLE_IMPORTING = 1 << 27,
+   // This should always be the last value.
+-  DISABLE_REASON_LAST = 1LL << 27,
++  DISABLE_REASON_LAST = 1LL << 28,
+ };
+ 
+ static_assert(DISABLE_REASON_LAST - 1 <= std::numeric_limits<int>::max(),
+--- a/extensions/browser/disable_reason.cc
++++ b/extensions/browser/disable_reason.cc
+@@ -12,7 +12,7 @@
+ namespace extensions {
+ 
+ bool IsValidDisableReason(int reason) {
+-  static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 27),
++  static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 28),
+                 "Please update this method whenever a new disable reason is "
+                 "added / removed.");
+   return reason == disable_reason::DISABLE_NONE ||
+@@ -38,6 +38,7 @@
+          reason == disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION ||
+          reason == disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION ||
+          reason == disable_reason::DISABLE_BLOCKED_BY_CLOUD_POLICY_CHECK ||
++         reason == disable_reason::DISABLE_IMPORTING ||
+          reason == disable_reason::DISABLE_UNKNOWN;
+ }
+ 
+--- a/chrome/browser/extensions/chrome_extension_registrar_delegate.cc
++++ b/chrome/browser/extensions/chrome_extension_registrar_delegate.cc
+@@ -49,6 +49,7 @@
+ #include "extensions/common/extension.h"
+ #include "extensions/common/manifest_constants.h"
+ #include "extensions/common/manifest_handlers/incognito_info.h"
++#include "extensions/common/manifest_handlers/permissions_parser.h"
+ #include "extensions/common/manifest_handlers/shared_module_info.h"
+ #include "extensions/common/mojom/manifest.mojom-shared.h"
+ #include "extensions/common/permissions/permission_message_provider.h"
+@@ -311,6 +312,11 @@
+ 
+ bool ChromeExtensionRegistrarDelegate::CanEnableExtension(
+     const Extension* extension) {
++  // An interrupted import must finish restoring settings before executing.
++  if (extension_prefs_->HasDisableReason(
++          extension->id(), disable_reason::DISABLE_IMPORTING)) {
++    return false;
++  }
+   CHECK(system_->management_policy());
+   return !system_->management_policy()->MustRemainDisabled(extension, nullptr);
+ }
+@@ -379,6 +385,28 @@
+     disable_reasons.erase(disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY);
+   }
+ 
++  // Bay persists the import marker before installation. Apply its hold before
++  // AddNewExtension can activate any background page or service worker.
++  const auto* importing = extension_prefs_->ReadPrefAsDict(
++      extension->id(), "bay_pending_import");
++  if (importing) {
++    disable_reasons.insert(disable_reason::DISABLE_IMPORTING);
++    if (!importing->FindBool("enabled").value_or(false)) {
++      disable_reasons.insert(disable_reason::DISABLE_USER_ACTION);
++    }
++    if (importing->FindBool("store").value_or(false)) {
++      const auto* grants = importing->FindDict("grants");
++      if (grants) {
++        extension_prefs_->UpdateExtensionPref(
++            extension->id(), "granted_permissions", base::Value(grants->Clone()));
++      }
++      auto approved = extension_prefs_->GetGrantedPermissions(extension->id());
++      if (!approved || !approved->Contains(
++              PermissionsParser::GetRequiredPermissions(extension))) {
++        disable_reasons.insert(disable_reason::DISABLE_PERMISSIONS_INCREASE);
++      }
++    }
++  }
+   return disable_reasons;
+ }
+ 
+@@ -561,6 +589,18 @@
+             extension->permissions_data()->active_permissions(),
+             extension->GetType());
+ 
++    // Imported packages require explicit review for any required permissions
++    // absent from the original grants, including APIs with no warning message.
++    // Provenance persists after hydration, so startup cannot clear this hold.
++    // An explicit approval grants the required set and allows the hold to clear.
++    if (extension_prefs_->ReadPrefAsDict(extension->id(), "bay_import_source") &&
++        extension_prefs_->HasDisableReason(
++            extension->id(), disable_reason::DISABLE_PERMISSIONS_INCREASE) &&
++        !total_permissions->Contains(
++            PermissionsParser::GetRequiredPermissions(extension))) {
++      is_privilege_increase = true;
++    }
++
+     // If there was no privilege increase, the extension might still have new
+     // permissions (which either don't generate a warning message, or whose
+     // warning messages are suppressed by existing permissions). Grant the new
+--- a/tools/metrics/histograms/metadata/extensions/enums.xml
++++ b/tools/metrics/histograms/metadata/extensions/enums.xml
+@@ -170,6 +170,8 @@
+   <int value="8388608" label="DISABLE_UNSUPPORTED_MANIFEST_VERSION"/>
+   <int value="16777216" label="DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION"/>
+   <int value="33554432" label="DISABLE_UNKNOWN"/>
++  <int value="67108864" label="DISABLE_BLOCKED_BY_CLOUD_POLICY_CHECK"/>
++  <int value="134217728" label="DISABLE_IMPORTING"/>
+ </enum>
+ 
+ <!-- LINT.IfChange(ExtensionEvents) -->
+--- a/chrome/browser/extensions/sync/extension_sync_service.cc
++++ b/chrome/browser/extensions/sync/extension_sync_service.cc
+@@ -128,7 +128,7 @@
+ // reasons.
+ base::flat_set<int> GetSyncableDisableReasons(
+     const base::flat_set<int>& disable_reasons) {
+-  static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 27),
++  static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 28),
+                 "Please consider whether your new disable reason should be"
+                 " syncable, and if so update the list below accordingly!");
+   const base::flat_set<int> kKnownSyncableDisableReasons = {
+--- a/chrome/browser/metrics/extensions_metrics_provider.cc
++++ b/chrome/browser/metrics/extensions_metrics_provider.cc
+@@ -227,7 +227,7 @@
+   return ExtensionInstallProto::NO_BACKGROUND_SCRIPT;
+ }
+ 
+-static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 27),
++static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 28),
+               "Adding a new disable reason? Be sure to include the new reason "
+               "below, update the test to exercise it, and then adjust this "
+               "value for DISABLE_REASON_LAST");
+--- a/chrome/browser/ui/webui/extensions/extensions_internals_source.cc
++++ b/chrome/browser/ui/webui/extensions/extensions_internals_source.cc
+@@ -152,7 +152,7 @@
+ 
+ base::ListValue DisableReasonsToList(
+     const extensions::DisableReasonSet& disable_reasons) {
+-  static_assert(extensions::disable_reason::DISABLE_REASON_LAST == 1 << 27,
++  static_assert(extensions::disable_reason::DISABLE_REASON_LAST == 1 << 28,
+                 "Please add your new disable reason here.");
+ 
+   base::ListValue disable_reasons_value;
+@@ -238,6 +238,9 @@
+           extensions::disable_reason::DISABLE_BLOCKED_BY_CLOUD_POLICY_CHECK)) {
+     disable_reasons_value.Append("DISABLE_BLOCKED_BY_CLOUD_POLICY_CHECK");
+   }
++  if (disable_reasons.contains(extensions::disable_reason::DISABLE_IMPORTING)) {
++    disable_reasons_value.Append("DISABLE_IMPORTING");
++  }
+   if (disable_reasons.contains(extensions::disable_reason::DISABLE_UNKNOWN)) {
+     disable_reasons_value.Append("DISABLE_UNKNOWN");
+   }

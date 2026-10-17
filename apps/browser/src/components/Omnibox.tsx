@@ -1,17 +1,16 @@
 import { TextInput, View, modKey } from "@bay/platform";
 import { displayUrl, hostOf, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-
+import { useLayoutEffect, useRef, useState } from "react";
 import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowser } from "../store/browser";
-import { useWindowId, useWindowProfileId } from "../store/hooks";
+import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
-import { dispositionFor, openFromBar, openInBackground, switchFromBar, type Disposition } from "./omnibox/open";
+import { dispositionFor, openFromBar, openInBackground, restoreFromBar, switchFromBar, type Disposition } from "./omnibox/open";
 import { clipboardPasteAction, pasteMenuItem, pasteTarget, readClipboard } from "./omnibox/paste";
 import { ScopeChip } from "./omnibox/ScopeChip";
 import { SuggestionIcon, SuggestionList, type RowActions } from "./omnibox/SuggestionRow";
@@ -30,6 +29,13 @@ import { isEscapeKey } from "../lib/escapeKey";
 
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
+
+// The text an arrowed-to row puts in the field, to open as is or keep editing.
+function fillText(s: Suggestion | undefined, dropdown: boolean): string | null {
+  if (s?.kind === "search") return s.query;
+  if (s?.kind === "page") return dropdown ? s.url : s.url.replace(/^https?:\/\//, "");
+  return null;
+}
 
 const BASE_KEYS = [
   { key: "Escape" },
@@ -74,10 +80,10 @@ export function Omnibox({
 }) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const profileId = useWindowProfileId();
+  const spaceId = useWindowSpaceId();
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const engines = useBrowser((s) => searchEngines(s.settings));
-  const searchTemplates = useMemo(() => engines.map((e) => e.url), [engines]);
+  const searchTemplates = engines.map((e) => e.url);
   const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
   const currentTitle = useBrowser((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
   const currentFavicon = useBrowser((s) => s.tabs[tabId]?.favicon ?? null);
@@ -92,10 +98,9 @@ export function Omnibox({
   const [suppressCompletion, setSuppressCompletion] = useState(true);
   const [selected, setSelected] = useState(palette && !newTab && !!currentUrl && initialText === currentUrl ? -1 : 0);
   const [scope, setScope] = useState<SearchScope | null>(null);
+  const [arrowed, setArrowed] = useState<{ typed: string; index: number; text: string } | null>(null);
   const scopeFrom = useRef("");
-  const [pendingSelection, setPendingSelection] = useState<Selection | null>(
-    initial ? { start: 0, end: initial.length } : null,
-  );
+  const [pendingSelection, setPendingSelection] = useState<Selection | null>(initial ? { start: 0, end: initial.length } : null);
   const selection = useRef<Selection>({ start: 0, end: typed.length });
   const input = useRef<TextInput>(null);
   const root = useRef<View>(null);
@@ -104,7 +109,7 @@ export function Omnibox({
     text: typed,
     active: edited || !!scope,
     windowId,
-    profileId,
+    spaceId,
     currentTabId: tabId,
     currentUrl: currentUrl || undefined,
     scope,
@@ -112,25 +117,25 @@ export function Omnibox({
     // ten at most) right after the search row, then matching pages.
     ...(palette ? { limit: 20, remoteLimit: 10, remoteFirst: true } : {}),
   });
-  const start = useDropdownStart(dropdown && !edited && !scope, tabId, profileId);
-  const idleSections = usePaletteStart(windowId, profileId, tabId);
+  const start = useDropdownStart(dropdown && !edited && !scope, tabId, spaceId);
+  const idleSections = usePaletteStart(windowId, spaceId, tabId);
   const idle = !scope && (!edited || !typed.trim());
   const pageContext = palette && !newTab && !!currentUrl && initialText === currentUrl && typed === initial && !edited && !scope;
-  const sections = useMemo(() => {
-    if (!idle) return [{ id: "results", items: suggested }];
-    if (pageContext) return currentPageActions({ url: currentUrl, title: currentTitle, customTitle: null });
-    return idleSections;
-  }, [idle, suggested, pageContext, currentUrl, currentTitle, idleSections]);
+  let sections = idleSections;
+  if (!idle) sections = [{ id: "results", items: suggested }];
+  else if (pageContext) sections = currentPageActions({ url: currentUrl, title: currentTitle, customTitle: null });
   const items = palette ? sections.flatMap((s) => s.items) : dropdown && !edited && !scope ? start : suggested;
   const inline = useInlineCompletion(input, typed, suppressCompletion || scope ? "" : completion);
   const shownCompletion = inline.shown;
-  const value = typed + shownCompletion;
+  const typedValue = typed + shownCompletion;
   const selectedIndex = Math.min(selected, items.length - 1);
+  const preview = arrowed && arrowed.typed === typed && arrowed.index === selectedIndex ? arrowed.text : null;
+  const value = preview ?? typedValue;
   const current: PaletteSuggestion | undefined = items[selectedIndex];
   // ⇧⌫ forgets the selected history row once it was picked from the list, not while it's the typed match.
   const canForget = palette && forgettable(current, searchTemplates) && (!edited || selectedIndex > 0);
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
-  const tabScope = canScope ? scopeFor(value, windowId) : null;
+  const tabScope = canScope ? scopeFor(typedValue, windowId) : null;
 
   // Apply selection imperatively; RN macOS can restore a stale caret when its selection prop clears.
   useLayoutEffect(() => {
@@ -176,12 +181,14 @@ export function Omnibox({
           switchFromBar(s.tabId, s.url, tabId, disposition);
           return;
         }
+        if (s.cleanedId && disposition === "current" && restoreFromBar(s.cleanedId, tabId)) return;
         return go(s.url, disposition);
       case "search":
       case "create":
         return go(s.url, disposition);
       case "calc":
-        if (disposition !== "current") return go(s.url, disposition);
+      case "emoji":
+        if (s.kind === "calc" && disposition !== "current") return go(s.url, disposition);
         copyText(s.value);
         setTyped(s.value);
         setSuppressCompletion(true);
@@ -215,17 +222,32 @@ export function Omnibox({
     setSuppressCompletion(true);
   };
 
-  const move = (delta: 1 | -1) => setSelected((i) => Math.max(0, Math.min(Math.min(i, items.length - 1) + delta, items.length - 1)));
+  const move = (delta: 1 | -1) => {
+    const next = Math.max(0, Math.min(selectedIndex + delta, items.length - 1));
+    setSelected(next);
+    // Arrowing through results fills the field with the row, as Chrome's omnibox; the top row is what was typed.
+    const text = !idle && next > 0 ? fillText(items[next], dropdown) : null;
+    setArrowed(text === null ? null : { typed, index: next, text });
+    if (text !== null) setPendingSelection({ start: text.length, end: text.length });
+    else if (preview !== null) setPendingSelection({ start: typed.length, end: typedValue.length });
+  };
 
   const forget = (s: PaletteSuggestion) => {
     const { history, removeHistory } = useBrowser.getState();
-    const urls = s.host ? (history[profileId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
-    removeHistory(profileId, urls);
+    const urls = s.host ? (history[spaceId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
+    removeHistory(spaceId, urls);
   };
 
   const openRowMenu = (target = current) => {
     if (!target) return;
-    const title = target.kind === "page" ? target.title || displayUrl(target.url) : target.kind === "search" ? target.query : target.kind === "calc" ? target.value : target.title;
+    const title =
+      target.kind === "page"
+        ? target.title || displayUrl(target.url)
+        : target.kind === "search"
+          ? target.query
+          : target.kind === "calc" || target.kind === "emoji"
+            ? target.value
+            : target.title;
     const actions = rowMenuActions(target, newTab, searchTemplates, {
       choose,
       openInBackground: (url) => openInBackground(url, tabId),
@@ -258,7 +280,7 @@ export function Omnibox({
     if (key === "Tab") {
       if (shiftKey) return move(-1);
       if (tabScope) return enterScope(tabScope);
-      if (shownCompletion) {
+      if (shownCompletion && preview === null) {
         setTyped(value);
         setSuppressCompletion(true);
         setPendingSelection({ start: value.length, end: value.length });
@@ -269,8 +291,7 @@ export function Omnibox({
     if (key === "Backspace" && scope && !typed) return leaveScope(true);
     if (key === "Enter") {
       if (metaKey && shiftKey) return forceSearch();
-      if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim())
-        return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
+      if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim()) return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
       if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return openInBackground(current.url, tabId);
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent));
@@ -326,7 +347,7 @@ export function Omnibox({
     keyAt.current = Date.now();
     setEdited(true);
     setTyped(change.typed);
-    setSuppressCompletion(change.suppress);
+    setSuppressCompletion(change.suppress || (preview !== null && next.length < preview.length));
     setSelected(0);
   };
 
@@ -336,7 +357,18 @@ export function Omnibox({
     key: (key, mods) => onKeyDown({ nativeEvent: { key, ...mods } }),
     submit: () => choose(current),
     measure: () => new Promise((resolve) => root.current?.measureInWindow((x, y, width, height) => resolve({ x, y, width, height }))),
-    state: () => ({ typed, value, selection: selection.current, completion: shownCompletion, suggested: completion, selected: selectedIndex, scope, scopeFrom: scopeFrom.current, tabScope, items }),
+    state: () => ({
+      typed,
+      value,
+      selection: selection.current,
+      completion: shownCompletion,
+      suggested: completion,
+      selected: selectedIndex,
+      scope,
+      scopeFrom: scopeFrom.current,
+      tabScope,
+      items,
+    }),
   });
 
   const leadingIcon =
@@ -388,7 +420,7 @@ export function Omnibox({
 
   // Stable, so the rows (memoized) don't re-render as the bar does.
   const chooseRow = useEffectEvent((s: Suggestion) => choose(s));
-  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(profileId, [url]));
+  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(spaceId, [url]));
   const rowActions: RowActions = { choose: chooseRow, hover: setSelected, remove: removeRow };
   const suggestionList = (
     <SuggestionList
@@ -405,8 +437,15 @@ export function Omnibox({
       <View ref={root}>
         <PaletteContent
           pageContext={pageContext}
-          leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} profileId={profileId} /> : undefined}
-          field={<ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}><View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>{scope ? <ScopeChip scope={scope} large /> : null}{field}</View></ContextMenuArea>}
+          leadingIcon={pageContext ? <Favicon url={currentUrl} favicon={currentFavicon} size={20} spaceId={spaceId} /> : undefined}
+          field={
+            <ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}>
+              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                {scope ? <ScopeChip scope={scope} large /> : null}
+                {field}
+              </View>
+            </ContextMenuArea>
+          }
           sections={sections}
           selectedIndex={selectedIndex}
           current={current}

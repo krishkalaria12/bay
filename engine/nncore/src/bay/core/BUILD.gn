@@ -55,6 +55,8 @@ source_set("core") {
     "nn_page_channel.h",
     "nn_page_channel.mm",
     "nn_password_prompt.h",
+    "nn_peek_links.h",
+    "nn_peek_links.mm",
     "nn_password_prompt.mm",
     "nn_permissions.h",
     "nn_permissions.mm",

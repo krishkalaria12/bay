@@ -79,10 +79,11 @@ const measure = (h: Host) =>
       resolve([x, y, w, hgt]);
     });
   });
-const frames = (n: number) => new Promise<void>((resolve) => {
-  const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step));
-  step();
-});
+const frames = (n: number) =>
+  new Promise<void>((resolve) => {
+    const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step));
+    step();
+  });
 const moved = (a: Frame, b: Frame) => a.some((v, i) => Math.abs(v - b[i]!) > 0.01);
 
 /** Hovers every tracked view inside the `scopes` components (all of them when omitted); returns what moved. */

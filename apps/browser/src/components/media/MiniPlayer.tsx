@@ -9,27 +9,18 @@ import { useTab } from "../../store/hooks";
 import { Favicon, useHover } from "../primitives";
 import { useArtwork } from "./artwork";
 import { useMarqueeGroup, Marquee } from "./Marquee";
+import { formatTime, hasTrackControls, hostOf, isPlaying, mediaCommand, positionOf, seekTo, skip, useSession, useTicker, type Session } from "./state";
 import {
-  formatTime,
-  hasTrackControls,
-  hostOf,
-  isPlaying,
-  mediaCommand,
-  positionOf,
-  setNowPlaying,
+  MINI_PLAYER_ART,
+  MINI_PLAYER_CONTROLS_WIDTH,
+  MINI_PLAYER_HEIGHT,
+  MINI_PLAYER_INSET,
+  MINI_PLAYER_TEXT_X,
+  MINI_PLAYER_WIDTH,
+  SEEK_HOVER_SEGMENTS,
   SKIP_SECONDS,
-  useSession,
-  useTicker,
-  type Session,
-} from "./state";
+} from "./constants";
 import { useMediaTokens, type MediaTokens } from "./tokens";
-
-export const MINI_PLAYER_WIDTH = 320;
-export const MINI_PLAYER_HEIGHT = 76;
-const INSET = 10;
-const ART = 56;
-const TEXT_X = INSET + ART + 12;
-const CONTROLS_WIDTH = 88;
 
 export function MiniPlayer({ tabId, onBackToTab }: { tabId: string; onBackToTab: () => void }) {
   const tokens = useMediaTokens();
@@ -40,19 +31,36 @@ export function MiniPlayer({ tabId, onBackToTab }: { tabId: string; onBackToTab:
   const group = useMarqueeGroup(`${session?.title}|${session?.artist}`);
   if (!session || !tab) return null;
   const width = MINI_PLAYER_WIDTH;
-  const textWidth = width - TEXT_X - CONTROLS_WIDTH - 8 - INSET;
-  const controlsX = width - INSET - CONTROLS_WIDTH;
+  const textWidth = width - MINI_PLAYER_TEXT_X - MINI_PLAYER_CONTROLS_WIDTH - 8 - MINI_PLAYER_INSET;
+  const controlsX = width - MINI_PLAYER_INSET - MINI_PLAYER_CONTROLS_WIDTH;
   const tracks = hasTrackControls(session);
   const artist = session.artist || hostOf(tab.url);
   const title = session.title || tab.title;
 
   return (
     <View style={{ width, height: MINI_PLAYER_HEIGHT }}>
-      <AlbumArt tabId={tabId} profileId={tab.profileId} session={session} url={tab.url} favicon={tab.favicon} tokens={tokens} muted={tab.muted} onPress={onBackToTab} onUnmute={() => toggleMute(tabId)} />
-      <View style={{ position: "absolute", left: TEXT_X, top: 10, width: textWidth }}>
-        <Marquee id="title" text={title} group={group} height={18} background={tokens.backgroundRgb} style={{ fontSize: 13, fontWeight: "600", color: tokens.label }} />
+      <AlbumArt
+        tabId={tabId}
+        spaceId={tab.spaceId}
+        session={session}
+        url={tab.url}
+        favicon={tab.favicon}
+        tokens={tokens}
+        muted={tab.muted}
+        onPress={onBackToTab}
+        onUnmute={() => toggleMute(tabId)}
+      />
+      <View style={{ position: "absolute", left: MINI_PLAYER_TEXT_X, top: 10, width: textWidth }}>
+        <Marquee
+          id="title"
+          text={title}
+          group={group}
+          height={18}
+          background={tokens.backgroundRgb}
+          style={{ fontSize: 13, fontWeight: "600", color: tokens.label }}
+        />
       </View>
-      <View style={{ position: "absolute", left: TEXT_X, top: 30, width: textWidth }}>
+      <View style={{ position: "absolute", left: MINI_PLAYER_TEXT_X, top: 30, width: textWidth }}>
         <Marquee id="artist" text={artist} group={group} height={16} background={tokens.backgroundRgb} style={{ fontSize: 11, color: tokens.secondary }} />
       </View>
 
@@ -84,23 +92,11 @@ export function MiniPlayer({ tabId, onBackToTab }: { tabId: string; onBackToTab:
         onPress={() => (tracks ? mediaCommand(tabId, "next") : skip(tabId, session, SKIP_SECONDS))}
       />
 
-      <View style={{ position: "absolute", left: TEXT_X, right: INSET, top: 50, height: 18 }}>
+      <View style={{ position: "absolute", left: MINI_PLAYER_TEXT_X, right: MINI_PLAYER_INSET, top: 50, height: 18 }}>
         <TimeBar tabId={tabId} session={session} tokens={tokens} />
       </View>
     </View>
   );
-}
-
-export function skip(tabId: string, session: Session, seconds: number) {
-  const now = Date.now();
-  const position = Math.max(0, Math.min(session.duration ?? Infinity, positionOf(session, now) + seconds));
-  setNowPlaying(tabId, { ...session, position, timestamp: now });
-  mediaCommand(tabId, "seekBy", seconds);
-}
-
-export function seekTo(tabId: string, session: Session, seconds: number) {
-  setNowPlaying(tabId, { ...session, position: seconds, timestamp: Date.now() });
-  mediaCommand(tabId, "seekTo", seconds);
 }
 
 function TransportButton({
@@ -137,7 +133,7 @@ function TransportButton({
 
 function AlbumArt({
   tabId,
-  profileId,
+  spaceId,
   session,
   url,
   favicon,
@@ -147,7 +143,7 @@ function AlbumArt({
   onUnmute,
 }: {
   tabId: string;
-  profileId: string;
+  spaceId: string;
   session: Session;
   url: string;
   favicon: string | null;
@@ -164,27 +160,48 @@ function AlbumArt({
   const art = downloaded && downloaded !== failed ? downloaded : null;
   useEffect(() => fade.set(0), [art]);
   return (
-    <View {...hoverProps} style={{ position: "absolute", left: INSET, top: INSET, width: ART, height: ART }}>
+    <View {...hoverProps} style={{ position: "absolute", left: MINI_PLAYER_INSET, top: MINI_PLAYER_INSET, width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }}>
       <Pressable onPress={onPress} tooltip="Back to Tab">
-        <View style={{ width: ART, height: ART, borderRadius: 6, overflow: "hidden", backgroundColor: tokens.artPlaceholder, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{
+            width: MINI_PLAYER_ART,
+            height: MINI_PLAYER_ART,
+            borderRadius: 6,
+            overflow: "hidden",
+            backgroundColor: tokens.artPlaceholder,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           {art ? (
-            <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: ART, height: ART }, fadeStyle]}>
+            <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }, fadeStyle]}>
               <Image
                 key={art}
                 source={{ uri: art }}
                 resizeMode="cover"
                 onLoad={() => fade.set(withTiming(1, { duration: 200 }))}
                 onError={() => setFailed(art)}
-                style={{ width: ART, height: ART }}
+                style={{ width: MINI_PLAYER_ART, height: MINI_PLAYER_ART }}
               />
             </Animated.View>
           ) : (
             <View style={{ opacity: 0.5 }}>
-              <Favicon url={url} favicon={favicon} size={24} profileId={profileId} />
+              <Favicon url={url} favicon={favicon} size={24} spaceId={spaceId} />
             </View>
           )}
           {hovered ? (
-            <View style={{ position: "absolute", left: 0, top: 0, width: ART, height: ART, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" }}>
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: MINI_PLAYER_ART,
+                height: MINI_PLAYER_ART,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <Symbol name="arrow.up.left" size={16} weight="semibold" color="#FFFFFF" style={{ width: 22, height: 22 }} />
             </View>
           ) : null}
@@ -230,8 +247,6 @@ function TimeBar({ tabId, session, tokens }: { tabId: string; session: Session; 
     </View>
   );
 }
-
-const HOVER_SEGMENTS = 40;
 
 export function SeekBar({
   session,
@@ -279,15 +294,19 @@ export function SeekBar({
       }}
       onResponderTerminate={() => update(null)}
     >
-      <View style={{ position: "absolute", left: 0, right: 0, top, height: barHeight, borderRadius: radius, backgroundColor: tokens.track, overflow: "hidden" }}>
+      <View
+        style={{ position: "absolute", left: 0, right: 0, top, height: barHeight, borderRadius: radius, backgroundColor: tokens.track, overflow: "hidden" }}
+      >
         <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${progress * 100}%`, borderRadius: radius, backgroundColor: tokens.fill }} />
         {hover !== null && drag === null ? (
-          <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${hover * 100}%`, borderRadius: radius, backgroundColor: tokens.hoverFill }} />
+          <View
+            style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${hover * 100}%`, borderRadius: radius, backgroundColor: tokens.hoverFill }}
+          />
         ) : null}
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, flexDirection: "row" }}>
-        {Array.from({ length: HOVER_SEGMENTS }, (_, i) => (
-          <View key={i} style={{ flex: 1 }} onMouseEnter={() => setHover((i + 0.5) / HOVER_SEGMENTS)} />
+        {Array.from({ length: SEEK_HOVER_SEGMENTS }, (_, i) => (
+          <View key={i} style={{ flex: 1 }} onMouseEnter={() => setHover((i + 0.5) / SEEK_HOVER_SEGMENTS)} />
         ))}
       </View>
     </View>

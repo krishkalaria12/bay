@@ -1,10 +1,12 @@
 import { View } from "@bay/platform";
+import { useSidebarMetrics } from "./tokens";
 import { FadeLabel } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { reduceMotion } from "../../lib/reduceMotion";
-import { layout, useTheme } from "../../lib/theme";
+import { useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import type { Tab } from "../../store/types";
@@ -12,15 +14,12 @@ import { tabTitle } from "./actions";
 import { SelectedFill } from "./ActiveHighlight";
 import { useDragSource } from "./dnd";
 import { TabIcon } from "./TabIcon";
+import { MAX_MOVING_ROWS, ROW_FRESH_MS, ROW_MS } from "./constants";
 
 // As yab opens and closes tabs: a new tab's row fades in where it goes as the rows under it make room, and a closed
 // one's fades where it was as they close the gap. Eased in and out: the switch's curve, half done in its first frame,
 // shut a closing row at once.
-const ROW_MS = 180;
 const ROW_EASING = Easing.inOut(Easing.cubic);
-// Opening or closing more at once (restoring a window, cleaning up) just shows the list as it is.
-const MAX_MOVING = 3;
-const FRESH_MS = 500;
 
 export type ClosingTab = { tab: Tab; active: boolean };
 
@@ -28,18 +27,17 @@ export type ClosingTab = { tab: Tab; active: boolean };
 const closed = new Map<string, ClosingTab & { at: number }>();
 
 useBrowser.subscribe((s, prev) => {
-  if (s.windows === prev.windows) return;
+  if (s.tabLists === prev.tabLists) return;
   const now = Date.now();
-  for (const [windowId, was] of Object.entries(prev.windows)) {
-    const tabIds = s.windows[windowId]?.tabIds;
-    if (tabIds === was.tabIds) continue;
-    const kept = new Set(tabIds);
-    for (const id of was.tabIds) {
+  for (const [key, was] of Object.entries(prev.tabLists)) {
+    if (s.tabLists[key] === was) continue;
+    for (const id of was) {
       const tab = prev.tabs[id];
-      if (!kept.has(id) && !s.tabs[id] && tab) closed.set(id, { tab, active: activeTabId(prev, windowId) === id, at: now });
+      if (s.tabs[id] || !tab) continue;
+      closed.set(id, { tab, active: Object.keys(prev.windows).some((w) => activeTabId(prev, w) === id), at: now });
     }
   }
-  for (const [id, c] of closed) if (now - c.at > FRESH_MS) closed.delete(id);
+  for (const [id, c] of closed) if (now - c.at > ROW_FRESH_MS) closed.delete(id);
 });
 
 type Ghost = ClosingTab & { after: string | null };
@@ -73,15 +71,15 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
     const animate = enabled && !reduceMotion();
 
     const tabs = useBrowser.getState().tabs;
-    const fresh = entries.filter((e) => !had.has(e) && e.startsWith("t:") && now - (tabs[e.slice(2)]?.createdAt ?? 0) <= FRESH_MS);
+    const fresh = entries.filter((e) => !had.has(e) && e.startsWith("t:") && now - (tabs[e.slice(2)]?.createdAt ?? 0) <= ROW_FRESH_MS);
     const stillOpening = [...opening].filter((e) => listed.has(e));
-    const nextOpening = animate && fresh.length <= MAX_MOVING ? [...stillOpening, ...fresh] : stillOpening;
+    const nextOpening = animate && fresh.length <= MAX_MOVING_ROWS ? [...stillOpening, ...fresh] : stillOpening;
     if (nextOpening.length !== opening.size || nextOpening.some((e) => !opening.has(e))) setOpening(nextOpening.length ? new Set(nextOpening) : NONE);
 
     const gone: Ghost[] = [];
     before.forEach((entry, i) => {
       const closing = !listed.has(entry) && entry.startsWith("t:") ? closed.get(entry.slice(2)) : undefined;
-      if (!closing || now - closing.at > FRESH_MS) return;
+      if (!closing || now - closing.at > ROW_FRESH_MS) return;
       // Placed after the nearest entry above it that stays (null: the top of the list).
       let after: string | null = null;
       for (let k = i - 1; k >= 0 && after === null; k--) if (listed.has(before[k]!)) after = before[k]!;
@@ -89,17 +87,18 @@ export function useRowMotion(entries: string[], enabled: boolean): RowMotion {
     });
     // A row whose place went too can't stay; one placed at the top stays there.
     const staying = ghosts.filter((g) => g.after === null || listed.has(g.after));
-    const next = animate && gone.length <= MAX_MOVING ? [...staying, ...gone] : staying;
+    const next = animate && gone.length <= MAX_MOVING_ROWS ? [...staying, ...gone] : staying;
     if (next.length !== ghosts.length || next.some((g, i) => g !== ghosts[i])) setGhosts(next);
   }
   // Made once: every row gets them, and a new function would re-render them all.
   const [gone] = useState(() => (tabId: string) => setGhosts((all) => all.filter((g) => g.tab.id !== tabId)));
-  const [opened] = useState(() => (entry: string) =>
-    setOpening((all) => {
-      if (!all.has(entry)) return all;
-      const rest = [...all].filter((e) => e !== entry);
-      return rest.length ? new Set(rest) : NONE;
-    }),
+  const [opened] = useState(
+    () => (entry: string) =>
+      setOpening((all) => {
+        if (!all.has(entry)) return all;
+        const rest = [...all].filter((e) => e !== entry);
+        return rest.length ? new Set(rest) : NONE;
+      }),
   );
   if (!ghosts.length) return { rows: entries, opening, gone, opened };
   const rows: (string | ClosingTab)[] = ghosts.filter((g) => g.after === null);
@@ -114,7 +113,18 @@ const play = (onDone: () => void) =>
   });
 
 /** Wraps a list entry: while its tab has just opened, it grows from nothing (its gap included) and fades in. */
-export function OpeningRow({ entry, opening, onOpened, children }: { entry: string; opening: boolean; onOpened: (entry: string) => void; children: ReactNode }) {
+export function OpeningRow({
+  entry,
+  opening,
+  onOpened,
+  children,
+}: {
+  entry: string;
+  opening: boolean;
+  onOpened: (entry: string) => void;
+  children: ReactNode;
+}) {
+  const metrics = useSidebarMetrics();
   const [grows] = useState(opening);
   const progress = useSharedValue(grows ? 0 : 1);
   useEffect(() => {
@@ -125,12 +135,12 @@ export function OpeningRow({ entry, opening, onOpened, children }: { entry: stri
   const style = useAnimatedStyle(() => {
     const p = growing ? progress.get() : 1;
     return {
-      height: growing ? p * layout.rowHeight : "auto",
+      height: growing ? p * metrics.rowHeight : "auto",
       marginBottom: (p - 1) * layout.rowGap,
       opacity: interpolate(p, [0.25, 1], [0, 1], Extrapolation.CLAMP),
       overflow: growing ? "hidden" : "visible",
     };
-  }, [growing]);
+  }, [growing, metrics.rowHeight]);
   // Dragged, its entry closes up inside this wrapper: the wrapper takes back the list's gap after it, or the rows
   // below moved down by it as a drag began.
   const dragged = useDragSource(entry);
@@ -139,6 +149,7 @@ export function OpeningRow({ entry, opening, onOpened, children }: { entry: stri
 
 /** A closed tab's row on its way out: it fades, and its room (its gap included) closes. */
 export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId: string) => void }) {
+  const metrics = useSidebarMetrics();
   const theme = useTheme();
   const progress = useSharedValue(0);
   useEffect(() => {
@@ -146,14 +157,14 @@ export function ClosingTabRow({ row, onGone }: { row: ClosingTab; onGone: (tabId
   }, []);
   const style = useAnimatedStyle(() => {
     const p = progress.get();
-    return { height: (1 - p) * layout.rowHeight, marginBottom: -p * layout.rowGap, opacity: interpolate(p, [0, 0.75], [1, 0], Extrapolation.CLAMP) };
+    return { height: (1 - p) * metrics.rowHeight, marginBottom: -p * layout.rowGap, opacity: interpolate(p, [0, 0.75], [1, 0], Extrapolation.CLAMP) };
   });
   const { tab, active } = row;
   return (
     <Animated.View pointerEvents="none" style={[{ overflow: "hidden" }, style]}>
-      <View style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}>
+      <View style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 6 }}>
         {active && <SelectedFill borderWidth={0.5} />}
-        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} />
+        <TabIcon url={tab.url} favicon={tab.favicon} icon={tab.customIcon} spaceId={tab.spaceId} />
         <FadeLabel text={tabTitle(tab)} fontSize={13} color={active ? theme.tabSelectedText : theme.textTab} style={{ flex: 1, height: 18, marginLeft: 5 }} />
       </View>
     </Animated.View>

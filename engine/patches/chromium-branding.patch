@@ -10,6 +10,6 @@ new file mode 100644
 +PRODUCT_INSTALLER_FULLNAME=Chromium Installer
 +PRODUCT_INSTALLER_SHORTNAME=Chromium Installer
 +COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Chromium Authors. All rights reserved.
-+MAC_BUNDLE_ID=com.bay.browser
++MAC_BUNDLE_ID=in.krishkalaria.bay
 +MAC_CREATOR_CODE=Cr24
-+MAC_TEAM_ID=U5L5T3NGVV
++MAC_TEAM_ID=GP328GJT66

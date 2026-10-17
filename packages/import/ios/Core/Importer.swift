@@ -170,6 +170,14 @@ public final class Importer: @unchecked Sendable {
             result.warnings.append(ImportWarning(kind, "undecryptable", "\(Self.count(outcome.undecryptable, "card")) couldn't be decrypted"))
           }
 
+        case (.extensions, .chromium), (.extensions, .arc):
+          result.extensions = ExtensionsImport.list(profile: dir, browser: def)
+          count = result.extensions.count
+
+        case (.extensions, .firefox):
+          result.extensions = ExtensionsImport.list(profile: dir, browser: def)
+          count = result.extensions.count
+
         default:
           throw ImportError.unsupported("\(def.name) has no \(kind.rawValue) to import")
         }

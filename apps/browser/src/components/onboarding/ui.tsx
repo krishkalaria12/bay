@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
@@ -85,11 +85,7 @@ export function Reveal({ delay = 0, children, style }: { delay?: number; childre
     t.set(withDelay(delay, withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) })));
   }, []);
   const reveal = useAnimatedStyle(() => ({ opacity: t.get(), transform: [{ translateY: interpolate(t.get(), [0, 1], [8, 0]) }] }));
-  return (
-    <Animated.View style={[style, reveal]}>
-      {children}
-    </Animated.View>
-  );
+  return <Animated.View style={[style, reveal]}>{children}</Animated.View>;
 }
 
 export function StepProgress() {
@@ -104,9 +100,7 @@ export function StepProgress() {
           <View key={s} style={{ width: 22, height: 3, borderRadius: 1.5, backgroundColor: i <= index ? colors.progressFill : colors.progressTrack }} />
         ))}
       </View>
-      <Text style={{ fontSize: 11, fontWeight: "500", letterSpacing: 0.2, color: colors.steps }}>
-        {`STEP ${index + 1} OF ${steps.length}`}
-      </Text>
+      <Text style={{ fontSize: 11, fontWeight: "500", letterSpacing: 0.2, color: colors.steps }}>{`STEP ${index + 1} OF ${steps.length}`}</Text>
     </View>
   );
 }
@@ -200,17 +194,20 @@ export function CheckMark({ on, size = 18 }: { on: boolean; size?: number }) {
       }}
     >
       <Animated.View
-        style={[{
-          position: "absolute",
-          left: -1.5,
-          top: -1.5,
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: colors.checkboxOn,
-        }, mark]}
+        style={[
+          {
+            position: "absolute",
+            left: -1.5,
+            top: -1.5,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: colors.checkboxOn,
+          },
+          mark,
+        ]}
       >
         <Symbol name="checkmark" size={size * 0.5} weight="bold" color={colors.checkmark} style={{ width: size, height: size }} />
       </Animated.View>
@@ -237,7 +234,13 @@ export function CheckRow({
   const { hovered, hoverProps } = useHover();
   return (
     <View {...hoverProps} style={{ opacity: disabled ? 0.5 : 1 }}>
-      <Pressable disabled={disabled} onPress={() => onChange(!value)} accessibilityRole="checkbox" accessibilityState={{ checked: value, disabled }} accessibilityLabel={title}>
+      <Pressable
+        disabled={disabled}
+        onPress={() => onChange(!value)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: value, disabled }}
+        accessibilityLabel={title}
+      >
         <View
           style={{
             flexDirection: "row",
@@ -258,7 +261,9 @@ export function CheckRow({
           ) : null}
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={{ fontSize: 13, fontWeight: "500", color: colors.title }}>{title}</Text>
-            <Text numberOfLines={2} style={{ fontSize: 12, color: colors.rowSubtitle }}>{subtitle}</Text>
+            <Text numberOfLines={2} style={{ fontSize: 12, color: colors.rowSubtitle }}>
+              {subtitle}
+            </Text>
           </View>
           <CheckMark on={value} />
         </View>

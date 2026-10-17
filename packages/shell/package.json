@@ -8,12 +8,12 @@
   "scripts": {
     "typecheck": "tsc -p ."
   },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
+  },
   "peerDependencies": {
     "expo": "*",
     "react": "*",
     "react-native": "*"
-  },
-  "dependencies": {
-    "@bay/platform": "workspace:*"
   }
 }

@@ -1,6 +1,6 @@
 import { View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
-import { setTrafficLightsOnHover, Surface } from "@bay/shell";
+import { setTrafficLightsOnHover, Surface, WindowDragRegion } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
@@ -15,21 +15,25 @@ import { DownloadsPanel } from "./components/DownloadsPanel";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
 import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding";
-import { CreateProfileHost } from "./components/profiles/CreateProfile";
-import { ThemeEditorHost } from "./components/profiles/ThemeEditor";
+import { CreateSpaceHost } from "./components/spaces/CreateSpace";
+import { RenameDialogHost } from "./components/RenameDialog";
+import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
-import { ProfileSwipe, ProfileTint } from "./components/layout/ProfileSwipe";
-import { TOP_CARD_INSET, TOP_STRIP_HEIGHT, TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
+import { SpaceSwipe, SpaceTint } from "./components/layout/SpaceSwipe";
+import { TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
+import { TOP_CARD_INSET } from "./components/layout/constants";
+import { TOP_STRIP_HEIGHT } from "./components/layout/constants";
 import { usePeek } from "./components/layout/usePeek";
 import { useSidebarDock } from "./components/layout/useSidebarDock";
 import { useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./components/layout/windowLayout";
 import { WindowProfile } from "./components/layout/WindowProfile";
 import { Sidebar } from "./components/Sidebar";
-import { HarborWindow } from "./components/harbor/HarborWindow";
+import { LittleBayWindow } from "./components/littleBay/LittleBayWindow";
 import { SidebarOverlays } from "./components/sidebar/Overlays";
 import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
-import { hex, layout, ThemeScope, useTheme } from "./lib/theme";
+import { hex, ThemeScope, useTheme } from "./lib/theme";
+import { layout } from "./lib/constants";
 import { useBrowser } from "./store/browser";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
@@ -50,7 +54,7 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <HarborWindow /> : <BrowserWindow />}</ThemeScope>
+      <ThemeScope>{small ? <LittleBayWindow /> : <BrowserWindow />}</ThemeScope>
     </WindowContext.Provider>
   );
 }
@@ -67,10 +71,10 @@ function BrowserWindow() {
   const showStrip = sidebarOpen && topTabs;
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left, the window buttons where they are.
   const right = useSidebarOnRight();
-  // The page has no toolbar to hold the window buttons then: it runs up under them, and they show only while the
-  // pointer is over the window's top, as Zen has it.
+  // The page has no toolbar to hold the window buttons then (or with the sidebar closed): it runs up under them, and
+  // they show only while the pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
-  const buttonsOnHover = right && addressInSidebar && !fullscreen;
+  const buttonsOnHover = (right || !sidebarOpen) && addressInSidebar && !fullscreen;
   useEffect(() => {
     void setTrafficLightsOnHover(windowId, buttonsOnHover);
   }, [windowId, buttonsOnHover]);
@@ -97,7 +101,7 @@ function BrowserWindow() {
     <View style={{ flex: 1, flexDirection: right ? "row-reverse" : "row" }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
       <WindowBackdrop vibrancy={theme.glass} {...theme.backdrop} colors={theme.windowTint} grainOpacity={theme.grain} style={StyleSheet.absoluteFill} />
       <WindowProfile />
-      <ProfileTint />
+      <SpaceTint />
       {!topTabs && (
         <Animated.View
           pointerEvents={fullscreen || !showSidebar ? "none" : "auto"}
@@ -105,9 +109,9 @@ function BrowserWindow() {
         >
           {dock.mounted ? (
             <Animated.View style={[{ width: sidebarWidth, height: "100%" }, dockedStyle]}>
-              <ProfileSwipe>
+              <SpaceSwipe>
                 <Sidebar />
-              </ProfileSwipe>
+              </SpaceSwipe>
             </Animated.View>
           ) : null}
         </Animated.View>
@@ -130,6 +134,10 @@ function BrowserWindow() {
         <ContentCard />
         {!fullscreen && <ExtensionSidePanel />}
       </View>
+      {/* No toolbar or sidebar to move the window by: the gap over the page does. */}
+      {addressInSidebar && !sidebarOpen && !fullscreen ? (
+        <WindowDragRegion style={{ position: "absolute", top: 0, left: 0, right: 0, height: layout.cardTop }} />
+      ) : null}
       {showStrip && (
         <View pointerEvents={fullscreen ? "none" : "auto"} style={[{ position: "absolute", left: 0, right: 0 }, fullscreen ? { bottom: "100%" } : { top: 0 }]}>
           <TopTabStrip width={width} hidden={fullscreen} />
@@ -140,7 +148,8 @@ function BrowserWindow() {
       <DownloadMagnet />
       <BookmarkDialog />
       <EditBookmarkDialog />
-      <CreateProfileHost />
+      <CreateSpaceHost />
+      <RenameDialogHost pageLeft={showSidebar && !right ? sidebarWidth : 0} pageRight={showSidebar && right ? sidebarWidth : 0} />
       <SidebarOverlays windowWidth={width} />
       {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
       <DownloadsPanel windowWidth={width} windowHeight={size.height} />
@@ -165,6 +174,15 @@ function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
   return (
     <>
       {enabled ? <View onMouseEnter={show} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} /> : null}
+      {/* The rest of the window while it's out: the pointer reaching it hides the peek, as leaving the peek does. Its own
+          leave alone missed some exits (onto the page, say), leaving it out. */}
+      {live ? (
+        <View
+          pointerEvents="none"
+          onMouseEnter={hide}
+          style={{ position: "absolute", top: 0, bottom: 0, [side]: 6 + sidebarWidth, [right ? "left" : "right"]: 0 }}
+        />
+      ) : null}
       <Animated.View
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}

@@ -2,9 +2,9 @@ import { createContext, useContext } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
 import { useBrowser } from "./browser";
-import { activeTabId, bookmarkProfileId, IDLE_LIVE, profileFor } from "./model";
+import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
-import type { BrowserWindow, FindState, Profile, Tab, TabLive } from "./types";
+import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
 import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
 
 export const WindowContext = createContext<string | null>(null);
@@ -24,24 +24,24 @@ export function useWindowField<T>(select: (w: BrowserWindow) => T, fallback: T):
   });
 }
 
-export const PageProfileContext = createContext<string | null>(null);
+export const PageSpaceContext = createContext<string | null>(null);
 
-export function usePageProfileId(): string {
-  const page = useContext(PageProfileContext);
-  const own = useWindowProfileId();
+export function usePageSpaceId(): string {
+  const page = useContext(PageSpaceContext);
+  const own = useWindowSpaceId();
   return page ?? own;
 }
 
 export const useIsIncognito = () => useWindowField((w) => w.incognito, false);
 export const useSidebarOpen = () => useWindowField((w) => w.sidebarOpen, true);
-export const useWindowProfileId = () => useWindowField((w) => w.profileId, "");
+export const useWindowSpaceId = () => useWindowField((w) => w.spaceId, "");
 
-export function useWindowProfile(): Profile {
-  const profileId = useWindowProfileId();
-  return useBrowser((s) => profileFor(s, profileId));
+export function useWindowSpace(): Space {
+  const spaceId = useWindowSpaceId();
+  return useBrowser((s) => spaceFor(s, spaceId));
 }
 
-export const useProfiles = (): Profile[] => useBrowser(useShallow((s) => s.profileOrder.map((id) => s.profiles[id]!)));
+export const useSpaces = (): Space[] => useBrowser(useShallow((s) => s.spaceOrder.map((id) => s.spaces[id]!)));
 
 export function useActiveTabId(): string | undefined {
   const id = useWindowId();
@@ -56,11 +56,14 @@ export function useActiveTab(): Tab | undefined {
   });
 }
 
-export const useIsActiveTab = (tabId: string) =>
-  useBrowser((s) => {
+/** Whether the window it's drawn in (every window on its space lists it) shows the tab. */
+export function useIsActiveTab(tabId: string): boolean {
+  const windowId = useWindowId();
+  return useBrowser((s) => {
     const tab = s.tabs[tabId];
-    return !!tab && activeTabId(s, tab.windowId, tab.profileId) === tabId;
+    return !!tab && activeTabId(s, windowId || tab.windowId, tab.spaceId) === tabId;
   });
+}
 
 export const useTab = (tabId: string | undefined): Tab | undefined => useBrowser((s) => (tabId ? s.tabs[tabId] : undefined));
 
@@ -84,5 +87,5 @@ export const useSettings = <T>(select: (settings: Settings) => T): T => useBrows
 
 export function useIsBookmarked(url: string): boolean {
   const id = useWindowId();
-  return useBrowser((s) => isBookmarked(s.bookmarks, bookmarkProfileId(s, s.windows[id]), url));
+  return useBrowser((s) => isBookmarked(s.bookmarks, bookmarkSpaceId(s, s.windows[id]), url));
 }

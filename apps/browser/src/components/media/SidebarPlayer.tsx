@@ -10,15 +10,17 @@ import { useTab } from "../../store/hooks";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useArtwork } from "./artwork";
-import { seekTo, SeekBar, skip } from "./MiniPlayer";
-import { hasTrackControls, hostOf, isPlaying, isTabShown, mediaCommand, playerTabFor, SKIP_SECONDS, useMedia, useSession, useTicker } from "./state";
+import { SeekBar } from "./MiniPlayer";
+import { hasTrackControls, hostOf, isPlaying, isTabShown, mediaCommand, playerTabFor, seekTo, skip, useMedia, useSession, useTicker } from "./state";
+import { SIDEBAR_PLAYER_HEIGHT, SKIP_SECONDS } from "./constants";
 import { useMediaTokens } from "./tokens";
-
-export const SIDEBAR_PLAYER_HEIGHT = 74 + 8;
+import { listIds, windowListKey } from "../../store/model";
+import { MediaSessionButton, useWindowMediaTabs } from "./SessionList";
 
 const NO_IDS: string[] = [];
 
 export function useSidebarPlayerTab(windowId: string): string | undefined {
+  const all = useWindowMediaTabs(windowId);
   // Only tabs with a media session can have a player: start from those (usually none) rather than
   // filtering every tab in the window on every store update.
   const sessions = useMedia(useShallow((m) => Object.keys(m.sessions)));
@@ -26,14 +28,17 @@ export function useSidebarPlayerTab(windowId: string): string | undefined {
     useShallow((s) => {
       const w = s.windows[windowId];
       if (!sessions.length || !w) return NO_IDS;
-      const ids = sessions.filter((id) => s.tabs[id]?.windowId === windowId && s.tabs[id]!.profileId === w.profileId && !isTabShown(s, id));
+      const ids = sessions.filter((id) => s.tabs[id]?.windowId === windowId && s.tabs[id]!.spaceId === w.spaceId && !isTabShown(s, id));
       // In sidebar order, which breaks ties between equally recent sessions.
-      return ids.length > 1 ? ids.sort((a, b) => w.tabIds.indexOf(a) - w.tabIds.indexOf(b)) : ids;
+      const order = listIds(s, windowListKey(s, w));
+      return ids.length > 1 ? ids.sort((a, b) => order.indexOf(a) - order.indexOf(b)) : ids;
     }),
   );
   // The player keeps the tab it shows (playerTabFor): a pause, or a report that was already on its way, never swaps it.
   const [shown, setShown] = useState<string | undefined>(undefined);
-  const next = useMedia((m) => playerTabFor(m, hidden, shown));
+  const next = useMedia(
+    (m) => playerTabFor(m, hidden, shown) ?? (all.length > 1 ? (playerTabFor(m, all, shown) ?? all.find((id) => !m.dismissed[id])) : undefined),
+  );
   if (next !== shown) setShown(next);
   return next;
 }
@@ -44,6 +49,7 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
   const media = useMediaTokens();
   const session = useSession(tabId);
   const tab = useTab(tabId);
+  const sessions = useWindowMediaTabs(tab?.windowId ?? "");
   const playing = isPlaying(session);
   const { hovered, hoverProps } = useHover();
   const artwork = useArtwork(tabId, session?.artwork);
@@ -55,14 +61,30 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
 
   return (
     <View {...hoverProps} style={{ height: SIDEBAR_PLAYER_HEIGHT - 8 }}>
-      <Surface fill={hex(tokens.groupFill)} cornerRadius={12} borderColor={hex(tokens.groupStroke)} borderWidth={0.5} style={{ flex: 1, paddingHorizontal: 7, paddingTop: 7 }}>
+      <Surface
+        fill={hex(tokens.groupFill)}
+        cornerRadius={12}
+        borderColor={hex(tokens.groupStroke)}
+        borderWidth={0.5}
+        style={{ flex: 1, paddingHorizontal: 7, paddingTop: 7 }}
+      >
         <View style={{ flexDirection: "row", alignItems: "center", height: 32 }}>
           <Pressable onPress={go} tooltip="Back to Tab">
-            <View style={{ width: 32, height: 32, borderRadius: 6, overflow: "hidden", backgroundColor: media.artPlaceholder, alignItems: "center", justifyContent: "center" }}>
+            <View
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 6,
+                overflow: "hidden",
+                backgroundColor: media.artPlaceholder,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               {artwork ? (
                 <Image source={{ uri: artwork }} resizeMode="cover" style={{ width: 32, height: 32 }} />
               ) : (
-                <Favicon url={tab.url} favicon={tab.favicon} size={18} profileId={tab.profileId} />
+                <Favicon url={tab.url} favicon={tab.favicon} size={18} spaceId={tab.spaceId} />
               )}
             </View>
           </Pressable>
@@ -83,7 +105,14 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
             tooltip={tracks ? "Play Previous Track" : `Skip back ${SKIP_SECONDS} seconds`}
             onPress={() => (tracks ? mediaCommand(tabId, "previous") : skip(tabId, session, -SKIP_SECONDS))}
           />
-          <IconButton icon={playing ? "pause.fill" : "play.fill"} size={13} box={24} radius={6} tooltip={playing ? "Pause" : "Play"} onPress={() => mediaCommand(tabId, "toggle")} />
+          <IconButton
+            icon={playing ? "pause.fill" : "play.fill"}
+            size={13}
+            box={24}
+            radius={6}
+            tooltip={playing ? "Pause" : "Play"}
+            onPress={() => mediaCommand(tabId, "toggle")}
+          />
           <IconButton
             icon={tracks ? "forward.fill" : `goforward.${SKIP_SECONDS}`}
             size={tracks ? 10 : 12}
@@ -94,14 +123,28 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
           />
           {session.duration ? (
             <View style={{ flex: 1, flexDirection: "row", marginLeft: 6 }}>
-              <TickingSeekBar playing={playing} session={session} tokens={media} height={12} barHeight={3} onSeek={(p) => seekTo(tabId, session, p * session.duration!)} />
+              <TickingSeekBar
+                playing={playing}
+                session={session}
+                tokens={media}
+                height={12}
+                barHeight={3}
+                onSeek={(p) => seekTo(tabId, session, p * session.duration!)}
+              />
             </View>
-          ) : null}
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+          {sessions.length > 1 ? <MediaSessionButton windowId={tab.windowId} count={sessions.length} /> : null}
         </View>
       </Surface>
       {hovered ? (
         <View style={{ position: "absolute", top: -6, right: -6, flexDirection: "row", gap: 2 }}>
-          <CornerButton icon={tab.muted ? "speaker.wave.2.fill" : "speaker.slash.fill"} tooltip={tab.muted ? "Unmute Site" : "Mute Site"} onPress={() => toggleMute(tabId)} />
+          <CornerButton
+            icon={tab.muted ? "speaker.wave.2.fill" : "speaker.slash.fill"}
+            tooltip={tab.muted ? "Unmute Site" : "Mute Site"}
+            onPress={() => toggleMute(tabId)}
+          />
           <CornerButton icon="xmark" tooltip="Close Player" onPress={() => useMedia.setState((m) => ({ dismissed: { ...m.dismissed, [tabId]: true } }))} />
         </View>
       ) : null}

@@ -5,7 +5,7 @@ import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { tabLabel } from "../../store/model";
+import { spaceTabIds, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
 
@@ -16,12 +16,11 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
   const suggestions = useBrowser(
     useShallow((s) => {
       const tab = s.tabs[tabId];
-      const w = tab && s.windows[tab.windowId];
-      if (!w) return [];
+      if (!tab) return [];
       const inSplit = new Set(Object.values(s.splits).find((v) => v.tabIds.includes(tabId))?.tabIds ?? [tabId]);
-      return w.tabIds
+      return spaceTabIds(s, tab.spaceId)
         .map((id) => s.tabs[id]!)
-        .filter((t) => t && t.url && t.profileId === tab.profileId && !inSplit.has(t.id))
+        .filter((t) => t.url && !inSplit.has(t.id))
         .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
         .slice(0, 5)
         .map((t) => t.id);
@@ -48,7 +47,18 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
           Add a tab to this Split View
         </Text>
         {typing ? (
-          <View style={{ height: 36, marginHorizontal: 6, paddingHorizontal: 10, borderRadius: 9, flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: theme.rowHover }}>
+          <View
+            style={{
+              height: 36,
+              marginHorizontal: 6,
+              paddingHorizontal: 10,
+              borderRadius: 9,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 9,
+              backgroundColor: theme.rowHover,
+            }}
+          >
             <Symbol name="magnifyingglass" size={13} color={theme.textSecondary} style={{ width: 16, height: 16 }} />
             <TextInput
               autoFocus
@@ -68,7 +78,12 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
             />
           </View>
         ) : (
-          <Row icon={<Symbol name="magnifyingglass" size={13} color={theme.textSecondary} style={{ width: 16, height: 16 }} />} label="Search or Ask a Question" secondary onPress={() => setTyping(true)} />
+          <Row
+            icon={<Symbol name="magnifyingglass" size={13} color={theme.textSecondary} style={{ width: 16, height: 16 }} />}
+            label="Search or Ask a Question"
+            secondary
+            onPress={() => setTyping(true)}
+          />
         )}
         {suggestions.length > 0 && <View style={{ height: 6 }} />}
         {suggestions.map((id) => (
@@ -82,7 +97,7 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
 function Suggestion({ tabId, onPress }: { tabId: string; onPress: () => void }) {
   const tab = useBrowser((s) => s.tabs[tabId]);
   if (!tab) return null;
-  return <Row icon={<Favicon url={tab.url} favicon={tab.favicon} profileId={tab.profileId} />} label={tabLabel(tab)} detail={tab.title} onPress={onPress} />;
+  return <Row icon={<Favicon url={tab.url} favicon={tab.favicon} spaceId={tab.spaceId} />} label={tabLabel(tab)} detail={tab.title} onPress={onPress} />;
 }
 
 function Row({ icon, label, detail, secondary, onPress }: { icon: React.ReactNode; label: string; detail?: string; secondary?: boolean; onPress: () => void }) {

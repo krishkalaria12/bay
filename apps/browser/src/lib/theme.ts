@@ -1,18 +1,22 @@
 import type { AreaLightPalette } from "@bay/shaders";
 import { createContext, createElement, useContext, type ReactNode } from "react";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { PageProfileContext, WindowContext } from "../store/hooks";
-import type { Profile, ProfileColor } from "../store/types";
-import { backdropTint, opaqueTint, tintForHue, type BackdropTint } from "./windowTint";
+import { PageSpaceContext, WindowContext } from "../store/hooks";
+import { activeTabId } from "../store/model";
+import { DEFAULT_SPACE } from "../store/spaces";
+import type { Space, SpaceColor } from "../store/types";
+import { SPACE_SWATCHES } from "./spaceSwatches";
+import { backdropTint, opaqueTint, pageTint, tintForHue, type BackdropTint } from "./windowTint";
 
-export type Theme = typeof dark & ProfileTheme & {
-  backdrop: BackdropTint;
-  // The window's colours: what a solid window shows, or a glass one when inactive.
-  windowTint: [string, string];
-  // Glass (Appearance › Window): the desktop shows through the window.
-  glass: boolean;
-  powerUpColor: string | null;
-};
+export type Theme = typeof dark &
+  ProfileTheme & {
+    backdrop: BackdropTint;
+    // The window's colours: what a solid window shows, or a glass one when inactive.
+    windowTint: [string, string];
+    // Glass (Appearance › Window): the desktop shows through the window.
+    glass: boolean;
+    powerUpColor: string | null;
+  };
 
 const dark = {
   dark: true,
@@ -37,8 +41,9 @@ const dark = {
   tabSelectedText: "#FFFFFF",
   // Dia: 0.5pt border; 15/12.5 shadow.
   tabSelectedBorder: ["rgba(255,255,255,0.15)", "rgba(255,255,255,0.15)"] as [string, string],
-  tabSelectedShadow: "rgba(255,255,255,0.15)",
-  tabSelectedShadowRadius: 15,
+  // No glow: a white one haloed the row on the dark sidebar. Its fill and border set it apart.
+  tabSelectedShadow: "rgba(0,0,0,0)",
+  tabSelectedShadowRadius: 0,
   pinnedResting: "rgba(255,255,255,0.1)",
   pinnedRestingStroke: "rgba(255,255,255,0.14)",
   pinnedSelectedFill: "rgba(255,255,255,0.25)",
@@ -88,8 +93,9 @@ const light: typeof dark = {
   tabSelected: "rgba(255,255,255,0.7)",
   tabSelectedText: "#000000",
   tabSelectedBorder: ["rgba(255,255,255,0.98)", "rgba(0,0,0,0.06)"],
-  tabSelectedShadow: "rgba(0,0,0,0.12)",
-  tabSelectedShadowRadius: 12.5,
+  // No shadow, as in dark: its fill and border set it apart.
+  tabSelectedShadow: "rgba(0,0,0,0)",
+  tabSelectedShadowRadius: 0,
   pinnedResting: "rgba(0,0,0,0.05)",
   pinnedRestingStroke: "rgba(0,0,0,0.18)",
   pinnedSelectedFill: "rgba(255,255,255,0.7)",
@@ -124,7 +130,11 @@ export function hex(color: string): string {
   const m = color.match(/rgba?\(([^)]+)\)/);
   if (!m) return color;
   const [r, g, b, a = "1"] = m[1]!.split(",").map((v) => v.trim());
-  const h = (n: number) => Math.round(Math.min(255, Math.max(0, n))).toString(16).padStart(2, "0").toUpperCase();
+  const h = (n: number) =>
+    Math.round(Math.min(255, Math.max(0, n)))
+      .toString(16)
+      .padStart(2, "0")
+      .toUpperCase();
   return `#${h(+r!)}${h(+g!)}${h(+b!)}${h(+a * 255)}`;
 }
 
@@ -135,7 +145,7 @@ type ProfileTheme = {
   edgeLight: string;
 };
 
-type ProfileColorSpec = {
+type SpaceColorSpec = {
   name: string;
   swatch: string;
   palette: AreaLightPalette | null;
@@ -146,10 +156,10 @@ type ProfileColorSpec = {
   light?: ProfileTheme;
 };
 
-export const PROFILE_COLORS: Record<ProfileColor, ProfileColorSpec> = {
+export const SPACE_COLORS: Record<SpaceColor, SpaceColorSpec> = {
   plum: {
     name: "Plum",
-    swatch: "#C07A98",
+    swatch: SPACE_SWATCHES.plum,
     // Dia: plum band #B5556B, tint #B25B6B, name #DD899B.
     powerUp: "#B5556B",
     tint: "#B25B6B",
@@ -158,16 +168,16 @@ export const PROFILE_COLORS: Record<ProfileColor, ProfileColorSpec> = {
     dark: { lightPalette: "pink", edgeLight: "#EBB3CB80" },
     light: { lightPalette: "pink", edgeLight: "#D37B8B66" },
   },
-  blue: { name: "Blue", swatch: "#4691C3", palette: "blue" },
-  purple: { name: "Purple", swatch: "#7873AF", palette: "purple" },
-  pink: { name: "Pink", swatch: "#D37B8B", palette: "pink" },
-  red: { name: "Red", swatch: "#C1575C", palette: "red" },
-  orange: { name: "Orange", swatch: "#D87249", palette: "orange" },
-  yellow: { name: "Yellow", swatch: "#E3AC38", palette: "yellow" },
-  green: { name: "Green", swatch: "#3EB489", palette: "green" },
+  blue: { name: "Blue", swatch: SPACE_SWATCHES.blue, palette: "blue" },
+  purple: { name: "Purple", swatch: SPACE_SWATCHES.purple, palette: "purple" },
+  pink: { name: "Pink", swatch: SPACE_SWATCHES.pink, palette: "pink" },
+  red: { name: "Red", swatch: SPACE_SWATCHES.red, palette: "red" },
+  orange: { name: "Orange", swatch: SPACE_SWATCHES.orange, palette: "orange" },
+  yellow: { name: "Yellow", swatch: SPACE_SWATCHES.yellow, palette: "yellow" },
+  green: { name: "Green", swatch: SPACE_SWATCHES.green, palette: "green" },
   neutral: {
     name: "Neutral",
-    swatch: "#8E8E93",
+    swatch: SPACE_SWATCHES.neutral,
     palette: null,
     dark: { lightPalette: null, edgeLight: "#FFFFFF40" },
     light: { lightPalette: null, edgeLight: "#00000026" },
@@ -177,8 +187,8 @@ export const PROFILE_COLORS: Record<ProfileColor, ProfileColorSpec> = {
 const INCOGNITO_TINT = "#3A3A3C";
 const INCOGNITO: ProfileTheme = { lightPalette: null, edgeLight: "#FFFFFF33" };
 
-export function profileNameColor(color: ProfileColor, dark: boolean): string {
-  const spec = PROFILE_COLORS[color] ?? PROFILE_COLORS.plum;
+export function profileNameColor(color: SpaceColor, dark: boolean): string {
+  const spec = SPACE_COLORS[color] ?? SPACE_COLORS.plum;
   const base = spec.action ?? spec.swatch;
   return dark ? mix(base, "#FFFFFF", 0.6) : mix(base, "#000000", 0.4);
 }
@@ -186,11 +196,14 @@ export function profileNameColor(color: ProfileColor, dark: boolean): string {
 function mix(a: string, b: string, t: number): string {
   const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
   const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
-  return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  return `#${out
+    .map((v) => v.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase()}`;
 }
 
-function profileTheme(color: ProfileColor, isDark: boolean): ProfileTheme {
-  const spec = PROFILE_COLORS[color] ?? PROFILE_COLORS.plum;
+function profileTheme(color: SpaceColor, isDark: boolean): ProfileTheme {
+  const spec = SPACE_COLORS[color] ?? SPACE_COLORS.plum;
   const explicit = isDark ? spec.dark : spec.light;
   if (explicit) return explicit;
   return isDark
@@ -199,17 +212,22 @@ function profileTheme(color: ProfileColor, isDark: boolean): ProfileTheme {
 }
 
 const cache = new Map<string, Theme>();
-// Custom themes are keyed by their values, so dragging in the theme editor makes a key a frame: keep the latest few.
-const MAX_CUSTOM = 48;
+// Custom themes are keyed by their values, so dragging in the theme editor makes a key a frame, and solid windows by
+// their pages' colours: keep the latest few.
+const MAX_TRANSIENT = 48;
 const CUSTOM = "custom|";
 
 const GLASS = ":glass";
+// A solid window's page colour, after its space's key: "plum:dark@#202124".
+const SITE = "@";
+const transient = (key: string) => key.startsWith(CUSTOM) || key.includes(SITE);
 
 /** A space's theme key: its preset colour's, or its own theme's (the theme editor); glass windows' end in ":glass". */
-export function spaceThemeKey(profile: Pick<Profile, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
+export function spaceThemeKey(profile: Pick<Space, "color" | "theme"> | undefined, dark: boolean, glass = false): string {
+  const space = profile ?? DEFAULT_SPACE;
   const mode = `${dark ? "dark" : "light"}${glass ? GLASS : ""}`;
-  const t = profile?.theme;
-  if (!t?.colors.length) return `${profile?.color ?? "plum"}:${mode}`;
+  const t = space.theme;
+  if (!t?.colors.length) return `${space.color}:${mode}`;
   return `${CUSTOM}${t.colors.join(",")}|${t.intensity.toFixed(2)}|${t.grain.toFixed(2)}:${mode}`;
 }
 
@@ -238,49 +256,84 @@ function customTheme(key: string): Theme {
   };
 }
 
+function presetTheme(key: string): Theme {
+  const [color, mode, material] = key.split(":") as [SpaceColor | "incognito", string, string | undefined];
+  const solid = material !== "glass";
+  const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
+  const spec = color === "incognito" ? null : (SPACE_COLORS[color] ?? SPACE_COLORS.plum);
+  // Dia: neutral band 0.502 at 0.65.
+  const powerUpColor = !spec ? null : spec.palette ? (spec.powerUp ?? spec.swatch) : "#808080A6";
+  const backdrop = backdropTint(spec ? (spec.tint ?? tintForHue(spec.swatch, !spec.palette)) : INCOGNITO_TINT, !spec?.palette);
+  return {
+    ...base,
+    backdrop,
+    windowTint: opaqueTint(backdrop, base.dark, solid),
+    glass: !solid,
+    powerUpColor,
+  };
+}
+
 export function themeFor(key: string): Theme {
   let theme = cache.get(key);
-  if (!theme && key.startsWith(CUSTOM)) {
-    theme = customTheme(key);
-    cache.set(key, theme);
-    const custom = [...cache.keys()].filter((k) => k.startsWith(CUSTOM));
-    for (const old of custom.slice(0, Math.max(0, custom.length - MAX_CUSTOM))) cache.delete(old);
-  }
-  if (!theme) {
-    const [color, mode, material] = key.split(":") as [ProfileColor | "incognito", string, string | undefined];
-    const solid = material !== "glass";
-    const base = color === "incognito" ? { ...dark, ...INCOGNITO } : { ...(mode === "dark" ? dark : light), ...profileTheme(color, mode === "dark") };
-    const spec = color === "incognito" ? null : (PROFILE_COLORS[color] ?? PROFILE_COLORS.plum);
-    // Dia: neutral band 0.502 at 0.65.
-    const powerUpColor = !spec ? null : spec.palette ? (spec.powerUp ?? spec.swatch) : "#808080A6";
-    const backdrop = backdropTint(spec ? (spec.tint ?? tintForHue(spec.swatch, !spec.palette)) : INCOGNITO_TINT, !spec?.palette);
-    theme = {
-      ...base,
-      backdrop,
-      windowTint: opaqueTint(backdrop, base.dark, solid),
-      glass: !solid,
-      powerUpColor,
-    };
-    cache.set(key, theme);
+  if (theme) return theme;
+  const site = key.indexOf(SITE);
+  // A solid window filled with its page's colour, its space's theme in the look that reads on it.
+  if (site >= 0) theme = { ...themeFor(key.slice(0, site)), windowTint: [key.slice(site + 1), key.slice(site + 1)] };
+  else theme = key.startsWith(CUSTOM) ? customTheme(key) : presetTheme(key);
+  cache.set(key, theme);
+  if (transient(key)) {
+    const keys = [...cache.keys()].filter(transient);
+    for (const old of keys.slice(0, Math.max(0, keys.length - MAX_TRANSIENT))) cache.delete(old);
   }
   return theme;
 }
 
-function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
-  const w = s.windows[windowId ?? s.ui.focusedWindowId ?? ""];
+// The colour the page the window shows for a space reports (its theme-color, else its top's), if any.
+function siteColor(s: BrowserState, windowId: string, spaceId: string): string | null {
+  const id = activeTabId(s, windowId, spaceId);
+  const color = id && s.tabs[id]?.url ? s.live[id]?.themeColor : null;
+  return color && /^#[0-9a-f]{6}/i.test(color) ? color.slice(0, 7).toUpperCase() : null;
+}
+
+/**
+ * A window's theme key for a space (its own by default): a solid one takes its page's colour, glass its space's. A
+ * space's own theme (the theme editor's) always shows, as Arc's and Zen's do: only a preset colour gives way to the page.
+ */
+export function themeKey(s: BrowserState, windowId: string | null, page: string | null): string {
+  const id = windowId ?? s.ui.focusedWindowId ?? "";
+  const w = s.windows[id];
   const glass = s.settings.windowMaterial === "glass";
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
-  return spaceThemeKey(s.profiles[page ?? w?.profileId ?? s.settings.defaultProfileId], s.ui.appDark, glass);
+  const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
+  // A look being chosen for this window (the new space panel's) shows on its space meanwhile.
+  const preview = w && spaceId === w.spaceId ? s.ui.previewLooks?.[id] : undefined;
+  const space = { ...(s.spaces[spaceId] ?? DEFAULT_SPACE), ...preview };
+  // Light or dark is always the user's (Appearance, or macOS's with Automatic); the page's colour is fitted to it.
+  const follow = space?.followSite ?? !space?.theme?.colors.length;
+  const pageColor = w && !glass && follow ? siteColor(s, id, spaceId) : null;
+  const site = pageColor ? pageTint(pageColor, s.ui.appDark) : null;
+  const key = spaceThemeKey(space, s.ui.appDark, glass);
+  return site ? `${key}${SITE}${site}` : key;
 }
 
 const ThemeContext = createContext<Theme | null>(null);
+
+/** Shows `look` on the window's space until it's cleared (null): the new space panel's Look step. */
+export function setPreviewLook(windowId: string, look: Pick<Space, "color" | "theme" | "followSite"> | null) {
+  useBrowser.setState((s) => {
+    const looks = { ...s.ui.previewLooks };
+    if (look) looks[windowId] = look;
+    else delete looks[windowId];
+    return { ui: { ...s.ui, previewLooks: looks } };
+  });
+}
 
 // Resolves the theme once for everything below it: every window root and every profile page (which
 // sets PageProfileContext) has one, so the hundreds of components that call useTheme read a context
 // instead of each subscribing to the store (each subscription runs on every store update).
 export function ThemeScope({ children }: { children: ReactNode }) {
   const windowId = useContext(WindowContext);
-  const page = useContext(PageProfileContext);
+  const page = useContext(PageSpaceContext);
   const key = useBrowser((s) => themeKey(s, windowId, page));
   return createElement(ThemeContext.Provider, { value: themeFor(key) }, children);
 }
@@ -294,23 +347,3 @@ export function useTheme(): Theme {
   if (__DEV__) console.warn("useTheme outside a ThemeScope");
   return unscopedTheme();
 }
-
-export const layout = {
-  sidebarWidth: 190,
-  sidebarHeader: 46,
-  // Dia: 6pt inset.
-  sidebarInset: 6,
-  // Dia: 41pt tiles, 6pt gap, 54pt top. Rows a little roomier than yab's 28pt, 2pt apart as there.
-  pinnedTop: 54,
-  pinnedHeight: 41,
-  rowHeight: 31,
-  rowGap: 2,
-  cardTop: 6,
-  cardInset: 7,
-  cardRadius: 10,
-  toolbarHeight: 41,
-  toolbarButton: 30,
-  toolbarIconCenters: [21, 56, 92, 127],
-  breadcrumbX: 153,
-  trafficLightsWidth: 78,
-} as const;

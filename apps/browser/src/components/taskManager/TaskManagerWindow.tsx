@@ -2,21 +2,21 @@ import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import { killTask, listTasks, type EngineTask } from "@bay/nncore";
 import { Symbol, WindowDragRegion } from "@bay/shell";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Text } from "react-native";
 import { switchToTab } from "../../lib/actions";
+import { APP_NAME } from "../../lib/constants";
+import { APP_ICON } from "../../lib/assets";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { tabForBrowser, usePages } from "../layout/pageState";
+import type { Tab } from "../../store/types";
+import { usePages } from "../layout/pageState";
 import { Favicon, useHover } from "../primitives";
 import { Button, useFormColors } from "../settings/controls";
-
-const ICON = require("../../../assets/app-icon.png");
-const POLL_MS = 1500;
-const TOOLBAR = 44;
-const ROW = 24;
+import { TASK_POLL_MS, TASK_ROW_HEIGHT, TASK_TOOLBAR_HEIGHT } from "./constants";
 
 type SortKey = "task" | "memory" | "cpu" | "gpu";
+type Sort = { key: SortKey; descending: boolean };
 type Column = { key: SortKey; title: string; width?: number };
 
 const COLUMNS: Column[] = [
@@ -26,7 +26,7 @@ const COLUMNS: Column[] = [
   { key: "gpu", title: "GPU Memory", width: 110 },
 ];
 
-type Row = EngineTask & { label: string; tabIds: string[]; favicon: { url: string; favicon: string | null; profileId: string } | null };
+type Row = EngineTask & { label: string; tabIds: string[]; favicon: { url: string; favicon: string | null; spaceId: string } | null };
 
 const TYPE_ICONS: Partial<Record<EngineTask["type"], string>> = {
   gpu: "cpu",
@@ -43,44 +43,47 @@ const TYPE_ICONS: Partial<Record<EngineTask["type"], string>> = {
 const bytes = (n: number) =>
   n < 0 ? "–" : n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
 
+// The engine's tasks as rows, named for the tabs they show and in the order the table sorts them.
+function taskRows(tasks: EngineTask[], tabs: Record<string, Tab>, browsers: Record<number, string>, sort: Sort): Row[] {
+  const resolved: Row[] = tasks.map((task) => {
+    const tabIds = task.browserIds.map((id) => browsers[id]).filter((id): id is string => !!id && !!tabs[id]);
+    const first = tabIds[0] ? tabs[tabIds[0]] : undefined;
+    const name = first ? first.customTitle || first.title || first.url || "New Tab" : "";
+    const label = first ? `Tab: ${name}${tabIds.length > 1 ? ` (and ${tabIds.length - 1} more)` : ""}` : task.type === "browser" ? APP_NAME : task.title;
+    return { ...task, label, tabIds, favicon: first ? { url: first.url, favicon: first.favicon, spaceId: first.spaceId } : null };
+  });
+  const value = (r: Row) => (sort.key === "memory" ? r.memory : sort.key === "cpu" ? r.cpu : sort.key === "gpu" ? r.gpuMemory : 0);
+  return resolved.sort((a, b) => {
+    const order = sort.key === "task" ? a.label.localeCompare(b.label) : value(a) - value(b);
+    return (sort.descending ? -order : order) || a.id - b.id;
+  });
+}
+
 export function TaskManagerWindow() {
   const theme = useTheme();
   const colors = useFormColors();
   const [tasks, setTasks] = useState<EngineTask[]>([]);
-  const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({ key: "memory", descending: true });
+  const [sort, setSort] = useState<Sort>({ key: "memory", descending: true });
   const [selected, setSelected] = useState<number | null>(null);
   const tabs = useBrowser((s) => s.tabs);
   const browsers = usePages((s) => s.browsers);
 
   useEffect(() => {
     let live = true;
-    const poll = () => void listTasks().then((list) => live && setTasks(list), () => {});
+    const poll = () =>
+      void listTasks().then(
+        (list) => live && setTasks(list),
+        () => {},
+      );
     poll();
-    const timer = setInterval(poll, POLL_MS);
+    const timer = setInterval(poll, TASK_POLL_MS);
     return () => {
       live = false;
       clearInterval(timer);
     };
   }, []);
 
-  const rows = useMemo(() => {
-    const resolved: Row[] = tasks.map((task) => {
-      const tabIds = task.browserIds.map(tabForBrowser).filter((id): id is string => !!id && !!tabs[id]);
-      const first = tabIds[0] ? tabs[tabIds[0]] : undefined;
-      const name = first ? first.customTitle || first.title || first.url || "New Tab" : "";
-      const label = first
-        ? `Tab: ${name}${tabIds.length > 1 ? ` (and ${tabIds.length - 1} more)` : ""}`
-        : task.type === "browser"
-          ? "Bay"
-          : task.title;
-      return { ...task, label, tabIds, favicon: first ? { url: first.url, favicon: first.favicon, profileId: first.profileId } : null };
-    });
-    const value = (r: Row) => (sort.key === "memory" ? r.memory : sort.key === "cpu" ? r.cpu : sort.key === "gpu" ? r.gpuMemory : 0);
-    return resolved.sort((a, b) => {
-      const order = sort.key === "task" ? a.label.localeCompare(b.label) : value(a) - value(b);
-      return (sort.descending ? -order : order) || a.id - b.id;
-    });
-  }, [tasks, tabs, browsers, sort]);
+  const rows = taskRows(tasks, tabs, browsers, sort);
 
   const selectedRow = rows.find((r) => r.id === selected);
   useEffect(() => {
@@ -97,7 +100,7 @@ export function TaskManagerWindow() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.dark ? "#1E1E1E" : "#FFFFFF" }}>
-      <View style={{ height: TOOLBAR, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ height: TASK_TOOLBAR_HEIGHT, alignItems: "center", justifyContent: "center" }}>
         <WindowDragRegion style={StyleSheet.absoluteFill} />
         <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Task Manager</Text>
       </View>
@@ -191,7 +194,13 @@ function HeaderCell({
             {column.title}
           </Text>
           {active ? (
-            <Symbol name={descending ? "chevron.down" : "chevron.up"} size={8} weight="semibold" color={theme.textSecondary} style={{ width: 10, height: 10 }} />
+            <Symbol
+              name={descending ? "chevron.down" : "chevron.up"}
+              size={8}
+              weight="semibold"
+              color={theme.textSecondary}
+              style={{ width: 10, height: 10 }}
+            />
           ) : null}
         </View>
       </Pressable>
@@ -216,7 +225,7 @@ function TaskRow({ row, stripe, selected, onSelect, onOpen }: { row: Row; stripe
     <Pressable onPress={press} accessibilityRole="button" accessibilityLabel={row.label} accessibilityState={{ selected }}>
       <View
         style={{
-          height: ROW,
+          height: TASK_ROW_HEIGHT,
           flexDirection: "row",
           alignItems: "center",
           marginHorizontal: 6,
@@ -226,9 +235,9 @@ function TaskRow({ row, stripe, selected, onSelect, onOpen }: { row: Row; stripe
       >
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 7, paddingLeft: 8, paddingRight: 8 }}>
           {row.favicon ? (
-            <Favicon url={row.favicon.url} favicon={row.favicon.favicon} size={16} profileId={row.favicon.profileId} />
+            <Favicon url={row.favicon.url} favicon={row.favicon.favicon} size={16} spaceId={row.favicon.spaceId} />
           ) : row.type === "browser" ? (
-            <Image source={ICON} style={{ width: 16, height: 16 }} />
+            <Image source={APP_ICON} style={{ width: 16, height: 16 }} />
           ) : (
             <Symbol name={icon} size={12} color={detail} style={{ width: 16, height: 16 }} />
           )}

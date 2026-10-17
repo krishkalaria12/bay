@@ -3,9 +3,6 @@ import { activeTabId } from "../../store/model";
 
 // Which sites are in Developer Mode (devMode.ts), without the app's UI: the window's layout asks.
 
-// Its tabs' outline and its offer's mark: yab's yellow.
-export const DEVELOPER_YELLOW = "#F5C518";
-
 /** The site a URL is on, as Developer Mode keeps it: "localhost:3000", "app.test"; "" for anything but http(s). */
 export function siteKey(url: string): string {
   const m = /^https?:\/\/(?:[^@/?#]*@)?([^/?#]+)/i.exec(url);

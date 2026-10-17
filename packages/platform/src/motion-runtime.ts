@@ -1,7 +1,15 @@
 /** JavaScript animation driver for desktop RNW, independent of native Reanimated. */
 export type Completion = (finished?: boolean, current?: number) => void;
 export type TimingConfig = { duration?: number; easing?: (t: number) => number; reduceMotion?: string };
-export type SpringConfig = TimingConfig & { stiffness?: number; damping?: number; mass?: number; velocity?: number; overshootClamping?: boolean; restDisplacementThreshold?: number; restSpeedThreshold?: number };
+export type SpringConfig = TimingConfig & {
+  stiffness?: number;
+  damping?: number;
+  mass?: number;
+  velocity?: number;
+  overshootClamping?: boolean;
+  restDisplacementThreshold?: number;
+  restSpeedThreshold?: number;
+};
 export type SharedValue<T> = {
   value: T;
   get(): T;
@@ -26,12 +34,13 @@ const descriptor = (animation: Animation): number => {
   return animation as unknown as number;
 };
 const isAnimation = (value: unknown): value is Animation => typeof value === "object" && value !== null && animations.has(value);
-const child = (value: number): Animation => isAnimation(value) ? value : { kind: "timing", to: value, config: { duration: 0 } };
+const child = (value: number): Animation => (isAnimation(value) ? value : { kind: "timing", to: value, config: { duration: 0 } });
 export const withTiming = (to: number, config: TimingConfig = {}, callback?: Completion): number => descriptor({ kind: "timing", to, config, callback });
 export const withSpring = (to: number, config: SpringConfig = {}, callback?: Completion): number => descriptor({ kind: "spring", to, config, callback });
 export const withDelay = (delay: number, animation: number): number => descriptor({ kind: "delay", delay, children: [child(animation)] });
 export const withSequence = (...values: number[]): number => descriptor({ kind: "sequence", children: values.map(child) });
-export const withRepeat = (animation: number, count = 2, reverse = false, callback?: Completion): number => descriptor({ kind: "repeat", count, reverse, children: [child(animation)], callback });
+export const withRepeat = (animation: number, count = 2, reverse = false, callback?: Completion): number =>
+  descriptor({ kind: "repeat", count, reverse, children: [child(animation)], callback });
 
 export type FrameClock = { request(callback: (time: number) => void): number; cancel(id: number): void; now(): number; reduced(): boolean };
 let clock: FrameClock = {
@@ -41,7 +50,9 @@ let clock: FrameClock = {
   reduced: () => false,
 };
 /** Install the host clock once, or a deterministic clock in tests. */
-export function configureMotionClock(value: FrameClock): void { clock = value; }
+export function configureMotionClock(value: FrameClock): void {
+  clock = value;
+}
 let collecting: Set<Observable> | null = null;
 type Observable = { subscribe(listener: () => void): () => void; version(): number };
 let revision = 0;
@@ -49,8 +60,11 @@ export function collectMotion<T>(read: () => T): { value: T; dependencies: Set<O
   const previous = collecting;
   const dependencies = new Set<Observable>();
   collecting = dependencies;
-  try { return { value: read(), dependencies }; }
-  finally { collecting = previous; }
+  try {
+    return { value: read(), dependencies };
+  } finally {
+    collecting = previous;
+  }
 }
 
 // Each runner owns its cancellation and calls its completion once, including interruption.
@@ -59,7 +73,10 @@ function run(animation: Animation, from: number, write: (value: number) => void,
   let frame: number | undefined;
   let cancelChild: (() => void) | undefined;
   let current = from;
-  const put = (value: number) => { current = value; write(value); };
+  const put = (value: number) => {
+    current = value;
+    write(value);
+  };
   const finish = (finished: boolean) => {
     if (!active) return;
     active = false;
@@ -114,7 +131,11 @@ function run(animation: Animation, from: number, write: (value: number) => void,
     const tick = (time: number) => {
       if (!active) return;
       const elapsed = Math.max(0, time - start);
-      if (reduce || config.duration === 0) { put(to); finish(true); return; }
+      if (reduce || config.duration === 0) {
+        put(to);
+        finish(true);
+        return;
+      }
       if (animation.kind === "spring" && config.duration === undefined) {
         const stiffness = config.stiffness ?? 100;
         const damping = config.damping ?? 10;
@@ -124,19 +145,29 @@ function run(animation: Animation, from: number, write: (value: number) => void,
         let position = current;
         while (remaining > 0) {
           const dt = Math.min(remaining, 1 / 240);
-          velocity += (-stiffness * (position - to) - damping * velocity) / mass * dt;
+          velocity += ((-stiffness * (position - to) - damping * velocity) / mass) * dt;
           position += velocity * dt;
           remaining -= dt;
         }
         const overshot = config.overshootClamping && (from < to ? position > to : position < to);
-        if (overshot || (Math.abs(velocity) < (config.restSpeedThreshold ?? 0.01) && Math.abs(position - to) < (config.restDisplacementThreshold ?? 0.01)) || elapsed > 10000) {
-          put(to); finish(true); return;
+        if (
+          overshot ||
+          (Math.abs(velocity) < (config.restSpeedThreshold ?? 0.01) && Math.abs(position - to) < (config.restDisplacementThreshold ?? 0.01)) ||
+          elapsed > 10000
+        ) {
+          put(to);
+          finish(true);
+          return;
         }
         put(position);
       } else {
         const progress = Math.min(1, elapsed / Math.max(1, config.duration ?? 300));
         put(from + (to - from) * (config.easing?.(progress) ?? progress));
-        if (progress >= 1) { put(to); finish(true); return; }
+        if (progress >= 1) {
+          put(to);
+          finish(true);
+          return;
+        }
       }
       previous = time;
       frame = clock.request(tick);
@@ -156,38 +187,61 @@ export function makeMutable<T>(initial: T): SharedValue<T> {
   let changedAt = 0;
   const listeners = new Map<number, (value: T) => void>();
   const subscribers = new Set<() => void>();
-  const read = () => { collecting?.add(observable); return current; };
+  const read = () => {
+    collecting?.add(observable);
+    return current;
+  };
   const write = (value: T) => {
     if (Object.is(current, value)) return;
     current = value;
     changedAt = ++revision;
-    for (const listener of [...listeners.values()]) listener(value);
-    for (const listener of [...subscribers]) listener();
+    for (const listener of Array.from(listeners.values())) listener(value);
+    for (const listener of Array.from(subscribers)) listener();
   };
   const observable: SharedValue<T> & Observable = {
-    get value() { return read(); },
-    set value(value: T) { observable.set(value); },
+    get value() {
+      return read();
+    },
+    set value(value: T) {
+      observable.set(value);
+    },
     get: read,
     set(value) {
       cancelAnimation(observable);
       const next = typeof value === "function" ? (value as (v: T) => T)(current) : value;
       if (isAnimation(next)) {
         if (typeof current !== "number") throw new Error("Windows motion animations require a numeric shared value");
-        const cancel = run(next, current, (v) => write(v as T), () => {});
+        const cancel = run(
+          next,
+          current,
+          (v) => write(v as T),
+          () => {},
+        );
         cancellers.set(observable, cancel);
       } else write(next);
     },
-    addListener: (id, listener) => { listeners.set(id, listener); },
-    removeListener: (id) => { listeners.delete(id); },
-    modify: (modifier) => { if (modifier) observable.set(modifier(current)); },
+    addListener: (id, listener) => {
+      listeners.set(id, listener);
+    },
+    removeListener: (id) => {
+      listeners.delete(id);
+    },
+    modify: (modifier) => {
+      if (modifier) observable.set(modifier(current));
+    },
     version: () => changedAt,
-    subscribe(listener) { subscribers.add(listener); return () => { subscribers.delete(listener); }; },
+    subscribe(listener) {
+      subscribers.add(listener);
+      return () => {
+        subscribers.delete(listener);
+      };
+    },
   };
   return observable;
 }
 
 export const Extrapolation = { IDENTITY: "identity", CLAMP: "clamp", EXTEND: "extend" } as const;
-export type Extrapolation = typeof Extrapolation[keyof typeof Extrapolation];
+export type Extrapolation = (typeof Extrapolation)[keyof typeof Extrapolation];
 export const ReduceMotion = { System: "system", Always: "always", Never: "never" } as const;
 export function interpolate(value: number, input: readonly number[], output: readonly number[], mode: Extrapolation | string = Extrapolation.EXTEND): number {
   if (input.length !== output.length || input.length < 2) throw new Error("interpolate requires equal ranges of at least two values");

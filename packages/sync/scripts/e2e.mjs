@@ -109,7 +109,10 @@ function bip39(entropy) {
   const list = fs.readFileSync(`${WORK}/english.txt`, "utf8").split("\n").filter(Boolean);
   const hash = crypto.createHash("sha256").update(entropy).digest()[0];
   const bits = [...entropy].map((b) => b.toString(2).padStart(8, "0")).join("") + hash.toString(2).padStart(8, "0");
-  return bits.match(/.{11}/g).map((b) => list[parseInt(b, 2)]).join(" ");
+  return bits
+    .match(/.{11}/g)
+    .map((b) => list[parseInt(b, 2)])
+    .join(" ");
 }
 
 const savePassword = (origin, user, password) =>
@@ -183,17 +186,38 @@ try {
   );
   await ev("B", savePassword("https://nne2e-shop.example", "nne2e-bob", "NNE2E-B-shop-pass"));
   const typed = words.map((w, i) => `${i + 1}. ${w.toUpperCase()}`).join("\n");
-  check("B joins with the right phrase", text(await ev("B", `return nnSync.enterRecoveryPhrase(${JSON.stringify(FOLDER)}, ${JSON.stringify(typed)})`)) === '{"ok":true}');
+  check(
+    "B joins with the right phrase",
+    text(await ev("B", `return nnSync.enterRecoveryPhrase(${JSON.stringify(FOLDER)}, ${JSON.stringify(typed)})`)) === '{"ok":true}',
+  );
   for (let i = 0; i < 3; i++) await sync("B", "A");
   let [a, b] = [await state("A"), await state("B")];
-  check("A's bookmarks, history, pinned tab and password reach B", text(b).includes("NNE2E Bookmark Alpha") && b.history.some((u) => u.includes("hist1")) && b.pinned.some((u) => u.includes("pin1")) && b.passwords.some((p) => p.includes("NNE2E-hunter2-secret")), text(data(b)));
-  check("B's own bookmark and password reach A (joining merges, nothing is lost)", text(a).includes("Gamma from B") && a.passwords.some((p) => p.includes("NNE2E-B-shop-pass")));
+  check(
+    "A's bookmarks, history, pinned tab and password reach B",
+    text(b).includes("NNE2E Bookmark Alpha") &&
+      b.history.some((u) => u.includes("hist1")) &&
+      b.pinned.some((u) => u.includes("pin1")) &&
+      b.passwords.some((p) => p.includes("NNE2E-hunter2-secret")),
+    text(data(b)),
+  );
+  check(
+    "B's own bookmark and password reach A (joining merges, nothing is lost)",
+    text(a).includes("Gamma from B") && a.passwords.some((p) => p.includes("NNE2E-B-shop-pass")),
+  );
   check("Chrome's password manager on B lists A's login", b.chromePasswords.includes("https://nne2e-bank.example nne2e-alice"));
   check("B took the synced settings when it joined", b.settings.appearance === "dark" && b.settings.searchEngine === "duckduckgo", text(b.settings));
   check("synced pinned tabs arrive unloaded", b.unloadedPins === 1);
   check("A and B converge", same(a, b), text({ a: data(a), b: data(b) }));
-  check("A sees B's open tabs (not its pinned tabs)", a.remoteTabs.length === 1 && text(a.remoteTabs).includes("tabB") && !text(a.remoteTabs).includes("pin1"), text(a.remoteTabs));
-  check("B's overflow menu: \"Your MacBook Pro Tabs\"-style item with Recent Tabs", /^Your .+ Tabs$/.test(b.menu?.title ?? "") && b.menu.children[0].title === "Recent Tabs" && text(b.menu).includes("NNE2E open page"), text(b.menu));
+  check(
+    "A sees B's open tabs (not its pinned tabs)",
+    a.remoteTabs.length === 1 && text(a.remoteTabs).includes("tabB") && !text(a.remoteTabs).includes("pin1"),
+    text(a.remoteTabs),
+  );
+  check(
+    'B\'s overflow menu: "Your MacBook Pro Tabs"-style item with Recent Tabs',
+    /^Your .+ Tabs$/.test(b.menu?.title ?? "") && b.menu.children[0].title === "Recent Tabs" && text(b.menu).includes("NNE2E open page"),
+    text(b.menu),
+  );
 
   await ev(
     "B",
@@ -211,10 +235,17 @@ try {
   await ev("B", savePassword("https://nne2e-bank.example", "nne2e-alice", "NNE2E-changed-on-B"));
   await sync("B", "A", "B", "A");
   a = await state("A");
-  check("B's rename, delete and new bookmark reach A", text(a.bookmarks).includes("Beta Renamed on B") && !text(a.bookmarks).includes("Gamma from B") && text(a.bookmarks).includes("Delta from B"));
+  check(
+    "B's rename, delete and new bookmark reach A",
+    text(a.bookmarks).includes("Beta Renamed on B") && !text(a.bookmarks).includes("Gamma from B") && text(a.bookmarks).includes("Delta from B"),
+  );
   check("B's history delete and new visit reach A", !a.history.some((u) => u.includes("hist1")) && a.history.some((u) => u.includes("hist2")));
   check("B's settings reach A", a.settings.showFullUrl === true && a.settings.cleanUp === 24);
-  check("B's password change and deletion reach A", text(a.passwords) === text(["https://nne2e-bank.example/ nne2e-alice=NNE2E-changed-on-B"]), text(a.passwords));
+  check(
+    "B's password change and deletion reach A",
+    text(a.passwords) === text(["https://nne2e-bank.example/ nne2e-alice=NNE2E-changed-on-B"]),
+    text(a.passwords),
+  );
 
   await ev(
     "A",
@@ -232,19 +263,39 @@ try {
   await ev("A", savePassword("https://nne2e-mail.example", "nne2e-carol", "NNE2E-mail-from-A"));
   await sync("A", "B", "A", "B");
   b = await state("B");
-  check("A's move, folder delete and new bookmark reach B", text(b.bookmarks).includes("NNE2E Second from A") && !text(b.bookmarks).includes("NNE2E Folder"), text(b.bookmarks));
-  check("A's new pinned tab and settings reach B", b.pinned.some((u) => u.includes("pin2")) && b.settings.appearance === "light" && b.settings.cleanUp === null, text(b.settings));
-  check("A's new password reaches B", b.passwords.some((p) => p.includes("NNE2E-mail-from-A")));
+  check(
+    "A's move, folder delete and new bookmark reach B",
+    text(b.bookmarks).includes("NNE2E Second from A") && !text(b.bookmarks).includes("NNE2E Folder"),
+    text(b.bookmarks),
+  );
+  check(
+    "A's new pinned tab and settings reach B",
+    b.pinned.some((u) => u.includes("pin2")) && b.settings.appearance === "light" && b.settings.cleanUp === null,
+    text(b.settings),
+  );
+  check(
+    "A's new password reaches B",
+    b.passwords.some((p) => p.includes("NNE2E-mail-from-A")),
+  );
 
-  await ev("A", `const s = nn.store.getState(); s.updateBookmark(Object.values(s.bookmarks.nodes).find((n) => n.title === "NNE2E Beta Renamed on B").id, { title: "NNE2E Concurrent A" }); s.updateSettings({ searchEngine: "bing" }); return true;`);
+  await ev(
+    "A",
+    `const s = nn.store.getState(); s.updateBookmark(Object.values(s.bookmarks.nodes).find((n) => n.title === "NNE2E Beta Renamed on B").id, { title: "NNE2E Concurrent A" }); s.updateSettings({ searchEngine: "bing" }); return true;`,
+  );
   await ev("A", savePassword("https://nne2e-bank.example", "nne2e-alice", "NNE2E-concurrent-A"));
   await sleep(20);
-  await ev("B", `const s = nn.store.getState(); s.updateBookmark(Object.values(s.bookmarks.nodes).find((n) => n.title === "NNE2E Beta Renamed on B").id, { title: "NNE2E Concurrent B" }); s.updateSettings({ searchEngine: "google" }); return true;`);
+  await ev(
+    "B",
+    `const s = nn.store.getState(); s.updateBookmark(Object.values(s.bookmarks.nodes).find((n) => n.title === "NNE2E Beta Renamed on B").id, { title: "NNE2E Concurrent B" }); s.updateSettings({ searchEngine: "google" }); return true;`,
+  );
   await ev("B", savePassword("https://nne2e-bank.example", "nne2e-alice", "NNE2E-concurrent-B"));
   await sync("A", "B", "A", "B", "A", "B");
   [a, b] = [await state("A"), await state("B")];
   check("concurrent edits converge on both Macs", same(a, b), text({ a: data(a), b: data(b) }));
-  check("the later edit wins (bookmark, setting, password)", text(a.bookmarks).includes("NNE2E Concurrent B") && a.settings.searchEngine === "google" && a.passwords.some((p) => p.includes("NNE2E-concurrent-B")));
+  check(
+    "the later edit wins (bookmark, setting, password)",
+    text(a.bookmarks).includes("NNE2E Concurrent B") && a.settings.searchEngine === "google" && a.passwords.some((p) => p.includes("NNE2E-concurrent-B")),
+  );
 
   const seqs = async () => text(await Promise.all(["A", "B"].map((n) => ev(n, "return Object.values(nnSync.doc().scopes).map((s) => s.seq)"))));
   const before = await seqs();
@@ -253,10 +304,16 @@ try {
 
   const list = () => execSync(`find ${FOLDER} -name '*.nns' -type f`).toString().trim().split("\n");
   const known = new Set(list());
-  await ev("A", `nn.store.getState().addBookmark({ profileId: "default", url: "${W}/alpha.html?nne2e=partial1", title: "NNE2E Partial One" }); return nnSync.syncNow()`);
+  await ev(
+    "A",
+    `nn.store.getState().addBookmark({ profileId: "default", url: "${W}/alpha.html?nne2e=partial1", title: "NNE2E Partial One" }); return nnSync.syncNow()`,
+  );
   const first = list().find((f) => !known.has(f));
   known.add(first);
-  await ev("A", `nn.store.getState().addBookmark({ profileId: "default", url: "${W}/beta.html?nne2e=partial2", title: "NNE2E Partial Two" }); return nnSync.syncNow()`);
+  await ev(
+    "A",
+    `nn.store.getState().addBookmark({ profileId: "default", url: "${W}/beta.html?nne2e=partial2", title: "NNE2E Partial Two" }); return nnSync.syncNow()`,
+  );
   const second = list().find((f) => !known.has(f));
   const full = fs.readFileSync(first);
   fs.writeFileSync(first, full.subarray(0, full.length >> 1));
@@ -265,7 +322,11 @@ try {
   fs.writeFileSync(stub, "placeholder");
   await sync("B");
   b = await state("B");
-  check("a half-copied file and an undownloaded one aren't applied", !text(b.bookmarks).includes("Partial One") && !text(b.bookmarks).includes("Partial Two") && b.pending === 1, `pending ${b.pending}`);
+  check(
+    "a half-copied file and an undownloaded one aren't applied",
+    !text(b.bookmarks).includes("Partial One") && !text(b.bookmarks).includes("Partial Two") && b.pending === 1,
+    `pending ${b.pending}`,
+  );
   fs.writeFileSync(first, full);
   fs.unlinkSync(stub);
   fs.renameSync(`${second}.aside`, second);
@@ -276,10 +337,20 @@ try {
   const files = execSync(`find ${FOLDER} -mindepth 1`).toString().trim().split("\n");
   const needles = ["NNE2E", "nne2e", "hunter2", "127.0.0.1", "alpha.html", "Bookmark", "duckduckgo", "appearance", "MacBook", "https", "default", "pw:", "bm:"];
   const leaks = needles.filter((n) => files.some((f) => f.slice(FOLDER.length).includes(n) || (fs.statSync(f).isFile() && fs.readFileSync(f).includes(n))));
-  check(`no plaintext in the sync folder (${files.filter((f) => f.endsWith(".nns")).length} files; ${needles.length} strings searched)`, leaks.length === 0, leaks.join(", "));
-  check("every file is padded to 1 KiB steps", files.filter((f) => f.endsWith(".nns")).every((f) => (fs.statSync(f).size - 32) % 1024 === 0));
+  check(
+    `no plaintext in the sync folder (${files.filter((f) => f.endsWith(".nns")).length} files; ${needles.length} strings searched)`,
+    leaks.length === 0,
+    leaks.join(", "),
+  );
+  check(
+    "every file is padded to 1 KiB steps",
+    files.filter((f) => f.endsWith(".nns")).every((f) => (fs.statSync(f).size - 32) % 1024 === 0),
+  );
   const local = ["A", "B"].flatMap((n) => ["sync.json", "sync-state.nns", "sync-journal.nns"].map((f) => `${DEV[n].dir}/${f}`)).filter((f) => fs.existsSync(f));
-  check("this Mac's own sync state holds no plaintext password", local.every((f) => !fs.readFileSync(f).includes("NNE2E-concurrent-B")));
+  check(
+    "this Mac's own sync state holds no plaintext password",
+    local.every((f) => !fs.readFileSync(f).includes("NNE2E-concurrent-B")),
+  );
 
   await start("C");
   await ev("C", `nn.store.getState().newTab(nn.store.getState().windowOrder[0], { url: "${W}/openc.html?nne2e=tabC" }); return true`);
@@ -290,12 +361,18 @@ try {
   const c = await state("C");
   a = await state("A");
   check("C converges with A", same(a, c), text({ a: data(a), c: data(c) }));
-  check("A lists three devices, and two other devices' tabs roll up into \"Your Devices\"", a.devices.length === 3 && (await ev("A", "return nnSync.menu.syncedDevicesMenuItem('default')")).title === "Your Devices");
+  check(
+    'A lists three devices, and two other devices\' tabs roll up into "Your Devices"',
+    a.devices.length === 3 && (await ev("A", "return nnSync.menu.syncedDevicesMenuItem('default')")).title === "Your Devices",
+  );
 
   b = await state("B");
   await ev("B", "return nnSync.stopSync({ deleteData: false })");
   const off = await state("B");
-  check("turning sync off on B leaves its bookmarks, history, settings, pinned tabs and passwords", same(b, off) && text(off.chromePasswords) === text(b.chromePasswords) && !off.enabled);
+  check(
+    "turning sync off on B leaves its bookmarks, history, settings, pinned tabs and passwords",
+    same(b, off) && text(off.chromePasswords) === text(b.chromePasswords) && !off.enabled,
+  );
   check("B's key is gone from its data folder", !fs.readdirSync(DEV.B.dir).some((f) => f.startsWith("sync-key-")));
   await sync("A");
   a = await state("A");
@@ -310,7 +387,11 @@ try {
   await sync("C");
   const cAfter = await state("C");
   check("A's Delete My Sync Data empties the folder", execSync(`find ${FOLDER} -mindepth 1 | wc -l`).toString().trim() === "0");
-  check("C shows Dia's reset message and stops", cAfter.status === "reset" && /reset from another device/.test(cAfter.error ?? "") && !cAfter.enabled, text(cAfter.status));
+  check(
+    "C shows Dia's reset message and stops",
+    cAfter.status === "reset" && /reset from another device/.test(cAfter.error ?? "") && !cAfter.enabled,
+    text(cAfter.status),
+  );
   check("A and C keep all their data", same(a, await state("A")) && same(cBefore, cAfter));
 } catch (error) {
   check("the run finished", false, error.stack);

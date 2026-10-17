@@ -1,6 +1,6 @@
 {
   "name": "@bay/browser",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,11 @@
     "pods": "cd macos && pod install",
     "build": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Release",
     "typecheck": "tsc -p .",
+    "compiler:check": "node scripts/compiler-check.mjs",
+    "test:folders": "node scripts/nested-folders-test.mjs",
+    "dev:folders": "node scripts/nested-folders-demo.mjs",
+    "test:links": "node scripts/external-link-rules-test.mjs",
+    "dev:links": "node scripts/external-link-rules-demo.mjs",
     "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\"",
     "windows": "pwsh -File windows/build.ps1 -Run",
     "bundle:windows": "react-native bundle --platform windows --entry-file index.windows.js --dev false --bundle-output windows/bundle/index.windows.bundle --assets-dest windows/bundle",
@@ -18,18 +23,19 @@
     "@bay/core": "workspace:*",
     "@bay/import": "workspace:*",
     "@bay/nncore": "workspace:*",
+    "@bay/platform": "workspace:*",
     "@bay/shaders": "workspace:*",
     "@bay/shell": "workspace:*",
     "@bay/sync": "workspace:*",
+    "@legendapp/list": "^3.6.0",
     "expo": "~54.0.37",
     "expo-modules-core": "~3.0.29",
     "react": "19.1.4",
     "react-native": "0.81.6",
     "react-native-macos": "0.81.9",
     "react-native-reanimated": "3.19.5",
-    "zustand": "^5.0.8",
-    "@bay/platform": "workspace:*",
-    "react-native-windows": "0.81.5"
+    "react-native-windows": "0.81.5",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
