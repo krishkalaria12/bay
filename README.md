@@ -260,11 +260,13 @@ Chrome and ImageMagick. The geometry in the SVGs is computed, not drawn by hand:
 
 ## Windows port
 
-Bay targets desktop macOS and Windows 11 x64. The Windows port is in progress;
-see [implementation status and Windows commands](docs/windows-implementation-status.md)
-for completed checks, native gaps and the required Windows validation. Mobile
-application targets are disabled. Native macOS code remains in packages' existing
-`ios` source directories.
+Bay targets desktop macOS and Windows 11 x64. The Windows port is in progress: on
+Windows, Bay's React UI runs on react-native-web as a Chrome WebUI page, with tabs
+embedded through SurfaceEmbed, on the same NNCore engine as macOS. See the
+[port plan](docs/windows-port-plan.html) and the
+[implementation status and Windows commands](docs/windows-implementation-status.md).
+Mobile application targets are disabled. Native macOS code remains in packages'
+existing `ios` source directories.
 
 ## License
 

@@ -34,14 +34,16 @@ work around a missing runtime file.
 
 ## App and installer
 
-Copy the artifact ZIP and its trusted SHA-256 from the engine build. A downloaded
-checksum must be pinned in release configuration independently of the download.
+The React Native for Windows app this section used to build was removed when the
+port plan moved to a web-rendered UI (see `docs/windows-port-plan.html`). Until
+Phase 3 produces the Chrome-based app, the installer script packages an app
+directory you pass in. A downloaded engine checksum must be pinned in release
+configuration independently of the download.
 
 ```powershell
 python scripts/windows/fetch-engine.py --archive C:/artifacts/engine.zip --sha256 <trusted-sha256> --destination dist/windows-engine
-pwsh -File apps/browser/windows/build.ps1 -Configuration Release -EngineDirectory "$pwd/dist/windows-engine"
-pwsh -File scripts/windows/smoke.ps1 -AppPath apps/browser/windows/x64/Release/Bay/Bay.exe
-pwsh -File scripts/windows/package.ps1 -Version 0.1.0 -Unsigned
+pwsh -File scripts/windows/smoke.ps1 -AppPath <app directory>\Bay.exe
+pwsh -File scripts/windows/package.ps1 -Version 0.1.0 -AppDirectory <app directory> -Unsigned
 ```
 
 Install Inno Setup 6 first. Unsigned installers are for local testing; their
