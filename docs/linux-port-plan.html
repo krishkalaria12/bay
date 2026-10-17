@@ -201,7 +201,7 @@
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         gap: 32px;
-        padding: 28px 0 80px;
+        padding: 28px 16px 80px;
       }
       @media (min-width: 1000px) {
         .layout {
@@ -718,14 +718,14 @@
         <div class="eyebrow">Bay · Port plan · <span class="mono">feat/linux</span> (after <span class="mono">feat/windows</span>)</div>
         <h1>Bay for Linux</h1>
         <p class="lede">
-          Linux is the third desktop target, and it differs from the other two in one important way: React Native has no usable Linux platform. This plan builds
-          on the Windows groundwork (the C host ABI, the JSON native bridge, the platform seams and the portable C++ modules) and runs Bay's existing React UI
-          inside Chrome itself through react-native-web. Zen and Vivaldi are both built this way. It begins with what the Linux machine needs, including the
-          commands to build the pinned Chromium/CEF engine. The phases follow.
+          Linux is the third desktop target, and it differs from the other two in one important way: React Native has no usable Linux platform. Linux shares the
+          Windows plan's host: Bay's React UI runs on react-native-web as a Chrome WebUI page, tabs are SurfaceEmbed elements in it, and the engine is NNCore,
+          Chrome plus Bay's layer. Zen and Vivaldi are both built this way. The plan begins with what the Linux machine needs, including the commands to build
+          the pinned Chromium. The phases follow.
         </p>
         <div class="meta">
           <span>Drafted 17 Oct 2026</span>
-          <span>Engine: CEF 8037 / Chromium 154.0.8037.58</span>
+          <span>Engine: Chromium 154.0.8037.58 + NNCore</span>
           <span>UI: React 19.1 · RN 0.81 · Expo 54 → react-native-web on Linux</span>
           <span>Build box: Arch Linux, x86_64</span>
           <button class="theme-toggle" type="button" id="themeToggle" aria-label="Toggle colour theme">Theme</button>
@@ -750,7 +750,7 @@
           <li class="sub"><a href="#p0">0 · Groundwork</a></li>
           <li class="sub"><a href="#p1">1 · Linux engine build</a></li>
           <li class="sub"><a href="#p2">2 · Hosting spike (gate)</a></li>
-          <li class="sub"><a href="#p3">3 · Engine port</a></li>
+          <li class="sub"><a href="#p3">3 · Engine: NNCore on Linux</a></li>
           <li class="sub"><a href="#p4">4 · UI on web + bridge</a></li>
           <li class="sub"><a href="#p5">5 · Linux shell & UX</a></li>
           <li class="sub"><a href="#p6">6 · Data: import, sync, secrets</a></li>
@@ -771,29 +771,28 @@
           <div class="prose">
             <div class="callout ok">
               <p>
-                <strong>Yes, Bay can run on Linux, and most of the hard parts already exist.</strong> The engine side is well-trodden: Chromium is native on
-                Linux, CEF's Views framework runs on both Wayland and X11, and Helium (also ungoogled-chromium based) ships Linux with only six Linux-specific
-                patches. Windows has already paid for the cross-platform groundwork: <code>nncore_c.h</code>, the JSON bridge in <code>@bay/platform</code>, the
-                series platform column and portable C++ for sync and import.
+                <strong>Yes, Bay can run on Linux, on the same host as Windows.</strong> Since 17 October 2026 the Windows plan renders Bay's UI inside the
+                engine: the React UI runs on react-native-web as a Chrome WebUI page (<code>chrome://bay</code>), each tab is an
+                <code>&lt;embed&gt;</code> backed by Chromium's <strong>SurfaceEmbed</strong>, and the engine is NNCore, which is Chrome plus Bay's layer, as on
+                macOS. Linux uses that host unchanged. Only the window frame, the backdrop and system integration are Linux code.
               </p>
             </div>
             <p>
-              <strong>The real difference is the UI runtime.</strong> Meta ships no React Native for Linux. The community projects are early:
-              <em>react-native-linux</em> says "pre-alpha, M0 done" with 4 stars, and <em>react-native-gtkx</em> has 8 stars and no releases. Neither can embed
-              a Chromium surface. So for Linux this plan picks what the Windows plan called option&nbsp;C:
-              <strong>Bay's React UI is built with react-native-web and rendered by Chrome</strong>, in a privileged view in the same window as the tabs. One
-              compositor draws everything. Translucent overlays over pages work, and Wayland is fine because CEF owns the window. Blurring the page behind a
-              panel is the exception: it needs an engine patch (see <a href="#risks">Risks</a>). This is the same model Zen uses on Gecko: about 178k lines of
-              UI JS/CSS, of which only 18 references are Linux-specific.
+              <strong>Why this fits Linux.</strong> Meta ships no React Native for Linux, and the community projects are early: <em>react-native-linux</em> says
+              "pre-alpha, M0 done", and <em>react-native-gtkx</em> has no releases. Neither can embed a Chromium surface. A UI drawn by the engine needs
+              neither, and Chrome's own window code already runs on Wayland and X11 through Ozone. This is the model Zen uses on Gecko: about 178k lines of UI
+              JS/CSS, of which only 18 references are Linux-specific.
             </p>
             <p>
-              Native calls keep their exact contract. The <code>{value}</code>/<code>{error}</code> envelopes of <code>bindWindowsModule</code> travel over CEF
-              process messages instead of a TurboModule, and the C++ module code from <code>packages/*/windows</code> is split into shared code plus Windows and
-              Linux backends.
+              <strong>Upstream is building it.</strong> Chromium's <em>WebUI Browser</em> (<code>kWebium</code>) and <code>components/surface_embed</code>
+              are both in Bay's pinned tag, 154.0.8037.58, switched off by default. One caution for Linux: upstream's SurfaceEmbed render test is disabled on
+              Linux (crbug.com/534291359) while it runs on Windows and macOS. Phase&nbsp;2 tests painting on Wayland and X11 before anything else.
             </p>
             <p>
-              <strong>The one question to settle early</strong> (Phase&nbsp;2): can a full-window transparent UI view sit above the tab views and pass clicks
-              through where it draws nothing? The plan is a Views masked hit-test patch. A fallback is ready if it fails.
+              <strong>Shared with Windows:</strong> the web build of the UI, the <code>@bay/platform</code> web wrappers, the asynchronous bridge over Mojo, the
+              NNCore <code>.mm</code> split, the Bay window class and <code>chrome://bay</code>. Each is written once, in the Windows plan's phases, and Linux
+              adds its frame, backdrop, secrets and packaging. The prerequisite steps below build stock Chrome from the pinned tree, which is the baseline both
+              platforms start from.
             </p>
           </div>
         </section>
@@ -810,7 +809,7 @@
               engine built here also runs on older distros.
             </p>
             <p>
-              The build in Steps 4–8 is a <strong>stock CEF baseline with the exact pins</strong> from <code>engine/patches/build/engine-lock.json</code>. It
+              The build in Steps 4–8 is a <strong>stock Chrome baseline with the exact pins</strong> from <code>engine/patches/build/engine-lock.json</code>. It
               proves the machine and toolchain work. The Bay-patched build uses the same checkout once Phase&nbsp;1 adds <code>linux</code> to the series and
               the engine script (Step&nbsp;9).
             </p>
@@ -993,12 +992,12 @@ cd "$CB/chromium_git/chromium/src"
 <span class="c"># About 2 GB of RAM per job keeps the link steps out of swap</span>
 JOBS=$(( $(awk '/MemTotal/ {print int($2/1048576)}' /proc/meminfo) / 2 ))
 [ "$JOBS" -gt "$(nproc)" ] &amp;&amp; JOBS=$(nproc)
-autoninja -C out/Release_GN_x64 -j "$JOBS" libcef cefsimple chrome_sandbox \
+autoninja -C out/Release_GN_x64 -j "$JOBS" chrome chrome_sandbox \
   2&gt;&amp;1 | tee "$CB/logs/linux-build.log"</pre>
               </div>
               <p>
-                The build uses <code>cefsimple</code> rather than <code>cefclient</code>: CEF notes that cefclient can't be built with
-                <code>use_sysroot=true</code>. cefsimple uses Views and Chrome style, the same two things Bay depends on.
+                The baseline is stock Chrome from the pinned tree. Bay's engine on every platform is Chrome plus Bay's layer, so this is what Phase&nbsp;1
+                patches. CEF's tooling only fetched and generated the tree; nothing here links <code>libcef</code>.
               </p>
             </li>
 
@@ -1006,12 +1005,15 @@ autoninja -C out/Release_GN_x64 -j "$JOBS" libcef cefsimple chrome_sandbox \
               <h3>Run it on your desktop <span class="where">host · exit the container</span></h3>
               <div class="code">
                 <pre>OUT="$HOME/chromium-build/chromium_git/chromium/src/out/Release_GN_x64"
-"$OUT/cefsimple" --url=https://www.chromium.org/                        <span class="c"># auto-selects the platform</span>
-"$OUT/cefsimple" --ozone-platform=wayland --url=chrome://gpu            <span class="c"># Wayland, check GPU</span>
-"$OUT/cefsimple" --ozone-platform=x11 --url=chrome://sandbox            <span class="c"># X11/XWayland, check sandbox</span>
+P="$HOME/.cache/bay-baseline"                                            <span class="c"># a throwaway profile</span>
+"$OUT/chrome" --user-data-dir="$P" https://www.chromium.org/              <span class="c"># auto-selects the platform</span>
+"$OUT/chrome" --user-data-dir="$P" --ozone-platform=wayland chrome://gpu  <span class="c"># Wayland, check GPU</span>
+"$OUT/chrome" --user-data-dir="$P" --ozone-platform=x11 chrome://sandbox  <span class="c"># X11/XWayland, check sandbox</span>
+<span class="c"># The host Bay builds on: upstream's WebUI browser with SurfaceEmbed tabs</span>
+"$OUT/chrome" --user-data-dir="$P" --enable-features=Webium,SurfaceEmbed https://www.chromium.org/
 
 <span class="c"># glibc floor of the build (decides the oldest distro Bay can support)</span>
-objdump -T "$OUT/libcef.so" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1</pre>
+objdump -T "$OUT/chrome" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1</pre>
               </div>
               <details>
                 <summary>If you see "No usable sandbox"</summary>
@@ -1038,8 +1040,8 @@ export CHROME_DEVEL_SANDBOX="$OUT/chrome_sandbox"</pre>
               </p>
               <div class="code">
                 <pre>cd "$HOME/code/bay"
-python3 scripts/engine.py --platform linux prepare   <span class="c"># cef series → CEF patcher → ungoogled → domain subst. → chromium series → gn gen</span>
-python3 scripts/engine.py --platform linux build     <span class="c"># libcef, bay host, chrome_sandbox</span>
+python3 scripts/engine.py --platform linux prepare   <span class="c"># checkout → ungoogled → domain subst. → chromium series → Bay layers → gn gen</span>
+python3 scripts/engine.py --platform linux build     <span class="c"># chrome (as bay) with Bay's layer, chrome_sandbox</span>
 python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engine-154.0.8037.58-linux-x64-&lt;digest&gt;.tar.zst + symbols</span></pre>
               </div>
             </li>
@@ -1050,8 +1052,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="distros" aria-labelledby="distros-h">
           <h2 id="distros-h">Distro support</h2>
           <p class="prose">
-            "Most distros, not all" becomes three tiers. Glibc is the hard floor: Phase&nbsp;1 reads it from the built <code>libcef.so</code> (Step&nbsp;8). CEF
-            documents Ubuntu 20.04+ and Debian 10+ as build hosts. Treat the oldest LTS rows below as provisional until the floor is known.
+            "Most distros, not all" becomes three tiers. Glibc is the hard floor: Phase&nbsp;1 reads it from the built <code>chrome</code> binary (Step&nbsp;8).
+            CEF documents Ubuntu 20.04+ and Debian 10+ as build hosts. Treat the oldest LTS rows below as provisional until the floor is known.
           </p>
           <div class="table-wrap">
             <table>
@@ -1142,8 +1144,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td>Glass / vibrancy surfaces</td>
                   <td>
-                    Solid theme surfaces. CSS translucency works inside the UI view but can't blur page pixels without the optional
-                    <code>cef-overlay-backdrop-blur</code> patch (Phase&nbsp;2)
+                    Solid window background. Inside the window, CSS translucency works, and <code>backdrop-filter</code> over pages is tested in Phase&nbsp;2
                   </td>
                   <td><span class="chip warn">Replace</span></td>
                 </tr>
@@ -1236,13 +1237,13 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>Capability table + OS seam</td>
-                  <td><code>packages/platform/src/capabilities.ts</code>, <code>os.ts</code>, <code>os.windows.ts</code></td>
-                  <td><span class="chip ok">Extend</span>: add <code>"linux"</code> to <code>PlatformOS</code> and an <code>os.web.ts</code></td>
+                  <td><code>packages/platform/src/capabilities.ts</code>, <code>os.ts</code></td>
+                  <td><span class="chip ok">Extend</span>: add <code>"linux"</code> to <code>PlatformOS</code>; the web OS layer is shared with Windows</td>
                 </tr>
                 <tr>
                   <td>Ctrl shortcut table, motion seam</td>
-                  <td><code>shortcuts.ts</code>, <code>keys.ts</code>, <code>motion.windows.ts</code></td>
-                  <td><span class="chip ok">Reuse</span>; Linux shares the Windows key table with a few differences</td>
+                  <td><code>shortcuts.ts</code>, <code>keys.ts</code>, <code>motion.ts</code></td>
+                  <td><span class="chip ok">Reuse</span>; Linux shares the Windows key table with a few differences, and Reanimated runs on the web on both</td>
                 </tr>
                 <tr>
                   <td>Native contracts: 15 modules, 237 methods, 17 views</td>
@@ -1252,17 +1253,20 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td>JSON envelope bridge</td>
                   <td><code>nativeBridge.ts</code> (<code>bindWindowsModule</code>, <code>decodeNativeResult</code>)</td>
-                  <td><span class="chip ok">Reuse</span>: rename to a transport-neutral <code>NativeBridge</code>, add a CEF IPC transport</td>
+                  <td><span class="chip ok">Reuse</span>: transport-neutral, with the Mojo transport the Windows plan adds</td>
                 </tr>
                 <tr>
-                  <td>Host C ABI</td>
-                  <td><code>engine/nncore/.../public/nncore_c.h</code></td>
-                  <td><span class="chip ok">Reuse</span>; Linux adds window calls (Views windows rather than HWND parents)</td>
+                  <td>The web host</td>
+                  <td>Windows plan: <code>BayWebUIBrowserWindow</code>, <code>chrome://bay</code>, SurfaceEmbed tabs, Mojo bridge</td>
+                  <td><span class="chip ok">Share</span>: written once; Linux adds its frame view and backdrop</td>
                 </tr>
                 <tr>
-                  <td>CEF host implementation, 801 lines</td>
-                  <td><code>engine/nncore/.../win/nncore_win.cc</code></td>
-                  <td><span class="chip warn">Split</span>: CEF-generic tab and engine logic into a shared .cc, HWND code stays Windows-only</td>
+                  <td>NNCore engine, ~10k lines</td>
+                  <td><code>engine/nncore/src/bay/core</code> (about 9.2k lines are Chrome C++ in <code>.mm</code> files)</td>
+                  <td>
+                    <span class="chip warn">Split</span> once in Phase&nbsp;0 for Windows and Linux; the CEF host in <code>win/</code> is Windows-only and being
+                    retired
+                  </td>
                 </tr>
                 <tr>
                   <td>Portable .cc moved out of .mm</td>
@@ -1281,7 +1285,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td>Sync crypto + vault (C++)</td>
                   <td><code>packages/sync/windows</code> (CNG)</td>
-                  <td><span class="chip warn">Split</span>: vault and module are shared; crypto backend is BoringSSL on Linux</td>
+                  <td><span class="chip warn">Split</span>: the vault is shared and served over Mojo; crypto backend is BoringSSL on Linux</td>
                 </tr>
                 <tr>
                   <td>Import readers (C++)</td>
@@ -1390,49 +1394,48 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
           <h2 id="hosting-h">The hosting decision</h2>
           <div class="prose">
             <p>
-              <strong>Two constraints narrow it down.</strong> First, there's no maintained React Native for Linux that can host a Chromium surface. Second, CEF
-              on Linux supports Wayland only for windows it creates itself through Views. Embedding CEF in a third-party Wayland window has been an open issue
-              (#2804) since 2019. Contributor patches for Wayland subsurface embedding appeared in August 2026, and the maintainers called them early, saying
-              review would take weeks or months.
+              <strong>Decided 17 October 2026, together with Windows:</strong> the web-rendered host (L‑W). Two constraints ruled out the alternatives. There's
+              no maintained React Native for Linux that can host a Chromium surface, and embedding a browser in a third-party Wayland window isn't upstream in
+              CEF (issue #2804, open since 2019). A UI that Chrome draws in Chrome's own window avoids both.
             </p>
           </div>
           <div class="stack">
             <figure class="pick">
-              <div class="layer top"><b>L‑A · UI rendered by Chrome</b> (recommended)</div>
-              <div class="layer top">Overlay UI view: transparent, full window, masked hit test</div>
-              <div class="layer chrome">Tab BrowserViews laid out at pane rects sent from JS</div>
-              <div class="layer top">Base UI view: sidebar, toolbar (react-native-web)</div>
-              <div class="layer native">CefWindow (Views, frameless, Chrome style)</div>
+              <div class="layer top"><b>L‑W · Web-rendered host</b> (chosen, shared with Windows)</div>
+              <div class="layer native"><code>BayWebUIBrowserWindow</code>: Views widget, Bay's frame (CSD on Wayland)</div>
+              <div class="layer top"><code>chrome://bay</code>: Bay's React UI on react-native-web, overlays as DOM</div>
+              <div class="layer chrome"><code>&lt;embed&gt;</code> per pane through SurfaceEmbed, one WebContents each</div>
+              <div class="layer native">NNCore: Chrome + Bay's layer; Mojo bridge</div>
               <figcaption>
-                Everything is in one Views window and one compositor, so translucency, rounded panels over video and Wayland all work. Blur over pages doesn't
-                come for free: the overlay's CSS can only see its own view. Bay's React tree renders once into the base UI view, with overlays portalled into
-                the overlay view's document, or as one view if the mask works (Phase&nbsp;2). The macOS design survives almost intact: Chrome window, JS-placed
-                tabs, UI on top. Costs: react-native-web parity, and a bridge over process messages with no sync calls.
+                One window, one compositor, one document for the UI. Overlays over pages are ordinary DOM, so there's no hit-mask patch and no rect syncing. The
+                tab's output is a layer in the UI page's compositor tree, so CSS <code>backdrop-filter</code> should blur pages (Phase&nbsp;2 checks).
+                Reanimated runs through its web support.
               </figcaption>
             </figure>
             <figure>
-              <div class="layer top"><b>L‑B · Native toolkit host</b></div>
-              <div class="layer native">GTK4 window running react-native-gtkx or react-native-linux</div>
-              <div class="layer chrome">CEF embedded as a child (X11 only today)</div>
+              <div class="layer top"><b>L‑A · Views overlay host</b> (fallback)</div>
+              <div class="layer top">Transparent overlay UI view with a masked hit test</div>
+              <div class="layer chrome">Tab BrowserViews at pane rects sent from JS</div>
+              <div class="layer top">Base UI view (react-native-web)</div>
               <figcaption>
-                The direct counterpart of Windows' RNW host. Rejected for now: both RN Linux projects are pre-release, and neither has TurboModules, Reanimated
-                or a way to embed foreign surfaces. CEF embedding on Wayland isn't upstream. Overlays over pages would hit the same airspace problem as Windows.
+                The earlier Linux design, kept as the fallback if SurfaceEmbed fails on Linux. It needs a masked hit-test patch
+                (<code>cef-overlay-hit-mask</code>), rect syncing, and a separate blur patch, because the overlay's CSS can only see its own view.
               </figcaption>
             </figure>
             <figure>
-              <div class="layer top"><b>L‑C · Wait for RN Linux</b></div>
-              <div class="layer native">react-native-linux (Fabric + Skia/Vulkan, Wayland)</div>
+              <div class="layer top"><b>L‑B / L‑C · Native toolkit or wait</b></div>
+              <div class="layer native">GTK4 + react-native-gtkx, or react-native-linux later</div>
               <figcaption>
-                Interesting long term (RN 0.87, Hermes, New Architecture). On its own roadmap, TurboModules arrive at M3, and a decision on Reanimated plus
-                multi-window at M4–M5. Track it, but don't depend on it. L‑A keeps the JS identical, so moving later stays possible.
+                Rejected for now: both React Native Linux projects are pre-release, with no TurboModules, Reanimated or way to embed foreign surfaces. Track
+                react-native-linux; the shared JS keeps a later move possible.
               </figcaption>
             </figure>
           </div>
           <div class="callout warn">
             <p>
-              <strong>Shared with Windows:</strong> the Windows README still lists transparent React overlays above Chromium HWNDs as an open integration gate.
-              L‑A uses only CEF Views, which Windows also has. If the Windows gate fails, this same design is that plan's option&nbsp;C, already built. Keep the
-              Linux host code in shared files wherever it doesn't touch Wayland or X11.
+              <strong>Linux-specific risk:</strong> upstream disabled <code>SurfaceEmbedRendersRedRect</code> on Linux
+              (<code>webui_browser_browsertest.cc</code>, crbug.com/534291359). If painting fails on Wayland or X11 and the bug isn't fixed by then, try
+              upstream's <code>GuestContents</code> path in the same window first, then L‑A.
             </p>
           </div>
         </section>
@@ -1445,11 +1448,11 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             Phase&nbsp;0 needs no Linux machine and can start on the Mac today. The prerequisite steps above can run in parallel with it.
           </p>
           <ol class="flow" aria-label="Phase order">
-            <li><strong>0 · Groundwork</strong>linux seam, web target, splits<br /><span class="chip mac">Mac or Linux</span></li>
-            <li><strong>1 · Engine build</strong>Bay series on Linux<br /><span class="chip lnx">Arch box</span></li>
-            <li class="gate"><strong>2 · Hosting spike</strong>Prove L‑A<br /><span class="chip gate">Gate</span></li>
-            <li><strong>3 · Engine port</strong>nncore_linux + patches<br /><span class="chip lnx">Arch box</span></li>
-            <li><strong>4 · UI on web</strong>Bridge + DOM views<br /><span class="chip lnx">Mostly Linux</span></li>
+            <li><strong>0 · Groundwork</strong>Shared with Windows Phase&nbsp;0<br /><span class="chip mac">Mac or Linux</span></li>
+            <li><strong>1 · Engine build</strong>Chrome target on Linux<br /><span class="chip lnx">Arch box</span></li>
+            <li class="gate"><strong>2 · Hosting spike</strong>WebUI + SurfaceEmbed<br /><span class="chip gate">Gate</span></li>
+            <li><strong>3 · Engine</strong>NNCore on Linux<br /><span class="chip lnx">Arch box</span></li>
+            <li><strong>4 · UI on web</strong>Shared bridge + DOM views<br /><span class="chip lnx">Mostly shared</span></li>
             <li><strong>5 · Shell & UX</strong>CSD, portals, Wayland rules<br /><span class="chip lnx">Linux</span></li>
             <li><strong>6 · Data</strong>Import, sync, secrets<br /><span class="chip mac">Parsers anywhere</span></li>
             <li><strong>7 · Ship</strong>deb, rpm, AUR, AppImage<br /><span class="chip lnx">Linux + CI</span></li>
@@ -1464,75 +1467,48 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <span class="chip mac">Runs on Mac or Linux, now</span>
             </div>
             <p class="goal">
-              Make Linux a known platform everywhere the code asks "which platform?", get the real UI rendering in a browser, and turn the Windows-only C++ into
-              shared code with backends. Mac and Windows behave exactly as before.
+              The Windows plan's Phase&nbsp;0, with Linux added wherever the code asks "which platform?". The Mac app behaves exactly as before.
             </p>
             <dl class="facts">
               <dt>Depends on</dt>
-              <dd>The Windows groundwork in the current <code>feat/windows</code> tree</dd>
-              <dt>Touches</dt>
-              <dd>
-                <code>packages/platform</code>, <code>apps/browser</code> (Metro, web entry), <code>packages/{sync,import}</code>, <code>engine/nncore</code>,
-                <code>engine/patches/series*</code>, <code>scripts/</code>, <code>.github/workflows</code>
-              </dd>
+              <dd>Nothing; it is the same work as <a href="windows-port-plan.html#p0">Windows Phase&nbsp;0</a></dd>
             </dl>
             <div class="cols">
               <div>
-                <h4>JS / TS</h4>
+                <h4>Shared with Windows</h4>
                 <ul>
-                  <li>
-                    Add <code>"linux"</code> to <code>PlatformOS</code> and a Linux column to <code>capabilitiesFor</code>: <code>hover</code>,
-                    <code>tooltips</code>, <code>focusRing</code>, <code>keyDownEvents</code>, <code>windowMoveByView</code> and <code>nativeDrag</code> are
-                    true (the DOM provides them); glass, vibrancy, shaders, dock, menu bar and traffic lights are false.
-                  </li>
-                  <li>
-                    Add an <code>os.web.ts</code>: <code>platformOS = "linux"</code> when the Bay host bridge is present. Keep throwing for any other platform,
-                    as <code>os.ts</code> does today.
-                  </li>
-                  <li>
-                    Web target: add <code>react-native-web</code> and <code>react-dom</code> at the versions Expo&nbsp;54 pins, plus
-                    <code>expo export --platform web</code> wiring in <code>metro.config.js</code>.
-                    <strong>Goal: <code>App.tsx</code> boots in desktop Chrome</strong> against <code>test-native-stub.mjs</code>, and every break is listed.
-                  </li>
+                  <li>Boot <code>App.tsx</code> on the web with Metro (Expo&nbsp;54) against stub native modules, and list every react-native-web gap.</li>
                   <li>
                     <code>.web.tsx</code> versions of the <code>@bay/platform</code> view wrappers: hover → pointer events, <code>tooltip</code> →
                     <code>title</code>, focus ring → <code>:focus-visible</code>, <code>draggedTypes</code> → HTML5 drag, <code>mouseDownCanMoveWindow</code> →
-                    <code>-webkit-app-region: drag</code>.
+                    <code>app-region: drag</code>.
                   </li>
-                  <li>
-                    Motion: confirm Reanimated 3.19's web backend runs <code>withTiming</code>, <code>withSpring</code>, <code>measure</code> and
-                    <code>runOnJS</code>. If not, add a <code>motion.web.ts</code> behind the seam Windows created.
-                  </li>
-                  <li>
-                    <strong>The 26 sync methods</strong> (e.g. <code>copyText</code>, <code>readDocument</code>, <code>fileExists</code>,
-                    <code>systemInfo</code>, <code>prepareTransfer</code>, <code>newDeviceId</code>): CEF has no synchronous renderer→browser call. Make each
-                    one async, serve it from a startup snapshot, or mark it optional. This also helps Windows.
-                  </li>
-                  <li>Rename <code>WindowsBridge</code> / <code>bindWindowsModule</code> to transport-neutral names. The envelope format doesn't change.</li>
+                  <li>Convert the 26 synchronous native methods to async, snapshots or optional.</li>
+                  <li>Put a transport interface under the JSON envelopes so a Mojo transport can replace the TurboModule one.</li>
+                  <li>Split NNCore's <code>.mm</code> files into portable <code>.cc</code> and small <code>_mac.mm</code> files.</li>
                 </ul>
               </div>
               <div>
-                <h4>Native, engine & CI</h4>
+                <h4>Linux additions</h4>
                 <ul>
                   <li>
-                    <code>series</code>: accept <code>linux</code>, plus comma lists such as <code>mac,linux</code>, in the platform column. Mark the patches
-                    with a macOS half explicitly.
+                    Add <code>"linux"</code> to <code>PlatformOS</code> and a Linux column to <code>capabilitiesFor</code>: hover, tooltips, focus ring and drag
+                    are true; glass, vibrancy, shaders, dock, menu bar and traffic lights are false. The host passes the OS in its constants.
                   </li>
                   <li>
-                    Generalise <code>scripts/windows/engine.py</code> into <code>scripts/engine.py --platform win|linux</code>. Split
-                    <code>engine-lock.json</code> into shared pins and per-platform <code>outputDirectory</code>, <code>architecture</code> and minimum OS.
+                    <code>series</code>: accept <code>linux</code> and comma lists such as <code>mac,win</code> in the platform column; mark the
+                    <code>cef-*</code> patches <code>mac,win</code>, since Linux doesn't build CEF.
                   </li>
                   <li>
-                    Split <code>packages/sync/windows</code> into <code>native/</code> (SyncVault, SyncModule, wordlist) plus <code>win/</code> (CNG) and
-                    <code>linux/</code> (BoringSSL) crypto backends. Do the same for import: <code>native/</code> (Readers, Sessions, SQLite),
-                    <code>win/Secrets</code>, <code>linux/Secrets</code>.
+                    Generalise <code>scripts/windows/engine.py</code> into <code>scripts/engine.py --platform win|linux</code> with a lock section per platform.
                   </li>
                   <li>
-                    Split <code>nncore_win.cc</code> into CEF-generic code (engine lifecycle, tab registry, JSON calls, permission prompts) and HWND code.
+                    Split <code>packages/sync/windows</code> crypto into backends (CNG on Windows, BoringSSL on Linux) and
+                    <code>packages/import/windows</code> secrets into DPAPI and libsecret/KWallet versions.
                   </li>
                   <li>
-                    CI: a <code>linux-checks.yml</code> on <code>ubuntu-24.04</code> running <code>pnpm typecheck</code>, <code>pnpm test</code>, the web bundle
-                    build and <code>series.py files --platform linux</code>.
+                    CI: a <code>linux-checks.yml</code> on <code>ubuntu-24.04</code> running typecheck, tests, the web bundle and
+                    <code>series.py files --platform linux</code>.
                   </li>
                 </ul>
               </div>
@@ -1540,9 +1516,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>The Mac test scripts and the Windows checks pass unchanged.</li>
-              <li><code>App.tsx</code> renders in desktop Chrome with stubbed natives, and every web incompatibility is either fixed or listed.</li>
-              <li>Each of the 26 sync methods has an async, snapshot or optional plan.</li>
-              <li>Sync and import C++ build from shared sources on Windows, with the same tests passing.</li>
+              <li><code>App.tsx</code> renders in desktop Chrome with stubbed natives, and every web incompatibility is fixed or listed.</li>
+              <li>No synchronous native call remains in the contracts.</li>
               <li>The Linux CI job is green.</li>
             </ul>
           </article>
@@ -1554,59 +1529,42 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <h3 id="p1-h">Linux engine build</h3>
               <span class="chip lnx">Arch box (distrobox)</span>
             </div>
-            <p class="goal">
-              Build the same CEF 8037 / Chromium 154 tree with Bay's series on Linux x64 from one command, and archive it so app builds never recompile
-              Chromium.
-            </p>
+            <p class="goal">Build Chrome from the pinned tree with Bay's series and layer on Linux x64, from one command, and archive it.</p>
             <dl class="facts">
               <dt>Depends on</dt>
               <dd>Prerequisite steps 1–8; Phase&nbsp;0's series column and engine script (helpful, not blocking)</dd>
               <dt>References</dt>
               <dd>
-                <code>helium-linux</code> (container, flags, packaging), <code>ungoogled-chromium-portablelinux</code> (Linux patch), the Windows
-                <code>engine.py</code> flow
+                <code>helium-linux</code> (container, flags, packaging), <code>ungoogled-chromium-portablelinux</code>, the Windows <code>engine.py</code>
+                flow
               </dd>
             </dl>
             <ul>
               <li>
-                Run the macOS/Windows order on Linux: CEF series (<code>cef all</code>) → CEF <code>version_manager</code> + <code>patcher.py</code> →
-                <code>03-ungoogled.py</code> → domain substitution (with <code>domsub-keep-store.txt</code>) → <code>chromium</code> series for
-                <code>linux</code> → <code>layer</code> copies → <code>gn gen</code>.
+                Run the macOS order on Linux: checkout through CEF's tooling → <code>03-ungoogled.py</code> → domain substitution → the
+                <code>chromium</code> series for <code>linux</code> → the NNCore and Bay layers → <code>gn gen</code>. CEF is only the checkout tool; nothing
+                links <code>libcef</code>.
               </li>
               <li>
                 <code>03-ungoogled.py</code>: stop skipping the two "Linux-only" patches on Linux, and consider portablelinux's
                 <code>use-oauth2-client-switches-as-default.patch</code>.
               </li>
               <li>
-                <code>chromium-bay-layer-linux.patch</code>: link <code>//chrome/browser/bay:exports</code> into <code>libcef.so</code> with the
-                <code>nn_*</code> symbols visible (a linker version script). The host finds them with <code>dlsym</code>, as on macOS.
+                <code>chromium-bay-layer-linux.patch</code>: link <code>//chrome/browser/bay</code> and <code>//bay/core</code> into the
+                <code>chrome</code> binary, as the Windows patch does for <code>chrome.dll</code>.
               </li>
+              <li>Brand the binary as <code>bay</code>; keep <code>chrome_sandbox</code> and <code>chrome_crashpad_handler</code>.</li>
               <li>
-                Add the <code>bay</code> host executable as a GN target in the engine tree. It owns <code>main()</code> and links <code>libcef.so</code> and
-                nncore. On Linux the UI host and native modules live in the browser process, so there's no separate RN host build.
+                Launch with <code>--enable-features=Webium,SurfaceEmbed</code> on Wayland and X11 and check upstream's WebUI browser: tabs paint in
+                <code>&lt;embed&gt;</code>, typing, IME and Orca reach the page.
               </li>
-              <li>Record the glibc floor (<code>objdump</code>, Step&nbsp;8) and the sysroot name in the lock file. Finalise the distro tiers from it.</li>
-              <li>
-                Archive <code>runtime/</code> (<code>libcef.so</code>, <code>bay</code>, <code>chrome_sandbox</code>, <code>*.pak</code>,
-                <code>icudtl.dat</code>, <code>v8_context_snapshot.bin</code>, <code>libEGL.so</code>, <code>libGLESv2.so</code>,
-                <code>libvk_swiftshader.so</code>, <code>vk_swiftshader_icd.json</code>, <code>libvulkan.so.1</code>, <code>locales/</code>) plus
-                <code>include/</code> into <code>.tar.zst</code> with the Windows manifest format. Keep symbols in a separate archive (unstripped ELF, as Helium
-                does before stripping).
-              </li>
-              <li>
-                Confirm the CEF facts the plan relies on: Chrome-style <code>CefWindow</code> + <code>CefBrowserView</code> on both
-                <code>--ozone-platform=wayland</code> and <code>x11</code>; <code>CefWindow::AddOverlayView</code> with a <code>BrowserView</code>; transparent
-                BrowserView backgrounds; <code>CefRunMessageLoop</code> as the Linux loop (no external pump).
-              </li>
-              <li>
-                Speed: add <code>ccache</code> or <code>sccache</code> (<code>cc_wrapper</code>) as Helium does. Rebuild the engine only when the pin or the
-                series changes.
-              </li>
+              <li>Record the glibc floor (<code>objdump</code>, Step&nbsp;8) and the sysroot in the lock file. Finalise the distro tiers from it.</li>
+              <li>Archive the runtime and symbols separately; add <code>ccache</code>/<code>sccache</code> as Helium does.</li>
             </ul>
             <h4>Exit criteria</h4>
             <ul class="checks">
-              <li>A clean checkout builds the patched engine with <code>scripts/engine.py --platform linux</code>, and <code>series.py check</code> passes.</li>
-              <li>A Chrome-style cefsimple, on the patched engine, installs a Web Store extension on Wayland and on X11.</li>
+              <li>A clean checkout builds the patched Chrome with <code>scripts/engine.py --platform linux</code>, and <code>series.py check</code> passes.</li>
+              <li>Upstream's WebUI browser runs SurfaceEmbed tabs on Wayland and X11, or the failure is recorded for Phase&nbsp;2.</li>
               <li>The engine artifact and symbols are archived, versioned and checksummed.</li>
             </ul>
           </article>
@@ -1618,14 +1576,14 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <h3 id="p2-h">Hosting spike</h3>
               <span class="chip gate">Go / no-go gate</span><span class="chip lnx">Arch box</span>
             </div>
-            <p class="goal">A throwaway host that proves L‑A before the main port. The output is a short decision record.</p>
+            <p class="goal">The Windows spike, run on Linux desktops. The output is a short decision record.</p>
             <dl class="facts">
               <dt>Depends on</dt>
               <dd>Phase&nbsp;1</dd>
               <dt>Setup</dt>
               <dd>
-                One frameless <code>CefWindow</code>; a base UI view running a small react-native-web app; two tab BrowserViews placed from JS rects; one
-                transparent overlay UI view; a minimal process-message bridge
+                Upstream's <code>WebUIBrowserWindow</code> pointed at a small <code>chrome://bay</code> page: a react-native-web sidebar, two tab embeds, a
+                translucent overlay panel, a minimal Mojo bridge
               </dd>
             </dl>
             <div class="table-wrap">
@@ -1641,22 +1599,24 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Overlay</td>
-                    <td>A rounded, partly transparent panel draws over a playing video with no flicker while the window moves and resizes</td>
+                    <td>Painting</td>
+                    <td>Both embeds paint and update on Wayland and X11 (upstream's render test is disabled on Linux, so this comes first)</td>
                   </tr>
                   <tr>
-                    <td>Hit testing</td>
-                    <td>
-                      With a Views masked targeter fed by JS rects (<code>cef-overlay-hit-mask</code>), clicks, wheel and hover reach the page outside the mask;
-                      page text selection and drag work up to the panel's edge
-                    </td>
+                    <td>Overlay</td>
+                    <td>A rounded, translucent panel draws over a playing video with no flicker while the window moves and resizes</td>
+                  </tr>
+                  <tr>
+                    <td>Blur over pages</td>
+                    <td>CSS <code>backdrop-filter</code> on the panel blurs the page and video behind it at 60 fps, or the failure is recorded</td>
+                  </tr>
+                  <tr>
+                    <td>Input</td>
+                    <td>Clicks, wheel, hover, text selection and drag reach the page around the panel; drag-and-drop works between the UI and a page</td>
                   </tr>
                   <tr>
                     <td>Keyboard & focus</td>
-                    <td>
-                      Ctrl shortcuts reach the UI first while a page has focus (<code>OnPreKeyEvent</code>); page shortcuts still work; F6 cycles sidebar →
-                      address → page
-                    </td>
+                    <td>Ctrl shortcuts reach the UI while a page has focus; page shortcuts still work; F6 cycles sidebar → address → page</td>
                   </tr>
                   <tr>
                     <td>IME</td>
@@ -1664,61 +1624,44 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   </tr>
                   <tr>
                     <td>Accessibility</td>
-                    <td>Orca reads the UI, then the page, in a sensible order</td>
+                    <td>Orca reads the UI, then the page, in order (SurfaceEmbed stitches the trees)</td>
                   </tr>
                   <tr>
                     <td>Scaling</td>
-                    <td>100/125/150/200% fractional scaling and mixed-DPI monitors; rects stay in DIPs, nothing blurs or misaligns</td>
+                    <td>100/125/150/200% fractional scaling and mixed-DPI monitors; nothing blurs or misaligns</td>
                   </tr>
                   <tr>
                     <td>Decorations</td>
-                    <td>Frameless window: drag region, resize edges, double-click maximize, GNOME edge tiling and KDE quick tile all work</td>
-                  </tr>
-                  <tr>
-                    <td>Blur over pages</td>
-                    <td>
-                      A command-panel-sized rect in the overlay blurs the page and video behind it at 60 fps, through a Views layer background blur
-                      (<code>ui::Layer::SetBackgroundBlur</code>, as ChromeOS uses) sized from JS rects. If it doesn't, ship solid panels and record it
-                    </td>
+                    <td>Bay's frame: drag regions, resize edges, double-click maximize, GNOME edge tiling and KDE quick tile</td>
                   </tr>
                   <tr>
                     <td>Edge peek</td>
                     <td>
-                      With the sidebar hidden, the pointer at the window edge over a page reveals the peek (the edge strip is in the hit mask); leaving the
-                      window, including fast exits on a maximized window and past CSD resize borders, hides it within the delay; no code reads a global pointer
-                      position
+                      With the sidebar hidden, the pointer at the window edge over a page reveals the peek; leaving the window, including fast exits on a
+                      maximized window and past CSD borders, hides it within the delay; no code reads a global pointer position
                     </td>
                   </tr>
                   <tr>
                     <td>Motion</td>
-                    <td>Sidebar and peek animations hold 60 fps with three panes loading (Reanimated on web)</td>
+                    <td>Sidebar and peek animations hold 60 fps with three panes loading, using Reanimated on web</td>
                   </tr>
                   <tr>
                     <td>Bridge</td>
-                    <td>p95 invoke round trip under 2 ms; 60 Hz <code>tab.changed</code> events cause no UI jank</td>
-                  </tr>
-                  <tr>
-                    <td>Isolation</td>
-                    <td>Tab pages can't see or reach the bridge; the browser process rejects messages from any frame except the UI frame</td>
+                    <td>p95 Mojo round trip under 2 ms; 60 Hz tab events cause no UI jank; tabs cannot reach the bridge</td>
                   </tr>
                   <tr>
                     <td>Cost</td>
-                    <td>The UI renderer's memory overhead is measured and acceptable next to the Mac app's</td>
+                    <td>The UI renderer's memory and cold start are measured and acceptable next to the Mac app's</td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <h4>Outcomes</h4>
             <ul>
-              <li><strong>All pass:</strong> L‑A, one overlay view with a masked hit test. Proceed to Phases 3 and 4.</li>
+              <li><strong>All pass:</strong> L‑W on Linux, same as Windows. Proceed to Phases 3 and 4.</li>
+              <li><strong>Painting or input fails:</strong> try upstream's <code>GuestContents</code> path in the same window, then L‑A.</li>
               <li>
-                <strong>Mask fails:</strong> floating UI (command panel, find bar, menus, toasts, peek, inspector) moves into short-lived frameless overlay
-                views or popup <code>CefWindow</code>s sized to the element. That's the Linux counterpart of the Windows fallback, but the UI code stays the
-                same.
-              </li>
-              <li>
-                <strong>Web UI performance fails:</strong> profile first (React compiler output, Reanimated web path, layout thrash from rect syncing). Re-check
-                react-native-linux's maturity only after that.
+                <strong>Performance fails:</strong> profile first (compiler output, layout thrash, Reanimated's web path), then move hot animations to CSS.
               </li>
             </ul>
           </article>
@@ -1727,58 +1670,41 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
           <article class="phase" id="p3" aria-labelledby="p3-h">
             <div class="phase-head">
               <span class="phase-num">Phase 3</span>
-              <h3 id="p3-h">Engine port</h3>
+              <h3 id="p3-h">Engine: NNCore on Linux</h3>
               <span class="chip lnx">Arch box</span>
             </div>
-            <p class="goal">Implement <code>nncore_c.h</code> on Linux over CEF Views, and bring the host-specific patches and platform services across.</p>
+            <p class="goal">Bay's engine, window and WebUI run on Linux, sharing the Windows host code.</p>
             <dl class="facts">
               <dt>Depends on</dt>
-              <dd>Phase&nbsp;2's decision; Phase&nbsp;0's <code>nncore_win.cc</code> split</dd>
+              <dd>Phase&nbsp;2; the NNCore split from Phase&nbsp;0</dd>
               <dt>Runs alongside</dt>
               <dd>Phase&nbsp;4</dd>
             </dl>
             <ul>
               <li>
-                <code>nncore_linux.cc</code>: <code>window.create/close/bounds/state</code> on frameless <code>CefWindow</code>s; the UI views;
-                <code>tab.create {window}</code> as a child <code>CefBrowserView</code>; bounds in DIPs, which Views scales, so the Windows DPI conversion isn't
-                needed. The loop is <code>CefRunMessageLoop</code>.
+                Shared with Windows Phase&nbsp;3: <code>BayWebUIBrowserWindow</code>, <code>chrome://bay</code> with its CSP and Mojo receiver, the SurfaceEmbed
+                allowlist, NNCore tab strips with <code>SurfaceEmbedHandle</code> ids, and the engine calls behind the dispatcher.
               </li>
               <li>
-                Patches with macOS halves (see the <a href="#patches">map</a>): <code>cef-window-keys</code> (the Linux accelerator path),
-                <code>cef-window-translucent</code> (an ARGB visual on X11; Wayland is fine), <code>chromium-window-docked-devtools</code> (Views docking),
-                <code>chromium-safe-storage-name</code> (a Linux version, below). <code>cef-window-client</code>, <code>chromium-window-hosted</code> and
-                <code>chromium-webview-native-hosted</code> are probably unnecessary with Views-owned windows: confirm, then mark them <code>mac,win</code>.
+                Linux frame view: client-side decorations on Wayland, caption buttons drawn by the UI in the desktop's button layout, resize edges and drag
+                regions mapped to the right hit-test codes.
               </li>
               <li>
-                New: <code>cef-overlay-hit-mask</code>, plus <code>cef-overlay-backdrop-blur</code> if its Phase&nbsp;2 test passed. The UI bridge itself is
-                layer code (a render-process handler plus a browser-side dispatcher), not a patch.
+                <strong>Secrets (load-bearing):</strong> os_crypt keeps its key in Secret Service or KWallet, chosen by desktop or
+                <code>--password-store</code>, and falls back to <code>basic</code>, a fixed key. Give Bay its own application name so its key never collides
+                with Chromium's, pin it as the macOS series comment does, and warn the user when only <code>basic</code> is available.
               </li>
               <li>
-                Message pump: <code>cef-idle-pump</code> and <code>cef-pump-wake</code> exist for the macOS external pump. Check whether they're no-ops under
-                <code>CefRunMessageLoop</code>, and mark them if so.
+                Platform services: <code>nn_downloads_linux.cc</code> (Chrome already writes <code>user.xdg.origin.url</code>),
+                <code>nn_external_apps_linux.cc</code> (GIO or the OpenURI portal), <code>pip/nn_pip_linux.cc</code>, desktop capture through PipeWire and the
+                ScreenCast portal.
               </li>
-              <li>
-                <strong>Secrets (load-bearing):</strong> on Linux, os_crypt keeps its key in Secret Service or KWallet, chosen by desktop or
-                <code>--password-store</code>. Without a store it falls back to <code>basic</code>, a fixed key. Give Bay its own application name so its key
-                never collides with Chromium's, and pin it as the macOS series comment does. Warn the user when only <code>basic</code> is available.
-              </li>
-              <li>
-                Platform services: <code>nn_downloads_linux.cc</code> (no quarantine; Chrome already writes <code>user.xdg.origin.url</code> xattrs),
-                <code>nn_external_apps_linux.cc</code> (GIO default handler, or the OpenURI portal), <code>pip/nn_pip_linux.cc</code> (Views PiP, mirroring
-                <code>nn_pip_win.cc</code>), reauth (none, like Chrome on Linux), desktop capture through PipeWire and the ScreenCast portal.
-              </li>
-              <li>
-                Prompts and menus (context menu, passwords, autofill, device chooser, cast, permissions) keep their JSON events. Only the anchoring geometry is
-                per platform.
-              </li>
+              <li>Prompts and menus keep their JSON events; only the anchoring geometry is per platform.</li>
             </ul>
             <h4>Exit criteria</h4>
             <ul class="checks">
-              <li>
-                A small C++ test host drives the engine through <code>nncore_c.h</code> on Linux: windows, tabs, split panes, popups, extensions, permission and
-                password prompts, PiP, DevTools docked and undocked.
-              </li>
-              <li><code>nn_*</code> calls return the same JSON as on Mac and Windows for the same profile operations.</li>
+              <li>Bay's window opens on Linux with real tabs, split panes, popups, extensions, permission and password prompts, PiP and DevTools.</li>
+              <li>Engine calls return the same JSON as on Mac and Windows for the same profile operations.</li>
             </ul>
           </article>
 
@@ -1787,65 +1713,32 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             <div class="phase-head">
               <span class="phase-num">Phase 4</span>
               <h3 id="p4-h">UI on web + native bridge</h3>
-              <span class="chip lnx">Mostly Linux</span><span class="chip mac">JS parts anywhere</span>
+              <span class="chip lnx">Mostly shared</span><span class="chip mac">JS parts anywhere</span>
             </div>
             <p class="goal">
-              Run the real <code>App.tsx</code> in the Linux host, with every module from the <a href="#modules">module map</a> either implemented against its
-              contract or reported missing so the UI falls back.
+              The real <code>App.tsx</code> runs in <code>chrome://bay</code> on Linux, with every module from the <a href="#modules">module map</a>
+              answered or reported missing so the UI falls back.
             </p>
             <dl class="facts">
               <dt>Depends on</dt>
-              <dd>Phase&nbsp;0 (web target), Phase&nbsp;2 (bridge shape), Phase&nbsp;3 for engine-backed modules</dd>
-              <dt>Lives in</dt>
               <dd>
-                <code>apps/browser/linux/</code> (host resources, launch scripts), <code>packages/*/native</code> + <code>linux/</code>,
-                <code>packages/platform/src/native.web.ts</code>
+                Phase&nbsp;0 (web target), Phase&nbsp;3 for engine-backed modules; <a href="windows-port-plan.html#p4">Windows Phase&nbsp;4</a> builds the same
+                pieces
               </dd>
             </dl>
-            <div class="cols">
-              <div>
-                <h4>Bundle & bridge</h4>
-                <ul>
-                  <li>
-                    Release builds pack the <code>expo export -p web</code> output into Bay's resources and serve it from a <code>bay://app/</code> scheme
-                    handler with a strict CSP. Debug builds set <code>BAY_DEV=1</code> to load Metro at <code>localhost:8081</code> with hot reload, matching
-                    <code>pnpm dev:app</code> on macOS.
-                  </li>
-                  <li>
-                    Renderer side: a <code>CefV8Handler</code> installed in <code>OnContextCreated</code> only for the UI browsers' main frames exposes
-                    <code>__bayNative</code> (<code>contractVersion</code>, <code>modules</code>, <code>views</code>, <code>constantsJSON</code>,
-                    <code>invoke</code>, <code>subscribe</code>).
-                  </li>
-                  <li>
-                    Browser side: a dispatcher routes <code>{module, method, args}</code> to the same C++ module code Windows uses and replies with the same
-                    envelopes. Events come back as process messages.
-                  </li>
-                  <li>
-                    <code>native.web.ts</code> binds modules with the renamed <code>bindNativeModule</code>. The contract-version check refuses to start on a
-                    mismatch, as on Mac and Windows.
-                  </li>
-                </ul>
-              </div>
-              <div>
-                <h4>Views become DOM</h4>
-                <ul>
-                  <li>
-                    <code>BayCEF</code>: a placeholder <code>&lt;div&gt;</code> whose rect (<code>ResizeObserver</code>, coalesced per animation frame) drives
-                    <code>tab.bounds</code> and <code>tab.visible</code>. Pages draw in the real BrowserView behind it.
-                  </li>
-                  <li><code>BaySymbol</code>: the Fluent icon font through the Windows mapping table.</li>
-                  <li>
-                    <code>BaySurface</code>, <code>BayFadeLabel</code>, <code>BayActivitySpinner</code>, <code>BayContextMenuArea</code>,
-                    <code>BayWindowProfile</code>: plain components.
-                  </li>
-                  <li><code>BayFileDrag</code>: HTML5 drag-out (Chrome supports <code>DownloadURL</code> drags on Linux).</li>
-                  <li>
-                    Order: <code>BayCEF</code> + nncore → <code>BayShell</code>/<code>BayApp</code> → <code>BayChromeUI</code>/<code>BayExtensions</code> →
-                    <code>BaySystem</code> → keychain, sync and import after Phase&nbsp;6.
-                  </li>
-                </ul>
-              </div>
-            </div>
+            <ul>
+              <li>The Mojo transport in <code>@bay/platform</code>; contract tests run against it.</li>
+              <li><code>BayCEF</code> becomes an <code>&lt;embed&gt;</code> component with the same props and handle as today's web view.</li>
+              <li>
+                <code>BaySymbol</code> through bundled SVG icons (Segoe Fluent Icons isn't available on Linux); <code>BaySurface</code>,
+                <code>BayFadeLabel</code>, <code>BayActivitySpinner</code>, <code>BayContextMenuArea</code>, <code>BayWindowProfile</code> as web components;
+                <code>BayFileDrag</code> through HTML5 drag-out.
+              </li>
+              <li>
+                Release builds serve the web bundle from the build's resources with a strict CSP. Debug builds set <code>BAY_DEV=1</code> to load Metro with hot
+                reload, matching <code>pnpm dev:app</code> on macOS.
+              </li>
+            </ul>
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>The real <code>App.tsx</code> boots on Linux from Metro with hot reload, and from the packed bundle in Release.</li>
@@ -1979,7 +1872,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <div>
                 <ul>
                   <li>
-                    <strong>Layout:</strong> <code>/opt/bay/{bay, bay-wrapper, libcef.so, chrome_sandbox, resources…}</code>, with
+                    <strong>Layout:</strong> <code>/opt/bay/{bay, bay-wrapper, chrome_sandbox, chrome_crashpad_handler, resources…}</code>, with
                     <code>/usr/bin/bay</code> pointing at the wrapper. The wrapper sets <code>CHROME_WRAPPER</code> and the library path, as Helium's does.
                   </li>
                   <li>
@@ -2061,8 +1954,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="modules" aria-labelledby="modules-h">
           <h2 id="modules-h">Native module map</h2>
           <p class="prose">
-            From <code>nativeContracts.ts</code>: 15 modules, 237 methods, 26 of them synchronous, and 17 views. On Linux every module is C++ in the browser
-            process, behind the CEF bridge, and every view is a DOM component.
+            From <code>nativeContracts.ts</code>: 15 modules, 237 methods, 26 of them synchronous, and 17 views. On Linux, as on Windows, every module is C++ in
+            the browser process behind the Mojo bridge, and every view is a DOM component.
           </p>
           <div class="table-wrap">
             <table>
@@ -2077,7 +1970,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <tbody>
                 <tr>
                   <td><code>BayCEF</code> (62 methods)</td>
-                  <td><code>nncore_linux</code> over <code>nncore_c.h</code> + <code>nn_engine.h</code> via <code>dlsym</code></td>
+                  <td>NNCore tab strips in the Bay layer, shared with Windows</td>
                   <td><code>prepareTransfer</code>, <code>releaseTransfer</code></td>
                   <td class="num">3–4</td>
                 </tr>
@@ -2089,7 +1982,10 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td><code>BayShell</code> (32)</td>
-                  <td>Windows (CefWindow), app menu (DOM), dialogs, clipboard (Chrome's <code>ui::Clipboard</code>), documents in <code>BAY_DATA_DIR</code></td>
+                  <td>
+                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), dialogs, clipboard (Chrome's <code>ui::Clipboard</code>), documents in
+                    <code>BAY_DATA_DIR</code>
+                  </td>
                   <td>
                     <code>copyText</code>, <code>copyImage</code>, <code>readDocument</code>, <code>writeDocument</code>, <code>removeDocument</code>;
                     <code>startDictation</code> → optional
@@ -2149,7 +2045,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>View <code>BayCEF</code></td>
-                  <td>Placeholder <code>&lt;div&gt;</code> + rect sync to the tab BrowserView</td>
+                  <td><code>&lt;embed&gt;</code> through SurfaceEmbed, shared with Windows</td>
                   <td></td>
                   <td class="num">4</td>
                 </tr>
@@ -2158,7 +2054,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                     Views <code>BaySymbol</code>, <code>BaySurface</code>, <code>BayFadeLabel</code>, <code>BayActivitySpinner</code>,
                     <code>BayContextMenuArea</code>, <code>BayWindowProfile</code>, <code>BayShell</code>
                   </td>
-                  <td>react-native-web components (icon font for symbols)</td>
+                  <td>react-native-web components (bundled SVG icons for symbols)</td>
                   <td></td>
                   <td class="num">4</td>
                 </tr>
@@ -2186,15 +2082,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="patches" aria-labelledby="patches-h">
           <h2 id="patches-h">Patch series map</h2>
           <p class="prose">
-            From the current <code>engine/patches/series</code> (46 lines: 18 <code>cef</code>, 28 <code>chromium</code>). "Portable" still means it must apply
-            cleanly and build in Phase&nbsp;1.
+            From the current <code>engine/patches/series</code> (50 lines: 18 <code>cef</code>, 30 <code>chromium</code>, 2 layers). "Portable" still means it
+            must apply cleanly and build in Phase&nbsp;1.
           </p>
           <div class="grid2">
             <div class="card">
               <h3>Portable, expected to work <span class="chip ok">most</span></h3>
               <p class="prose">
-                Every <code>cef all</code> and <code>chromium all</code> line not listed on the right: tab model, UI surfaces and triggers, DevTools, media,
-                extensions, autofill, password, cast, device chooser, side panel, PiP, tab sharing, branding.
+                Every <code>chromium all</code> line not listed on the right: tab model hooks, DevTools, media, extensions, autofill, password, cast, device
+                chooser, side panel, PiP, tab sharing, branding, extension import, file chooser.
               </p>
               <h3>Skip on Linux <span class="chip risk">mac / win only</span></h3>
               <ul>
@@ -2203,29 +2099,27 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <code>chromium-devtools-redock-display</code> (mac)
                 </li>
                 <li><code>chromium-bay-layer</code> (mac framework), <code>chromium-bay-layer-win</code> (chrome.dll)</li>
+                <li>All 18 <code>cef-*</code> patches: Linux doesn't build CEF (mark them <code>mac,win</code>)</li>
               </ul>
             </div>
             <div class="card">
               <h3>Needs Linux work <span class="chip warn">rework</span></h3>
               <ul>
-                <li><code>cef-window-keys</code>: the Linux accelerator path</li>
-                <li><code>cef-window-translucent</code>: ARGB visuals on X11</li>
                 <li><code>chromium-window-docked-devtools</code>: Views docking</li>
                 <li><code>chromium-safe-storage-name</code>: <strong>add a Linux version</strong> (Secret Service / KWallet naming)</li>
                 <li>
-                  <code>cef-window-client</code>, <code>chromium-window-hosted</code>, <code>chromium-webview-native-hosted</code>: probably not needed with
-                  Views windows. Confirm, then mark <code>mac,win</code>
+                  <code>chromium-window-hosted</code>, <code>chromium-webview-native-hosted</code>: host Chrome's views inside the macOS app; not needed with
+                  the web host. Mark them <code>mac</code>
                 </li>
-                <li><code>cef-idle-pump</code>, <code>cef-pump-wake</code>: check under <code>CefRunMessageLoop</code></li>
               </ul>
               <h3>New for Linux <span class="chip lnx">add</span></h3>
               <ul>
-                <li><code>chromium-bay-layer-linux</code>: <code>nn_*</code> exports from <code>libcef.so</code></li>
-                <li><code>cef-overlay-hit-mask</code>: a masked hit test for the overlay UI view (Phase&nbsp;2)</li>
+                <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
                 <li>
-                  <code>cef-overlay-backdrop-blur</code>: a Views layer background blur under JS-sent panel rects, so panels can blur the page behind them
-                  (optional, Phase&nbsp;2)
+                  Shared with Windows: <code>chromium-bay-webui-window</code>, <code>chromium-surface-embed-bay</code>, and the SurfaceEmbed backports from
+                  trunk
                 </li>
+                <li>Fallback only (L‑A): <code>cef-overlay-hit-mask</code> and <code>cef-overlay-backdrop-blur</code></li>
                 <li>Candidates from Helium: default theme rather than GTK for Chrome-drawn UI; a clear error when the <code>.desktop</code> file is missing</li>
                 <li>From portablelinux: <code>use-oauth2-client-switches-as-default</code> (only if Bay keeps sign-in features)</li>
               </ul>
@@ -2255,20 +2149,20 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   </td>
                 </tr>
                 <tr>
-                  <td>The overlay can't pass input through (no masked targeting for a BrowserView)</td>
+                  <td>SurfaceEmbed on Linux: upstream's render test is disabled on Linux (crbug.com/534291359), and the feature is off by default in M154</td>
                   <td><span class="chip risk">High</span></td>
-                  <td>Phase&nbsp;2 gate; small patch to Views targeting; fallback to per-element overlay views or popup windows with the same JS</td>
+                  <td>
+                    Phase&nbsp;1 smoke test and the Phase&nbsp;2 painting test come first; carry upstream fixes as backports; GuestContents, then L‑A, as
+                    fallbacks
+                  </td>
                 </tr>
                 <tr>
                   <td>
-                    No blur over pages: the overlay view's CSS <code>backdrop-filter</code> sees only its own document, not the tab views beneath (Zen avoids
-                    this because Gecko draws UI and pages in one document)
+                    Blur over pages: CSS <code>backdrop-filter</code> over an <code>&lt;embed&gt;</code> is expected to work, since the tab is a layer in the
+                    UI's compositor tree, but it is unverified
                   </td>
                   <td><span class="chip warn">Medium</span></td>
-                  <td>
-                    Phase&nbsp;2 test of a Views layer background blur under the panel rects (new patch, <code>cef-overlay-backdrop-blur</code>); if it fails or
-                    costs too much, solid or translucent-only panels, as Zen ships on Linux by default
-                  </td>
+                  <td>Phase&nbsp;2 blur test; if it fails or costs too much, translucent panels without blur, as Zen ships on Linux by default</td>
                 </tr>
                 <tr>
                   <td>
@@ -2278,8 +2172,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   </td>
                   <td><span class="chip warn">Medium</span></td>
                   <td>
-                    Drive peek only from in-window enter, move and leave events plus the existing hide delay (Zen falls back to timeouts too); keep edge strips
-                    inside the overlay hit mask so they get hover over pages; let the compositor choose the screen; Phase&nbsp;2 edge-peek test
+                    Drive peek only from in-window enter, move and leave events plus the existing hide delay (Zen falls back to timeouts too); edge strips are
+                    DOM above the embeds, so they get hover over pages; let the compositor choose the screen; Phase&nbsp;2 edge-peek test
                   </td>
                 </tr>
                 <tr>
@@ -2308,16 +2202,16 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td>Bridge security: a privileged frame next to untrusted tabs</td>
                   <td><span class="chip warn">Medium</span></td>
                   <td>
-                    Bridge only in UI browsers' main frames; browser-side check of browser id and URL; strict CSP on <code>bay://app</code>; no remote URLs in
-                    UI views in Release
+                    The Mojo interface is bound only for <code>chrome://bay</code>; SurfaceEmbed gives pages no script access to the UI; strict CSP; no remote
+                    URLs in Release
                   </td>
                 </tr>
                 <tr>
                   <td>Three platforms to keep in step on every Chromium rebase</td>
                   <td><span class="chip warn">Medium</span></td>
                   <td>
-                    Platform column in series; Linux CI on every engine bump; <code>_linux.cc</code> files, not <code>#if</code> soup; the shared Views host
-                    also helps Windows
+                    Platform column in series; Linux CI on every engine bump; <code>_linux.cc</code> files, not <code>#if</code> soup; one engine and one host
+                    for Windows and Linux
                   </td>
                 </tr>
                 <tr>
@@ -2355,8 +2249,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <tbody>
                 <tr>
                   <td>UI hosting on Linux</td>
-                  <td>L‑A: react-native-web in CEF Views, with an overlay view and a masked hit test</td>
-                  <td>Phase&nbsp;2</td>
+                  <td><strong>Decided 17 Oct 2026:</strong> the web-rendered host shared with Windows (L‑W); L‑A as the fallback</td>
+                  <td>—</td>
                 </tr>
                 <tr>
                   <td>Branching</td>
@@ -2393,7 +2287,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>Icons</td>
-                  <td>Reuse the Windows Fluent mapping, so there's one table for both non-Mac platforms</td>
+                  <td>Bundled SVG icons behind one <code>Symbol</code> component; Segoe Fluent Icons on Windows only, since Linux doesn't ship the font</td>
                   <td>Phase&nbsp;4</td>
                 </tr>
                 <tr>
@@ -2407,9 +2301,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td>Phase&nbsp;5</td>
                 </tr>
                 <tr>
-                  <td>If the Windows airspace gate fails</td>
-                  <td>Adopt L‑A on Windows as well, sharing the Views host</td>
-                  <td>Windows Phase&nbsp;2</td>
+                  <td>Branch order</td>
+                  <td>Engine and host work lands on <code>feat/windows</code> first; Linux-only changes on <code>feat/linux</code>, stacked on it</td>
+                  <td>Now</td>
                 </tr>
                 <tr>
                   <td>arm64</td>
@@ -2422,8 +2316,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
           <h3>Assumptions in this plan</h3>
           <ul class="prose">
             <li>
-              <code>CefWindow::AddOverlayView</code> accepts a Chrome-style <code>BrowserView</code> with a transparent background on Linux. Check this against
-              the CEF 8037 headers in Phase&nbsp;1.
+              SurfaceEmbed paints and takes input on Wayland and X11 at M154, despite upstream's disabled Linux render test. Phase&nbsp;1 checks it before any
+              Linux host work.
             </li>
             <li>
               <code>install-build-deps.sh</code> at the pinned Chromium still takes <code>--no-nacl</code>, as CEF's current quick start uses it. If it has been
@@ -2455,6 +2349,23 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             </li>
           </ul>
           <h3>Chromium & CEF</h3>
+          <ul class="sources">
+            <li><a href="windows-port-plan.html">Bay for Windows</a>: the shared web-rendered host</li>
+            <li>
+              <a href="https://github.com/chromium/chromium/tree/154.0.8037.58/chrome/browser/ui/webui_browser">chrome/browser/ui/webui_browser</a> at
+              154.0.8037.58 (Webium)
+            </li>
+            <li>
+              <a href="https://github.com/chromium/chromium/tree/154.0.8037.58/components/surface_embed">components/surface_embed</a> at 154.0.8037.58, and its
+              <a href="https://github.com/chromium/chromium/blob/main/components/surface_embed/USER_GUIDE.md">user guide</a>
+            </li>
+            <li>
+              <a href="https://github.com/chromium/chromium/blob/154.0.8037.58/chrome/browser/ui/webui_browser/webui_browser_browsertest.cc"
+                >webui_browser_browsertest.cc</a
+              >
+              (the SurfaceEmbed render test disabled on Linux)
+            </li>
+          </ul>
           <ul class="sources">
             <li>
               <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/linux/build_instructions.md">Checking out and building Chromium on Linux</a>
