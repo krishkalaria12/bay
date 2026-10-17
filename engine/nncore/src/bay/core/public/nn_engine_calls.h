@@ -24,6 +24,7 @@ inline bool IsEngineCall(std::string_view name) {
     "nn_downloads_remove",
     "nn_downloads_resume",
     "nn_extensions_configure",
+    "nn_extensions_import",
     "nn_extensions_install",
     "nn_extensions_install_crx",
     "nn_extensions_list",
