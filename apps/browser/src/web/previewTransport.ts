@@ -12,7 +12,7 @@ export function createPreviewTransport(): NativeTransport {
     modules: ["BayCEF", "BayShell", "BayApp", "BaySystem", "BayKeychain", "BayImport", "BayChromeUI", "BayExtensions"],
     views: [],
     optionalMethods: ["BaySystem.downloadsFolder"],
-    constants: { BayApp: { apiVersion: 9 }, BayShell: { preview: true } },
+    constants: { BayApp: { apiVersion: 9 }, BayShell: { preview: true, hostingSpike: new URLSearchParams(location.search).has("spike") } },
     snapshots: {
       BayShell: { documents },
       BaySystem: { files: {}, downloadsFolder: null },

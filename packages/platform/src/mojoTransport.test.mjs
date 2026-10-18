@@ -55,6 +55,15 @@ test("failed bootstrap closes both Mojo endpoints and removes listeners", async 
   await assert.rejects(createMojoTransport(native), /disconnected/);
   assert.equal(native.closed(), 2); assert.equal(native.callbacks.size, 0);
 });
+test("unresponsive bootstrap times out and closes endpoints before a late reply", async () => {
+  let resolve;
+  const native = endpoints({ getHostInfo: () => new Promise(done => { resolve = done; }) });
+  await assert.rejects(createMojoTransport({ ...native, bootstrapTimeoutMs: 5 }), { code: "bootstrap_timeout" });
+  assert.equal(native.closed(), 2); assert.equal(native.callbacks.size, 0);
+  resolve({ infoJson: JSON.stringify(info()) });
+  await Promise.resolve();
+  assert.equal(native.closed(), 2);
+});
 test("web bootstrap installs host identity before application imports", async () => {
   const native = endpoints(), installed = await initializeWebNativeBridge(native);
   assert.equal(getNativeHostInfo().platform, "windows");

@@ -18,10 +18,11 @@ export type WebNativeBridgeOptions = {
   remote: MojoNativeHostRemote;
   client: MojoNativeHostClientRouter;
   onProtocolError?: (error: Error) => void;
+  bootstrapTimeoutMs?: number;
 };
 
 /** Only the trusted chrome://bay bootstrap creates the Mojo endpoints. No window messages are accepted. */
-export async function createMojoTransport({ remote, client, onProtocolError = error => console.error(error) }: WebNativeBridgeOptions): Promise<NativeTransport> {
+export async function createMojoTransport({ remote, client, onProtocolError = error => console.error(error), bootstrapTimeoutMs = 15000 }: WebNativeBridgeOptions): Promise<NativeTransport> {
   let info: NativeHostInfo | null = null;
   let failure: Error | null = null;
   let disposed = false;
@@ -61,7 +62,17 @@ export async function createMojoTransport({ remote, client, onProtocolError = er
       for (const subscription of [...(listeners.get(module)?.get(event) ?? [])]) subscription.listener(payload);
     }));
     remote.setClient(client.$.bindNewPipeAndPassRemote());
-    const initial = parseInfo((await remote.getHostInfo()).infoJson);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let initial: NativeHostInfo;
+    try {
+      const response = await Promise.race([
+        remote.getHostInfo(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new NativeBridgeError("bootstrap_timeout", "Bay's native host did not finish starting")), bootstrapTimeoutMs);
+        }),
+      ]);
+      initial = parseInfo(response.infoJson);
+    } finally { clearTimeout(timeout); }
     active();
     // An update received during bootstrap is newer than the initial request's snapshot.
     info ??= initial;
