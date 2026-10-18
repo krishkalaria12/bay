@@ -1,6 +1,7 @@
 # Windows desktop builds
 
-Windows 11 22H2 or later, x64, is the initial target. Bay compiles Chrome with
+Windows 10 and Windows 11, x64, are the targets. Mica requires Windows 11 22H2;
+earlier systems use a solid backdrop. Bay compiles Chrome with
 its own WebUI and SurfaceEmbed tab host. The React UI is a local web bundle in
 `bay-ui/`, served as `chrome://bay`. No React Native Windows runtime, CEF DLL or
 bootstrap launcher ships. The macOS build remains separate.
@@ -50,6 +51,23 @@ The app builder runs `pnpm --filter @bay/browser build:web`, copies the static
 web export into `bay-ui/`, preserves matching generated Mojo bindings and stages
 the verified Chrome runtime. `--skip-web-build` accepts an existing export. Use
 a fresh output directory to prevent stale engine files from another revision.
+The builder validates the local HTML entrypoint and its script references, walks
+the generated Mojo module imports, and writes a checksum manifest for the staged
+application. Verify it before packaging with:
+
+```powershell
+python scripts/windows/build-app.py --verify dist/windows-app
+```
+
+Packaging checks that manifest again against its copied input before editing PE
+resources or signing. It then removes the manifest from the installer staging
+directory, since its checksums describe the unsigned build. The original staged
+build and manifest remain available for diagnosis. The signed installer and
+update feed have their own final SHA-256.
+
+Generated bindings come from Chromium's WebUI TypeScript build, not the legacy
+Mojo JavaScript generator. Shared `chrome://resources/mojo/` runtime imports stay
+in Chromium's standard resource PAKs.
 
 Install Inno Setup 6 first. Unsigned installers are for local testing; their
 updater is disabled. For signed builds, put the code-signing certificate in the
@@ -109,7 +127,12 @@ use the dedicated self-hosted `bay-engine` runner. The package workflow accepts
 an explicit version/channel and supports certificate secrets in the
 `windows-release` environment. It only uploads build artifacts.
 
-Before a beta release, use a clean Windows 11 VM:
+The [hosting gate](hosting-gate.md) records Phase 2 separately from process
+liveness. Run it on Windows 11 at 100% and 150%, and Windows 10. The smoke command
+accepts `-HostingSpike` to launch that diagnostic page, but still checks only
+process and window liveness.
+
+Before a beta release, use clean Windows 10 and Windows 11 installations:
 
 - Launch `--enable-features=Webium,SurfaceEmbed chrome://webui-browser` and test
   upstream tab embedding, then test `chrome://bay` with the packaged local UI.

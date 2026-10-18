@@ -35,6 +35,11 @@ New-Item $OutputDirectory -ItemType Directory -Force | Out-Null
 $OutputDirectory = (Resolve-Path $OutputDirectory).Path
 try {
     Copy-Item (Join-Path $AppDirectory '*') $stage -Recurse
+    # Verify the exact copied runtime and WebUI before adding release files or
+    # changing PE resources/signatures. The build manifest covers unsigned input.
+    & python (Join-Path $PSScriptRoot 'build-app.py') --verify $stage
+    if ($LASTEXITCODE -ne 0) { throw 'Staged application manifest validation failed' }
+    Remove-Item (Join-Path $stage 'app-manifest.json')
     Copy-Item (Join-Path $repo 'LICENSE'), (Join-Path $repo 'NOTICE') $stage
     Copy-Item (Join-Path $repo 'packaging/windows/licenses') $stage -Recurse
     # Keep debugging symbols separate from the downloadable application.

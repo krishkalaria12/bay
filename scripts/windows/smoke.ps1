@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$AppPath,
+    [switch]$HostingSpike,
     [ValidateRange(1, 120)][int]$StartupSeconds = 15
 )
 $ErrorActionPreference = 'Stop'
@@ -15,7 +16,9 @@ $previousData = $env:BAY_DATA_DIR
 $process = $null
 try {
     $env:BAY_DATA_DIR = $data
-    $process = Start-Process -FilePath $AppPath -ArgumentList "--user-data-dir=`"$data`"", '--enable-features=Webium,SurfaceEmbed', 'chrome://bay' -WorkingDirectory $directory -PassThru
+    $arguments = @("--user-data-dir=`"$data`"", '--enable-features=Webium,SurfaceEmbed')
+    if ($HostingSpike) { $arguments += '--bay-hosting-spike' }
+    $process = Start-Process -FilePath $AppPath -ArgumentList $arguments -WorkingDirectory $directory -PassThru
     $deadline = (Get-Date).AddSeconds($StartupSeconds)
     $windowAppeared = $false
     while ((Get-Date) -lt $deadline) {
@@ -28,7 +31,8 @@ try {
     Start-Sleep -Seconds 2
     $process.Refresh()
     if ($process.HasExited) { throw "Bay exited after creating its window: $($process.ExitCode)" }
-    Write-Output 'Bay created a desktop window and remained running'
+    Write-Output 'Liveness passed: Bay created a desktop window and remained running'
+    Write-Output 'This does not pass the Windows hosting gate; record that separately using packaging/windows/hosting-gate.md'
 } finally {
     $env:BAY_DATA_DIR = $previousData
     if ($process) {

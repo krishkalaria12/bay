@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "decision": "not-run",
+  "engineId": "",
+  "appManifestSha256": "",
+  "testedAt": "",
+  "tester": "",
+  "environment": {
+    "windowsVersion": "",
+    "windowsBuild": "",
+    "architecture": "x64",
+    "displayScalePercent": null,
+    "gpu": "",
+    "driverVersion": "",
+    "monitors": "",
+    "screenReaders": ""
+  },
+  "metrics": {
+    "mojoRoundTripSamples": null,
+    "mojoRoundTripP50Milliseconds": null,
+    "mojoRoundTripP95Milliseconds": null,
+    "motionFramesPerSecond": null,
+    "tabEventRateHertz": null,
+    "coldStartMilliseconds": null,
+    "uiRendererPrivateMemoryMiB": null,
+    "macColdStartMilliseconds": null,
+    "macUiMemoryMiB": null
+  },
+  "checks": {
+    "overlayVideoMoveResize": {"status": "not-run", "evidence": ""},
+    "backdropBlurVideo60fps": {"status": "not-run", "evidence": ""},
+    "pageInputAndUiPageDragDrop": {"status": "not-run", "evidence": ""},
+    "pageFocusShortcutsAndF6Cycle": {"status": "not-run", "evidence": ""},
+    "japaneseAndChineseImeInPageAndUi": {"status": "not-run", "evidence": ""},
+    "narratorNvdaAndUnifiedAutomationTree": {"status": "not-run", "evidence": ""},
+    "captionResizeSnapAndMixedDpi": {"status": "not-run", "evidence": ""},
+    "micaAndActiveInactiveBackdrop": {"status": "not-run", "evidence": ""},
+    "reanimatedMotionWithThreeLoadingPanes": {"status": "not-run", "evidence": ""},
+    "mojoP95Under2msAnd60hzEvents": {"status": "not-run", "evidence": ""},
+    "untrustedPageCannotAccessBridge": {"status": "not-run", "evidence": ""},
+    "tabTransferWithoutReload": {"status": "not-run", "evidence": ""},
+    "embeddedFullscreenPipAndDevtools": {"status": "not-run", "evidence": ""},
+    "coldStartAndMemoryComparedWithMac": {"status": "not-run", "evidence": ""}
+  },
+  "limitations": [],
+  "decisionReason": ""
+}

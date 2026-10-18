@@ -138,7 +138,7 @@ class ArtifactTests(unittest.TestCase):
                 manifest["files"][f"runtime/{name}"] = engine.sha256(path)
             (artifact / "manifest.json").write_text(json.dumps(manifest))
             web.mkdir()
-            (web / "index.html").write_text("<html>Bay</html>")
+            self.make_web_entry(web)
             (web / "native_host.mojom-webui.js").write_text("stale binding")
             with mock.patch.object(build_app.fetch.engine, "artifact_id", return_value="fixture"):
                 build_app.stage(artifact, web, destination)
@@ -146,6 +146,94 @@ class ArtifactTests(unittest.TestCase):
             self.assertFalse((destination / "chrome.exe").exists())
             self.assertEqual((destination / "bay-ui/native_host.mojom-webui.js").read_text(), "bay-ui/native_host.mojom-webui.js")
             self.assertTrue((destination / "bay-ui/index.html").is_file())
+            self.assertEqual(build_app.web_artifacts.verify_manifest(destination)["engineId"], "fixture")
+
+    @staticmethod
+    def make_web_entry(directory):
+        (directory / "index.html").write_text('<div id="root"></div><script type="module" src="/bay-native-host.js"></script><script defer src="/app.js"></script>')
+        (directory / "bay-native-host.js").write_text('import("/native_host.mojom-webui.js");')
+        (directory / "app.js").write_text("// app fixture")
+
+    def test_generated_mojo_graph_collects_local_modules_and_shared_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "native_host.mojom-webui.js").write_text('import {mojo} from "//resources/mojo/mojo/public/js/bindings.js";\nexport {Kind} from "./types/value.js";')
+            (root / "types").mkdir()
+            (root / "types/value.js").write_text('import "../native_host.mojom-webui.js";\nexport const Kind = 0;')
+            files, shared = build_app.web_artifacts.mojo_files(root)
+            self.assertEqual(set(files), {"native_host.mojom-webui.js", "types/value.js"})
+            self.assertEqual(shared, ["//resources/mojo/mojo/public/js/bindings.js"])
+            (root / "types/value.js").unlink()
+            with self.assertRaisesRegex(ValueError, "dependency is missing"):
+                build_app.web_artifacts.mojo_files(root)
+
+    def test_generated_mojo_rejects_remote_and_escaping_imports(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for reference in ("https://example.test/module.js", "../../outside.js", "file:///tmp/module.js", "/%2e%2e/outside.js"):
+                with self.subTest(reference=reference):
+                    (root / "native_host.mojom-webui.js").write_text(f'import "{reference}";')
+                    with self.assertRaises(ValueError):
+                        build_app.web_artifacts.mojo_files(root)
+
+    def test_web_entry_requires_local_bundle_and_mojo_bootstrap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            self.make_web_entry(root)
+            build_app.web_artifacts.validate_entrypoint(root)
+            for html in ('<script src="/app.js"></script>',
+                         '<div id="root"></div><script>window.boot()</script>',
+                         '<div id="root"></div><script type="module" src="https://example.test/app.js"></script>',
+                         '<div id="root"></div><script type="module" src="/bay-native-host.js"></script><script src="/missing.js"></script>'):
+                with self.subTest(html=html):
+                    (root / "index.html").write_text(html)
+                    with self.assertRaises(ValueError):
+                        build_app.web_artifacts.validate_entrypoint(root)
+
+    def test_app_manifest_rejects_changed_or_unlisted_ui_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            ui = root / "bay-ui"
+            ui.mkdir()
+            self.make_web_entry(ui)
+            (ui / "native_host.mojom-webui.js").write_text('// Mojo fixture')
+            build_app.web_artifacts.write_manifest(root, "fixture")
+            build_app.web_artifacts.verify_manifest(root)
+            (ui / "app.js").write_text("// changed")
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                build_app.web_artifacts.verify_manifest(root)
+            build_app.web_artifacts.write_manifest(root, "fixture")
+            (ui / "stale.js").write_text("// stale")
+            with self.assertRaisesRegex(ValueError, "do not match"):
+                build_app.web_artifacts.verify_manifest(root)
+
+    def test_archive_packages_transpiled_mojo_dependency_graph(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "verify_checkout"), \
+                mock.patch.object(engine, "source_digest", return_value="digest"), \
+                mock.patch.object(engine, "artifact_id", return_value="fixture"):
+            root = pathlib.Path(directory)
+            (root / "bay-engine-build.json").write_text(json.dumps({"lock": engine.LOCK, "sourceDigest": "digest"}))
+            binaries = root / "chromium_git/chromium/src" / engine.LOCK["outputDirectory"]
+            binaries.mkdir(parents=True)
+            for name in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "icudtl.dat", "resources.pak", "chrome.pdb"):
+                (binaries / name).write_bytes(name.encode())
+            (binaries / "locales").mkdir()
+            generated = binaries / "gen/chrome/browser/bay/webui/resources/tsc"
+            generated.mkdir(parents=True)
+            (generated / "native_host.mojom-webui.js").write_text('import "./helper.js";\nimport "//resources/mojo/mojo/public/js/bindings.js";')
+            (generated / "helper.js").write_text("// dependency fixture")
+            output = root / "archive"
+            engine.archive(root, output)
+            with zipfile.ZipFile(output / "fixture.zip") as archive:
+                self.assertIn("runtime/bay-ui/helper.js", archive.namelist())
+                self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", archive.namelist())
+                self.assertNotIn("runtime/chrome.pdb", archive.namelist())
+                manifest = json.loads(archive.read("manifest.json"))
+                self.assertEqual(manifest["mojo"]["sharedImports"], ["//resources/mojo/mojo/public/js/bindings.js"])
+            (generated / "helper.js").unlink()
+            with self.assertRaisesRegex(ValueError, "dependency is missing"):
+                engine.archive(root, root / "missing-output")
+            self.assertFalse((root / "missing-output").exists())
 
     def test_signed_updater_policy_rejects_unsafe_or_incomplete_configuration(self):
         config = {"enabled": True, "version": "1.2.3", "appVersion": "1.2.3", "buildNumber": "0",
