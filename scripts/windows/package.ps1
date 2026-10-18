@@ -67,7 +67,8 @@ try {
     $policy = @{ enabled = (-not $Unsigned -and [bool]$FeedUrl -and [bool]$DownloadBaseUrl);
         version = $Version; appVersion = $Version; buildNumber = $buildNumber; channel = $Channel;
         feedUrl = $FeedUrl; publisherThumbprints = $publisher; allowedOrigins = $origins;
-        publisherSubject = $publisherSubject; allowPublisherRenewal = [bool]$env:BAY_SIGNING_DLIB }
+        publisherSubject = $publisherSubject; allowPublisherRenewal = [bool]$env:BAY_SIGNING_DLIB;
+        scriptSha256 = (Get-FileHash (Join-Path $stage 'update.ps1') -Algorithm SHA256).Hash.ToLowerInvariant() }
     $policyPath = Join-Path $stage 'update-config.json'
     $policy | ConvertTo-Json -Depth 6 | Set-Content $policyPath -Encoding utf8
     & python (Join-Path $PSScriptRoot 'embed-update-config.py') --executable (Join-Path $stage 'Bay.exe') --config $policyPath

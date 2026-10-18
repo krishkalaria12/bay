@@ -6,11 +6,13 @@ param(
     [switch]$Deferred,
     [switch]$UseStaged,
     [switch]$CheckOnly,
-    [string]$StateFile
+    [string]$StateFile,
+    [string]$TrustedStateJson
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version Latest
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 
 function Write-Result($Value) { ConvertTo-Json -InputObject $Value -Compress -Depth 12 | Write-Output }
 function Get-Origin([uri]$Uri) {
@@ -128,23 +130,82 @@ function Assert-Payload([string]$Installer, $Feed, $Config) {
     if ((Get-Version $version) -ne (Get-Version $Feed.version) -or
         (Get-Version $version) -le (Get-Version $Config.appVersion)) { throw 'Signed installer version does not match a newer update' }
 }
+function Get-StagedUpdate($Config) {
+    $pending = Join-Path $env:LOCALAPPDATA "Bay/Updates/pending-$($Config.channel).json"
+    if (-not (Test-Path -LiteralPath $pending)) { return $null }
+    if ((Get-Item -LiteralPath $pending).Length -gt 1048576) { throw 'Invalid staged update metadata size' }
+    $feed = Get-Content -LiteralPath $pending -Raw | ConvertFrom-Json
+    Assert-Feed $feed $Config
+    if ((Get-Version $feed.version) -le (Get-Version $Config.appVersion)) { return $null }
+    $installer = Join-Path $env:LOCALAPPDATA "Bay/Updates/$($Config.channel)/$($feed.version)/BaySetup.exe"
+    Assert-Payload $installer $feed $Config
+    return [pscustomobject]@{ feed = $feed; installer = $installer }
+}
+function Test-ApplyCancelled([string]$StatePath) {
+    return Test-Path -LiteralPath ($StatePath + '.cancel')
+}
+function Wait-ApplyParent($Parent, [string]$StatePath, [bool]$ApplyDeferred) {
+    if (Test-ApplyCancelled $StatePath) { return $false }
+    if ($Parent) {
+        $deadline = [DateTime]::UtcNow.AddMinutes(2)
+        while (-not $Parent.WaitForExit(250)) {
+            if (Test-ApplyCancelled $StatePath) { return $false }
+            if (-not $ApplyDeferred -and [DateTime]::UtcNow -ge $deadline) {
+                throw 'Bay did not exit; update was left staged'
+            }
+        }
+    }
+    return -not (Test-ApplyCancelled $StatePath)
+}
+function New-ApplyCommand([string]$Source, [string]$StatePath, [int]$ParentId, [bool]$ApplyDeferred, [string]$ApplyStateJson = '') {
+    # Carry the already authenticated script in the worker command. A writable
+    # .ps1 copy in the cache would be executable code outside the signed policy.
+    $memory = [IO.MemoryStream]::new()
+    $gzip = [IO.Compression.GZipStream]::new($memory, [IO.Compression.CompressionLevel]::Optimal, $true)
+    $writer = [IO.StreamWriter]::new($gzip, [Text.UTF8Encoding]::new($false))
+    $payload = @{ source = $Source; state = $ApplyStateJson } | ConvertTo-Json -Compress -Depth 4
+    try { $writer.Write($payload) } finally { $writer.Dispose() }
+    try { $compressed = [Convert]::ToBase64String($memory.ToArray()) } finally { $memory.Dispose() }
+    $deferredArgument = if ($ApplyDeferred) { '-Deferred' } else { '' }
+    $stateArgument = if ($ApplyStateJson) { '-TrustedStateJson $payload.state' } else { '' }
+    $bootstrap = '$memory = [IO.MemoryStream]::new([Convert]::FromBase64String(''{0}''), $false); $gzip = [IO.Compression.GZipStream]::new($memory, [IO.Compression.CompressionMode]::Decompress); $reader = [IO.StreamReader]::new($gzip, [Text.Encoding]::UTF8); $payload = $reader.ReadToEnd() | ConvertFrom-Json; $reader.Dispose(); & ([scriptblock]::Create($payload.source)) -Mode Apply -StateFile ''{1}'' -ParentProcessId {2} {3} {4}' -f $compressed, $StatePath.Replace("'", "''"), $ParentId, $deferredArgument, $stateArgument
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
+    if ($encoded.Length -gt 28000) { throw 'The authenticated update worker exceeds the Windows command-line limit' }
+    return $encoded
+}
 
 $temporary = $null
 try {
     if ($CheckOnly) { $Mode = 'Check' }
     if ($Mode -eq 'Apply') {
         if (-not $StateFile -or $ParentProcessId -le 0) { throw 'Apply requires a staged state and parent process' }
-        $state = Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json
+        if (Test-ApplyCancelled $StateFile) {
+            Write-Result @{ status = 'cancelled' }
+            exit 0
+        }
+        # appPath, installer and feed were frozen by the authenticated parent
+        # script. Cache metadata is writable and must not select another signed
+        # Bay executable's older policy or change the approved release.
+        if (-not $TrustedStateJson) { throw 'Apply requires authenticated worker state' }
+        $state = $TrustedStateJson | ConvertFrom-Json
         # Hold a handle to this exact process, avoiding PID reuse after it exits.
         $parent = Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue
-        if ($parent) {
-            if ($Deferred) { $parent.WaitForExit() }
-            elseif (-not $parent.WaitForExit(120000)) { throw 'Bay did not exit; update was left staged' }
+        if (-not (Wait-ApplyParent $parent $StateFile ([bool]$Deferred))) {
+            Write-Result @{ status = 'cancelled' }
+            exit 0
         }
         $config = Read-Policy $state.appPath
         if (-not $config.enabled) { throw 'Updates are disabled' }
+        if (($config | ConvertTo-Json -Compress -Depth 12) -cne
+            ($state.policy | ConvertTo-Json -Compress -Depth 12)) {
+            throw 'The installed application update policy changed while the update was waiting'
+        }
         Assert-Feed $state.feed $config
         Assert-Payload $state.installer $state.feed $config
+        if (Test-ApplyCancelled $StateFile) {
+            Write-Result @{ status = 'cancelled' }
+            exit 0
+        }
         $process = Start-Process -FilePath $state.installer -ArgumentList '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS' -Wait -PassThru
         if ($process.ExitCode -ne 0) { throw "Installer failed with exit code $($process.ExitCode)" }
         # Deferred updates apply after a natural quit and must not reopen Bay.
@@ -159,18 +220,24 @@ try {
         exit 0
     }
     if ($Mode -eq 'State') {
+        $staged = $null
+        # A cache entry is a hint. Recheck the signed policy, feed, installer
+        # checksum, publisher and version before recovering it after a restart.
+        try { $staged = Get-StagedUpdate $config } catch { $staged = $null }
         Write-Result @{ status = 'ready'; configured = $true; currentVersion = $config.appVersion; appVersion = $config.appVersion;
-            buildNumber = $config.buildNumber; channel = $config.channel; feedUrl = $config.feedUrl }
+            buildNumber = $config.buildNumber; channel = $config.channel; feedUrl = $config.feedUrl;
+            staged = [bool]$staged; version = $(if ($staged) { $staged.feed.version } else { $null }) }
         exit 0
     }
     $pendingPath = Join-Path $env:LOCALAPPDATA "Bay/Updates/pending-$($config.channel).json"
     if ($UseStaged) {
         if ($Mode -ne 'Install') { throw 'UseStaged is only valid for Install' }
-        if (-not (Test-Path $pendingPath)) {
+        $staged = Get-StagedUpdate $config
+        if (-not $staged) {
             Write-Result @{ status = 'up-to-date'; currentVersion = $config.appVersion; version = $config.appVersion }
             exit 0
         }
-        $feed = Get-Content -LiteralPath $pendingPath -Raw | ConvertFrom-Json
+        $feed = $staged.feed
     } else {
         $temporary = Join-Path ([IO.Path]::GetTempPath()) ('Bay-update-check-' + [guid]::NewGuid())
         New-Item $temporary -ItemType Directory | Out-Null
@@ -208,8 +275,8 @@ try {
     if ($ParentProcessId -le 0) { throw 'Install requires ParentProcessId so it can wait for Bay to exit' }
     $worker = Join-Path $cache ('apply-' + [guid]::NewGuid())
     New-Item $worker -ItemType Directory | Out-Null
-    Copy-Item -LiteralPath $PSCommandPath (Join-Path $worker 'update.ps1')
-    @{ appPath = $appPath; installer = $installer; feed = $feed } | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $worker 'state.json') -Encoding utf8
+    $workerStateJson = @{ appPath = $appPath; installer = $installer; feed = $feed; policy = $config } | ConvertTo-Json -Depth 12
+    $workerStateJson | Set-Content (Join-Path $worker 'state.json') -Encoding utf8
     $start = New-Object Diagnostics.ProcessStartInfo
     $start.FileName = Join-Path $PSHOME 'powershell.exe'
     if (-not (Test-Path $start.FileName)) { $start.FileName = Join-Path $PSHOME 'pwsh.exe' }
@@ -217,11 +284,13 @@ try {
     # captured stdout pipe, so native callers receive EOF immediately.
     $start.UseShellExecute = $true
     $start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-    $start.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $worker 'update.ps1') + '" -Mode Apply -StateFile "' + (Join-Path $worker 'state.json') + '" -ParentProcessId ' + $ParentProcessId
-    if ($Deferred) { $start.Arguments += ' -Deferred' }
+    $source = [IO.File]::ReadAllText($PSCommandPath, [Text.Encoding]::UTF8)
+    $encoded = New-ApplyCommand $source (Join-Path $worker 'state.json') $ParentProcessId ([bool]$Deferred) $workerStateJson
+    $start.Arguments = '-NoLogo -NoProfile -NonInteractive -EncodedCommand ' + $encoded
     $process = [Diagnostics.Process]::Start($start)
     if (-not $process) { throw 'Could not start the updater worker' }
-    Write-Result @{ status = 'installing'; currentVersion = $config.appVersion; version = $feed.version; deferred = [bool]$Deferred; workerProcessId = $process.Id }
+    Write-Result @{ status = 'installing'; currentVersion = $config.appVersion; version = $feed.version; deferred = [bool]$Deferred;
+        workerProcessId = $process.Id; cancelPath = (Join-Path $worker 'state.json.cancel') }
 } catch {
     $failure = @{ status = 'error'; message = $_.Exception.Message }
     if ($Mode -eq 'Apply' -and $StateFile) {

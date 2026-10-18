@@ -13,7 +13,7 @@ RESOURCE_ID = 201
 
 
 def validate_config(config):
-    required = {"enabled", "version", "appVersion", "buildNumber", "channel", "feedUrl", "publisherThumbprints", "allowedOrigins"}
+    required = {"enabled", "version", "appVersion", "buildNumber", "channel", "feedUrl", "publisherThumbprints", "allowedOrigins", "scriptSha256"}
     if not required.issubset(config):
         raise ValueError("update policy is missing required fields")
     if not isinstance(config["enabled"], bool) or config["channel"] not in ("stable", "beta"):
@@ -22,6 +22,8 @@ def validate_config(config):
         raise ValueError("invalid installed application version")
     if config["appVersion"] != config["version"]:
         raise ValueError("installed application versions do not match")
+    if not isinstance(config["scriptSha256"], str) or not re.fullmatch(r"[a-fA-F0-9]{64}", config["scriptSha256"]):
+        raise ValueError("update script SHA-256 is invalid")
     for name in ("publisherThumbprints", "allowedOrigins"):
         if not isinstance(config[name], list) or any(not isinstance(value, str) for value in config[name]):
             raise ValueError(f"{name} must be an array of strings")

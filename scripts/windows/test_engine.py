@@ -238,10 +238,12 @@ class ArtifactTests(unittest.TestCase):
     def test_signed_updater_policy_rejects_unsafe_or_incomplete_configuration(self):
         config = {"enabled": True, "version": "1.2.3", "appVersion": "1.2.3", "buildNumber": "0",
                   "channel": "beta", "feedUrl": "https://updates.example.test/beta.json",
-                  "publisherThumbprints": ["trusted"], "allowedOrigins": ["https://updates.example.test"]}
+                  "publisherThumbprints": ["trusted"], "allowedOrigins": ["https://updates.example.test"],
+                  "scriptSha256": "a" * 64}
         self.assertEqual(json.loads(embed_config.validate_config(config))["appVersion"], "1.2.3")
         for change in ({"enabled": "true"}, {"allowedOrigins": []}, {"allowedOrigins": ["http://example.test"]},
-                       {"allowedOrigins": ["https://user:password@example.test"]}, {"appVersion": "1.2.2"}):
+                       {"allowedOrigins": ["https://user:password@example.test"]}, {"appVersion": "1.2.2"},
+                       {"scriptSha256": ""}, {"scriptSha256": "x" * 64}, {"scriptSha256": 12}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 embed_config.validate_config({**config, **change})
 
