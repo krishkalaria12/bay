@@ -24,6 +24,11 @@ export const engineProfile = (profileId: string) => {
   return id === DEFAULT_PROFILE_ID ? "" : id;
 };
 
+export const engineProfileFor = (profileId: string, profiles: Record<string, Profile>) => {
+  const id = profiles[profileId]?.dataId ?? profileId;
+  return id === DEFAULT_PROFILE_ID ? "" : id;
+};
+
 export const INCOGNITO_PROFILE: Profile = { id: "incognito", name: "Incognito", color: "neutral", icon: null, createdAt: 0 };
 
 export const IDLE_LIVE: TabLive = {

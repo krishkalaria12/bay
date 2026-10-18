@@ -1,6 +1,6 @@
 import type { StripGroup, StripState, StripTab } from "@bay/nncore";
 import type { BrowserState } from "./browser";
-import { engineProfile, pinnedFirst } from "./model";
+import { engineProfileFor, pinnedFirst } from "./model";
 import { forgetOpeners, switchKeepsOpeners } from "./openers";
 import { groupOf, placing, withGroup } from "./organize";
 import { splitOf } from "./splits";
@@ -45,7 +45,7 @@ export function chromeChanged(
   // An extension moving a tab to another window: it arrives in a strip of another app window.
   const home = homeWindow(s, after, siblings, stayed);
   const movedIn = (t: Keyed) =>
-    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfile(s.tabs[t.key]!.profileId) === after.profile;
+    !was.has(t.browser) && !!home && s.tabs[t.key]!.windowId !== home && engineProfileFor(s.tabs[t.key]!.profileId, s.profiles) === after.profile;
   const taken = new Set(now.filter((t) => firstFromChrome(t) || movedIn(t)).map((t) => t.key));
 
   for (const t of now) if (movedIn(t)) s = intoWindow(s, t.key, home!);

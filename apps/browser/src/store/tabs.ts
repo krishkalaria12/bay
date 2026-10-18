@@ -38,10 +38,12 @@ export type NewTabOptions = {
   wakeAdoptId?: string;
 };
 
-let openOutsideTab: (url: string, windowId: string) => boolean = () => false;
+export type AppUrlOpener = (url: string, windowId: string) => boolean;
+let openOutsideTab: AppUrlOpener = () => false;
 export const setAppUrlOpener = (open: typeof openOutsideTab) => {
   openOutsideTab = open;
 };
+export const registeredAppUrlOpener: AppUrlOpener = (url, windowId) => openOutsideTab(url, windowId);
 
 export type TabsSlice = {
   tabs: Record<string, Tab>;
@@ -291,7 +293,7 @@ export function withNewTab(s: BrowserState, windowId: string, o: NewTabOptions =
   return [next, tab.id];
 }
 
-export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (set, get) => ({
+export const createTabsSlice = (openAppUrl: AppUrlOpener): StateCreator<BrowserState, [], [], TabsSlice> => (set, get) => ({
   tabs: {},
   live: {},
   closedTabs: [],
@@ -309,7 +311,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
       // The Harbor page stays the opener, so the tabs it sends keep their order.
       return get().newTab(main, { ...options, profileId, index: undefined });
     }
-    if (options?.url && !options.adoptId && openOutsideTab(resolveInput(options.url, searchUrlPrefix(get().settings)), windowId)) return "";
+    if (options?.url && !options.adoptId && openAppUrl(resolveInput(options.url, searchUrlPrefix(get().settings)), windowId)) return "";
     let [next, id] = withNewTab(get(), windowId, options);
     if (id && options?.openerId) next = groupWithOpener(next, id, options.openerId, !!options.background);
     set(next);
@@ -367,7 +369,7 @@ export const createTabsSlice: StateCreator<BrowserState, [], [], TabsSlice> = (s
     const tab = s.tabs[id];
     if (!url || !tab) return;
     const panel = s.windowUi[tab.windowId]?.panel;
-    if (openOutsideTab(url, tab.windowId)) {
+    if (openAppUrl(url, tab.windowId)) {
       const current = get().windowUi[tab.windowId]?.panel;
       // An app URL may open a new palette session instead of navigating the page.
       if (current?.open && current.sessionId === panel?.sessionId) get().closePanel(tab.windowId);

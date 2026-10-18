@@ -7,7 +7,7 @@ import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, typ
 import { createProfilesSlice, DEFAULT_PROFILE, engineIdOf, type ProfilesSlice } from "./profiles";
 import { createSettingsSlice, restoreSettings, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
-import { activated, apply, createTabsSlice, type TabsSlice } from "./tabs";
+import { activated, apply, createTabsSlice, registeredAppUrlOpener, type AppUrlOpener, type TabsSlice } from "./tabs";
 import type { BrowserWindow, Tab } from "./types";
 import { createUiSlice, type UiSlice } from "./ui";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
@@ -65,10 +65,10 @@ const batched =
     return creator(batchedSet, get, api);
   };
 
-export const useBrowser = create<BrowserState>()(batched((...a) => ({
-  ...createProfilesSlice(...a),
+const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener): StateCreator<BrowserState> => batched((...a) => ({
+  ...createProfilesSlice(publishEngineProfiles)(...a),
   ...createWindowsSlice(...a),
-  ...createTabsSlice(...a),
+  ...createTabsSlice(openAppUrl)(...a),
   ...createGroupsSlice(...a),
   ...createOrganizeSlice(...a),
   ...createSplitsSlice(...a),
@@ -116,7 +116,7 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
     );
     const splits = sanitizeSplits(data.splits ?? {}, tabs);
     let bookmarks = data.bookmarks ?? s.bookmarks;
-    for (const id of profileOrder) bookmarks = ensureRoots(bookmarks, id)[0];
+    for (const id of profileOrder) bookmarks = ensureRoots(bookmarks, id, profiles)[0];
     const focused = data.focusedWindowId && windows[data.focusedWindowId] ? data.focusedWindowId : (windowOrder.at(-1) ?? null);
 
     const engines = new Set(Object.values(profiles).map(engineIdOf));
@@ -156,11 +156,20 @@ export const useBrowser = create<BrowserState>()(batched((...a) => ({
     for (const w of Object.values(windows)) next = apply(next, activated(next, w.activeTabIds[w.profileId]!));
     set(next);
   },
-})));
+}));
 
-useBrowser.subscribe((s, prev) => {
-  const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
-  if (patch) useBrowser.setState(patch);
-});
+export function createBrowserStore(options: { publishEngineProfiles?: boolean; openAppUrl?: AppUrlOpener } = {}) {
+  const store = create<BrowserState>()(browserState(options.publishEngineProfiles ?? false, options.openAppUrl ?? (() => false)));
+
+  store.subscribe((s, prev) => {
+    const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
+    if (patch) store.setState(patch);
+  });
+  return store;
+}
+
+// Native integrations on macOS still use model.engineProfile without an explicit registry.
+export const useBrowser = createBrowserStore({ publishEngineProfiles: true, openAppUrl: registeredAppUrlOpener });
+export type BrowserStore = ReturnType<typeof createBrowserStore>;
 
 export type { CreateWindowOptions } from "./windows";

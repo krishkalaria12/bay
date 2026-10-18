@@ -50,8 +50,8 @@ export function sharingProfiles(s: Pick<BrowserState, "profiles" | "profileOrder
   return s.profileOrder.filter((other) => other !== id && s.profiles[other] && dataIdOf(s.profiles[other]!) === dataIdOf(p));
 }
 
-function syncSharedData(s: BrowserState, prev: BrowserState): Partial<BrowserState> | null {
-  if (s.profiles !== prev.profiles) {
+function syncSharedData(s: BrowserState, prev: BrowserState, publishEngineProfiles: boolean): Partial<BrowserState> | null {
+  if (publishEngineProfiles && s.profiles !== prev.profiles) {
     setSharedDataIds(Object.fromEntries(Object.values(s.profiles).filter((p) => p.dataId).map((p) => [p.id, p.dataId!])));
   }
   if (s.profiles === prev.profiles && s.history === prev.history && s.bookmarks.roots === prev.bookmarks.roots) return null;
@@ -69,9 +69,9 @@ function syncSharedData(s: BrowserState, prev: BrowserState): Partial<BrowserSta
   return { history, bookmarks: roots === s.bookmarks.roots ? s.bookmarks : { ...s.bookmarks, roots } };
 }
 
-export const createProfilesSlice: StateCreator<BrowserState, [], [], ProfilesSlice> = (set, get, api) => {
+export const createProfilesSlice = (publishEngineProfiles: boolean): StateCreator<BrowserState, [], [], ProfilesSlice> => (set, get, api) => {
   api.subscribe((s, prev) => {
-    const patch = syncSharedData(s, prev);
+    const patch = syncSharedData(s, prev, publishEngineProfiles);
     if (patch) set(patch);
   });
 
@@ -94,11 +94,11 @@ export const createProfilesSlice: StateCreator<BrowserState, [], [], ProfilesSli
       let bookmarks = s.bookmarks;
       let history = s.history;
       if (source) {
-        const [withRoots, roots] = ensureRoots(bookmarks, source.id);
+        const [withRoots, roots] = ensureRoots(bookmarks, source.id, s.profiles);
         bookmarks = { ...withRoots, roots: { ...withRoots.roots, [profile.id]: roots } };
         if (s.history[source.id]) history = { ...history, [profile.id]: s.history[source.id]! };
       } else {
-        bookmarks = ensureRoots(bookmarks, profile.id)[0];
+        bookmarks = ensureRoots(bookmarks, profile.id, { ...s.profiles, [profile.id]: profile })[0];
       }
       set({ profiles: { ...s.profiles, [profile.id]: profile }, profileOrder: [...s.profileOrder, profile.id], bookmarks, history });
       return profile.id;
