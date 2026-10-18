@@ -1,5 +1,6 @@
 # Copyright 2026 Bay. Apache-2.0.
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
 
 mojom("mojom") {
   sources = [ "native_host.mojom" ]
@@ -139,4 +140,18 @@ if (is_win) {
       "wintrust.lib",
     ]
   }
+}
+
+# Pure browser-side privacy/command checks can run without a browser window.
+test("runtime_unittests") {
+  sources = [
+    "runtime_state.cc",
+    "runtime_state.h",
+    "runtime_state_unittest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//testing/gtest",
+  ]
 }
