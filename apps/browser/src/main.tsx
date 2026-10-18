@@ -11,10 +11,13 @@ import { perfMark, perfProbeEnabled, probeStore } from "./lib/perfProbe";
 import { startTabLifecycle } from "./lib/tabLifecycle";
 import { startTabPages } from "./lib/tabPages";
 import { startSync } from "./sync/engine";
+import { startLivePersistence } from "./live/store";
 import { setStoreBatching, useBrowser } from "./store/browser";
 import { installErrorReporting, startTelemetry } from "./telemetry";
 import { markFirstWindow } from "./telemetry/track";
 
+// Live state used to load during imports. Load it before other services or windows.
+startLivePersistence();
 probeStore("browser", useBrowser);
 // Reports stay silent until the user shares them.
 installErrorReporting();

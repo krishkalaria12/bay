@@ -70,9 +70,7 @@ function load(): Partial<LiveState> {
   }
 }
 
-const saved = load();
-
-export const useLive = create<LiveState>()(() => ({
+const initialState = (saved: Partial<LiveState> = {}): LiveState => ({
   folders: saved.folders ?? {},
   folderOrder: saved.folderOrder ?? [],
   items: saved.items ?? {},
@@ -88,24 +86,45 @@ export const useLive = create<LiveState>()(() => ({
   calendar: { ...DEFAULT_CALENDAR, ...saved.calendar },
   meetingGroups: saved.meetingGroups ?? {},
   dismissedAlerts: saved.dismissedAlerts ?? [],
-}));
+});
+
+// Importing window UI creates an in-memory view, without reading shared files
+// or installing another document writer. The application owner starts IO.
+export const useLive = create<LiveState>()(() => initialState());
 
 export const live = () => useLive.getState();
 export const setLive = (patch: Partial<LiveState> | ((s: LiveState) => Partial<LiveState>)) => useLive.setState(patch);
 
-let timer: ReturnType<typeof setTimeout> | undefined;
-useLive.subscribe((s, prev) => {
-  if (PERSISTED.every((k) => s[k] === prev[k])) return;
-  clearTimeout(timer);
-  timer = setTimeout(() => {
-    const s = live();
-    try {
-      writeDocument(DOC, JSON.stringify(Object.fromEntries(PERSISTED.map((k) => [k, s[k]]))));
-    } catch (error) {
-      console.warn("Couldn't save live folders", error);
-    }
-  }, 800);
-});
+let stopPersistence: (() => void) | undefined;
+
+/** Load shared Live state once, before services and windows start using it. */
+export function startLivePersistence(): () => void {
+  if (stopPersistence) return stopPersistence;
+  useLive.setState(initialState(load()), true);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unsubscribe = useLive.subscribe((s, prev) => {
+    if (PERSISTED.every((key) => s[key] === prev[key])) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      const s = live();
+      try {
+        writeDocument(DOC, JSON.stringify(Object.fromEntries(PERSISTED.map((key) => [key, s[key]]))));
+      } catch (error) {
+        console.warn("Couldn't save live folders", error);
+      }
+    }, 800);
+  });
+  const stop = () => {
+    if (stopPersistence !== stop) return;
+    clearTimeout(timer);
+    unsubscribe();
+    stopPersistence = undefined;
+  };
+  stopPersistence = stop;
+  return stop;
+}
 
 let counter = 0;
 const newId = () => `lf-${Date.now().toString(36)}-${(++counter).toString(36)}`;
