@@ -64,17 +64,30 @@ Portable NNCore sources and Chrome import/sync service targets are linked in
 the build definitions. Profile routing refuses unknown unloaded profiles, and
 native workers marshal engine replies back through the browser UI thread.
 
-The shared application runtime has an isolated store factory, detached read-only
-state projections and an ordered command authority with epoch, revision and
-duplicate-request checks. Regression tests cover simultaneous requests, failure
-recovery, immutable prior commits and store isolation. This foundation is not
-yet connected across renderer processes. Additional full application windows
-remain gated until the browser-owned coordinator, window mirrors, command
-migration, sole-writer persistence and two-window tests are complete.
+The shared application runtime has an isolated store factory, read-only window
+clients and an ordered command authority with epoch, revision and duplicate
+request checks. Its Mojo transport and coordinator runner publish state before
+acknowledging mutations. Recovery retains accepted live and navigation state
+without session hydration. Native privacy and command validators have 12
+executed C++ tests on macOS, linked against the pinned Chromium libraries.
 
-Native updater integration, native close-button shutdown preparation, remaining
-page methods, native event coverage and complete OS module coverage are still
-being implemented. Do not treat the diagnostic page as a complete browser host.
+Behind `--bay-shared-runtime`, a browser-owned detached WebContents holds the
+coordinator, authenticates document connections and retains accepted state for
+bounded crash recovery. Native projections remove other windows' private data;
+global engine, data and window events go to the coordinator. This experimental
+mode deliberately stops before the legacy UI entry, which still owns global
+services. The coordinator and visible UI entries are not wired together yet.
+Additional application windows remain gated pending command migration,
+sole-writer persistence and two-window tests. Live document IO now starts
+explicitly instead of running when window UI imports its store.
+
+Native updater and close-button shutdown preparation now participate in the
+acknowledged final session save. Native page controls cover printing, saving,
+screenshots, certificate details and media operations. Windows browser and
+installer identities, executable names, associations and taskbar IDs now agree.
+Remaining work includes shared service ownership, page fact routing, complete
+native event/OS coverage and the Windows acceptance runs. The diagnostic page
+does not establish a complete browser host.
 
 ## Validation still required on Windows
 
@@ -128,6 +141,10 @@ python scripts/windows/engine.py all --root C:\bay-engine --output C:\bay-artifa
 # Stage the matching engine artifact through scripts/windows/build-app.py.
 pwsh -File scripts/windows/smoke.ps1 -AppPath C:\bay-app\Bay.exe -HostingSpike
 ```
+
+The Chromium target `chrome/browser/bay/webui:runtime_unittests` exercises the
+browser-side privacy projections and command envelopes. Build and run it with
+the same output configuration as the engine.
 
 `smoke.ps1` checks process and window liveness. Complete the manual hosting gate
 on the visible diagnostic page separately.
