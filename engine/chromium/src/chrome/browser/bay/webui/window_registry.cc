@@ -11,6 +11,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/browser_process.h"
@@ -258,6 +259,12 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
       return Failure("Could not create an incognito profile");
     private_profiles_[profile] = profile->GetWeakPtr();
   }
+  // Only the authenticated coordinator may claim the exact initial shell.
+  // A missing requester or a matching profile alone grants no authority.
+  if (!context.is_window() && !requester && kind == "browser") {
+    if (auto* runtime = AppRuntime::GetIfStarted())
+      requester = runtime->TakeStartupWindowForAdoption(profile);
+  }
   if (requester) {
     auto& current = EnsureEntry(requester);
     if (current.id.empty() && requester->GetProfile() == profile &&
@@ -363,6 +370,12 @@ std::optional<gfx::Rect> WindowRegistry::Frame(const std::string& id) const {
 }
 
 void WindowRegistry::PublishHostInfo() {
+  if (AppRuntime::Enabled()) {
+    auto* runtime = AppRuntime::GetIfStarted();
+    if (auto host =
+            runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>())
+      host->PublishHostInfo();
+  }
   std::vector<std::pair<base::WeakPtr<NativeHost>, base::RepeatingClosure>>
       callbacks;
   for (const auto& [host, state] : hosts_)
@@ -373,6 +386,13 @@ void WindowRegistry::PublishHostInfo() {
   }
 }
 void WindowRegistry::Broadcast(base::DictValue event) {
+  if (AppRuntime::Enabled()) {
+    auto* runtime = AppRuntime::GetIfStarted();
+    if (auto host =
+            runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>())
+      host->Emit("BayShell", "onWindowEvent", base::Value(std::move(event)));
+    return;
+  }
   std::vector<base::WeakPtr<NativeHost>> hosts;
   for (const auto& [host, state] : hosts_)
     hosts.push_back(state->host);

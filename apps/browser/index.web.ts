@@ -41,6 +41,11 @@ async function start() {
     startHostingSpike(root);
     return;
   }
+  // The legacy entry owns global document writers. Keep experimental shared
+  // mode closed until coordinator and window entries own separate services.
+  if (getNativeHostInfo().constants.BayShell?.sharedRuntime === true) {
+    throw new Error("The shared runtime entry is not ready. Launch without --bay-shared-runtime.");
+  }
   await import("./src/main");
   const [{ AppRegistry }, { useBrowser }] = await Promise.all([import("react-native"), import("./src/store/browser")]);
   const hostId = getNativeHostInfo().constants.BayShell?.windowId;

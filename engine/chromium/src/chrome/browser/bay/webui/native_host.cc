@@ -26,6 +26,7 @@
 #include "bay/core/nn_devtools_call.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/nn_dispatch.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
 #include "chrome/browser/bay/webui/engine_services.h"
@@ -111,6 +112,14 @@ void CompleteQuitPreparation(bool proceed) {
   for (auto& callback : callbacks)
     std::move(callback).Run(proceed);
 }
+base::WeakPtr<NativeHost> QuitOwner() {
+  if (AppRuntime::Enabled()) {
+    auto* runtime = AppRuntime::GetIfStarted();
+    return runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>();
+  }
+  return Hosts().size() == 1 ? Hosts().begin()->second
+                             : base::WeakPtr<NativeHost>();
+}
 void PrepareRendererForQuit(base::OnceCallback<void(bool)> completion) {
   auto& quit = PendingQuit();
   if (!quit.callbacks.empty()) {
@@ -122,13 +131,14 @@ void PrepareRendererForQuit(base::OnceCallback<void(bool)> completion) {
     std::move(completion).Run(true);
     return;
   }
-  // Full application windows remain gated until a shared runtime exists. Do
-  // not pick an arbitrary session writer if that invariant is violated.
-  if (Hosts().size() != 1 || !Hosts().begin()->second) {
+  // Shared mode has one browser-owned coordinator, never an arbitrary visible
+  // renderer selected by map order.
+  auto owner = QuitOwner();
+  if (!owner) {
     std::move(completion).Run(false);
     return;
   }
-  quit.owner = Hosts().begin()->second;
+  quit.owner = owner;
   quit.callbacks.push_back(std::move(completion));
   quit.deadline.Start(FROM_HERE, base::Seconds(20),
                       base::BindOnce(&CompleteQuitPreparation, false));
@@ -141,12 +151,25 @@ void InstallCloseHooks() {
         [](BrowserWindowInterface* browser) {
           if (base::CommandLine::ForCurrentProcess()->HasSwitch(
                   "bay-hosting-spike") ||
-              browser_shutdown::ShouldIgnoreUnloadHandlers() ||
-              g_quit_prepared || Hosts().size() != 1)
+              browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
             return false;
-          const auto host = Hosts().begin()->second;
-          if (!host || host->browser() != browser)
+          const auto host = QuitOwner();
+          if (!host)
             return false;
+          if (AppRuntime::Enabled()) {
+            auto* runtime = AppRuntime::GetIfStarted();
+            if (runtime && runtime->IsRetiringStartupWindow(browser))
+              return false;
+            if (WindowRegistry::Get().Ids().size() > 1)
+              return false;
+            bool is_shell = false;
+            for (const auto& [owner, candidate] : Hosts())
+              is_shell |= candidate && candidate->browser() == browser;
+            if (!is_shell)
+              return false;
+          } else if (host->browser() != browser) {
+            return false;
+          }
           // Posting lets WebUIBrowserWindow rearm the consumed widget callback
           // before application shutdown can synchronously call Close() again.
           if (!g_quit_requested && !browser_shutdown::IsTryingToQuit()) {
@@ -265,7 +288,7 @@ void EngineEvent(void*, const char* topic, const char* json) {
   for (const auto& entry : Hosts())
     hosts.push_back(entry.second);
   for (const auto& host : hosts) {
-    if (!host)
+    if (!host || (AppRuntime::Enabled() && !host->is_coordinator()))
       continue;
     host->Emit("BayCEF", "onEngineEvent",
                base::Value(base::DictValue()
@@ -295,7 +318,7 @@ void DataEvent(const std::string& module,
   for (const auto& entry : Hosts())
     hosts.push_back(entry.second);
   for (const auto& host : hosts)
-    if (host)
+    if (host && (!AppRuntime::Enabled() || host->is_coordinator()))
       host->Emit(module.c_str(), event.c_str(), payload->Clone());
 }
 #endif
@@ -467,6 +490,7 @@ base::DictValue NativeHost::Info() const {
   system.Set("updates", false);
   base::DictValue shell;
   shell.Set("role", context_.role_name());
+  shell.Set("sharedRuntime", AppRuntime::Enabled());
   if (auto* window = context_.window()) {
     const std::string window_id = WindowRegistry::Get().IdFor(window);
     if (!window_id.empty())
@@ -1089,8 +1113,19 @@ void BindNativeHost(content::WebUI* web_ui,
   auto* window = WebUIBrowserWindow::FromWebShellWebContents(contents);
   // A normal tab can navigate to chrome://bay, but it cannot acquire host
   // privileges: only the window's own WebShell has this association.
-  if (!frame || !window || frame->GetLastCommittedURL() != GURL(kBayURL))
+  if (!frame || frame->GetLastCommittedURL() != GURL(kBayURL))
     return;
+  auto* runtime = AppRuntime::GetIfStarted();
+  if (runtime && runtime->Owns(contents) && runtime->profile()) {
+    auto* host =
+        new NativeHost(*frame, HostContext::ForCoordinator(*runtime->profile()),
+                       std::move(receiver));
+    runtime->SetCoordinatorHost(host->GetWeakPtr());
+    return;
+  }
+  if (!window)
+    return;
+  AppRuntime::StartForWindow(*window->browser());
   new NativeHost(*frame, HostContext::ForWindow(*window->browser()),
                  std::move(receiver));
 }

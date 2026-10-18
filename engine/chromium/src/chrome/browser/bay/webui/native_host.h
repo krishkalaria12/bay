@@ -43,6 +43,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   void ViewEvent(int tag, const char* event, base::DictValue payload);
   void PublishHostInfo();
   BrowserWindowInterface* browser() const { return context_.window(); }
+  bool is_coordinator() const { return !context_.is_window(); }
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:

@@ -19,6 +19,9 @@
 #include "bay/core/nn_strings.h"
 #include "bay/core/renderer/nn_content_renderer_client.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/bay_webui.h"
+#include "chrome/browser/chrome_browser_main.h"
+#include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/profiler/main_thread_stack_sampling_profiler.h"
@@ -34,10 +37,24 @@
 namespace nncore {
 namespace {
 
+class BayRuntimeMainExtraParts final : public ChromeBrowserMainExtraParts {
+ public:
+  void PostMainMessageLoopRun() override { bay::ShutdownAppRuntimeIfStarted(); }
+};
+
 // Chrome retains its native UI delegates and process lifetime. NNCore adds the
 // same document channel and navigation rules that the macOS host uses.
 class NNDesktopContentBrowserClient : public ChromeContentBrowserClient {
  public:
+  std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
+      bool is_integration_test) override {
+    auto parts =
+        ChromeContentBrowserClient::CreateBrowserMainParts(is_integration_test);
+    static_cast<ChromeBrowserMainParts*>(parts.get())
+        ->AddParts(std::make_unique<BayRuntimeMainExtraParts>());
+    return parts;
+  }
+
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override {
     ChromeContentBrowserClient::RenderProcessWillLaunch(host);
     SendPageScript(host);

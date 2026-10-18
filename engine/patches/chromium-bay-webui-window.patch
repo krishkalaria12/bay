@@ -83,12 +83,13 @@ diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.h b/chrome/browser
  
  #include <memory>
  
-@@ -64,6 +66,8 @@
+@@ -64,6 +66,9 @@
   public:
    explicit WebUIBrowserUI(content::WebUI* web_ui);
    ~WebUIBrowserUI() override;
 +
 +  void BindInterface(mojo::PendingReceiver<bay::mojom::NativeHost> receiver);
++  void BindInterface(mojo::PendingReceiver<bay::mojom::AppRuntime> receiver);
  
    void BindInterface(
        mojo::PendingReceiver<webui_browser::mojom::PageHandlerFactory> receiver);
@@ -123,10 +124,15 @@ diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.cc b/chrome/browse
  
    // Set up the chrome://webui-browser source.
    content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
-@@ -168,6 +178,11 @@
+@@ -168,6 +178,16 @@
  }
  
  WebUIBrowserUI::~WebUIBrowserUI() = default;
++
++void WebUIBrowserUI::BindInterface(
++    mojo::PendingReceiver<bay::mojom::AppRuntime> receiver) {
++  bay::BindAppRuntime(web_ui(), std::move(receiver));
++}
 +
 +void WebUIBrowserUI::BindInterface(
 +    mojo::PendingReceiver<bay::mojom::NativeHost> receiver) {
@@ -146,19 +152,22 @@ diff --git a/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop
  #include "chrome/common/chrome_features.h"
  #include "components/autofill/core/browser/ml_model/logging/autofill_ml_internals.mojom.h"
  #include "components/browser_apis/bookmarks/bookmarks_api.mojom.h"
-@@ -546,6 +547,8 @@
+@@ -546,6 +547,10 @@
        on_device_internals::OnDeviceInternalsUI>(map);
    RegisterWebUIControllerInterfaceBinder<
        guest_contents::mojom::GuestContentsHost, WebUIBrowserUI>(map);
++  RegisterWebUIControllerInterfaceBinder<bay::mojom::AppRuntime,
++                                         WebUIBrowserUI>(map);
 +  RegisterWebUIControllerInterfaceBinder<bay::mojom::NativeHost,
 +                                         WebUIBrowserUI>(map);
  
    const bool is_contextual_tasks_enabled =
        contextual_tasks::IsContextualTasksUIEnabled();
-@@ -687,6 +690,7 @@
+@@ -687,6 +692,8 @@
  
    if (webui_browser::IsWebUIBrowserEnabled()) {
      registry.ForWebUI<WebUIBrowserUI>()
++        .Add<bay::mojom::AppRuntime>()
 +        .Add<bay::mojom::NativeHost>()
          .Add<webui_browser::mojom::PageHandlerFactory>()
          .Add<bookmark_bar::mojom::PageHandlerFactory>()

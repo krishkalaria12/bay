@@ -38,6 +38,9 @@ class BayWebUIBrowserWindow : public WebUIBrowserWindow {
 bool ConfigureBayWebUI(content::WebUI* web_ui);
 void BindNativeHost(content::WebUI* web_ui,
                     mojo::PendingReceiver<mojom::NativeHost> receiver);
+void ShutdownAppRuntimeIfStarted();
+void BindAppRuntime(content::WebUI* web_ui,
+                    mojo::PendingReceiver<mojom::AppRuntime> receiver);
 void EmitWindowCommand(BrowserWindowInterface* browser, const char* command);
 
 }  // namespace bay
