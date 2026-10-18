@@ -5,10 +5,10 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/bay/webui/browser_services.h"
+#include "chrome/browser/bay/webui/host_context.h"
 
 class BrowserWindowInterface;
 namespace content {
@@ -25,7 +25,7 @@ class EngineServices {
   using Response = BrowserServices::Response;
   using EngineInvoker = BrowserServices::EngineInvoker;
 
-  EngineServices(BrowserWindowInterface* browser, EngineInvoker engine);
+  EngineServices(HostContext context, EngineInvoker engine);
   ~EngineServices();
   EngineServices(const EngineServices&) = delete;
   EngineServices& operator=(const EngineServices&) = delete;
@@ -43,7 +43,7 @@ class EngineServices {
   class PasswordExportPicker;
   void PasswordExportPickerFinished();
 
-  raw_ptr<BrowserWindowInterface> browser_;
+  const HostContext context_;
   EngineInvoker engine_;
   std::unique_ptr<PasswordExportPicker> password_export_picker_;
   base::WeakPtrFactory<EngineServices> weak_factory_{this};

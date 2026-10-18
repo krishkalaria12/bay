@@ -7,9 +7,9 @@
 #include <string>
 
 #include "base/functional/callback.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "chrome/browser/bay/webui/host_context.h"
 
 class BrowserWindowInterface;
 class Profile;
@@ -28,9 +28,7 @@ class BrowserServices {
   using EventSink =
       base::RepeatingCallback<void(const char*, const char*, base::DictValue)>;
 
-  BrowserServices(BrowserWindowInterface* browser,
-                  EngineInvoker engine,
-                  EventSink events);
+  BrowserServices(HostContext context, EngineInvoker engine, EventSink events);
   ~BrowserServices();
   BrowserServices(const BrowserServices&) = delete;
   BrowserServices& operator=(const BrowserServices&) = delete;
@@ -54,7 +52,7 @@ class BrowserServices {
                         const base::ListValue& args,
                         Response& response);
 
-  raw_ptr<BrowserWindowInterface> browser_;
+  const HostContext context_;
   EngineInvoker engine_;
   EventSink events_;
   std::unique_ptr<FolderPicker> folder_picker_;

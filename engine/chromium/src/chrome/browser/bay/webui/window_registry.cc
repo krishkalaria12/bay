@@ -9,6 +9,7 @@
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ref.h"
+#include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
@@ -20,7 +21,9 @@
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #include "chrome/browser/ui/window_metadata/window_metadata_controller.h"
+#include "chrome/common/chrome_paths.h"
 #include "ui/base/base_window.h"
+#include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -164,10 +167,15 @@ base::ListValue WindowRegistry::Ids() const {
   return ids;
 }
 
-WindowRegistry::Result WindowRegistry::Open(BrowserWindowInterface* requester,
+WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
                                             const std::string& id,
                                             const base::DictValue& options) {
-  if (!requester || !ValidName(id))
+  if (!context.profile())
+    return Failure("The host profile is no longer available");
+  auto* requester = context.window();
+  if (context.is_window() && !requester)
+    return Failure("The requesting window is no longer available");
+  if (!ValidName(id))
     return Failure("Invalid window id");
   for (const char* field : {"kind", "profile", "title"}) {
     if (const auto* value = options.Find(field); value && !value->is_string())
@@ -206,7 +214,15 @@ WindowRegistry::Result WindowRegistry::Open(BrowserWindowInterface* requester,
           *width > 32768 || *height > 32768) {
         return Failure("Invalid window size");
       }
-      const auto center = requester->GetWindow()->GetBounds().CenterPoint();
+      gfx::Point center;
+      if (requester) {
+        center = requester->GetWindow()->GetBounds().CenterPoint();
+      } else {
+        auto* screen = display::Screen::Get();
+        if (!screen)
+          return Failure("No display is available for the requested window");
+        center = screen->GetPrimaryDisplay().work_area().CenterPoint();
+      }
       const gfx::Size dimensions(static_cast<int>(std::round(*width)),
                                  static_cast<int>(std::round(*height)));
       frame.emplace(center.x() - dimensions.width() / 2,
@@ -224,8 +240,10 @@ WindowRegistry::Result WindowRegistry::Open(BrowserWindowInterface* requester,
   }
   if (incognito && !profile_name.empty() && profile_name != "incognito:" + id)
     return Failure("Incognito profile id must match its window id");
-  auto* original = requester->GetProfile()->GetOriginalProfile();
-  const auto profile_path = original->GetPath().DirName().AppendASCII(
+  base::FilePath root;
+  if (!base::PathService::Get(chrome::DIR_USER_DATA, &root))
+    return Failure("The user data directory is unavailable");
+  const auto profile_path = root.AppendASCII(
       profile_name.empty() || incognito ? "Default" : profile_name);
   auto* manager = g_browser_process->profile_manager();
   auto* profile = manager ? manager->GetProfileByPath(profile_path) : nullptr;
@@ -240,20 +258,22 @@ WindowRegistry::Result WindowRegistry::Open(BrowserWindowInterface* requester,
       return Failure("Could not create an incognito profile");
     private_profiles_[profile] = profile->GetWeakPtr();
   }
-  auto& current = EnsureEntry(requester);
-  if (current.id.empty() && requester->GetProfile() == profile &&
-      kind == "browser") {
-    current.id = id;
-    current.options = options.Clone();
-    current.options.Set("kind", kind);
-    if (frame)
-      requester->GetWindow()->SetBounds(*frame);
-    if (const auto* title = options.FindString("title"))
-      SetTitle(id, *title);
-    PublishHostInfo();
-    if (focus)
-      requester->GetWindow()->Activate();
-    return Success();
+  if (requester) {
+    auto& current = EnsureEntry(requester);
+    if (current.id.empty() && requester->GetProfile() == profile &&
+        kind == "browser") {
+      current.id = id;
+      current.options = options.Clone();
+      current.options.Set("kind", kind);
+      if (frame)
+        requester->GetWindow()->SetBounds(*frame);
+      if (const auto* title = options.FindString("title"))
+        SetTitle(id, *title);
+      PublishHostInfo();
+      if (focus)
+        requester->GetWindow()->Activate();
+      return Success();
+    }
   }
   BrowserWindowCreateParams params(profile, true);
   if (GetBrowserWindowCreationStatusForProfile(*profile) !=

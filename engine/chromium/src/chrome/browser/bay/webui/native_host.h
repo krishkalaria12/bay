@@ -7,10 +7,10 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/native_host.mojom.h"
 #include "content/public/browser/document_service.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -30,7 +30,7 @@ class EngineServices;
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
   NativeHost(content::RenderFrameHost& frame,
-             BrowserWindowInterface* browser,
+             HostContext context,
              mojo::PendingReceiver<mojom::NativeHost> receiver);
   ~NativeHost() override;
   void GetHostInfo(GetHostInfoCallback callback) override;
@@ -42,7 +42,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   void Emit(const char* module, const char* event, base::Value payload);
   void ViewEvent(int tag, const char* event, base::DictValue payload);
   void PublishHostInfo();
-  BrowserWindowInterface* browser() const { return browser_; }
+  BrowserWindowInterface* browser() const { return context_.window(); }
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
@@ -68,7 +68,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::vector<GetHostInfoCallback> host_info_callbacks_;
 #endif
 
-  raw_ptr<BrowserWindowInterface> browser_;
+  const HostContext context_;
   std::unique_ptr<BrowserServices> browser_services_;
   std::unique_ptr<EngineServices> engine_services_;
   mojo::Remote<mojom::NativeHostClient> client_;

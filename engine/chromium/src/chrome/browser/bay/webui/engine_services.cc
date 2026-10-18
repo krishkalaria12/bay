@@ -409,7 +409,7 @@ void WriteAutofillSettings(EngineInvoker engine,
 }
 
 content::WebContents* FindTab(BrowserWindowInterface* browser, int id) {
-  auto* tabs = browser->GetTabStripModel();
+  auto* tabs = browser ? browser->GetTabStripModel() : nullptr;
   for (int i = 0; tabs && i < tabs->count(); ++i) {
     auto* contents = tabs->GetWebContentsAt(i);
     if (sessions::SessionTabHelper::IdForTab(contents).id() == id)
@@ -561,9 +561,8 @@ class EngineServices::PasswordExportPicker final
   scoped_refptr<ui::SelectFileDialog> dialog_;
 };
 
-EngineServices::EngineServices(BrowserWindowInterface* browser,
-                               EngineInvoker engine)
-    : browser_(browser), engine_(std::move(engine)) {}
+EngineServices::EngineServices(HostContext context, EngineInvoker engine)
+    : context_(std::move(context)), engine_(std::move(engine)) {}
 EngineServices::~EngineServices() = default;
 void EngineServices::PasswordExportPickerFinished() {
   password_export_picker_.reset();
@@ -591,6 +590,21 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
                                           const std::string& method,
                                           const base::ListValue& args,
                                           Response& response) {
+  const bool window_method =
+      module == "BayChromeUI" &&
+      (method == "changeCaptureSource" || method == "showAutofillSuggestions");
+  if (module != "BayCEF" && !window_method)
+    return false;
+  if (!context_.profile()) {
+    std::move(response).Run(Failure("profile_unavailable",
+                                    "The host profile is no longer available"));
+    return true;
+  }
+  if ((window_method || method == "exportPasswords") && !context_.window()) {
+    std::move(response).Run(
+        Failure("window_required", "This operation requires a window host"));
+    return true;
+  }
   auto invalid = [&] {
     std::move(response).Run(
         Failure("invalid_args", "Invalid engine facade arguments"));
@@ -598,8 +612,9 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
   if (module == "BayChromeUI" && (method == "changeCaptureSource" ||
                                   method == "showAutofillSuggestions")) {
     const auto* first = At(args, 0);
-    auto* contents =
-        first && first->is_int() ? FindTab(browser_, first->GetInt()) : nullptr;
+    auto* contents = first && first->is_int()
+                         ? FindTab(context_.window(), first->GetInt())
+                         : nullptr;
     if (!contents) {
       std::move(response).Run(
           Failure("tab_unavailable", "This window does not own that tab"));
@@ -617,7 +632,7 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
     } else {
       const auto* second = At(args, 1);
       auto* target = second && second->is_int()
-                         ? FindTab(browser_, second->GetInt())
+                         ? FindTab(context_.window(), second->GetInt())
                          : nullptr;
       auto* sharing = target ? SharingDelegate(target, contents) : nullptr;
       const bool allowed = sharing &&
@@ -648,7 +663,8 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
         engine_, *profile, std::move(response),
         base::BindOnce(&EngineServices::PasswordExportPickerFinished,
                        weak_factory_.GetWeakPtr()));
-    password_export_picker_->Show(browser_->GetWindow()->GetNativeWindow());
+    password_export_picker_->Show(
+        context_.window()->GetWindow()->GetNativeWindow());
     return true;
   }
   if (method == "getPasswordAutofill" || method == "setPasswordAutofill" ||

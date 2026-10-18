@@ -12,6 +12,7 @@
 #include "base/no_destructor.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
+#include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "ui/gfx/geometry/rect.h"
@@ -42,7 +43,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   BrowserWindowInterface* Find(const std::string& id) const;
   base::ListValue Ids() const;
 
-  Result Open(BrowserWindowInterface* requester,
+  Result Open(const HostContext& context,
               const std::string& id,
               const base::DictValue& options);
   Result Close(const std::string& id);

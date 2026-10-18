@@ -9,6 +9,7 @@ mojom("mojom") {
 source_set("webui") {
   sources = [
     "bay_webui.h",
+    "host_context.h",
     "native_host.h",
   ]
   public_deps = [
@@ -27,6 +28,7 @@ source_set("impl") {
     "browser_services.h",
     "engine_services.cc",
     "engine_services.h",
+    "host_context.cc",
     "native_host.cc",
     "page_services.cc",
     "page_services.h",
@@ -76,6 +78,7 @@ source_set("impl") {
     "//services/network/public/mojom",
     "//skia",
     "//ui/base",
+    "//ui/display",
     "//ui/gfx",
     "//ui/gfx/codec",
     "//ui/shell_dialogs",
@@ -104,6 +107,7 @@ if (is_win) {
       "updater_service_win.h",
     ]
     deps = [
+      ":webui",
       "//base",
       "//chrome/browser:browser_process",
       "//chrome/browser:primitives",

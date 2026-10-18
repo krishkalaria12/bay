@@ -10,10 +10,10 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
+#include "chrome/browser/bay/webui/host_context.h"
 
 class BrowserWindowInterface;
 namespace bay {
@@ -23,7 +23,7 @@ namespace bay {
 class PlatformServices {
  public:
   using Response = base::OnceCallback<void(const std::string&)>;
-  PlatformServices(BrowserWindowInterface* browser,
+  PlatformServices(HostContext context,
                    base::RepeatingClosure snapshots_changed);
   ~PlatformServices();
   PlatformServices(const PlatformServices&) = delete;
@@ -54,7 +54,7 @@ class PlatformServices {
   void FilePickerFinished();
   void ContextMenuFinished();
 
-  raw_ptr<BrowserWindowInterface> browser_;
+  const HostContext context_;
   base::RepeatingClosure snapshots_changed_;
   scoped_refptr<base::SequencedTaskRunner> disk_runner_;
   base::FilePath document_directory_;

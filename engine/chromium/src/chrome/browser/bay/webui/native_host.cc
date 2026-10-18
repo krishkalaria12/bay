@@ -7,12 +7,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
+#include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -48,6 +50,7 @@
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
+#include "chrome/common/chrome_paths.h"
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/guest_contents/browser/guest_contents_handle.h"
@@ -226,8 +229,7 @@ int Number(const base::ListValue& values, size_t index, int fallback = 0) {
   const auto* value = At(values, index);
   return value && value->is_int() ? value->GetInt() : fallback;
 }
-std::optional<std::string> EngineProfilePath(BrowserWindowInterface* browser,
-                                             const std::string& id) {
+std::optional<std::string> EngineProfilePath(const std::string& id) {
   const bool valid =
       id.empty() || (id.size() <= 128 &&
                      id.find_first_not_of(
@@ -235,8 +237,9 @@ std::optional<std::string> EngineProfilePath(BrowserWindowInterface* browser,
                          "0123456789-_") == std::string::npos);
   if (!valid)
     return std::nullopt;
-  const auto root =
-      browser->GetProfile()->GetOriginalProfile()->GetPath().DirName();
+  base::FilePath root;
+  if (!base::PathService::Get(chrome::DIR_USER_DATA, &root))
+    return std::nullopt;
   return root.AppendASCII(id.empty() ? "Default" : id).AsUTF8Unsafe();
 }
 bool Boolean(const base::ListValue& values,
@@ -368,14 +371,17 @@ class TabObserver final : public content::WebContentsObserver {
 };
 
 NativeHost::NativeHost(content::RenderFrameHost& frame,
-                       BrowserWindowInterface* browser,
+                       HostContext context,
                        mojo::PendingReceiver<mojom::NativeHost> receiver)
-    : DocumentService(frame, std::move(receiver)), browser_(browser) {
+    : DocumentService(frame, std::move(receiver)),
+      context_(std::move(context)) {
+  CHECK(context_.profile());
+  CHECK_EQ(frame.GetBrowserContext(), context_.profile());
   Hosts()[this] = GetWeakPtr();
   if (Hosts().size() == 1)
     nn_engine_set_event_sink(&EngineEvent, nullptr);
   browser_services_ = std::make_unique<BrowserServices>(
-      browser_,
+      context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()),
       base::BindRepeating(
           [](base::WeakPtr<NativeHost> host, const char* module,
@@ -385,23 +391,25 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
           },
           GetWeakPtr()));
   engine_services_ = std::make_unique<EngineServices>(
-      browser_,
+      context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()));
 #if BUILDFLAG(IS_WIN)
   InstallCloseHooks();
   AppUpdater().Prepare(
       base::BindOnce(&NativeHost::PublishHostInfo, GetWeakPtr()));
-  RegisterDataProfile(browser_->GetProfile());
+  RegisterDataProfile(context_.profile());
   InitializeDataBridge(base::BindRepeating(&DataEvent));
   platform_services_ = std::make_unique<PlatformServices>(
-      browser_,
+      context_,
       base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
   platform_services_->Prepare(
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
-  WindowRegistry::Get().RegisterHost(
-      browser_, GetWeakPtr(),
-      base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  if (context_.window()) {
+    WindowRegistry::Get().RegisterHost(
+        context_.window(), GetWeakPtr(),
+        base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  }
 }
 NativeHost::~NativeHost() {
 #if BUILDFLAG(IS_WIN)
@@ -458,10 +466,13 @@ base::DictValue NativeHost::Info() const {
   system.Set("locale", g_browser_process->GetApplicationLocale());
   system.Set("updates", false);
   base::DictValue shell;
-  const std::string window_id = WindowRegistry::Get().IdFor(browser_);
-  if (!window_id.empty())
-    shell.Set("windowId", window_id);
-  shell.Set("windowOptions", WindowRegistry::Get().OptionsFor(browser_));
+  shell.Set("role", context_.role_name());
+  if (auto* window = context_.window()) {
+    const std::string window_id = WindowRegistry::Get().IdFor(window);
+    if (!window_id.empty())
+      shell.Set("windowId", window_id);
+    shell.Set("windowOptions", WindowRegistry::Get().OptionsFor(window));
+  }
   shell.Set("hostingSpike", base::CommandLine::ForCurrentProcess()->HasSwitch(
                                 "bay-hosting-spike"));
 #if BUILDFLAG(IS_WIN)
@@ -473,11 +484,14 @@ base::DictValue NativeHost::Info() const {
   auto info =
       base::DictValue()
           .Set("contractVersion", 2)
+          .Set("role", context_.role_name())
           .Set("platform", system.FindString("platform")
                                ? *system.FindString("platform")
                                : "linux")
           .Set("modules", std::move(modules))
-          .Set("views", base::ListValue().Append("BayWebView"))
+          .Set("views", context_.is_window()
+                            ? base::ListValue().Append("BayWebView")
+                            : base::ListValue())
           .Set("optionalMethods", std::move(engine_methods))
           .Set("constants",
                base::DictValue()
@@ -586,6 +600,11 @@ void NativeHost::InvokeEngine(const std::string& name,
                               base::DictValue args,
                               bool raw_json,
                               InvokeCallback callback) {
+  if (!context_.profile()) {
+    std::move(callback).Run(Failure("profile_unavailable",
+                                    "The host profile is no longer available"));
+    return;
+  }
   const uintptr_t token = ++g_next_reply;
   pending_.emplace(token, std::make_pair(raw_json, std::move(callback)));
   PendingOwners()[token] = GetWeakPtr();
@@ -611,7 +630,7 @@ void NativeHost::InvokeBrowserEngine(const std::string& name,
                                      const std::string& profile_id,
                                      base::DictValue args,
                                      InvokeCallback callback) {
-  const auto profile = EngineProfilePath(browser_, profile_id);
+  const auto profile = EngineProfilePath(profile_id);
   if (!profile) {
     std::move(callback).Run(
         Failure("invalid_profile", "Invalid Bay profile identifier"));
@@ -645,6 +664,11 @@ void NativeHost::Invoke(const std::string& module,
                         const std::string& method,
                         const std::string& args_json,
                         InvokeCallback callback) {
+  if (!context_.profile()) {
+    std::move(callback).Run(Failure("profile_unavailable",
+                                    "The host profile is no longer available"));
+    return;
+  }
   auto parsed = base::JSONReader::Read(args_json, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_list()) {
     std::move(callback).Run(
@@ -689,7 +713,12 @@ void NativeHost::Invoke(const std::string& module,
     return;
   }
   if (module == "BayApp") {
-    if (AppUpdater().Dispatch(browser_, method, args, callback))
+    if (method == "checkForUpdates" && !context_.window()) {
+      std::move(callback).Run(Failure(
+          "window_required", "A manual update check requires a window"));
+      return;
+    }
+    if (AppUpdater().Dispatch(context_.window(), method, args, callback))
       return;
     if (method == "systemInfo") {
       auto info = Info();
@@ -730,7 +759,7 @@ void NativeHost::Invoke(const std::string& module,
           Failure("invalid_args", "engine arguments must be an object"));
       return;
     }
-    const auto profile = EngineProfilePath(browser_, Text(args, 1));
+    const auto profile = EngineProfilePath(Text(args, 1));
     if (!profile) {
       std::move(callback).Run(Failure(
           "invalid_profile", "The profile must be a Bay profile identifier"));
@@ -753,11 +782,14 @@ void NativeHost::Invoke(const std::string& module,
     std::move(callback).Run(Success(base::Value(
         base::DictValue()
             .Set("pid", static_cast<int>(base::GetCurrentProcId()))
-            .Set("dataDirectory", browser_->GetProfile()
-                                      ->GetOriginalProfile()
-                                      ->GetPath()
-                                      .DirName()
-                                      .AsUTF8Unsafe())
+            .Set("dataDirectory",
+                 [] {
+                   base::FilePath directory;
+                   return base::PathService::Get(chrome::DIR_USER_DATA,
+                                                 &directory)
+                              ? directory.AsUTF8Unsafe()
+                              : std::string();
+                 }())
             .Set("engine", "NNCore")
             .Set("chromiumVersion", version_info::GetVersionNumber())
             .Set("liveBrowsers", static_cast<int>(tabs_.size()))
@@ -795,6 +827,11 @@ void NativeHost::Invoke(const std::string& module,
     }
     std::optional<WindowRegistry::Result> result;
     if (method == "openWindow") {
+      if (context_.is_window() && !context_.window()) {
+        std::move(callback).Run(Failure(
+            "window_required", "The requesting window is no longer available"));
+        return;
+      }
       const auto* options = At(args, 1);
       if (!options || !options->is_dict()) {
         std::move(callback).Run(
@@ -813,7 +850,7 @@ void NativeHost::Invoke(const std::string& module,
             "Additional windows require the shared application runtime"));
         return;
       }
-      result = windows.Open(browser_, id, options->GetDict());
+      result = windows.Open(context_, id, options->GetDict());
     } else if (method == "closeWindow")
       result = windows.Close(Text(args, 0));
     else if (method == "focusWindow")
@@ -834,6 +871,11 @@ void NativeHost::Invoke(const std::string& module,
 void NativeHost::InvokeView(const std::string& method,
                             const base::ListValue& args,
                             InvokeCallback callback) {
+  if (!context_.window()) {
+    std::move(callback).Run(
+        Failure("window_required", "Native views require a window host"));
+    return;
+  }
   const int tag = Number(args, 0, -1);
   if (tag < 0) {
     std::move(callback).Run(Failure("invalid_args", "view tag required"));
@@ -859,7 +901,7 @@ void NativeHost::InvokeView(const std::string& method,
       return;
     }
     const auto& props = raw->GetDict();
-    auto mounted = TabBroker::Get().Mount(browser_, props);
+    auto mounted = TabBroker::Get().Mount(context_.window(), props);
     if (!mounted.contents) {
       std::move(callback).Run(Failure("mount_failed", mounted.error));
       return;
@@ -916,7 +958,7 @@ void NativeHost::InvokeView(const std::string& method,
     if (auto frozen = props.FindBool("frozen"))
       contents->SetPageFrozen(*frozen);
     if (props.FindBool("visible").value_or(false)) {
-      auto* model = browser_->GetTabStripModel();
+      auto* model = context_.window()->GetTabStripModel();
       model->ActivateTabAt(model->GetIndexOfWebContents(contents));
     }
     std::move(callback).Run(Success());
@@ -973,7 +1015,7 @@ void NativeHost::InvokeView(const std::string& method,
   else if (command == "stop" || command == "stopLoading")
     contents->Stop();
   else if (command == "focus") {
-    auto* model = browser_->GetTabStripModel();
+    auto* model = context_.window()->GetTabStripModel();
     model->ActivateTabAt(model->GetIndexOfWebContents(contents));
     contents->Focus();
   } else if (command == "showDevTools")
@@ -1049,7 +1091,8 @@ void BindNativeHost(content::WebUI* web_ui,
   // privileges: only the window's own WebShell has this association.
   if (!frame || !window || frame->GetLastCommittedURL() != GURL(kBayURL))
     return;
-  new NativeHost(*frame, window->browser(), std::move(receiver));
+  new NativeHost(*frame, HostContext::ForWindow(*window->browser()),
+                 std::move(receiver));
 }
 void EmitWindowCommand(BrowserWindowInterface* browser, const char* command) {
   for (const auto& entry : Hosts())

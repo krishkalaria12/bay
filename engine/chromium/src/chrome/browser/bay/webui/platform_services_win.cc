@@ -476,9 +476,9 @@ class PlatformServices::ContextMenu final
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-PlatformServices::PlatformServices(BrowserWindowInterface* browser,
+PlatformServices::PlatformServices(HostContext context,
                                    base::RepeatingClosure changed)
-    : browser_(browser),
+    : context_(std::move(context)),
       snapshots_changed_(std::move(changed)),
       disk_runner_(DiskRunner()),
       document_directory_(DocumentDirectory()) {
@@ -607,6 +607,18 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
       supported = true;
   if (!supported)
     return false;
+  if (!context_.profile()) {
+    std::move(callback).Run(Failure("profile_unavailable",
+                                    "The host profile is no longer available"));
+    return true;
+  }
+  if (module == "BayShell" &&
+      (method == "showMenu" || method == "pickFiles" || method == "confirm") &&
+      !context_.window()) {
+    std::move(callback).Run(
+        Failure("window_required", "This operation requires a window host"));
+    return true;
+  }
   if (!ready_ || !initialization_error_.empty()) {
     std::move(callback).Run(Failure("initialization_failed",
                                     initialization_error_.empty()
@@ -630,7 +642,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
       return true;
     }
     auto* widget = views::Widget::GetWidgetForNativeWindow(
-        browser_->GetWindow()->GetNativeWindow());
+        context_.window()->GetWindow()->GetNativeWindow());
     if (!widget) {
       std::move(callback).Run(
           Failure("window_unavailable", "Bay's window is unavailable"));
@@ -727,7 +739,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
       return true;
     }
     file_picker_ = std::make_unique<FilePicker>(
-        browser_->GetWindow()->GetNativeWindow(), std::move(callback),
+        context_.window()->GetWindow()->GetNativeWindow(), std::move(callback),
         base::BindOnce(&PlatformServices::FilePickerFinished,
                        weak_factory_.GetWeakPtr()));
     file_picker_->Show();
@@ -740,7 +752,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
       return true;
     }
     chrome::ShowQuestionMessageBoxAsync(
-        browser_->GetWindow()->GetNativeWindow(),
+        context_.window()->GetWindow()->GetNativeWindow(),
         base::UTF8ToUTF16(options->FindString("title")
                               ? *options->FindString("title")
                               : "Bay"),
@@ -760,7 +772,8 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
   }
   if (module == "BayShell" && method == "isDarkAppearance") {
     std::move(callback).Run(Success(base::Value(
-        ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors())));
+        ui::NativeTheme::GetInstanceForNativeUi()->preferred_color_scheme() ==
+        ui::NativeTheme::PreferredColorScheme::kDark)));
     return true;
   }
   if (module == "BayShell" && method == "setAppearance") {
@@ -769,7 +782,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
       invalid();
       return true;
     }
-    ThemeServiceFactory::GetForProfile(browser_->GetProfile())
+    ThemeServiceFactory::GetForProfile(context_.profile())
         ->SetBrowserColorScheme(
             *mode == "dark"    ? ThemeService::BrowserColorScheme::kDark
             : *mode == "light" ? ThemeService::BrowserColorScheme::kLight
@@ -839,7 +852,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
               std::move(callback)));
     } else if (method == "openFile") {
       platform_util::OpenItem(
-          browser_->GetProfile(), path, platform_util::OPEN_FILE,
+          context_.profile(), path, platform_util::OPEN_FILE,
           base::BindOnce(
               [](Response callback, platform_util::OpenOperationResult result) {
                 std::move(callback).Run(Success(
@@ -847,7 +860,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
               },
               std::move(callback)));
     } else if (method == "revealFile") {
-      platform_util::ShowItemInFolder(browser_->GetProfile(), path);
+      platform_util::ShowItemInFolder(context_.profile(), path);
       std::move(callback).Run(Success(base::Value(true)));
     } else {
       ShellRunner()->PostTaskAndReplyWithResult(

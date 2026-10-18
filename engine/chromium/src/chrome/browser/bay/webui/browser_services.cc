@@ -103,6 +103,8 @@ bool ValidPath(const std::string& text) {
 Profile* ResolveCastProfile(BrowserWindowInterface* browser,
                             const std::string& logical_id) {
   if (logical_id.starts_with("incognito:")) {
+    if (!browser)
+      return nullptr;
     const auto window_id = WindowRegistry::Get().IdFor(browser);
     return !window_id.empty() && browser->GetProfile()->IsOffTheRecord() &&
                    logical_id == "incognito:" + window_id
@@ -124,7 +126,7 @@ Profile* ResolveCastProfile(BrowserWindowInterface* browser,
       root.AppendASCII(logical_id.empty() ? "Default" : logical_id));
 }
 content::WebContents* FindTab(BrowserWindowInterface* browser, int id) {
-  auto* tabs = browser->GetTabStripModel();
+  auto* tabs = browser ? browser->GetTabStripModel() : nullptr;
   for (int i = 0; tabs && i < tabs->count(); ++i) {
     auto* contents = tabs->GetWebContentsAt(i);
     if (sessions::SessionTabHelper::IdForTab(contents).id() == id)
@@ -376,10 +378,10 @@ class BrowserServices::RoutesWatcher final
   base::ScopedObservation<Profile, ProfileObserver> observation_{this};
 };
 
-BrowserServices::BrowserServices(BrowserWindowInterface* browser,
+BrowserServices::BrowserServices(HostContext context,
                                  EngineInvoker engine,
                                  EventSink events)
-    : browser_(browser),
+    : context_(std::move(context)),
       engine_(std::move(engine)),
       events_(std::move(events)) {}
 BrowserServices::~BrowserServices() = default;
@@ -404,6 +406,14 @@ bool BrowserServices::DispatchBrowserModule(const std::string& module,
                                             const std::string& method,
                                             const base::ListValue& args,
                                             Response& response) {
+  const bool supported =
+      (module == "BayExtensions" && Contains(kExtensionMethods, method)) ||
+      (module == "BayChromeUI" && Contains(kChromeMethods, method));
+  if (supported && !context_.profile()) {
+    std::move(response).Run(Failure("profile_unavailable",
+                                    "The host profile is no longer available"));
+    return true;
+  }
   if (module == "BayExtensions" && Contains(kExtensionMethods, method))
     return DispatchExtensions(method, args, response);
   if (module == "BayChromeUI" && Contains(kChromeMethods, method))
@@ -419,6 +429,11 @@ bool BrowserServices::DispatchExtensions(const std::string& method,
         Failure("invalid_args", "Invalid extension arguments"));
   };
   if (method == "chooseFolder") {
+    if (!context_.window()) {
+      std::move(response).Run(Failure(
+          "window_required", "An extension picker requires a window host"));
+      return true;
+    }
     if (folder_picker_) {
       std::move(response).Run(
           Failure("dialog_busy", "An extension picker is already open"));
@@ -428,7 +443,7 @@ bool BrowserServices::DispatchExtensions(const std::string& method,
         std::move(response),
         base::BindOnce(&BrowserServices::FolderPickerFinished,
                        weak_factory_.GetWeakPtr()));
-    folder_picker_->Show(browser_->GetWindow()->GetNativeWindow());
+    folder_picker_->Show(context_.window()->GetWindow()->GetNativeWindow());
     return true;
   }
   if (method == "inspectUnpacked") {
@@ -523,8 +538,14 @@ bool BrowserServices::DispatchChromeUI(const std::string& method,
                                        Response& response) {
   if (method == "watchCastRoutes") {
     const auto* profile = Text(args, 0);
+    if (profile && profile->starts_with("incognito:") && !context_.window()) {
+      std::move(response).Run(
+          Failure("window_required",
+                  "A private cast profile requires its window host"));
+      return true;
+    }
     auto* native_profile =
-        profile ? ResolveCastProfile(browser_, *profile) : nullptr;
+        profile ? ResolveCastProfile(context_.window(), *profile) : nullptr;
     if (!native_profile) {
       std::move(response).Run(
           Failure("profile_unavailable",
@@ -579,9 +600,14 @@ bool BrowserServices::DispatchChromeUI(const std::string& method,
         Failure("route_unavailable", "The cast route no longer exists"));
     return true;
   }
+  if (!context_.window()) {
+    std::move(response).Run(Failure(
+        "window_required", "This tab operation requires a window host"));
+    return true;
+  }
   const auto* browser_id = At(args, 0);
   auto* contents = browser_id && browser_id->is_int()
-                       ? FindTab(browser_, browser_id->GetInt())
+                       ? FindTab(context_.window(), browser_id->GetInt())
                        : nullptr;
   if (!contents) {
     std::move(response).Run(
