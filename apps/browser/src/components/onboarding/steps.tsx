@@ -265,10 +265,18 @@ export function ImportStep() {
   const [icons, setIcons] = useState<{ name: string; uri: string }[]>([]);
 
   useEffect(() => {
-    const installed = BROWSERS.filter((b) => fileExists(b.path)).slice(0, 6);
-    void Promise.all(installed.map(async (b) => ({ name: b.name, uri: (await fileIcon(b.path, 56)) ?? "" }))).then((list) =>
-      setIcons(list.filter((i) => i.uri)),
-    );
+    let live = true;
+    void Promise.all(
+      BROWSERS.map(async (b) => ({ browser: b, installed: await fileExists(b.path).catch(() => false) })),
+    ).then(async (results) => {
+      if (!live) return;
+      const installed = results.filter((result) => result.installed).slice(0, 6).map((result) => result.browser);
+      const list = await Promise.all(installed.map(async (b) => ({ name: b.name, uri: (await fileIcon(b.path, 56).catch(() => null)) ?? "" })));
+      if (live) setIcons(list.filter((i) => i.uri));
+    }).catch(() => undefined);
+    return () => {
+      live = false;
+    };
   }, []);
 
   const importNow = () => {

@@ -21,6 +21,7 @@ import { PaletteSurface } from "./omnibox/PaletteSurface";
 import { usePointerHover } from "./omnibox/usePointerHover";
 import { hostLabel, matchesQuery } from "./pages/PageLayout";
 import { IconButton, useHover } from "./primitives";
+import { useFileExists } from "./useFileExists";
 
 // The downloads, as a palette: search, a file-type filter, ↩ for the selected file and ⌘K for the rest.
 const FIELD_HEIGHT = 58;
@@ -83,10 +84,10 @@ const enginePrefsProfile = (windowId: string) => engineProfile(useBrowser.getSta
 
 type Primary = "open" | "pause" | "resume" | "remove" | "folder";
 
-function primaryOf(d: Download | undefined): Primary {
+function primaryOf(d: Download | undefined, exists: boolean | null): Primary {
   if (!d) return "folder";
   if (d.state === "downloading") return d.paused ? "resume" : "pause";
-  return d.state === "finished" && fileExists(d.path) ? "open" : "remove";
+  return d.state === "finished" && exists !== false ? "open" : "remove";
 }
 
 const PRIMARY_TITLES: Record<Primary, string> = { open: "Open", pause: "Pause", resume: "Resume", remove: "Remove from List", folder: "Open Downloads Folder" };
@@ -126,8 +127,11 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
   const any = useBrowser((s) => downloadsIn(s, windowId).length > 0);
   const selectedIndex = Math.max(0, Math.min(selected, ids.length - 1));
   const selectedId = ids[selectedIndex];
-  const primary = useBrowser((s) => primaryOf(selectedId ? s.downloads.find((d) => d.id === selectedId) : undefined));
+  const selectedDownload = useBrowser((s) => (selectedId ? s.downloads.find((d) => d.id === selectedId) : undefined));
+  const selectedFileState = useFileExists(selectedDownload?.path, selectedDownload?.state === "finished");
+  const primary = primaryOf(selectedDownload, selectedFileState);
   const hover = usePointerHover(ids);
+  const actionRequest = useRef(0);
 
   const width = Math.min(760, windowWidth - 32);
   const height = Math.max(240, Math.min(560, windowHeight - 56));
@@ -151,6 +155,10 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
     };
   }, [windowId]);
 
+  useEffect(() => () => {
+    actionRequest.current += 1;
+  }, []);
+
   useEffect(() => {
     const visible = viewport.current;
     if (!visible.height) return;
@@ -163,18 +171,21 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
   }, [selectedIndex, ids]);
 
   const dismiss = () => {
+    actionRequest.current += 1;
     useBrowser.getState().setDownloadsOpen(windowId, false);
     const active = activeTabId(useBrowser.getState(), windowId);
     if (active) void webviews.get(active)?.focus();
   };
   const closeMenu = () => {
+    actionRequest.current += 1;
     setMenu(null);
     input.current?.focus();
   };
   const current = () => (selectedId ? useBrowser.getState().downloads.find((d) => d.id === selectedId) : undefined);
   const submit = () => void runPrimary(primary, current(), windowId);
 
-  const openFilterMenu = () =>
+  const openFilterMenu = () => {
+    actionRequest.current += 1;
     setMenu({
       kind: "filter",
       title: "Show",
@@ -189,9 +200,19 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
         },
       })),
     });
+  };
 
-  const openActionsMenu = (d = current()) => {
-    const actions = d ? downloadActions(d) : [];
+  const openActionsMenu = async (d = current()) => {
+    const request = ++actionRequest.current;
+    const exists = d?.state === "finished" ? await fileExists(d.path).catch(() => false) : false;
+    if (request !== actionRequest.current) return;
+    if (d) {
+      const id = d.id;
+      const latest = useBrowser.getState().downloads.find((item) => item.id === id);
+      if (!latest || latest.path !== d.path || latest.state !== d.state) return;
+      d = latest;
+    }
+    const actions = d ? downloadActions(d, exists) : [];
     const clearable = downloadsIn(useBrowser.getState(), windowId).some((x) => x.state !== "downloading");
     actions.push(
       { id: "folder", title: "Open Downloads Folder", icon: "folder", hint: d ? undefined : "↩", separator: !!d, run: () => openDownloadsFolder(windowId) },
@@ -294,7 +315,9 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
                   // A click opens a finished file; the rest of ↩'s actions (pause, remove) stay on the keyboard.
                   onPress={(d) => {
                     setSelected(index);
-                    if (primaryOf(d) === "open") void openFile(d.path);
+                    if (d.state === "finished") {
+                      void fileExists(d.path).then((exists) => exists && openFile(d.path)).catch(() => undefined);
+                    }
                   }}
                   onMenu={(d) => {
                     setSelected(index);
@@ -374,8 +397,7 @@ const FIELD_KEYS = [
 // ⇧⌫ removes the selected download only while the search field is empty, so it still deletes text.
 const EMPTY_FIELD_KEYS = [...FIELD_KEYS, { key: "Backspace", shiftKey: true }];
 
-function downloadActions(d: Download): PaletteMenuAction[] {
-  const exists = d.state === "finished" && fileExists(d.path);
+function downloadActions(d: Download, exists: boolean): PaletteMenuAction[] {
   const copy = { id: "copy", title: "Copy Download Link", icon: "link", hint: "⇧⌘C", run: () => copyText(d.url) };
   if (d.state === "downloading") {
     return [
@@ -476,9 +498,10 @@ const PanelRow = memo(function PanelRow({ id, selected, onHover, onPress, onMenu
 }) {
   const theme = useTheme();
   const d = useBrowser((s) => s.downloads.find((x) => x.id === id));
+  const fileState = useFileExists(d?.path, d?.state === "finished");
   if (!d) return null;
-  const exists = d.state !== "finished" || fileExists(d.path);
-  const done = d.state === "finished" && exists;
+  const exists = d.state !== "finished" || fileState !== false;
+  const done = d.state === "finished" && fileState === true;
   const progress = d.total > 0 ? d.received / d.total : 0;
   const host = hostLabel(d.url);
   return (
@@ -505,7 +528,7 @@ const PanelRow = memo(function PanelRow({ id, selected, onHover, onPress, onMenu
                 </View>
               ) : (
                 <Text numberOfLines={1} style={{ fontSize: 12, color: theme.textTertiary }}>
-                  {downloadStatus(d, exists)}
+                  {downloadStatus(d, fileState !== false)}
                 </Text>
               )}
               {selected ? <Keycaps hint="↩" /> : null}

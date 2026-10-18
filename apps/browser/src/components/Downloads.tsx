@@ -62,7 +62,10 @@ export function toggleOpenWhenDone(id: string) {
 }
 
 export async function downloadMenu(d: Download, windowId: string) {
-  const exists = d.state === "finished" && fileExists(d.path);
+  const exists = d.state === "finished" && (await fileExists(d.path).catch(() => false));
+  const current = useBrowser.getState().downloads.find((item) => item.id === d.id);
+  if (!current || current.path !== d.path || current.state !== d.state) return;
+  d = current;
   const items: MenuItem[] =
     d.state === "downloading"
       ? [

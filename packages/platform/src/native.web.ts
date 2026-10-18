@@ -47,7 +47,6 @@ export function nativeSnapshot<T>(module: string, method: string, args: readonly
   const indexed: Record<string, { field: string; missing: null | boolean }> = {
     "BayShell.readDocument": { field: "documents", missing: null },
     "BayApp.launchEnvironment": { field: "environment", missing: null },
-    "BaySystem.fileExists": { field: "files", missing: false },
   };
   const source = indexed[`${module}.${method}`];
   if (source) {

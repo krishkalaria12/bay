@@ -65,7 +65,7 @@ test("snapshot facades perform no IPC, missing required state fails, disposal is
     assert.equal(nativeSnapshot("BayShell", "readDocument", ["state.json"], forbiddenFallback), "saved");
     assert.equal(nativeSnapshot("BayShell", "readDocument", ["missing"], forbiddenFallback), null);
     assert.equal(nativeSnapshot("BayApp", "launchEnvironment", ["absent"], forbiddenFallback), null);
-    assert.equal(nativeSnapshot("BaySystem", "fileExists", ["absent"], forbiddenFallback), false);
+    assert.throws(() => nativeSnapshot("BaySystem", "fileExists", ["C:/test"], forbiddenFallback), { code: "snapshot_unavailable" });
     assert.throws(() => nativeSnapshot("BaySync", "deviceName", [], forbiddenFallback), { code: "snapshot_unavailable" });
     assert.equal(invoked, 0);
     assert.equal(await invokeNative("BayShell", "copyText", ["copied"]), true);
