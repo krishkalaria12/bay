@@ -213,6 +213,10 @@ NNMainDelegate::NNMainDelegate(const StartupTimestamps& timestamps)
 
 NNMainDelegate::~NNMainDelegate() = default;
 
+std::optional<int> NNMainDelegate::BasicStartupComplete() {
+  return ChromeMainDelegate::BasicStartupComplete();
+}
+
 void NNMainDelegate::PreSandboxStartup() {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();

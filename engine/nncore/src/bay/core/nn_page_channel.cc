@@ -1,17 +1,15 @@
 #include "bay/core/nn_page_channel.h"
 
-#import <Foundation/Foundation.h>
-
 #include <utility>
 
 #include "base/functional/bind.h"
-#include "base/task/bind_post_task.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/sys_string_conversions.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
+#include "bay/core/nn_tab_events.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -23,8 +21,6 @@
 #include "ipc/ipc_channel_proxy.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "bay/core/nn_browser.h"
-#import "bay/core/nncore_internal.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "url/gurl.h"
@@ -47,10 +43,10 @@ mojo::AssociatedRemote<mojom::NNPage> PageOf(content::RenderFrameHost* frame) {
   return page;
 }
 
-// Web pages may not navigate to or open bay: URLs (the app's own pages, which only the
-// app maps): cancelled silently. Chrome's pages (chrome:, devtools:) may ask for one in their
-// main frame: cancelled too, and the host is told (tab:didRequestAppURL:userGesture:), as
-// CEF's NNClient told the app.
+// Web pages may not navigate to or open bay: URLs (the app's own pages, which
+// only the app maps): cancelled silently. Chrome's pages (chrome:, devtools:)
+// may ask for one in their main frame: cancelled too, and the host is told
+// (tab:didRequestAppURL:userGesture:), as CEF's NNClient told the app.
 class AppSchemeThrottle : public content::NavigationThrottle {
  public:
   explicit AppSchemeThrottle(content::NavigationThrottleRegistry& registry)
@@ -71,8 +67,8 @@ class AppSchemeThrottle : public content::NavigationThrottle {
         navigation->GetInitiatorOrigin();
     content::NavigationEntry* committed =
         contents->GetController().GetLastCommittedEntry();
-    // A new popup's first navigation is reported by the opener's delegate instead
-    // (NNWebContentsDelegate), which drops the popup.
+    // A new popup's first navigation is reported by the opener's delegate
+    // instead (NNWebContentsDelegate), which drops the popup.
     const bool popup_start = !committed || committed->IsInitialEntry();
     if (navigation->IsInPrimaryMainFrame() && !popup_start &&
         !navigation->WasServerRedirect() && initiator &&
@@ -80,10 +76,11 @@ class AppSchemeThrottle : public content::NavigationThrottle {
         IsWebUIURL(contents->GetPrimaryMainFrame()->GetLastCommittedURL())) {
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(
-                         [](base::WeakPtr<content::WebContents> contents, GURL url,
-                            bool user_gesture) {
+                         [](base::WeakPtr<content::WebContents> contents,
+                            GURL url, bool user_gesture) {
                            if (contents) {
-                             ReportAppURLRequest(contents.get(), url, user_gesture);
+                             ReportAppURLRequest(contents.get(), url,
+                                                 user_gesture);
                            }
                          },
                          contents->GetWeakPtr(), navigation->GetURL(),
@@ -103,18 +100,6 @@ bool IsWebUIURL(const GURL& url) {
   return url.SchemeIs("chrome") || url.SchemeIs("devtools");
 }
 
-void ReportAppURLRequest(content::WebContents* contents,
-                         const GURL& url,
-                         bool user_gesture) {
-  NNCoreTab* tab = TabBridge::GetOrCreate(contents)->tab();
-  id<NNCoreTabDelegate> delegate = tab.delegate;
-  if ([delegate respondsToSelector:@selector(tab:didRequestAppURL:userGesture:)]) {
-    [delegate tab:tab
-        didRequestAppURL:base::SysUTF8ToNSString(url.spec())
-             userGesture:user_gesture];
-  }
-}
-
 void SetPageScript(const std::string& script) {
   Script() = script;
   for (auto it = content::RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
@@ -131,8 +116,8 @@ const std::string& GetPageScript() {
 }
 
 void SendPageScript(content::RenderProcessHost* host) {
-  // On the process's IPC channel, so it arrives before the messages that create frames
-  // (RenderProcessWillLaunch runs just after the channel is unpaused).
+  // On the process's IPC channel, so it arrives before the messages that create
+  // frames (RenderProcessWillLaunch runs just after the channel is unpaused).
   IPC::ChannelProxy* channel = host->GetChannel();
   if (!channel) {
     return;
@@ -160,7 +145,8 @@ void AddAppSchemeThrottle(content::NavigationThrottleRegistry& registry) {
   registry.AddThrottle(std::make_unique<AppSchemeThrottle>(registry));
 }
 
-// --- PageChannel --------------------------------------------------------------------------
+// --- PageChannel
+// --------------------------------------------------------------------------
 
 PageChannel::PageChannel(content::WebContents* contents)
     : content::WebContentsObserver(contents),
@@ -168,8 +154,8 @@ PageChannel::PageChannel(content::WebContents* contents)
       receivers_(contents, this) {}
 
 void PageChannel::PrimaryPageChanged(content::Page& page) {
-  // The old document's pending evaluations get no answer (it may sit in the back/forward
-  // cache, timers frozen, and answer much later otherwise).
+  // The old document's pending evaluations get no answer (it may sit in the
+  // back/forward cache, timers frozen, and answer much later otherwise).
   main_page_.reset();
 }
 
@@ -188,29 +174,16 @@ std::string PageChannel::FrameId(content::RenderFrameHost* frame) {
                        base::NumberToString(id.frame_routing_id)});
 }
 
-void PageChannel::Bind(content::RenderFrameHost* frame,
-                       mojo::PendingAssociatedReceiver<mojom::NNPageHost> receiver) {
+void PageChannel::Bind(
+    content::RenderFrameHost* frame,
+    mojo::PendingAssociatedReceiver<mojom::NNPageHost> receiver) {
   receivers_.Bind(frame, std::move(receiver));
 }
 
 void PageChannel::Post(const std::string& kind, const std::string& json) {
   content::RenderFrameHost& frame = receivers_.CurrentTargetFrame();
-  const bool main = frame.IsInPrimaryMainFrame();
-  NNCoreTab* tab = TabBridge::GetOrCreate(&GetWebContents())->tab();
-  id<NNCoreTabDelegate> delegate = tab.delegate;
-  NSString* ns_kind = base::SysUTF8ToNSString(kind);
-  NSString* ns_json = base::SysUTF8ToNSString(json);
-  if ([delegate respondsToSelector:@selector
-                (tab:didReceivePageMessage:json:frame:main:)]) {
-    [delegate tab:tab
-        didReceivePageMessage:ns_kind
-                         json:ns_json
-                        frame:base::SysUTF8ToNSString(FrameId(&frame))
-                         main:main];
-  } else if (main && [delegate respondsToSelector:@selector
-                               (tab:didReceivePageMessage:json:)]) {
-    [delegate tab:tab didReceivePageMessage:ns_kind json:ns_json];
-  }
+  DeliverPageMessage(&GetWebContents(), kind, json, FrameId(&frame),
+                     frame.IsInPrimaryMainFrame());
 }
 
 mojom::NNPage* PageChannel::MainPage() {
@@ -220,8 +193,8 @@ mojom::NNPage* PageChannel::MainPage() {
   }
   if (!main_page_.is_bound() || !main_page_.is_connected() ||
       main_page_frame_ != frame->GetGlobalId()) {
-    // A new document's calls go to its frame (an evaluation pending on the old one gets
-    // no answer).
+    // A new document's calls go to its frame (an evaluation pending on the old
+    // one gets no answer).
     main_page_.reset();
     frame->GetRemoteAssociatedInterfaces()->GetInterface(&main_page_);
     main_page_frame_ = frame->GetGlobalId();
@@ -284,8 +257,9 @@ void PageChannel::Evaluate(
     bool user_gesture,
     base::OnceCallback<void(const std::optional<std::string>&)> callback) {
   // No answer when the frame (or the renderer) goes before it answers.
-  // Always on a later turn: the default answer runs when the remote goes, which can be in
-  // the middle of this object's work (and the host may close the tab from its completion).
+  // Always on a later turn: the default answer runs when the remote goes, which
+  // can be in the middle of this object's work (and the host may close the tab
+  // from its completion).
   auto answer = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
       base::BindPostTaskToCurrentDefault(std::move(callback)), std::nullopt);
   mojom::NNPage* page = MainPage();

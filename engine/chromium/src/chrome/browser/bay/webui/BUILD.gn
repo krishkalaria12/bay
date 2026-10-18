@@ -1,0 +1,119 @@
+# Copyright 2026 Bay. Apache-2.0.
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  sources = [ "native_host.mojom" ]
+  webui_module_path = "/"
+}
+
+source_set("webui") {
+  sources = [
+    "bay_webui.h",
+    "native_host.h",
+  ]
+  public_deps = [
+    ":mojom",
+    "//base",
+    "//chrome/browser/ui/webui_browser",
+    "//content/public/browser",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
+source_set("impl") {
+  sources = [
+    "bay_webui.cc",
+    "browser_services.cc",
+    "browser_services.h",
+    "native_host.cc",
+    "tab_broker.cc",
+    "tab_broker.h",
+    "window_registry.cc",
+    "window_registry.h",
+  ]
+  deps = [
+    ":webui",
+    "resources:build_ts",
+    "//bay/core:portable",
+    "//chrome/app:command_ids",
+    "//chrome/browser:browser_process",
+    "//chrome/browser/bay",
+    "//chrome/browser/devtools",
+    "//chrome/browser/extensions",
+    "//chrome/browser/lifetime",
+    "//chrome/browser/media/router:media_router_feature",
+    "//chrome/browser/media/webrtc",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/profiles:profile_manager",
+    "//chrome/browser/profiles/keep_alive",
+    "//chrome/browser/ui",
+    "//chrome/browser/ui/tabs:tab_model",
+    "//chrome/browser/ui/webui_browser",
+    "//chrome/browser/ui/window_metadata",
+    "//components/find_in_page",
+    "//components/guest_contents/browser",
+    "//components/keep_alive_registry",
+    "//components/media_router/browser",
+    "//components/media_router/common",
+    "//components/sessions",
+    "//components/surface_embed/common",
+    "//components/version_info",
+    "//components/zoom",
+    "//extensions/browser",
+    "//extensions/common",
+    "//services/network/public/mojom",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/codec",
+    "//ui/shell_dialogs",
+    "//ui/views",
+    "//ui/webui",
+  ]
+  if (is_win) {
+    sources += [
+      "data_bridge.cc",
+      "data_bridge.h",
+    ]
+    deps += [
+      ":platform_services_win",
+      "//chrome/browser/bay/data:data_services",
+    ]
+  }
+}
+
+if (is_win) {
+  source_set("platform_services_win") {
+    sources = [
+      "platform_services_win.cc",
+      "platform_services_win.h",
+    ]
+    deps = [
+      "//base",
+      "//chrome/browser:browser_process",
+      "//chrome/browser:primitives",
+      "//chrome/browser:shell_integration",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/themes",
+      "//chrome/browser/ui",
+      "//chrome/browser/ui:simple_message_box_headers",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/common:constants",
+      "//components/version_info",
+      "//skia",
+      "//ui/base",
+      "//ui/base/clipboard",
+      "//ui/base/mojom:ui_base_types",
+      "//ui/display",
+      "//ui/gfx/codec",
+      "//ui/menus",
+      "//ui/native_theme",
+      "//ui/shell_dialogs",
+      "//ui/views",
+      "//url",
+    ]
+    libs = [
+      "advapi32.lib",
+      "shell32.lib",
+    ]
+  }
+}

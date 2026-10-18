@@ -1,0 +1,86 @@
+diff --git a/chrome/browser/profiles/profile.h b/chrome/browser/profiles/profile.h
+--- a/chrome/browser/profiles/profile.h
++++ b/chrome/browser/profiles/profile.h
+@@ -95,6 +95,9 @@
+     static OTRProfileID CreateUnique(const std::string& profile_id_prefix);
+ 
+     // Creates a unique OTR profile id to be used for CEF browser contexts.
++    // Each Bay private window owns an isolated, extension-free context.
++    static OTRProfileID CreateUniqueForBay();
++
+     static OTRProfileID CreateUniqueForCEF();
+     bool IsUniqueForCEF() const;
+ 
+diff --git a/chrome/browser/profiles/profile.cc b/chrome/browser/profiles/profile.cc
+--- a/chrome/browser/profiles/profile.cc
++++ b/chrome/browser/profiles/profile.cc
+@@ -104,6 +104,7 @@
+ // differentiated by such prefixes. Consult with the profile owners before
+ // proceeding if you believe a new prefix is strictly necessary.
+ // See `chrome/browser/PRESUBMIT.py` which enforces this via a warning.
++constexpr char kBayOTRProfileIDPrefix[] = "Bay::PrivateWindow";
+ constexpr char kCEFOTRProfileIDPrefix[] = "CEF::BrowserContext";
+ constexpr char kDevToolsOTRProfileIDPrefix[] = "Devtools::BrowserContext";
+ constexpr char kMediaRouterOTRProfileIDPrefix[] = "MediaRouter::Presentation";
+@@ -125,6 +126,8 @@
+   // DevTools::BrowserContext, MediaRouter::Presentation, and
+   // CaptivePortal::Signin are exceptions to this ban.
+   if (*this == PrimaryID() || IsDevTools() ||
++      base::StartsWith(profile_id_, kBayOTRProfileIDPrefix,
++                       base::CompareCase::SENSITIVE) ||
+       base::StartsWith(profile_id_, kCEFOTRProfileIDPrefix,
+                        base::CompareCase::SENSITIVE) ||
+       base::StartsWith(profile_id_, kMediaRouterOTRProfileIDPrefix,
+@@ -165,6 +168,11 @@
+   return OTRProfileID(base::StringPrintf(
+       "%s-%s", profile_id_prefix.c_str(),
+       base::Uuid::GenerateRandomV4().AsLowercaseString().c_str()));
++}
++
++// static
++Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForBay() {
++  return CreateUnique(kBayOTRProfileIDPrefix);
+ }
+ 
+ // static
+diff --git a/chrome/browser/lifetime/browser_close_manager.h b/chrome/browser/lifetime/browser_close_manager.h
+--- a/chrome/browser/lifetime/browser_close_manager.h
++++ b/chrome/browser/lifetime/browser_close_manager.h
+@@ -22,6 +22,10 @@
+ 
+   BrowserCloseManager(const BrowserCloseManager&) = delete;
+   BrowserCloseManager& operator=(const BrowserCloseManager&) = delete;
++
++  // Restore detached Bay pages before the common beforeunload preflight.
++  // A failed restoration cancels the close rather than losing a live page.
++  static void SetBayClosePreflight(bool (*preflight)());
+ 
+   // Starts closing all browser windows.
+   void StartClosingBrowsers();
+diff --git a/chrome/browser/lifetime/browser_close_manager.cc b/chrome/browser/lifetime/browser_close_manager.cc
+--- a/chrome/browser/lifetime/browser_close_manager.cc
++++ b/chrome/browser/lifetime/browser_close_manager.cc
+@@ -36,6 +36,7 @@
+ #endif
+ 
+ namespace {
++bool (*g_bay_close_preflight)() = nullptr;
+ 
+ // Navigates a browser window for |profile|, creating one if necessary, to the
+ // downloads page if there are downloads in progress for |profile|.
+@@ -54,7 +55,15 @@
+ BrowserCloseManager::BrowserCloseManager() : current_browser_(nullptr) {}
+ BrowserCloseManager::~BrowserCloseManager() = default;
+ 
++void BrowserCloseManager::SetBayClosePreflight(bool (*preflight)()) {
++  g_bay_close_preflight = preflight;
++}
++
+ void BrowserCloseManager::StartClosingBrowsers() {
++  if (g_bay_close_preflight && !g_bay_close_preflight()) {
++    CancelBrowserClose();
++    return;
++  }
+   close_timer_.emplace();
+ 
+   // If the session is ending or a silent exit was requested, skip straight to

@@ -10,4 +10,6 @@ test("the JS bundle and the native build declare the same API version", () => {
   const native = read("../../../packages/shell/ios/AppModule.swift").match(/Constant\("apiVersion"\) \{ \(\) -> Int in (\d+) \}/)?.[1];
   assert.ok(js && native, "both declarations found");
   assert.equal(js, native);
+  const chrome = read("../../../engine/chromium/src/chrome/browser/bay/webui/native_host.cc").match(/Set\("apiVersion", (\d+)\)/)?.[1];
+  assert.equal(js, chrome, "Chrome WebUI and macOS must expose the same application API");
 });

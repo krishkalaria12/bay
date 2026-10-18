@@ -57,6 +57,9 @@ chromium all chromium-pip-overlay-window.patch
 chromium all chromium-tab-sharing-capturer.patch
 chromium mac chromium-bay-layer.patch
 chromium win chromium-bay-layer-win.patch
+chromium win chromium-bay-webui-window.patch
+chromium win chromium-bay-lifecycle.patch
+chromium win chromium-bay-extension-hooks.patch
 
 layer all engine/chromium
 layer all engine/nncore

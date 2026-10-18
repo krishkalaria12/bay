@@ -1,0 +1,423 @@
+// Copyright 2026 Bay. Apache-2.0.
+#include "chrome/browser/bay/webui/window_registry.h"
+
+#include <cmath>
+#include <limits>
+#include <utility>
+#include <vector>
+
+#include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/memory/raw_ref.h"
+#include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/bay/webui/native_host.h"
+#include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_destroyer.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/webui_browser/webui_browser_window.h"
+#include "chrome/browser/ui/window_metadata/window_metadata_controller.h"
+#include "ui/base/base_window.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
+
+namespace bay {
+namespace {
+WindowRegistry::Result Success() {
+  return {true, {}};
+}
+WindowRegistry::Result Failure(const char* message) {
+  return {false, message};
+}
+bool ValidName(const std::string& name) {
+  return !name.empty() && name.size() <= 256 &&
+         name.find_first_not_of(
+             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+             "-") == std::string::npos;
+}
+bool KnownKind(const std::string& kind) {
+  return kind == "browser" || kind == "small" || kind == "settings" ||
+         kind == "import" || kind == "taskManager";
+}
+std::optional<gfx::Rect> ReadFrame(const base::Value* value) {
+  if (!value || !value->is_list() || value->GetList().size() != 4)
+    return std::nullopt;
+  int numbers[4];
+  for (size_t i = 0; i < 4; ++i) {
+    const auto number = value->GetList()[i].GetIfDouble();
+    if (!number || !std::isfinite(*number) ||
+        *number < std::numeric_limits<int>::min() ||
+        *number > std::numeric_limits<int>::max()) {
+      return std::nullopt;
+    }
+    numbers[i] = static_cast<int>(std::round(*number));
+  }
+  if (numbers[2] <= 0 || numbers[3] <= 0)
+    return std::nullopt;
+  return gfx::Rect(numbers[0], numbers[1], numbers[2], numbers[3]);
+}
+base::ListValue RectValue(const gfx::Rect& rect) {
+  return base::ListValue()
+      .Append(rect.x())
+      .Append(rect.y())
+      .Append(rect.width())
+      .Append(rect.height());
+}
+}  // namespace
+
+class WindowRegistry::Entry final : public views::WidgetObserver {
+ public:
+  Entry(WindowRegistry& registry, BrowserWindowInterface* browser)
+      : registry_(registry), browser_(browser->GetWeakPtr()) {}
+  void ObserveWidget() {
+    auto* window = WebUIBrowserWindow::FromBrowser(browser_.get());
+    if (window && window->widget() && !observation_.IsObserving())
+      observation_.Observe(window->widget());
+  }
+  void OnWidgetBoundsChanged(views::Widget*, const gfx::Rect& bounds) override {
+    if (browser_)
+      registry_->BoundsChanged(browser_.get(), bounds);
+  }
+  void OnWidgetDestroyed(views::Widget*) override { observation_.Reset(); }
+
+  std::string id;
+  base::DictValue options;
+
+ private:
+  const raw_ref<WindowRegistry> registry_;
+  const base::WeakPtr<BrowserWindowInterface> browser_;
+  base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
+      this};
+};
+
+struct WindowRegistry::Host {
+  base::WeakPtr<NativeHost> host;
+  base::RepeatingClosure publish_host_info;
+};
+struct WindowRegistry::PendingOpen {
+  raw_ptr<Profile> profile;
+  std::string id;
+  base::DictValue options;
+};
+
+WindowRegistry& WindowRegistry::Get() {
+  static base::NoDestructor<WindowRegistry> registry;
+  return *registry;
+}
+WindowRegistry::WindowRegistry() {
+  observation_.Observe(GlobalBrowserCollection::GetInstance());
+  TabBroker::Get().SetProfileReleasedCallback(base::BindRepeating(
+      &WindowRegistry::ReleasePrivateProfile, base::Unretained(this)));
+}
+WindowRegistry::~WindowRegistry() = default;
+
+WindowRegistry::Entry& WindowRegistry::EnsureEntry(
+    BrowserWindowInterface* browser) {
+  auto& entry = entries_[browser];
+  if (!entry)
+    entry = std::make_unique<Entry>(*this, browser);
+  entry->ObserveWidget();
+  return *entry;
+}
+std::string WindowRegistry::RegisterHost(
+    BrowserWindowInterface* browser,
+    base::WeakPtr<NativeHost> host,
+    base::RepeatingClosure publish_host_info) {
+  CHECK(browser);
+  CHECK(host);
+  NativeHost* key = host.get();
+  hosts_[key] =
+      std::make_unique<Host>(std::move(host), std::move(publish_host_info));
+  OnBrowserCreated(browser);
+  return IdFor(browser);
+}
+void WindowRegistry::UnregisterHost(NativeHost* host) {
+  hosts_.erase(host);
+}
+std::string WindowRegistry::IdFor(BrowserWindowInterface* browser) const {
+  auto it = entries_.find(browser);
+  return it == entries_.end() ? std::string() : it->second->id;
+}
+base::DictValue WindowRegistry::OptionsFor(
+    BrowserWindowInterface* browser) const {
+  auto it = entries_.find(browser);
+  return it == entries_.end() ? base::DictValue() : it->second->options.Clone();
+}
+BrowserWindowInterface* WindowRegistry::Find(const std::string& id) const {
+  if (id.empty())
+    return nullptr;
+  for (const auto& [browser, entry] : entries_) {
+    if (entry->id == id)
+      return browser;
+  }
+  return nullptr;
+}
+base::ListValue WindowRegistry::Ids() const {
+  base::ListValue ids;
+  for (const auto& [browser, entry] : entries_) {
+    if (!entry->id.empty())
+      ids.Append(entry->id);
+  }
+  return ids;
+}
+
+WindowRegistry::Result WindowRegistry::Open(BrowserWindowInterface* requester,
+                                            const std::string& id,
+                                            const base::DictValue& options) {
+  if (!requester || !ValidName(id))
+    return Failure("Invalid window id");
+  for (const char* field : {"kind", "profile", "title"}) {
+    if (const auto* value = options.Find(field); value && !value->is_string())
+      return Failure("Window text options must be strings");
+  }
+  for (const char* field : {"focus", "incognito"}) {
+    if (const auto* value = options.Find(field); value && !value->is_bool())
+      return Failure("Window flags must be booleans");
+  }
+  if (const auto* size = options.Find("size"); size && !size->is_list())
+    return Failure("Invalid window size");
+  const std::string kind =
+      options.FindString("kind") ? *options.FindString("kind") : "browser";
+  if (!KnownKind(kind))
+    return Failure("Unknown window kind");
+  const bool focus = options.FindBool("focus").value_or(true);
+  if (auto* existing = Find(id)) {
+    if (focus)
+      existing->GetWindow()->Activate();
+    return Success();
+  }
+  if (pending_open_)
+    return Failure("A window is already being created");
+  const auto* frame_value = options.Find("frame");
+  auto frame = ReadFrame(frame_value);
+  if (frame_value && !frame_value->is_none() && !frame)
+    return Failure("Invalid window frame");
+  if (!frame) {
+    if (const auto* size = options.FindList("size")) {
+      if (size->size() != 2)
+        return Failure("Invalid window size");
+      const auto width = (*size)[0].GetIfDouble();
+      const auto height = (*size)[1].GetIfDouble();
+      if (!width || !height || !std::isfinite(*width) ||
+          !std::isfinite(*height) || *width < 1 || *height < 1 ||
+          *width > 32768 || *height > 32768) {
+        return Failure("Invalid window size");
+      }
+      const auto center = requester->GetWindow()->GetBounds().CenterPoint();
+      const gfx::Size dimensions(static_cast<int>(std::round(*width)),
+                                 static_cast<int>(std::round(*height)));
+      frame.emplace(center.x() - dimensions.width() / 2,
+                    center.y() - dimensions.height() / 2, dimensions.width(),
+                    dimensions.height());
+    }
+  }
+  const bool incognito = options.FindBool("incognito").value_or(false);
+  const std::string profile_name =
+      options.FindString("profile") ? *options.FindString("profile") : "";
+  if (!profile_name.empty() &&
+      !(incognito && profile_name == "incognito:" + id) &&
+      (!ValidName(profile_name) || profile_name.size() > 128)) {
+    return Failure("Invalid profile id");
+  }
+  if (incognito && !profile_name.empty() && profile_name != "incognito:" + id)
+    return Failure("Incognito profile id must match its window id");
+  auto* original = requester->GetProfile()->GetOriginalProfile();
+  const auto profile_path = original->GetPath().DirName().AppendASCII(
+      profile_name.empty() || incognito ? "Default" : profile_name);
+  auto* manager = g_browser_process->profile_manager();
+  auto* profile = manager ? manager->GetProfileByPath(profile_path) : nullptr;
+  if (!profile)
+    return Failure("The requested profile has not been loaded");
+  if (incognito) {
+    // Each Bay private window has its own cookie/storage context. Non-primary
+    // Chrome OTR profiles intentionally do not expose installed extensions.
+    const auto otr = Profile::OTRProfileID::CreateUniqueForBay();
+    profile = profile->GetOffTheRecordProfile(otr, true);
+    if (!profile)
+      return Failure("Could not create an incognito profile");
+    private_profiles_[profile] = profile->GetWeakPtr();
+  }
+  auto& current = EnsureEntry(requester);
+  if (current.id.empty() && requester->GetProfile() == profile &&
+      kind == "browser") {
+    current.id = id;
+    current.options = options.Clone();
+    current.options.Set("kind", kind);
+    if (frame)
+      requester->GetWindow()->SetBounds(*frame);
+    if (const auto* title = options.FindString("title"))
+      SetTitle(id, *title);
+    PublishHostInfo();
+    if (focus)
+      requester->GetWindow()->Activate();
+    return Success();
+  }
+  BrowserWindowCreateParams params(profile, true);
+  if (GetBrowserWindowCreationStatusForProfile(*profile) !=
+      BrowserWindowInterface::CreationStatus::kOk) {
+    if (incognito)
+      ReleasePrivateProfile(profile->GetWeakPtr());
+    return Failure("The profile cannot create a browser window");
+  }
+  params.should_trigger_session_restore = false;
+  params.omit_from_session_restore = true;
+  if (frame)
+    params.initial_bounds = *frame;
+  if (const auto* title = options.FindString("title"))
+    params.user_title = *title;
+  pending_open_ = std::make_unique<PendingOpen>(profile, id, options.Clone());
+  pending_open_->options.Set("kind", kind);
+  auto* created = CreateBrowserWindow(std::move(params));
+  if (created)
+    OnBrowserCreated(created);
+  pending_open_.reset();
+  if (!created) {
+    if (incognito)
+      ReleasePrivateProfile(profile->GetWeakPtr());
+    return Failure("Chrome could not create the requested window");
+  }
+  if (IdFor(created) != id) {
+    created->GetWindow()->Close();
+    return Failure("Chrome did not create a Bay WebUI window");
+  }
+  PublishHostInfo();
+  if (focus)
+    created->GetWindow()->Show();
+  else
+    created->GetWindow()->ShowInactive();
+  return Success();
+}
+
+WindowRegistry::Result WindowRegistry::Close(const std::string& id) {
+  auto* browser = Find(id);
+  if (!browser)
+    return Success();
+  browser->GetWindow()->Close();
+  return Success();
+}
+WindowRegistry::Result WindowRegistry::Focus(const std::string& id) {
+  auto* browser = Find(id);
+  if (!browser)
+    return Failure("Unknown window id");
+  if (browser->GetWindow()->IsMinimized())
+    browser->GetWindow()->Restore();
+  browser->GetWindow()->Show();
+  browser->GetWindow()->Activate();
+  return Success();
+}
+WindowRegistry::Result WindowRegistry::SetTitle(const std::string& id,
+                                                const std::string& title) {
+  auto* browser = Find(id);
+  if (!browser)
+    return Failure("Unknown window id");
+  if (auto* metadata = WindowMetadataController::From(browser)) {
+    metadata->SetWindowUserTitle(title);
+    return Success();
+  }
+  return Failure("Window metadata is not ready");
+}
+WindowRegistry::Result WindowRegistry::SetFrame(const std::string& id,
+                                                const gfx::Rect& frame) {
+  auto* browser = Find(id);
+  if (!browser)
+    return Failure("Unknown window id");
+  if (frame.IsEmpty())
+    return Failure("Invalid window frame");
+  browser->GetWindow()->SetBounds(frame);
+  return Success();
+}
+WindowRegistry::Result WindowRegistry::Minimize(const std::string& id) {
+  auto* browser = Find(id);
+  if (!browser)
+    return Failure("Unknown window id");
+  browser->GetWindow()->Minimize();
+  return Success();
+}
+std::optional<gfx::Rect> WindowRegistry::Frame(const std::string& id) const {
+  auto* browser = Find(id);
+  return browser ? std::make_optional(browser->GetWindow()->GetBounds())
+                 : std::nullopt;
+}
+
+void WindowRegistry::PublishHostInfo() {
+  std::vector<std::pair<base::WeakPtr<NativeHost>, base::RepeatingClosure>>
+      callbacks;
+  for (const auto& [host, state] : hosts_)
+    callbacks.emplace_back(state->host, state->publish_host_info);
+  for (auto& [host, callback] : callbacks) {
+    if (host)
+      callback.Run();
+  }
+}
+void WindowRegistry::Broadcast(base::DictValue event) {
+  std::vector<base::WeakPtr<NativeHost>> hosts;
+  for (const auto& [host, state] : hosts_)
+    hosts.push_back(state->host);
+  for (const auto& host : hosts) {
+    if (host)
+      host->Emit("BayShell", "onWindowEvent", base::Value(event.Clone()));
+  }
+}
+void WindowRegistry::BoundsChanged(BrowserWindowInterface* browser,
+                                   const gfx::Rect& bounds) {
+  const auto id = IdFor(browser);
+  if (!id.empty())
+    Broadcast(base::DictValue()
+                  .Set("type", "frame")
+                  .Set("id", id)
+                  .Set("frame", RectValue(bounds)));
+}
+void WindowRegistry::OnBrowserCreated(BrowserWindowInterface* browser) {
+  if (!WebUIBrowserWindow::FromBrowser(browser))
+    return;
+  auto& entry = EnsureEntry(browser);
+  if (entry.id.empty() && pending_open_ && !Find(pending_open_->id) &&
+      browser->GetProfile() == pending_open_->profile) {
+    entry.id = pending_open_->id;
+    entry.options = pending_open_->options.Clone();
+  }
+}
+void WindowRegistry::OnBrowserClosed(BrowserWindowInterface* browser) {
+  const auto id = IdFor(browser);
+  entries_.erase(browser);
+  if (!id.empty()) {
+    PublishHostInfo();
+    Broadcast(base::DictValue().Set("type", "close").Set("id", id));
+  }
+  auto private_profile = private_profiles_.find(browser->GetProfile());
+  if (private_profile != private_profiles_.end() && private_profile->second) {
+    // Chrome destroys primary incognito profiles automatically. These are
+    // isolated non-primary profiles owned by Bay, so release them after the
+    // browser is gone and only after any DevTools window has also closed.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&WindowRegistry::ReleasePrivateProfile,
+                       base::Unretained(this), private_profile->second));
+  } else if (private_profile != private_profiles_.end()) {
+    private_profiles_.erase(private_profile);
+  }
+}
+void WindowRegistry::ReleasePrivateProfile(base::WeakPtr<Profile> profile) {
+  if (!profile || !profile->IsOffTheRecord() ||
+      g_browser_process->IsShuttingDown())
+    return;
+  if (TabBroker::Get().UsesProfile(profile.get()))
+    return;
+  bool in_use = false;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&profile, &in_use](BrowserWindowInterface* browser) {
+        in_use = browser->GetProfile() == profile.get();
+        return !in_use;
+      });
+  if (!in_use && private_profiles_.erase(profile.get()))
+    ProfileDestroyer::DestroyOTRProfileWhenAppropriate(profile.get());
+}
+void WindowRegistry::OnBrowserActivated(BrowserWindowInterface* browser) {
+  const auto id = IdFor(browser);
+  if (!id.empty())
+    Broadcast(base::DictValue().Set("type", "focus").Set("id", id));
+}
+}  // namespace bay

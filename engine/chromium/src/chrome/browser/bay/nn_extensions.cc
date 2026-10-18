@@ -298,7 +298,7 @@ NN_ENGINE_CALL(nn_extensions_list) {
 NN_ENGINE_CALL(nn_extensions_install) {
   NN_EXTENSIONS_CALL();
   const std::string path = call.String("path");
-  if (path.empty() || path[0] != '/') {
+  if (!base::FilePath::FromUTF8Unsafe(path).IsAbsolute()) {
     return call.TakeReply().Error("an absolute path required");
   }
   Profile* profile = call.profile();
@@ -329,7 +329,7 @@ NN_ENGINE_CALL(nn_extensions_install) {
 NN_ENGINE_CALL(nn_extensions_install_crx) {
   NN_EXTENSIONS_CALL();
   const std::string path = call.String("path");
-  if (path.empty() || path[0] != '/') {
+  if (!base::FilePath::FromUTF8Unsafe(path).IsAbsolute()) {
     return call.TakeReply().Error("an absolute path required");
   }
   Profile* profile = call.profile();

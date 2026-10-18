@@ -67,7 +67,7 @@ export default forwardRef<NativeHandle, NativeProps>(function NativeWebView(prop
       events.remove();
       pending.current = pending.current.catch(() => undefined).then(() => invokeNative("BayWebView", "unmount", [tag])).catch(console.error);
     };
-  }, [windowId]);
+  }, [windowId, props.profile, props.adoptId, props.transferKey, props.extensionHost, props.standalone]);
   useEffect(() => {
     if (serialized === firstProps.current) return;
     firstProps.current = serialized;

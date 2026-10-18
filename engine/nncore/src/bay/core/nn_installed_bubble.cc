@@ -8,6 +8,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/scoped_observation.h"
+#include "bay/core/nn_tab_events.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
@@ -19,11 +20,11 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
-#include "bay/core/nn_browser.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/views/widget/widget.h"
 
-// The hook in Chrome's ExtensionInstallUIDesktop::OnInstallSuccess (engine/nncore/apply.sh).
+// The hook in Chrome's ExtensionInstallUIDesktop::OnInstallSuccess
+// (engine/nncore/apply.sh).
 extern bool (*g_bay_extension_installed)(
     Profile* profile,
     scoped_refptr<const extensions::Extension> extension,
@@ -50,52 +51,42 @@ std::vector<Waiting>& WaitingBubbles() {
   return *waiting;
 }
 
-// The page the app shows for `profile` in one of its windows on screen (the last active
-// first): the bubble goes over that window. Never one of the host's hidden windows (its own
-// pages, a Browser Chrome made), whose pages the app moves away and whose windows it closes.
-content::WebContents* ShownPageFor(Profile* profile) {
-  content::WebContents* found = nullptr;
-  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
-      [&](BrowserWindowInterface* browser) {
-        WindowHost* host = WindowHost::ForBrowser(browser);
-        tabs::TabInterface* tab = browser->GetActiveTabInterface();
-        if (browser->GetProfile() != profile || !host || host->internal() ||
-            host->closing() || !host->widget() || !host->widget()->IsVisible() ||
-            !host->IsActiveBrowser(static_cast<Browser*>(browser)) || !tab) {
-          return true;  // Continue iterating.
-        }
-        found = tab->GetContents();
-        return false;
-      });
-  return found;
-}
+// The page the app shows for `profile` in one of its windows on screen (the
+// last active first): the bubble goes over that window. Never one of the host's
+// hidden windows (its own pages, a Browser Chrome made), whose pages the app
+// moves away and whose windows it closes.
 
 void Show(Profile* profile,
           scoped_refptr<const extensions::Extension> extension,
           const SkBitmap& icon,
           content::WebContents* page) {
-  // Chrome reads the page once the extension is ready (a later task): gone by then, no bubble.
-  // The bubble is a child of the page's window, and closes with it.
+  // Chrome reads the page once the extension is ready (a later task): gone by
+  // then, no bubble. The bubble is a child of the page's window, and closes
+  // with it.
   extensions::TriggerPostInstallDialog(
       profile, std::move(extension), icon,
       base::BindOnce(
           [](base::WeakPtr<content::WebContents> page) { return page.get(); },
           page->GetWeakPtr()),
-      // No "pin it" tip: Chrome's points at its toolbar, which our windows don't have.
+      // No "pin it" tip: Chrome's points at its toolbar, which our windows
+      // don't have.
       base::OnceCallback<void(base::WeakPtr<content::WebContents>)>());
 }
 
-// A Browser becoming active: a window of a waiting profile may be on screen now.
+// A Browser becoming active: a window of a waiting profile may be on screen
+// now.
 class ActivationWatch : public BrowserCollectionObserver {
  public:
-  ActivationWatch() { observation_.Observe(GlobalBrowserCollection::GetInstance()); }
+  ActivationWatch() {
+    observation_.Observe(GlobalBrowserCollection::GetInstance());
+  }
   void OnBrowserActivated(BrowserWindowInterface* browser) override {
     ShowWaitingInstalledBubbles();
   }
 
  private:
-  base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver> observation_{
-      this};
+  base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>
+      observation_{this};
 };
 
 bool ExtensionInstalled(Profile* profile,
@@ -108,7 +99,7 @@ bool ExtensionInstalled(Profile* profile,
   // As Chrome: confirmed in a normal window, whatever window it came from.
   Profile* original = profile->GetOriginalProfile();
   const SkBitmap bitmap = icon ? *icon : SkBitmap();
-  if (content::WebContents* page = ShownPageFor(original)) {
+  if (content::WebContents* page = ShownHostPageForProfile(original)) {
     Show(original, std::move(extension), bitmap, page);
     return true;
   }
@@ -138,14 +129,14 @@ void ShowWaitingInstalledBubbles() {
   std::vector<Waiting> list = std::move(waiting);
   waiting.clear();
   for (Waiting& w : list) {
-    // The profile went, or the extension did (uninstalled or turned off meanwhile: Chrome's
-    // watcher would wait for it for good).
+    // The profile went, or the extension did (uninstalled or turned off
+    // meanwhile: Chrome's watcher would wait for it for good).
     if (!w.profile || !extensions::ExtensionRegistry::Get(w.profile.get())
                            ->enabled_extensions()
                            .Contains(w.extension->id())) {
       continue;
     }
-    if (content::WebContents* page = ShownPageFor(w.profile.get())) {
+    if (content::WebContents* page = ShownHostPageForProfile(w.profile.get())) {
       Show(w.profile.get(), std::move(w.extension), w.icon, page);
     } else {
       waiting.push_back(std::move(w));

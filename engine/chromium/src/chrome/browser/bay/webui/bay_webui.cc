@@ -1,0 +1,116 @@
+// Copyright 2026 Bay. Apache-2.0.
+#include "chrome/browser/bay/webui/bay_webui.h"
+
+#include "base/command_line.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/path_service.h"
+#include "base/task/thread_pool.h"
+#include "chrome/browser/ui/webui_browser/webui_browser.h"
+#include "components/surface_embed/common/features.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_ui.h"
+#include "content/public/browser/web_ui_data_source.h"
+#include "content/public/common/url_constants.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
+
+namespace bay {
+namespace {
+
+base::FilePath AssetRoot() {
+  base::FilePath directory;
+  if (!base::PathService::Get(base::DIR_EXE, &directory))
+    return {};
+  return directory.AppendASCII("bay-ui");
+}
+
+scoped_refptr<base::RefCountedMemory> ReadAsset(const std::string& request) {
+  std::string path = request.substr(0, request.find('?'));
+  if (path.empty())
+    path = "index.html";
+  const base::FilePath relative = base::FilePath::FromUTF8Unsafe(path);
+  // Never let a compromised WebUI read files outside the installed UI bundle.
+  if (relative.IsAbsolute() || relative.ReferencesParent() ||
+      path.find('\\') != std::string::npos ||
+      path.find(':') != std::string::npos)
+    return nullptr;
+  const base::FilePath root = AssetRoot();
+  if (root.empty())
+    return nullptr;
+  base::FilePath file = root.Append(relative);
+  base::FilePath real_root;
+  base::FilePath real_file;
+  if (!base::NormalizeFilePath(root, &real_root) ||
+      !base::NormalizeFilePath(file, &real_file) ||
+      !real_root.IsParent(real_file))
+    return nullptr;
+  std::string bytes;
+  if (!base::ReadFileToStringWithMaxSize(real_file, &bytes, 64 * 1024 * 1024))
+    return nullptr;
+  return base::MakeRefCounted<base::RefCountedString>(std::move(bytes));
+}
+
+}  // namespace
+
+BayWebUIConfig::BayWebUIConfig()
+    : DefaultWebUIConfig(content::kChromeUIScheme, kBayHost) {}
+
+bool BayWebUIConfig::IsWebUIEnabled(content::BrowserContext*) {
+  return webui_browser::IsWebUIBrowserEnabled();
+}
+
+BayWebUIBrowserWindow::BayWebUIBrowserWindow(BrowserWindowInterface* browser)
+    : WebUIBrowserWindow(browser, GURL(kBayURL)) {}
+
+void BayWebUIBrowserWindow::SetFocusToLocationBar(bool is_user_initiated) {
+  EmitWindowCommand(browser(), "focusCommandBar");
+}
+
+bool ConfigureBayWebUI(content::WebUI* web_ui) {
+  if (!web_ui->GetWebContents()->GetVisibleURL().SchemeIs(
+          content::kChromeUIScheme) ||
+      web_ui->GetWebContents()->GetVisibleURL().host() != kBayHost)
+    return false;
+  auto* source = content::WebUIDataSource::CreateAndAdd(
+      web_ui->GetWebContents()->GetBrowserContext(), kBayHost);
+  source->UseStringsJs();
+  // React Native Web injects style nodes and Expo loads local script chunks.
+  // CSP still restricts executable code to the installed WebUI resources.
+  source->DisableTrustedTypesCSP();
+  source->AddString("platform",
+#if BUILDFLAG(IS_WIN)
+                    "windows"
+#else
+                    "linux"
+#endif
+  );
+  source->AddBoolean(
+      "enableSurfaceEmbed",
+      base::FeatureList::IsEnabled(surface_embed::features::kSurfaceEmbed));
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ObjectSrc, "object-src 'self';");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
+      "script-src 'self' chrome://resources;");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::StyleSrc,
+      "style-src 'self' 'unsafe-inline' chrome://resources;");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ImgSrc,
+      "img-src 'self' data: blob: https: chrome://favicon2;");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ConnectSrc,
+      "connect-src 'self' https:;");
+  source->SetRequestFilter(
+      base::BindRepeating([](const std::string&) { return true; }),
+      base::BindRepeating([](const std::string& path,
+                             content::WebUIDataSource::GotDataCallback reply) {
+        base::ThreadPool::PostTaskAndReplyWithResult(
+            FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+            base::BindOnce(&ReadAsset, path), std::move(reply));
+      }));
+  return true;
+}
+}  // namespace bay
