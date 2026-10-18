@@ -40,6 +40,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   void SetClient(mojo::PendingRemote<mojom::NativeHostClient> client) override;
   void Emit(const char* module, const char* event, base::Value payload);
   void ViewEvent(int tag, const char* event, base::DictValue payload);
+  void PublishHostInfo();
   BrowserWindowInterface* browser() const { return browser_; }
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
@@ -59,7 +60,6 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
                            InvokeCallback callback);
   content::WebContents* ContentsForTag(int tag) const;
   base::DictValue Info() const;
-  void PublishHostInfo();
 #if BUILDFLAG(IS_WIN)
   void PlatformReady();
   std::unique_ptr<PlatformServices> platform_services_;

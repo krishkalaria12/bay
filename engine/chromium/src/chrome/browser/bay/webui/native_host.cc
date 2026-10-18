@@ -17,8 +17,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "bay/core/nn_devtools_call.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bay/nn_dispatch.h"
@@ -30,6 +32,10 @@
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
+#include "chrome/browser/bay/webui/updater_service_win.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/browser_close_manager.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #endif
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -66,6 +72,128 @@ std::map<NativeHost*, base::WeakPtr<NativeHost>>& Hosts() {
       hosts;
   return *hosts;
 }
+#if BUILDFLAG(IS_WIN)
+bool g_quit_requested = false;
+bool g_quit_prepared = false;
+UpdaterService& AppUpdater() {
+  static base::NoDestructor<UpdaterService> updater(
+      base::BindRepeating([](base::DictValue) {
+        // Updater preferences and operation state are shared by every window.
+        // A host-info update also refreshes the synchronous systemInfo
+        // snapshot.
+        for (const auto& [owner, host] : Hosts()) {
+          if (host)
+            host->PublishHostInfo();
+        }
+      }),
+      base::BindRepeating(&chrome::AttemptExit));
+  return *updater;
+}
+struct QuitPreparation {
+  base::WeakPtr<NativeHost> owner;
+  std::vector<base::OnceCallback<void(bool)>> callbacks;
+  base::OneShotTimer deadline;
+};
+QuitPreparation& PendingQuit() {
+  static base::NoDestructor<QuitPreparation> quit;
+  return *quit;
+}
+void CompleteQuitPreparation(bool proceed) {
+  auto& quit = PendingQuit();
+  quit.deadline.Stop();
+  quit.owner.reset();
+  auto callbacks = std::exchange(quit.callbacks, {});
+  for (auto& callback : callbacks)
+    std::move(callback).Run(proceed);
+}
+void PrepareRendererForQuit(base::OnceCallback<void(bool)> completion) {
+  auto& quit = PendingQuit();
+  if (!quit.callbacks.empty()) {
+    quit.callbacks.push_back(std::move(completion));
+    return;
+  }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike") ||
+      Hosts().empty()) {
+    std::move(completion).Run(true);
+    return;
+  }
+  // Full application windows remain gated until a shared runtime exists. Do
+  // not pick an arbitrary session writer if that invariant is violated.
+  if (Hosts().size() != 1 || !Hosts().begin()->second) {
+    std::move(completion).Run(false);
+    return;
+  }
+  quit.owner = Hosts().begin()->second;
+  quit.callbacks.push_back(std::move(completion));
+  quit.deadline.Start(FROM_HERE, base::Seconds(20),
+                      base::BindOnce(&CompleteQuitPreparation, false));
+  quit.owner->Emit("BayShell", "onAppEvent",
+                   base::Value(base::DictValue().Set("type", "willQuit")));
+}
+void InstallCloseHooks() {
+  static const bool installed = [] {
+    WebUIBrowserWindow::SetBayCloseRequestHandler(
+        [](BrowserWindowInterface* browser) {
+          if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+                  "bay-hosting-spike") ||
+              browser_shutdown::ShouldIgnoreUnloadHandlers() ||
+              g_quit_prepared || Hosts().size() != 1)
+            return false;
+          const auto host = Hosts().begin()->second;
+          if (!host || host->browser() != browser)
+            return false;
+          // Posting lets WebUIBrowserWindow rearm the consumed widget callback
+          // before application shutdown can synchronously call Close() again.
+          if (!g_quit_requested && !browser_shutdown::IsTryingToQuit()) {
+            g_quit_requested = true;
+            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+                FROM_HERE, base::BindOnce(&chrome::AttemptExit));
+          }
+          return true;
+        });
+    BrowserCloseManager::SetBayClosePreflight(
+        [](base::OnceCallback<void(bool)> completion) {
+          g_quit_requested = true;
+          g_quit_prepared = false;
+          if (browser_shutdown::ShouldIgnoreUnloadHandlers()) {
+            std::move(completion).Run(TabBroker::Get().PrepareForQuit());
+            return;
+          }
+          PrepareRendererForQuit(base::BindOnce(
+              [](base::OnceCallback<void(bool)> completion, bool proceed) {
+                if (!proceed) {
+                  std::move(completion).Run(false);
+                  return;
+                }
+                AppUpdater().PrepareForQuit(base::BindOnce(
+                    [](base::OnceCallback<void(bool)> completion,
+                       bool updater_ready) {
+                      const bool prepared =
+                          updater_ready && TabBroker::Get().PrepareForQuit();
+                      g_quit_prepared = prepared;
+                      std::move(completion).Run(prepared);
+                    },
+                    std::move(completion)));
+              },
+              std::move(completion)));
+        },
+        [] {
+          g_quit_requested = false;
+          g_quit_prepared = false;
+          CompleteQuitPreparation(false);
+          AppUpdater().CancelQuit();
+          for (const auto& [owner, host] : Hosts()) {
+            if (host)
+              host->Emit(
+                  "BayShell", "onAppEvent",
+                  base::Value(base::DictValue().Set("type", "quitCancelled")));
+          }
+        });
+    return true;
+  }();
+  (void)installed;
+}
+#endif
 std::map<uintptr_t, base::WeakPtr<NativeHost>>& PendingOwners() {
   static base::NoDestructor<std::map<uintptr_t, base::WeakPtr<NativeHost>>>
       owners;
@@ -255,6 +383,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
           },
           GetWeakPtr()));
 #if BUILDFLAG(IS_WIN)
+  InstallCloseHooks();
+  AppUpdater().Prepare(
+      base::BindOnce(&NativeHost::PublishHostInfo, GetWeakPtr()));
   RegisterDataProfile(browser_->GetProfile());
   InitializeDataBridge(base::BindRepeating(&DataEvent));
   platform_services_ = std::make_unique<PlatformServices>(
@@ -268,6 +399,10 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
       base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
 }
 NativeHost::~NativeHost() {
+#if BUILDFLAG(IS_WIN)
+  if (PendingQuit().owner.get() == this)
+    CompleteQuitPreparation(false);
+#endif
   WindowRegistry::Get().UnregisterHost(this);
   for (const auto& entry : pending_)
     PendingOwners().erase(entry.first);
@@ -353,6 +488,13 @@ base::DictValue NativeHost::Info() const {
                             .Set("downloadsFolder", base::Value())));
 #if BUILDFLAG(IS_WIN)
   auto snapshots = platform_services_->Snapshots();
+  if (auto* app = snapshots.FindDict("BayApp")) {
+    if (auto* system_info = app->FindDict("systemInfo"))
+      system_info->Set(
+          "updates",
+          AppUpdater().State().FindBool("available").value_or(false));
+    app->Set("updaterState", AppUpdater().State());
+  }
   if (auto result = base::JSONReader::ReadDict(
           data::Invoke("BaySync", "deviceName", "[]"), base::JSON_PARSE_RFC)) {
     if (const auto* name = result->Find("value"); name && name->is_string())
@@ -364,6 +506,11 @@ base::DictValue NativeHost::Info() const {
   for (const auto& method : browser_services_->SupportedMethods())
     methods.Append(method.Clone());
   methods.Append("BayShell.windowFrame");
+  methods.Append("BayShell.replyToTerminate");
+  for (const auto* method :
+       {"BayApp.checkForUpdates", "BayApp.setAutomaticUpdateChecks",
+        "BayApp.setAutomaticUpdateDownloads"})
+    methods.Append(method);
   for (const auto& module : data::ModuleNames())
     for (const auto& method : data::MethodNames(module))
       methods.Append(module + "." + method);
@@ -514,6 +661,32 @@ void NativeHost::Invoke(const std::string& module,
   if (browser_services_->DispatchBrowserModule(module, method, args, callback))
     return;
 #if BUILDFLAG(IS_WIN)
+  if (module == "BayShell" && method == "replyToTerminate") {
+    if (!args[0].is_bool()) {
+      std::move(callback).Run(
+          Failure("invalid_args", "Quit reply must be a boolean"));
+      return;
+    }
+    if (PendingQuit().owner.get() != this) {
+      std::move(callback).Run(
+          Failure("stale_quit", "This document has no pending quit request"));
+      return;
+    }
+    std::move(callback).Run(Success());
+    CompleteQuitPreparation(args[0].GetBool());
+    return;
+  }
+  if (module == "BayApp") {
+    if (AppUpdater().Dispatch(browser_, method, args, callback))
+      return;
+    if (method == "systemInfo") {
+      auto info = Info();
+      const auto* system = info.FindByDottedPath("snapshots.BayApp.systemInfo");
+      std::move(callback).Run(
+          Success(system ? system->Clone() : base::Value()));
+      return;
+    }
+  }
   if (module == "BayImport" || module == "BaySync") {
     if (data::RequiresUIThread(module, method)) {
       std::move(callback).Run(data::Invoke(module, method, args_json));

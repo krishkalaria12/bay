@@ -86,6 +86,8 @@ if (is_win) {
     sources = [
       "platform_services_win.cc",
       "platform_services_win.h",
+      "updater_service_win.cc",
+      "updater_service_win.h",
     ]
     deps = [
       "//base",
@@ -97,8 +99,10 @@ if (is_win) {
       "//chrome/browser/ui",
       "//chrome/browser/ui:simple_message_box_headers",
       "//chrome/browser/ui/browser_window",
+      "//chrome/browser/ui/views:message_box_dialog",
       "//chrome/common:constants",
       "//components/version_info",
+      "//crypto",
       "//skia",
       "//ui/base",
       "//ui/base/clipboard",
@@ -114,6 +118,7 @@ if (is_win) {
     libs = [
       "advapi32.lib",
       "shell32.lib",
+      "wintrust.lib",
     ]
   }
 }

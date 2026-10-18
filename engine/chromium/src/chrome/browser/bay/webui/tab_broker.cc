@@ -5,9 +5,11 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/uuid.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
@@ -90,8 +92,13 @@ TabBroker& TabBroker::Get() {
   return *broker;
 }
 TabBroker::TabBroker() {
+#if !BUILDFLAG(IS_WIN)
   BrowserCloseManager::SetBayClosePreflight(
-      [] { return TabBroker::Get().PrepareForQuit(); });
+      [](base::OnceCallback<void(bool)> completion) {
+        std::move(completion).Run(TabBroker::Get().PrepareForQuit());
+      },
+      nullptr);
+#endif
 }
 TabBroker::~TabBroker() = default;
 void TabBroker::PruneDestroyed() {
