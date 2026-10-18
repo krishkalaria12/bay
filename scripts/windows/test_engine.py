@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -33,6 +34,8 @@ class PatchPlatformTests(unittest.TestCase):
         self.assertNotIn("chromium-safe-storage-name.patch", win)
         self.assertIn("chromium-bay-layer-win.patch", win)
         self.assertNotIn("chromium-bay-layer-win.patch", mac)
+        self.assertIn("chromium-bay-branding-win.patch", win)
+        self.assertNotIn("chromium-bay-branding-win.patch", mac)
         self.assertIn("cef-chrome-tabs.patch", mac)
         self.assertNotIn("cef-chrome-tabs.patch", win)
         self.assertFalse(any(step.kind == "cef" for step in series.read_series("win")))
@@ -58,6 +61,96 @@ class PatchPlatformTests(unittest.TestCase):
             (chrome / "BUILD.gn").write_text(original)
             self.assertIsNone(series.apply_step(step, directory))
             self.assertTrue(series.is_applied(step, directory))
+
+
+class WindowsIdentityTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        patch = (engine.REPO / "engine/patches/chromium-bay-branding-win.patch").read_text()
+        cls.changes = {}
+        for section in re.split(r"(?=^diff --git )", patch, flags=re.MULTILINE):
+            if not section.startswith("diff --git "):
+                continue
+            path = section.splitlines()[0].split(" b/", 1)[1]
+            cls.changes[path] = "\n".join(
+                line[1:] for line in section.splitlines()
+                if line.startswith("+") and not line.startswith("+++"))
+        cls.installer = (engine.REPO / "packaging/windows/Bay.iss").read_text()
+        cls.registry = []
+        for line in cls.installer.splitlines():
+            if line.startswith("Root:"):
+                cls.registry.append({key.lower(): value.replace('""', '"')
+                                     for key, value in re.findall(r'(\w+):\s*"((?:""|[^"])*)"', line)})
+
+    def registry_value(self, subkey, name=""):
+        return next(row["valuedata"] for row in self.registry
+                    if row["subkey"] == subkey and row.get("valuename", "") == name)
+
+    def test_windows_branding_applies_after_repository_branding_creation(self):
+        # A Mac development checkout may contain later local bundle changes.
+        # The Windows baseline is the preceding repository patch, not that
+        # already-patched checkout's BRANDING file.
+        steps = series.read_series("win")
+        creator = next(step for step in steps if step.name == "chromium-branding.patch")
+        branding = next(step for step in steps if step.name == "chromium-bay-branding-win.patch")
+        self.assertLess(steps.index(creator), steps.index(branding))
+        path = "chrome/app/theme/bay/BRANDING"
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(series.apply_step(creator, directory))
+            baseline = (pathlib.Path(directory) / path).read_bytes()
+            self.assertIn(b"MAC_BUNDLE_ID=com.bay.browser", baseline)
+            for arguments in (("--check",), (), ("--reverse", "--check"), ("--reverse",)):
+                subprocess.run(["git", "apply", *arguments, f"--include={path}", branding.patch],
+                               cwd=directory, capture_output=True, text=True, check=True)
+                if not arguments:
+                    result = (pathlib.Path(directory) / path).read_text()
+                    self.assertIn("PRODUCT_FULLNAME=Bay", result)
+                    self.assertIn("MAC_BUNDLE_ID=com.bay.browser", result)
+            self.assertEqual((pathlib.Path(directory) / path).read_bytes(), baseline)
+
+    def test_native_default_browser_identity_matches_installer(self):
+        mode = self.changes["chrome/install_static/chromium_install_modes.h"]
+        def field(name):
+            return re.search(r"\." + name + r'\s*=\s*L"([^"]+)"', mode)[1]
+        application = field("base_app_name")
+        app_id = field("base_app_id")
+        html, pdf = field("browser_prog_id_prefix"), field("pdf_prog_id_prefix")
+        capabilities = rf"Software\Clients\StartMenuInternet\{application}\Capabilities"
+        self.assertEqual(self.registry_value(r"Software\RegisteredApplications", application), capabilities)
+        for scheme in ("http", "https"):
+            self.assertEqual(self.registry_value(capabilities + r"\URLAssociations", scheme), html)
+        for extension, prog_id in ((".htm", html), (".html", html), (".pdf", pdf)):
+            self.assertEqual(self.registry_value(capabilities + r"\FileAssociations", extension), prog_id)
+        for prog_id in (html, pdf):
+            self.assertEqual(self.registry_value("Software\\Classes\\" + prog_id, "AppUserModelId"), app_id)
+            self.assertEqual(self.registry_value("Software\\Classes\\" + prog_id + r"\Application", "AppUserModelId"), app_id)
+            self.assertEqual(self.registry_value("Software\\Classes\\" + prog_id + r"\Application", "ApplicationName"), application)
+        shortcut_ids = re.findall(r'AppUserModelID: "([^"]+)"', self.installer)
+        self.assertTrue(shortcut_ids)
+        self.assertEqual(set(shortcut_ids), {app_id})
+        self.assertIn(f'L"{app_id}"', self.changes["chrome/installer/util/shell_util.cc"])
+        self.assertIn(f'L"{app_id}"', self.changes["chrome/browser/shell_integration_win.cc"])
+        self.assertEqual(self.changes["chrome/installer/util/shell_util.cc"].count("if (UsesBayRegistrationIdentity())"), 3)
+        # The existing Inno upgrade identity is also Bay's distinct Active Setup
+        # identity. Neither registration may inherit Chromium's product GUID.
+        app_guid = re.search(r"^AppId=\{\{([A-F0-9-]+)\}", self.installer, re.MULTILINE)[1]
+        self.assertIn(f'L"{{{app_guid}}}"', mode)
+        self.assertNotIn("7D2B3E1D-D096-4594-9D8F-A6667F12E0AC", mode)
+
+    def test_native_executable_and_shell_commands_match_staged_browser(self):
+        constants = self.changes["chrome/common/chrome_constants.cc"]
+        names = re.findall(r'FPL\("([^"]+)"\)', constants)
+        self.assertEqual(names, ["Bay.exe"] * 4)
+        self.assertIn('kChromeExe[] = L"Bay.exe"', self.changes["chrome/installer/util/util_constants.h"])
+        self.assertIn("ORIGINAL_FILENAME=Bay.exe", self.changes["chrome/app/chrome_exe.ver"])
+        self.assertEqual(self.registry_value(r"Software\Microsoft\Windows\CurrentVersion\App Paths\Bay.exe"), r"{app}\Bay.exe")
+        for prog_id in ("Bay.HTML", "Bay.PDF", r"Applications\Bay.exe"):
+            self.assertEqual(self.registry_value("Software\\Classes\\" + prog_id + r"\shell\open\command"),
+                             r'"{app}\Bay.exe" --single-argument "%1"')
+        branding = self.changes["chrome/app/theme/bay/BRANDING"]
+        self.assertIn("PRODUCT_FULLNAME=Bay", branding)
+        self.assertIn("PRODUCT_SHORTNAME=Bay", branding)
+        self.assertEqual(engine.GN_ARGS["branding_file_path"], "//chrome/app/theme/bay/BRANDING")
 
 
 class ArtifactTests(unittest.TestCase):
