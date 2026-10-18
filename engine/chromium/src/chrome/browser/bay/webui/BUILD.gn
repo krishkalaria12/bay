@@ -25,6 +25,8 @@ source_set("impl") {
     "bay_webui.cc",
     "browser_services.cc",
     "browser_services.h",
+    "engine_services.cc",
+    "engine_services.h",
     "native_host.cc",
     "tab_broker.cc",
     "tab_broker.h",
@@ -47,11 +49,15 @@ source_set("impl") {
     "//chrome/browser/profiles:profile_manager",
     "//chrome/browser/profiles/keep_alive",
     "//chrome/browser/ui",
+    "//chrome/browser/ui/tab_sharing",
     "//chrome/browser/ui/tabs:tab_model",
     "//chrome/browser/ui/webui_browser",
     "//chrome/browser/ui/window_metadata",
+    "//components/autofill/content/browser",
+    "//components/autofill/core/browser",
     "//components/find_in_page",
     "//components/guest_contents/browser",
+    "//components/infobars/content",
     "//components/keep_alive_registry",
     "//components/media_router/browser",
     "//components/media_router/common",
@@ -68,6 +74,7 @@ source_set("impl") {
     "//ui/shell_dialogs",
     "//ui/views",
     "//ui/webui",
+    "//url",
   ]
   if (is_win) {
     sources += [

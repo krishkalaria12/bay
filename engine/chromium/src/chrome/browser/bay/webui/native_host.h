@@ -25,6 +25,7 @@ namespace bay {
 class TabObserver;
 class PlatformServices;
 class BrowserServices;
+class EngineServices;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -69,6 +70,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 
   raw_ptr<BrowserWindowInterface> browser_;
   std::unique_ptr<BrowserServices> browser_services_;
+  std::unique_ptr<EngineServices> engine_services_;
   mojo::Remote<mojom::NativeHostClient> client_;
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
   std::map<uintptr_t, std::pair<bool, InvokeCallback>> pending_;

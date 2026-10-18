@@ -26,6 +26,7 @@
 #include "chrome/browser/bay/nn_dispatch.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
+#include "chrome/browser/bay/webui/engine_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #if BUILDFLAG(IS_WIN)
@@ -382,6 +383,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
               host->Emit(module, event, base::Value(std::move(payload)));
           },
           GetWeakPtr()));
+  engine_services_ = std::make_unique<EngineServices>(
+      browser_,
+      base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()));
 #if BUILDFLAG(IS_WIN)
   InstallCloseHooks();
   AppUpdater().Prepare(
@@ -462,6 +466,9 @@ base::DictValue NativeHost::Info() const {
 #if BUILDFLAG(IS_WIN)
   shell.Set("initializationError", platform_services_->initialization_error());
 #endif
+  auto engine_methods = browser_services_->SupportedMethods();
+  for (const auto& method : engine_services_->SupportedMethods())
+    engine_methods.Append(method.Clone());
   auto info =
       base::DictValue()
           .Set("contractVersion", 2)
@@ -470,7 +477,7 @@ base::DictValue NativeHost::Info() const {
                                : "linux")
           .Set("modules", std::move(modules))
           .Set("views", base::ListValue().Append("BayWebView"))
-          .Set("optionalMethods", browser_services_->SupportedMethods())
+          .Set("optionalMethods", std::move(engine_methods))
           .Set("constants",
                base::DictValue()
                    .Set("BayApp", base::DictValue().Set("apiVersion", 9))
@@ -504,6 +511,8 @@ base::DictValue NativeHost::Info() const {
   info.Set("snapshots", std::move(snapshots));
   auto methods = platform_services_->SupportedMethods();
   for (const auto& method : browser_services_->SupportedMethods())
+    methods.Append(method.Clone());
+  for (const auto& method : engine_services_->SupportedMethods())
     methods.Append(method.Clone());
   methods.Append("BayShell.windowFrame");
   methods.Append("BayShell.replyToTerminate");
@@ -659,6 +668,8 @@ void NativeHost::Invoke(const std::string& module,
     return;
   }
   if (browser_services_->DispatchBrowserModule(module, method, args, callback))
+    return;
+  if (engine_services_->DispatchEngineModule(module, method, args, callback))
     return;
 #if BUILDFLAG(IS_WIN)
   if (module == "BayShell" && method == "replyToTerminate") {
@@ -853,6 +864,7 @@ void NativeHost::InvokeView(const std::string& method,
       return;
     }
     auto* contents = mounted.contents;
+    engine_services_->TrackTab(contents);
     if (auto muted = props.FindBool("muted"))
       contents->SetAudioMuted(*muted);
     if (auto frozen = props.FindBool("frozen"))
