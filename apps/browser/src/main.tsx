@@ -1,11 +1,8 @@
 // The app itself, which index.js loads once the native build matches this bundle (nativeApi.tsx).
 // First, so every native module listener the app adds applies held page reports before it runs.
 import "./lib/nativeEvents";
-import { WindowContext, batchedUpdates } from "@bay/platform";
-import { useEffect, useState } from "react";
-import { AppRegistry } from "react-native";
-import { WindowRoot } from "./App";
-import { DevErrorBoundary } from "./DevErrorBoundary";
+import { batchedUpdates } from "@bay/platform";
+import { registerWindowApplication } from "./windowEntry";
 import { startTranslate } from "./components/site/translate";
 import { startAppIntegration } from "./lib/appIntegration";
 import { startNativeSync } from "./lib/native";
@@ -33,35 +30,5 @@ startSync();
 startTelemetry();
 if (__DEV__ || perfProbeEnabled) require("./lib/devHarness").startDevHarness();
 
-// Development: `globalThis.nnDevMountDelayMs` holds a window's content back that long after its root starts, as a
-// window opened under load mounts late (acceptance move-tab-slow-mount).
-const devMountDelay = () => (__DEV__ ? ((globalThis as { nnDevMountDelayMs?: number }).nnDevMountDelayMs ?? 0) : 0);
-
-function Root({ windowId }: { windowId: string }) {
-  return <WindowContext.Provider value={windowId}><RootContents windowId={windowId} /></WindowContext.Provider>;
-}
-
-function RootContents({ windowId }: { windowId: string }) {
-  const [delay] = useState(devMountDelay);
-  const [held, setHeld] = useState(delay > 0);
-  useEffect(() => {
-    if (!held) return;
-    const timer = setTimeout(() => setHeld(false), delay);
-    return () => clearTimeout(timer);
-  }, []);
-  useEffect(() => {
-    perfMark("firstWindow");
-    markFirstWindow();
-  }, []);
-  if (held) return null;
-  return __DEV__ ? (
-    <DevErrorBoundary>
-      <WindowRoot windowId={windowId} />
-    </DevErrorBoundary>
-  ) : (
-    <WindowRoot windowId={windowId} />
-  );
-}
-
-AppRegistry.registerComponent("main", () => Root);
+registerWindowApplication({ onFirstMount: markFirstWindow });
 perfMark("bundleEnd");
