@@ -76,6 +76,19 @@ function resetDocumentState(): void {
 
 /** Optimistic reads and per-document ordering match the existing fire-and-forget facade. */
 export function nativeDocumentWrite(name: string, contents: string | null, _fallback: () => void): void {
+  const method = contents === null ? "removeDocument" : "writeDocument";
+  void queueDocumentWrite(name, contents, method).catch(error => {
+    const code = error instanceof NativeBridgeError ? error.code : "transport_error";
+    console.error(`Native document ${method} failed for ${name}: ${code}`);
+  });
+}
+
+/** Acknowledged saves share the queue with optimistic writes and removals. */
+export function nativeDocumentSave(name: string, contents: string, _fallback: () => Promise<void>): Promise<void> {
+  return queueDocumentWrite(name, contents, "saveDocument");
+}
+
+function queueDocumentWrite(name: string, contents: string | null, method: string): Promise<void> {
   resetDocumentState();
   const transport = getNativeTransport();
   const sequence = ++documentSequence;
@@ -87,7 +100,6 @@ export function nativeDocumentWrite(name: string, contents: string | null, _fall
     }
   }
   documentWrites.set(name, { value: contents, sequence, pending: true });
-  const method = contents === null ? "removeDocument" : "writeDocument";
   const args = contents === null ? [name] : [name, contents];
   const previous = documentQueues.get(name) ?? Promise.resolve();
   const operation = previous.then(async () => {
@@ -101,10 +113,12 @@ export function nativeDocumentWrite(name: string, contents: string | null, _fall
         if (documentCommitted.has(name)) documentWrites.set(name, { value: documentCommitted.get(name)!, sequence, pending: false });
         else documentWrites.delete(name);
       }
-      const code = error instanceof NativeBridgeError ? error.code : "transport_error";
-      console.error(`Native document ${method} failed for ${name}: ${code}`);
+      throw error;
     }
   });
-  documentQueues.set(name, operation);
-  void operation.then(() => { if (documentQueues.get(name) === operation) documentQueues.delete(name); });
+  // A rejected save must reach its caller without poisoning later writes.
+  const settled = operation.catch(() => {});
+  documentQueues.set(name, settled);
+  void settled.then(() => { if (documentQueues.get(name) === settled) documentQueues.delete(name); });
+  return operation;
 }

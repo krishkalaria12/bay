@@ -1,7 +1,7 @@
 import { capabilities } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
-import { requireNativeModule, requireOptionalNativeModule, nativeSnapshot, nativeDocumentWrite, type EventSubscription } from "@bay/platform/native";
+import { requireNativeModule, requireOptionalNativeModule, nativeSnapshot, nativeDocumentWrite, nativeDocumentSave, type EventSubscription } from "@bay/platform/native";
 
 
 export * from "./system";
@@ -252,7 +252,7 @@ const Shell = requireNativeModule<{
 export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
 export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
-export const saveDocument = (name: string, contents: string) => Shell.saveDocument(name, contents);
+export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
 export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
 
 export const startDictation = () => Shell.startDictation();

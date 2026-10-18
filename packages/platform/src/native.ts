@@ -15,3 +15,7 @@ export function nativeRandomUUID(fallback: () => string): string {
 export function nativeDocumentWrite(_name: string, _contents: string | null, fallback: () => void): void {
   fallback();
 }
+
+export function nativeDocumentSave(_name: string, _contents: string, fallback: () => Promise<void>): Promise<void> {
+  return fallback();
+}

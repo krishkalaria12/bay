@@ -4,10 +4,10 @@ export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
 export const writeDocument = (name, contents) => docs.set(name, contents);
 // saveDocument lands at once, or, while heldSaves.on, when a test runs the queued releases.
-export const heldSaves = { on: false, queue: [] };
+export const heldSaves = { on: false, queue: [], error: null };
 export const saveDocument = (name, contents) =>
-  new Promise((resolve) => {
-    const land = () => (docs.set(name, contents), resolve());
+  new Promise((resolve, reject) => {
+    const land = () => heldSaves.error ? reject(heldSaves.error) : (docs.set(name, contents), resolve());
     if (heldSaves.on) heldSaves.queue.push(land);
     else land();
   });

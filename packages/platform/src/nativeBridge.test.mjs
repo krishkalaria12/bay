@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bindNativeModule, decodeNativeResult, getNativeHostInfo, installNativeTransport, invokeNative, readNativeSnapshot, validateNativeHostInfo } from "./nativeBridge.ts";
-import { nativeDocumentWrite, nativeSnapshot } from "./native.web.ts";
+import { nativeDocumentSave, nativeDocumentWrite, nativeSnapshot } from "./native.web.ts";
 import { nativeContracts } from "./nativeContracts.ts";
 
 const hostInfo = overrides => ({ contractVersion: 2, platform: "windows", modules: ["BayShell", "BayApp", "BayWebView"], views: [], constants: { BayApp: { apiVersion: 8 } }, ...overrides });
@@ -102,5 +102,36 @@ test("document snapshots read optimistic writes and native writes preserve per-d
     assert.deepEqual(calls[2], ["BayShell", "removeDocument", '["state.json"]']);
     resolvers.shift()('{"value":null}');
     await new Promise(resolve => setImmediate(resolve));
+  } finally { installed.remove(); }
+});
+
+test("acknowledged saves follow queued writes, report failure and allow retry", async () => {
+  const calls = [], replies = [];
+  const installed = installNativeTransport(transport({
+    getHostInfo: () => hostInfo({ snapshots: { BayShell: { documents: { "state.json": "old" } } } }),
+    invoke: (...args) => { calls.push(args); return new Promise(resolve => replies.push(resolve)); },
+  }));
+  const turn = () => new Promise(resolve => setImmediate(resolve));
+  const read = () => nativeSnapshot("BayShell", "readDocument", ["state.json"], () => null);
+  try {
+    nativeDocumentWrite("state.json", "first", () => {});
+    let acknowledged = false;
+    const saving = nativeDocumentSave("state.json", "final", async () => {}).then(() => { acknowledged = true; });
+    const rejected = assert.rejects(saving, { code: "disk_full" });
+    await turn();
+    assert.equal(calls.length, 1);
+    assert.equal(read(), "final");
+    replies.shift()('{"value":null}');
+    await turn();
+    assert.deepEqual(calls[1], ["BayShell", "saveDocument", '["state.json","final"]']);
+    assert.equal(acknowledged, false);
+    replies.shift()('{"error":{"code":"disk_full","message":"No space"}}');
+    await rejected;
+    assert.equal(read(), "first", "failed final save restores last acknowledged contents");
+    const retry = nativeDocumentSave("state.json", "retry", async () => {});
+    await turn();
+    replies.shift()('{"value":null}');
+    await retry;
+    assert.equal(read(), "retry");
   } finally { installed.remove(); }
 });

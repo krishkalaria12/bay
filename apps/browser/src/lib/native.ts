@@ -35,6 +35,7 @@ import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
 
 let quitting = false;
+let quitAttempt = 0;
 export const isQuitting = () => quitting;
 
 export function startNativeSync() {
@@ -58,11 +59,17 @@ export function startNativeSync() {
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
     if (e.type === "willQuit") {
       quitting = true;
-      flushPersistence({ final: true });
-      void replyToTerminate(true);
+      const attempt = ++quitAttempt;
+      void flushPersistence({ final: true }).then(() => {
+        if (quitting && attempt === quitAttempt) return replyToTerminate(true);
+      }, error => {
+        console.error("Couldn't save the session before quitting", error);
+        if (quitting && attempt === quitAttempt) return replyToTerminate(false);
+      });
     }
     if (e.type === "quitCancelled") {
       quitting = false;
+      quitAttempt++;
       resumePersistence();
     }
   });

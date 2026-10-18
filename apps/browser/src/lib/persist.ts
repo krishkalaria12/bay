@@ -1,5 +1,5 @@
 import { cancelDownload, type Download } from "@bay/nncore";
-import { readDocument, writeDocument } from "@bay/shell";
+import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
 import { inPinnedContainer, isIncognitoProfile, newId, snapshotTab } from "../store/model";
 import { parkWindowPins } from "../store/parkedPins";
@@ -152,24 +152,34 @@ export function loadSession(): HydrateData | null {
   return data;
 }
 
-let flush: () => void = () => {};
+let flush: (final: boolean) => Promise<void> = () => Promise.resolve();
 let resume: () => void = () => {};
+let finalFlush: Promise<void> | null = null;
+let persistenceGeneration = 0;
 // From the quit's last save until the quit ends or is cancelled: what the quit itself does to the store (its windows
 // closing) is never saved.
 let frozen = false;
 
 export function flushPersistence({ final = false } = {}) {
-  flush();
-  if (final) frozen = true;
+  if (!final) return flush(false);
+  if (finalFlush) return finalFlush;
+  // Capture the final state before freezing. Native window closure must not
+  // replace that snapshot while its acknowledged writes are still in flight.
+  finalFlush = flush(true);
+  frozen = true;
+  return finalFlush;
 }
 
 // The quit was cancelled (a page's beforeunload said Stay): saving goes on, starting with what changed meanwhile.
 export function resumePersistence() {
+  persistenceGeneration++;
   frozen = false;
+  finalFlush = null;
   resume();
 }
 
 export function startPersistence() {
+  persistenceGeneration++;
   useBrowser.getState().hydrate(loadSession() ?? {});
 
   const lastSources = new Map<string, unknown[]>();
@@ -177,19 +187,34 @@ export function startPersistence() {
   const dirty = new Set<Doc>();
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const save = () => {
+  const save = (final = false): Promise<void> => {
     clearTimeout(timer);
     timer = undefined;
-    if (frozen) return;
+    if (frozen) return finalFlush ?? Promise.resolve();
     const s = useBrowser.getState();
-    for (const doc of DOCS.filter((d) => dirty.has(d))) {
+    const generation = persistenceGeneration;
+    const pending: Promise<void>[] = [];
+    for (const doc of DOCS.filter((d) => final || dirty.has(d))) {
       const json = doc.json(s);
-      if (lastJson.get(doc.name) !== json) {
+      if (final) {
+        // Re-save every final document, including an earlier fire-and-forget
+        // write whose completion is otherwise unknown on an async host.
+        pending.push(saveDocument(doc.name, json).then(() => {
+          if (generation === persistenceGeneration) lastJson.set(doc.name, json);
+        }, error => {
+          if (generation === persistenceGeneration) {
+            lastJson.delete(doc.name);
+            dirty.add(doc);
+          }
+          throw error;
+        }));
+      } else if (lastJson.get(doc.name) !== json) {
         lastJson.set(doc.name, json);
         write(doc.name, json);
       }
     }
     dirty.clear();
+    return Promise.all(pending).then(() => {});
   };
   flush = save;
 
@@ -202,7 +227,7 @@ export function startPersistence() {
       lastSources.set(doc.name, sources);
       if (!initial) dirty.add(doc);
     }
-    if (dirty.size && !timer) timer = setTimeout(save, SAVE_DELAY_MS);
+    if (dirty.size && !timer) timer = setTimeout(() => { void save(); }, SAVE_DELAY_MS);
   };
   check(useBrowser.getState(), true);
   resume = () => {
