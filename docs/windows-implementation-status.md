@@ -1,6 +1,6 @@
 # Windows implementation checkpoint
 
-Updated 17 October 2026. Windows 10 and Windows 11 x64 are supported targets.
+Updated 18 October 2026. Windows 10 and Windows 11 x64 are supported targets.
 Mica requires Windows 11 build 22621 or later. macOS keeps its existing native
 host. The `ios` directories contain macOS sources, not mobile application targets.
 
@@ -16,7 +16,9 @@ no Windows Chromium build or native hosting acceptance run has passed yet.
   export, desktop and web TypeScript checks, and JavaScript tests pass.
 - Native calls use an asynchronous transport with versioned JSON envelopes,
   generated method validation, native events and startup snapshots. Document
-  writes serialize per document and roll back the local cache on failure.
+  writes and acknowledged saves serialize per document and roll back the local
+  cache on failure. Final session saves await disk acknowledgement before quit;
+  cancelling quit invalidates stale save callbacks and resumes persistence.
 - Web view adapters cover desktop keys, hover, focus, menus, drag regions,
   Fluent glyphs and CSS effects. Mobile platform policy and the former React
   Native for Windows host have been removed.
@@ -29,28 +31,49 @@ no Windows Chromium build or native hosting acceptance run has passed yet.
   Recovery QR codes and PDF output have been decoded independently on macOS.
 - Windows pipeline tests cover pinned revisions, patch selection, archive
   validation, locks, manifests and staging. Packaging stages the Chrome runtime,
-  exported UI and generated Mojo JavaScript. Update policy and installer checks
-  are implemented; their native application integration remains pending.
+  exported UI and generated Mojo JavaScript. Signed update policy binds the
+  updater script hash. Deferred workers carry authenticated code and frozen
+  arguments, revalidate cached installers, and support cancellation markers.
 - The macOS production JavaScript bundle still builds.
 
 The former React Native for Windows implementation is recoverable from commit
 `f9e87f27`. Its portable import and sync services remain in this branch.
 
-## Chrome host work in progress
+## Chrome host and runtime progress
 
-The initial native host sources provide the `chrome://bay` resource loader,
-Mojo bridge, generated contracts, direct engine dispatch and SurfaceEmbed tab
-mounting. The patch applies after the Windows export patch against copies of the
-pinned Chromium source. This is source-level verification, not a native build.
+The native host sources provide the `chrome://bay` resource loader, Mojo bridge,
+generated contracts, restricted engine dispatch and SurfaceEmbed tab mounting.
+The Windows patches apply in order against copies of pinned Chromium sources.
+Actual generated Mojo C++ and TypeScript bindings and portable host sources
+pass syntax checks against that revision. This is source-level verification,
+not a Windows build or link.
 
 A dedicated hosting test page provides two page elements, a translucent blurred
 overlay, a Reanimated animation, frame-interval sampling, bridge timing, an IME
 input and native page controls. In the localhost preview it displays explicit
 placeholders instead of substituting iframes or claiming native results.
 
-The host still needs complete OS module coverage, shared state across windows,
-profile/private-tab ownership, tab transfer, browser events and the remaining
-native page methods. Portable NNCore extraction and import/sync linkage are
+The host now includes native window registration, isolated private-profile
+lifetime, tab mount leases and transfer ownership, extension and Cast adapters,
+atomic document storage, clipboard, file dialogs, system integration and Windows
+credential storage. Parked pages rejoin Chrome's tab strips before application
+quit so Chrome can run their beforeunload handlers. These paths still need
+Windows build and runtime verification.
+
+Portable NNCore sources and Chrome import/sync service targets are linked in
+the build definitions. Profile routing refuses unknown unloaded profiles, and
+native workers marshal engine replies back through the browser UI thread.
+
+The shared application runtime has an isolated store factory, detached read-only
+state projections and an ordered command authority with epoch, revision and
+duplicate-request checks. Regression tests cover simultaneous requests, failure
+recovery, immutable prior commits and store isolation. This foundation is not
+yet connected across renderer processes. Additional full application windows
+remain gated until the browser-owned coordinator, window mirrors, command
+migration, sole-writer persistence and two-window tests are complete.
+
+Native updater integration, native close-button shutdown preparation, remaining
+page methods, native event coverage and complete OS module coverage are still
 being implemented. Do not treat the diagnostic page as a complete browser host.
 
 ## Validation still required on Windows
@@ -83,8 +106,18 @@ python3 scripts/windows/generate-engine-calls.py --check
 ```
 
 Portable native tests require C++17, `pkg-config` and OpenSSL on macOS. They
-fetch a checksum-pinned nlohmann/json header into a temporary dependency cache.
+use the vendored, checksum-pinned nlohmann/json header without a network fetch.
 Windows tests use MSVC, CNG and the Windows SQLite API.
+
+With PowerShell installed, run the platform-independent updater contract tests:
+
+```sh
+pwsh -NoProfile -File scripts/windows/test-updater.ps1
+```
+
+These tests cover policy and payload rejection, encoded worker arguments,
+staged-cache recovery and cancellation. Windows signature APIs, file locking,
+process launching and actual installer execution require Windows validation.
 
 On the Windows engine machine, use the Visual Studio, ATL/MFC and Windows SDK
 versions required by the pinned Chromium revision, a short NTFS checkout path,
