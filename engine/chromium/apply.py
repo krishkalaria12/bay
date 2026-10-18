@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Copy the Bay Chromium layer on every desktop build platform."""
 import argparse
+import contextlib
 import filecmp
 import json
 import os
 from pathlib import Path
 import shutil
+import tempfile
 
 OWNED = ["chrome/browser/bay"]
 
@@ -41,6 +43,25 @@ def sync(source: Path, destination: Path) -> None:
             shutil.copyfile(item, target)
 
 
+@contextlib.contextmanager
+def layer_source(here: Path, owned: str):
+    """Materialize canonical package code inside the GN-owned Chromium layer."""
+    source = here / "src" / owned
+    if owned != "chrome/browser/bay":
+        yield source
+        return
+    repository = here.parents[1]
+    with tempfile.TemporaryDirectory(prefix="bay-chromium-layer-") as temporary:
+        staged = Path(temporary) / "bay"
+        shutil.copytree(source, staged)
+        for package in ("import", "sync"):
+            canonical = repository / "packages" / package / "windows"
+            destination = staged / "data/packages" / package / "windows"
+            shutil.copytree(canonical, destination,
+                            ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))
+        yield staged
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
@@ -52,13 +73,14 @@ def main() -> int:
     here = Path(__file__).resolve().parent
     root = Path(os.environ.get("CHROMIUM_SRC", str(Path.home() / "chromium-build/chromium_git/chromium/src")))
     for owned in OWNED:
-        source, destination = here / "src" / owned, root / owned
-        if args.check:
-            if differs(source, destination):
-                print(f"drift: {owned}")
-                return 1
-        else:
-            sync(source, destination)
+        destination = root / owned
+        with layer_source(here, owned) as source:
+            if args.check:
+                if differs(source, destination):
+                    print(f"drift: {owned}")
+                    return 1
+            else:
+                sync(source, destination)
     return 0
 
 

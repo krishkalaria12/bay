@@ -23,11 +23,14 @@ namespace {
 std::mutex stateMutex;
 Bytes entropy;
 std::unique_ptr<Keys> keys;
+std::string configuredDirectory;
+ProfileResolver profileResolver;
 struct SecretText {
   std::string value;
   ~SecretText() {
     volatile char *bytes = value.empty() ? nullptr : value.data();
-    for (std::size_t index = 0; index < value.size(); ++index) bytes[index] = 0;
+    for (std::size_t index = 0; index < value.size(); ++index)
+      bytes[index] = 0;
   }
 };
 void setEntropy(Bytes next) {
@@ -51,6 +54,8 @@ fs::path environment(const wchar_t *name) {
 #endif
 }
 fs::path dataDirectory() {
+  if (!configuredDirectory.empty())
+    return fs::u8path(configuredDirectory);
   auto custom = environment(L"BAY_DATA_DIR");
   return custom.empty() ? environment(L"LOCALAPPDATA") / "Bay" : custom;
 }
@@ -195,6 +200,14 @@ void clipboard(const std::string &text) {
 #endif
 }
 } // namespace
+void SetDataDirectory(std::string directory) {
+  std::lock_guard<std::mutex> lock(stateMutex);
+  configuredDirectory = std::move(directory);
+}
+void SetProfileResolver(ProfileResolver resolver) {
+  std::lock_guard<std::mutex> lock(stateMutex);
+  profileResolver = std::move(resolver);
+}
 std::string Invoke(const std::string &, const std::string &method,
                    const std::string &argsJson) {
   auto args = Json::parse(argsJson);
@@ -371,11 +384,14 @@ std::string Invoke(const std::string &, const std::string &method,
     if (profile.find_first_of("/\\:") != std::string::npos || profile == ".." ||
         profile == ".")
       throw Failure("format", "Invalid profile id");
-    auto root = dataDirectory() / "Engine";
-    auto path =
-        root / (profile.empty() ? fs::path("Default") : fs::u8path(profile));
+    // Resolve through Chrome rather than guessing user-data/profile paths.
+    if (!profileResolver)
+      throw Failure("profile_unavailable", "This browser profile is not loaded");
+    auto paths = profileResolver(profile);
+    if (paths.first.empty() || paths.second.empty())
+      throw Failure("profile_unavailable", "This browser profile is not loaded");
     try {
-      result = bay::importer::readEnginePasswords(root, path);
+      result = bay::importer::readEnginePasswords(paths.first, paths.second);
     } catch (const std::exception &) {
       result = nullptr;
     }

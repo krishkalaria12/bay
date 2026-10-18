@@ -1,6 +1,6 @@
 #include "RecoveryKit.h"
 #include "RecoveryKitInternal.h"
-#include "vendor/qrcodegen.cpp"
+#include "vendor/qrcodegen.hpp"
 #include <algorithm>
 #include <array>
 #include <chrono>

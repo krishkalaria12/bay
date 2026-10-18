@@ -15,7 +15,7 @@
     "windows": "node scripts/windows/run-python.mjs build-app.py",
     "windows:engine": "node scripts/windows/run-python.mjs engine.py",
     "windows:package": "pwsh -File scripts/windows/package.ps1",
-    "test:windows-build": "node scripts/windows/run-python.mjs -m unittest discover -s scripts/windows -p \"test_*.py\"",
+    "test:windows-build": "node scripts/windows/run-python.mjs -m unittest discover -s scripts/windows -p \"test_*.py\" && node scripts/windows/run-python.mjs -m unittest engine/chromium/test_apply.py",
     "test:windows-native": "node scripts/windows/run-python.mjs test-native.py",
     "windows:build": "node scripts/windows/run-python.mjs build-app.py",
     "web": "pnpm --filter @bay/browser web",

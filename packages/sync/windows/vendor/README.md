@@ -8,6 +8,5 @@ Bay uses the encoder for recovery phrase QR codes and the vector QR in exported
 PDF recovery kits. Encoding runs locally. The encoder has no network or image
 library dependency.
 
-The portable `RecoveryKit.cpp` includes the implementation directly, so build
-systems should compile `RecoveryKit.cpp` and should not compile the vendor source
-separately.
+Build systems compile `RecoveryKit.cpp` and `vendor/qrcodegen.cpp` as separate
+translation units.
