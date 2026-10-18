@@ -144,6 +144,31 @@ function Get-StagedUpdate($Config) {
 function Test-ApplyCancelled([string]$StatePath) {
     return Test-Path -LiteralPath ($StatePath + '.cancel')
 }
+function Get-ProcessCreationTime($Process) {
+    # Opening Handle first pins this process instance. StartTime alone may open
+    # a temporary handle and would leave a subsequent wait exposed to PID reuse.
+    if ($Process.Handle -eq [IntPtr]::Zero) { throw 'Could not open the Bay process handle' }
+    return $Process.StartTime.ToUniversalTime().Ticks.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+function Get-ApplyParent([int]$ParentId, [string]$ExpectedCreationTime) {
+    if ($ExpectedCreationTime -notmatch '^\d{1,19}$') { throw 'Invalid authenticated parent creation time' }
+    try { $parent = Get-Process -Id $ParentId -ErrorAction Stop } catch {
+        if ($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId,*') { return $null }
+        throw
+    }
+    try {
+        if ((Get-ProcessCreationTime $parent) -cne $ExpectedCreationTime) {
+            # This PID now identifies another process. The authenticated Bay
+            # instance already exited; never wait on or terminate its successor.
+            $parent.Dispose()
+            return $null
+        }
+        return $parent
+    } catch {
+        $parent.Dispose()
+        throw
+    }
+}
 function Wait-ApplyParent($Parent, [string]$StatePath, [bool]$ApplyDeferred) {
     if (Test-ApplyCancelled $StatePath) { return $false }
     if ($Parent) {
@@ -188,12 +213,13 @@ try {
         # Bay executable's older policy or change the approved release.
         if (-not $TrustedStateJson) { throw 'Apply requires authenticated worker state' }
         $state = $TrustedStateJson | ConvertFrom-Json
-        # Hold a handle to this exact process, avoiding PID reuse after it exits.
-        $parent = Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue
-        if (-not (Wait-ApplyParent $parent $StateFile ([bool]$Deferred))) {
-            Write-Result @{ status = 'cancelled' }
-            exit 0
-        }
+        $parent = Get-ApplyParent $ParentProcessId $state.parentCreationTime
+        try {
+            if (-not (Wait-ApplyParent $parent $StateFile ([bool]$Deferred))) {
+                Write-Result @{ status = 'cancelled' }
+                exit 0
+            }
+        } finally { if ($parent) { $parent.Dispose() } }
         $config = Read-Policy $state.appPath
         if (-not $config.enabled) { throw 'Updates are disabled' }
         if (($config | ConvertTo-Json -Compress -Depth 12) -cne
@@ -273,9 +299,17 @@ try {
         exit 0
     }
     if ($ParentProcessId -le 0) { throw 'Install requires ParentProcessId so it can wait for Bay to exit' }
+    # Bay is awaiting this Install response. Capture its identity now, before
+    # creating an independent worker that might not run until this PID is reused.
+    $parent = Get-Process -Id $ParentProcessId -ErrorAction Stop
+    try {
+        $parentCreationTime = Get-ProcessCreationTime $parent
+        if ($parent.HasExited) { throw 'Bay already exited; update was left staged' }
+    } finally { $parent.Dispose() }
     $worker = Join-Path $cache ('apply-' + [guid]::NewGuid())
     New-Item $worker -ItemType Directory | Out-Null
-    $workerStateJson = @{ appPath = $appPath; installer = $installer; feed = $feed; policy = $config } | ConvertTo-Json -Depth 12
+    $workerStateJson = @{ appPath = $appPath; installer = $installer; feed = $feed; policy = $config;
+        parentCreationTime = $parentCreationTime } | ConvertTo-Json -Depth 12
     $workerStateJson | Set-Content (Join-Path $worker 'state.json') -Encoding utf8
     $start = New-Object Diagnostics.ProcessStartInfo
     $start.FileName = Join-Path $PSHOME 'powershell.exe'

@@ -114,4 +114,75 @@ try {
     $env:LOCALAPPDATA = $previousLocalAppData
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'Updater policy, payload, authenticated worker, cache recovery and cancellation checks passed'
+
+# Exercise the real identity/wait helpers with process handles that record the
+# order of access. No test terminates or opens an operating-system process.
+function New-ParentFixture {
+    $process = [pscustomobject]@{
+        created = [DateTime]::Parse('2026-10-18T01:02:03Z').ToUniversalTime()
+        opened = $false
+        disposed = $false
+        handleDenied = $false
+        startDenied = $false
+        calls = 0
+    }
+    $process | Add-Member -MemberType ScriptProperty -Name Handle -Value {
+        if ($this.handleDenied) { throw 'Access denied opening the parent' }
+        $this.opened = $true
+        return [IntPtr]::new(1234)
+    }
+    $process | Add-Member -MemberType ScriptProperty -Name StartTime -Value {
+        if (-not $this.opened) { throw 'Start time read before pinning the handle' }
+        if ($this.startDenied) { throw 'Access denied reading the parent creation time' }
+        return $this.created
+    }
+    $process | Add-Member -MemberType ScriptMethod -Name Dispose -Value { $this.disposed = $true }
+    $process | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value {
+        param($milliseconds)
+        if (-not $this.opened -or $this.disposed) { throw 'Wait did not use the pinned process' }
+        $this.calls++
+        return $true
+    }
+    return $process
+}
+$script:parentLookup = 'present'
+$script:parentProcess = New-ParentFixture
+function Get-Process {
+    [CmdletBinding()]
+    param([int]$Id)
+    if ($script:parentLookup -eq 'missing') {
+        Write-Error -Message 'The original process exited' -ErrorId NoProcessFoundForGivenId -Category ObjectNotFound
+        return
+    }
+    if ($script:parentLookup -eq 'denied') { throw 'Access denied looking up the parent' }
+    return $script:parentProcess
+}
+$creationTime = $script:parentProcess.created.Ticks.ToString([Globalization.CultureInfo]::InvariantCulture)
+$parent = Get-ApplyParent 123 $creationTime
+if (-not [object]::ReferenceEquals($parent, $script:parentProcess) -or -not $parent.opened -or $parent.disposed) {
+    throw 'Matching parent did not keep its exact process handle'
+}
+$noCancellation = Join-Path ([IO.Path]::GetTempPath()) ('Bay-no-cancel-' + [guid]::NewGuid())
+if (-not (Wait-ApplyParent $parent $noCancellation $true) -or $parent.calls -ne 1) {
+    throw 'Matching parent did not wait using the pinned handle'
+}
+$parent.Dispose()
+$script:parentProcess = New-ParentFixture
+$script:parentProcess.created = $script:parentProcess.created.AddSeconds(1)
+if ($null -ne (Get-ApplyParent 123 $creationTime) -or -not $script:parentProcess.disposed -or $script:parentProcess.calls) {
+    throw 'Reused PID was treated as the authenticated Bay process'
+}
+$script:parentLookup = 'missing'
+if ($null -ne (Get-ApplyParent 123 $creationTime)) { throw 'Exited parent was not accepted' }
+$script:parentLookup = 'denied'
+Assert-Throws { Get-ApplyParent 123 $creationTime }
+$script:parentLookup = 'present'
+$script:parentProcess = New-ParentFixture
+$script:parentProcess.handleDenied = $true
+Assert-Throws { Get-ApplyParent 123 $creationTime }
+if (-not $script:parentProcess.disposed -or $script:parentProcess.calls) { throw 'Inaccessible parent was not left staged' }
+$script:parentProcess = New-ParentFixture
+$script:parentProcess.startDenied = $true
+Assert-Throws { Get-ApplyParent 123 $creationTime }
+Assert-Throws { Get-ApplyParent 123 'invalid' }
+Write-Output 'Updater policy, payload, worker identity, authenticated state, cache recovery and cancellation checks passed'
