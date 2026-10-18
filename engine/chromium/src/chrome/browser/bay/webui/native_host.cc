@@ -27,6 +27,7 @@
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
 #include "chrome/browser/bay/webui/engine_services.h"
+#include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #if BUILDFLAG(IS_WIN)
@@ -1029,6 +1030,8 @@ void NativeHost::InvokeView(const std::string& method,
       find->StopFinding(Boolean(params, 0)
                             ? find_in_page::SelectionAction::kClear
                             : find_in_page::SelectionAction::kKeep);
+  } else if (DispatchPageMethod(contents, command, params, callback)) {
+    return;
   } else {
     std::move(callback).Run(
         Failure("unsupported_method", "WebView." + command));
