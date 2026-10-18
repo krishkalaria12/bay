@@ -29,6 +29,7 @@
     "./keys": "./src/keys.ts",
     "./capabilities": "./src/capabilities.ts",
     "./nativeBridge": "./nativeBridge.ts",
-    "./webViewHost": "./webViewHost.ts"
+    "./webViewHost": "./webViewHost.ts",
+    "./runtimeTransport": "./src/runtimeTransport.ts"
   }
 }

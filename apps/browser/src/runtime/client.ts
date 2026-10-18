@@ -57,7 +57,7 @@ const projectionFields: Record<keyof BrowserProjection, "array" | "record"> = {
   historyReady: "record", historyFloor: "record", bookmarks: "record", bookmarksReady: "record",
   settings: "record", ui: "record", windowUi: "record", find: "record", downloads: "array",
 };
-function commitFrom(value: unknown, previous: BrowserCommit | null): BrowserCommit {
+export function decodeBrowserCommit(value: unknown, previous: BrowserCommit | null = null): BrowserCommit {
   const input = record(copyJson(value, previous));
   if (Object.keys(input).length !== 3 || Object.keys(input).some((key) => !["epoch", "revision", "state"].includes(key))) invalid();
   if (typeof input.epoch !== "string" || !input.epoch || !Number.isSafeInteger(input.revision) || (input.revision as number) < 0) invalid();
@@ -159,7 +159,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
   function acceptCommit(input: unknown) {
     if (terminalError) return;
     let commit: BrowserCommit;
-    try { commit = commitFrom(input, current); } catch { fail(new BrowserClientError("invalid_protocol", "invalid browser runtime commit")); return; }
+    try { commit = decodeBrowserCommit(input, current); } catch { fail(new BrowserClientError("invalid_protocol", "invalid browser runtime commit")); return; }
     acceptValidatedCommit(commit);
   }
   function acceptValidatedCommit(commit: BrowserCommit) {
@@ -188,7 +188,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     }).then((input) => {
       snapshotInFlight = false;
       if (terminalError) return;
-      const commit = commitFrom(input, current);
+      const commit = decodeBrowserCommit(input, current);
       if (!sameEpoch(commit)) return;
       if (commit.revision < minimumRevision || (current && commit.revision < current.revision)) return invalid();
       install(commit);
@@ -219,7 +219,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
       if (Object.keys(reply).some((key) => !["clientId", "requestId", "commit", "value"].includes(key)) || reply.clientId !== clientId || reply.requestId !== command.request.requestId) invalid();
       const createsId = command.request.command.method === "createWindow" || command.request.command.method === "newTab";
       if (createsId ? typeof reply.value !== "string" : reply.value !== null) invalid();
-      const commit = commitFrom(reply.commit, current);
+      const commit = decodeBrowserCommit(reply.commit, current);
       if (!sameEpoch(commit)) return;
       if (commit.revision < command.baseRevision) invalid();
       command.reply = Object.freeze({ clientId, requestId: command.request.requestId, commit, value: reply.value as string | null });
