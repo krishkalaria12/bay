@@ -9,6 +9,7 @@
 #include "base/path_service.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/webui_browser/webui_browser.h"
 #include "components/surface_embed/common/features.h"
 #include "content/public/browser/web_contents.h"
@@ -71,6 +72,14 @@ BayWebUIBrowserWindow::BayWebUIBrowserWindow(BrowserWindowInterface* browser)
 
 void BayWebUIBrowserWindow::SetFocusToLocationBar(bool is_user_initiated) {
   EmitWindowCommand(browser(), "focusCommandBar");
+}
+void BayWebUIBrowserWindow::Show() {
+  if (!WindowRegistry::Get().AbsorbOnShow(browser()))
+    WebUIBrowserWindow::Show();
+}
+void BayWebUIBrowserWindow::ShowInactive() {
+  if (!WindowRegistry::Get().AbsorbOnShow(browser()))
+    WebUIBrowserWindow::ShowInactive();
 }
 
 bool ConfigureBayWebUI(content::WebUI* web_ui) {

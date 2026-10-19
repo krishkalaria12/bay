@@ -445,6 +445,11 @@ base::DictValue NativeHost::Info() const {
                                 "bay-hosting-spike"));
 #if BUILDFLAG(IS_WIN)
   shell.Set("initializationError", platform_services_->initialization_error());
+#endif
+  if (context_.window() && WindowRegistry::Get().IsAbsorbed(context_.window()))
+    shell.Set("initializationError",
+              "This window's tabs moved to the open Bay window");
+#if BUILDFLAG(IS_WIN)
   shell.Set("backdrop", FrameWin::BackdropEnabled() ? "mica" : "solid");
 #endif
   auto engine_methods = browser_services_->SupportedMethods();

@@ -58,6 +58,14 @@ class WindowRegistry final : public BrowserCollectionObserver {
   // {maximized, fullscreen}, or nullopt for an unknown window.
   std::optional<base::DictValue> State(const std::string& id) const;
 
+  // Until the shared runtime owns every window, one full UI document runs per
+  // process. A normal window Chrome opens on its own (a relaunch, the taskbar,
+  // an extension) is absorbed: its document refuses to start, and on Show its
+  // tabs join the most recently active Bay window before it closes unshown.
+  bool IsAbsorbed(BrowserWindowInterface* browser) const;
+  // Returns true when `browser` is absorbed and must not be shown.
+  bool AbsorbOnShow(BrowserWindowInterface* browser);
+
  private:
   friend class base::NoDestructor<WindowRegistry>;
   class Entry;
@@ -71,6 +79,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   void Broadcast(base::DictValue event);
   void BoundsChanged(BrowserWindowInterface* browser, const gfx::Rect& bounds);
   void ShowStateChanged(BrowserWindowInterface* browser);
+  void MoveIntoBayWindow(base::WeakPtr<BrowserWindowInterface> source);
   void ReleasePrivateProfile(base::WeakPtr<Profile> profile);
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
   void OnBrowserClosed(BrowserWindowInterface* browser) override;

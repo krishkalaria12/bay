@@ -63,6 +63,7 @@ source_set("impl") {
     "//chrome/browser/profiles/keep_alive",
     "//chrome/browser/resource_coordinator",
     "//chrome/browser/ui",
+    "//chrome/browser/ui/navigator",
     "//chrome/browser/ui/tab_sharing",
     "//chrome/browser/ui/tabs:tab_model",
     "//chrome/browser/ui/webui_browser",

@@ -1,12 +1,14 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/window_registry.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
 #include <vector>
 
 #include "base/check.h"
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ref.h"
 #include "base/path_service.h"
@@ -19,15 +21,23 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #include "chrome/browser/ui/window_metadata/window_metadata_controller.h"
 #include "chrome/common/chrome_paths.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
+#include "ui/base/page_transition_types.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
+#include "url/gurl.h"
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/webui/frame_win.h"
 #endif
@@ -103,6 +113,7 @@ class WindowRegistry::Entry final : public views::WidgetObserver {
 
   std::string id;
   base::DictValue options;
+  bool absorbed = false;
 
  private:
   const raw_ref<WindowRegistry> registry_;
@@ -472,12 +483,71 @@ void WindowRegistry::ShowStateChanged(BrowserWindowInterface* browser) {
 void WindowRegistry::OnBrowserCreated(BrowserWindowInterface* browser) {
   if (!WebUIBrowserWindow::FromBrowser(browser))
     return;
+  const bool known = entries_.contains(browser);
   auto& entry = EnsureEntry(browser);
   if (entry.id.empty() && pending_open_ && !Find(pending_open_->id) &&
       browser->GetProfile() == pending_open_->profile) {
     entry.id = pending_open_->id;
     entry.options = pending_open_->options.Clone();
   }
+  // Decided once, before the window's document can ask for host info.
+  if (!known && entry.id.empty() && !AppRuntime::Enabled() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike")) {
+    entry.absorbed =
+        std::ranges::any_of(entries_, [browser](const auto& other) {
+          return other.first != browser && !other.second->absorbed;
+        });
+  }
+}
+bool WindowRegistry::IsAbsorbed(BrowserWindowInterface* browser) const {
+  auto it = entries_.find(browser);
+  return it != entries_.end() && it->second->absorbed;
+}
+bool WindowRegistry::AbsorbOnShow(BrowserWindowInterface* browser) {
+  if (!IsAbsorbed(browser))
+    return false;
+  // Chrome adds the window's tabs before showing it. Move them once the
+  // caller's stack, which may still use the window, has unwound.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&WindowRegistry::MoveIntoBayWindow,
+                                base::Unretained(this), browser->GetWeakPtr()));
+  return true;
+}
+void WindowRegistry::MoveIntoBayWindow(
+    base::WeakPtr<BrowserWindowInterface> source) {
+  if (!source)
+    return;
+  BrowserWindowInterface* target = nullptr;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&](BrowserWindowInterface* browser) {
+        auto it = entries_.find(browser);
+        if (browser == source.get() || it == entries_.end() ||
+            it->second->absorbed || browser->IsDeleteScheduled())
+          return true;
+        target = browser;
+        return false;
+      },
+      BrowserCollection::Order::kActivation);
+  if (target) {
+    TabStripModel* from = source->GetTabStripModel();
+    TabStripModel* to = target->GetTabStripModel();
+    if (source->GetProfile() == target->GetProfile()) {
+      while (!from->empty())
+        to->AppendTab(from->DetachTabAtForInsertion(0), /*foreground=*/true);
+    } else if (!source->GetProfile()->IsOffTheRecord()) {
+      // Pages cannot change profile. Reopen them in the Bay window's profile;
+      // private pages are never copied into a regular one.
+      for (int i = 0; i < from->count(); ++i) {
+        NavigateParams params(target,
+                              from->GetWebContentsAt(i)->GetVisibleURL(),
+                              ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+        params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+        Navigate(&params);
+      }
+    }
+    target->GetWindow()->Activate();
+  }
+  source->GetWindow()->Close();
 }
 void WindowRegistry::OnBrowserClosed(BrowserWindowInterface* browser) {
   const auto id = IdFor(browser);

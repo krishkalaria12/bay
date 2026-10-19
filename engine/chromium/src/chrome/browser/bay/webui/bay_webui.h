@@ -31,6 +31,9 @@ class BayWebUIBrowserWindow : public WebUIBrowserWindow {
  public:
   explicit BayWebUIBrowserWindow(BrowserWindowInterface* browser);
   void SetFocusToLocationBar(bool is_user_initiated) override;
+  // A window Chrome opened beside Bay's own is never shown (WindowRegistry).
+  void Show() override;
+  void ShowInactive() override;
 };
 
 // Called by the shared upstream controller after its Browser association is
