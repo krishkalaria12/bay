@@ -37,6 +37,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
+#include "chrome/browser/bay/webui/frame_win.h"
 #include "chrome/browser/bay/webui/notifications_win.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/updater_service_win.h"
@@ -444,6 +445,7 @@ base::DictValue NativeHost::Info() const {
                                 "bay-hosting-spike"));
 #if BUILDFLAG(IS_WIN)
   shell.Set("initializationError", platform_services_->initialization_error());
+  shell.Set("backdrop", FrameWin::BackdropEnabled() ? "mica" : "solid");
 #endif
   auto engine_methods = browser_services_->SupportedMethods();
   for (const auto& method : engine_services_->SupportedMethods())
@@ -497,6 +499,10 @@ base::DictValue NativeHost::Info() const {
   for (const auto& method : engine_services_->SupportedMethods())
     methods.Append(method.Clone());
   methods.Append("BayShell.windowFrame");
+  for (const auto* method :
+       {"BayShell.minimizeWindow", "BayShell.toggleMaximizeWindow",
+        "BayShell.windowState", "BayShell.setWindowCaption"})
+    methods.Append(method);
   methods.Append("BayShell.replyToTerminate");
   for (const auto* method :
        {"BayApp.checkForUpdates", "BayApp.setAutomaticUpdateChecks",
@@ -803,6 +809,13 @@ void NativeHost::Invoke(const std::string& module,
                         : base::Value()));
       return;
     }
+    if (method == "windowState") {
+      auto state = windows.State(Text(args, 0));
+      std::move(callback).Run(
+          state ? Success(base::Value(std::move(*state)))
+                : Failure("window_error", "Unknown window id"));
+      return;
+    }
     std::optional<WindowRegistry::Result> result;
     if (method == "openWindow") {
       if (context_.is_window() && !context_.window()) {
@@ -837,6 +850,10 @@ void NativeHost::Invoke(const std::string& module,
       result = windows.SetTitle(Text(args, 0), Text(args, 1));
     else if (method == "minimizeWindow")
       result = windows.Minimize(Text(args, 0));
+    else if (method == "toggleMaximizeWindow")
+      result = windows.ToggleMaximize(Text(args, 0));
+    else if (method == "setWindowCaption")
+      result = windows.SetCaption(Text(args, 0), At(args, 1));
     if (result) {
       std::move(callback).Run(
           result->ok ? Success() : Failure("window_error", result->error));

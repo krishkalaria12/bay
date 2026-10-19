@@ -8,6 +8,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/task/thread_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/webui_browser/webui_browser.h"
 #include "components/surface_embed/common/features.h"
 #include "content/public/browser/web_contents.h"
@@ -15,6 +16,10 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "third_party/skia/include/core/SkColor.h"
+#if BUILDFLAG(IS_WIN)
+#include "chrome/browser/bay/webui/frame_win.h"
+#endif
 
 namespace bay {
 namespace {
@@ -76,6 +81,12 @@ bool ConfigureBayWebUI(content::WebUI* web_ui) {
   auto* source = content::WebUIDataSource::CreateAndAdd(
       web_ui->GetWebContents()->GetBrowserContext(), kBayHost);
   source->UseStringsJs();
+#if BUILDFLAG(IS_WIN)
+  // Mica shows through wherever a window's UI leaves its page transparent.
+  if (FrameWin::BackdropEnabled() &&
+      WebUIBrowserWindow::FromWebShellWebContents(web_ui->GetWebContents()))
+    web_ui->GetWebContents()->SetPageBaseBackgroundColor(SK_ColorTRANSPARENT);
+#endif
   // React Native Web injects style nodes and Expo loads local script chunks.
   // CSP still restricts executable code to the installed WebUI resources.
   source->DisableTrustedTypesCSP();

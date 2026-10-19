@@ -276,6 +276,7 @@ if (is_mac) {
       deps += [
         "//chrome/browser/bay/webui:platform_services_win",
         "//chrome/browser/notifications",
+        "//chrome/browser/ui/webui_browser",
       ]
     }
   }

@@ -11,6 +11,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
@@ -27,6 +28,9 @@
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
+#if BUILDFLAG(IS_WIN)
+#include "chrome/browser/bay/webui/frame_win.h"
+#endif
 
 namespace bay {
 namespace {
@@ -63,6 +67,12 @@ std::optional<gfx::Rect> ReadFrame(const base::Value* value) {
     return std::nullopt;
   return gfx::Rect(numbers[0], numbers[1], numbers[2], numbers[3]);
 }
+base::DictValue StateValue(BrowserWindowInterface* browser) {
+  auto* window = browser->GetWindow();
+  return base::DictValue()
+      .Set("maximized", window->IsMaximized())
+      .Set("fullscreen", window->IsFullscreen());
+}
 base::ListValue RectValue(const gfx::Rect& rect) {
   return base::ListValue()
       .Append(rect.x())
@@ -84,6 +94,10 @@ class WindowRegistry::Entry final : public views::WidgetObserver {
   void OnWidgetBoundsChanged(views::Widget*, const gfx::Rect& bounds) override {
     if (browser_)
       registry_->BoundsChanged(browser_.get(), bounds);
+  }
+  void OnWidgetShowStateChanged(views::Widget*) override {
+    if (browser_)
+      registry_->ShowStateChanged(browser_.get());
   }
   void OnWidgetDestroyed(views::Widget*) override { observation_.Reset(); }
 
@@ -363,6 +377,46 @@ WindowRegistry::Result WindowRegistry::Minimize(const std::string& id) {
   browser->GetWindow()->Minimize();
   return Success();
 }
+WindowRegistry::Result WindowRegistry::ToggleMaximize(const std::string& id) {
+  auto* browser = Find(id);
+  if (!browser)
+    return Failure("Unknown window id");
+  auto* window = browser->GetWindow();
+  // The caption's maximize button has no meaning while a page is full screen.
+  if (window->IsFullscreen())
+    return Success();
+  if (window->IsMaximized())
+    window->Restore();
+  else
+    window->Maximize();
+  return Success();
+}
+WindowRegistry::Result WindowRegistry::SetCaption(const std::string& id,
+                                                  const base::Value* caption) {
+  auto* browser = Find(id);
+  if (!browser)
+    return Failure("Unknown window id");
+  const auto* fields = caption ? caption->GetIfDict() : nullptr;
+  const auto dark = fields ? fields->FindBool("dark") : std::nullopt;
+  const auto* maximize = fields ? fields->Find("maximize") : nullptr;
+  std::optional<gfx::Rect> bounds;
+  if (maximize && !maximize->is_none())
+    bounds = ReadFrame(maximize);
+  if (!dark || !maximize || (!maximize->is_none() && !bounds))
+    return Failure("Invalid window caption");
+#if BUILDFLAG(IS_WIN)
+  auto* window = WebUIBrowserWindow::FromBrowser(browser);
+  if (!window || !window->widget() ||
+      !FrameWin::SetCaption(window->widget(), bounds, *dark))
+    return Failure("This window has no Bay frame");
+#endif
+  return Success();
+}
+std::optional<base::DictValue> WindowRegistry::State(
+    const std::string& id) const {
+  auto* browser = Find(id);
+  return browser ? std::make_optional(StateValue(browser)) : std::nullopt;
+}
 std::optional<gfx::Rect> WindowRegistry::Frame(const std::string& id) const {
   auto* browser = Find(id);
   return browser ? std::make_optional(browser->GetWindow()->GetBounds())
@@ -409,6 +463,11 @@ void WindowRegistry::BoundsChanged(BrowserWindowInterface* browser,
                   .Set("type", "frame")
                   .Set("id", id)
                   .Set("frame", RectValue(bounds)));
+}
+void WindowRegistry::ShowStateChanged(BrowserWindowInterface* browser) {
+  const auto id = IdFor(browser);
+  if (!id.empty())
+    Broadcast(StateValue(browser).Set("type", "state").Set("id", id));
 }
 void WindowRegistry::OnBrowserCreated(BrowserWindowInterface* browser) {
   if (!WebUIBrowserWindow::FromBrowser(browser))

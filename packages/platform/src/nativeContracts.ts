@@ -215,6 +215,34 @@ export const nativeContracts = {
           "maxArgs": 0,
           "signature": "windowIds(): Promise<string[]>;"
         },
+        "minimizeWindow": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "minimizeWindow?(id: string): Promise<void>;"
+        },
+        "toggleMaximizeWindow": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "toggleMaximizeWindow?(id: string): Promise<void>;"
+        },
+        "windowState": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "windowState?(id: string): Promise<WindowState>;"
+        },
+        "setWindowCaption": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "setWindowCaption?(id: string, caption: WindowCaption): Promise<void>;"
+        },
         "setAppearance": {
           "async": true,
           "optional": false,
@@ -1915,7 +1943,9 @@ export const nativeContracts = {
     "shell/src/index.tsx": {
       "BrowserCommand": "| \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newHarbor\"\n  | \"toggleOpenLinksInHarbor\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToProfile\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchProfile\"\n  | \"nextProfile\"\n  | \"previousProfile\"\n  | \"newProfile\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openProfileMenu\"",
       "CommandEvent": "{\n  command: BrowserCommand;\n  arg: string | null;\n  windowId: string | null;\n}",
-      "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }",
+      "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }\n  | ({ type: \"state\"; id: string } & WindowState)",
+      "WindowState": "{ maximized: boolean; fullscreen: boolean }",
+      "WindowCaption": "{ maximize: [number, number, number, number] | null; dark: boolean }",
       "AppEvent": "| { type: \"reopen\" }\n  | { type: \"willQuit\" }\n  | { type: \"quitCancelled\" }\n  | { type: \"appearance\"; dark: boolean }\n  | { type: \"quitWarningSuppressed\" }\n  | { type: \"resignActive\" }\n  | { type: \"screenLocked\" }\n  | { type: \"controlReleased\" }\n  | { type: \"switcherKey\"; key: \"escape\" | \"next\" | \"previous\" }\n  | { type: \"switcherMouseUp\" }",
       "ShellEvents": "{\n  onCommand: (e: CommandEvent) => void;\n  onOpenURLs: (e: { urls: string[] }) => void;\n  onWindowEvent: (e: WindowEvent) => void;\n  onAppEvent: (e: AppEvent) => void;\n}",
       "MenuItem": "| { separator: true }\n  | {\n      id: string;\n      title: string;\n      symbol?: string;\n      swatch?: string;\n      key?: string;\n      modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\")[];\n      enabled?: boolean;\n      checked?: boolean;\n      children?: MenuItem[];\n    }",

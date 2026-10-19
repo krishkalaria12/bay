@@ -51,7 +51,12 @@ class WindowRegistry final : public BrowserCollectionObserver {
   Result SetTitle(const std::string& id, const std::string& title);
   Result SetFrame(const std::string& id, const gfx::Rect& frame);
   Result Minimize(const std::string& id);
+  Result ToggleMaximize(const std::string& id);
+  // The caption the UI draws on Windows: {maximize: Rect4 | null, dark}.
+  Result SetCaption(const std::string& id, const base::Value* caption);
   std::optional<gfx::Rect> Frame(const std::string& id) const;
+  // {maximized, fullscreen}, or nullopt for an unknown window.
+  std::optional<base::DictValue> State(const std::string& id) const;
 
  private:
   friend class base::NoDestructor<WindowRegistry>;
@@ -65,6 +70,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   void PublishHostInfo();
   void Broadcast(base::DictValue event);
   void BoundsChanged(BrowserWindowInterface* browser, const gfx::Rect& bounds);
+  void ShowStateChanged(BrowserWindowInterface* browser);
   void ReleasePrivateProfile(base::WeakPtr<Profile> profile);
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
   void OnBrowserClosed(BrowserWindowInterface* browser) override;
