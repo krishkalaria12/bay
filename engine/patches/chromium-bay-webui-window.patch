@@ -74,25 +74,25 @@ diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/u
 diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.h b/chrome/browser/ui/webui_browser/webui_browser_ui.h
 --- a/chrome/browser/ui/webui_browser/webui_browser_ui.h
 +++ b/chrome/browser/ui/webui_browser/webui_browser_ui.h
-@@ -4,6 +4,8 @@
- 
+@@ -5,6 +5,8 @@
  #ifndef CHROME_BROWSER_UI_WEBUI_BROWSER_WEBUI_BROWSER_UI_H_
  #define CHROME_BROWSER_UI_WEBUI_BROWSER_WEBUI_BROWSER_UI_H_
-+
-+#include "chrome/browser/bay/webui/native_host.mojom-forward.h"
  
++#include "chrome/browser/bay/webui/native_host.mojom-forward.h"
++
  #include <memory>
  
-@@ -64,6 +66,9 @@
-  public:
+ #include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
+@@ -65,6 +67,9 @@
    explicit WebUIBrowserUI(content::WebUI* web_ui);
    ~WebUIBrowserUI() override;
-+
+ 
 +  void BindInterface(mojo::PendingReceiver<bay::mojom::NativeHost> receiver);
 +  void BindInterface(mojo::PendingReceiver<bay::mojom::AppRuntime> receiver);
- 
++
    void BindInterface(
        mojo::PendingReceiver<webui_browser::mojom::PageHandlerFactory> receiver);
+   void BindInterface(
 diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.cc b/chrome/browser/ui/webui_browser/webui_browser_ui.cc
 --- a/chrome/browser/ui/webui_browser/webui_browser_ui.cc
 +++ b/chrome/browser/ui/webui_browser/webui_browser_ui.cc
@@ -124,12 +124,10 @@ diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.cc b/chrome/browse
  
    // Set up the chrome://webui-browser source.
    content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
-@@ -168,6 +178,16 @@
- }
- 
+@@ -170,6 +180,16 @@
  WebUIBrowserUI::~WebUIBrowserUI() = default;
-+
-+void WebUIBrowserUI::BindInterface(
+ 
+ void WebUIBrowserUI::BindInterface(
 +    mojo::PendingReceiver<bay::mojom::AppRuntime> receiver) {
 +  bay::BindAppRuntime(web_ui(), std::move(receiver));
 +}
@@ -138,9 +136,11 @@ diff --git a/chrome/browser/ui/webui_browser/webui_browser_ui.cc b/chrome/browse
 +    mojo::PendingReceiver<bay::mojom::NativeHost> receiver) {
 +  bay::BindNativeHost(web_ui(), std::move(receiver));
 +}
- 
- void WebUIBrowserUI::BindInterface(
++
++void WebUIBrowserUI::BindInterface(
      mojo::PendingReceiver<webui_browser::mojom::PageHandlerFactory> receiver) {
+   page_factory_receiver_.reset();
+   page_factory_receiver_.Bind(std::move(receiver));
 diff --git a/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc b/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
 --- a/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
 +++ b/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
@@ -290,7 +290,7 @@ diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
  #include "chrome/browser/ai/ai_data_keyed_service.h"          // nogncheck
  #include "chrome/browser/ai/ai_data_keyed_service_factory.h"  // nogncheck
  #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-@@ -629,6 +632,13 @@
+@@ -620,6 +623,13 @@
  
  
  void Browser::TabStripEmpty() {
@@ -301,9 +301,9 @@ diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
 +    return;
 +  }
 +#endif
- #if BUILDFLAG(ENABLE_CEF)
-   // Bay: a window the CEF client shows its own UI in stays open without
-   // tabs, unless it is closing.
+   // Note: even though the tab strip is empty, the call to Close() may not
+   // result in closing this Browser. This can happen in the case of closing
+   // the last Browser with ongoing downloads.
 diff --git a/chrome/browser/ui/unload_controller.cc b/chrome/browser/ui/unload_controller.cc
 --- a/chrome/browser/ui/unload_controller.cc
 +++ b/chrome/browser/ui/unload_controller.cc
@@ -327,6 +327,6 @@ diff --git a/chrome/browser/ui/unload_controller.cc b/chrome/browser/ui/unload_c
 +    return;
 +  }
 +#endif
- #if BUILDFLAG(ENABLE_CEF)
-   // Bay: see Browser::TabStripEmpty. The window stays open for new tabs.
-   if (!is_attempting_to_close_browser_ && browser_->cef_delegate() &&
+   // Set is_attempting_to_close_browser_ here, so that extensions, etc, do not
+   // attempt to add tabs to the browser before it closes.
+   is_attempting_to_close_browser_ = true;

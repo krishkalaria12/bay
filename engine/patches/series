@@ -29,7 +29,7 @@ cef mac cef-bay-layer.patch
 
 chromium mac chromium-autofill-card-touchbar.patch
 chromium all chromium-autofill-address-bubble-window.patch
-chromium all chromium-browser-view-hosted-fullscreen.patch
+chromium mac chromium-browser-view-hosted-fullscreen.patch
 chromium all chromium-device-chooser-hook.patch
 chromium all chromium-cast-dialog-hook.patch
 chromium all chromium-side-panel-hook.patch
@@ -49,9 +49,9 @@ chromium all chromium-password-bubble-hook.patch
 chromium all chromium-password-generation-local.patch
 chromium all chromium-tab-strip-notify-before-insert.patch
 chromium all chromium-ui-update-before-insert.patch
-chromium all chromium-webview-native-hosted.patch
-chromium all chromium-window-docked-devtools.patch
-chromium all chromium-window-hosted.patch
+chromium mac chromium-webview-native-hosted.patch
+chromium mac chromium-window-docked-devtools.patch
+chromium mac chromium-window-hosted.patch
 chromium all chromium-extension-installed-bubble.patch
 chromium all chromium-pip-close-keeps-playing.patch
 chromium all chromium-pip-overlay-window.patch
