@@ -136,11 +136,16 @@ export function restoreSettings(saved: Partial<Settings> & {
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
 const NO_EXTENSION_ENGINES: ExtensionSearchEngine[] = [];
 const engineCache = new WeakMap<
-  CustomSearchEngine[],
-  { legacyUrl: string; extension: ExtensionSearchEngine[]; engines: SearchEngine[] }
+  readonly CustomSearchEngine[],
+  { legacyUrl: string; extension: readonly ExtensionSearchEngine[]; engines: SearchEngine[] }
 >();
 
-export function searchEngines(settings: Settings): SearchEngine[] {
+type SearchSettings = Readonly<Pick<Settings, "searchEngine" | "customSearchUrl">> & {
+  readonly customSearchEngines: readonly CustomSearchEngine[];
+  readonly extensionSearchEngines: readonly ExtensionSearchEngine[];
+};
+
+export function searchEngines(settings: SearchSettings): SearchEngine[] {
   const custom = settings.customSearchEngines ?? NO_CUSTOM_ENGINES;
   const extension = settings.extensionSearchEngines ?? NO_EXTENSION_ENGINES;
   const cached = engineCache.get(custom);
@@ -154,11 +159,11 @@ export function searchEngines(settings: Settings): SearchEngine[] {
   return engines;
 }
 
-export function controllingSearchExtension(settings: Settings): ExtensionSearchEngine | undefined {
+export function controllingSearchExtension(settings: Pick<SearchSettings, "extensionSearchEngines">): ExtensionSearchEngine | undefined {
   return controllingExtensionEngine(settings.extensionSearchEngines ?? NO_EXTENSION_ENGINES);
 }
 
-export function defaultSearchEngine(settings: Settings): SearchEngine {
+export function defaultSearchEngine(settings: SearchSettings): SearchEngine {
   const controlling = controllingSearchExtension(settings);
   return engineById(searchEngines(settings), controlling ? extensionEngineId(controlling.extensionId) : settings.searchEngine);
 }

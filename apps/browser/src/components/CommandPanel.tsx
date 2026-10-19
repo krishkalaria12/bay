@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../lib/theme";
-import { useBrowser } from "../store/browser";
-import { useWindowId, useWindowUi } from "../store/hooks";
+import { browserRead, useBrowserRead } from "../store/read";
+import { dispatchBrowserCommand } from "../runtime/commands";
+import { DEFAULT_WINDOW_UI } from "../store/ui";
+import { showToast } from "./layout/splitActions";
+import { useWindowId } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { PAGE_MS, SWITCH_EASING } from "./layout/switchMotion";
 import { useUrlAnchors } from "./layout/windowLayout";
@@ -26,11 +29,11 @@ const DROPDOWN_RADIUS = 12;
 export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth: number; windowHeight?: number }) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const { panel } = useWindowUi();
+  const panel = useBrowserRead((s) => (s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel);
   // The active tab's id, and only while the panel is open: a closed panel doesn't re-render on tab switches.
-  const activeId = useBrowser((s) => (panel.open ? activeTabId(s, windowId) : undefined));
+  const activeId = useBrowserRead((s) => (panel.open ? activeTabId(s, windowId) : undefined));
   const anchor = useUrlAnchors((s) => (panel.open ? s[windowId] : undefined));
-  const small = useBrowser((s) => s.windows[windowId]?.kind === "small");
+  const small = useBrowserRead((s) => s.windows[windowId]?.kind === "small");
   const session = panel.open && activeId && !small ? { key: panel.sessionId ?? activeId, tabId: activeId, initialText: panel.initialText } : null;
   // The palette last open: closed, it fades out as it faded in, so leaving a New Tab page it goes with the page's
   // crossfade rather than at once, which left the bare page on screen for a frame or two.
@@ -54,7 +57,12 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
   if (!panel.open || !activeId || !anchor) return null;
 
   const room = (left: number, fallback: number) => (windowWidth > 0 ? windowWidth - left - WINDOW_MARGIN : fallback);
-  const onCancel = () => useBrowser.getState().closePanel(windowId);
+  const onCancel = () => {
+    void dispatchBrowserCommand({ method: "dismissCommandPanel", windowId }).catch(error => {
+      console.error("Couldn't close search", error);
+      showToast(windowId, "Couldn't close search", "Please try again.");
+    });
+  };
 
   if (anchor.sidebar) {
     const width = Math.min(Math.max(DROPDOWN_MIN_WIDTH, anchor.width + DROPDOWN_PAST_FIELD), room(anchor.left, DROPDOWN_MIN_WIDTH));
@@ -128,10 +136,15 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
     return { opacity: p, transform: [{ translateY: closing ? 0 : (1 - p) * 6 }] };
   }, [closing]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: closing ? appear.get() : 1 }), [closing]);
-  const dismiss = () => {
-    useBrowser.getState().closePanel(windowId);
-    const active = activeTabId(useBrowser.getState(), windowId);
-    if (active) void webviews.get(active)?.focus();
+  const dismiss = async () => {
+    try {
+      await dispatchBrowserCommand({ method: "dismissCommandPanel", windowId });
+      const active = activeTabId(browserRead.getState(), windowId);
+      if (active) await webviews.get(active)?.focus();
+    } catch (error) {
+      console.error("Couldn't close search", error);
+      showToast(windowId, "Couldn't close search", "Please try again.");
+    }
   };
   if (windowWidth < 1 || windowHeight < 1) return null;
   const width = Math.min(760, windowWidth - 32);

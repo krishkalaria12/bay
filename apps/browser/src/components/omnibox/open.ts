@@ -1,6 +1,5 @@
 import { modKey } from "@bay/platform";
-import { openWindow, switchToTab } from "../../lib/actions";
-import { useBrowser } from "../../store/browser";
+import { dispatchBrowserCommand } from "../../runtime/commands";
 
 export type Disposition = "current" | "newTab" | "newWindow";
 
@@ -10,28 +9,16 @@ export function dispositionFor(mods: { metaKey?: boolean; ctrlKey?: boolean; alt
   return "current";
 }
 
-export function openFromBar(url: string, tabId: string, disposition: Disposition) {
-  const s = useBrowser.getState();
-  const tab = s.tabs[tabId];
-  if (!url || !tab) return;
-  const w = s.windows[tab.windowId];
-  if (disposition === "current") return s.navigate(tabId, url);
-  s.closePanel(tab.windowId);
-  if (disposition === "newTab") return void s.newTab(tab.windowId, { url, profileId: tab.profileId, openerId: tab.url ? tabId : undefined });
-  openWindow(w?.incognito ? { incognito: true, url } : { profileId: tab.profileId, url });
+export function openFromBar(url: string, tabId: string, disposition: Disposition): Promise<null> {
+  return dispatchBrowserCommand({ method: "openLocation", sourceTabId: tabId, url, disposition });
 }
 
-export function openInBackground(url: string, barTabId: string) {
-  const s = useBrowser.getState();
-  const tab = s.tabs[barTabId];
-  if (!url || !tab) return;
-  s.newTab(tab.windowId, { url, profileId: tab.profileId, background: true });
+export function openInBackground(url: string, barTabId: string): Promise<null> {
+  return dispatchBrowserCommand({ method: "openLocation", sourceTabId: barTabId, url, disposition: "backgroundTab" });
 }
 
-export function switchFromBar(targetTabId: string, url: string, barTabId: string, disposition: Disposition) {
-  if (disposition !== "current") return openFromBar(url, barTabId, disposition);
-  const s = useBrowser.getState();
-  const bar = s.tabs[barTabId];
-  if (bar) s.closePanel(bar.windowId);
-  switchToTab(targetTabId);
+export function switchFromBar(targetTabId: string, url: string, barTabId: string, disposition: Disposition): Promise<null> {
+  return disposition === "current"
+    ? dispatchBrowserCommand({ method: "switchToExistingTab", sourceTabId: barTabId, targetTabId })
+    : openFromBar(url, barTabId, disposition);
 }

@@ -7,7 +7,10 @@ import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowser } from "../store/browser";
-import { useWindowId, useWindowProfileId } from "../store/hooks";
+import { useBrowserRead } from "../store/read";
+import { dispatchBrowserCommand } from "../runtime/commands";
+import { showToast } from "./layout/splitActions";
+import { useWindowId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
@@ -74,15 +77,15 @@ export function Omnibox({
 }) {
   const theme = useTheme();
   const windowId = useWindowId();
-  const profileId = useWindowProfileId();
-  const engine = useBrowser((s) => defaultSearchEngine(s.settings));
-  const engines = useBrowser((s) => searchEngines(s.settings));
+  const profileId = useBrowserRead((s) => s.windows[windowId]?.profileId ?? "");
+  const engine = useBrowserRead((s) => defaultSearchEngine(s.settings));
+  const engines = useBrowserRead((s) => searchEngines(s.settings));
   const searchTemplates = useMemo(() => engines.map((e) => e.url), [engines]);
-  const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
-  const currentTitle = useBrowser((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
-  const currentFavicon = useBrowser((s) => s.tabs[tabId]?.favicon ?? null);
+  const currentUrl = useBrowserRead((s) => s.tabs[tabId]?.url ?? "");
+  const currentTitle = useBrowserRead((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
+  const currentFavicon = useBrowserRead((s) => s.tabs[tabId]?.favicon ?? null);
   const palette = variant === "palette";
-  const newTab = useBrowser((s) => s.windowUi[windowId]?.panel.mode === "newTab");
+  const newTab = useBrowserRead((s) => s.windowUi[windowId]?.panel.mode === "newTab");
   const [menu, setMenu] = useState<PaletteMenu | null>(null);
   const dropdown = variant === "sidebar";
 
@@ -155,10 +158,19 @@ export function Omnibox({
     requestAnimationFrame(() => input.current?.focus());
   };
 
+  const openingFailed = (error: unknown) => {
+    console.error("Couldn't open the address", error);
+    showToast(windowId, "Couldn't open the address", "Please try again.");
+  };
+  const background = (url: string) => {
+    void openInBackground(url, tabId).catch(openingFailed);
+  };
   const go = (url: string, disposition: Disposition = "current") => {
     if (!url) return;
-    if (palette && newTab && disposition !== "newWindow") useBrowser.getState().submitNewTabPanel(windowId, url);
-    else openFromBar(url, tabId, disposition);
+    const result = palette && newTab && disposition !== "newWindow"
+      ? dispatchBrowserCommand({ method: "submitNewTab", windowId, url })
+      : openFromBar(url, tabId, disposition);
+    void result.catch(openingFailed);
   };
 
   const choose = (s: Suggestion | undefined, disposition: Disposition = "current") => {
@@ -173,7 +185,7 @@ export function Omnibox({
       case "page":
         if (s.tabId) {
           if (palette && newTab && disposition !== "current") return go(s.url, disposition);
-          switchFromBar(s.tabId, s.url, tabId, disposition);
+          void switchFromBar(s.tabId, s.url, tabId, disposition).catch(openingFailed);
           return;
         }
         return go(s.url, disposition);
@@ -228,7 +240,7 @@ export function Omnibox({
     const title = target.kind === "page" ? target.title || displayUrl(target.url) : target.kind === "search" ? target.query : target.kind === "calc" ? target.value : target.title;
     const actions = rowMenuActions(target, newTab, searchTemplates, {
       choose,
-      openInBackground: (url) => openInBackground(url, tabId),
+      openInBackground: background,
       copyLink: copyText,
       closeTab,
       forget,
@@ -272,7 +284,7 @@ export function Omnibox({
       if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim())
         return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
-      if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return openInBackground(current.url, tabId);
+      if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return background(current.url);
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent));
       return choose(current);
     }
