@@ -1,9 +1,8 @@
 import { listTasks, onExtensionsChanged } from "@bay/nncore";
-import { onAppEvent } from "@bay/shell";
 import { useTranslate } from "../components/site/translate";
 import { useBrowser } from "../store/browser";
 import { useSync } from "../sync/engine";
-import { capture, endSession, flush, isSharing, startClient } from "./client";
+import { capture, endSession, flush, isSharing, resumeClientAfterQuit, startClient } from "./client";
 import { reportNativeCrashes } from "./errors";
 import { takeOmniboxLatency } from "./track";
 
@@ -138,15 +137,29 @@ export function startUsage() {
   watchExtensions();
   setTimeout(() => void sampleMemory(), FIRST_MEMORY_SAMPLE_MS);
   setInterval(hourly, HOUR_MS);
-  onAppEvent((e) => e.type === "willQuit" && sessionEnding());
+}
+
+let quitPrepared = false;
+
+export function prepareTelemetryForQuit(): Promise<void> {
+  if (!quitPrepared) {
+    quitPrepared = true;
+    if (isSharing()) {
+      emitCounts();
+      emitOmniboxLatency();
+      capture("app_session_ended", { duration_minutes: Math.round((Date.now() - startedAt) / 60_000) });
+    }
+  }
+  return endSession();
+}
+
+export function resumeTelemetryAfterQuit(): Promise<void> {
+  quitPrepared = false;
+  return resumeClientAfterQuit();
 }
 
 export function sessionEnding() {
-  if (!isSharing()) return;
-  emitCounts();
-  emitOmniboxLatency();
-  capture("app_session_ended", { duration_minutes: Math.round((Date.now() - startedAt) / 60_000) });
-  endSession();
+  void prepareTelemetryForQuit().catch((error) => console.warn("Couldn't checkpoint telemetry before quitting", error));
 }
 
 export async function devHourly() {

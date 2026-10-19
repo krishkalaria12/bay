@@ -33,6 +33,9 @@ import { HARBOR_DISABLED_COMMANDS } from "../components/harbor/menu";
 import { runCommand } from "./commands";
 import { flushPersistence, resumePersistence } from "./persist";
 import { flushLivePersistence, resumeLivePersistence } from "../live/store";
+import { prepareSyncForQuit, resumeSyncAfterQuit } from "../sync/engine";
+import { prepareTelemetryForQuit, resumeTelemetryAfterQuit } from "../telemetry/usage";
+import { prepareApplicationQuit } from "./quitPreparation";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
@@ -64,18 +67,27 @@ export function startNativeSync() {
     if (e.type === "willQuit") {
       quitting = true;
       const attempt = ++quitAttempt;
-      void Promise.all([flushPersistence({ final: true }), flushLivePersistence({ final: true })]).then(() => {
-        if (quitting && attempt === quitAttempt) return replyToTerminate(true);
+      const isCurrent = () => quitting && attempt === quitAttempt;
+      void prepareApplicationQuit({
+        isCurrent,
+        prepareSync: prepareSyncForQuit,
+        flushSession: () => flushPersistence({ final: true }),
+        flushLive: () => flushLivePersistence({ final: true }),
+        flushTelemetry: prepareTelemetryForQuit,
+      }).then((prepared) => {
+        if (prepared && isCurrent()) return replyToTerminate(true);
       }, error => {
-        console.error("Couldn't save the session before quitting", error);
-        if (quitting && attempt === quitAttempt) return replyToTerminate(false);
-      });
+        console.error("Couldn't save app data before quitting", error);
+        if (isCurrent()) return replyToTerminate(false);
+      }).catch(error => console.error("Couldn't reply to app shutdown", error));
     }
     if (e.type === "quitCancelled") {
       quitting = false;
       quitAttempt++;
+      resumeSyncAfterQuit();
       resumePersistence();
       resumeLivePersistence();
+      void resumeTelemetryAfterQuit().catch(error => console.error("Couldn't restore telemetry after cancelled quit", error));
     }
   });
 
