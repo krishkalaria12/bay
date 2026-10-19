@@ -1,6 +1,6 @@
 # Windows implementation checkpoint
 
-Updated 18 October 2026. Windows 10 and Windows 11 x64 are supported targets.
+Updated 19 October 2026. Windows 10 and Windows 11 x64 are supported targets.
 Mica requires Windows 11 build 22621 or later. macOS keeps its existing native
 host. The `ios` directories contain macOS sources, not mobile application targets.
 
@@ -89,7 +89,35 @@ Remaining work includes shared service ownership, page fact routing, complete
 native event/OS coverage and the Windows acceptance runs. The diagnostic page
 does not establish a complete browser host.
 
+## Frame, notifications and menus
+
+Bay windows use their own Win32 frame (`frame_win.cc`, installed through
+`chromium-bay-frame-win.patch`). DWM keeps the borders, shadow and Aero Snap;
+the client area reaches the window's top, the top edge stays a resize border,
+and the UI's caption buttons are drawn at the top right. The host reports the
+UI's maximize button as `HTMAXBUTTON` so Windows 11 offers Snap Layouts over
+it. On Windows 11 22H2 and later the window is translucent with a Mica system
+backdrop behind the UI's glass material; `--bay-disable-mica` and Windows 10
+use the solid theme colour. The macOS traffic-light space is no longer reserved
+on Windows; every layout clears the caption buttons instead.
+
+App notifications are Windows toasts through Chrome's notification bridge, with
+the installer's AUMID and toast activator. Clicks received before the UI
+subscribes are retained. Commands from the macOS menu bar are listed in the
+command panel on Windows.
+
+Windows-only sources now also pass a Windows-target syntax check on macOS
+(Chromium's clang with mingw-w64 headers). Errors that come only from patches
+outside that overlay, or from mingw's WinRT headers, are expected there.
+
 ## Validation still required on Windows
+
+Frame: drag from the caption, double-click to maximize, resize from every edge
+including the top, Snap Layouts on hovering maximize, Aero Snap, multi-monitor
+DPI changes, maximized windows staying on their monitor, the caption buttons'
+hover and click, and Mica with readable text in light and dark themes (then
+again with `--bay-disable-mica`). Notifications: a toast appears, and clicking
+it focuses its tab, including after a cold start from the toast.
 
 Build the pinned Chrome target and run the hosting gate before accepting the
 architecture. Record compositor transparency and clipping, focus and keyboard
