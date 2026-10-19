@@ -7,9 +7,21 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 
 OWNED = ["chrome/browser/bay"]
+WINDOWS_ICONS = (
+    "chrome/app/theme/chromium/win/chromium.ico",
+    "chrome/app/theme/chromium/win/chromium_doc.ico",
+    "chrome/app/theme/chromium/win/chromium_pdf.ico",
+)
+
+
+def owned_paths(platform):
+    return ([[path, True] for path in OWNED] +
+            [[path, False] for path in WINDOWS_ICONS if platform == "win"])
+
 
 def differs(source: Path, destination: Path) -> bool:
     if not destination.is_dir():
@@ -67,8 +79,10 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--list-paths", action="store_true")
     args = parser.parse_args()
+    platform = os.environ.get("BAY_ENGINE_PLATFORM",
+                              {"win32": "win", "darwin": "mac"}.get(sys.platform, "linux"))
     if args.list_paths:
-        print(json.dumps([[path, True] for path in OWNED]))
+        print(json.dumps(owned_paths(platform)))
         return 0
     here = Path(__file__).resolve().parent
     root = Path(os.environ.get("CHROMIUM_SRC", str(Path.home() / "chromium-build/chromium_git/chromium/src")))
@@ -81,6 +95,20 @@ def main() -> int:
                     return 1
             else:
                 sync(source, destination)
+    if platform == "win":
+        icon = here / "assets/windows/bay.ico"
+        for owned in WINDOWS_ICONS:
+            destination = root / owned
+            matches = destination.is_file() and filecmp.cmp(icon, destination, shallow=False)
+            if args.check:
+                if not matches:
+                    print(f"drift: {owned}")
+                    return 1
+            elif not matches:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if destination.is_dir():
+                    shutil.rmtree(destination)
+                shutil.copyfile(icon, destination)
     return 0
 
 
