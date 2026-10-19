@@ -1,4 +1,5 @@
 import { onDownload, releaseProfile } from "@bay/nncore";
+import { capabilities } from "@bay/platform";
 import {
   closeWindow,
   focusWindow,
@@ -134,6 +135,7 @@ export function startNativeSync() {
   let menuTimer: ReturnType<typeof setTimeout> | undefined;
   const syncMenu = () => {
     menuTimer = undefined;
+    if (!capabilities.menuBar) return;
     const state = menuState(store.getState());
     // The bookmark menus are cached per bookmarks tree (bookmarkMenus), so they compare by identity;
     // stringifying them (thousands of bookmarks) on every store change is what this sync used to spend.
@@ -154,13 +156,13 @@ export function startNativeSync() {
   syncMenu();
   store.subscribe((s, prev) => {
     syncWindows(s, prev);
-    menuTimer ??= setTimeout(syncMenu, 120);
+    if (capabilities.menuBar) menuTimer ??= setTimeout(syncMenu, 120);
   });
   store.subscribe((s, prev) => {
     if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
   });
   useExtensions.subscribe((e, prev) => {
-    if (e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
+    if (capabilities.menuBar && e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
   });
   void windowIds().then((ids) => {
     const s = store.getState();
