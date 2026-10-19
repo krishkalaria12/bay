@@ -684,20 +684,27 @@ async function turnOnSyncInternal(folder: string): Promise<{ ok: true } | { erro
   return { ok: true };
 }
 
-export function enterRecoveryPhrase(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" | "quitting" }> {
+export function enterRecoveryPhrase(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" | "quitting" | "savedData" }> {
   if (quitPaused) return Promise.resolve({ error: "quitting" });
   return trackMutation(() => enterRecoveryPhraseInternal(folder, text));
 }
 
-async function enterRecoveryPhraseInternal(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" }> {
+async function enterRecoveryPhraseInternal(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" | "savedData" }> {
   const native = SyncNative;
   if (!native) return { error: "unavailable" };
   if (doc.enabled && doc.deviceId && useSync.getState().status === "locked") {
     const result = await native.enterPhrase(doc.deviceId, text, doc.folder ?? folder);
     if ("ok" in result) {
-      await loadState();
-      publishUi({ status: "starting", error: null });
-      scheduleSync(0);
+      try {
+        await loadState();
+        publishUi({ status: "starting", error: null });
+        scheduleSync(0);
+      } catch (error) {
+        stateLoaded = false;
+        doc.scopes = {};
+        publishUi({ status: "locked", error: errorText(error) });
+        return { error: "savedData" };
+      }
     }
     return result;
   }

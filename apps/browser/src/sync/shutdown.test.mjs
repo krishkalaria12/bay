@@ -129,6 +129,16 @@ test("preparing and cancelling quit before start does not write another owner's 
   assert.deepEqual(shell.docs, before);
 });
 
+test("recovery phrase entry reports unreadable saved data without replacing ciphertext", async (context) => {
+  const { engine } = await fixture(context, { overrides: { unlock: async () => false, openLocal: async () => null } });
+  const before = new Map(shell.docs);
+  assert.deepEqual(await engine.enterRecoveryPhrase("/sync", "recovery words"), { error: "savedData" });
+  assert.equal(engine.useSync.getState().status, "locked");
+  await engine.prepareSyncForQuit();
+  assert.equal(shell.docs.get("sync-state.nns"), before.get("sync-state.nns"));
+  assert.equal(shell.docs.get("sync-journal.nns"), before.get("sync-journal.nns"));
+});
+
 test("cancelling quit without native sync support preserves existing sync documents", () => {
   // @bay/sync captures native availability once, so this scenario needs a fresh renderer.
   const result = spawnSync(process.execPath, ["--no-warnings", "--import", "./src/test-loader.mjs", "--input-type=module", "--eval", `
