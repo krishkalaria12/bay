@@ -1,4 +1,4 @@
-import { isMac } from "@bay/platform";
+import { isMac, shortcutForCommand } from "@bay/platform";
 import { checkForUpdates, confirm, setAsDefaultBrowser, systemInfo } from "@bay/shell";
 import { sendFeedback } from "../../lib/appIntegration";
 import { openReleaseNotesPage, releaseNotesUrl } from "../../lib/releaseNotesPage";
@@ -31,7 +31,7 @@ export function appPaletteActions(windowId: string, onDismiss: () => void): Pale
       id: "about", title: `About ${app.appName}`, icon: "info.circle", separator: true,
       run: () => confirm({ title: `About ${app.appName}`, message: `${app.appName} ${app.appVersion}\nBuild ${app.appBuild}\n${isMac ? "macOS" : "Windows"} ${app.osVersion}`, confirmTitle: "OK", windowId }),
     },
-    { id: "settings", title: "Settings", icon: "gearshape", hint: "⌘,", run: () => openSettings() },
+    { id: "settings", title: "Settings", icon: "gearshape", hint: shortcutForCommand("openSettings", "⌘,"), run: () => openSettings() },
   ];
   return items.map(action);
 }
