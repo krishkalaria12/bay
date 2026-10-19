@@ -35,6 +35,8 @@ source_set("impl") {
     "native_host.cc",
     "page_observer.cc",
     "page_observer.h",
+    "page_security.cc",
+    "page_security.h",
     "page_services.cc",
     "page_services.h",
     "runtime_state.cc",
@@ -67,6 +69,7 @@ source_set("impl") {
     "//chrome/browser/ui/window_metadata",
     "//components/autofill/content/browser",
     "//components/autofill/core/browser",
+    "//components/favicon/content",
     "//components/find_in_page",
     "//components/guest_contents/browser",
     "//components/infobars/content",
@@ -84,6 +87,7 @@ source_set("impl") {
     "//services/media_session/public/mojom",
     "//services/network/public/mojom",
     "//skia",
+    "//third_party/blink/public/common",
     "//ui/base",
     "//ui/display",
     "//ui/gfx",
@@ -158,6 +162,20 @@ test("runtime_unittests") {
   deps = [
     "//base",
     "//base/test:run_all_unittests",
+    "//testing/gtest",
+  ]
+}
+
+test("page_security_unittests") {
+  sources = [
+    "page_security.cc",
+    "page_security.h",
+    "page_security_unittest.cc",
+  ]
+  deps = [
+    "//base/test:run_all_unittests",
+    "//content/public/browser",
+    "//net",
     "//testing/gtest",
   ]
 }

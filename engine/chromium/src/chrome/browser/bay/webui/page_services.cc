@@ -1,5 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/page_services.h"
+#include "chrome/browser/bay/webui/page_security.h"
 
 #include <algorithm>
 #include <cmath>
@@ -111,9 +112,11 @@ base::DictValue SecurityInfo(content::WebContents* contents) {
     return info;
   }
   const auto& ssl = entry->GetSSL();
-  const auto errors = ssl.cert_status & net::CERT_STATUS_ALL_ERRORS &
-                      ~(net::CERT_STATUS_NO_REVOCATION_MECHANISM |
-                        net::CERT_STATUS_UNABLE_TO_CHECK_REVOCATION);
+  const std::string_view level = PageSecurityLevel(ssl);
+  info.Set("level", level);
+  if (level == "none")
+    return info;
+  const auto errors = PageCertificateErrors(ssl.cert_status);
   const bool ran =
       ssl.content_status & (content::SSLStatus::RAN_INSECURE_CONTENT |
                             content::SSLStatus::RAN_CONTENT_WITH_CERT_ERRORS);
@@ -121,9 +124,6 @@ base::DictValue SecurityInfo(content::WebContents* contents) {
       ssl.content_status &
       (content::SSLStatus::DISPLAYED_INSECURE_CONTENT |
        content::SSLStatus::DISPLAYED_CONTENT_WITH_CERT_ERRORS);
-  info.Set("level", errors || !ssl.certificate ? "certificateError"
-                    : ran || displayed         ? "mixed"
-                                               : "secure");
   base::ListValue names;
   static constexpr std::pair<net::CertStatus, const char*> kErrors[] = {
       {net::CERT_STATUS_COMMON_NAME_INVALID, "nameMismatch"},
@@ -292,12 +292,17 @@ void CaptureScreenshot(content::WebContents* contents, PageResponse callback) {
 }
 }  // namespace
 
+base::DictValue GetPageSecurityInfo(content::WebContents* contents) {
+  return SecurityInfo(contents);
+}
+
 bool DispatchPageMethod(content::WebContents* contents,
                         const std::string& command,
                         const base::ListValue& params,
                         PageResponse& callback) {
   if (command == "getSecurityInfo") {
-    std::move(callback).Run(Success(base::Value(SecurityInfo(contents))));
+    std::move(callback).Run(
+        Success(base::Value(GetPageSecurityInfo(contents))));
   } else if (command == "captureScreenshot") {
     CaptureScreenshot(contents, std::move(callback));
   } else if (command == "capturePicture") {

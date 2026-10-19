@@ -14,6 +14,9 @@ class WebContents;
 namespace bay {
 using PageResponse = base::OnceCallback<void(const std::string&)>;
 
+// Shared snapshot for the explicit getter and native security-change events.
+base::DictValue GetPageSecurityInfo(content::WebContents* contents);
+
 // Runs on the UI sequence. Returns false without consuming the callback when
 // the command is not implemented here. Every handled command replies once with
 // the NativeHost JSON wire envelope, including after its page is destroyed.
