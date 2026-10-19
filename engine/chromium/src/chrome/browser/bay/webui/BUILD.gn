@@ -33,6 +33,8 @@ source_set("impl") {
     "engine_services.h",
     "host_context.cc",
     "native_host.cc",
+    "page_observer.cc",
+    "page_observer.h",
     "page_services.cc",
     "page_services.h",
     "runtime_state.cc",

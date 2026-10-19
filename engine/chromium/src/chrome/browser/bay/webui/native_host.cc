@@ -30,6 +30,7 @@
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
 #include "chrome/browser/bay/webui/engine_services.h"
+#include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
@@ -61,10 +62,8 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
 
@@ -323,75 +322,6 @@ void DataEvent(const std::string& module,
 }
 #endif
 }  // namespace
-
-class TabObserver final : public content::WebContentsObserver {
- public:
-  TabObserver(content::WebContents* contents,
-              int tag,
-              uint64_t lease,
-              std::optional<std::string> requested_url,
-              base::WeakPtr<NativeHost> host)
-      : WebContentsObserver(contents),
-        tag_(tag),
-        lease_(lease),
-        requested_url_(std::move(requested_url)),
-        host_(std::move(host)) {}
-  content::WebContents* contents() const { return web_contents(); }
-  uint64_t lease() const { return lease_; }
-  const std::optional<std::string>& requested_url() const {
-    return requested_url_;
-  }
-  void set_requested_url(std::optional<std::string> url) {
-    requested_url_ = std::move(url);
-  }
-  bool current() const {
-    return TabBroker::Get().IsCurrent(web_contents(), lease_);
-  }
-  void State() {
-    if (!host_ || !web_contents() || !current())
-      return;
-    auto* contents = web_contents();
-    auto& navigation = contents->GetController();
-    host_->ViewEvent(tag_, "onNavigationChange",
-                     base::DictValue()
-                         .Set("browserId", TabId(contents))
-                         .Set("url", contents->GetVisibleURL().spec())
-                         .Set("title", base::UTF16ToUTF8(contents->GetTitle()))
-                         .Set("isLoading", contents->IsLoading())
-                         .Set("themeColor", base::Value())
-                         .Set("themeColorSource", base::Value())
-                         .Set("canGoBack", navigation.CanGoBack())
-                         .Set("canGoForward", navigation.CanGoForward())
-                         .Set("audible", contents->IsCurrentlyAudible())
-                         .Set("muted", contents->IsAudioMuted()));
-  }
-  void TitleWasSet(content::NavigationEntry*) override { State(); }
-  void DidStartLoading() override { State(); }
-  void DidStopLoading() override { State(); }
-  void DidFinishNavigation(content::NavigationHandle* handle) override {
-    if (handle->IsInPrimaryMainFrame())
-      State();
-  }
-  void OnAudioStateChanged(bool) override { Media(); }
-  void DidUpdateAudioMutingState(bool) override { Media(); }
-  void Media() {
-    if (host_ && web_contents() && current())
-      host_->ViewEvent(tag_, "onMedia",
-                       base::DictValue()
-                           .Set("playing", web_contents()->IsCurrentlyAudible())
-                           .Set("muted", web_contents()->IsAudioMuted()));
-  }
-  void WebContentsDestroyed() override {
-    if (host_ && TabBroker::Get().IsLastLease(web_contents(), lease_))
-      host_->ViewEvent(tag_, "onWindowClose", base::DictValue());
-  }
-
- private:
-  int tag_;
-  uint64_t lease_;
-  std::optional<std::string> requested_url_;
-  base::WeakPtr<NativeHost> host_;
-};
 
 NativeHost::NativeHost(content::RenderFrameHost& frame,
                        HostContext context,
