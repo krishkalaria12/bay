@@ -1,5 +1,3 @@
-import("//cef/libcef/features/features.gni")
-
 # NNCore: Bay's own layer over //chrome (the "ArcCore" of Bay).
 #
 # Linked into Chrome's framework through one dep in //chrome:chrome_dll (see
@@ -210,45 +208,6 @@ if (is_mac) {
     ]
   }
 } else {
-  if (enable_cef && is_win) {
-    # CEF's sandbox bootstrap loads the RNW application DLL. NNCore has a C ABI
-    # and only links the public CEF wrapper, keeping Chromium types out of RNW.
-    shared_library("nncore") {
-      testonly = true
-      sources = [
-        "public/nncore_c.h",
-        "win/nncore_win.cc",
-      ]
-      defines = [ "CEF_USE_BOOTSTRAP" ]
-      deps = [
-        "//cef:libcef",
-        "//cef:libcef_dll_wrapper_dll",
-      ]
-      libs = [ "user32.lib" ]
-    }
-
-    shared_library("nncore_subprocess_dll") {
-      testonly = true
-      output_name = "nncore_subprocess"
-      sources = [ "win/nncore_subprocess.cc" ]
-      defines = [ "CEF_USE_BOOTSTRAP" ]
-      deps = [
-        "//cef:bootstrap",
-        "//cef:libcef",
-        "//cef:libcef_dll_wrapper_dll",
-      ]
-    }
-
-    copy("nncore_subprocess") {
-      testonly = true
-      sources = [ "$root_out_dir/bootstrap.exe" ]
-      outputs = [ "$root_out_dir/nncore_subprocess.exe" ]
-      deps = [
-        ":nncore_subprocess_dll",
-        "//cef:bootstrap",
-      ]
-    }
-  }
   source_set("core") {
     sources = [
       "nn_main_delegate.h",

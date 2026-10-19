@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install NNCore: the Windows CEF host or the existing macOS Chrome host."""
+"""Install NNCore: copy Bay's layer into the Windows Chrome tree, or run apply.sh for the macOS Chrome host."""
 import argparse
 import importlib.util
 import json

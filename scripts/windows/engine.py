@@ -244,8 +244,8 @@ def archive(root, output):
     if not pdbs:
         raise RuntimeError("no PDBs found; symbol_level=1 and a full build are required for release artifacts")
     for path in binaries.iterdir():
-        if path.is_file() and path.suffix.lower() in (".dll", ".exe", ".lib", ".pak", ".dat", ".bin", ".json") and not path.name.lower().startswith(("libcef", "nncore", "bootstrap")):
-            files[f"{'lib' if path.suffix.lower() == '.lib' else 'runtime'}/{path.name}"] = path
+        if path.is_file() and path.suffix.lower() in (".dll", ".exe", ".pak", ".dat", ".bin", ".json"):
+            files[f"runtime/{path.name}"] = path
     for name in ("locales", "swiftshader", "resources", "WidevineCdm", "MEIPreload", "PrivacySandboxAttestationsPreloaded", "hyphen-data"):
         if (binaries / name).is_dir():
             for path in (binaries / name).rglob("*"):
@@ -255,10 +255,6 @@ def archive(root, output):
     modules, shared_imports = web_artifacts.mojo_files(generated_mojo)
     for name, path in modules.items():
         files[f"runtime/bay-ui/{name}"] = path
-    for prefix, directory in (("include/nncore", REPO / "engine/nncore/src/bay/core/public"),
-                              ("include/bay", REPO / "engine/chromium/src/chrome/browser/bay/public")):
-        for path in directory.rglob("*.h"):
-            files[f"{prefix}/{path.relative_to(directory).as_posix()}"] = path
     manifest = {"schemaVersion": 1, "id": artifact_id(), "lock": LOCK, "sourceDigest": source_digest(),
                 "files": {name: sha256(path) for name, path in sorted(files.items())},
                 "mojo": {"entrypoint": "runtime/bay-ui/" + web_artifacts.MOJO_ENTRY, "sharedImports": shared_imports}}

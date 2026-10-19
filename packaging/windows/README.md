@@ -24,10 +24,12 @@ python scripts/windows/engine.py all --root C:/bay-engine --output dist/engine
 `download`, `prepare`, `build`, and `archive` run individually too. Preparation
 records completed phases. A failed phase stops immediately; investigate a partly
 applied ungoogled/domain phase before retrying, or use a new root. Existing source
-checkouts are never reset. Bay's CEF-only patches are macOS-only in the series.
-The pinned CEF upstream Chromium patch baseline remains available for shared
-patch compatibility, but GN sets `enable_cef=false` and builds `chrome` using
-ordinary GN arguments. Do not run macOS shell scripts on Windows.
+checkouts are never reset. Bay's CEF patches and the patches that host Chrome's
+views inside the macOS app are macOS-only in the series; the former CEF host for
+Windows has been removed. CEF's checkout and upstream Chromium patch baseline
+remain only so both platforms patch the same tree. GN sets `enable_cef=false` and
+builds `chrome` using ordinary GN arguments. Do not run macOS shell scripts on
+Windows.
 
 The artifact contains `runtime/`, headers/import libraries and `manifest.json`;
 matching PDBs are in a separate symbols ZIP. Its identity includes the engine
