@@ -32,6 +32,8 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #if BUILDFLAG(IS_WIN)
 #include "base/base_paths_win.h"
+#include "chrome/browser/bay/webui/notifications_win.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
 #endif
 
 namespace nncore {
@@ -39,6 +41,12 @@ namespace {
 
 class BayRuntimeMainExtraParts final : public ChromeBrowserMainExtraParts {
  public:
+#if BUILDFLAG(IS_WIN)
+  void PreProfileInit() override {
+    NotificationDisplayServiceFactory::SetBayHandlerInitializer(
+        &bay::NotificationsWin::InstallHandler);
+  }
+#endif
   void PostMainMessageLoopRun() override { bay::ShutdownAppRuntimeIfStarted(); }
 };
 

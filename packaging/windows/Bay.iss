@@ -35,11 +35,14 @@ SignedUninstaller=yes
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{autoprograms}\Bay"; Filename: "{app}\Bay.exe"; AppUserModelID: "Bay.Browser"
-Name: "{autodesktop}\Bay"; Filename: "{app}\Bay.exe"; AppUserModelID: "Bay.Browser"; Tasks: desktopicon
+Name: "{autoprograms}\Bay"; Filename: "{app}\Bay.exe"; AppUserModelID: "Bay.Browser"; AppUserModelToastActivatorCLSID: "0EA5371B-277F-5D11-90FB-F3047F2B4C73"
+Name: "{autodesktop}\Bay"; Filename: "{app}\Bay.exe"; AppUserModelID: "Bay.Browser"; AppUserModelToastActivatorCLSID: "0EA5371B-277F-5D11-90FB-F3047F2B4C73"; Tasks: desktopicon
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Registry]
+Root: HKCU; Subkey: "Software\Classes\CLSID\{{0EA5371B-277F-5D11-90FB-F3047F2B4C73}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\CLSID\{{0EA5371B-277F-5D11-90FB-F3047F2B4C73}\LocalServer32"; ValueType: string; ValueData: """{app}\notification_helper.exe"""
+Root: HKCU; Subkey: "Software\Classes\CLSID\{{0EA5371B-277F-5D11-90FB-F3047F2B4C73}\LocalServer32"; ValueType: string; ValueName: "ServerExecutable"; ValueData: "{app}\notification_helper.exe"
 Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "Bay"; ValueData: "Software\Clients\StartMenuInternet\Bay\Capabilities"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Bay"; ValueType: string; ValueData: "Bay"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Bay\DefaultIcon"; ValueType: string; ValueData: "{app}\Bay.exe,0"

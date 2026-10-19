@@ -1,5 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/platform_services_win.h"
+#include "chrome/browser/bay/webui/notifications_win.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 
 #include <windows.h>
@@ -527,7 +528,9 @@ base::ListValue PlatformServices::Modules() const {
       .Append("BayApp")
       .Append("BayShell")
       .Append("BaySystem")
-      .Append("BayKeychain");
+      .Append("BayKeychain")
+      // Capability marker: notification methods live on BayApp's contract.
+      .Append("BayNotifications");
 }
 base::ListValue PlatformServices::SupportedMethods() const {
   base::ListValue methods;
@@ -557,6 +560,11 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayApp.launchEnvironment",
                      "BayApp.openExternalURL",
                      "BayApp.updaterState",
+                     "BayApp.notificationPermission",
+                     "BayApp.requestNotificationPermission",
+                     "BayApp.postNotification",
+                     "BayApp.removeNotifications",
+                     "BayApp.openNotificationSettings",
                      "BayKeychain.get",
                      "BayKeychain.set",
                      "BayKeychain.delete"})
@@ -632,6 +640,9 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
   if (!shell_ui_)
     shell_ui_ = std::make_unique<ShellUI>();
   if (shell_ui_->Dispatch(context_, module, method, args, callback))
+    return true;
+  if (module == "BayApp" &&
+      NotificationsWin::Get().Dispatch(context_, method, args, callback))
     return true;
   auto invalid = [&] {
     std::move(callback).Run(

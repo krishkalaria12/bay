@@ -272,5 +272,11 @@ if (is_mac) {
       "//ui/base",
       "//ui/gfx",
     ]
+    if (is_win) {
+      deps += [
+        "//chrome/browser/bay/webui:platform_services_win",
+        "//chrome/browser/notifications",
+      ]
+    }
   }
 }

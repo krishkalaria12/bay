@@ -37,6 +37,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
+#include "chrome/browser/bay/webui/notifications_win.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/updater_service_win.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -373,6 +374,18 @@ NativeHost::~NativeHost() {
   for (const auto& entry : pending_)
     PendingOwners().erase(entry.first);
   Hosts().erase(this);
+#if BUILDFLAG(IS_WIN)
+  bool notification_client = false;
+  for (const auto& [owner, host] : Hosts()) {
+    if (host && host->client_ &&
+        (!AppRuntime::Enabled() || host->is_coordinator())) {
+      notification_client = true;
+      break;
+    }
+  }
+  if (!notification_client)
+    NotificationsWin::Get().SetEventSink({});
+#endif
   if (Hosts().empty())
     nn_engine_set_event_sink(nullptr, nullptr);
 }
@@ -527,6 +540,17 @@ void NativeHost::SetClient(
     mojo::PendingRemote<mojom::NativeHostClient> client) {
   client_.reset();
   client_.Bind(std::move(client));
+#if BUILDFLAG(IS_WIN)
+  if (!AppRuntime::Enabled() || is_coordinator()) {
+    // Activation can arrive before the trusted document connects. Drain only
+    // after its Mojo client is bound; the renderer retains startup responses
+    // until app integration subscribes.
+    NotificationsWin::Get().SetEventSink(base::BindRepeating(
+        [](base::DictValue response) {
+          DataEvent("BayApp", "onNotificationResponse", JSON(response));
+        }));
+  }
+#endif
 }
 void NativeHost::Emit(const char* module,
                       const char* event,
