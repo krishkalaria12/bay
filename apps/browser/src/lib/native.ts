@@ -1,6 +1,7 @@
 import { onDownload, releaseProfile } from "@bay/nncore";
 import {
   closeWindow,
+  focusWindow,
   isDarkAppearance,
   onAppEvent,
   onCommand,
@@ -12,6 +13,7 @@ import {
   setMenuStateParts,
   setWindowTitle,
   windowIds,
+  type OpenWindowOptions,
   type MenuBookmark,
   type MenuState,
 } from "@bay/shell";
@@ -34,6 +36,7 @@ import { flushLivePersistence, resumeLivePersistence } from "../live/store";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
+import { createNativeWindowReconciler } from "./nativeWindows";
 
 let quitting = false;
 let quitAttempt = 0;
@@ -82,49 +85,36 @@ export function startNativeSync() {
     if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
     if (e.type === "close") {
       if (quitting) return;
-      open.delete(e.id);
+      windows.nativeClosed(e.id);
       s.closeWindow(e.id);
-      releaseIfIncognito(e.id, s);
     }
   });
 
-  const open = new Set<string>();
-  const titles = new Map<string, string>();
-
-  const releaseIfIncognito = (id: string, s: BrowserState) => {
-    if (s.windows[id]?.incognito) void releaseProfile(incognitoProfileId(id));
-  };
+  const windows = createNativeWindowReconciler<OpenWindowOptions>({
+    open: openWindow,
+    close: closeWindow,
+    setTitle: setWindowTitle,
+    focus: focusWindow,
+    openFailed: (id) => store.getState().closeWindow(id),
+    closed: (id, options) => {
+      if (options.incognito) void releaseProfile(incognitoProfileId(id));
+    },
+    report: (operation, id, error) => console.error(`Couldn't ${operation} window ${id}`, error),
+  });
 
   const syncWindows = (s: BrowserState, prev?: BrowserState) => {
-// Open the focused window last so it comes to front.
+    if (prev && s.tabs === prev.tabs && s.windows === prev.windows && s.profiles === prev.profiles && s.ui.focusedWindowId === prev.ui.focusedWindowId) return;
+    // Dispatch the focused window last so it comes to front.
     const focused = s.ui.focusedWindowId;
     const order = s.windowOrder.filter((id) => id !== focused);
     if (focused && s.windows[focused]) order.push(focused);
-    for (const id of order) {
+    windows.sync(order.map(id => {
       const w = s.windows[id]!;
-      if (!open.has(id)) {
-        open.add(id);
-        titles.set(id, windowTitle(s, id));
-        const profile = engineProfile(w.profileId);
-        const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.harborSize } : {};
-        void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus: id === s.ui.focusedWindowId, profile, ...small });
-      }
-    }
-    for (const id of [...open]) {
-      if (s.windows[id]) continue;
-      open.delete(id);
-      titles.delete(id);
-      void closeWindow(id);
-      if (prev?.windows[id]?.incognito) void releaseProfile(incognitoProfileId(id));
-    }
-    if (prev && s.tabs === prev.tabs && s.windows === prev.windows && s.profiles === prev.profiles) return;
-    for (const id of open) {
       const title = windowTitle(s, id);
-      if (titles.get(id) !== title) {
-        titles.set(id, title);
-        void setWindowTitle(id, title);
-      }
-    }
+      const profile = engineProfile(w.profileId);
+      const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.harborSize } : {};
+      return { id, title, options: { frame: w.frame, incognito: w.incognito, title, focus: id === focused, profile, ...small } };
+    }), focused);
   };
 
   let lastMenu = "";
@@ -169,7 +159,6 @@ export function startNativeSync() {
       }
       // One that already existed kept the title it had (openWindow leaves it be): send the current one.
       const title = windowTitle(s, id);
-      titles.set(id, title);
       void setWindowTitle(id, title);
     }
   });
