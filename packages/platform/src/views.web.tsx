@@ -53,7 +53,10 @@ function useWebProps<T, P extends Adaptable>(props: P, forwardedRef: ForwardedRe
     const node = element.current;
     if (!node) return;
     if (props.tooltip) node.title = shortcutLabel(props.tooltip); else node.removeAttribute("title");
-    if (props.mouseDownCanMoveWindow) node.style.setProperty("-webkit-app-region", "drag"); else node.style.removeProperty("-webkit-app-region");
+    // Chromium drags the window from every descendant of a drag region, so an explicit false must opt back out (as a
+    // view refusing the drag does on macOS) or the controls inside never get their clicks.
+    if (props.mouseDownCanMoveWindow === undefined) node.style.removeProperty("-webkit-app-region");
+    else node.style.setProperty("-webkit-app-region", props.mouseDownCanMoveWindow ? "drag" : "no-drag");
   }, [props.tooltip, props.mouseDownCanMoveWindow]);
   const { tooltip: _tooltip, enableFocusRing: _ring, keyDownEvents: _keys, mouseDownCanMoveWindow: _drag, draggedTypes: _types, onMouseEnter: _enter, onMouseLeave: _leave, onDoubleClick: _double, onDragEnter: _dragEnter, onDragLeave: _dragLeave, onDrop: _drop, onKeyDown: _down, onKeyUp: _up, ...rest } = props;
   return { ref, props: rest };
