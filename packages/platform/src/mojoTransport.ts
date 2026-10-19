@@ -21,13 +21,61 @@ export type WebNativeBridgeOptions = {
   bootstrapTimeoutMs?: number;
 };
 
+const MAX_PENDING_NOTIFICATION_RESPONSES = 32;
+const MAX_PENDING_NOTIFICATION_BYTES = 256 * 1024;
+
 /** Only the trusted chrome://bay bootstrap creates the Mojo endpoints. No window messages are accepted. */
 export async function createMojoTransport({ remote, client, onProtocolError = error => console.error(error), bootstrapTimeoutMs = 15000 }: WebNativeBridgeOptions): Promise<NativeTransport> {
   let info: NativeHostInfo | null = null;
   let failure: Error | null = null;
   let disposed = false;
   const listeners = new Map<string, Map<string, Set<{ listener: (payload: unknown) => void }>>>();
+  const notificationResponses: { payload: unknown; bytes: number }[] = [];
+  let notificationBytes = 0;
+  let notificationDrainScheduled = false;
+  let drainingNotifications = false;
+  const encoder = new TextEncoder();
   const removers: number[] = [];
+  const notificationListeners = () => listeners.get("BayApp")?.get("onNotificationResponse");
+  const scheduleNotificationDrain = () => {
+    if (disposed || failure || notificationDrainScheduled || drainingNotifications || !notificationResponses.length || !notificationListeners()?.size) return;
+    notificationDrainScheduled = true;
+    queueMicrotask(() => {
+      notificationDrainScheduled = false;
+      if (disposed || failure) return;
+      drainingNotifications = true;
+      try {
+        // Events arriving during delivery join the next batch, after retained events.
+        const count = notificationResponses.length;
+        for (let i = 0; i < count && notificationResponses.length; i++) {
+          const callbacks = [...(notificationListeners() ?? [])];
+          if (!callbacks.length) break;
+          const response = notificationResponses.shift()!;
+          notificationBytes -= response.bytes;
+          for (const subscription of callbacks) {
+            try { subscription.listener(response.payload); }
+            catch (error) { onProtocolError(error instanceof Error ? error : new Error(String(error))); }
+          }
+        }
+      } finally {
+        drainingNotifications = false;
+        scheduleNotificationDrain();
+      }
+    });
+  };
+  const retainNotification = (json: string, payload: unknown) => {
+    // UTF-8 is never shorter than its UTF-16 code unit count. Check length first
+    // to avoid allocating an encoded copy of an oversized activation.
+    if (json.length > MAX_PENDING_NOTIFICATION_BYTES) return;
+    const bytes = encoder.encode(json).byteLength;
+    if (bytes > MAX_PENDING_NOTIFICATION_BYTES) return;
+    while (notificationResponses.length >= MAX_PENDING_NOTIFICATION_RESPONSES || notificationBytes + bytes > MAX_PENDING_NOTIFICATION_BYTES) {
+      notificationBytes -= notificationResponses.shift()!.bytes;
+    }
+    notificationResponses.push({ payload, bytes });
+    notificationBytes += bytes;
+    scheduleNotificationDrain();
+  };
   const parseInfo = (json: string): NativeHostInfo => {
     const parsed: unknown = JSON.parse(json);
     validateNativeHostInfo(parsed);
@@ -42,6 +90,8 @@ export async function createMojoTransport({ remote, client, onProtocolError = er
     disposed = true;
     for (const id of removers) client.removeListener(id);
     listeners.clear();
+    notificationResponses.length = 0;
+    notificationBytes = 0;
     client.$.close?.();
     remote.$?.close?.();
   };
@@ -59,6 +109,11 @@ export async function createMojoTransport({ remote, client, onProtocolError = er
       let payload: unknown;
       try { payload = JSON.parse(json); }
       catch { onProtocolError(new NativeBridgeError("invalid_event", `Invalid native event JSON for ${module}.${event}`)); return; }
+      if (module === "BayApp" && event === "onNotificationResponse"
+        && (!notificationListeners()?.size || notificationResponses.length || notificationDrainScheduled || drainingNotifications)) {
+        retainNotification(json, payload);
+        return;
+      }
       for (const subscription of [...(listeners.get(module)?.get(event) ?? [])]) subscription.listener(payload);
     }));
     remote.setClient(client.$.bindNewPipeAndPassRemote());
@@ -92,6 +147,7 @@ export async function createMojoTransport({ remote, client, onProtocolError = er
         if (!callbacks) events.set(event, callbacks = new Set());
         const entry = { listener };
         callbacks.add(entry);
+        if (module === "BayApp" && event === "onNotificationResponse") scheduleNotificationDrain();
         let removed = false;
         return { remove() {
           if (removed) return;

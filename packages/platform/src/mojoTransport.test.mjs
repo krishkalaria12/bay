@@ -83,3 +83,115 @@ test("duplicate callback registrations remain independent subscriptions", async 
   assert.equal(count, 3);
   second.remove(); transport.dispose();
 });
+
+const notification = (native, payload) => native.emit("event", "BayApp", "onNotificationResponse", JSON.stringify(payload));
+const drain = () => new Promise(queueMicrotask);
+
+test("notification activations emitted by SetClient and during bootstrap replay after subscription", async () => {
+  let finishBootstrap;
+  const native = endpoints({
+    setClient() { notification(native, { id: "cold-start" }); },
+    getHostInfo: () => new Promise(resolve => { finishBootstrap = resolve; }),
+  });
+  const ready = createMojoTransport(native);
+  notification(native, { id: "during-bootstrap" });
+  finishBootstrap({ infoJson: JSON.stringify(info()) });
+  const transport = await ready, received = [];
+  transport.subscribe("BayApp", "onNotificationResponse", payload => received.push(payload));
+  assert.deepEqual(received, [], "subscription never synchronously invokes application code");
+  await drain();
+  assert.deepEqual(received, [{ id: "cold-start" }, { id: "during-bootstrap" }]);
+  transport.dispose();
+});
+
+test("notification replay stays ordered with events arriving before and during its drain", async () => {
+  const native = endpoints(), transport = await createMojoTransport(native), received = [];
+  notification(native, 1);
+  transport.subscribe("BayApp", "onNotificationResponse", payload => {
+    received.push(payload);
+    if (payload === 1) notification(native, 4);
+  });
+  notification(native, 2); notification(native, 3);
+  await drain(); await drain();
+  assert.deepEqual(received, [1, 2, 3, 4]);
+  notification(native, 5);
+  assert.deepEqual(received, [1, 2, 3, 4, 5], "live delivery remains immediate once replay completes");
+  transport.dispose();
+});
+
+test("a throwing notification replay subscriber does not interrupt other subscribers or later responses", async () => {
+  const native = endpoints(), errors = [], received = [];
+  const transport = await createMojoTransport({ ...native, onProtocolError: error => errors.push(error) });
+  notification(native, 1);
+  transport.subscribe("BayApp", "onNotificationResponse", () => { throw new Error("subscriber failed"); });
+  transport.subscribe("BayApp", "onNotificationResponse", payload => {
+    received.push(payload);
+    if (payload === 2) notification(native, 3);
+  });
+  notification(native, 2);
+  await drain(); await drain();
+  assert.deepEqual(received, [1, 2, 3]);
+  assert.deepEqual(errors.map(error => error.message), ["subscriber failed", "subscriber failed", "subscriber failed"]);
+  transport.dispose();
+});
+
+test("unsubscribing before a drain retains notification responses for the next subscriber", async () => {
+  const native = endpoints(), transport = await createMojoTransport(native), first = [], next = [];
+  notification(native, 1);
+  const subscription = transport.subscribe("BayApp", "onNotificationResponse", payload => first.push(payload));
+  subscription.remove(); await drain();
+  notification(native, 2);
+  transport.subscribe("BayApp", "onNotificationResponse", payload => next.push(payload));
+  await drain();
+  assert.deepEqual(first, []); assert.deepEqual(next, [1, 2]);
+  transport.dispose();
+});
+
+test("notification retention evicts the oldest responses after the count limit", async () => {
+  const native = endpoints(), transport = await createMojoTransport(native), received = [];
+  for (let i = 0; i < 40; i++) notification(native, i);
+  transport.subscribe("BayApp", "onNotificationResponse", payload => received.push(payload));
+  await drain();
+  assert.deepEqual(received, Array.from({ length: 32 }, (_, index) => index + 8));
+  transport.dispose();
+});
+
+test("notification retention bounds UTF-8 bytes and drops an oversized response", async () => {
+  const native = endpoints(), transport = await createMojoTransport(native), received = [];
+  // Each response is about 180 KiB in UTF-8 but only 60 Ki UTF-16 code units.
+  notification(native, { id: 1, text: "界".repeat(60 * 1024) });
+  notification(native, { id: 2, text: "界".repeat(60 * 1024) });
+  notification(native, { id: "too-large", text: "界".repeat(100 * 1024) });
+  notification(native, { id: "too-many-code-units", text: "x".repeat(256 * 1024) });
+  transport.subscribe("BayApp", "onNotificationResponse", payload => received.push(payload.id));
+  await drain();
+  assert.deepEqual(received, [2]);
+  transport.dispose();
+});
+
+test("disposing before notification replay prevents queued delivery", async () => {
+  const native = endpoints(), transport = await createMojoTransport(native), received = [];
+  notification(native, { id: "queued" });
+  transport.subscribe("BayApp", "onNotificationResponse", payload => received.push(payload));
+  transport.dispose(); await drain();
+  assert.deepEqual(received, []); assert.equal(native.callbacks.size, 0);
+});
+
+test("only notification responses retain events and delivered responses do not replay", async () => {
+  const native = endpoints(), transport = await createMojoTransport(native), received = [];
+  native.emit("event", "BayApp", "onCommand", '"app-command"');
+  native.emit("event", "BayShell", "onNotificationResponse", '"other-module"');
+  native.emit("event", "BayApp", "onNativeEvent", '"other-event"');
+  const subscriptions = [
+    transport.subscribe("BayApp", "onCommand", payload => received.push(payload)),
+    transport.subscribe("BayShell", "onNotificationResponse", payload => received.push(payload)),
+    transport.subscribe("BayApp", "onNativeEvent", payload => received.push(payload)),
+    transport.subscribe("BayApp", "onNotificationResponse", payload => received.push(payload)),
+  ];
+  notification(native, "delivered");
+  await drain(); assert.deepEqual(received, ["delivered"]);
+  subscriptions.forEach(subscription => subscription.remove());
+  transport.subscribe("BayApp", "onNotificationResponse", payload => received.push(payload));
+  await drain(); assert.deepEqual(received, ["delivered"]);
+  transport.dispose();
+});
