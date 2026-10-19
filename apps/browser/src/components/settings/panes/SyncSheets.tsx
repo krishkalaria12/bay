@@ -119,6 +119,8 @@ const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string
       return "Couldn’t save the sync key in your Keychain.";
     case "unavailable":
       return "Sync isn’t available in this build.";
+    case "quitting":
+      return "Sync is paused while Bay is quitting. Cancel quit to try again.";
   }
 };
 
