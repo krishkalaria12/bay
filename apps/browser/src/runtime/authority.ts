@@ -1,8 +1,9 @@
 import { createBrowserStore, type BrowserStore } from "../store/browser";
 import { createBrowserProjector, type BrowserProjection } from "./projection";
+import { executeLocationCommand, parseLocationCommand, type LocationCommand, type LocationCommandEffects } from "./locationCommands";
 
 // Native facts (for example updateLive) and hydration are deliberately absent.
-export type BrowserCommand =
+export type BrowserCommand = LocationCommand
   | { method: "createWindow"; options?: { profileId?: string; incognito?: boolean; url?: string } }
   | { method: "newTab"; windowId: string; options?: { url?: string; background?: boolean } }
   | { method: "activate" | "closeTab"; tabId: string }
@@ -68,13 +69,20 @@ function commandFrom(value: unknown): BrowserCommand {
     case "closeWindow":
       keys(c, ["method", "windowId"]);
       return { method: c.method, windowId: text(c.windowId) };
+    case "openLocation":
+    case "switchToExistingTab":
+    case "requestNewTab":
+    case "submitNewTab":
+    case "dismissCommandPanel":
+    case "openCommandPanel":
+      return parseLocationCommand(c);
     default:
       return invalid("unknown browser command");
   }
 }
 
 /** In-process authority only. It does not authenticate renderer client identities. */
-export function createBrowserAuthority({ epoch, store = createBrowserStore() }: { epoch: string; store?: BrowserStore }) {
+export function createBrowserAuthority({ epoch, store = createBrowserStore(), effects }: { epoch: string; store?: BrowserStore; effects?: LocationCommandEffects }) {
   text(epoch);
   const project = createBrowserProjector();
   let observed = store.getState();
@@ -121,6 +129,7 @@ export function createBrowserAuthority({ epoch, store = createBrowserStore() }: 
       case "navigate": s.navigate(command.tabId, command.url); break;
       case "closeTab": s.closeTab(command.tabId); break;
       case "closeWindow": s.closeWindow(command.windowId); break;
+      default: return executeLocationCommand(store, command, effects);
     }
     return null;
   }

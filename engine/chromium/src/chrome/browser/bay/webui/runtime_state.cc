@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/runtime_state.h"
 
 #include <cmath>
+#include <initializer_list>
 #include <set>
 #include <string_view>
 #include <vector>
@@ -78,6 +79,32 @@ bool ValidOwnedRecord(const base::DictValue& records,
   const auto* record = records.FindDict(id);
   const auto* owner = record ? record->FindString("windowId") : nullptr;
   return owner && windows.contains(*owner);
+}
+bool CommandFields(const base::DictValue& command,
+                   std::initializer_list<std::string_view> required,
+                   std::initializer_list<std::string_view> optional = {}) {
+  for (auto name : required)
+    if (!command.contains(name))
+      return false;
+  for (const auto [name, value] : command) {
+    bool allowed = false;
+    for (auto field : required)
+      allowed |= name == field;
+    for (auto field : optional)
+      allowed |= name == field;
+    if (!allowed)
+      return false;
+  }
+  return true;
+}
+bool CommandText(const base::DictValue& command,
+                 std::string_view field,
+                 size_t maximum,
+                 bool allow_empty = false) {
+  const auto* text = command.FindString(field);
+  return text && text->size() <= maximum &&
+         (allow_empty ||
+          !base::TrimWhitespaceASCII(*text, base::TRIM_ALL).empty());
 }
 }  // namespace
 
@@ -341,21 +368,120 @@ std::optional<base::DictValue> ProjectRuntimeState(
 bool CanDispatchRuntimeCommand(const base::DictValue& state,
                                const std::string& window_id,
                                const base::DictValue& command) {
-  const auto* window = state.FindDict("windows");
-  if (!window || !window->FindDict(window_id))
+  const auto* windows = state.FindDict("windows");
+  const auto* own_window = windows ? windows->FindDict(window_id) : nullptr;
+  const auto* tabs = state.FindDict("tabs");
+  if (!own_window || !tabs)
     return false;
   const auto* method = command.FindString("method");
   if (!method)
     return false;
+  const auto own_tab = [&](std::string_view field) -> const base::DictValue* {
+    const auto* id = command.FindString(field);
+    const auto* tab = id ? tabs->FindDict(*id) : nullptr;
+    const auto* owner = tab ? tab->FindString("windowId") : nullptr;
+    return owner && *owner == window_id ? tab : nullptr;
+  };
+  const auto own_target = [&] {
+    const auto* id = command.FindString("windowId");
+    return id && *id == window_id;
+  };
+  const auto* kind = own_window->FindString("kind");
+  const bool harbor = kind && *kind == "small";
+  constexpr size_t kMaximumInput = 1024 * 1024;
   if (*method == "newTab" || *method == "closeWindow") {
-    const auto* target = command.FindString("windowId");
-    return target && *target == window_id;
+    // Harbor tab creation can redirect to a new main window.
+    if (*method == "newTab" && harbor)
+      return false;
+    if (!CommandFields(command, {"method", "windowId"},
+                       *method == "newTab"
+                           ? std::initializer_list<std::string_view>{"options"}
+                           : std::initializer_list<std::string_view>{}) ||
+        !own_target())
+      return false;
+    if (!command.contains("options"))
+      return true;
+    const auto* options = command.FindDict("options");
+    return options && CommandFields(*options, {}, {"url", "background"}) &&
+           (!options->contains("url") ||
+            CommandText(*options, "url", kMaximumInput, true)) &&
+           (!options->contains("background") ||
+            options->FindBool("background").has_value());
   }
   if (*method == "activate" || *method == "closeTab" || *method == "navigate") {
-    const auto* id = command.FindString("tabId");
-    const auto* tab = id ? state.FindDict("tabs")->FindDict(*id) : nullptr;
-    const auto* owner = tab ? tab->FindString("windowId") : nullptr;
-    return owner && *owner == window_id;
+    return CommandFields(
+               command,
+               *method == "navigate"
+                   ? std::initializer_list<std::string_view>{"method", "tabId",
+                                                             "url"}
+                   : std::initializer_list<std::string_view>{"method",
+                                                             "tabId"}) &&
+           own_tab("tabId") &&
+           (*method != "navigate" ||
+            CommandText(command, "url", kMaximumInput));
+  }
+  if (*method == "openLocation") {
+    if (!CommandFields(command,
+                       {"method", "sourceTabId", "url", "disposition"}) ||
+        !own_tab("sourceTabId") || !CommandText(command, "url", kMaximumInput))
+      return false;
+    const auto* disposition = command.FindString("disposition");
+    // New native application windows remain gated during UI migration.
+    return disposition && (*disposition == "current" ||
+                           (!harbor && (*disposition == "newTab" ||
+                                        *disposition == "backgroundTab")));
+  }
+  if (*method == "switchToExistingTab") {
+    if (!CommandFields(command, {"method", "sourceTabId", "targetTabId"}) ||
+        !own_tab("sourceTabId"))
+      return false;
+    const auto* target_id = command.FindString("targetTabId");
+    const auto* target = target_id ? tabs->FindDict(*target_id) : nullptr;
+    const auto* target_owner =
+        target ? target->FindString("windowId") : nullptr;
+    const auto* target_window =
+        target_owner ? windows->FindDict(*target_owner) : nullptr;
+    if (!target_window)
+      return false;
+    if (own_window->FindBool("incognito").value_or(false))
+      return *target_owner == window_id;
+    return !target_window->FindBool("incognito").value_or(false);
+  }
+  if (*method == "requestNewTab") {
+    if (!CommandFields(command, {"method", "windowId"}, {"groupId"}) ||
+        !own_target())
+      return false;
+    // A Harbor request can create a main window. Enable that path only with
+    // the rest of the native multiwindow acceptance gate.
+    if (harbor)
+      return false;
+    if (!command.contains("groupId"))
+      return true;
+    if (!CommandText(command, "groupId", 1024))
+      return false;
+    const auto* groups = state.FindDict("groups");
+    const auto* group =
+        groups ? groups->FindDict(*command.FindString("groupId")) : nullptr;
+    const auto* owner = group ? group->FindString("windowId") : nullptr;
+    const auto* profile = group ? group->FindString("profileId") : nullptr;
+    return owner && *owner == window_id && profile &&
+           own_window->FindString("profileId") &&
+           *profile == *own_window->FindString("profileId");
+  }
+  if (*method == "submitNewTab") {
+    return CommandFields(command, {"method", "windowId", "url"}) &&
+           own_target() && CommandText(command, "url", kMaximumInput);
+  }
+  if (*method == "openCommandPanel") {
+    return CommandFields(command, {"method", "windowId"},
+                         {"initialText", "sourceTabId"}) &&
+           own_target() &&
+           (!command.contains("sourceTabId") || own_tab("sourceTabId")) &&
+           (!command.contains("initialText") ||
+            CommandText(command, "initialText", kMaximumInput, true));
+  }
+  if (*method == "dismissCommandPanel") {
+    return CommandFields(command, {"method", "windowId"}) && own_target();
   }
   // Creating another native window is still gated until the complete command
   // migration and native two-window tests pass.

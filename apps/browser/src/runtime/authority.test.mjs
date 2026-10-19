@@ -185,3 +185,55 @@ test("reentrant subscribers see commits in the same order", () => {
   assert.deepEqual(seen, [1, 2]);
   authority.close();
 });
+
+test("location intents publish panel dismissal and tab changes as one committed result", async () => {
+  const store = createBrowserStore();
+  const w = store.getState().createWindow({ url: "source.com" });
+  const tabId = store.getState().windows[w].tabIds[0];
+  store.getState().openPanel(w);
+  const authority = createBrowserAuthority({ epoch: "epoch-1", store });
+  const commits = [];
+  authority.subscribe((commit) => commits.push(commit));
+  const reply = await authority.dispatch(request(1, { method: "openLocation", sourceTabId: tabId, url: "next.com", disposition: "newTab" }));
+  assert.equal(reply.value, null);
+  assert.equal(commits.length, 1);
+  assert.equal(commits[0], reply.commit);
+  assert.equal(reply.commit.state.windowUi[w].panel.open, false);
+  assert.equal(reply.commit.state.windows[w].tabIds.length, 2);
+  await authority.dispatch(request(2, { method: "requestNewTab", windowId: w }));
+  const before = commits.length;
+  const submitted = await authority.dispatch(request(3, { method: "submitNewTab", windowId: w, url: "third.com" }));
+  assert.equal(submitted.value, null);
+  assert.equal(commits.length, before + 1);
+  assert.equal(submitted.commit.state.windowUi[w].panel.open, false);
+  assert.equal(submitted.commit.state.windows[w].tabIds.length, 3);
+  authority.close();
+});
+
+test("invalid location intent ownership leaves authority unchanged and later commands usable", async () => {
+  const store = createBrowserStore();
+  const w = store.getState().createWindow();
+  const authority = createBrowserAuthority({ epoch: "epoch-1", store });
+  const before = authority.getSnapshot();
+  await assert.rejects(authority.dispatch(request(1, { method: "openLocation", sourceTabId: "missing", url: "x.com", disposition: "newTab" })), { code: "invalid_request" });
+  assert.equal(authority.getSnapshot(), before);
+  const reply = await authority.dispatch(request(2, { method: "openCommandPanel", windowId: w, initialText: "" }));
+  assert.equal(reply.value, null);
+  assert.equal(reply.commit.state.windowUi[w].panel.mode, "navigate");
+  authority.close();
+});
+
+test("authority routes focus through an injected effect and commits the final destination", async () => {
+  const store = createBrowserStore();
+  const source = store.getState().createWindow({ url: "source.com" });
+  const target = store.getState().createWindow({ url: "target.com" });
+  store.getState().setFocusedWindow(source);
+  const focused = [];
+  const authority = createBrowserAuthority({ epoch: "epoch-1", store, effects: { focusWindow: (id) => focused.push(id) } });
+  const reply = await authority.dispatch(request(1, { method: "switchToExistingTab", sourceTabId: store.getState().windows[source].tabIds[0], targetTabId: store.getState().windows[target].tabIds[0] }));
+  assert.equal(reply.value, null);
+  assert.equal(reply.commit.revision, 1);
+  assert.equal(reply.commit.state.ui.focusedWindowId, target);
+  assert.deepEqual(focused, [target]);
+  authority.close();
+});
