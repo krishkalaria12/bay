@@ -1,5 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/platform_services_win.h"
+#include "chrome/browser/bay/webui/shell_ui.h"
 
 #include <windows.h>
 
@@ -539,11 +540,13 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayShell.copyImage",
                      "BayShell.pickFiles",
                      "BayShell.confirm",
+                     "BayShell.prompt",
                      "BayShell.setAppearance",
                      "BayShell.isDarkAppearance",
                      "BaySystem.isDefaultBrowser",
                      "BaySystem.setAsDefaultBrowser",
                      "BaySystem.fileExists",
+                     "BaySystem.fileIcon",
                      "BaySystem.downloadsFolder",
                      "BaySystem.openFile",
                      "BaySystem.revealFile",
@@ -626,6 +629,10 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
                                         : initialization_error_));
     return true;
   }
+  if (!shell_ui_)
+    shell_ui_ = std::make_unique<ShellUI>();
+  if (shell_ui_->Dispatch(context_, module, method, args, callback))
+    return true;
   auto invalid = [&] {
     std::move(callback).Run(
         Failure("invalid_args", "Invalid native method arguments"));

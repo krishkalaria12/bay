@@ -17,6 +17,7 @@
 
 class BrowserWindowInterface;
 namespace bay {
+class ShellUI;
 
 // UI-sequence owner. Blocking disk/registry/credential work runs on
 // disk_runner_.
@@ -65,6 +66,7 @@ class PlatformServices {
   std::vector<base::OnceClosure> ready_callbacks_;
   std::unique_ptr<FilePicker> file_picker_;
   std::unique_ptr<ContextMenu> context_menu_;
+  std::unique_ptr<ShellUI> shell_ui_;
   base::WeakPtrFactory<PlatformServices> weak_factory_{this};
 };
 }  // namespace bay

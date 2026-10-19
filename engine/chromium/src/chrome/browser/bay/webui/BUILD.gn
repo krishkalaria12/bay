@@ -114,6 +114,10 @@ if (is_win) {
     sources = [
       "platform_services_win.cc",
       "platform_services_win.h",
+      "shell_ui.cc",
+      "shell_ui.h",
+      "shell_ui_options.cc",
+      "shell_ui_options.h",
       "updater_service_win.cc",
       "updater_service_win.h",
     ]
@@ -121,6 +125,7 @@ if (is_win) {
       ":webui",
       "//base",
       "//chrome/browser:browser_process",
+      "//chrome/browser:icon_loader",
       "//chrome/browser:primitives",
       "//chrome/browser:shell_integration",
       "//chrome/browser/profiles:profile",
@@ -130,6 +135,7 @@ if (is_win) {
       "//chrome/browser/ui/browser_window",
       "//chrome/browser/ui/views:message_box_dialog",
       "//chrome/common:constants",
+      "//components/constrained_window",
       "//components/version_info",
       "//crypto",
       "//skia",
@@ -176,6 +182,19 @@ test("page_security_unittests") {
     "//base/test:run_all_unittests",
     "//content/public/browser",
     "//net",
+    "//testing/gtest",
+  ]
+}
+
+test("shell_ui_options_unittests") {
+  sources = [
+    "shell_ui_options.cc",
+    "shell_ui_options.h",
+    "shell_ui_options_unittest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
     "//testing/gtest",
   ]
 }
