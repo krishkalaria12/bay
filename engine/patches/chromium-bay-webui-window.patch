@@ -188,25 +188,26 @@ diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer
 diff --git a/chrome/app/chrome_main.cc b/chrome/app/chrome_main.cc
 --- a/chrome/app/chrome_main.cc
 +++ b/chrome/app/chrome_main.cc
-@@ -21,6 +21,9 @@
+@@ -21,7 +21,10 @@
  #include "build/build_config.h"
  #if !defined(BUILDING_CHROME_RENDERER)
  #include "chrome/app/chrome_main_delegate.h"
 +#if BUILDFLAG(IS_WIN)
 +#include "bay/core/nn_main_delegate.h"  // nogncheck
-+#endif
  #endif
++#endif
  #include "chrome/app/startup_timestamps.h"
  #include "chrome/browser/headless/headless_mode_init.h"
-@@ -130,7 +133,7 @@
+ #include "chrome/common/buildflags.h"
+@@ -129,7 +132,7 @@
        base::TimeTicks::FromInternalValue(exe_entry_point_ticks),
        base::TimeTicks::FromInternalValue(preread_begin_ticks),
        base::TimeTicks::FromInternalValue(preread_end_ticks)};
 -  ChromeMainDelegate chrome_main_delegate(timestamps);
 +  nncore::NNMainDelegate chrome_main_delegate(timestamps);
  #else  // BUILDFLAG(IS_WIN)
-   // Bay: NNCore's delegate (engine/nncore), a ChromeMainDelegate.
-   nncore::NNMainDelegate chrome_main_delegate(
+   ChromeMainDelegate chrome_main_delegate(
+       {.exe_entry_point_ticks = base::TimeTicks::Now()});
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
