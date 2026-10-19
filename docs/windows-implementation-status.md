@@ -110,9 +110,39 @@ Windows-only sources now also pass a Windows-target syntax check on macOS
 (Chromium's clang with mingw-w64 headers). Errors that come only from patches
 outside that overlay, or from mingw's WinRT headers, are expected there.
 
+## CEF host retired
+
+The CEF C ABI host (`engine/nncore/src/bay/core/win`), its GN targets, its
+generated call header and the engine archive's headers and import libraries are
+gone. The patches that host Chrome's views inside the macOS app
+(`chromium-webview-native-hosted`, `chromium-window-hosted`,
+`chromium-window-docked-devtools`, `chromium-browser-view-hosted-fullscreen`)
+are macOS-only. CEF's checkout and patcher still run on Windows only so both
+platforms patch the same base tree.
+
+The Windows series is checked on macOS against a Windows base: the macOS
+`series-base`, plus the macOS tree's own file for each path only Windows
+patches (those carry CEF's patcher, ungoogled and domain substitution, and no
+Bay patch). `series.py materialize --platform win` must then report no errors.
+This found a `chromium-bay-webui-window.patch` hunk that only applied on top of
+a macOS-only patch; it is rebased.
+
+## Windows Chrome opens itself
+
+Until the shared runtime owns every window, one full UI document runs per
+process. A normal window Chrome opens on its own while a Bay window exists (a
+second launch with `--new-window`, a taskbar task, an extension's
+`chrome.windows.create`) is absorbed: it is never shown, its document refuses
+to start, and its tabs move into the most recently active Bay window. Pages in
+another regular profile reopen there; private pages are dropped rather than
+copied into a regular profile. Bay's own additional windows (private, Harbor,
+settings, import) remain gated, and the taskbar jump list waits for them.
+
 ## Validation still required on Windows
 
-Frame: drag from the caption, double-click to maximize, resize from every edge
+Absorbed windows: with Bay open, run `Bay.exe --new-window https://example.com`
+and check the page opens as a tab in the existing window with no second window
+flashing. Frame: drag from the caption, double-click to maximize, resize from every edge
 including the top, Snap Layouts on hovering maximize, Aero Snap, multi-monitor
 DPI changes, maximized windows staying on their monitor, the caption buttons'
 hover and click, and Mica with readable text in light and dark themes (then
