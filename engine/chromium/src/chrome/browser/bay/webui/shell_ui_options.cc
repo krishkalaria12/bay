@@ -66,7 +66,9 @@ std::optional<ShellIconRequest> ParseShellFileIconArgs(
   // A missing file name deliberately asks for its file-type icon. Relative
   // directory paths would instead depend on the browser's working directory.
   if (path.value().size() > 32767 || path.ReferencesParent() ||
-      (!path.IsAbsolute() && path != path.BaseName()))
+      (!path.IsAbsolute() &&
+       (path != path.BaseName() ||
+        value.find_first_of("/\\:") != std::string::npos)))
     return std::nullopt;
   return ShellIconRequest{std::move(path),
                           static_cast<int>(std::round(*points * 2))};
