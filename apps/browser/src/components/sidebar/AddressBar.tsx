@@ -11,6 +11,7 @@ import { useHistoryAvailability } from "../layout/history";
 import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
 import { addressBarInSidebar, setUrlAnchor, SIDEBAR_FIELD, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
+import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../layout/windowButtons";
 import { GlassFill, liquidGlass } from "../glass";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
@@ -24,7 +25,8 @@ const TOGGLE_X = 70.75 + 27;
 const EDGE = 7;
 // On the window's right there are no window buttons to clear: the toggle starts at the edge.
 const TOGGLE_X_RIGHT = EDGE + BUTTON / 2;
-const toggleMinWidth = (x: number) => x + BUTTON / 2 + GAP + NAV_WIDTH + EDGE;
+// `end`: the navigation buttons' room from the sidebar's right edge.
+const toggleMinWidth = (x: number, end: number) => x + BUTTON / 2 + GAP + NAV_WIDTH + end;
 
 export function SidebarHeaderTools({ width }: { width: number }) {
   const windowId = useWindowId();
@@ -32,11 +34,13 @@ export function SidebarHeaderTools({ width }: { width: number }) {
   const palette = toolbarPalette(useTheme(), null);
   const top = LIGHTS_Y - BUTTON / 2;
   const right = useSidebarOnRight();
-  const toggleX = right ? TOGGLE_X_RIGHT : TOGGLE_X;
+  // The window's buttons on this side of the window: the traffic lights at its left, the caption buttons at its right.
+  const toggleX = right || !LIGHTS_WIDTH ? TOGGLE_X_RIGHT : TOGGLE_X;
+  const end = EDGE + (right ? CAPTION_BUTTONS_WIDTH : 0);
   const sidebarSymbol = useSidebarSymbol();
   return (
     <>
-      {width >= toggleMinWidth(toggleX) ? (
+      {width >= toggleMinWidth(toggleX, end) ? (
         <ToolbarButton
           style={{ position: "absolute", top, left: toggleX - BUTTON / 2 }}
           palette={palette}
@@ -45,7 +49,7 @@ export function SidebarHeaderTools({ width }: { width: number }) {
           tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}
-      <View style={{ position: "absolute", top, right: EDGE, flexDirection: "row", gap: GAP }}>
+      <View style={{ position: "absolute", top, right: end, flexDirection: "row", gap: GAP }}>
         {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
       </View>
     </>

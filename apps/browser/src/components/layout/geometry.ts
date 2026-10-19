@@ -1,6 +1,8 @@
+import { capabilities } from "@bay/platform";
 import { layout } from "../../lib/theme";
 import { slotsOf } from "../../store/splits";
 import type { SplitView } from "../../store/types";
+import { CAPTION_BUTTONS_WIDTH } from "./windowButtons";
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
@@ -74,21 +76,23 @@ export type ToolbarGeometry = {
   sidebarButton: number | null;
   // The sidebar toggle at the toolbar's right end instead, beside a sidebar docked on the right.
   sidebarButtonEnd: boolean;
+  // The window's caption buttons over the toolbar's end (Windows): the pane at the window's top right.
+  captionEnd: boolean;
   back: number;
   forward: number;
   reload: number;
   urlLeft: number;
 };
 
-export const TRAFFIC_LIGHTS_OFFSET = 70;
+export const TRAFFIC_LIGHTS_OFFSET = capabilities.trafficLights ? 70 : 0;
 
 const geometries = new Map<string, ToolbarGeometry>();
 
 // One object per layout, so panes that get it as a prop can skip re-rendering.
-type ToolbarLayout = { sidebarButton: boolean; clearTrafficLights: boolean; sidebarButtonEnd?: boolean };
+type ToolbarLayout = { sidebarButton: boolean; clearTrafficLights: boolean; sidebarButtonEnd?: boolean; captionEnd?: boolean };
 
 export function toolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
-  const key = `${o.sidebarButton}|${o.clearTrafficLights}|${!!o.sidebarButtonEnd}`;
+  const key = `${o.sidebarButton}|${o.clearTrafficLights}|${!!o.sidebarButtonEnd}|${!!o.captionEnd}`;
   let g = geometries.get(key);
   if (!g) geometries.set(key, (g = computeToolbarGeometry(o)));
   return g;
@@ -97,16 +101,21 @@ export function toolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
 function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
   const offset = o.clearTrafficLights ? TRAFFIC_LIGHTS_OFFSET : 0;
   const end = !!o.sidebarButtonEnd;
+  const captionEnd = !!o.captionEnd;
   const [c0, c1, c2, c3] = layout.toolbarIconCenters;
-  if (o.sidebarButton) return { sidebarButton: offset + c0, sidebarButtonEnd: end, back: offset + c1, forward: offset + c2, reload: offset + c3, urlLeft: offset + layout.breadcrumbX - 8 };
+  if (o.sidebarButton) return { sidebarButton: offset + c0, sidebarButtonEnd: end, captionEnd, back: offset + c1, forward: offset + c2, reload: offset + c3, urlLeft: offset + layout.breadcrumbX - 8 };
   const shift = c1 - c0;
-  return { sidebarButton: null, sidebarButtonEnd: end, back: offset + c1 - shift, forward: offset + c2 - shift, reload: offset + c3 - shift, urlLeft: offset + layout.breadcrumbX - 8 - shift };
+  return { sidebarButton: null, sidebarButtonEnd: end, captionEnd, back: offset + c1 - shift, forward: offset + c2 - shift, reload: offset + c3 - shift, urlLeft: offset + layout.breadcrumbX - 8 - shift };
 }
 
 // The end toggle's room at the toolbar's right: its button and a 2pt gap.
 export const SIDEBAR_BUTTON_END_ROOM = layout.toolbarButton + 2;
+// The caption buttons' room at the toolbar's right: theirs at the window's corner, less the card's inset.
+export const CAPTION_END_ROOM = Math.max(0, CAPTION_BUTTONS_WIDTH - layout.cardInset);
+/** What a toolbar's end keeps clear: the caption buttons outermost, then a sidebar toggle there. */
+export const toolbarEndRoom = (g: ToolbarGeometry) => (g.captionEnd ? CAPTION_END_ROOM : 0) + (g.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0);
 
-export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, sidebarButtonEnd: false, back: 21, forward: 21, reload: 21, urlLeft: 8 };
+export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, sidebarButtonEnd: false, captionEnd: false, back: 21, forward: 21, reload: 21, urlLeft: 8 };
 // No toolbar on the window's top-left pane with the sidebar on the right: the window buttons show over its corner on
 // hover, so what starts there (Developer Mode's bar, prompts) starts past them.
-export const NO_TOOLBAR_PAST_LIGHTS: ToolbarGeometry = { ...NO_TOOLBAR, urlLeft: TRAFFIC_LIGHTS_OFFSET };
+export const NO_TOOLBAR_PAST_LIGHTS: ToolbarGeometry = capabilities.trafficLights ? { ...NO_TOOLBAR, urlLeft: TRAFFIC_LIGHTS_OFFSET } : NO_TOOLBAR;

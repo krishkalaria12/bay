@@ -34,6 +34,8 @@ const glyphs: Record<string, number> = {
   "moon.zzz": 0xe708, "stethoscope": 0xe9d9, "wand.and.stars": 0xe7c1,
   "equal.circle": 0xe94e, "circle.fill": 0xea3b,
   "gearshape": 0xe713, "gearshape.fill": 0xe713, "trash": 0xe74d,
+  // The window's caption buttons (CaptionButtons.tsx): Windows' own Chrome* glyphs, no SF Symbol counterpart.
+  "window.minimize": 0xe921, "window.maximize": 0xe922, "window.restore": 0xe923, "window.close": 0xe8bb,
 };
 
 /** The help glyph is visible when a future symbol has no mapping yet. */

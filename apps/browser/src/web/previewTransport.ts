@@ -11,7 +11,7 @@ export function createPreviewTransport(): NativeTransport {
     platform: "windows",
     modules: ["BayCEF", "BayShell", "BayApp", "BaySystem", "BayKeychain", "BayImport", "BayChromeUI", "BayExtensions"],
     views: [],
-    optionalMethods: ["BaySystem.downloadsFolder"],
+    optionalMethods: ["BaySystem.downloadsFolder", "BayShell.minimizeWindow", "BayShell.toggleMaximizeWindow", "BayShell.windowState", "BayShell.setWindowCaption"],
     constants: { BayApp: { apiVersion: 9 }, BayShell: { preview: true, hostingSpike: new URLSearchParams(location.search).has("spike") } },
     snapshots: {
       BayShell: { documents },
@@ -33,6 +33,7 @@ export function createPreviewTransport(): NativeTransport {
   const noResult = new Set([
     "BayShell.setAppearance", "BayShell.setMenuState", "BayShell.setMenuBookmarks", "BayShell.setWindowTitle",
     "BayShell.focusWindow", "BayShell.setSwitcherCapture", "BayShell.setTrafficLightsCenter", "BayShell.setTrafficLightsOnHover",
+    "BayShell.minimizeWindow", "BayShell.toggleMaximizeWindow", "BayShell.setWindowCaption",
     "BayApp.setWindowActivity", "BayApp.setScriptState", "BayApp.removeNotifications", "BaySystem.hapticTick",
     "BayCEF.prepareTransfer", "BayCEF.releaseTransfer", "BayCEF.watchDownloads", "BayCEF.watchContentBlocker",
     "BayCEF.watchHistory", "BayCEF.watchBookmarks", "BayCEF.watchPreferences", "BayCEF.releaseProfile",
@@ -60,6 +61,7 @@ export function createPreviewTransport(): NativeTransport {
         case "BayShell.openWindow": windows.add(String(args[0])); return ok();
         case "BayShell.closeWindow": windows.delete(String(args[0])); emit("BayShell", "onWindowEvent", { type: "close", id: args[0] }); return ok();
         case "BayShell.windowIds": return ok([...windows]);
+        case "BayShell.windowState": return ok({ maximized: false, fullscreen: false });
         case "BayShell.isDarkAppearance": return ok(matchMedia("(prefers-color-scheme: dark)").matches);
         case "BayShell.showMenu": return ok();
         case "BayShell.confirm": return ok({ confirmed: false, suppressed: false });

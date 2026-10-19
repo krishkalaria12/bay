@@ -11,6 +11,7 @@ import { PageProfileContext, useIsIncognito, useSettings, useWindowId, useWindow
 import { activeTabId } from "../store/model";
 import { cleanedTabsFor, cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
+import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "./layout/windowButtons";
 import { listTopGap, SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS, SIDEBAR_HEADER_WITH_FIELD, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
 import { SIDEBAR_PLAYER_HEIGHT, SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
 import { HoverSlot } from "./HoverSlot";
@@ -75,8 +76,11 @@ export function Sidebar() {
   const field = useSidebarFieldShown();
   const header = field ? SIDEBAR_HEADER_WITH_FIELD : layout.sidebarHeader;
   const glowRoom = field ? 0 : GLOW_ROOM;
-  // On the window's right the header has no window buttons to clear: the profile starts at the inset.
-  const profileX = useSidebarOnRight() ? layout.sidebarInset + 4 : PROFILE_INDICATOR_X;
+  // The header clears the window's buttons on its side of the window: macOS's traffic lights on the left, the caption
+  // buttons on the right (Windows). Elsewhere the profile starts at the inset.
+  const right = useSidebarOnRight();
+  const profileX = !right && LIGHTS_WIDTH ? PROFILE_INDICATOR_X : layout.sidebarInset + 4;
+  const headerEnd = right && CAPTION_BUTTONS_WIDTH ? CAPTION_BUTTONS_WIDTH : 7;
   // The footer: downloads at its left, then the space switcher with its + for a new space (every window but a
   // private one).
   const spaces = !useIsIncognito();
@@ -162,8 +166,8 @@ export function Sidebar() {
               </>
             ) : (
               // Box-none: the header's empty space is the drag region's (it moves the window), not the row's.
-              <View pointerEvents="box-none" style={{ height: layout.sidebarHeader, flexDirection: "row", alignItems: "flex-start", paddingLeft: profileX, paddingRight: 7, paddingTop: 27 - 17 }}>
-                <ProfileIndicator room={width - profileX - 7} />
+              <View pointerEvents="box-none" style={{ height: layout.sidebarHeader, flexDirection: "row", alignItems: "flex-start", paddingLeft: profileX, paddingRight: headerEnd, paddingTop: 27 - 17 }}>
+                <ProfileIndicator room={width - profileX - headerEnd} />
                 <View pointerEvents="none" style={{ flex: 1 }} />
               </View>
             )}

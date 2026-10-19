@@ -12,7 +12,7 @@ import { useIsBookmarked, useSettings, useTabLive } from "../store/hooks";
 import { bookmarkProfileId } from "../store/model";
 import type { Tab } from "../store/types";
 import { ToolbarButton, type ClickModifiers } from "./layout/controls";
-import { SIDEBAR_BUTTON_END_ROOM, type ToolbarGeometry } from "./layout/geometry";
+import { CAPTION_END_ROOM, toolbarEndRoom, type ToolbarGeometry } from "./layout/geometry";
 import { setPopover, usePage, usePages } from "./layout/pageState";
 import { closeHistoryMenu, goBack, goForward, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu } from "./layout/history";
 import { openModeFor, openUrl } from "./bookmarks/actions";
@@ -81,8 +81,10 @@ export function Toolbar({
   };
   const at = useMemo(() => buttonPlaces(geometry), [geometry]);
   const sidebarSymbol = useSidebarSymbol();
-  // A toggle at the end (the sidebar on the right) is outermost: the split buttons, extensions and field move in for it.
-  const end = geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0;
+  // A toggle at the end (the sidebar on the right) is outermost but for the caption buttons: the split buttons,
+  // extensions and field move in for them.
+  const end = toolbarEndRoom(geometry);
+  const toggleRight = 8 + (geometry.captionEnd ? CAPTION_END_ROOM : 0);
   const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
   const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: 21.2 - 15 };
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
@@ -97,7 +99,7 @@ export function Toolbar({
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       <Animated.View style={[StyleSheet.absoluteFill, dimStyle]} pointerEvents="box-none">
         {geometry.sidebarButton !== null && sidebarToggle(at.sidebarButton)}
-        {geometry.sidebarButtonEnd && sidebarToggle({ position: "absolute", top, right: 8 })}
+        {geometry.sidebarButtonEnd && sidebarToggle({ position: "absolute", top, right: toggleRight })}
         <HistoryButton style={at.back} tab={tab} direction={-1} disabled={!history.back} palette={palette} onFocus={focus} />
         <HistoryButton style={at.forward} tab={tab} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
         <ReloadButton style={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} />

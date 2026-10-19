@@ -18,6 +18,8 @@ const paths: Record<string, string> = {
   house: "m2 11 10-9 10 9M5 9v13h5v-7h4v7h5V9", folder: "M2 6h8l2 3h10v12H2Zm0 0V3h7l3 3",
   doc: "M5 2h9l5 5v15H5Zm9 0v6h5M8 12h8M8 16h8", "doc.zipper": "M5 2h9l5 5v15H5Zm7 1v2m0 2v2m0 2v2m-1 2h2v4h-2Z",
   "square.on.square": "M8 3h13v13h-4M3 8h13v13H3Z", "square.stack": "M5 3h16v14M3 7h14v14H3Z",
+  "window.minimize": "M4 12h16", "window.maximize": "M4 4h16v16H4Z", "window.restore": "M8 4h12v12M4 8h12v12H4Z",
+  "window.close": "m4 4 16 16M4 20 20 4",
   "rectangle.split.2x1": "M2 4h20v16H2Zm10 0v16", "rectangle.inset.filled": "M2 4h20v16H2Zm9 5h8v8h-8Z",
   "rectangle.inset.filled.and.person.filled": "M2 4h20v16H2Zm5 16v-2a5 5 0 0 1 10 0v2M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
   macwindow: "M2 4h20v16H2Zm0 4h20M5 6h.01M8 6h.01M11 6h.01", display: "M2 3h20v14H2Zm10 14v5m-5 0h10",

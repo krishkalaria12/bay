@@ -4,7 +4,7 @@ import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface,
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { findNodeHandle, PanResponder, StyleSheet, Text } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
-import { hex, layout, ThemeScope, useTheme } from "../../lib/theme";
+import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { PageProfileContext, useIsActiveTab, usePageProfileId, useSettings, useTab, useTabLive, useWindowId, useWindowProfileId } from "../../store/hooks";
@@ -45,6 +45,7 @@ import {
 import { makeRoom, registerSlot, reorderOffsets, settleRoom, SLIDE } from "./stripReorder";
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabDrag";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "./toolbarColors";
+import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "./windowButtons";
 
 // Dia's top strip, from a 2x capture of 1.50.1: the card starts 42 below the window top, and everything in the
 // strip (window buttons, icons, titles) centres on y 21.
@@ -98,8 +99,10 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
   const { pages } = usePagerPages(windowId);
   const profileChip = useProfileIndicatorWidth(PROFILE_ROOM);
   const controls = (profileChip ? profileChip + CONTROLS_GAP : 0) + DOWNLOADS_BOX;
-  const left = floating ? 8 : layout.trafficLightsWidth + LIGHTS_GAP;
-  const right = Math.max(84, controls + 8 + 6);
+  const left = floating ? 8 : LIGHTS_WIDTH + LIGHTS_GAP;
+  // The drop-down strip shows in page full screen, where the window has no caption buttons.
+  const caption = floating ? 0 : CAPTION_BUTTONS_WIDTH;
+  const right = Math.max(84, controls + 8 + 6) + caption;
   const pageWidth = Math.max(0, width - left - right);
   const flare = floating ? 0 : FLARE;
 
@@ -115,12 +118,12 @@ export function TopTabStrip({ width, floating = false, hidden = false, swipe = t
         <WindowDragRegion style={StyleSheet.absoluteFill} />
         {/* The clip starts a flare's width early so the first tab's flare isn't cut, and ends at the profile chip and
             download button, so tabs scrolled past the end never show under them. */}
-        <View style={{ position: "absolute", left: left - flare, right: Math.max(right - flare, controls + 8), top: 0, bottom: 0, overflow: "hidden" }}>
+        <View style={{ position: "absolute", left: left - flare, right: Math.max(right - flare, controls + 8 + caption), top: 0, bottom: 0, overflow: "hidden" }}>
           {pages.map((page) => (
             <StripPage key={page.id} profileId={page.id} slot={page.slot} pageWidth={pageWidth} current={page.id === current} resting={!!page.resting} />
           ))}
         </View>
-        <View mouseDownCanMoveWindow={false} style={{ position: "absolute", right: 8, top: MID - 17, flexDirection: "row", alignItems: "center", gap: CONTROLS_GAP }}>
+        <View mouseDownCanMoveWindow={false} style={{ position: "absolute", right: 8 + caption, top: MID - 17, flexDirection: "row", alignItems: "center", gap: CONTROLS_GAP }}>
           <ProfileIndicator room={PROFILE_ROOM} />
           <IconButton
             icon="arrow.down.circle"
@@ -1209,7 +1212,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   });
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: layout.trafficLightsWidth, right: 0, top: 0, height: 6 }} /> : null}
+      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: LIGHTS_WIDTH, right: CAPTION_BUTTONS_WIDTH, top: 0, height: 6 }} /> : null}
       <Animated.View
         pointerEvents={live ? "auto" : "none"}
         onMouseEnter={live ? show : undefined}

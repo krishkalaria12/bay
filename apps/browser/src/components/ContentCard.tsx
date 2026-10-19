@@ -21,7 +21,7 @@ import { splitOf } from "../store/splits";
 import type { SplitView } from "../store/types";
 import { BOOKMARKS_BAR_HEIGHT, BookmarksBar, useBookmarksBarShown } from "./bookmarks/BookmarksBar";
 import { FindBar } from "./FindBar";
-import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, SIDEBAR_BUTTON_END_ROOM, splitGeometry, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
+import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, splitGeometry, toolbarEndRoom, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
 import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
 import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
@@ -185,6 +185,8 @@ export function ContentCard() {
       sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,
       sidebarButtonEnd: trailing && sidebarRight,
       clearTrafficLights: leading && tabLayout === "sidebar" && (!sidebarOpen || sidebarRight),
+      // The window's top right is this pane's unless a sidebar docked there or the top strip holds it.
+      captionEnd: trailing && (tabLayout === "sidebar" ? !sidebarOpen || !sidebarRight : !sidebarOpen),
     });
   };
 
@@ -308,7 +310,7 @@ const TabPane = memo(function TabPane({
   const autoLayout = autoHide && toolbar && !fullscreen && !devBar;
   // The page's own popovers open under the bar's end (inside a sidebar toggle there), or under the sidebar's field at
   // the page's start.
-  const barEnd = 8 + (geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0);
+  const barEnd = 8 + toolbarEndRoom(geometry);
   // Without a toolbar, past the window buttons when they show over this pane's corner.
   const pageStart = geometry === NO_TOOLBAR_PAST_LIGHTS ? geometry.urlLeft : 8;
   const popoverSide = toolbar || devBar ? { right: barEnd } : { left: pageStart };

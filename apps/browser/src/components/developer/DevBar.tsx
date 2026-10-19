@@ -8,7 +8,7 @@ import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { useTabLive } from "../../store/hooks";
 import { ToolbarButton } from "../layout/controls";
-import type { ToolbarGeometry } from "../layout/geometry";
+import { CAPTION_END_ROOM, type ToolbarGeometry } from "../layout/geometry";
 import { useHistoryAvailability } from "../layout/history";
 import { setPopover, usePages } from "../layout/pageState";
 import { closePane, showSplitMenu } from "../layout/splitActions";
@@ -93,7 +93,7 @@ export function DevBar({
           <ReloadButton style={at(geometry.reload)} tab={tab} loading={loading} palette={palette} onFocus={focus} />
         </>
       ) : null}
-      <View pointerEvents="box-none" style={{ position: "absolute", left: navigation ? geometry.urlLeft : geometry.urlLeft - 2, right: 6, top: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 2 }}>
+      <View pointerEvents="box-none" style={{ position: "absolute", left: navigation ? geometry.urlLeft : geometry.urlLeft - 2, right: 6 + (geometry.captionEnd ? CAPTION_END_ROOM : 0), top: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 2 }}>
         <Address url={tab.url} tabId={tabId} windowId={windowId} onFocus={focus} />
         {button("ruler", inspecting ? "Stop Inspecting (esc)" : "Inspect Elements", () => toggleInspecting(tabId), inspecting)}
         {button("chevron.left.forwardslash.chevron.right", `Developer Tools (${shortcutForCommand("devTools", "⌥⌘I")})`, () => void webviews.get(tabId)?.showDevTools("toggle"))}

@@ -12,7 +12,9 @@ import type { Tab } from "../../store/types";
 import { CommandPanel } from "../CommandPanel";
 import { ContentCard } from "../ContentCard";
 import { DownloadsPanel } from "../DownloadsPanel";
+import { CaptionButtons } from "../layout/CaptionButtons";
 import { usePage } from "../layout/pageState";
+import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../layout/windowButtons";
 import { setUrlAnchor } from "../layout/windowLayout";
 import { showUrlBarMenu } from "../omnibox/paste";
 import { Favicon, IconButton, useHover } from "../primitives";
@@ -25,12 +27,15 @@ export const SMALL_BAR_HEIGHT = 38;
 const MID = SMALL_BAR_HEIGHT / 2;
 const INSET = 6;
 const LIGHTS_CENTER: [number, number] = [20, MID];
-const FIELD_LEFT = 84;
+// Past the traffic lights on macOS; the caption buttons take the bar's other end on Windows.
+const FIELD_LEFT = LIGHTS_WIDTH ? 84 : INSET + 4;
+const BAR_END = INSET + CAPTION_BUTTONS_WIDTH;
 const FIELD_HEIGHT = 28;
 const BUTTON = 28;
 
 export function HarborWindow() {
   const theme = useTheme();
+  const windowId = useWindowId();
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
@@ -41,6 +46,7 @@ export function HarborWindow() {
       <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
         <HarborBar />
       </View>
+      <CaptionButtons windowId={windowId} height={SMALL_BAR_HEIGHT} />
       <CommandPanel windowWidth={size.width} windowHeight={size.height} />
       <DownloadsPanel windowWidth={size.width} windowHeight={size.height} />
     </View>
@@ -69,10 +75,10 @@ function HarborBar() {
   return (
     <View style={{ height: SMALL_BAR_HEIGHT }}>
       <WindowDragRegion style={StyleSheet.absoluteFill} />
-      <View style={{ position: "absolute", left: FIELD_LEFT, right: INSET + 2 * BUTTON + 8, top: MID - FIELD_HEIGHT / 2, height: FIELD_HEIGHT }}>
+      <View style={{ position: "absolute", left: FIELD_LEFT, right: BAR_END + 2 * BUTTON + 8, top: MID - FIELD_HEIGHT / 2, height: FIELD_HEIGHT }}>
         {tab ? <PageField tab={tab} windowId={windowId} hidden={panelOpen} /> : null}
       </View>
-      <View style={{ position: "absolute", right: INSET, top: MID - BUTTON / 2, flexDirection: "row", gap: 2 }}>
+      <View style={{ position: "absolute", right: BAR_END, top: MID - BUTTON / 2, flexDirection: "row", gap: 2 }}>
         <IconButton icon={copied ? "checkmark" : "link"} size={14} box={BUTTON} radius={7} disabled={!tab?.url} tooltip="Copy Link (⇧⌘C)" onPress={copy} />
         <IconButton icon="arrow.up.left.and.arrow.down.right" size={13} box={BUTTON} radius={7} tooltip="Open in Bay (⌘O)" onPress={() => openInMainWindow(windowId)} />
       </View>

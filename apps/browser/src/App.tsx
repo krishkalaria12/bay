@@ -19,6 +19,7 @@ import { CreateProfileHost } from "./components/profiles/CreateProfile";
 import { ThemeEditorHost } from "./components/profiles/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
 import { ProfileSwipe, ProfileTint } from "./components/layout/ProfileSwipe";
+import { CaptionButtons } from "./components/layout/CaptionButtons";
 import { TOP_CARD_INSET, TOP_STRIP_HEIGHT, TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
 import { usePeek } from "./components/layout/usePeek";
 import { useSidebarDock } from "./components/layout/useSidebarDock";
@@ -71,6 +72,10 @@ function BrowserWindow() {
   // pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
   const buttonsOnHover = right && addressInSidebar && !fullscreen;
+  // Windows' caption buttons sit at the other corner: over the page there when it has no toolbar to hold them.
+  const captionOnHover = !topTabs && addressInSidebar && (!right || !showSidebar);
+  const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
+  const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   useEffect(() => {
     void setTrafficLightsOnHover(windowId, buttonsOnHover);
   }, [windowId, buttonsOnHover]);
@@ -136,6 +141,7 @@ function BrowserWindow() {
         </View>
       )}
       {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} />)}
+      {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} onHover={captionOnHover} />}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />
