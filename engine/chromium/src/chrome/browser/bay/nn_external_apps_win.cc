@@ -17,7 +17,8 @@ base::DictValue AppForScheme(const std::string& scheme) {
   AssocQueryStringW(ASSOCF_IS_PROTOCOL, ASSOCSTR_FRIENDLYAPPNAME,
                     association.c_str(), nullptr, nullptr, &length);
   base::DictValue result;
-  result.Set("app", base::Value()).Set("icon", base::Value());
+  result.Set("app", base::Value());
+  result.Set("icon", base::Value());
   // Shell associations are user-controlled. Bound the allocation and let the
   // caller keep the allowance even when its handler was uninstalled.
   if (length == 0 || length > 32768) return result;
