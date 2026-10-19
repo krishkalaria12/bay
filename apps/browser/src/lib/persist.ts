@@ -1,6 +1,6 @@
 import { cancelDownload, type Download } from "@bay/nncore";
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
-import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
+import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } from "../store/browser";
 import { inPinnedContainer, isIncognitoProfile, newId, snapshotTab } from "../store/model";
 import { parkWindowPins } from "../store/parkedPins";
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
@@ -152,57 +152,45 @@ export function loadSession(): HydrateData | null {
   return data;
 }
 
-let flush: (final: boolean) => Promise<void> = () => Promise.resolve();
-let resume: () => void = () => {};
-let finalFlush: Promise<void> | null = null;
-let persistenceGeneration = 0;
-// From the quit's last save until the quit ends or is cancelled: what the quit itself does to the store (its windows
-// closing) is never saved.
-let frozen = false;
+export type PersistenceOwner = {
+  flush(options?: { final?: boolean }): Promise<void>;
+  resume(): void;
+  dispose(): void;
+};
 
-export function flushPersistence({ final = false } = {}) {
-  if (!final) return flush(false);
-  if (finalFlush) return finalFlush;
-  // Capture the final state before freezing. Native window closure must not
-  // replace that snapshot while its acknowledged writes are still in flight.
-  finalFlush = flush(true);
-  frozen = true;
-  return finalFlush;
-}
-
-// The quit was cancelled (a page's beforeunload said Stay): saving goes on, starting with what changed meanwhile.
-export function resumePersistence() {
-  persistenceGeneration++;
-  frozen = false;
-  finalFlush = null;
-  resume();
-}
-
-export function startPersistence() {
-  persistenceGeneration++;
-  useBrowser.getState().hydrate(loadSession() ?? {});
-
+/** Owns session/download persistence for one authority store. Global history,
+ * bookmark, favicon and profile services are started separately by its caller.
+ */
+export function createPersistence({ store, restoreSession = true }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
+  if (restoreSession) store.getState().hydrate(loadSession() ?? {});
   const lastSources = new Map<string, unknown[]>();
   const lastJson = new Map<string, string>();
   const dirty = new Set<Doc>();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let generation = 0;
+  let finalFlush: Promise<void> | null = null;
+  let frozen = false;
+  let disposed = false;
 
-  const save = (final = false): Promise<void> => {
+  function save(final = false, snapshot = store.getState()): Promise<void> {
     clearTimeout(timer);
     timer = undefined;
-    if (frozen) return finalFlush ?? Promise.resolve();
-    const s = useBrowser.getState();
-    const generation = persistenceGeneration;
+    if (disposed) return Promise.reject(new Error("Persistence owner is disposed"));
+    if (frozen && !final) return finalFlush ?? Promise.resolve();
+    const savingGeneration = generation;
     const pending: Promise<void>[] = [];
     for (const doc of DOCS.filter((d) => final || dirty.has(d))) {
-      const json = doc.json(s);
+      const json = doc.json(snapshot);
       if (final) {
-        // Re-save every final document, including an earlier fire-and-forget
-        // write whose completion is otherwise unknown on an async host.
-        pending.push(saveDocument(doc.name, json).then(() => {
-          if (generation === persistenceGeneration) lastJson.set(doc.name, json);
-        }, error => {
-          if (generation === persistenceGeneration) {
+        // Re-save every final document, including a previous background write
+        // whose completion is otherwise unknown on an asynchronous host.
+        let saved: Promise<void>;
+        try { saved = Promise.resolve(saveDocument(doc.name, json)); }
+        catch (error) { saved = Promise.reject(error); }
+        pending.push(saved.then(() => {
+          if (!disposed && savingGeneration === generation) lastJson.set(doc.name, json);
+        }, (error) => {
+          if (!disposed && savingGeneration === generation) {
             lastJson.delete(doc.name);
             dirty.add(doc);
           }
@@ -215,40 +203,101 @@ export function startPersistence() {
     }
     dirty.clear();
     return Promise.all(pending).then(() => {});
-  };
-  flush = save;
-
-  const check = (s: BrowserState, initial = false) => {
-    if (frozen) return;
+  }
+  function check(state: BrowserState, initial = false) {
+    if (disposed || frozen) return;
     for (const doc of DOCS) {
-      const sources = doc.sources(s);
-      const prev = lastSources.get(doc.name);
-      if (prev && sources.every((v, i) => v === prev[i])) continue;
+      const sources = doc.sources(state);
+      const previous = lastSources.get(doc.name);
+      if (previous && sources.every((value, index) => value === previous[index])) continue;
       lastSources.set(doc.name, sources);
       if (!initial) dirty.add(doc);
     }
-    if (dirty.size && !timer) timer = setTimeout(() => { void save(); }, SAVE_DELAY_MS);
-  };
-  check(useBrowser.getState(), true);
-  resume = () => {
-    check(useBrowser.getState());
-    save();
-  };
-  const stopFavicons = startFavicons();
-  const stopHistory = startHistory();
-  const stopBookmarks = startBookmarks();
-  const stopProfileData = startProfileDataCleanup();
-  const stopSession = useBrowser.subscribe((s, prev) => {
-    check(s);
-    if (s.windows !== prev.windows) forgetClosedIncognito(s, prev);
+    if (dirty.size && !timer) timer = setTimeout(() => {
+      try { void save().catch((error) => console.warn("Couldn't save the session", error)); }
+      catch (error) { console.warn("Couldn't save the session", error); }
+    }, SAVE_DELAY_MS);
+  }
+  check(store.getState(), true);
+  const unsubscribe = store.subscribe((_state, previous) => {
+    // Profile/private-window cleanup can produce nested updates before this
+    // subscriber runs, so save the current state rather than the outer event.
+    const state = store.getState();
+    check(state);
+    if (state.windows !== previous.windows) forgetClosedIncognito(state, previous);
   });
-  return () => {
-    stopFavicons();
-    stopHistory();
-    stopBookmarks();
-    stopProfileData();
-    stopSession();
+  return {
+    flush({ final = false } = {}) {
+      if (disposed) return Promise.reject(new Error("Persistence owner is disposed"));
+      if (final) {
+        if (finalFlush) return finalFlush;
+        // Capture before freezing. Window closure during quit must not replace
+        // this snapshot while its acknowledged writes are still in flight.
+        const snapshot = store.getState();
+        frozen = true;
+        try { finalFlush = save(true, snapshot); }
+        catch (error) { finalFlush = Promise.reject(error); }
+        return finalFlush;
+      }
+      try { return save(); } catch (error) { return Promise.reject(error); }
+    },
+    resume() {
+      if (disposed) return;
+      generation++;
+      frozen = false;
+      finalFlush = null;
+      check(store.getState());
+      try { void save().catch((error) => console.warn("Couldn't save the session", error)); }
+      catch (error) { console.warn("Couldn't save the session", error); }
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      generation++;
+      clearTimeout(timer);
+      timer = undefined;
+      unsubscribe();
+      dirty.clear(); lastSources.clear(); lastJson.clear(); finalFlush = null;
+    },
   };
+}
+
+let defaultPersistence: PersistenceOwner | null = null;
+let stopDefault: (() => void) | null = null;
+export function flushPersistence(options: { final?: boolean } = {}) {
+  return defaultPersistence?.flush(options) ?? Promise.resolve();
+}
+
+// A page's beforeunload cancelled quit. Resume from whatever changed meanwhile.
+export function resumePersistence() { defaultPersistence?.resume(); }
+
+/** macOS compatibility entry. These services still use the default store; an
+ * isolated coordinator must start its own parameterized services explicitly.
+ */
+export function startPersistence() {
+  stopDefault?.();
+  const owner = createPersistence({ store: useBrowser });
+  defaultPersistence = owner;
+  const stops: (() => void)[] = [];
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    try { for (const stopService of stops) stopService(); }
+    finally {
+      owner.dispose();
+      if (defaultPersistence === owner) defaultPersistence = null;
+      if (stopDefault === stop) stopDefault = null;
+    }
+  };
+  stopDefault = stop;
+  try {
+    stops.push(startFavicons());
+    stops.push(startHistory());
+    stops.push(startBookmarks());
+    stops.push(startProfileDataCleanup());
+  } catch (error) { stop(); throw error; }
+  return stop;
 }
 
 function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
