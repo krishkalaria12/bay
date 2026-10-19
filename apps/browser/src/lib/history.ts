@@ -1,8 +1,8 @@
 import { addHistoryVisits, onHistoryChanged, queryHistory, watchHistory, type EngineHistoryEntry, type HistoryChange } from "@bay/nncore";
 import { readDocument, removeDocument } from "@bay/shell";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { useBrowser, type BrowserState, type BrowserStore } from "../store/browser";
 import { MAX_HISTORY, MAX_VISIT_TIMES } from "../store/history";
-import { engineProfile, isIncognitoProfile } from "../store/model";
+import { engineProfileFor, isIncognitoProfile } from "../store/model";
 import type { HistoryEntry } from "../store/types";
 
 // Keeps the store's `history` view of Chrome's history (store/history.ts): read from Chrome at launch and for
@@ -20,7 +20,6 @@ const CHUNK = 500;
 // it again (adding only what Chrome lacks).
 const LEGACY_KEPT_MS = 15_000;
 
-const store = () => useBrowser.getState();
 
 // The pages the app's History, command bar and sync show: Chrome also keeps extension pages (a hidden helper's
 // chrome-extension:// page among them), which the app never listed.
@@ -34,41 +33,6 @@ const toEntry = (e: EngineHistoryEntry): HistoryEntry => ({
   lastVisit: e.visitTimes.length ? e.visitTimes[e.visitTimes.length - 1]! : 0,
   visitTimes: e.visitTimes,
 });
-
-const engineProfiles = (s: Pick<BrowserState, "profiles">) =>
-  [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map(engineProfile))];
-
-const profilesUsing = (s: Pick<BrowserState, "profiles">, engine: string) =>
-  Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfile(id) === engine);
-
-function viewOf(engine: string): HistoryEntry[] {
-  const s = store();
-  for (const id of profilesUsing(s, engine)) if (s.history[id]) return s.history[id]!;
-  return [];
-}
-
-// Sync may use a view only once history.json is in Chrome: before, its visits would read as deleted.
-let legacyMoved = false;
-
-/**
- * Shows `list` for the engine profile. `floor`: visits at or before it may be missing from the view (it holds
- * Chrome's newest MAX_HISTORY URLs); a read sets it, and it only rises while the view fills from events.
- */
-function setView(engine: string, list: HistoryEntry[], floor?: number) {
-  useBrowser.setState((s) => {
-    const ids = profilesUsing(s, engine);
-    const was = ids.map((id) => s.historyFloor[id] ?? -Infinity).reduce((a, b) => Math.max(a, b), -Infinity);
-    const full = list.length >= MAX_HISTORY ? list[list.length - 1]!.lastVisit : -Infinity;
-    const next = Math.max(floor ?? was, full);
-    const ready = legacyMoved;
-    if (ids.every((id) => s.history[id] === list && (s.historyFloor[id] ?? -Infinity) === next && (!ready || s.historyReady[id]))) return {};
-    return {
-      history: { ...s.history, ...Object.fromEntries(ids.map((id) => [id, list])) },
-      historyFloor: { ...s.historyFloor, ...Object.fromEntries(ids.map((id) => [id, next])) },
-      ...(ready ? { historyReady: { ...s.historyReady, ...Object.fromEntries(ids.map((id) => [id, true as const])) } } : {}),
-    };
-  });
-}
 
 // MARK: Changes
 
@@ -112,145 +76,241 @@ export function applyHistoryChange(list: HistoryEntry[], change: Exclude<History
   }
 }
 
-// MARK: Loading
+export function createHistoryService(browser: BrowserStore) {
+  const store = () => browser.getState();
+  let active = true;
+  let generation = 0;
+  let stopListening: (() => void) | undefined;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const current = (run: number) => active && generation === run;
+  const engineProfiles = (s: Pick<BrowserState, "profiles">) =>
+    [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map((id) => engineProfileFor(id, s.profiles)))];
 
-type Load = { running: Promise<void>; again: boolean; queued: HistoryChange[] };
-const loads = new Map<string, Load>();
-const loaded = new Set<string>();
-// Profiles whose old file is being moved in: their views are read again once it's done, not per added visit.
-const migrating = new Set<string>();
+  const profilesUsing = (s: Pick<BrowserState, "profiles">, engine: string) =>
+    Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfileFor(id, s.profiles) === engine);
 
-function load(engine: string): Promise<void> {
-  const running = loads.get(engine);
-  if (running) {
-    running.again = true;
-    return running.running;
+  function viewOf(engine: string): HistoryEntry[] {
+    const s = store();
+    for (const id of profilesUsing(s, engine)) if (s.history[id]) return s.history[id]!;
+    return [];
   }
-  const state: Load = { running: Promise.resolve(), again: false, queued: [] };
-  loads.set(engine, state);
-  state.running = (async () => {
+
+  // Sync may use a view only once history.json is in Chrome: before, its visits would read as deleted.
+  let legacyMoved = false;
+
+  /**
+   * Shows `list` for the engine profile. `floor`: visits at or before it may be missing from the view (it holds
+   * Chrome's newest MAX_HISTORY URLs); a read sets it, and it only rises while the view fills from events.
+   */
+  function setView(engine: string, list: HistoryEntry[], floor?: number) {
+    if (!active) return;
+    browser.setState((s) => {
+      const ids = profilesUsing(s, engine);
+      const was = ids.map((id) => s.historyFloor[id] ?? -Infinity).reduce((a, b) => Math.max(a, b), -Infinity);
+      const full = list.length >= MAX_HISTORY ? list[list.length - 1]!.lastVisit : -Infinity;
+      const next = Math.max(floor ?? was, full);
+      const ready = legacyMoved;
+      if (ids.every((id) => s.history[id] === list && (s.historyFloor[id] ?? -Infinity) === next && (!ready || s.historyReady[id]))) return {};
+      // An absent floor means the complete history is visible. Keep the unbounded
+      // value out of state so coordinator snapshots remain JSON serializable.
+      const historyFloor = { ...s.historyFloor };
+      for (const id of ids) {
+        if (next === -Infinity) delete historyFloor[id];
+        else historyFloor[id] = next;
+      }
+      return {
+        history: { ...s.history, ...Object.fromEntries(ids.map((id) => [id, list])) },
+        historyFloor,
+        ...(ready ? { historyReady: { ...s.historyReady, ...Object.fromEntries(ids.map((id) => [id, true as const])) } } : {}),
+      };
+    });
+  }
+
+  // MARK: Loading
+
+  type Load = { running: Promise<void>; again: boolean; queued: HistoryChange[] };
+  const loads = new Map<string, Load>();
+  const loaded = new Set<string>();
+  // Profiles whose old file is being moved in: their views are read again once it's done, not per added visit.
+  const migrating = new Set<string>();
+
+  function load(engine: string): Promise<void> {
+    if (!active) return Promise.resolve();
+    const run = generation;
+    const running = loads.get(engine);
+    if (running) {
+      running.again = true;
+      return running.running;
+    }
+    const state: Load = { running: Promise.resolve(), again: false, queued: [] };
+    loads.set(engine, state);
+    state.running = (async () => {
+      try {
+        do {
+          state.again = false;
+          state.queued = [];
+          await watchHistory(engine);
+          if (!current(run)) return;
+          const read = await queryHistory(engine, MAX_HISTORY, MAX_VISIT_TIMES);
+          if (!current(run)) return;
+          // Chrome had more URLs than the view reads: the older ones may be missing (shown or not).
+          const floor = read.length >= MAX_HISTORY ? Math.min(...read.map((e) => e.visitTimes.at(-1) ?? 0)) : -Infinity;
+          let list = read.filter((e) => shownInHistory(e.url)).map(toEntry).sort(byLastVisit);
+          for (const change of state.queued) if (!(change.kind === "deleted" && change.all)) list = applyHistoryChange(list, change);
+          if (state.queued.some((c) => c.kind === "deleted" && c.all)) state.again = true;
+          setView(engine, list, floor);
+          loaded.add(engine);
+        } while (current(run) && state.again);
+      } catch (error) {
+        console.warn(`[history] couldn't read ${engine || "the default profile"}'s history`, error);
+      } finally {
+        if (loads.get(engine) === state) loads.delete(engine);
+      }
+    })();
+    return state.running;
+  }
+
+  function changed(change: HistoryChange) {
+    if (!active) return;
+    const engine = change.profile;
+    if (migrating.has(engine)) return;
+    const running = loads.get(engine);
+    if (running) return void running.queued.push(change);
+    if (!loaded.has(engine)) return;
+    if (change.kind === "deleted" && change.all) return void load(engine);
+    setView(engine, applyHistoryChange(viewOf(engine), change));
+  }
+
+  // MARK: The old file
+
+  type LegacyFile = { history?: Record<string, HistoryEntry[]> };
+
+  /**
+   * Adds history.json's visits that Chrome doesn't have (imports, other Macs' synced history, visits it never
+   * saw) to Chrome, then deletes the file once Chrome has committed. Adding again is harmless (each visit Chrome
+   * has accounts for one saved visit), so a launch that stops halfway starts over. Profiles that no longer exist
+   * are dropped.
+   */
+  async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_KEPT_MS } = {}): Promise<"none" | "moved" | "kept"> {
+    const run = generation;
+    let file: LegacyFile | null = null;
     try {
-      do {
-        state.again = false;
-        state.queued = [];
-        await watchHistory(engine);
-        const read = await queryHistory(engine, MAX_HISTORY, MAX_VISIT_TIMES);
-        // Chrome had more URLs than the view reads: the older ones may be missing (shown or not).
-        const floor = read.length >= MAX_HISTORY ? Math.min(...read.map((e) => e.visitTimes.at(-1) ?? 0)) : -Infinity;
-        let list = read.filter((e) => shownInHistory(e.url)).map(toEntry).sort(byLastVisit);
-        for (const change of state.queued) if (!(change.kind === "deleted" && change.all)) list = applyHistoryChange(list, change);
-        if (state.queued.some((c) => c.kind === "deleted" && c.all)) state.again = true;
-        setView(engine, list, floor);
-        loaded.add(engine);
-      } while (state.again);
+      const json = readDocument(LEGACY_FILE);
+      file = json ? (JSON.parse(json) as LegacyFile) : null;
     } catch (error) {
-      console.warn(`[history] couldn't read ${engine || "the default profile"}'s history`, error);
+      console.warn(`[history] ${LEGACY_FILE} is unreadable; leaving it`, error);
+      return "kept";
+    }
+    if (!file) return "none";
+    const s = store();
+    const perEngine = new Map<string, HistoryEntry[]>();
+    for (const [profileId, list] of Object.entries(file.history ?? {})) {
+      if (!s.profiles[profileId] || isIncognitoProfile(profileId) || !Array.isArray(list)) continue;
+      const engine = engineProfileFor(profileId, s.profiles);
+      // Profiles sharing data saved the same list.
+      if (!perEngine.has(engine)) perEngine.set(engine, list);
+    }
+    for (const engine of perEngine.keys()) migrating.add(engine);
+    try {
+      for (const [engine, list] of perEngine) {
+        const pages = list
+          .filter((e) => e && typeof e.url === "string")
+          .map((e) => ({
+            url: e.url,
+            title: e.title ?? "",
+            visitTimes: (e.visitTimes?.length ? e.visitTimes : [e.lastVisit]).filter((t) => typeof t === "number" && t > now - CHROME_KEEPS_MS),
+          }))
+          .filter((p) => p.visitTimes.length);
+        for (let i = 0; i < pages.length; i += CHUNK) {
+          if (!current(run)) return "kept";
+          await addHistoryVisits(engine, pages.slice(i, i + CHUNK), LEGACY_TOLERANCE_MS);
+        }
+      }
+    } catch (error) {
+      console.warn(`[history] moving ${LEGACY_FILE} into Chrome failed; trying again next launch`, error);
+      return "kept";
     } finally {
-      loads.delete(engine);
+      if (current(run)) migrating.clear();
     }
-  })();
-  return state.running;
-}
-
-function changed(change: HistoryChange) {
-  const engine = change.profile;
-  if (migrating.has(engine)) return;
-  const running = loads.get(engine);
-  if (running) return void running.queued.push(change);
-  if (!loaded.has(engine)) return;
-  if (change.kind === "deleted" && change.all) return void load(engine);
-  setView(engine, applyHistoryChange(viewOf(engine), change));
-}
-
-// MARK: The old file
-
-type LegacyFile = { history?: Record<string, HistoryEntry[]> };
-
-/**
- * Adds history.json's visits that Chrome doesn't have (imports, other Macs' synced history, visits it never
- * saw) to Chrome, then deletes the file once Chrome has committed. Adding again is harmless (each visit Chrome
- * has accounts for one saved visit), so a launch that stops halfway starts over. Profiles that no longer exist
- * are dropped.
- */
-export async function migrateHistoryFile(now = Date.now(), { keepMs = LEGACY_KEPT_MS } = {}): Promise<"none" | "moved" | "kept"> {
-  let file: LegacyFile | null = null;
-  try {
-    const json = readDocument(LEGACY_FILE);
-    file = json ? (JSON.parse(json) as LegacyFile) : null;
-  } catch (error) {
-    console.warn(`[history] ${LEGACY_FILE} is unreadable; leaving it`, error);
-    return "kept";
-  }
-  if (!file) return "none";
-  const s = store();
-  const perEngine = new Map<string, HistoryEntry[]>();
-  for (const [profileId, list] of Object.entries(file.history ?? {})) {
-    if (!s.profiles[profileId] || isIncognitoProfile(profileId) || !Array.isArray(list)) continue;
-    const engine = engineProfile(profileId);
-    // Profiles sharing data saved the same list.
-    if (!perEngine.has(engine)) perEngine.set(engine, list);
-  }
-  for (const engine of perEngine.keys()) migrating.add(engine);
-  try {
-    for (const [engine, list] of perEngine) {
-      const pages = list
-        .filter((e) => e && typeof e.url === "string")
-        .map((e) => ({
-          url: e.url,
-          title: e.title ?? "",
-          visitTimes: (e.visitTimes?.length ? e.visitTimes : [e.lastVisit]).filter((t) => typeof t === "number" && t > now - CHROME_KEEPS_MS),
-        }))
-        .filter((p) => p.visitTimes.length);
-      for (let i = 0; i < pages.length; i += CHUNK) await addHistoryVisits(engine, pages.slice(i, i + CHUNK), LEGACY_TOLERANCE_MS);
+    if (!current(run)) return "kept";
+    if (keepMs) {
+      const timer = setTimeout(() => { timers.delete(timer); if (current(run)) removeDocument(LEGACY_FILE); }, keepMs);
+      timers.add(timer);
     }
-  } catch (error) {
-    console.warn(`[history] moving ${LEGACY_FILE} into Chrome failed; trying again next launch`, error);
-    return "kept";
-  } finally {
+    else removeDocument(LEGACY_FILE);
+    return "moved";
+  }
+
+  // MARK: Start
+
+  function startHistory() {
+    if (stopListening) return stopListening;
+    active = true;
+    const run = generation;
+    const events = onHistoryChanged((change) => { if (current(run)) changed(change); });
+    const loadAll = (s: Pick<BrowserState, "profiles">) => {
+      for (const engine of engineProfiles(s)) if (!loaded.has(engine) && !loads.has(engine)) void load(engine);
+    };
+    // With an old history.json to move in, the views are first read (and Chrome's changes watched) once it's in:
+    // watching during the move sent the JS one event per moved visit (~88,000 for a long-used profile, ~200 ms of
+    // the startup JS), all of them ignored, and the views are read again after it anyway.
+    let moving = readDocument(LEGACY_FILE) !== null;
+    if (!moving) loadAll(store());
+    void migrateHistoryFile().then((result) => {
+      if (!current(run)) return;
+      legacyMoved = result !== "kept";
+      if (moving) {
+        moving = false;
+        loadAll(store());
+      } else if (result === "moved") void reloadHistory();
+      else if (legacyMoved) for (const engine of loaded) setView(engine, viewOf(engine));
+    });
+    const stop = browser.subscribe((s, prev) => {
+      if (s.profiles === prev.profiles) return;
+      if (!moving) loadAll(s);
+      // A profile sharing another's data shows its list at once.
+      for (const id of Object.keys(s.profiles)) {
+        if (prev.profiles[id] || isIncognitoProfile(id) || s.history[id]) continue;
+        const list = viewOf(engineProfileFor(id, s.profiles));
+        if (list.length) setView(engineProfileFor(id, s.profiles), list);
+      }
+    });
+    stopListening = () => {
+      if (!current(run)) return;
+      active = false;
+      generation++;
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+      loads.clear();
+      migrating.clear();
+      stopListening = undefined;
+      events.remove();
+      stop();
+      loaded.clear();
+      legacyMoved = false;
+    };
+    return stopListening;
+  }
+
+  /** Re-reads every profile's history from Chrome (the dev harness, tests). */
+  const reloadHistory = () => Promise.all(engineProfiles(store()).map(load));
+
+  function dispose() {
+    if (stopListening) { stopListening(); return; }
+    active = false;
+    generation++;
+    for (const timer of timers) clearTimeout(timer);
+    timers.clear();
+    loads.clear();
     migrating.clear();
-  }
-  if (keepMs) setTimeout(() => removeDocument(LEGACY_FILE), keepMs);
-  else removeDocument(LEGACY_FILE);
-  return "moved";
-}
-
-// MARK: Start
-
-export function startHistory() {
-  const events = onHistoryChanged(changed);
-  const loadAll = (s: Pick<BrowserState, "profiles">) => {
-    for (const engine of engineProfiles(s)) if (!loaded.has(engine) && !loads.has(engine)) void load(engine);
-  };
-  // With an old history.json to move in, the views are first read (and Chrome's changes watched) once it's in:
-  // watching during the move sent the JS one event per moved visit (~88,000 for a long-used profile, ~200 ms of
-  // the startup JS), all of them ignored, and the views are read again after it anyway.
-  let moving = readDocument(LEGACY_FILE) !== null;
-  if (!moving) loadAll(store());
-  void migrateHistoryFile().then((result) => {
-    legacyMoved = result !== "kept";
-    if (moving) {
-      moving = false;
-      loadAll(store());
-    } else if (result === "moved") void reloadHistory();
-    else if (legacyMoved) for (const engine of loaded) setView(engine, viewOf(engine));
-  });
-  const stop = useBrowser.subscribe((s, prev) => {
-    if (s.profiles === prev.profiles) return;
-    if (!moving) loadAll(s);
-    // A profile sharing another's data shows its list at once.
-    for (const id of Object.keys(s.profiles)) {
-      if (prev.profiles[id] || isIncognitoProfile(id) || s.history[id]) continue;
-      const list = viewOf(engineProfile(id));
-      if (list.length) setView(engineProfile(id), list);
-    }
-  });
-  return () => {
-    events.remove();
-    stop();
     loaded.clear();
     legacyMoved = false;
-  };
+  }
+
+  return { start: startHistory, reload: reloadHistory, migrateFile: migrateHistoryFile, dispose };
 }
 
-/** Re-reads every profile's history from Chrome (the dev harness, tests). */
-export const reloadHistory = () => Promise.all(engineProfiles(store()).map(load));
+const historyService = createHistoryService(useBrowser);
+export const startHistory = historyService.start;
+export const reloadHistory = historyService.reload;
+export const migrateHistoryFile = historyService.migrateFile;
