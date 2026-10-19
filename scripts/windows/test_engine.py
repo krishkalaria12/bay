@@ -224,7 +224,7 @@ class ArtifactTests(unittest.TestCase):
             root = pathlib.Path(directory)
             artifact, web, destination = root / "engine", root / "web", root / "app"
             manifest = self.make_artifact(artifact)
-            for name in ("chrome.exe", "chrome_elf.dll", "resources.pak", "icudtl.dat", "bay-ui/native_host.mojom-webui.js"):
+            for name in ("chrome.exe", "chrome_elf.dll", "notification_helper.exe", "resources.pak", "icudtl.dat", "bay-ui/native_host.mojom-webui.js"):
                 path = artifact / "runtime" / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(name.encode())
@@ -237,9 +237,21 @@ class ArtifactTests(unittest.TestCase):
                 build_app.stage(artifact, web, destination)
             self.assertEqual((destination / "Bay.exe").read_bytes(), b"chrome.exe")
             self.assertFalse((destination / "chrome.exe").exists())
+            self.assertEqual((destination / "notification_helper.exe").read_bytes(), b"notification_helper.exe")
             self.assertEqual((destination / "bay-ui/native_host.mojom-webui.js").read_text(), "bay-ui/native_host.mojom-webui.js")
             self.assertTrue((destination / "bay-ui/index.html").is_file())
             self.assertEqual(build_app.web_artifacts.verify_manifest(destination)["engineId"], "fixture")
+
+            # A valid artifact manifest can still describe an incomplete
+            # runtime. Refuse it before creating an unusable app directory.
+            (artifact / "runtime/notification_helper.exe").unlink()
+            del manifest["files"]["runtime/notification_helper.exe"]
+            (artifact / "manifest.json").write_text(json.dumps(manifest))
+            incomplete = root / "missing-helper"
+            with mock.patch.object(build_app.fetch.engine, "artifact_id", return_value="fixture"):
+                with self.assertRaisesRegex(ValueError, "missing notification_helper.exe"):
+                    build_app.stage(artifact, web, incomplete)
+            self.assertFalse(incomplete.exists())
 
     @staticmethod
     def make_web_entry(directory):
@@ -308,7 +320,7 @@ class ArtifactTests(unittest.TestCase):
             (root / "bay-engine-build.json").write_text(json.dumps({"lock": engine.LOCK, "sourceDigest": "digest"}))
             binaries = root / "chromium_git/chromium/src" / engine.LOCK["outputDirectory"]
             binaries.mkdir(parents=True)
-            for name in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "icudtl.dat", "resources.pak", "chrome.pdb"):
+            for name in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "notification_helper.exe", "icudtl.dat", "resources.pak", "chrome.pdb"):
                 (binaries / name).write_bytes(name.encode())
             (binaries / "locales").mkdir()
             generated = binaries / "gen/chrome/browser/bay/webui/resources/tsc"
@@ -320,6 +332,7 @@ class ArtifactTests(unittest.TestCase):
             with zipfile.ZipFile(output / "fixture.zip") as archive:
                 self.assertIn("runtime/bay-ui/helper.js", archive.namelist())
                 self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", archive.namelist())
+                self.assertIn("runtime/notification_helper.exe", archive.namelist())
                 self.assertNotIn("runtime/chrome.pdb", archive.namelist())
                 manifest = json.loads(archive.read("manifest.json"))
                 self.assertEqual(manifest["mojo"]["sharedImports"], ["//resources/mojo/mojo/public/js/bindings.js"])

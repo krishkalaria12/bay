@@ -236,7 +236,7 @@ def archive(root, output):
         raise RuntimeError("engine sources changed since the last successful build; run build before archiving")
     src = root / "chromium_git/chromium/src"
     binaries = src / LOCK["outputDirectory"]
-    for required in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "icudtl.dat", "resources.pak", "locales"):
+    for required in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "notification_helper.exe", "icudtl.dat", "resources.pak", "locales"):
         if not (binaries / required).exists():
             raise RuntimeError(f"missing engine output: {binaries / required}")
     files = {}
