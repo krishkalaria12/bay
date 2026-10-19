@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { docs } from "../test-native-stub.mjs";
+import { docs, heldSaves } from "../test-native-stub.mjs";
 
 let instance = 0;
 const freshStore = () => import(`./store.ts?live-persistence=${++instance}`);
@@ -92,4 +92,64 @@ test("invalid Live JSON restores defaults without writing over the document", as
   assert.equal(useLive.getState().calendar.showTimeToNext, true);
   t.mock.timers.tick(1000);
   assert.equal(docs.get("live.json"), "broken JSON");
+});
+
+test("final Live persistence drains the debounce and waits for disk acknowledgement", async (t) => {
+  docs.clear();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { startLivePersistence, flushLivePersistence, updateConfig } = await freshStore();
+  const stop = startLivePersistence();
+  t.after(() => { heldSaves.on = false; heldSaves.queue.splice(0).forEach(release => release()); stop(); });
+  updateConfig({ githubClientId: "before-quit" });
+  heldSaves.on = true;
+  let saved = false;
+  const final = flushLivePersistence({ final: true });
+  void final.then(() => { saved = true; });
+  assert.strictEqual(flushLivePersistence({ final: true }), final);
+  await Promise.resolve();
+  assert.equal(saved, false);
+  assert.equal(heldSaves.queue.length, 1);
+  updateConfig({ githubClientId: "while-closing" });
+  t.mock.timers.tick(1000);
+  assert.equal(docs.has("live.json"), false);
+  heldSaves.queue.splice(0).forEach(release => release());
+  await final;
+  assert.equal(JSON.parse(docs.get("live.json")).config.githubClientId, "before-quit");
+});
+
+test("cancelled Live quit resumes current memory despite a late final acknowledgement", async (t) => {
+  docs.clear();
+  const { startLivePersistence, flushLivePersistence, resumeLivePersistence, updateConfig, live } = await freshStore();
+  const stop = startLivePersistence();
+  t.after(() => { heldSaves.on = false; heldSaves.queue.splice(0).forEach(release => release()); stop(); });
+  updateConfig({ githubClientId: "old" });
+  heldSaves.on = true;
+  const final = flushLivePersistence({ final: true });
+  updateConfig({ githubClientId: "current" });
+  resumeLivePersistence();
+  const newer = docs.get("live.json");
+  assert.equal(JSON.parse(newer).config.githubClientId, "current");
+  heldSaves.queue.splice(0).forEach(release => release());
+  await final;
+  // The real transport serializes the newer write after the old final save.
+  docs.set("live.json", newer);
+  assert.equal(live().config.githubClientId, "current");
+  heldSaves.on = false;
+  updateConfig({ githubClientId: "after-cancellation" });
+  await flushLivePersistence();
+  assert.equal(JSON.parse(docs.get("live.json")).config.githubClientId, "after-cancellation");
+});
+
+test("a failed final Live save rejects and can be saved after cancellation", async (t) => {
+  docs.clear();
+  const { startLivePersistence, flushLivePersistence, resumeLivePersistence, updateConfig } = await freshStore();
+  const stop = startLivePersistence();
+  t.after(() => { heldSaves.error = null; stop(); });
+  updateConfig({ githubClientId: "retained" });
+  heldSaves.error = new Error("disk full");
+  await assert.rejects(flushLivePersistence({ final: true }), /disk full/);
+  heldSaves.error = null;
+  resumeLivePersistence();
+  await flushLivePersistence({ final: true });
+  assert.equal(JSON.parse(docs.get("live.json")).config.githubClientId, "retained");
 });

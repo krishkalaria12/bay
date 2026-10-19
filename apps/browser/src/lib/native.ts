@@ -30,6 +30,7 @@ import { openExternalUrls } from "../components/harbor/actions";
 import { HARBOR_DISABLED_COMMANDS } from "../components/harbor/menu";
 import { runCommand } from "./commands";
 import { flushPersistence, resumePersistence } from "./persist";
+import { flushLivePersistence, resumeLivePersistence } from "../live/store";
 import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
@@ -60,7 +61,7 @@ export function startNativeSync() {
     if (e.type === "willQuit") {
       quitting = true;
       const attempt = ++quitAttempt;
-      void flushPersistence({ final: true }).then(() => {
+      void Promise.all([flushPersistence({ final: true }), flushLivePersistence({ final: true })]).then(() => {
         if (quitting && attempt === quitAttempt) return replyToTerminate(true);
       }, error => {
         console.error("Couldn't save the session before quitting", error);
@@ -71,6 +72,7 @@ export function startNativeSync() {
       quitting = false;
       quitAttempt++;
       resumePersistence();
+      resumeLivePersistence();
     }
   });
 

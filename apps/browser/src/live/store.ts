@@ -1,4 +1,4 @@
-import { readDocument, writeDocument } from "@bay/shell";
+import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import { create } from "zustand";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
 
@@ -95,34 +95,69 @@ export const useLive = create<LiveState>()(() => initialState());
 export const live = () => useLive.getState();
 export const setLive = (patch: Partial<LiveState> | ((s: LiveState) => Partial<LiveState>)) => useLive.setState(patch);
 
-let stopPersistence: (() => void) | undefined;
+type LivePersistence = { stop(): void; flush(final: boolean): Promise<void>; resume(): void };
+let persistence: LivePersistence | undefined;
+
+export function flushLivePersistence({ final = false } = {}): Promise<void> {
+  return persistence?.flush(final) ?? Promise.resolve();
+}
+
+export function resumeLivePersistence() { persistence?.resume(); }
 
 /** Load shared Live state once, before services and windows start using it. */
 export function startLivePersistence(): () => void {
-  if (stopPersistence) return stopPersistence;
+  if (persistence) return persistence.stop;
   useLive.setState(initialState(load()), true);
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let frozen = false;
+  let finalFlush: Promise<void> | null = null;
+  const json = () => {
+    const state = live();
+    return JSON.stringify(Object.fromEntries(PERSISTED.map(key => [key, state[key]])));
+  };
+  const write = () => {
+    timer = undefined;
+    try { writeDocument(DOC, json()); }
+    catch (error) { console.warn("Couldn't save live folders", error); }
+  };
+  const save = (): Promise<void> => {
+    try { return Promise.resolve(saveDocument(DOC, json())); }
+    catch (error) { return Promise.reject(error); }
+  };
   const unsubscribe = useLive.subscribe((s, prev) => {
-    if (PERSISTED.every((key) => s[key] === prev[key])) return;
+    if (frozen || PERSISTED.every((key) => s[key] === prev[key])) return;
     clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = undefined;
-      const s = live();
-      try {
-        writeDocument(DOC, JSON.stringify(Object.fromEntries(PERSISTED.map((key) => [key, s[key]]))));
-      } catch (error) {
-        console.warn("Couldn't save live folders", error);
-      }
-    }, 800);
+    timer = setTimeout(write, 800);
   });
   const stop = () => {
-    if (stopPersistence !== stop) return;
+    if (persistence?.stop !== stop) return;
     clearTimeout(timer);
     unsubscribe();
-    stopPersistence = undefined;
+    persistence = undefined;
   };
-  stopPersistence = stop;
+  persistence = {
+    stop,
+    flush(final) {
+      clearTimeout(timer);
+      timer = undefined;
+      if (frozen) return finalFlush ?? Promise.resolve();
+      if (!final) return save();
+      // Capture and acknowledge every final document, including a pending
+      // background write. Closing-window mutations must not replace it.
+      frozen = true;
+      finalFlush = save();
+      return finalFlush;
+    },
+    resume() {
+      frozen = false;
+      finalFlush = null;
+      clearTimeout(timer);
+      // Cancellation preserves changes made while closing, without loading
+      // disk state over the current in-memory folders and account settings.
+      write();
+    },
+  };
   return stop;
 }
 
