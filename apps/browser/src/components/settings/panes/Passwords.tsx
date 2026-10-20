@@ -107,7 +107,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
     <View>
       <SectionHeader
         title="Passwords"
-        description="Saved on this Mac, separately for each profile, and encrypted with a key in your Keychain."
+        description="Saved on this Mac, separately for each space, and encrypted with a key in your Keychain."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }

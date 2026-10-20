@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatShortcut, parseShortcut, relabelShortcuts, strokeMatches, WINDOWS_SHORTCUTS } from "./keys.ts";
+import { formatShortcut, parseShortcut, relabelShortcuts, strokeMatches, windowsShortcutLabel, WINDOWS_SHORTCUTS } from "./keys.ts";
 import { capabilitiesFor } from "./capabilities.ts";
 
 test("desktop shortcut labels preserve Mac glyphs and spell Windows modifiers", () => {
@@ -15,6 +15,11 @@ test("Windows shortcut matches Control, Alt navigation and explicit Control stro
   assert.equal(strokeMatches(WINDOWS_SHORTCUTS.newTab, { key: "t", metaKey: true }), false);
   assert.equal(strokeMatches(WINDOWS_SHORTCUTS.back, { key: "ArrowLeft", altKey: true }), true);
   assert.equal(strokeMatches({ key: "Tab", ctrl: true }, { key: "Tab", ctrlKey: true }), true);
+});
+test("Windows opens the same space menu command as macOS", () => {
+  assert.equal(windowsShortcutLabel("openSpaceMenu"), "Ctrl+Shift+P");
+  assert.equal(strokeMatches(WINDOWS_SHORTCUTS.openSpaceMenu, { key: "p", ctrlKey: true, shiftKey: true }), true);
+  assert.equal(WINDOWS_SHORTCUTS.openProfileMenu, undefined);
 });
 test("Windows never advertises Apple-only features, even if a bridge shares module names", () => {
   const windows = capabilitiesFor("windows", () => true);

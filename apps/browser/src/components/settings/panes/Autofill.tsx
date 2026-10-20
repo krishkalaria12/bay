@@ -61,7 +61,7 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
     <View>
       <SectionHeader
         title="Autofill"
-        description={`Addresses and cards you save are offered when you fill in a form, separately for each profile. Card numbers are kept in ${isMac ? "your macOS Keychain" : "Windows Credential Manager"}.`}
+        description={`Addresses and cards you save are offered when you fill in a form, separately for each space. Card numbers are kept in ${isMac ? "your macOS Keychain" : "Windows Credential Manager"}.`}
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }

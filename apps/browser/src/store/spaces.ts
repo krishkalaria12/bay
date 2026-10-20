@@ -200,7 +200,7 @@ export const createSpacesSlice =
         const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
         const profile: Space = {
           id: newId("p"),
-          name: name.trim() || `Profile ${s.spaceOrder.length + 1}`,
+          name: name.trim() || `Space ${s.spaceOrder.length + 1}`,
           color: look.color,
           ...(look.theme ? { theme: look.theme } : {}),
           icon: icon || unusedSpaceIcon(s.spaces),

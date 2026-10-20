@@ -182,7 +182,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   keyboardShortcuts: { key: "/", mod: true },
   openFile: { key: "O", mod: true },
   newLittleBay: { key: "N", mod: true, alt: true },
-  openProfileMenu: { key: "P", mod: true, shift: true },
+  openSpaceMenu: { key: "P", mod: true, shift: true },
   moveTabUp: { key: "Up", mod: true, shift: true },
   moveTabDown: { key: "Down", mod: true, shift: true },
   moveTabToWindow: { key: "N", mod: true, shift: true },

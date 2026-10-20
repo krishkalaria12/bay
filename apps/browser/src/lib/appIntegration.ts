@@ -87,7 +87,7 @@ export async function diagnostics(): Promise<string> {
     engine ? `Engine: NNCore, Chromium ${engine.chromiumVersion}` : "Engine: unavailable",
     `${isMac ? "macOS" : "Windows"} ${app.osVersion} (${app.osBuild}), ${app.arch}, ${app.model}, ${Math.round(app.memoryGB)} GB`,
     `Bundle: ${app.bundleId}, locale ${app.locale}`,
-    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, profiles: ${s.spaceOrder.length}`,
+    `Windows: ${regular.length} (+${s.windowOrder.length - regular.length} incognito), tabs: ${Object.keys(s.tabs).length}, spaces: ${s.spaceOrder.length}`,
     !updates?.available
       ? "Updates: not built in"
       : !updates.configured
@@ -266,7 +266,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
     }
     case "focusProfile": {
       const windowId = resolveWindowId(s, null);
-      if (!s.spaces[request.profileId]) throw new Error("That profile no longer exists.");
+      if (!s.spaces[request.profileId]) throw new Error("That space no longer exists.");
       if (!windowId || s.windows[windowId]!.incognito) throw new Error("There's no window to show the space in.");
       return switchSpace(windowId, request.profileId);
     }

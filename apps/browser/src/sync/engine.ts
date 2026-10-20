@@ -40,7 +40,7 @@ import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules";
 export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "settings";
 
 export const DATA_TYPES: { id: DataType; title: string; description: string }[] = [
-  { id: "bookmarks", title: "Bookmarks", description: "Each synced profile’s bookmarks bar and other bookmarks." },
+  { id: "bookmarks", title: "Bookmarks", description: "Each synced space’s bookmarks bar and other bookmarks." },
   { id: "history", title: "History", description: "The last 90 days." },
   { id: "tabs", title: "Open Tabs", description: "Your other devices’ tabs show in the tab overflow menu." },
   { id: "pinned", title: "Pinned Tabs and Groups", description: "Pinned tabs and pinned tab groups." },

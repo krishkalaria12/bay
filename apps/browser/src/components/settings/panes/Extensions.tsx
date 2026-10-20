@@ -48,7 +48,7 @@ export function ExtensionsPane() {
     <View>
       <SectionHeader
         title="Extensions"
-        description="Add features to Bay with extensions from the Chrome Web Store. Each profile has its own."
+        description="Add features to Bay with extensions from the Chrome Web Store. Each space has its own."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }

@@ -162,7 +162,7 @@ export function SpacesStep({ flow }: StepProps) {
           )}
           <Text
             style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 10 }}
-          >{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected profile; the others become new profiles.`}</Text>
+          >{`Customize which profiles to bring over to ${APP_NAME}. The first goes into your selected space; the others become new spaces.`}</Text>
           <View style={{ gap: 6 }}>
             {source.profiles.map((p) => (
               <SelectRow

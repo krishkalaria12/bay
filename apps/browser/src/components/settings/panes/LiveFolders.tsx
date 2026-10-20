@@ -49,7 +49,7 @@ export function LiveFoldersPane() {
             <Row
               key={f.id}
               title={f.name}
-              description={`${profiles[f.spaceId]?.name ?? "Profile"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
+              description={`${profiles[f.spaceId]?.name ?? "Space"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
             >
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <Button title="Refresh" onPress={() => void refreshFolder(f.id)} />

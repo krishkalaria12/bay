@@ -49,7 +49,7 @@ export function closeWindowDialog(windowId: string) {
   const message =
     byProfile.size > 1
       ? ["Closing this window closes all tabs open across spaces:", ...[...byProfile].map(([id, n]) => `  • ${tabs(n)} in ${spaceFor(s, id).name}`)].join("\n")
-      : `This window has ${tabs(count)} open in your ${spaceFor(s, w.spaceId).name} profile.`;
+      : `This window has ${tabs(count)} open in your ${spaceFor(s, w.spaceId).name} space.`;
   return {
     title: count === 1 ? "Close 1 tab?" : `Close ${count} tabs?`,
     message,
