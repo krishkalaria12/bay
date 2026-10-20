@@ -1,3 +1,4 @@
+import { reportBrowserCommand } from "../runtime/commands";
 import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/shell";
 import { markdownLink } from "@bay/core";
 import { useBrowser } from "../store/browser";
@@ -42,11 +43,11 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "undoPinnedFolderMove":
       return s.undoPinnedFolderMove();
     case "newWindow":
-      return void openWindow({ spaceId: arg ?? undefined });
+      return reportBrowserCommand(openWindow({ spaceId: arg ?? undefined }));
     case "newIncognitoWindow":
-      return void openWindow({ incognito: true });
+      return reportBrowserCommand(openWindow({ incognito: true }));
     case "newLittleBay":
-      return void openLittleBay();
+      return reportBrowserCommand(openLittleBay());
     case "toggleOpenLinksInLittleBay":
       return s.updateSettings({ openLinksInLittleBay: !s.settings.openLinksInLittleBay });
     case "reopenClosedWindow":
@@ -94,8 +95,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
   const windowId = resolveWindowId(s, requested);
   if (!windowId) {
     if (command === "newTab") {
-      const created = openWindow();
-      useBrowser.getState().openPanel(created);
+      reportBrowserCommand(openWindow(undefined, true));
     }
     if (command === "reopenClosedTab" || command === "restoreClosed") {
       if (arg) s.restoreClosed(arg);
@@ -336,7 +336,7 @@ function runLittleBayCommand(command: string, windowId: string): boolean {
       s.openPanel(windowId, tab?.url ?? "");
       return true;
     case "openFile":
-      openInMainWindow(windowId);
+      reportBrowserCommand(openInMainWindow(windowId));
       return true;
   }
   return false;
@@ -383,7 +383,7 @@ async function openFiles(windowId: string | null) {
   if (!urls.length) return;
   const s = useBrowser.getState();
   const target = resolveWindowId(s, windowId);
-  if (!target) return void openWindow({ url: urls[0] });
+  if (!target) return void (await openWindow({ url: urls[0] }));
   let last: string | undefined;
   for (const url of urls) last = useBrowser.getState().newTab(target, { url });
   if (last) useBrowser.getState().activate(last, target);

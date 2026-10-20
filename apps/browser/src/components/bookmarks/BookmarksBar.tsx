@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PanResponder, StyleSheet, Text, type LayoutRectangle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
@@ -205,7 +206,7 @@ function BarItem({
   );
   if (!node) return null;
   const open = (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>
-    node.kind === "url" ? openUrl(node.url, windowId, openModeFor(e)) : void openFolderMenu(windowId, node.children, undefined, node.id);
+    node.kind === "url" ? reportBrowserCommand(openUrl(node.url, windowId, openModeFor(e))) : void openFolderMenu(windowId, node.children, undefined, node.id);
 
   return (
     <Animated.View
@@ -328,10 +329,10 @@ async function openFolderMenu(windowId: string, ids: string[], _e?: ClickMods, f
   if (!choice) return;
   const [action, id] = splitChoice(choice);
   const node = id ? useBrowser.getState().bookmarks.nodes[id] : undefined;
-  if (action === "open" && node?.kind === "url") openUrl(node.url, windowId, "current");
-  if (action === "openAll" && id) void openFolder(id, windowId, "tabs");
-  if (action === "openAllWindow" && id) void openFolder(id, windowId, "window");
-  if (action === "openAllIncognito" && id) void openFolder(id, windowId, "incognito");
+  if (action === "open" && node?.kind === "url") reportBrowserCommand(openUrl(node.url, windowId, "current"));
+  if (action === "openAll" && id) reportBrowserCommand(openFolder(id, windowId, "tabs"));
+  if (action === "openAllWindow" && id) reportBrowserCommand(openFolder(id, windowId, "window"));
+  if (action === "openAllIncognito" && id) reportBrowserCommand(openFolder(id, windowId, "incognito"));
 }
 
 const splitChoice = (choice: string): [string, string] => {
@@ -386,17 +387,17 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
   if (!choice) return;
   const bar = s.bookmarks.roots[spaceId]?.bar;
   if (node?.kind === "url") {
-    if (choice === "tab") openUrl(node.url, windowId, "foreground");
-    if (choice === "window") openUrl(node.url, windowId, "window");
-    if (choice === "incognito") openUrl(node.url, windowId, "incognito");
-    if (choice === "split") openUrl(node.url, windowId, "split");
+    if (choice === "tab") reportBrowserCommand(openUrl(node.url, windowId, "foreground"));
+    if (choice === "window") reportBrowserCommand(openUrl(node.url, windowId, "window"));
+    if (choice === "incognito") reportBrowserCommand(openUrl(node.url, windowId, "incognito"));
+    if (choice === "split") reportBrowserCommand(openUrl(node.url, windowId, "split"));
     if (choice === "edit") void editBookmark(node.id, windowId);
     if (choice === "copy") copyText(cleanUrl(node.url));
   }
   if (node?.kind === "folder") {
-    if (choice === "openAll") void openFolder(node.id, windowId, "tabs");
-    if (choice === "openAllWindow") void openFolder(node.id, windowId, "window");
-    if (choice === "openAllIncognito") void openFolder(node.id, windowId, "incognito");
+    if (choice === "openAll") reportBrowserCommand(openFolder(node.id, windowId, "tabs"));
+    if (choice === "openAllWindow") reportBrowserCommand(openFolder(node.id, windowId, "window"));
+    if (choice === "openAllIncognito") reportBrowserCommand(openFolder(node.id, windowId, "incognito"));
     if (choice === "rename") void editBookmark(node.id, windowId);
   }
   if (choice === "delete" && node) useBrowser.getState().removeBookmark(node.id);
@@ -407,6 +408,6 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (title) useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index });
   }
-  if (choice === "manage") openInternalPage("bookmarks", windowId);
+  if (choice === "manage") reportBrowserCommand(openInternalPage("bookmarks", windowId));
   if (choice.startsWith("bar:")) useBrowser.getState().updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode });
 }

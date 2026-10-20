@@ -75,7 +75,7 @@ function openRequestedTab(request: TabsRequest) {
     : undefined;
   if (request.adoptId && spaceId) {
     if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
-    else openWindow({ url: request.url, adoptId: request.adoptId, spaceId });
+    else s.createWindow({ url: request.url, adoptId: request.adoptId, spaceId });
     return;
   }
   if (windowId) s.newTab(windowId, { url: request.url, background });

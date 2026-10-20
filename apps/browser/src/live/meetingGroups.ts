@@ -1,4 +1,6 @@
 import { confirm } from "@bay/shell";
+import { activate, newTab } from "../runtime/tabActions";
+import { browserRead } from "../store/read";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { changedIds } from "../store/changes";
 import { activeTabId } from "../store/model";
@@ -47,18 +49,18 @@ export function groupCall(tabId: string, event?: CalendarEvent | null): string {
   return groupId;
 }
 
-export function joinMeeting(windowId: string, event: CalendarEvent, joinUrl: string, openAll = false) {
-  const s = store();
+export async function joinMeeting(windowId: string, event: CalendarEvent, joinUrl: string, openAll = false) {
+  const s = browserRead.getState();
   if (!s.windows[windowId]) return;
-  const callTab = s.newTab(windowId, { url: joinUrl });
+  const callTab = await newTab(windowId, { url: joinUrl });
   const grouped = s.settings.autoGroupMeetingTabs ? groupCall(callTab, event) : "";
   if (openAll) {
     for (const url of relatedLinks(event)) {
-      const id = store().newTab(windowId, { url, background: true, openerId: callTab });
+      const id = await newTab(windowId, { url, background: true, openerId: callTab });
       if (grouped && !groupOf(store(), id)) store().addTabsToGroup(grouped, [id]);
     }
   }
-  store().activate(callTab);
+  await activate(callTab);
 }
 
 let started = false;

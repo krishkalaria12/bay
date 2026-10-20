@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
 import type { Tab } from "../../store/types";
@@ -106,7 +107,7 @@ function LittleBayBar() {
           box={SMALL_BUTTON}
           radius={7}
           tooltip="Open in Bay (⌘O)"
-          onPress={() => openInMainWindow(windowId)}
+          onPress={() => reportBrowserCommand(openInMainWindow(windowId))}
         />
       </View>
     </View>

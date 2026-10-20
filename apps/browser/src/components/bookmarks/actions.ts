@@ -4,6 +4,8 @@ import { create } from "zustand";
 import { focus, openWindow } from "../../lib/actions";
 import { folderLinks } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
+import { browserRead } from "../../store/read";
+import { navigate, newTab } from "../../runtime/tabActions";
 import { activeTabId, bookmarkSpaceId, listIds, resolveWindowId, viewTabIds, windowListKey } from "../../store/model";
 
 export type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";
@@ -15,28 +17,28 @@ export function openModeFor(e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?
   return "current";
 }
 
-export function openUrl(url: string, windowId: string | null | undefined, mode: OpenMode) {
-  const s = useBrowser.getState();
+export async function openUrl(url: string, windowId: string | null | undefined, mode: OpenMode) {
+  const s = browserRead.getState();
   const id = resolveWindowId(s, windowId);
-  if (mode === "incognito") return void openWindow({ incognito: true, url });
+  if (mode === "incognito") return void (await openWindow({ incognito: true, url }));
   if (!id || mode === "window") {
     const w = id ? s.windows[id] : undefined;
     // From a private window, a new window stays private.
-    const created = openWindow(w?.incognito ? { incognito: true, url } : { url, spaceId: w?.spaceId });
+    const created = await openWindow(w?.incognito ? { incognito: true, url } : { url, spaceId: w?.spaceId });
     return focus(created);
   }
   const tabId = activeTabId(s, id);
   if (mode === "split") {
-    const result = s.openSplitPane(id, { url });
+    const result = useBrowser.getState().openSplitPane(id, { url });
     if (result.ok) return;
-    return void s.newTab(id, { url });
+    return void (await newTab(id, { url }));
   }
-  if (mode === "current" && tabId) return s.navigate(tabId, url);
-  s.newTab(id, { url, background: mode === "background", openerId: mode === "background" ? tabId : undefined });
+  if (mode === "current" && tabId) return navigate(tabId, url);
+  await newTab(id, { url, background: mode === "background", openerId: mode === "background" ? tabId : undefined });
 }
 
 export async function openFolder(folderId: string, windowId: string | null | undefined, mode: "tabs" | "window" | "incognito" = "tabs") {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const links = folderLinks(s.bookmarks, folderId);
   if (!links.length) return;
   if (links.length > 15) {
@@ -52,22 +54,22 @@ export async function openFolder(folderId: string, windowId: string | null | und
   const source = id ? s.windows[id] : undefined;
   if (mode !== "tabs" || !id) {
     const incognito = mode === "incognito" || !!source?.incognito;
-    const created = openWindow({ url: links[0]!.url, incognito, spaceId: incognito ? undefined : source?.spaceId });
-    openInOrder(created, links.slice(1), activeTabId(useBrowser.getState(), created));
+    const created = await openWindow({ url: links[0]!.url, incognito, spaceId: incognito ? undefined : source?.spaceId });
+    await openInOrder(created, links.slice(1), activeTabId(browserRead.getState(), created));
     return focus(created);
   }
-  const first = useBrowser.getState().newTab(id, { url: links[0]!.url });
-  openInOrder(id, links.slice(1), first);
+  const first = await newTab(id, { url: links[0]!.url });
+  await openInOrder(id, links.slice(1), first);
 }
 
 // The folder's order, whatever the new-tab position setting.
-function openInOrder(windowId: string, links: { url: string }[], after: string | undefined) {
+async function openInOrder(windowId: string, links: { url: string }[], after: string | undefined) {
   for (const link of links) {
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     const w = s.windows[windowId];
     const tabIds = w ? listIds(s, windowListKey(s, w)) : [];
     const index = after && tabIds.includes(after) ? tabIds.indexOf(after) + 1 : undefined;
-    after = useBrowser.getState().newTab(windowId, { url: link.url, background: true, index }) || after;
+    after = (await newTab(windowId, { url: link.url, background: true, index })) || after;
   }
 }
 

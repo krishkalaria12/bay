@@ -213,13 +213,13 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
   };
   switch (request.command) {
     case "newWindow": {
-      const windowId = openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
+      const windowId = await openWindow({ url: request.url, incognito: request.incognito, spaceId: request.profileId });
       return { windowId };
     }
     case "newTab": {
       const windowId = resolveWindowId(s, request.windowId);
       if (!windowId) {
-        const created = openWindow({ url: request.url });
+        const created = await openWindow({ url: request.url });
         return { windowId: created, tabId: activeTabId(useBrowser.getState(), created) };
       }
       const view = viewTabIds(s, windowId);
@@ -258,7 +258,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
       return void (await loaded(request.tabId).goForward());
     case "focusTab":
       tabOf(request.tabId);
-      return switchToTab(request.tabId);
+      return void (await switchToTab(request.tabId));
     case "setActiveTabIndex": {
       if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
       if (request.index < 1 || request.index > viewTabIds(s, request.windowId).length) throw new Error("There's no tab at that index.");

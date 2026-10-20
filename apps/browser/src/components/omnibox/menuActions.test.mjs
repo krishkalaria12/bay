@@ -134,7 +134,7 @@ if (!process.env.BAY_MENU_TEST_CHILD) {
     // opening a picker. Keep the palette label aligned with that handler.
     const commandSource = readFileSync(new URL("../../lib/commands.ts", import.meta.url), "utf8");
     const littleBayHandler = commandSource.slice(commandSource.indexOf("function runLittleBayCommand"));
-    assert.match(littleBayHandler, /case "openFile":\s*openInMainWindow\(windowId\);/);
+    assert.match(littleBayHandler, /case "openFile":\s*reportBrowserCommand\(openInMainWindow\(windowId\)\);/);
     for (const id of ["toggleTabLayout", "openSplitPane", "nextTab", "bookmarkAllTabs"]) assert.ok(!ids(littleBay).includes(id), id);
   });
 }

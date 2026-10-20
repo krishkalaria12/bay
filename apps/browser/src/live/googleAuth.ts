@@ -1,4 +1,5 @@
-import { useBrowser } from "../store/browser";
+import { browserRead } from "../store/read";
+import { closeTab, newTab } from "../runtime/tabActions";
 import { GOOGLE_REDIRECT, GOOGLE_SCOPE } from "./constants";
 import { endpoints, form } from "./net";
 import { connectGoogle } from "./sources";
@@ -33,27 +34,37 @@ export function connectGoogleDrive(windowId: string, clientId: string, clientSec
     access_type: "offline",
     prompt: "consent",
   })}`;
-  const tabId = useBrowser.getState().newTab(windowId, { url });
   return new Promise<void>((resolve, reject) => {
-    const stop = useBrowser.subscribe((s, prev) => {
-      if (s.tabs === prev.tabs) return;
-      const tab = s.tabs[tabId];
-      if (!tab) return finish(new Error("Sign-in was cancelled"));
-      if (!tab.url.startsWith(GOOGLE_REDIRECT)) return;
-      const params = query(tab.url);
-      if (params.get("state") !== state) return finish(new Error("Sign-in didn't match this request"));
-      const code = params.get("code");
-      stop();
-      useBrowser.getState().closeTab(tabId);
-      if (!code) return finish(new Error(params.get("error") ?? "Google didn't grant access"));
-      connectGoogle(clientId.trim(), clientSecret.trim(), code, verifier, GOOGLE_REDIRECT).then(() => finish(), finish);
-    });
+    let stop = () => {};
+    let settled = false;
+    const request = { cancel: () => finish(new Error("Cancelled")) };
     const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
       stop();
-      pending = null;
+      if (pending === request) pending = null;
       if (error) reject(error);
       else resolve();
     };
-    pending = { cancel: () => finish(new Error("Cancelled")) };
+    pending = request;
+    void newTab(windowId, { url })
+      .then((tabId) => {
+        if (settled) return;
+        const check = () => {
+          const tab = browserRead.getState().tabs[tabId];
+          if (!tab) return finish(new Error("Sign-in was cancelled"));
+          if (!tab.url.startsWith(GOOGLE_REDIRECT)) return;
+          const params = query(tab.url);
+          if (params.get("state") !== state) return finish(new Error("Sign-in didn't match this request"));
+          const code = params.get("code");
+          stop();
+          void closeTab(tabId).catch((error) => console.error("Couldn't close the sign-in tab", error));
+          if (!code) return finish(new Error(params.get("error") ?? "Google didn't grant access"));
+          connectGoogle(clientId.trim(), clientSecret.trim(), code, verifier, GOOGLE_REDIRECT).then(() => finish(), finish);
+        };
+        stop = browserRead.subscribe(check);
+        check();
+      })
+      .catch(finish);
   });
 }

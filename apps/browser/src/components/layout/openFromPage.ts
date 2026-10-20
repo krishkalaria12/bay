@@ -1,5 +1,7 @@
 import type { OpenWindowRequest } from "@bay/nncore";
 import { openWindow } from "../../lib/actions";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { navigate, newTab } from "../../runtime/tabActions";
 import { useBrowser } from "../../store/browser";
 import { engineProfile } from "../../store/model";
 import { opensInPeek } from "../../store/peeks";
@@ -13,12 +15,13 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
   const w = s.windows[from.windowId];
   if (!w) return;
   if (disposition === "current") {
-    if (from.tabId) s.navigate(from.tabId, url, { userInitiated: false });
+    if (from.tabId) reportBrowserCommand(navigate(from.tabId, url, { userInitiated: false }));
     return;
   }
   // Links stay in Little Bay; new tabs (target=_blank, ⌘-click, split) open behind, in a main window.
   if (isSmall(s, w.id) && disposition !== "window" && disposition !== "incognito") {
-    return void s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background: true });
+    if (adoptId) return void s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background: true });
+    return reportBrowserCommand(newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background: true }));
   }
   if (disposition === "split") {
     if (from.tabId) return openLinkInSplit(from.tabId, url, adoptId);
@@ -28,12 +31,13 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
   if (disposition === "incognito") {
     // A private tab Chrome already made (an extension's incognito window, Open Link in Incognito Window) moves in
     // live; anything else loads afresh in the private window.
-    if (adoptId?.startsWith("tab:")) return void openWindow({ incognito: true, url, adoptId });
-    return void openWindow({ incognito: true, url });
+    if (adoptId?.startsWith("tab:")) return void s.createWindow({ incognito: true, url, adoptId });
+    return reportBrowserCommand(openWindow({ incognito: true, url }));
   }
   // A private window's new window is private too: a session of its own, so the page loads afresh there.
   if (disposition === "window") {
-    return void openWindow(w.incognito ? { incognito: true, url } : { spaceId: from.spaceId, url, adoptId });
+    if (!w.incognito && adoptId) return void s.createWindow({ spaceId: from.spaceId, url, adoptId });
+    return reportBrowserCommand(openWindow(w.incognito ? { incognito: true, url } : { spaceId: from.spaceId, url }));
   }
   // A link a pinned tab or a favourite opens in front: a peek over its page, as Arc's (store/peeks.ts).
   if (disposition === "foreground" && from.tabId && opensInPeek(s, from.tabId, url)) {
@@ -41,7 +45,8 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
     return;
   }
   const background = disposition === "background";
-  s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background });
+  if (adoptId) s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background });
+  else reportBrowserCommand(newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background }));
 }
 
 // The store profile of a page outside tabs (an extension popup or side panel): its engine profile's.

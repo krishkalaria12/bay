@@ -1,70 +1,59 @@
 import { focus, openWindow } from "../../lib/actions";
 import { matchingLinkRule } from "../../lib/externalLinkRules";
-import { useBrowser } from "../../store/browser";
-import { activeTabId, viewTabIds } from "../../store/model";
+import { browserRead } from "../../store/read";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
+import { navigate, newTab } from "../../runtime/tabActions";
+import { closeWindow, createWindow } from "../../runtime/windowActions";
+import { viewTabIds } from "../../store/model";
 import { isSmall, mainWindowFor } from "../../store/small";
 
-const store = () => useBrowser.getState();
+const store = () => browserRead.getState();
 
 // ⌘⌥N, and links from other apps. Without a page the bar's field opens, ready to type.
-export function openLittleBay(url?: string, spaceId?: string): string {
-  const id = store().createWindow({ small: true, url, spaceId });
-  if (!url) store().openPanel(id, "");
-  return id;
+export async function openLittleBay(url?: string, spaceId?: string): Promise<string> {
+  return createWindow({ small: true, url, spaceId }, !url);
 }
 
 const opensInLittleBay = (url: string) => /^(https?|file):/i.test(url);
 
 // Only incoming desktop links use these rules. Page navigation and explicit tab commands keep their behavior.
-export function openExternalUrls(urls: string[], sourceApp?: string) {
+export async function openExternalUrls(urls: string[], sourceApp?: string) {
   for (const url of urls) {
     const s = store();
     const spaceId = s.settings.defaultSpaceId;
     const target = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
-    if (target?.kind === "space" && s.spaces[target.spaceId]) openLinksInMainWindow([url], target.spaceId);
-    else if (target?.kind === "littleBay") openLittleBay(url, spaceId);
-    else if (target?.kind === "newWindow") focus(openWindow({ url, spaceId }));
-    else if (s.settings.openLinksInLittleBay && urls.length === 1 && opensInLittleBay(url)) openLittleBay(url, spaceId);
-    else openLinksInMainWindow([url], spaceId);
+    if (target?.kind === "space" && s.spaces[target.spaceId]) await openLinksInMainWindow([url], target.spaceId);
+    else if (target?.kind === "littleBay") await openLittleBay(url, spaceId);
+    else if (target?.kind === "newWindow") focus(await openWindow({ url, spaceId }));
+    else if (s.settings.openLinksInLittleBay && urls.length === 1 && opensInLittleBay(url)) await openLittleBay(url, spaceId);
+    else await openLinksInMainWindow([url], spaceId);
   }
 }
 
 // New tabs in the frontmost main window showing the profile (else the frontmost main window, paged to it), which
 // comes forward; a new window when there's none. The blank window a launch opens takes the first link itself.
-function openLinksInMainWindow(urls: string[], spaceId: string) {
+async function openLinksInMainWindow(urls: string[], spaceId: string) {
   let target = mainWindowFor(store(), spaceId);
   for (const url of urls) {
     const s = store();
     const w = target ? s.windows[target] : undefined;
     const view = target ? viewTabIds(s, target) : [];
     const blank = w && view.length === 1 ? s.tabs[view[0]!] : undefined;
-    if (!w) target = openWindow({ url, spaceId });
-    else if (blank && !blank.url && !blank.navigation && blank.spaceId === spaceId && !s.windowUi[w.id]?.panel.open) s.navigate(blank.id, url);
-    else s.newTab(w.id, { url, spaceId });
+    if (!w) target = await openWindow({ url, spaceId });
+    else if (blank && !blank.url && !blank.navigation && blank.spaceId === spaceId && !s.windowUi[w.id]?.panel.open) await navigate(blank.id, url);
+    else await newTab(w.id, { url, spaceId });
   }
   if (target) focus(target);
 }
 
 // ⌘O / the bar's button: the live page (history, scroll, playback) moves into the frontmost main window of its
 // profile, which opens if there's none, and Little Bay closes with it.
-export function openInMainWindow(windowId: string) {
-  const s = store();
-  if (!isSmall(s, windowId)) return;
-  const tabId = activeTabId(s, windowId);
-  const tab = tabId ? s.tabs[tabId] : undefined;
-  const target = mainWindowFor(s, tab?.spaceId ?? s.windows[windowId]!.spaceId);
-  if (!tab?.url) {
-    s.closeWindow(windowId);
-    if (target) focus(target);
-    else openWindow({ spaceId: tab?.spaceId });
-    return;
-  }
-  const moved = s.moveTabsToWindow([tab.id], target ?? null);
-  if (moved) focus(moved);
+export function openInMainWindow(windowId: string): Promise<null> {
+  return dispatchBrowserCommand({ method: "openInMainWindow", windowId });
 }
 
-export function closeLittleBay(windowId: string) {
-  if (isSmall(store(), windowId)) store().closeWindow(windowId);
+export async function closeLittleBay(windowId: string) {
+  if (isSmall(store(), windowId)) await closeWindow(windowId);
 }
 
 // An Esc the page didn't want (not typed into a field, no page full screen) closes Little Bay.
@@ -72,5 +61,5 @@ export function closeLittleBayOnEscape(tabId: string) {
   const s = store();
   const tab = s.tabs[tabId];
   if (!tab || !isSmall(s, tab.windowId) || s.find[tabId]?.open || s.windowUi[tab.windowId]?.panel.open) return;
-  closeLittleBay(tab.windowId);
+  reportBrowserCommand(closeLittleBay(tab.windowId));
 }

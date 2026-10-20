@@ -246,12 +246,20 @@ export function endTabDrag(): boolean {
     return false;
   }
   const asked: { frame: [number, number, number, number] | null } = { frame: null };
-  const moved = dropTabsOutside(tabIds, windowId, x, y, (frame) => (asked.frame = frame), liveFrame);
-  // A new window: the picture grows into it.
-  dragPreview.end(asked.frame ? moved : null, asked.frame);
-  // Another window's tab strip made room for it: there.
-  if (moved && moved === overWindow && insertBefore !== undefined) useBrowser.getState().placeTabs(tabIds, { pinned: false, beforeId: insertBefore });
-  if (moved) focus(moved);
+  const endingSequence = dragSeq;
+  void dropTabsOutside(tabIds, windowId, x, y, (frame) => (asked.frame = frame), liveFrame).then(
+    (moved) => {
+      if (dragSeq !== endingSequence) return;
+      // A new window: the picture grows into it after its ID is acknowledged.
+      dragPreview.end(asked.frame ? moved : null, asked.frame);
+      if (moved && moved === overWindow && insertBefore !== undefined) useBrowser.getState().placeTabs(tabIds, { pinned: false, beforeId: insertBefore });
+      if (moved) focus(moved);
+    },
+    (error) => {
+      if (dragSeq === endingSequence) dragPreview.end();
+      console.error("Couldn't move tabs to another window", error);
+    },
+  );
   return true;
 }
 

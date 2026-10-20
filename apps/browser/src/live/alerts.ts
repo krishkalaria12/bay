@@ -1,6 +1,7 @@
 import { onAppEvent, onWindowEvent, postNotification, removeNotifications } from "@bay/shell";
 import { create } from "zustand";
 import { useBrowser } from "../store/browser";
+import { reportBrowserCommand } from "../runtime/commands";
 import { useCalendar } from "./calendar";
 import { joinMeeting } from "./meetingGroups";
 import { ALERT_LEADS, dueAlerts, joinLink, joinTitle, relativeTime, type CalendarEvent } from "./meetings";
@@ -36,7 +37,7 @@ function check() {
 export function joinEvent(event: CalendarEvent, openAll = false, windowId = frontWindow()) {
   const link = joinLink(event);
   if (!link || !windowId) return;
-  joinMeeting(windowId, event, link.url, openAll);
+  reportBrowserCommand(joinMeeting(windowId, event, link.url, openAll));
   dismiss(event);
 }
 
