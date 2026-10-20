@@ -24,7 +24,7 @@ base::DictValue State() {
   CHECK(state);
   return std::move(*state);
 }
-void AddWindow(base::DictValue &state, const char *id, bool incognito) {
+void AddWindow(base::DictValue& state, const char* id, bool incognito) {
   const std::string profile =
       incognito ? std::string("incognito:") + id : "default";
   const std::string tab_id = std::string(id) + "-tab";
@@ -33,7 +33,7 @@ void AddWindow(base::DictValue &state, const char *id, bool incognito) {
                                   base::DictValue().Set("id", profile));
     state.FindList("spaceOrder")->Append(profile);
   }
-  auto *list = state.FindDict("tabLists")->FindList(profile);
+  auto* list = state.FindDict("tabLists")->FindList(profile);
   if (!list) {
     state.FindDict("tabLists")->Set(profile, base::ListValue());
     list = state.FindDict("tabLists")->FindList(profile);
@@ -136,12 +136,12 @@ TEST(RuntimeStateTest, KeepsUnprofiledPublicDownloadAndRejectsPrivateAlias) {
 TEST(RuntimeStateTest, FiltersPrivateBookmarkRootsAndUnreachableNodes) {
   auto state = State();
   AddWindow(state, "normal", false);
-  auto *bookmarks = state.FindDict("bookmarks");
+  auto* bookmarks = state.FindDict("bookmarks");
   bookmarks->FindDict("roots")->Set(
       "default", base::DictValue().Set("bar", "public-root"));
   bookmarks->FindDict("roots")->Set(
       "incognito:private", base::DictValue().Set("bar", "private-root"));
-  auto *nodes = bookmarks->FindDict("nodes");
+  auto* nodes = bookmarks->FindDict("nodes");
   nodes->Set(
       "public-root",
       base::DictValue().Set("children", base::ListValue().Append("shared")));
@@ -164,7 +164,7 @@ TEST(RuntimeStateTest, FiltersPrivateBookmarkRootsAndUnreachableNodes) {
 TEST(RuntimeStateTest, FiltersPrivateClosedRecordsIncludingLegacyFlags) {
   auto state = State();
   AddWindow(state, "normal", false);
-  for (const auto *key : {"closedWindows", "closedTabs", "cleanedTabs",
+  for (const auto* key : {"closedWindows", "closedTabs", "cleanedTabs",
                           "closedGroups", "deletedGroups"}) {
     state.FindList(key)->Append(base::DictValue().Set("url", "public-closed"));
     state.FindList(key)->Append(
@@ -200,7 +200,7 @@ TEST(RuntimeStateTest, AuthorizesOnlyCommandsOwnedByActualWindow) {
   auto state = State();
   AddWindow(state, "normal", false);
   AddWindow(state, "private", true);
-  for (const auto *method : {"activate", "closeTab", "navigate"}) {
+  for (const auto* method : {"activate", "closeTab", "navigate"}) {
     auto command =
         base::DictValue().Set("method", method).Set("tabId", "normal-tab");
     if (std::string_view(method) == "navigate")
@@ -209,7 +209,7 @@ TEST(RuntimeStateTest, AuthorizesOnlyCommandsOwnedByActualWindow) {
     command.Set("tabId", "private-tab");
     EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
   }
-  for (const auto *method : {"newTab", "closeWindow"}) {
+  for (const auto* method : {"newTab", "closeWindow"}) {
     EXPECT_TRUE(CanDispatchRuntimeCommand(
         state, "normal",
         base::DictValue().Set("method", method).Set("windowId", "normal")));
@@ -300,7 +300,7 @@ TEST(RuntimeStateTest, PrivateGroupsCannotClaimAnotherPrivateNamespace) {
 TEST(RuntimeStateTest, PrivateWindowKeepsOwnBookmarkRootOnly) {
   auto state = State();
   AddWindow(state, "private", true);
-  auto *bookmarks = state.FindDict("bookmarks");
+  auto* bookmarks = state.FindDict("bookmarks");
   bookmarks->FindDict("roots")->Set("incognito:private",
                                     base::DictValue().Set("bar", "own-root"));
   bookmarks->FindDict("roots")->Set("incognito:other",
@@ -326,7 +326,7 @@ TEST(RuntimeStateTest, LocationCommandsUseOwnedSourceAndClosedFieldAllowlist) {
                      .Set("sourceTabId", "normal-tab")
                      .Set("url", "https://example.com/")
                      .Set("disposition", "current");
-  for (const auto *disposition : {"current", "newTab", "backgroundTab"}) {
+  for (const auto* disposition : {"current", "newTab", "backgroundTab"}) {
     command.Set("disposition", disposition);
     EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
   }
@@ -366,7 +366,7 @@ TEST(RuntimeStateTest, PanelAndNewTabIntentsValidateWindowAndGroupOwnership) {
   auto state = State();
   AddWindow(state, "normal", false);
   AddWindow(state, "other", false);
-  for (const auto *method : {"requestNewTab", "submitNewTab",
+  for (const auto* method : {"requestNewTab", "submitNewTab",
                              "openCommandPanel", "dismissCommandPanel"}) {
     auto command =
         base::DictValue().Set("method", method).Set("windowId", "normal");
@@ -470,7 +470,7 @@ TEST(RuntimeStateTest, NewSlicesDoNotLeakForeignPrivateStateOrUndoSnapshots) {
   AddWindow(state, "normal", false);
   AddWindow(state, "private-one", true);
   AddWindow(state, "private-two", true);
-  for (const auto *id : {"normal", "private-one", "private-two"}) {
+  for (const auto* id : {"normal", "private-one", "private-two"}) {
     const auto space =
         *state.FindDict("windows")->FindDict(id)->FindString("spaceId");
     state.FindDict("pinnedFolders")
@@ -493,7 +493,7 @@ TEST(RuntimeStateTest, NewSlicesDoNotLeakForeignPrivateStateOrUndoSnapshots) {
                           base::ListValue().Append(std::string(id) + "-tab")));
   }
   // A public move collected global IDs and snapshots before projection.
-  auto &move = state.FindList("folderMoveUndo")->front().GetDict();
+  auto& move = state.FindList("folderMoveUndo")->front().GetDict();
   move.Set(
       "folderIds",
       base::ListValue().Append("normal-folder").Append("private-two-folder"));
@@ -537,6 +537,27 @@ TEST(RuntimeStateTest, RejectsCrossPrivateListsGroupsAndSplits) {
       ->Append("private-two-tab");
   EXPECT_FALSE(IsRuntimeState(state));
 }
+TEST(RuntimeStateTest, WindowLookPreviewsAreAcceptedAndPrivacyScoped) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  state.FindDict("ui")->Set(
+      "previewLooks",
+      base::DictValue()
+          .Set("normal", base::DictValue().Set("color", "public-preview"))
+          .Set("private", base::DictValue().Set("color", "private-preview")));
+  ASSERT_TRUE(IsRuntimeState(state));
+  auto regular = ProjectRuntimeState(state, "normal");
+  ASSERT_TRUE(regular);
+  EXPECT_EQ(base::WriteJson(*regular)->find("private-preview"),
+            std::string::npos);
+  auto own = ProjectRuntimeState(state, "private");
+  ASSERT_TRUE(own);
+  EXPECT_TRUE(
+      own->FindDict("ui")->FindDict("previewLooks")->contains("private"));
+  state.FindDict("ui")->Set("unknownPrivateField", base::DictValue());
+  EXPECT_FALSE(IsRuntimeState(state));
+}
 TEST(RuntimeStateTest, HarborTabCreationCannotBypassTheNewWindowGate) {
   auto state = State();
   AddWindow(state, "harbor", false);
@@ -551,12 +572,12 @@ TEST(RuntimeStateTest, HarborTabCreationCannotBypassTheNewWindowGate) {
                      .Set("method", "openLocation")
                      .Set("sourceTabId", "harbor-tab")
                      .Set("url", "https://example.com/");
-  for (const auto *disposition : {"newTab", "backgroundTab", "newWindow"}) {
+  for (const auto* disposition : {"newTab", "backgroundTab", "newWindow"}) {
     command.Set("disposition", disposition);
     EXPECT_FALSE(CanDispatchRuntimeCommand(state, "harbor", command));
   }
   command.Set("disposition", "current");
   EXPECT_TRUE(CanDispatchRuntimeCommand(state, "harbor", command));
 }
-} // namespace
-} // namespace bay
+}  // namespace
+}  // namespace bay
