@@ -161,11 +161,18 @@ bool IsRuntimeCommit(const base::DictValue& commit,
 }
 RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command) {
   const auto* method = command.FindString("method");
-  if (method && (*method == "newTab" || *method == "createWindow" ||
-                 *method == "addCustomEngine"))
-    return RuntimeResultKind::kRequiredId;
-  if (method && (*method == "duplicateTab" || *method == "moveTabsToWindow"))
-    return RuntimeResultKind::kOptionalId;
+  if (!method)
+    return RuntimeResultKind::kNone;
+  // Keep in sync with browserCommandResultKind in runtime/userCommands.ts.
+  for (const char* name :
+       {"newTab", "createWindow", "addCustomEngine", "createGroup", "groupTabs",
+        "duplicateGroup", "newTabInGroup", "newPinnedFolder", "createSplit"})
+    if (*method == name)
+      return RuntimeResultKind::kRequiredId;
+  for (const char* name : {"duplicateTab", "moveTabsToWindow", "restoreCleaned",
+                           "openSplitPane", "openPeek"})
+    if (*method == name)
+      return RuntimeResultKind::kOptionalId;
   return RuntimeResultKind::kNone;
 }
 bool IsRuntimeReply(const base::DictValue& reply,
@@ -563,6 +570,106 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   const auto* kind = own_window->FindString("kind");
   const bool harbor = kind && *kind == "small";
   constexpr size_t kMaximumInput = 1024 * 1024;
+  // Organize commands act on a space's shared list. A public main window may
+  // name public tabs that another main window shows; a private window or a
+  // Little Bay only names its own.
+  const auto visible_tab = [&](const std::string& id) {
+    const auto* tab = tabs->FindDict(id);
+    if (!tab || !StoredTab(state, *tab))
+      return false;
+    const auto* owner = tab->FindString("windowId");
+    if (is_private || harbor)
+      return owner && *owner == window_id;
+    if (!owner || PrivateSpace(*tab->FindString("spaceId")))
+      return false;
+    if (owner->empty())
+      return true;
+    const auto* window = windows->FindDict(*owner);
+    const auto* owner_kind = window ? window->FindString("kind") : nullptr;
+    return window && !window->FindBool("incognito").value_or(false) &&
+           !(owner_kind && *owner_kind == "small");
+  };
+  const auto visible_field = [&](const base::DictValue& input,
+                                 std::string_view field) {
+    const auto* id = input.FindString(field);
+    return id && visible_tab(*id);
+  };
+  const auto visible_tabs = [&](const base::DictValue& input,
+                                size_t minimum = 0, size_t maximum = 10000) {
+    const auto* ids = input.FindList("tabIds");
+    if (!ids || ids->size() < minimum || ids->size() > maximum)
+      return false;
+    std::set<std::string> seen;
+    for (const auto& id : *ids)
+      if (!id.is_string() || !seen.insert(id.GetString()).second ||
+          !visible_tab(id.GetString()))
+        return false;
+    return true;
+  };
+  const auto visible_group = [&](const base::DictValue& input,
+                                 std::string_view field) {
+    const auto* id = input.FindString(field);
+    const auto* group = id ? state.FindDict("groups")->FindDict(*id) : nullptr;
+    const auto* space = group ? group->FindString("spaceId") : nullptr;
+    if (!space || harbor)
+      return false;
+    return is_private ? *space == *own_window->FindString("spaceId")
+                      : public_space(*group, "spaceId");
+  };
+  const auto visible_folder = [&](const base::DictValue& input,
+                                  std::string_view field) {
+    const auto* id = input.FindString(field);
+    const auto* folder =
+        id ? state.FindDict("pinnedFolders")->FindDict(*id) : nullptr;
+    return folder && !is_private && !harbor && public_space(*folder, "spaceId");
+  };
+  const auto visible_split = [&] {
+    const auto* id = command.FindString("splitId");
+    const auto* split = id ? state.FindDict("splits")->FindDict(*id) : nullptr;
+    const auto* members = split ? split->FindList("tabIds") : nullptr;
+    if (!members || members->empty())
+      return false;
+    for (const auto& member : *members)
+      if (!member.is_string() || !visible_tab(member.GetString()))
+        return false;
+    return true;
+  };
+  const auto optional_bool = [](const base::DictValue& input,
+                                std::string_view field) {
+    return !input.contains(field) || input.FindBool(field).has_value();
+  };
+  const auto optional_text = [](const base::DictValue& input,
+                                std::string_view field,
+                                size_t maximum = 1024) {
+    return !input.contains(field) ||
+           CommandText(input, field, maximum, /*allow_empty=*/true);
+  };
+  // An absent or null reference, or one the check accepts.
+  const auto nullable = [](const base::DictValue& input, std::string_view field,
+                           const auto& check) {
+    const auto* value = input.Find(field);
+    return !value || value->is_none() || check(input, field);
+  };
+  const auto group_style = [&](const base::DictValue& input) {
+    const auto* color = input.Find("color");
+    if (color && !color->is_none()) {
+      if (!color->is_string())
+        return false;
+      bool known = false;
+      for (const char* name : {"grey", "blue", "red", "yellow", "green", "pink",
+                               "purple", "cyan", "orange"})
+        known |= color->GetString() == name;
+      if (!known)
+        return false;
+    }
+    const auto* icon = input.Find("icon");
+    return optional_text(input, "name") &&
+           (!icon || icon->is_none() || CommandText(input, "icon", 1024, true));
+  };
+  const auto delta = [&] {
+    const auto value = command.FindDouble("delta");
+    return value && (*value == -1 || *value == 1);
+  };
   if (*method == "newTab") {
     if (!CommandFields(command, {"method", "windowId"}, {"options"}) ||
         !own_target())
@@ -719,7 +826,8 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     return true;
   }
   if (*method == "reopenClosed" || *method == "reopenClosedTab" ||
-      *method == "reopenClosedWindow" || *method == "restoreClosed") {
+      *method == "reopenClosedWindow" || *method == "restoreClosed" ||
+      *method == "reopenPeekOrClosed") {
     if (!CommandFields(
             command,
             *method == "restoreClosed"
@@ -913,6 +1021,243 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   if (*method == "dismissCommandPanel") {
     return CommandFields(command, {"method", "windowId"}) && own_target();
   }
+  if (*method == "createGroup" || *method == "groupTabs") {
+    if (!CommandFields(command, {"method", "tabIds"}, {"options"}) ||
+        !visible_tabs(command, 1))
+      return false;
+    if (!command.contains("options"))
+      return true;
+    const auto* options = command.FindDict("options");
+    if (*method == "groupTabs")
+      return options && CommandFields(*options, {}, {"pinned", "name"}) &&
+             optional_bool(*options, "pinned") &&
+             optional_text(*options, "name");
+    return options && CommandFields(*options, {}, {"name", "icon", "color"}) &&
+           group_style(*options);
+  }
+  if (*method == "updateGroup") {
+    const auto* patch = command.FindDict("patch");
+    return CommandFields(command, {"method", "groupId", "patch"}) &&
+           visible_group(command, "groupId") && patch &&
+           CommandFields(*patch, {},
+                         {"name", "icon", "color", "collapsed", "pinned"}) &&
+           group_style(*patch) && optional_bool(*patch, "collapsed") &&
+           optional_bool(*patch, "pinned");
+  }
+  if (*method == "addTabsToGroup")
+    return CommandFields(command, {"method", "groupId", "tabIds"}) &&
+           visible_group(command, "groupId") && visible_tabs(command, 1);
+  if (*method == "removeTabsFromGroup")
+    return CommandFields(command, {"method", "tabIds"}) &&
+           visible_tabs(command, 1);
+  if (*method == "ungroup" || *method == "closeGroup" ||
+      *method == "deleteGroup" || *method == "duplicateGroup" ||
+      *method == "moveGroupToBookmarksBar")
+    return CommandFields(command, {"method", "groupId"}) &&
+           visible_group(command, "groupId");
+  if (*method == "moveGroup") {
+    const auto* placement = command.FindDict("placement");
+    return CommandFields(command, {"method", "groupId", "placement"}) &&
+           visible_group(command, "groupId") && placement &&
+           CommandFields(*placement, {"pinned"}, {"beforeId"}) &&
+           placement->FindBool("pinned").has_value() &&
+           nullable(*placement, "beforeId", visible_field);
+  }
+  if (*method == "newTabInGroup")
+    return CommandFields(command, {"method", "groupId"}, {"url"}) &&
+           visible_group(command, "groupId") &&
+           optional_text(command, "url", kMaximumInput);
+  const auto folder_anchor = [&](const base::DictValue& input,
+                                 std::string_view field) {
+    return visible_folder(input, field) || visible_field(input, field);
+  };
+  if (*method == "newPinnedFolder") {
+    if (!CommandFields(command, {"method", "windowId"}, {"options"}) ||
+        !own_target() || is_private || harbor)
+      return false;
+    if (!command.contains("options"))
+      return true;
+    const auto* options = command.FindDict("options");
+    return options &&
+           CommandFields(*options, {},
+                         {"tabIds", "name", "parentId", "spaceId",
+                          "beforeId"}) &&
+           (!options->contains("tabIds") || visible_tabs(*options)) &&
+           optional_text(*options, "name") &&
+           (!options->contains("parentId") ||
+            visible_folder(*options, "parentId")) &&
+           (!options->contains("spaceId") ||
+            public_space(*options, "spaceId")) &&
+           (!options->contains("beforeId") ||
+            folder_anchor(*options, "beforeId"));
+  }
+  if (*method == "updatePinnedFolder") {
+    const auto* patch = command.FindDict("patch");
+    const auto* icon = patch ? patch->Find("icon") : nullptr;
+    return CommandFields(command, {"method", "folderId", "patch"}) &&
+           visible_folder(command, "folderId") && patch &&
+           CommandFields(*patch, {}, {"name", "icon", "collapsed"}) &&
+           optional_text(*patch, "name") &&
+           (!icon || icon->is_none() ||
+            CommandText(*patch, "icon", 1024, true)) &&
+           optional_bool(*patch, "collapsed");
+  }
+  if (*method == "movePinnedFolder") {
+    return CommandFields(command, {"method", "folderId", "beforeId"},
+                         {"parentId"}) &&
+           visible_folder(command, "folderId") &&
+           nullable(command, "beforeId", folder_anchor) &&
+           nullable(command, "parentId", visible_folder);
+  }
+  if (*method == "deletePinnedFolder")
+    return CommandFields(command, {"method", "folderId"}) &&
+           visible_folder(command, "folderId");
+  if (*method == "undoPinnedFolderMove")
+    return CommandFields(command, {"method"}) && !is_private && !harbor;
+  if (*method == "setSelection")
+    return CommandFields(command, {"method", "windowId", "tabIds"}) &&
+           own_target() && visible_tabs(command);
+  if (*method == "placeTabs") {
+    const auto* placement = command.FindDict("placement");
+    return CommandFields(command, {"method", "tabIds", "placement"}) &&
+           visible_tabs(command, 1) && placement &&
+           CommandFields(*placement, {"pinned"},
+                         {"row", "folderId", "beforeId", "groupId"}) &&
+           placement->FindBool("pinned").has_value() &&
+           optional_bool(*placement, "row") &&
+           nullable(*placement, "folderId", visible_folder) &&
+           nullable(*placement, "groupId", visible_group) &&
+           nullable(*placement, "beforeId", visible_field);
+  }
+  if (*method == "pinTabs" || *method == "pinRows" || *method == "setMuted") {
+    const char* flag = *method == "setMuted" ? "muted" : "pinned";
+    return CommandFields(command, {"method", "tabIds", flag}) &&
+           visible_tabs(command, 1) && command.FindBool(flag).has_value();
+  }
+  if (*method == "setSiteMuted")
+    return CommandFields(command, {"method", "tabId", "muted"}) &&
+           visible_field(command, "tabId") &&
+           command.FindBool("muted").has_value();
+  if (*method == "returnToPinnedUrl")
+    return CommandFields(command, {"method", "tabId"}) &&
+           visible_field(command, "tabId");
+  if (*method == "setPinnedUrl")
+    return CommandFields(command, {"method", "tabId"}, {"url"}) &&
+           visible_field(command, "tabId") &&
+           optional_text(command, "url", kMaximumInput);
+  if (*method == "cleanUpTabs") {
+    if (!CommandFields(command, {"method", "windowId"}, {"options"}) ||
+        !own_target())
+      return false;
+    if (!command.contains("options"))
+      return true;
+    const auto* options = command.FindDict("options");
+    const auto* space = options ? options->FindString("spaceId") : nullptr;
+    return options &&
+           CommandFields(*options, {}, {"inactiveForMs", "spaceId"}) &&
+           (!options->contains("inactiveForMs") ||
+            RuntimeInteger(*options, "inactiveForMs")) &&
+           (!options->contains("spaceId") ||
+            (space && (is_private ? *space == *own_window->FindString("spaceId")
+                                  : public_space(*options, "spaceId"))));
+  }
+  if (*method == "restoreCleaned") {
+    if (!CommandFields(command, {"method", "windowId"}, {"entryId"}) ||
+        !own_target())
+      return false;
+    if (!command.contains("entryId"))
+      return true;
+    if (!CommandText(command, "entryId", 1024))
+      return false;
+    // Public windows restore public entries; a private window only its own.
+    const auto* entries =
+        is_private ? state.FindDict("privateCleanedTabs")->FindList(window_id)
+                   : state.FindList("cleanedTabs");
+    if (!entries)
+      return false;
+    for (const auto& entry : *entries) {
+      const auto* id =
+          entry.is_dict() ? entry.GetDict().FindString("id") : nullptr;
+      if (id && *id == *command.FindString("entryId"))
+        return is_private || !HasPrivateData(entry);
+    }
+    return false;
+  }
+  if (*method == "createSplit") {
+    const auto* orientation = command.FindString("orientation");
+    return CommandFields(command, {"method", "tabIds"}, {"orientation"}) &&
+           visible_tabs(command, 2, 3) &&
+           (!command.contains("orientation") ||
+            (orientation &&
+             (*orientation == "horizontal" || *orientation == "vertical")));
+  }
+  if (*method == "openSplitPane") {
+    if (!CommandFields(command, {"method", "windowId"}, {"options"}) ||
+        !own_target())
+      return false;
+    if (!command.contains("options"))
+      return true;
+    const auto* options = command.FindDict("options");
+    const auto* side = options ? options->FindString("side") : nullptr;
+    return options &&
+           CommandFields(*options, {},
+                         {"tabId", "url", "anchorTabId", "side",
+                          "background"}) &&
+           (!options->contains("tabId") || visible_field(*options, "tabId")) &&
+           (!options->contains("anchorTabId") ||
+            visible_field(*options, "anchorTabId")) &&
+           optional_text(*options, "url", kMaximumInput) &&
+           optional_bool(*options, "background") &&
+           (!options->contains("side") ||
+            (side && (*side == "left" || *side == "right" || *side == "top" ||
+                      *side == "bottom")));
+  }
+  if (*method == "replaceSplitPane")
+    return CommandFields(command, {"method", "paneTabId", "tabId"}) &&
+           visible_field(command, "paneTabId") &&
+           visible_field(command, "tabId");
+  if (*method == "removeTabFromSplit")
+    return CommandFields(command, {"method", "tabId"}) &&
+           visible_field(command, "tabId");
+  if (*method == "movePane")
+    return CommandFields(command, {"method", "tabId", "delta"}) &&
+           visible_field(command, "tabId") && delta();
+  if (*method == "separateSplit" || *method == "flipSplit" ||
+      *method == "toggleSplitOrientation")
+    return CommandFields(command, {"method", "splitId"}) && visible_split();
+  if (*method == "updateSplit") {
+    const auto* patch = command.FindDict("patch");
+    if (!CommandFields(command, {"method", "splitId", "patch"}) ||
+        !visible_split() || !patch ||
+        !CommandFields(*patch, {}, {"sizes", "stackSizes"}))
+      return false;
+    for (const char* field : {"sizes", "stackSizes"}) {
+      if (!patch->contains(field))
+        continue;
+      const auto* sizes = patch->FindList(field);
+      const size_t maximum = std::string_view(field) == "sizes" ? 3 : 2;
+      if (!sizes || sizes->size() < 2 || sizes->size() > maximum)
+        return false;
+      for (const auto& size : *sizes)
+        if ((!size.is_double() && !size.is_int()) ||
+            !std::isfinite(size.GetDouble()) || size.GetDouble() <= 0 ||
+            size.GetDouble() > 1)
+          return false;
+    }
+    return true;
+  }
+  if (*method == "focusPane")
+    return CommandFields(command, {"method", "windowId", "delta"}) &&
+           own_target() && delta();
+  if (*method == "toggleTabLayout")
+    return CommandFields(command, {"method", "windowId"}) && own_target() &&
+           !is_private;
+  if (*method == "closePeek" || *method == "keepPeek" ||
+      *method == "splitPeek")
+    return CommandFields(command, {"method", "windowId"}) && own_target();
+  if (*method == "openPeek")
+    return CommandFields(command, {"method", "fromTabId", "url"}) &&
+           own_tab("fromTabId") && CommandText(command, "url", kMaximumInput);
   return false;
 }
 }  // namespace bay

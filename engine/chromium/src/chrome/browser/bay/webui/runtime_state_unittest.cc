@@ -846,5 +846,246 @@ TEST(RuntimeStateTest, OpenInMainWindowRequiresOwnedRegularSmallWindow) {
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "small", command));
   EXPECT_EQ(RuntimeCommandResultKind(command), RuntimeResultKind::kNone);
 }
+TEST(RuntimeStateTest,
+     OrganizeCommandsShareSpaceTabsButNotPrivateOrHarborTabs) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  AddWindow(state, "private-other", true);
+  state.FindDict("tabs")->Set("detached-tab", base::DictValue()
+                                                  .Set("id", "detached-tab")
+                                                  .Set("windowId", "")
+                                                  .Set("spaceId", "default"));
+  state.FindDict("tabLists")->FindList("default")->Append("detached-tab");
+  const auto group = [](std::initializer_list<const char*> ids) {
+    base::ListValue list;
+    for (const auto* id : ids) {
+      list.Append(id);
+    }
+    return base::DictValue()
+        .Set("method", "createGroup")
+        .Set("tabIds", std::move(list));
+  };
+  EXPECT_TRUE(CanDispatchRuntimeCommand(
+      state, "normal", group({"normal-tab", "other-tab", "detached-tab"})));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal",
+                                         group({"normal-tab", "private-tab"})));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", group({})));
+  EXPECT_TRUE(
+      CanDispatchRuntimeCommand(state, "private", group({"private-tab"})));
+  EXPECT_FALSE(
+      CanDispatchRuntimeCommand(state, "private", group({"normal-tab"})));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private",
+                                         group({"private-other-tab"})));
+  auto styled = group({"normal-tab"});
+  styled.Set("options", base::DictValue()
+                            .Set("name", "")
+                            .Set("icon", base::Value())
+                            .Set("color", "blue"));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", styled));
+  styled.FindDict("options")->Set("color", "magenta");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", styled));
+  styled.FindDict("options")->Set("color", "blue");
+  styled.FindDict("options")->Set("tabIds", base::ListValue());
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", styled));
+
+  AddWindow(state, "harbor", false);
+  state.FindDict("windows")->FindDict("harbor")->Set("kind", "small");
+  state.FindDict("tabLists")
+      ->FindList("default")
+      ->EraseValue(base::Value("harbor-tab"));
+  state.FindDict("tabLists")
+      ->Set("harbor", base::ListValue().Append("harbor-tab"));
+  EXPECT_FALSE(
+      CanDispatchRuntimeCommand(state, "normal", group({"harbor-tab"})));
+  EXPECT_FALSE(
+      CanDispatchRuntimeCommand(state, "harbor", group({"normal-tab"})));
+  auto mute = base::DictValue()
+                  .Set("method", "setMuted")
+                  .Set("tabIds", base::ListValue().Append("harbor-tab"))
+                  .Set("muted", true);
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "harbor", mute));
+  auto ungroup =
+      base::DictValue().Set("method", "ungroup").Set("groupId", "normal-group");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "other", ungroup));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "harbor", ungroup));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", ungroup));
+  ungroup.Set("groupId", "private-group");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", ungroup));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private-other", ungroup));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", ungroup));
+  for (const auto* method : {"cleanUpInactiveTabs", "closeAbandonedNewTabs"}) {
+    EXPECT_FALSE(CanDispatchRuntimeCommand(
+        state, "normal", base::DictValue().Set("method", method)));
+  }
+}
+TEST(RuntimeStateTest, PlacementAndFolderReferencesStayInVisibleSpaces) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  state.FindDict("pinnedFolders")
+      ->Set("folder",
+            base::DictValue().Set("id", "folder").Set("spaceId", "default"));
+  auto place = base::DictValue()
+                   .Set("method", "placeTabs")
+                   .Set("tabIds", base::ListValue().Append("normal-tab"))
+                   .Set("placement", base::DictValue()
+                                         .Set("pinned", false)
+                                         .Set("row", true)
+                                         .Set("folderId", "folder")
+                                         .Set("beforeId", base::Value()));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", place));
+  place.FindDict("placement")->Set("groupId", "private-group");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", place));
+  place.FindDict("placement")->Set("groupId", "normal-group");
+  place.FindDict("placement")->Set("beforeId", "private-tab");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", place));
+  place.FindDict("placement")->Remove("beforeId");
+  place.FindDict("placement")->Remove("pinned");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", place));
+  place.Set("tabIds", base::ListValue().Append("private-tab"));
+  place.FindDict("placement")->Set("pinned", false);
+  place.FindDict("placement")->Remove("groupId");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", place));
+  place.FindDict("placement")->Remove("folderId");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", place));
+
+  auto folder = base::DictValue()
+                    .Set("method", "newPinnedFolder")
+                    .Set("windowId", "normal")
+                    .Set("options", base::DictValue()
+                                        .Set("tabIds", base::ListValue())
+                                        .Set("parentId", "folder")
+                                        .Set("beforeId", "normal-tab"));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", folder));
+  folder.FindDict("options")->Set("spaceId", "incognito:private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", folder));
+  folder.FindDict("options")->Remove("spaceId");
+  folder.Set("windowId", "private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", folder));
+  auto move = base::DictValue()
+                  .Set("method", "movePinnedFolder")
+                  .Set("folderId", "folder")
+                  .Set("beforeId", base::Value())
+                  .Set("parentId", base::Value());
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", move));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", move));
+  move.Set("beforeId", "private-tab");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", move));
+  move.Remove("beforeId");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", move));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(
+      state, "private",
+      base::DictValue().Set("method", "undoPinnedFolderMove")));
+
+  state.FindList("cleanedTabs")
+      ->Append(base::DictValue()
+                   .Set("id", "public-entry")
+                   .Set("tab", base::DictValue().Set("spaceId", "default")));
+  state.FindDict("privateCleanedTabs")
+      ->FindList("private")
+      ->Append(base::DictValue().Set("id", "private-entry"));
+  auto restore = base::DictValue()
+                     .Set("method", "restoreCleaned")
+                     .Set("windowId", "normal")
+                     .Set("entryId", "public-entry");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", restore));
+  restore.Set("entryId", "private-entry");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", restore));
+  restore.Set("windowId", "private");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", restore));
+  restore.Set("entryId", "public-entry");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", restore));
+  auto clean = base::DictValue()
+                   .Set("method", "cleanUpTabs")
+                   .Set("windowId", "private")
+                   .Set("options", base::DictValue()
+                                       .Set("inactiveForMs", 0)
+                                       .Set("spaceId", "incognito:private"));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", clean));
+  clean.FindDict("options")->Set("spaceId", "default");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", clean));
+  clean.FindDict("options")->Set("inactiveForMs", -1);
+  clean.Set("windowId", "normal");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", clean));
+}
+TEST(RuntimeStateTest, SplitAndPeekCommandsValidateTargetsAndResults) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  auto split =
+      base::DictValue()
+          .Set("method", "createSplit")
+          .Set("tabIds",
+               base::ListValue().Append("normal-tab").Append("other-tab"))
+          .Set("orientation", "vertical");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", split));
+  EXPECT_EQ(RuntimeCommandResultKind(split), RuntimeResultKind::kRequiredId);
+  split.Set("tabIds", base::ListValue().Append("normal-tab"));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", split));
+  split.Set("tabIds",
+            base::ListValue().Append("normal-tab").Append("private-tab"));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", split));
+
+  auto sizes =
+      base::DictValue()
+          .Set("method", "updateSplit")
+          .Set("splitId", "normal-split")
+          .Set("patch",
+               base::DictValue().Set(
+                   "sizes", base::ListValue().Append(0.5).Append(0.5)));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "other", sizes));
+  sizes.FindDict("patch")->Set("sizes", base::ListValue().Append(0).Append(1));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", sizes));
+  sizes.FindDict("patch")->Set("sizes",
+                               base::ListValue().Append(0.5).Append(0.5));
+  sizes.Set("splitId", "private-split");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", sizes));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", sizes));
+
+  auto pane = base::DictValue()
+                  .Set("method", "openSplitPane")
+                  .Set("windowId", "normal")
+                  .Set("options", base::DictValue()
+                                      .Set("anchorTabId", "normal-tab")
+                                      .Set("side", "left")
+                                      .Set("url", "x.com"));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", pane));
+  EXPECT_EQ(RuntimeCommandResultKind(pane), RuntimeResultKind::kOptionalId);
+  pane.FindDict("options")->Set("adoptId", "chrome-tab");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", pane));
+  pane.FindDict("options")->Remove("adoptId");
+  pane.FindDict("options")->Set("tabId", "private-tab");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", pane));
+
+  auto peek = base::DictValue()
+                  .Set("method", "openPeek")
+                  .Set("fromTabId", "normal-tab")
+                  .Set("url", "https://example.org");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", peek));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", peek));
+  peek.Set("adoptId", "chrome-tab");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", peek));
+  for (const auto* method :
+       {"closePeek", "keepPeek", "splitPeek", "reopenPeekOrClosed"}) {
+    auto command =
+        base::DictValue().Set("method", method).Set("windowId", "normal");
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", command));
+  }
+  auto layout = base::DictValue()
+                    .Set("method", "toggleTabLayout")
+                    .Set("windowId", "private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", layout));
+  auto focus = base::DictValue()
+                   .Set("method", "focusPane")
+                   .Set("windowId", "normal")
+                   .Set("delta", 2);
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", focus));
+  focus.Set("delta", -1);
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", focus));
+}
 }  // namespace
 }  // namespace bay
