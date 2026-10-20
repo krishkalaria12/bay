@@ -3,6 +3,7 @@ import { ContextMenuArea, hapticTick, showMenu, Symbol } from "@bay/shell";
 import { useLayoutEffect, useState } from "react";
 import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "@bay/platform/motion";
+import { useBrowserRead } from "../../../store/read";
 import { createSpace, deleteSpace } from "../../../lib/actions";
 import { hex, SPACE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser, type BrowserState } from "../../../store/browser";
@@ -37,7 +38,7 @@ function cleanUpHoursOf(choice: string): number | null | undefined {
 export function SpacesPane() {
   const theme = useTheme();
   const spaces = useSpaces();
-  const defaultId = useBrowser((s) => s.settings.defaultSpaceId);
+  const defaultId = useBrowserRead((s) => s.settings.defaultSpaceId);
 
   return (
     <View>
@@ -156,7 +157,7 @@ function SpaceRow({
   const theme = useTheme();
   const colors = useFormColors();
   const profile = useBrowser((s) => s.spaces[spaceId]);
-  const isDefault = useBrowser((s) => s.settings.defaultSpaceId === spaceId);
+  const isDefault = useBrowserRead((s) => s.settings.defaultSpaceId === spaceId);
   const { hovered, hoverProps } = useHover();
   const go = useSettingsNav((n) => n.go);
   const [pan] = useState(() =>
@@ -247,9 +248,9 @@ function bookmarkCount(s: BrowserState, spaceId: string): number {
 export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
   const theme = useTheme();
   const profile = useBrowser((s) => s.spaces[spaceId]);
-  const isDefault = useBrowser((s) => s.settings.defaultSpaceId === spaceId);
+  const isDefault = useBrowserRead((s) => s.settings.defaultSpaceId === spaceId);
   const only = useBrowser((s) => s.spaceOrder.length <= 1);
-  const appCleanUp = useBrowser((s) => s.settings.cleanUpInactiveTabsAfterHours);
+  const appCleanUp = useBrowserRead((s) => s.settings.cleanUpInactiveTabsAfterHours);
   const stats = useBrowser((s) => `${plural((s.history[spaceId] ?? []).length, "page")} in history · ${plural(bookmarkCount(s, spaceId), "bookmark")}`);
   const [name, setName] = useState(profile?.name ?? "");
   const [picking, setPicking] = useState(false);

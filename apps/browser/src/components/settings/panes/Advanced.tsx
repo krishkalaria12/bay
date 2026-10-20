@@ -2,15 +2,16 @@ import { View } from "@bay/platform";
 import { engineInfo, listComponents, WIDEVINE_COMPONENT_ID, type EngineComponent, type EngineInfo } from "@bay/nncore";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { openInternalPage } from "../../pages/urls";
 import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 
 export function AdvancedPane() {
   const theme = useTheme();
-  const settings = useBrowser((s) => s.settings);
-  const update = useBrowser((s) => s.updateSettings);
+  const settings = useBrowserRead((s) => s.settings);
   const [info, setInfo] = useState<EngineInfo | null>(null);
   const [widevine, setWidevine] = useState<EngineComponent | null | undefined>(undefined);
   useEffect(() => {
@@ -28,20 +29,20 @@ export function AdvancedPane() {
       <SectionHeader title="Browsing" />
       <Group>
         <Row title="Show full URL in the address bar" description="Instead of the site alone.">
-          <Toggle value={settings.showFullUrl} onChange={(v) => update({ showFullUrl: v })} />
+          <Toggle value={settings.showFullUrl} onChange={(v) => reportBrowserCommand(updateSettings({ showFullUrl: v }))} />
         </Row>
         <Row title="Warn before moving tabs between spaces" description="Some site data doesn't come along.">
-          <Toggle value={settings.warnBeforeMovingTabsToSpace} onChange={(v) => update({ warnBeforeMovingTabsToSpace: v })} />
+          <Toggle value={settings.warnBeforeMovingTabsToSpace} onChange={(v) => reportBrowserCommand(updateSettings({ warnBeforeMovingTabsToSpace: v }))} />
         </Row>
         <Row title="Show the Import bookmarks button" description="On an empty bookmarks bar.">
-          <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => update({ hideBookmarksBarImport: !v })} />
+          <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => reportBrowserCommand(updateSettings({ hideBookmarksBarImport: !v }))} />
         </Row>
       </Group>
 
       <SectionHeader title="Performance" />
       <Group>
         <Row title="Battery Saver" description="On battery or in Low Power Mode, pause background tabs that keep the processor busy.">
-          <Toggle value={settings.batterySaver} onChange={(v) => update({ batterySaver: v })} />
+          <Toggle value={settings.batterySaver} onChange={(v) => reportBrowserCommand(updateSettings({ batterySaver: v }))} />
         </Row>
       </Group>
 

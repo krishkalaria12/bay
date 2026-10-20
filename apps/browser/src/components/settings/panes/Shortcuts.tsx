@@ -2,8 +2,10 @@ import { Pressable, View, shortcutLabel } from "@bay/platform";
 import { cancelShortcutRecording, menuShortcuts, recordShortcut, Symbol, type MenuShortcut } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead, browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { IconButton, useHover } from "../../primitives";
 import { matchesQuery } from "../../pages/PageLayout";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, useFormColors } from "../controls";
@@ -46,7 +48,7 @@ const comboId = (c: Combo) => (c.key ? `${[...c.modifiers].sort().join("+")}+${c
 
 export function ShortcutsPane() {
   const theme = useTheme();
-  const overrides = useBrowser((s) => s.settings.shortcuts);
+  const overrides = useBrowserRead((s) => s.settings.shortcuts);
   const [items, setItems] = useState<MenuShortcut[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -70,10 +72,10 @@ export function ShortcutsPane() {
   const conflictsOf = (item: MenuShortcut) => (conflicts.get(comboId(effective(item))) ?? []).filter((x) => x.id !== item.id);
 
   const setShortcut = (id: string, combo: Combo | null) => {
-    const next = { ...useBrowser.getState().settings.shortcuts };
+    const next = Object.fromEntries(Object.entries(browserRead.getState().settings.shortcuts).map(([name, keys]) => [name, [...keys]]));
     if (combo) next[id] = [combo.key, ...combo.modifiers];
     else delete next[id];
-    useBrowser.getState().updateSettings({ shortcuts: next });
+    reportBrowserCommand(updateSettings({ shortcuts: next }));
   };
 
   const record = async (item: MenuShortcut) => {
@@ -111,7 +113,7 @@ export function ShortcutsPane() {
           onChange={setFilter}
           minWidth={170}
         />
-        <Button title="Reset All Shortcuts" disabled={!customizedCount} onPress={() => useBrowser.getState().updateSettings({ shortcuts: {} })} />
+        <Button title="Reset All Shortcuts" disabled={!customizedCount} onPress={() => reportBrowserCommand(updateSettings({ shortcuts: {} }))} />
       </View>
       {items !== null && shown.length === 0 && (
         <Text style={{ marginTop: 30, textAlign: "center", fontSize: 13, color: theme.textTertiary }}>No matching actions</Text>

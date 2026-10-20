@@ -2,6 +2,7 @@ import { View } from "@bay/platform";
 import { reloadExtension, type InstalledExtension } from "@bay/nncore";
 import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
+import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
@@ -24,7 +25,7 @@ const siteAccessOf = (ext: InstalledExtension): SiteAccess =>
 export function ExtensionsPane() {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => browserRead.getState().settings.defaultSpaceId);
   const profile = engineProfile(spaceId);
   const list = useExtensionList(profile);
   const [detail, setDetail] = useState<string | null>(null);

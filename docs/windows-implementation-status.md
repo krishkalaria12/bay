@@ -1,6 +1,6 @@
 # Windows implementation checkpoint
 
-Updated 19 October 2026. Windows 10 and Windows 11 x64 are supported targets.
+Updated 20 October 2026. Windows 10 and Windows 11 x64 are supported targets.
 Mica requires Windows 11 build 22621 or later. macOS keeps its existing native
 host. The `ios` directories contain macOS sources, not mobile application targets.
 
@@ -68,8 +68,25 @@ The shared application runtime has an isolated store factory, read-only window
 clients and an ordered command authority with epoch, revision and duplicate
 request checks. Its Mojo transport and coordinator runner publish state before
 acknowledging mutations. Recovery retains accepted live and navigation state
-without session hydration. Native privacy and command validators have 12
-executed C++ tests on macOS, linked against the pinned Chromium libraries.
+without session hydration.
+
+The command migration now covers tab creation, selection, navigation, closing,
+duplication, pinning and reordering; window creation, movement, restoration,
+focus and space switching; and user settings/search-engine changes. The native
+broker validates source ownership, public destinations and private isolation,
+with 31 executed C++ tests against the pinned Chromium libraries. Creation can
+open its initial command panel in the same commit. Little Bay moves its page
+or creates and focuses a main window within one command, before its source
+connection closes. Settings layout changes also
+commit once across all windows, and extension-reported engines remain native
+facts rather than renderer preferences.
+
+Migrated UI paths include settings controls, bookmark opening, Little Bay,
+internal-page opening, tab window drops, Google sign-in and meeting tab opens.
+They use read-only projections and await returned IDs before follow-up work.
+Two-client integration tests exercise concurrent commands, publication before
+acknowledgement, duplicate requests, one native reconciliation/persistence owner,
+and disconnects without falling back to the local writable store.
 
 Behind `--bay-shared-runtime`, a browser-owned detached WebContents holds the
 coordinator, authenticates document connections and retains accepted state for
@@ -77,8 +94,12 @@ bounded crash recovery. Native projections remove other windows' private data;
 global engine, data and window events go to the coordinator. This experimental
 mode deliberately stops before the legacy UI entry, which still owns global
 services. The coordinator and visible UI entries are not wired together yet.
-Additional application windows remain gated pending command migration,
-sole-writer persistence and two-window tests. Live document IO now starts
+Additional application windows remain gated pending the remaining command
+migration and service ownership. Group, split, peek, bookmark mutation, native
+page-fact and other legacy UI paths still access the writable singleton. Global
+service startup and cross-renderer page handoff must move to the coordinator
+before enabling the shared UI entry. In-process two-client tests do not replace
+native two-window acceptance. Live document IO now starts
 explicitly instead of running when window UI imports its store.
 
 Native updater and close-button shutdown preparation now participate in the

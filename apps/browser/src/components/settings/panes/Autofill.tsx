@@ -16,8 +16,8 @@ import {
 import { confirm, copyText, Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
+import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { IconButton } from "../../primitives";
@@ -28,7 +28,7 @@ import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => initial ?? browserRead.getState().settings.defaultSpaceId);
   const [addresses, setAddresses] = useState<SavedAddress[] | null>(null);
   const [cards, setCards] = useState<SavedCard[] | null>(null);
   const [enabled, setEnabled] = useState<{ addresses: boolean; cards: boolean } | null>(null);

@@ -26,8 +26,8 @@ import {
 import { confirm } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
+import { useBrowserRead, browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { Favicon } from "../../primitives";
@@ -176,7 +176,7 @@ function FilterListsSheet() {
 // MARK: Zoom levels
 
 function ZoomLevels() {
-  const spaceId = useBrowser((s) => s.settings.defaultSpaceId);
+  const spaceId = useBrowserRead((s) => s.settings.defaultSpaceId);
   const profiles = useSpaces();
   const [selected, setSelected] = useState(spaceId);
   const [levels, setLevels] = useState<Record<string, number>>({});
@@ -237,7 +237,7 @@ const VALUE_OPTIONS: { value: SiteSettingValue; title: string }[] = [
 
 function SitePermissions() {
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => browserRead.getState().settings.defaultSpaceId);
   const [origins, setOrigins] = useState<string[] | null>(null);
   const refresh = () =>
     void getSiteSettingsOrigins(engineProfile(spaceId))
@@ -274,7 +274,7 @@ function SitePermissions() {
 
 function AppLinks() {
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => browserRead.getState().settings.defaultSpaceId);
   const [allowed, setAllowed] = useState<ExternalAppAllowance[] | null>(null);
   const refresh = () =>
     void getExternalAppAllowances(engineProfile(spaceId))
