@@ -9,7 +9,8 @@ export type BrowserClientTransport = {
   subscribeClose(listener: () => void): () => void;
 };
 export type BrowserClientStatus = "initializing" | "ready" | "resyncing" | "closed";
-export type BrowserCommandValue<C extends BrowserCommand> = C extends { method: "createWindow" | "newTab" } ? string : null;
+import { browserCommandResultKind, type BrowserCommandValue } from "./userCommands";
+export type { BrowserCommandValue } from "./userCommands";
 type ClientErrorCode = "closed" | "transport_closed" | "epoch_changed" | "invalid_protocol" | "snapshot_failed";
 export class BrowserClientError extends Error {
   readonly code: ClientErrorCode;
@@ -284,8 +285,15 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
         reply.requestId !== command.request.requestId
       )
         invalid();
-      const createsId = command.request.command.method === "createWindow" || command.request.command.method === "newTab";
-      if (createsId ? typeof reply.value !== "string" : reply.value !== null) invalid();
+      const result = browserCommandResultKind(command.request.command.method);
+      if (
+        result === "id"
+          ? typeof reply.value !== "string"
+          : result === "optionalId"
+            ? reply.value !== null && typeof reply.value !== "string"
+            : reply.value !== null
+      )
+        invalid();
       const commit = decodeBrowserCommit(reply.commit, current);
       if (!sameEpoch(commit)) return;
       if (commit.revision < command.baseRevision) invalid();

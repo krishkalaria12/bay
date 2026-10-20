@@ -128,7 +128,7 @@ test("revision gaps request one complete resync and hold new commands", async ()
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value }));
   fake.emit(second.commit);
-  const pending = client.dispatch({ method: "closeWindow", windowId: "missing" });
+  const pending = client.dispatch({ method: "reopenClosedWindow" });
   await tick();
   assert.equal(client.getStatus(), "resyncing");
   assert.equal(client.getSnapshot().revision, 0);
@@ -428,7 +428,7 @@ test("a gap before the scheduled send holds that command through resync", async 
     { fake, client } = await connect(authority.getSnapshot());
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value }));
-  const pending = client.dispatch({ method: "closeWindow", windowId: "missing" });
+  const pending = client.dispatch({ method: "reopenClosedWindow" });
   fake.emit(second.commit);
   await tick();
   assert.equal(fake.commands.length, 0);
@@ -472,7 +472,7 @@ test("a command held by resync rejects replies predating its actual send", async
     { fake, client } = await connect(initial);
   const first = await authority.dispatch(request(1, { method: "createWindow" }));
   const second = await authority.dispatch(request(2, { method: "newTab", windowId: first.value }));
-  const pending = client.dispatch({ method: "closeWindow", windowId: "missing" });
+  const pending = client.dispatch({ method: "reopenClosedWindow" });
   fake.emit(second.commit);
   await tick();
   fake.snapshots[1].resolve(second.commit);

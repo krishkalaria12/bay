@@ -1,15 +1,8 @@
 import { createBrowserStore, type BrowserStore } from "../store/browser";
 import { createBrowserProjector, type BrowserProjection } from "./projection";
-import { executeLocationCommand, parseLocationCommand, type LocationCommand, type LocationCommandEffects } from "./locationCommands";
-
-// Native facts (for example updateLive) and hydration are deliberately absent.
-export type BrowserCommand =
-  | LocationCommand
-  | { method: "createWindow"; options?: { spaceId?: string; incognito?: boolean; url?: string } }
-  | { method: "newTab"; windowId: string; options?: { url?: string; background?: boolean } }
-  | { method: "activate" | "closeTab"; tabId: string }
-  | { method: "navigate"; tabId: string; url: string }
-  | { method: "closeWindow"; windowId: string };
+import type { LocationCommandEffects } from "./locationCommands";
+import { executeBrowserCommand, parseBrowserCommand, type BrowserCommand } from "./userCommands";
+export type { BrowserCommand } from "./userCommands";
 
 export type BrowserCommit = Readonly<{ epoch: string; revision: number; state: BrowserProjection }>;
 export type CommandRequest = Readonly<{ epoch: string; clientId: string; requestId: number; command: BrowserCommand }>;
@@ -39,51 +32,6 @@ function text(value: unknown): string {
   if (typeof value !== "string" || !value.length || value.length > 1_048_576) return invalid("expected a nonempty string");
   return value;
 }
-function options(value: unknown, fields: Record<string, "string" | "boolean">): Record<string, string | boolean> | undefined {
-  if (value === undefined) return undefined;
-  const input = record(value);
-  keys(input, Object.keys(fields));
-  const result: Record<string, string | boolean> = {};
-  for (const key of Object.keys(fields)) {
-    if (!Object.hasOwn(input, key)) continue;
-    const item = input[key];
-    if (typeof item !== fields[key]) invalid("invalid option type");
-    if (typeof item === "string" && item.length > 1_048_576) invalid("option is too long");
-    result[key] = item as string | boolean;
-  }
-  return result;
-}
-function commandFrom(value: unknown): BrowserCommand {
-  const c = record(value);
-  switch (c.method) {
-    case "createWindow":
-      keys(c, ["method", "options"]);
-      return { method: c.method, options: options(c.options, { spaceId: "string", incognito: "boolean", url: "string" }) };
-    case "newTab":
-      keys(c, ["method", "windowId", "options"]);
-      return { method: c.method, windowId: text(c.windowId), options: options(c.options, { url: "string", background: "boolean" }) };
-    case "activate":
-    case "closeTab":
-      keys(c, ["method", "tabId"]);
-      return { method: c.method, tabId: text(c.tabId) };
-    case "navigate":
-      keys(c, ["method", "tabId", "url"]);
-      return { method: c.method, tabId: text(c.tabId), url: text(c.url) };
-    case "closeWindow":
-      keys(c, ["method", "windowId"]);
-      return { method: c.method, windowId: text(c.windowId) };
-    case "openLocation":
-    case "switchToExistingTab":
-    case "requestNewTab":
-    case "submitNewTab":
-    case "dismissCommandPanel":
-    case "openCommandPanel":
-      return parseLocationCommand(c);
-    default:
-      return invalid("unknown browser command");
-  }
-}
-
 /** In-process authority only. It does not authenticate renderer client identities. */
 export function createBrowserAuthority({
   epoch,
@@ -138,31 +86,6 @@ export function createBrowserAuthority({
     if (!executing) publish();
   });
 
-  function run(command: BrowserCommand): string | null {
-    const s = store.getState();
-    switch (command.method) {
-      case "createWindow":
-        return s.createWindow(command.options);
-      case "newTab":
-        return s.newTab(command.windowId, command.options);
-      case "activate":
-        s.activate(command.tabId);
-        break;
-      case "navigate":
-        s.navigate(command.tabId, command.url);
-        break;
-      case "closeTab":
-        s.closeTab(command.tabId);
-        break;
-      case "closeWindow":
-        s.closeWindow(command.windowId);
-        break;
-      default:
-        return executeLocationCommand(store, command, effects);
-    }
-    return null;
-  }
-
   function dispatch(input: unknown): Promise<CommandReply> {
     try {
       if (closed) throw new AuthorityError("closed", "authority is closed");
@@ -172,7 +95,7 @@ export function createBrowserAuthority({
       const clientId = text(request.clientId);
       const requestId = request.requestId;
       if (typeof requestId !== "number" || !Number.isSafeInteger(requestId) || requestId < 1) return invalid("request id must be a positive safe integer");
-      const command = commandFrom(request.command);
+      const command = parseBrowserCommand(request.command);
       const fingerprint = JSON.stringify(command);
       let client = clients.get(clientId);
       if (!client) {
@@ -191,7 +114,7 @@ export function createBrowserAuthority({
         executing = true;
         let value: string | null;
         try {
-          value = run(command);
+          value = executeBrowserCommand(store, command, effects);
         } finally {
           executing = false;
           publish();

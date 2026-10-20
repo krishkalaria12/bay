@@ -3,6 +3,7 @@ import type { BrowserState, BrowserStore } from "../store/browser";
 import { createBrowserAuthority, type BrowserCommand, type BrowserCommit, type CommandRequest } from "./authority";
 import { decodeBrowserCommit } from "./client";
 import type { BrowserProjection } from "./projection";
+import type { LocationCommandEffects } from "./locationCommands";
 
 export type BrowserCoordinatorTransport = CoordinatorRuntimeTransport<BrowserProjection, BrowserCommand, string | null>;
 
@@ -30,10 +31,12 @@ function commandError(error: unknown): { code: string; message: string } {
 export async function createBrowserCoordinator({
   store,
   transport,
+  effects,
   onError = (error) => console.error("[runtime] coordinator failed", error),
 }: {
   store: BrowserStore;
   transport: BrowserCoordinatorTransport;
+  effects?: LocationCommandEffects;
   onError?: (error: Error) => void;
 }) {
   const identity = transport.bootstrap;
@@ -50,7 +53,7 @@ export async function createBrowserCoordinator({
     )
       throw new Error("A browser-assigned coordinator connection is required");
     if (identity.recoveryState !== undefined) recover(store, identity.epoch, identity.recoveryState);
-    authority = createBrowserAuthority({ epoch: identity.epoch, store });
+    authority = createBrowserAuthority({ epoch: identity.epoch, store, effects });
   } catch (error) {
     transport.dispose();
     throw error;

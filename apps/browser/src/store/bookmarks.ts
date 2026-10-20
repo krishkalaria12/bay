@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
+import type { DeepReadonly } from "../runtime/projection";
 import { engineProfile, engineProfileFor, without } from "./model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks, Space } from "./types";
 
@@ -134,9 +135,11 @@ export function bookmarksByUrl(b: Bookmarks, spaceId: string): Map<string, strin
 
 export const isBookmarked = (b: Bookmarks, spaceId: string, url: string) => !!url && bookmarksByUrl(b, spaceId).has(url);
 
-export function folderChildren(b: Bookmarks, folderId: string): BookmarkNode[] {
+export function folderChildren(b: Bookmarks, folderId: string): BookmarkNode[];
+export function folderChildren(b: DeepReadonly<Bookmarks>, folderId: string): DeepReadonly<BookmarkNode>[];
+export function folderChildren(b: DeepReadonly<Bookmarks>, folderId: string): DeepReadonly<BookmarkNode>[] {
   const folder = b.nodes[folderId];
-  return folder?.kind === "folder" ? folder.children.map((id) => b.nodes[id]).filter((n): n is BookmarkNode => !!n) : [];
+  return folder?.kind === "folder" ? folder.children.map((id) => b.nodes[id]).filter((n): n is DeepReadonly<BookmarkNode> => !!n) : [];
 }
 
 function insertChild(b: Bookmarks, node: BookmarkNode, parentId: string, index?: number): Bookmarks {
@@ -159,7 +162,7 @@ export function bookmarkAncestors(b: Bookmarks, id: string): BookmarkFolder[] {
   return out;
 }
 
-export function folderLinks(b: Bookmarks, folderId: string): Extract<BookmarkNode, { kind: "url" }>[] {
+export function folderLinks(b: DeepReadonly<Bookmarks>, folderId: string): Extract<BookmarkNode, { kind: "url" }>[] {
   return folderChildren(b, folderId).flatMap((n) => (n.kind === "url" ? [n] : folderLinks(b, n.id)));
 }
 

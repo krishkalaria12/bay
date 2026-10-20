@@ -139,9 +139,9 @@ test("duplicate requests share results and conflicting reuse is rejected", async
 
 test("evicted requests are rejected instead of executed again", async () => {
   const authority = createBrowserAuthority({ epoch: "epoch-1" });
-  const first = request(1, { method: "closeWindow", windowId: "missing" });
+  const first = request(1, { method: "reopenClosedWindow" });
   await authority.dispatch(first);
-  for (let id = 2; id <= 131; id++) await authority.dispatch(request(id, { method: "closeWindow", windowId: "missing" }));
+  for (let id = 2; id <= 131; id++) await authority.dispatch(request(id, { method: "reopenClosedWindow" }));
   await assert.rejects(authority.dispatch(first), { code: "request_expired" });
   authority.close();
 });
@@ -184,10 +184,10 @@ test("a projection failure cannot acknowledge an older snapshot", async () => {
   const authority = createBrowserAuthority({ epoch: "epoch-1", store });
   const before = authority.getSnapshot();
   assert.throws(() => store.setState({ settings: { ...store.getState().settings, sidebarWidth: NaN } }), /non-JSON/);
-  await assert.rejects(authority.dispatch(request(1, { method: "closeWindow", windowId: "missing" })), /non-JSON/);
+  await assert.rejects(authority.dispatch(request(1, { method: "reopenClosedWindow" })), /non-JSON/);
   assert.equal(authority.getSnapshot(), before);
   store.setState({ settings: { ...store.getState().settings, sidebarWidth: 250 } });
-  const reply = await authority.dispatch(request(2, { method: "closeWindow", windowId: "missing" }));
+  const reply = await authority.dispatch(request(2, { method: "reopenClosedWindow" }));
   assert.equal(reply.commit.state.settings.sidebarWidth, 250);
   assert.equal(reply.commit.revision, 1);
   authority.close();

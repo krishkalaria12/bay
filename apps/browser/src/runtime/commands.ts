@@ -1,16 +1,17 @@
 import { focusWindow } from "@bay/shell";
 import { useBrowser, type BrowserStore } from "../store/browser";
-import { executeLocationCommand, parseLocationCommand, type LocationCommand, type LocationCommandEffects } from "./locationCommands";
+import type { LocationCommandEffects } from "./locationCommands";
+import { executeBrowserCommand, parseBrowserCommand, type BrowserCommand, type BrowserCommandValue } from "./userCommands";
 import type { createBrowserClient } from "./client";
 
-export type BrowserCommands = { dispatch(command: LocationCommand): Promise<null> };
+export type BrowserCommands = { dispatch<C extends BrowserCommand>(command: C): Promise<BrowserCommandValue<C>> };
 
 /** Execute before returning the Promise, preserving local macOS reducer timing. */
 export function createLocalBrowserCommands(store: BrowserStore, effects: LocationCommandEffects = { focusWindow() {} }): BrowserCommands {
   return {
-    dispatch(command) {
+    dispatch<C extends BrowserCommand>(command: C) {
       try {
-        return Promise.resolve(executeLocationCommand(store, parseLocationCommand(command), effects));
+        return Promise.resolve(executeBrowserCommand(store, parseBrowserCommand(command), effects) as BrowserCommandValue<C>);
       } catch (error) {
         return Promise.reject(error);
       }
@@ -47,4 +48,11 @@ export function installBrowserCommands(next: BrowserCommands) {
     if (active) current = bindings[bindings.length - 1]!.commands;
   };
 }
-export const dispatchBrowserCommand = (command: LocationCommand): Promise<null> => current.dispatch(command);
+export const dispatchBrowserCommand = <C extends BrowserCommand>(command: C): Promise<BrowserCommandValue<C>> => current.dispatch(command);
+
+/** Event handlers must observe failures, including remote rejection. Never retry
+ * a mutation whose outcome may be uncertain after a disconnection.
+ */
+export function reportBrowserCommand(command: Promise<unknown>): void {
+  void command.catch((error) => console.error("Browser command failed", error));
+}
