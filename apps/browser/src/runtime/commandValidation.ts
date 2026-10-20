@@ -57,3 +57,40 @@ export function requireCommandTab(s: BrowserState, id: string) {
   }
   return tab;
 }
+export type CommandReaders<T> = { [K in keyof T]-?: (value: unknown) => T[K] };
+/** Reads only the present fields; `undefined` never reaches a reducer patch. */
+export function commandFields<T>(o: Record<string, unknown>, readers: CommandReaders<T>): T {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(readers) as (keyof T & string)[]) if (o[key] !== undefined) out[key] = readers[key](o[key]);
+  return out as T;
+}
+export function commandOptionalText(value: unknown): string | null {
+  return value === null ? null : commandText(value);
+}
+/** Several tabs in one command never mix private and public pages, or two private windows. */
+export function requireCommandTabs(s: BrowserState, ids: readonly string[]) {
+  const tabs = ids.map((id) => requireCommandTab(s, id));
+  const context = (spaceId: string) => (isIncognitoSpace(spaceId) ? spaceId : "");
+  if (tabs.some((tab) => context(tab.spaceId) !== context(tabs[0]!.spaceId))) return invalidCommand("tabs cross private window boundaries");
+  return tabs;
+}
+export function requireCommandGroup(s: BrowserState, id: string) {
+  const group = Object.hasOwn(s.groups, id) ? s.groups[id] : undefined;
+  if (!group || group.id !== id) return invalidCommand("group no longer exists");
+  if (isIncognitoSpace(group.spaceId)) {
+    if (!Object.values(s.windows).some((w) => w.incognito && w.spaceId === group.spaceId)) return invalidCommand("group no longer exists");
+  } else requireCommandSpace(s, group.spaceId);
+  return group;
+}
+export function requireCommandFolder(s: BrowserState, id: string) {
+  const folder = Object.hasOwn(s.pinnedFolders, id) ? s.pinnedFolders[id] : undefined;
+  if (!folder || folder.id !== id) return invalidCommand("folder no longer exists");
+  requireCommandSpace(s, folder.spaceId);
+  return folder;
+}
+export function requireCommandSplit(s: BrowserState, id: string) {
+  const split = Object.hasOwn(s.splits, id) ? s.splits[id] : undefined;
+  if (!split || split.id !== id) return invalidCommand("split no longer exists");
+  requireCommandTabs(s, split.tabIds);
+  return split;
+}
