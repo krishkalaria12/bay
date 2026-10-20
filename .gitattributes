@@ -1,0 +1,2 @@
+# Preserve the bytes checked against the pinned upstream SHA-256 on Windows.
+engine/chromium/src/chrome/browser/bay/data/vendor/nlohmann/json.hpp text eol=lf

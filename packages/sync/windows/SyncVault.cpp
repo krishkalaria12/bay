@@ -6,8 +6,10 @@
 #include <mutex>
 #include <thread>
 #ifdef _WIN32
-#include <cfapi.h>
+// cfapi.h needs both the Windows types and NTSTATUS before it is included.
 #include <windows.h>
+#include <winternl.h>
+#include <cfapi.h>
 #endif
 namespace bay::sync {
 namespace fs = std::filesystem;

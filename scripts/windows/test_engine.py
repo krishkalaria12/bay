@@ -1,5 +1,6 @@
 """Cross-platform regression tests for Windows engine artifacts and patch routing."""
 import importlib.util
+import hashlib
 import json
 import pathlib
 import re
@@ -24,6 +25,26 @@ fetch = load("fetch", HERE / "fetch-engine.py")
 series = load("series", engine.REPO / "engine/patches/series.py")
 build_app = load("build_app", HERE / "build-app.py")
 embed_config = load("embed_config", HERE / "embed-update-config.py")
+
+
+class SourceCheckoutTests(unittest.TestCase):
+    def test_windows_checkout_preserves_vendored_json_checksum(self):
+        native = load("test_native", HERE / "test-native.py")
+        relative = pathlib.Path("engine/chromium/src/chrome/browser/bay/data/vendor/nlohmann/json.hpp")
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = pathlib.Path(directory)
+            header = checkout / relative
+            header.parent.mkdir(parents=True)
+            header.write_bytes((engine.REPO / relative).read_bytes())
+            (checkout / ".gitattributes").write_bytes((engine.REPO / ".gitattributes").read_bytes())
+            def git(*args):
+                return subprocess.run(["git", "-c", "core.autocrlf=true", *args],
+                                      cwd=checkout, check=True, capture_output=True)
+            git("init")
+            git("add", ".gitattributes", relative.as_posix())
+            header.unlink()
+            git("checkout-index", relative.as_posix())
+            self.assertEqual(hashlib.sha256(header.read_bytes()).hexdigest(), native.JSON_SHA256)
 
 
 class PatchPlatformTests(unittest.TestCase):
