@@ -1,7 +1,15 @@
 /** Keeps desired windows separate from acknowledged native windows. An open
  * that finishes after its window was removed is followed by a cleanup close.
  */
-export function createNativeWindowReconciler<Options>({ open, close, setTitle, focus, openFailed, closed, report }: {
+export function createNativeWindowReconciler<Options>({
+  open,
+  close,
+  setTitle,
+  focus,
+  openFailed,
+  closed,
+  report,
+}: {
   open(id: string, options: Options): void | Promise<void>;
   close(id: string): void | Promise<void>;
   setTitle(id: string, title: string): void | Promise<void>;
@@ -11,7 +19,15 @@ export function createNativeWindowReconciler<Options>({ open, close, setTitle, f
   report(operation: string, id: string, error: unknown): void;
 }) {
   type Wanted = { id: string; title: string; options: Options };
-  type Entry = { status: "opening" | "open" | "closing"; options: Options; title: string; wantedFocus: boolean; cancelled: boolean; nativeClosed: boolean; released: boolean };
+  type Entry = {
+    status: "opening" | "open" | "closing";
+    options: Options;
+    title: string;
+    wantedFocus: boolean;
+    cancelled: boolean;
+    nativeClosed: boolean;
+    released: boolean;
+  };
   const entries = new Map<string, Entry>();
   const failed = new Set<string>();
   let wanted = new Map<string, Wanted>();
@@ -20,13 +36,19 @@ export function createNativeWindowReconciler<Options>({ open, close, setTitle, f
   const release = (id: string, entry: Entry) => {
     if (entry.released) return;
     entry.released = true;
-    try { closed(id, entry.options); }
-    catch (error) { report("release", id, error); }
+    try {
+      closed(id, entry.options);
+    } catch (error) {
+      report("release", id, error);
+    }
   };
   // Dispatch immediately, preserving macOS call order and void-returning hosts.
   const invoke = (run: () => void | Promise<void>) => {
-    try { return Promise.resolve(run()); }
-    catch (error) { return Promise.reject(error); }
+    try {
+      return Promise.resolve(run());
+    } catch (error) {
+      return Promise.reject(error);
+    }
   };
   const finishClose = (id: string, entry: Entry) => {
     if (entries.get(id) !== entry) return;
@@ -40,17 +62,20 @@ export function createNativeWindowReconciler<Options>({ open, close, setTitle, f
   const beginClose = (id: string, entry: Entry) => {
     if (entry.status === "closing") return;
     entry.status = "closing";
-    void invoke(() => close(id)).then(() => finishClose(id, entry), error => {
-      // Keep uncertain failures recorded instead of resending a close on the
-      // next unrelated store update. A real native close event can finish it.
-      report("close", id, error);
-    });
+    void invoke(() => close(id)).then(
+      () => finishClose(id, entry),
+      (error) => {
+        // Keep uncertain failures recorded instead of resending a close on the
+        // next unrelated store update. A real native close event can finish it.
+        report("close", id, error);
+      },
+    );
   };
   const updateTitle = (id: string, entry: Entry) => {
     const next = wanted.get(id);
     if (!next || next.title === entry.title) return;
     entry.title = next.title;
-    void invoke(() => setTitle(id, next.title)).catch(error => report("title", id, error));
+    void invoke(() => setTitle(id, next.title)).catch((error) => report("title", id, error));
   };
 
   function reconcile() {
@@ -62,28 +87,42 @@ export function createNativeWindowReconciler<Options>({ open, close, setTitle, f
         if (existing.status === "open") updateTitle(id, existing);
         continue;
       }
-      const entry: Entry = { status: "opening", options: window.options, title: window.title, wantedFocus: id === focusedId, cancelled: false, nativeClosed: false, released: false };
+      const entry: Entry = {
+        status: "opening",
+        options: window.options,
+        title: window.title,
+        wantedFocus: id === focusedId,
+        cancelled: false,
+        nativeClosed: false,
+        released: false,
+      };
       entries.set(id, entry);
-      void invoke(() => open(id, window.options)).then(() => {
-        // Even a close event can precede completion of an in-flight create.
-        // One acknowledged cleanup close prevents a late page resurrection,
-        // and keeps its private profile alive until creation has settled.
-        if (entry.nativeClosed || entry.cancelled || !wanted.has(id)) return beginClose(id, entry);
-        entry.status = "open";
-        updateTitle(id, entry);
-        if (entry.wantedFocus && focusedId && focusedId !== id && entries.get(focusedId)?.status === "open") {
-          const current = focusedId;
-          void invoke(() => focus(current)).catch(error => report("focus", current, error));
-        }
-      }, error => {
-        report("open", id, error);
-        failed.add(id);
-        // Remove the invisible canonical window before another update can try
-        // again. Close also cleans up a possibly partial native creation.
-        try { openFailed(id); }
-        catch (failure) { report("reconcile", id, failure); }
-        beginClose(id, entry);
-      });
+      void invoke(() => open(id, window.options)).then(
+        () => {
+          // Even a close event can precede completion of an in-flight create.
+          // One acknowledged cleanup close prevents a late page resurrection,
+          // and keeps its private profile alive until creation has settled.
+          if (entry.nativeClosed || entry.cancelled || !wanted.has(id)) return beginClose(id, entry);
+          entry.status = "open";
+          updateTitle(id, entry);
+          if (entry.wantedFocus && focusedId && focusedId !== id && entries.get(focusedId)?.status === "open") {
+            const current = focusedId;
+            void invoke(() => focus(current)).catch((error) => report("focus", current, error));
+          }
+        },
+        (error) => {
+          report("open", id, error);
+          failed.add(id);
+          // Remove the invisible canonical window before another update can try
+          // again. Close also cleans up a possibly partial native creation.
+          try {
+            openFailed(id);
+          } catch (failure) {
+            report("reconcile", id, failure);
+          }
+          beginClose(id, entry);
+        },
+      );
     }
     for (const [id, entry] of entries) {
       if (wanted.has(id)) continue;
@@ -94,7 +133,7 @@ export function createNativeWindowReconciler<Options>({ open, close, setTitle, f
 
   return {
     sync(windows: Wanted[], focused: string | null) {
-      wanted = new Map(windows.map(window => [window.id, window]));
+      wanted = new Map(windows.map((window) => [window.id, window]));
       focusedId = focused;
       for (const id of failed) if (!wanted.has(id)) failed.delete(id);
       reconcile();

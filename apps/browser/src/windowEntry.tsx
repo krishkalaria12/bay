@@ -12,7 +12,11 @@ type WindowApplicationOptions = { onFirstMount?: () => void };
 // a web window can mount without starting those services again.
 export function registerWindowApplication({ onFirstMount }: WindowApplicationOptions = {}) {
   function Root({ windowId }: { windowId: string }) {
-    return <WindowContext.Provider value={windowId}><RootContents windowId={windowId} onFirstMount={onFirstMount} /></WindowContext.Provider>;
+    return (
+      <WindowContext.Provider value={windowId}>
+        <RootContents windowId={windowId} onFirstMount={onFirstMount} />
+      </WindowContext.Provider>
+    );
   }
 
   AppRegistry.registerComponent("main", () => Root);

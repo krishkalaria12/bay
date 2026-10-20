@@ -41,6 +41,19 @@ test("Linux desktop uses the web host without Apple services", () => {
   const linux = capabilitiesFor("linux", () => true);
   assert.equal(linux.windowBackdrop, true);
   assert.equal(linux.hover, true);
-  for (const key of ["liquidGlass", "vibrancy", "shaders", "dock", "dockSelection", "calendar", "translation", "appleScript", "handoff", "introMusic", "trafficLights"]) assert.equal(linux[key], false, key);
+  for (const key of [
+    "liquidGlass",
+    "vibrancy",
+    "shaders",
+    "dock",
+    "dockSelection",
+    "calendar",
+    "translation",
+    "appleScript",
+    "handoff",
+    "introMusic",
+    "trafficLights",
+  ])
+    assert.equal(linux[key], false, key);
   assert.equal(linux.keychain, true);
 });

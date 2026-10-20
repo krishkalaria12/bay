@@ -3,7 +3,9 @@ import "expo";
 import { installNativeTransport, getNativeHostInfo } from "@bay/platform/nativeBridge";
 import { createMojoTransport, type WebNativeBridgeOptions } from "../../packages/platform/src/mojoTransport";
 
-declare global { var __bayNativeHostReady: Promise<WebNativeBridgeOptions> | undefined; }
+declare global {
+  var __bayNativeHostReady: Promise<WebNativeBridgeOptions> | undefined;
+}
 
 async function start() {
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
@@ -11,20 +13,34 @@ async function start() {
     const deadline = performance.now() + 5000;
     while (!globalThis.__bayNativeHostReady) {
       if (performance.now() >= deadline) throw new Error("Bay's native WebUI bootstrap did not load");
-      await new Promise<void>(resolve => setTimeout(resolve, 16));
+      await new Promise<void>((resolve) => setTimeout(resolve, 16));
     }
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let expired = false;
-    const ready = globalThis.__bayNativeHostReady.then(options => {
-      if (expired) { options.remote.$?.close?.(); options.client.$.close?.(); }
+    const ready = globalThis.__bayNativeHostReady.then((options) => {
+      if (expired) {
+        options.remote.$?.close?.();
+        options.client.$.close?.();
+      }
       return options;
     });
     try {
-      const options = await Promise.race([ready, new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => { expired = true; reject(new Error("Bay's native WebUI bootstrap did not finish loading")); }, Math.max(0, deadline - performance.now()));
-      })]);
+      const options = await Promise.race([
+        ready,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => {
+              expired = true;
+              reject(new Error("Bay's native WebUI bootstrap did not finish loading"));
+            },
+            Math.max(0, deadline - performance.now()),
+          );
+        }),
+      ]);
       installNativeTransport(await createMojoTransport(options));
-    } finally { clearTimeout(timeout); }
+    } finally {
+      clearTimeout(timeout);
+    }
   } else if (local) {
     const { createPreviewTransport } = await import("./src/web/previewTransport");
     installNativeTransport(createPreviewTransport());
@@ -55,8 +71,11 @@ async function start() {
   if (!rootTag) throw new Error("The WebUI root element is missing");
   AppRegistry.runApplication("main", { rootTag, initialProps: { windowId } });
 }
-void start().catch(error => {
+void start().catch((error) => {
   console.error(error);
   const root = document.getElementById("root");
-  if (root) { root.textContent = `Bay could not start: ${error instanceof Error ? error.message : String(error)}`; root.setAttribute("role", "alert"); }
+  if (root) {
+    root.textContent = `Bay could not start: ${error instanceof Error ? error.message : String(error)}`;
+    root.setAttribute("role", "alert");
+  }
 });

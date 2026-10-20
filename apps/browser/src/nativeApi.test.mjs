@@ -24,8 +24,13 @@ test("the native runtime accepts every slice of the coordinator's current state 
     return [...body.matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort();
   };
   const state = createBrowserProjector()(createBrowserStore().getState());
-  for (const [name, isList] of [["kRecords", false], ["kLists", true]]) {
-    const expected = Object.keys(state).filter((key) => Array.isArray(state[key]) === isList).sort();
+  for (const [name, isList] of [
+    ["kRecords", false],
+    ["kLists", true],
+  ]) {
+    const expected = Object.keys(state)
+      .filter((key) => Array.isArray(state[key]) === isList)
+      .sort();
     assert.deepEqual(fields(name), expected, `${name} must match the published coordinator projection`);
   }
 });

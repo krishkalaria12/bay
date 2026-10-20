@@ -9,19 +9,25 @@ export type BrowserCommands = { dispatch(command: LocationCommand): Promise<null
 export function createLocalBrowserCommands(store: BrowserStore, effects: LocationCommandEffects = { focusWindow() {} }): BrowserCommands {
   return {
     dispatch(command) {
-      try { return Promise.resolve(executeLocationCommand(store, parseLocationCommand(command), effects)); }
-      catch (error) { return Promise.reject(error); }
+      try {
+        return Promise.resolve(executeLocationCommand(store, parseLocationCommand(command), effects));
+      } catch (error) {
+        return Promise.reject(error);
+      }
     },
   };
 }
 export function createClientBrowserCommands(client: Pick<ReturnType<typeof createBrowserClient>, "dispatch">): BrowserCommands {
-  return { dispatch: command => client.dispatch(command) };
+  return { dispatch: (command) => client.dispatch(command) };
 }
 
 const local = createLocalBrowserCommands(useBrowser, {
   focusWindow(id) {
-    try { void Promise.resolve(focusWindow(id)).catch(error => console.error("Couldn't focus the browser window", error)); }
-    catch (error) { console.error("Couldn't focus the browser window", error); }
+    try {
+      void Promise.resolve(focusWindow(id)).catch((error) => console.error("Couldn't focus the browser window", error));
+    } catch (error) {
+      console.error("Couldn't focus the browser window", error);
+    }
   },
 });
 const bindings = [{ commands: local }];

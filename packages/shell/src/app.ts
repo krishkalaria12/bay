@@ -199,9 +199,15 @@ export type IntroMusicCues = {
   exit: number;
   end: number;
 };
-export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => { if (capabilities.introMusic) void App.playIntroMusic(cues, muted); };
-export const setIntroMusicMuted = (muted: boolean) => { if (capabilities.introMusic) void App.setIntroMusicMuted(muted); };
-export const stopIntroMusic = (fade = 0.4) => { if (capabilities.introMusic) void App.stopIntroMusic(fade); };
+export const playIntroMusic = (cues: IntroMusicCues, muted: boolean) => {
+  if (capabilities.introMusic) void App.playIntroMusic(cues, muted);
+};
+export const setIntroMusicMuted = (muted: boolean) => {
+  if (capabilities.introMusic) void App.setIntroMusicMuted(muted);
+};
+export const stopIntroMusic = (fade = 0.4) => {
+  if (capabilities.introMusic) void App.stopIntroMusic(fade);
+};
 export const devRenderIntroMusic = (cues: IntroMusicCues, path: string) => App.devRenderIntroMusic(cues, path);
 export const launchEnvironment = (name: string) => nativeSnapshot("BayApp", "launchEnvironment", [name], () => App.launchEnvironment(name));
 export const devRunAppleScript = (source: string) => App.devRunAppleScript(source);

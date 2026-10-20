@@ -1,7 +1,14 @@
 import { capabilities } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
-import { requireNativeModule, requireOptionalNativeModule, nativeSnapshot, nativeDocumentWrite, nativeDocumentSave, type EventSubscription } from "@bay/platform/native";
+import {
+  requireNativeModule,
+  requireOptionalNativeModule,
+  nativeSnapshot,
+  nativeDocumentWrite,
+  nativeDocumentSave,
+  type EventSubscription,
+} from "@bay/platform/native";
 
 export * from "./system";
 export * from "./app";
@@ -331,8 +338,7 @@ export const windowIds = () => Shell.windowIds();
 // The window's own caption buttons (capabilities.captionButtons): no-ops on hosts whose system draws them.
 export const minimizeWindow = (id: string) => Shell.minimizeWindow?.(id) ?? Promise.resolve();
 export const toggleMaximizeWindow = (id: string) => Shell.toggleMaximizeWindow?.(id) ?? Promise.resolve();
-export const windowState = (id: string): Promise<WindowState> =>
-  Shell.windowState?.(id) ?? Promise.resolve({ maximized: false, fullscreen: false });
+export const windowState = (id: string): Promise<WindowState> => Shell.windowState?.(id) ?? Promise.resolve({ maximized: false, fullscreen: false });
 export const setWindowCaption = (id: string, caption: WindowCaption) => Shell.setWindowCaption?.(id, caption) ?? Promise.resolve();
 
 export const setAppearance = (mode: "auto" | "light" | "dark") => Shell.setAppearance(mode);

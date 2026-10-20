@@ -10,8 +10,6 @@ import { CHROME_HISTORY_KEEPS_MS, HISTORY_CHUNK, LEGACY_HISTORY_FILE, LEGACY_HIS
 // each new profile, then kept current from Chrome's change events. Once, it moves the app's old history.json
 // into Chrome.
 
-
-
 // The pages the app's History, command bar and sync show: Chrome also keeps extension pages (a hidden helper's
 // chrome-extension:// page among them), which the app never listed.
 export const shownInHistory = (url: string) => /^(https?|file):/i.test(url);
@@ -74,8 +72,13 @@ export function createHistoryService(browser: BrowserStore) {
   let stopListening: (() => void) | undefined;
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const current = (run: number) => active && generation === run;
-  const engineProfiles = (s: Pick<BrowserState, "spaces">) =>
-    [...new Set(Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id)).map((id) => engineProfileFor(id, s.spaces)))];
+  const engineProfiles = (s: Pick<BrowserState, "spaces">) => [
+    ...new Set(
+      Object.keys(s.spaces)
+        .filter((id) => !isIncognitoSpace(id))
+        .map((id) => engineProfileFor(id, s.spaces)),
+    ),
+  ];
 
   const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
     Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfileFor(id, s.spaces) === engine);
@@ -146,7 +149,10 @@ export function createHistoryService(browser: BrowserStore) {
           if (!current(run)) return;
           // Chrome had more URLs than the view reads: the older ones may be missing (shown or not).
           const floor = read.length >= MAX_HISTORY ? Math.min(...read.map((e) => e.visitTimes.at(-1) ?? 0)) : -Infinity;
-          let list = read.filter((e) => shownInHistory(e.url)).map(toEntry).sort(byLastVisit);
+          let list = read
+            .filter((e) => shownInHistory(e.url))
+            .map(toEntry)
+            .sort(byLastVisit);
           for (const change of state.queued) if (!(change.kind === "deleted" && change.all)) list = applyHistoryChange(list, change);
           if (state.queued.some((c) => c.kind === "deleted" && c.all)) state.again = true;
           setView(engine, list, floor);
@@ -225,10 +231,12 @@ export function createHistoryService(browser: BrowserStore) {
     }
     if (!current(run)) return "kept";
     if (keepMs) {
-      const timer = setTimeout(() => { timers.delete(timer); if (current(run)) removeDocument(LEGACY_HISTORY_FILE); }, keepMs);
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        if (current(run)) removeDocument(LEGACY_HISTORY_FILE);
+      }, keepMs);
       timers.add(timer);
-    }
-    else removeDocument(LEGACY_HISTORY_FILE);
+    } else removeDocument(LEGACY_HISTORY_FILE);
     return "moved";
   }
 
@@ -238,7 +246,9 @@ export function createHistoryService(browser: BrowserStore) {
     if (stopListening) return stopListening;
     active = true;
     const run = generation;
-    const events = onHistoryChanged((change) => { if (current(run)) changed(change); });
+    const events = onHistoryChanged((change) => {
+      if (current(run)) changed(change);
+    });
     const loadAll = (s: Pick<BrowserState, "spaces">) => {
       for (const engine of engineProfiles(s)) if (!loaded.has(engine) && !loads.has(engine)) void load(engine);
     };
@@ -287,7 +297,10 @@ export function createHistoryService(browser: BrowserStore) {
   const reloadHistory = () => Promise.all(engineProfiles(store()).map(load));
 
   function dispose() {
-    if (stopListening) { stopListening(); return; }
+    if (stopListening) {
+      stopListening();
+      return;
+    }
     active = false;
     generation++;
     for (const timer of timers) clearTimeout(timer);

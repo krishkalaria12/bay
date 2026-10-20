@@ -22,8 +22,12 @@ export function createBrowserProjector() {
     visiting.add(value);
     try {
       const result = Array.isArray(value)
-        ? value.map((item) => item === undefined ? null : copy(item))
-        : Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, copy(item)]));
+        ? value.map((item) => (item === undefined ? null : copy(item)))
+        : Object.fromEntries(
+            Object.entries(value)
+              .filter(([, item]) => item !== undefined)
+              .map(([key, item]) => [key, copy(item)]),
+          );
       Object.freeze(result);
       copies.set(value, result);
       return result;

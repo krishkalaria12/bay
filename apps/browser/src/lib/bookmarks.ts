@@ -73,7 +73,10 @@ function flatFromEngine(tree: { bar: EngineBookmark; other: EngineBookmark }, en
       ...(node.key ? { key: node.key } : {}),
     });
     if (node.k === "f") {
-      flat.children.set(id, (node.c ?? []).map((c) => c.id));
+      flat.children.set(
+        id,
+        (node.c ?? []).map((c) => c.id),
+      );
       for (const c of node.c ?? []) walk(c, c.id, id);
     }
   };
@@ -185,7 +188,11 @@ export function applyOps(tree: Flat, ops: BookmarkOp[], engine: string): Flat {
     }
     if (op.op === "update") {
       if (!node || node.parent === null) break;
-      flat.nodes.set(op.id, { ...node, ...(op.t !== undefined ? { title: op.t } : {}), ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}) });
+      flat.nodes.set(op.id, {
+        ...node,
+        ...(op.t !== undefined ? { title: op.t } : {}),
+        ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}),
+      });
       continue;
     }
     const parent = flatParent(engine, op.parent);
@@ -195,7 +202,8 @@ export function applyOps(tree: Flat, ops: BookmarkOp[], engine: string): Flat {
       if (!node || node.parent === null || inside(op.id, parent)) break;
       detach(op.id);
       attach(op.id, parent, op.index);
-      if (op.op === "add") flat.nodes.set(op.id, { ...flat.nodes.get(op.id)!, title: op.t, ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}) });
+      if (op.op === "add")
+        flat.nodes.set(op.id, { ...flat.nodes.get(op.id)!, title: op.t, ...(op.u && node.kind === "url" && keepsUrl(op.u) ? { url: op.u } : {}) });
       continue;
     }
     // Chrome drops an add whose URL it can't keep, and goes on.
@@ -243,8 +251,13 @@ export function createBookmarksService(browser: BrowserStore) {
   // Sync may use a tree only once bookmarks.json is in Chrome: before, its bookmarks would read as deleted.
   let legacyMoved = false;
 
-  const engineProfiles = (s: Pick<BrowserState, "spaces">) =>
-    [...new Set(Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id)).map((id) => engineProfileFor(id, s.spaces)))];
+  const engineProfiles = (s: Pick<BrowserState, "spaces">) => [
+    ...new Set(
+      Object.keys(s.spaces)
+        .filter((id) => !isIncognitoSpace(id))
+        .map((id) => engineProfileFor(id, s.spaces)),
+    ),
+  ];
   const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
     Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfileFor(id, s.spaces) === engine);
 
@@ -261,8 +274,25 @@ export function createBookmarksService(browser: BrowserStore) {
         const key = n.key ? { syncKey: n.key } : {};
         nodes[id] =
           n.kind === "url"
-            ? { kind: "url", id, parentId: n.parent!, title: n.title, url: n.url ?? "", favicon: was?.kind === "url" ? was.favicon : null, addedAt: n.addedAt, ...key }
-            : ({ kind: "folder", id, parentId: n.parent, title: n.title, children: flat.children.get(id) ?? [], addedAt: n.addedAt, ...key } satisfies BookmarkFolder);
+            ? {
+                kind: "url",
+                id,
+                parentId: n.parent!,
+                title: n.title,
+                url: n.url ?? "",
+                favicon: was?.kind === "url" ? was.favicon : null,
+                addedAt: n.addedAt,
+                ...key,
+              }
+            : ({
+                kind: "folder",
+                id,
+                parentId: n.parent,
+                title: n.title,
+                children: flat.children.get(id) ?? [],
+                addedAt: n.addedAt,
+                ...key,
+              } satisfies BookmarkFolder);
       }
       nodes[roots.bar] = { ...(nodes[roots.bar] as BookmarkFolder), title: "Bookmarks Bar" };
       nodes[roots.other] = { ...(nodes[roots.other] as BookmarkFolder), title: "Other Bookmarks" };
@@ -300,8 +330,9 @@ export function createBookmarksService(browser: BrowserStore) {
     adopt(engine, merged);
     if (!edits.length) return;
     if (!current(run)) return;
-    if (await sendOps(engine, edits)) { if (current(run)) state.shadow = merged; }
-    else state.needRead = true;
+    if (await sendOps(engine, edits)) {
+      if (current(run)) state.shadow = merged;
+    } else state.needRead = true;
   }
 
   async function pushTree(engine: string, state: EngineState, run: number) {
@@ -310,8 +341,9 @@ export function createBookmarksService(browser: BrowserStore) {
     if (!desired.nodes.size) return;
     const ops = bookmarkOps(state.shadow, desired, engine);
     if (!ops.length) return;
-    if (await sendOps(engine, ops)) { if (current(run)) state.shadow = desired; }
-    else state.needRead = true;
+    if (await sendOps(engine, ops)) {
+      if (current(run)) state.shadow = desired;
+    } else state.needRead = true;
   }
 
   function work(engine: string) {
@@ -474,10 +506,12 @@ export function createBookmarksService(browser: BrowserStore) {
     }
     if (!current(run)) return "kept";
     if (keepMs) {
-      const timer = setTimeout(() => { timers.delete(timer); if (current(run)) removeDocument(LEGACY_FILE); }, keepMs);
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        if (current(run)) removeDocument(LEGACY_FILE);
+      }, keepMs);
       timers.add(timer);
-    }
-    else removeDocument(LEGACY_FILE);
+    } else removeDocument(LEGACY_FILE);
     return "moved";
   }
 
@@ -535,7 +569,10 @@ export function createBookmarksService(browser: BrowserStore) {
   }
 
   function dispose() {
-    if (stopListening) { stopListening(); return; }
+    if (stopListening) {
+      stopListening();
+      return;
+    }
     active = false;
     generation++;
     for (const timer of timers) clearTimeout(timer);

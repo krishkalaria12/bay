@@ -351,182 +351,189 @@ export function withNewTab(s: BrowserState, windowId: string, o: NewTabOptions =
   return [next, tab.id];
 }
 
-export const createTabsSlice = (openAppUrl: AppUrlOpener): StateCreator<BrowserState, [], [], TabsSlice> => (set, get) => ({
-  tabs: {},
-  tabLists: {},
-  live: {},
-  closedTabs: [],
+export const createTabsSlice =
+  (openAppUrl: AppUrlOpener): StateCreator<BrowserState, [], [], TabsSlice> =>
+  (set, get) => ({
+    tabs: {},
+    tabLists: {},
+    live: {},
+    closedTabs: [],
 
-  newTab(windowId, options) {
-    const small = get().windows[windowId];
-    if (small?.kind === "small" && listIds(get(), small.id).length) {
-      // Little Bay keeps its one page; new tabs go to a main window of that profile.
-      const spaceId = options?.spaceId ?? small.spaceId;
-      const main = mainWindowFor(get(), spaceId);
-      if (!main) {
-        const created = get().createWindow({ spaceId, url: options?.url, adoptId: options?.adoptId ?? options?.wakeAdoptId, background: options?.background });
-        return activeTabId(get(), created) ?? "";
+    newTab(windowId, options) {
+      const small = get().windows[windowId];
+      if (small?.kind === "small" && listIds(get(), small.id).length) {
+        // Little Bay keeps its one page; new tabs go to a main window of that profile.
+        const spaceId = options?.spaceId ?? small.spaceId;
+        const main = mainWindowFor(get(), spaceId);
+        if (!main) {
+          const created = get().createWindow({
+            spaceId,
+            url: options?.url,
+            adoptId: options?.adoptId ?? options?.wakeAdoptId,
+            background: options?.background,
+          });
+          return activeTabId(get(), created) ?? "";
+        }
+        // The Little Bay page stays the opener, so the tabs it sends keep their order.
+        return get().newTab(main, { ...options, spaceId, index: undefined });
       }
-      // The Little Bay page stays the opener, so the tabs it sends keep their order.
-      return get().newTab(main, { ...options, spaceId, index: undefined });
-    }
-    if (options?.url && !options.adoptId && openAppUrl(resolveInput(options.url, searchUrlPrefix(get().settings)), windowId)) return "";
-    let [next, id] = withNewTab(get(), windowId, options);
-    if (id && options?.openerId) next = groupWithOpener(next, id, options.openerId, !!options.background);
-    set(next);
-    return id;
-  },
+      if (options?.url && !options.adoptId && openAppUrl(resolveInput(options.url, searchUrlPrefix(get().settings)), windowId)) return "";
+      let [next, id] = withNewTab(get(), windowId, options);
+      if (id && options?.openerId) next = groupWithOpener(next, id, options.openerId, !!options.background);
+      set(next);
+      return id;
+    },
 
-  closeTab(id) {
-    const s = get();
-    const tab = s.tabs[id];
-    if (!tab) return;
-    if (inPinnedContainer(s, id)) return set(unloadPinnedTabs(s, [id]));
-    // Its window's last open tab: the tab closes, then the window (its space keeps its other tabs).
-    const last = closesWindow(s, id) ? tab.windowId : undefined;
-    set(removeTabs(s, [id], true));
-    if (last && get().windows[last]) get().closeWindow(last);
-  },
-
-  closeTabs(ids) {
-    let s = unloadPinnedTabs(get(), ids);
-    const closing = ids.filter((id) => !inPinnedContainer(s, id));
-    for (const w of Object.values(s.windows)) {
-      const view = viewTabIds(s, w.id);
-      if (view.some((id) => closing.includes(id)) && view.every((id) => closing.includes(id) || s.tabs[id]!.unloaded)) {
-        s = withNewTab(s, w.id)[0];
-      }
-    }
-    set(removeTabs(s, closing, true));
-  },
-
-  removeTab(id) {
-    set(removeTabs(get(), [id], true));
-  },
-
-  activate(id, windowId) {
-    const s = get();
-    const tab = s.tabs[id];
-    const w = tab && windowFor(s, tab, windowId);
-    if (!tab || !w) return;
-    const shown = activeTabId(s, w.id);
-    let next = apply(s, activated(s, id, w.id));
-    if (shown && shown !== id && !switchKeepsOpeners(s, shown, id)) next = forgetOpeners(next, tabListKey(next, next.tabs[id]!));
-    set(next);
-  },
-
-  activateIndex(windowId, index) {
-    const view = viewTabIds(get(), windowId);
-    const id = index < 0 ? view.at(-1) : view[index];
-    if (id) get().activate(id, windowId);
-  },
-
-  cycle(windowId, delta) {
-    const s = get();
-    const view = viewTabIds(s, windowId);
-    const i = view.indexOf(s.windows[windowId]?.activeTabIds[s.windows[windowId]!.spaceId] ?? "");
-    if (view.length) get().activate(view[(i + delta + view.length) % view.length]!, windowId);
-  },
-
-  navigate(id, input, { userInitiated = true } = {}) {
-    const s = get();
-    const url = resolveInput(input, searchUrlPrefix(s.settings));
-    const tab = s.tabs[id];
-    if (!url || !tab) return;
-    const panel = s.windowUi[tab.windowId]?.panel;
-    if (openAppUrl(url, tab.windowId)) {
-      const current = get().windowUi[tab.windowId]?.panel;
-      // An app URL may open a new palette session instead of navigating the page.
-      if (current?.open && current.sessionId === panel?.sessionId) get().closePanel(tab.windowId);
-      return;
-    }
-    // A new address supersedes a link the tab kept to load when shown (the engine drops it: lib/chromeTabs.ts).
-    const { unloaded: _, wakeAdoptId: _kept, ...rest } = tab;
-    // Typing an address starts a new task (a New Tab page gets one lookup first, as in Chrome).
-    const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;
-    set(
-      apply(base, {
-        tabs: { ...base.tabs, [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation: navigationTo(url, userInitiated), url: tab.url || url } },
-      }),
-    );
-    const ui = get().windowUi[tab.windowId];
-    if (ui?.panel.open) get().closePanel(tab.windowId);
-  },
-
-  updateTab(id, patch, livePatch) {
-    const s = get();
-    const tab = s.tabs[id];
-    if (!tab) return;
-    const url = patch.url;
-    // Loading something else supersedes the link the tab kept to load when shown.
-    const supersedes = !!tab.wakeAdoptId && !("wakeAdoptId" in patch) && (!!patch.navigation || !!patch.adoptId || (url !== undefined && url !== tab.url));
-    const change = supersedes ? { ...patch, wakeAdoptId: undefined } : patch;
-    const next = merge(tab, url !== undefined && url !== tab.url ? { ...onUrlChange(s, tab, url), ...change } : change);
-    const live = livePatch ? s.live[id] : undefined;
-    const nextLive = live && livePatch ? merge(live, livePatch) : live;
-    if (next === tab && nextLive === live) return;
-    set((s) => ({
-      ...(next !== tab ? { tabs: { ...s.tabs, [id]: next } } : {}),
-      ...(nextLive !== live ? { live: { ...s.live, [id]: nextLive! } } : {}),
-    }));
-  },
-
-  updateLive(id, patch) {
-    const live = get().live[id];
-    if (!live) return;
-    const next = merge(live, patch);
-    if (next !== live) set((s) => ({ live: { ...s.live, [id]: next } }));
-  },
-
-  navigated(id, page, live) {
-    get().updateTab(id, page, live);
-  },
-
-  faviconChanged(id, favicon) {
-    get().updateTab(id, { favicon });
-  },
-
-  duplicateTab(id) {
-    const s = get();
-    const source = s.tabs[id];
-    if (!source) return undefined;
-    const w = windowFor(s, source, source.windowId);
-    if (!w) return undefined;
-    const [next, copy] = withNewTab(s, w.id, {
-      url: source.url || undefined,
-      spaceId: source.spaceId,
-      snapshot: { ...snapshotTab(source), pinned: false, pinnedRow: undefined },
-      index: listIds(s, tabListKey(s, source)).indexOf(id) + 1,
-      adoptId: source.url ? `clone:${id}` : undefined,
-    });
-    set(next);
-    return copy;
-  },
-
-  togglePin(id) {
-    const tab = get().tabs[id];
-    if (tab) get().pinTabs([id], !tab.pinned);
-  },
-
-  moveTab(id, toIndex) {
-    set((s) => {
+    closeTab(id) {
+      const s = get();
       const tab = s.tabs[id];
-      const list = listOfTab(s, id);
-      if (!tab || !list) return {};
-      const inSection = (t: string) => s.tabs[t]?.spaceId === tab.spaceId && !!s.tabs[t]?.pinned === tab.pinned;
-      const section = list.tabIds.filter(inSection);
-      const moved = section.filter((t) => t !== id);
-      moved.splice(Math.min(Math.max(toIndex, 0), moved.length), 0, id);
-      let k = 0;
-      // The pinned rows share a section with the list here (both aren't Essentials): neither crosses into the other.
-      const tabIds = orderSections(
-        list.tabIds.map((t) => (inSection(t) ? moved[k++]! : t)),
-        s.tabs,
-        s.groups,
-        s.pinnedFolders,
+      if (!tab) return;
+      if (inPinnedContainer(s, id)) return set(unloadPinnedTabs(s, [id]));
+      // Its window's last open tab: the tab closes, then the window (its space keeps its other tabs).
+      const last = closesWindow(s, id) ? tab.windowId : undefined;
+      set(removeTabs(s, [id], true));
+      if (last && get().windows[last]) get().closeWindow(last);
+    },
+
+    closeTabs(ids) {
+      let s = unloadPinnedTabs(get(), ids);
+      const closing = ids.filter((id) => !inPinnedContainer(s, id));
+      for (const w of Object.values(s.windows)) {
+        const view = viewTabIds(s, w.id);
+        if (view.some((id) => closing.includes(id)) && view.every((id) => closing.includes(id) || s.tabs[id]!.unloaded)) {
+          s = withNewTab(s, w.id)[0];
+        }
+      }
+      set(removeTabs(s, closing, true));
+    },
+
+    removeTab(id) {
+      set(removeTabs(get(), [id], true));
+    },
+
+    activate(id, windowId) {
+      const s = get();
+      const tab = s.tabs[id];
+      const w = tab && windowFor(s, tab, windowId);
+      if (!tab || !w) return;
+      const shown = activeTabId(s, w.id);
+      let next = apply(s, activated(s, id, w.id));
+      if (shown && shown !== id && !switchKeepsOpeners(s, shown, id)) next = forgetOpeners(next, tabListKey(next, next.tabs[id]!));
+      set(next);
+    },
+
+    activateIndex(windowId, index) {
+      const view = viewTabIds(get(), windowId);
+      const id = index < 0 ? view.at(-1) : view[index];
+      if (id) get().activate(id, windowId);
+    },
+
+    cycle(windowId, delta) {
+      const s = get();
+      const view = viewTabIds(s, windowId);
+      const i = view.indexOf(s.windows[windowId]?.activeTabIds[s.windows[windowId]!.spaceId] ?? "");
+      if (view.length) get().activate(view[(i + delta + view.length) % view.length]!, windowId);
+    },
+
+    navigate(id, input, { userInitiated = true } = {}) {
+      const s = get();
+      const url = resolveInput(input, searchUrlPrefix(s.settings));
+      const tab = s.tabs[id];
+      if (!url || !tab) return;
+      const panel = s.windowUi[tab.windowId]?.panel;
+      if (openAppUrl(url, tab.windowId)) {
+        const current = get().windowUi[tab.windowId]?.panel;
+        // An app URL may open a new palette session instead of navigating the page.
+        if (current?.open && current.sessionId === panel?.sessionId) get().closePanel(tab.windowId);
+        return;
+      }
+      // A new address supersedes a link the tab kept to load when shown (the engine drops it: lib/chromeTabs.ts).
+      const { unloaded: _, wakeAdoptId: _kept, ...rest } = tab;
+      // Typing an address starts a new task (a New Tab page gets one lookup first, as in Chrome).
+      const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;
+      set(
+        apply(base, {
+          tabs: { ...base.tabs, [id]: { ...rest, openerId: base.tabs[id]!.openerId, navigation: navigationTo(url, userInitiated), url: tab.url || url } },
+        }),
       );
-      const next = { key: list.key, tabIds };
-      return { tabLists: withList(s, next).tabLists, groups: syncGroupOrder(s.groups, next) };
-    });
-  },
-});
+      const ui = get().windowUi[tab.windowId];
+      if (ui?.panel.open) get().closePanel(tab.windowId);
+    },
+
+    updateTab(id, patch, livePatch) {
+      const s = get();
+      const tab = s.tabs[id];
+      if (!tab) return;
+      const url = patch.url;
+      // Loading something else supersedes the link the tab kept to load when shown.
+      const supersedes = !!tab.wakeAdoptId && !("wakeAdoptId" in patch) && (!!patch.navigation || !!patch.adoptId || (url !== undefined && url !== tab.url));
+      const change = supersedes ? { ...patch, wakeAdoptId: undefined } : patch;
+      const next = merge(tab, url !== undefined && url !== tab.url ? { ...onUrlChange(s, tab, url), ...change } : change);
+      const live = livePatch ? s.live[id] : undefined;
+      const nextLive = live && livePatch ? merge(live, livePatch) : live;
+      if (next === tab && nextLive === live) return;
+      set((s) => ({
+        ...(next !== tab ? { tabs: { ...s.tabs, [id]: next } } : {}),
+        ...(nextLive !== live ? { live: { ...s.live, [id]: nextLive! } } : {}),
+      }));
+    },
+
+    updateLive(id, patch) {
+      const live = get().live[id];
+      if (!live) return;
+      const next = merge(live, patch);
+      if (next !== live) set((s) => ({ live: { ...s.live, [id]: next } }));
+    },
+
+    navigated(id, page, live) {
+      get().updateTab(id, page, live);
+    },
+
+    faviconChanged(id, favicon) {
+      get().updateTab(id, { favicon });
+    },
+
+    duplicateTab(id) {
+      const s = get();
+      const source = s.tabs[id];
+      if (!source) return undefined;
+      const w = windowFor(s, source, source.windowId);
+      if (!w) return undefined;
+      const [next, copy] = withNewTab(s, w.id, {
+        url: source.url || undefined,
+        spaceId: source.spaceId,
+        snapshot: { ...snapshotTab(source), pinned: false, pinnedRow: undefined },
+        index: listIds(s, tabListKey(s, source)).indexOf(id) + 1,
+        adoptId: source.url ? `clone:${id}` : undefined,
+      });
+      set(next);
+      return copy;
+    },
+
+    togglePin(id) {
+      const tab = get().tabs[id];
+      if (tab) get().pinTabs([id], !tab.pinned);
+    },
+
+    moveTab(id, toIndex) {
+      set((s) => {
+        const tab = s.tabs[id];
+        const list = listOfTab(s, id);
+        if (!tab || !list) return {};
+        const inSection = (t: string) => s.tabs[t]?.spaceId === tab.spaceId && !!s.tabs[t]?.pinned === tab.pinned;
+        const section = list.tabIds.filter(inSection);
+        const moved = section.filter((t) => t !== id);
+        moved.splice(Math.min(Math.max(toIndex, 0), moved.length), 0, id);
+        let k = 0;
+        // The pinned rows share a section with the list here (both aren't Essentials): neither crosses into the other.
+        const tabIds = orderSections(
+          list.tabIds.map((t) => (inSection(t) ? moved[k++]! : t)),
+          s.tabs,
+          s.groups,
+          s.pinnedFolders,
+        );
+        const next = { key: list.key, tabIds };
+        return { tabLists: withList(s, next).tabLists, groups: syncGroupOrder(s.groups, next) };
+      });
+    },
+  });

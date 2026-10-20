@@ -21,7 +21,11 @@ const views = new Map<string, ComponentType<object>>();
 export function registerNativeWebView<P extends object>(name: string, component: ComponentType<P>): EventSubscription {
   if (views.has(name)) throw new NativeBridgeError("duplicate_view", `Web view ${name} is already registered`);
   views.set(name, component as ComponentType<object>);
-  return { remove() { if (views.get(name) === component) views.delete(name); } };
+  return {
+    remove() {
+      if (views.get(name) === component) views.delete(name);
+    },
+  };
 }
 export function requireNativeViewManager<P extends object>(name: string): ComponentType<P> {
   const view = views.get(name);
@@ -38,8 +42,11 @@ export function nativeSnapshot<T>(module: string, method: string, args: readonly
     const optimistic = documentWrites.get(name);
     if (optimistic) {
       const current = snapshots?.documents;
-      const acknowledged = current && typeof current === "object" && !Array.isArray(current)
-        && (Object.prototype.hasOwnProperty.call(current, name) ? current[name] : null) === optimistic.value;
+      const acknowledged =
+        current &&
+        typeof current === "object" &&
+        !Array.isArray(current) &&
+        (Object.prototype.hasOwnProperty.call(current, name) ? current[name] : null) === optimistic.value;
       if (!optimistic.pending && acknowledged) documentWrites.delete(name);
       else return optimistic.value as T;
     }
@@ -51,7 +58,8 @@ export function nativeSnapshot<T>(module: string, method: string, args: readonly
   const source = indexed[`${module}.${method}`];
   if (source) {
     const values = snapshots?.[source.field];
-    if (!values || typeof values !== "object" || Array.isArray(values)) throw new NativeBridgeError("snapshot_unavailable", `Missing native snapshot ${module}.${source.field}`);
+    if (!values || typeof values !== "object" || Array.isArray(values))
+      throw new NativeBridgeError("snapshot_unavailable", `Missing native snapshot ${module}.${source.field}`);
     const key = String(args[0]);
     return (Object.prototype.hasOwnProperty.call(values, key) ? values[key] : source.missing) as T;
   }
@@ -77,7 +85,7 @@ function resetDocumentState(): void {
 /** Optimistic reads and per-document ordering match the existing fire-and-forget facade. */
 export function nativeDocumentWrite(name: string, contents: string | null, _fallback: () => void): void {
   const method = contents === null ? "removeDocument" : "writeDocument";
-  void queueDocumentWrite(name, contents, method).catch(error => {
+  void queueDocumentWrite(name, contents, method).catch((error) => {
     const code = error instanceof NativeBridgeError ? error.code : "transport_error";
     console.error(`Native document ${method} failed for ${name}: ${code}`);
   });
@@ -119,6 +127,8 @@ function queueDocumentWrite(name: string, contents: string | null, method: strin
   // A rejected save must reach its caller without poisoning later writes.
   const settled = operation.catch(() => {});
   documentQueues.set(name, settled);
-  void settled.then(() => { if (documentQueues.get(name) === settled) documentQueues.delete(name); });
+  void settled.then(() => {
+    if (documentQueues.get(name) === settled) documentQueues.delete(name);
+  });
   return operation;
 }

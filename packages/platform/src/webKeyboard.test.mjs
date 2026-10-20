@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { keyCode, webKeyMatches } from "./webKeyboard.ts";
-const event = overrides => ({ key: "Enter", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...overrides });
+const event = (overrides) => ({ key: "Enter", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...overrides });
 test("web controls consume their arrow, escape and shifted bindings exactly", () => {
   assert.equal(webKeyMatches({ key: "Left", altKey: true }, event({ key: "ArrowLeft", altKey: true })), true);
   assert.equal(webKeyMatches({ key: "Escape" }, event({ key: "Escape" })), true);

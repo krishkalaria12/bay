@@ -42,29 +42,39 @@ const release = () => heldSaves.queue.splice(0).forEach((done) => done());
 beforeEach(async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
   globalThis.nnTelemetryTestWriteDocument = writeDocument;
-  heldSaves.on = false; heldSaves.error = null;
+  heldSaves.on = false;
+  heldSaves.error = null;
   await resumeTelemetryAfterQuit();
-  setSharing(false, "settings"); docs.clear();
+  setSharing(false, "settings");
+  docs.clear();
   setSharing(true, "settings");
 });
 afterEach(async () => {
   globalThis.nnTelemetryTestWriteDocument = writeDocument;
-  heldSaves.on = false; heldSaves.error = null; release();
+  heldSaves.on = false;
+  heldSaves.error = null;
+  release();
   await resumeTelemetryAfterQuit();
   setSharing(false, "settings");
 });
 
 test("quit checkpoints both documents once per attempt and waits for both acknowledgements", async () => {
-  capture("before_quit"); queueLog("warn", "test warning", {});
+  capture("before_quit");
+  queueLog("warn", "test warning", {});
   heldSaves.on = true;
   const checkpoint = prepareTelemetryForQuit();
   assert.strictEqual(prepareTelemetryForQuit(), checkpoint);
-  let finished = false; void checkpoint.then(() => { finished = true; });
+  let finished = false;
+  void checkpoint.then(() => {
+    finished = true;
+  });
   await settle();
   assert.equal(heldSaves.queue.length, 2);
-  heldSaves.queue.shift()(); await settle();
+  heldSaves.queue.shift()();
+  await settle();
   assert.equal(finished, false);
-  heldSaves.queue.shift()(); await checkpoint;
+  heldSaves.queue.shift()();
+  await checkpoint;
   assert.equal(state().sessionOpen, false);
   assert.equal(queue().events.filter((e) => e.event === "app_session_ended").length, 1);
   assert.ok(queue().events.some((e) => e.event === "before_quit"));
@@ -73,15 +83,19 @@ test("quit checkpoints both documents once per attempt and waits for both acknow
 
 test("cancellation repairs late writes using current queue and opens the session", async () => {
   heldSaves.on = true;
-  const old = prepareTelemetryForQuit(); await settle();
+  const old = prepareTelemetryForQuit();
+  await settle();
   const resumed = resumeTelemetryAfterQuit();
   capture("after_cancel");
   assert.equal(devState().saved.sessionOpen, true);
   // These stale writes land after cancellation's background writes. The repair
   // waits for both, then checkpoints the live state rather than the old bytes.
-  release(); await old; await settle();
+  release();
+  await old;
+  await settle();
   assert.equal(heldSaves.queue.length, 2);
-  release(); await resumed;
+  release();
+  await resumed;
   assert.equal(state().sessionOpen, true);
   assert.ok(queue().events.some((e) => e.event === "after_cancel"));
   assert.equal(queue().events.filter((e) => e.event === "app_session_ended").length, 1);
@@ -104,24 +118,32 @@ test("failed writes reject quit and cancellation retries without losing queued e
 
 test("new attempts serialize after cancelled checkpoints without an old repair reopening them", async () => {
   heldSaves.on = true;
-  const old = prepareTelemetryForQuit(); await settle();
+  const old = prepareTelemetryForQuit();
+  await settle();
   const cancelled = resumeTelemetryAfterQuit();
   capture("between_attempts");
   const current = prepareTelemetryForQuit();
-  release(); await old; await cancelled; await settle();
+  release();
+  await old;
+  await cancelled;
+  await settle();
   assert.equal(heldSaves.queue.length, 2);
-  release(); await current;
+  release();
+  await current;
   assert.equal(state().sessionOpen, false);
   assert.ok(queue().events.some((e) => e.event === "between_attempts"));
 });
 
 test("opting out during checkpoint keeps the current empty queue and deleted identity", async () => {
   heldSaves.on = true;
-  const checkpoint = prepareTelemetryForQuit(); await settle();
+  const checkpoint = prepareTelemetryForQuit();
+  await settle();
   setSharing(false, "settings");
-  release(); await settle();
+  release();
+  await settle();
   assert.equal(heldSaves.queue.length, 2);
-  release(); await checkpoint;
+  release();
+  await checkpoint;
   heldSaves.on = false;
   await resumeTelemetryAfterQuit();
   assert.equal(state().sharing, false);
@@ -145,7 +167,8 @@ test("opting out after a completed checkpoint still clears persisted diagnostics
 for (const mode of ["delayed", "failed"]) {
   test(`a completed checkpoint is refreshed after opt-out with ${mode} background writes`, async () => {
     capture("delete_after_completed_checkpoint");
-    const first = prepareTelemetryForQuit(); await first;
+    const first = prepareTelemetryForQuit();
+    await first;
     assert.equal(state().sharing, true);
     const background = [];
     globalThis.nnTelemetryTestWriteDocument = (...args) => {
@@ -158,14 +181,19 @@ for (const mode of ["delayed", "failed"]) {
     const refreshed = prepareTelemetryForQuit();
     assert.notStrictEqual(refreshed, first);
     assert.strictEqual(prepareTelemetryForQuit(), refreshed);
-    let finished = false; void refreshed.then(() => { finished = true; });
+    let finished = false;
+    void refreshed.then(() => {
+      finished = true;
+    });
     await settle();
     assert.equal(heldSaves.queue.length, 2);
     // Native queues each acknowledgement after earlier background writes.
     background.forEach((land) => land());
-    heldSaves.queue.shift()(); await settle();
+    heldSaves.queue.shift()();
+    await settle();
     assert.equal(finished, false);
-    heldSaves.queue.shift()(); await refreshed;
+    heldSaves.queue.shift()();
+    await refreshed;
     assert.equal(state().sharing, false);
     assert.equal(state().installId, null);
     assert.deepEqual(queue(), { version: 1, events: [], logs: [] });
@@ -175,7 +203,9 @@ for (const mode of ["delayed", "failed"]) {
 
 test("a failed refreshed checkpoint rejects and cancellation repairs the opted-out state", async () => {
   await prepareTelemetryForQuit();
-  globalThis.nnTelemetryTestWriteDocument = () => { throw new Error("background disk failure"); };
+  globalThis.nnTelemetryTestWriteDocument = () => {
+    throw new Error("background disk failure");
+  };
   setSharing(false, "settings");
   heldSaves.error = new Error("acknowledged disk failure");
   await assert.rejects(prepareTelemetryForQuit(), /acknowledged disk failure/);
@@ -205,15 +235,18 @@ test("quit aborts uploads, starts no new requests and ignores late results after
   const requestsBefore = requestLog().length;
   await prepareTelemetryForQuit();
   assert.equal(pending[0].options.signal.aborted, true);
-  context.mock.timers.tick(60_000); await flush();
+  context.mock.timers.tick(60_000);
+  await flush();
   assert.equal(pending.length, 1);
   await resumeTelemetryAfterQuit();
-  pending[0].resolve({ status: 200 }); await sending;
+  pending[0].resolve({ status: 200 });
+  await sending;
   assert.equal(requestLog().length, requestsBefore);
   assert.ok(queue().events.some((e) => e.event === "retained_upload"));
   context.mock.timers.tick(30_000);
   assert.equal(pending.length, 2);
-  pending[1].resolve({ status: 200 }); await settle();
+  pending[1].resolve({ status: 200 });
+  await settle();
   assert.equal(devState().queued.events, 0);
 });
 

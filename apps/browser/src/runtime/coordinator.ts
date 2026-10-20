@@ -16,7 +16,10 @@ function recover(store: BrowserStore, epoch: string, state: BrowserProjection) {
   store.setState(detached);
 }
 function commandError(error: unknown): { code: string; message: string } {
-  const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" && /^[a-z_]{1,128}$/.test(error.code) ? error.code : "command_failed";
+  const code =
+    error && typeof error === "object" && "code" in error && typeof error.code === "string" && /^[a-z_]{1,128}$/.test(error.code)
+      ? error.code
+      : "command_failed";
   const message = error instanceof Error && error.message ? error.message.slice(0, 16384) : "Browser command failed";
   return { code, message };
 }
@@ -24,16 +27,34 @@ function commandError(error: unknown): { code: string; message: string } {
 /** Starts no services or windows. The owner calls announceReady only after
  * restoring state and reconciling native windows, then starts visible clients.
  */
-export async function createBrowserCoordinator({ store, transport, onError = (error) => console.error("[runtime] coordinator failed", error) }: {
-  store: BrowserStore; transport: BrowserCoordinatorTransport; onError?: (error: Error) => void;
+export async function createBrowserCoordinator({
+  store,
+  transport,
+  onError = (error) => console.error("[runtime] coordinator failed", error),
+}: {
+  store: BrowserStore;
+  transport: BrowserCoordinatorTransport;
+  onError?: (error: Error) => void;
 }) {
   const identity = transport.bootstrap;
   let authority: ReturnType<typeof createBrowserAuthority>;
   try {
-    if (identity.version !== 1 || identity.role !== "coordinator" || typeof identity.epoch !== "string" || !identity.epoch || typeof identity.clientId !== "string" || !identity.clientId || "windowId" in identity) throw new Error("A browser-assigned coordinator connection is required");
+    if (
+      identity.version !== 1 ||
+      identity.role !== "coordinator" ||
+      typeof identity.epoch !== "string" ||
+      !identity.epoch ||
+      typeof identity.clientId !== "string" ||
+      !identity.clientId ||
+      "windowId" in identity
+    )
+      throw new Error("A browser-assigned coordinator connection is required");
     if (identity.recoveryState !== undefined) recover(store, identity.epoch, identity.recoveryState);
     authority = createBrowserAuthority({ epoch: identity.epoch, store });
-  } catch (error) { transport.dispose(); throw error; }
+  } catch (error) {
+    transport.dispose();
+    throw error;
+  }
   const epoch = identity.epoch;
   let failure: Error | null = null;
   let disposed = false;
@@ -44,15 +65,32 @@ export async function createBrowserCoordinator({ store, transport, onError = (er
   let unsubscribeCommands = () => {};
   let unsubscribeClose = () => {};
 
-  function active() { if (failure) throw failure; if (disposed) throw new Error("Browser coordinator is closed"); }
+  function active() {
+    if (failure) throw failure;
+    if (disposed) throw new Error("Browser coordinator is closed");
+  }
   function stop(error?: unknown) {
     if (disposed) return;
     disposed = true;
     failure = error === undefined ? null : error instanceof Error ? error : new Error(String(error));
-    for (const remove of [unsubscribeAuthority, unsubscribeCommands, unsubscribeClose]) { try { remove(); } catch {} }
+    for (const remove of [unsubscribeAuthority, unsubscribeCommands, unsubscribeClose]) {
+      try {
+        remove();
+      } catch {}
+    }
     authority.close();
-    try { transport.dispose(); } catch (cause) { console.error("[runtime] coordinator transport cleanup failed", cause); }
-    if (failure) { try { onError(failure); } catch (cause) { console.error("[runtime] coordinator error handler failed", cause); } }
+    try {
+      transport.dispose();
+    } catch (cause) {
+      console.error("[runtime] coordinator transport cleanup failed", cause);
+    }
+    if (failure) {
+      try {
+        onError(failure);
+      } catch (cause) {
+        console.error("[runtime] coordinator error handler failed", cause);
+      }
+    }
   }
   function publish(commit: BrowserCommit): Promise<void> {
     const task = publications.then(async () => {
@@ -89,31 +127,50 @@ export async function createBrowserCoordinator({ store, transport, onError = (er
         response = { epoch, error: commandError(error) };
       }
       await resolve(token, response);
-    } catch (error) { if (!disposed) stop(error); }
+    } catch (error) {
+      if (!disposed) stop(error);
+    }
   }
 
   try {
     // Queue revision zero before subscribing, so synchronous service mutations
     // and commands can never overtake the initial publication.
     const initial = publish(authority.getSnapshot());
-    unsubscribeAuthority = authority.subscribe((commit) => { void publish(commit); });
+    unsubscribeAuthority = authority.subscribe((commit) => {
+      void publish(commit);
+    });
     const releaseClose = transport.subscribeClose((error) => stop(error));
-    if (disposed) releaseClose(); else unsubscribeClose = releaseClose;
+    if (disposed) releaseClose();
+    else unsubscribeClose = releaseClose;
     active();
-    const releaseCommands = transport.subscribeCommands((token, request) => { void handleCommand(token, request, initial); });
-    if (disposed) releaseCommands(); else unsubscribeCommands = releaseCommands;
+    const releaseCommands = transport.subscribeCommands((token, request) => {
+      void handleCommand(token, request, initial);
+    });
+    if (disposed) releaseCommands();
+    else unsubscribeCommands = releaseCommands;
     await initial;
     active();
     return {
       getSnapshot: authority.getSnapshot,
-      async flushPublications() { active(); await publications; active(); },
+      async flushPublications() {
+        active();
+        await publications;
+        active();
+      },
       async announceReady() {
         active();
-        ready ??= (async () => { await publications; active(); await transport.announceReady(); active(); })();
+        ready ??= (async () => {
+          await publications;
+          active();
+          await transport.announceReady();
+          active();
+        })();
         void ready.catch(stop);
         return ready;
       },
-      dispose() { stop(); },
+      dispose() {
+        stop();
+      },
     };
   } catch (error) {
     stop(error);

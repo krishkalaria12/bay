@@ -55,13 +55,15 @@ const Native = requireOptionalNativeModule<SyncNative>("BaySync");
 // synchronous IPC in the WebUI renderer.
 const newDeviceId = () => nativeRandomUUID(() => Native!.newDeviceId());
 const deviceName = () => nativeSnapshot("BaySync", "deviceName", [], () => Native!.deviceName());
-export const SyncNative: SyncNative | null = Native && new Proxy(Native, {
-  get(target, property) {
-    if (property === "newDeviceId") return newDeviceId;
-    if (property === "deviceName") return deviceName;
-    return Reflect.get(target, property);
-  },
-});
+export const SyncNative: SyncNative | null =
+  Native &&
+  new Proxy(Native, {
+    get(target, property) {
+      if (property === "newDeviceId") return newDeviceId;
+      if (property === "deviceName") return deviceName;
+      return Reflect.get(target, property);
+    },
+  });
 
 export const folderTransport = (native: SyncNative, folder: string): Transport => ({
   write: (scope, payload) => native.write(folder, scope, payload),
