@@ -3,7 +3,7 @@ export const SHARING_COPY = {
   summary: "Crashes, errors, rough feature counts and speed. Never the sites you visit, anything you type or search, or what's in your tabs.",
   whatsSent: "What's Sent",
   footnote:
-    "Sent to bay.com with a random ID made on this computer, and kept on our own servers. No third parties. Turning this off stops it at once and deletes anything waiting to be sent. This setting doesn't sync.",
+    "Sent to bay.krishkalaria.in with a random ID made on this Mac, and kept on our own servers. No third parties. Turning this off stops it at once and deletes anything waiting to be sent. This setting doesn't sync.",
   ask: {
     title: "Help fix Bay?",
     body: "Share anonymous crash reports and usage stats. No sites, searches or typing. Ever.",
@@ -11,7 +11,7 @@ export const SHARING_COPY = {
     notNow: "Not now",
   },
   // Not opt-in: the update feed (infra/site/nginx.conf) counts every check, the one thing any copy sends.
-  updateChecks: "bay.com counts update checks by version and day, and whether it's this copy's first. Nothing else.",
+  updateChecks: "bay.krishkalaria.in counts update checks by version and day, and whether it's this copy's first. Nothing else.",
   onboarding: {
     title: "Help us fix what breaks",
     row: "Crashes, errors, feature counts and speed. Never your sites, typing or tabs.",
@@ -43,16 +43,13 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
       "Launches, updates, and whether the last session ended cleanly",
       "How many tabs and windows you open (a count, not which)",
       "Opening split view, switching profiles and opening the command bar",
-      "The kind of command bar row you pick: history, bookmark, tab, address, search, calculator or action",
+      "The kind of command bar row you pick: history, bookmark, tab, address, search, calculator, emoji or action",
       "Installing an extension, turning sync on or off, translating a page, and which Settings sections you open",
     ],
   },
   {
     title: "Speed",
-    items: [
-      "Time to the first window, profile switch time, and command bar speed (a sample of keystrokes)",
-      "Memory use and the number of tabs, once an hour",
-    ],
+    items: ["Time to the first window, profile switch time, and command bar speed (a sample of keystrokes)", "Memory use and the number of tabs, once an hour"],
   },
   {
     title: "Never",

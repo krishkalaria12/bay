@@ -1,16 +1,18 @@
 import { appInfo, capture, isSharing } from "./client";
+import { MAX_SAMPLES, SAMPLE_EVERY } from "./config";
 
-export type SuggestionType = "history" | "bookmark" | "tab" | "url" | "search" | "calc" | "action" | "create" | "typed";
+export type SuggestionType = "history" | "bookmark" | "tab" | "cleaned" | "url" | "search" | "calc" | "emoji" | "action" | "create" | "typed";
 
-type SuggestionLike = { kind: string; tabId?: string; bookmarked?: boolean; visited?: boolean } | undefined;
+type SuggestionLike = { kind: string; tabId?: string; cleanedId?: string; bookmarked?: boolean; visited?: boolean } | undefined;
 
 export function suggestionType(s: SuggestionLike): SuggestionType {
   if (!s) return "typed";
   switch (s.kind) {
     case "page":
-      return s.tabId ? "tab" : s.bookmarked ? "bookmark" : s.visited ? "history" : "url";
+      return s.tabId ? "tab" : s.cleanedId ? "cleaned" : s.bookmarked ? "bookmark" : s.visited ? "history" : "url";
     case "search":
     case "calc":
+    case "emoji":
     case "action":
     case "create":
       return s.kind;
@@ -25,8 +27,6 @@ export const trackSettingsSection = (section: string) => capture("settings_secti
 
 // MARK: Command bar speed (sampled)
 
-const SAMPLE_EVERY = 5;
-const MAX_SAMPLES = 500;
 const latency: number[] = [];
 let keystrokes = 0;
 

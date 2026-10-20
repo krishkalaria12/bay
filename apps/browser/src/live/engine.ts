@@ -1,13 +1,10 @@
 import { onWindowEvent } from "@bay/shell";
 import { useBrowser } from "../store/browser";
-import { activeTabId, viewTabIds } from "../store/model";
+import { activeTabId, pinnedPage, viewTabIds } from "../store/model";
 import { SOURCES } from "./sources";
 import { applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./store";
 import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
-
-const INTERVAL_MS: Record<LiveFolderKind, number> = { pullRequests: 3 * 60_000, documents: 10 * 60_000 };
-const STALE_ON_FOCUS_MS = 60_000;
-export const COMPLETION_MS = 2600;
+import { COMPLETION_MS, REFRESH_INTERVAL_MS, STALE_ON_FOCUS_MS } from "./constants";
 
 const inflight = new Map<string, Promise<void>>();
 const fetchedSources = new Map<string, Set<LiveSourceId>>();
@@ -15,9 +12,7 @@ const fetchedSources = new Map<string, Set<LiveSourceId>>();
 const SECTION_ORDER: Record<PullRequestSection, number> = { authored: 0, review: 1, team: 2 };
 
 function order(items: LiveItem[]): LiveItem[] {
-  return [...items].sort(
-    (a, b) => (SECTION_ORDER[a.section ?? "authored"] ?? 0) - (SECTION_ORDER[b.section ?? "authored"] ?? 0) || b.updatedAt - a.updatedAt,
-  );
+  return [...items].sort((a, b) => (SECTION_ORDER[a.section ?? "authored"] ?? 0) - (SECTION_ORDER[b.section ?? "authored"] ?? 0) || b.updatedAt - a.updatedAt);
 }
 
 export function refreshFolder(folderId: string): Promise<void> {
@@ -115,7 +110,7 @@ export function newLiveFolder(windowId: string, kind: LiveFolderKind): string | 
     kind === "pullRequests"
       ? (["github", "bitbucket"] as const).filter((id) => s.accounts[id])
       : (["notion", "confluence", "gdrive"] as const).filter((id) => s.accounts[id]);
-  const id = createFolder(w.profileId, kind, sources.length ? sources : undefined);
+  const id = createFolder(w.spaceId, kind, sources.length ? sources : undefined);
   void refreshFolder(id);
   return id;
 }
@@ -135,7 +130,9 @@ export function openLiveItem(windowId: string, folderId: string, item: LiveItem,
 
 export function deleteLiveFolder(folderId: string) {
   const s = useBrowser.getState();
-  const tabs = Object.values(s.tabs).filter((t) => t.liveItem?.folderId === folderId).map((t) => t.id);
+  const tabs = Object.values(s.tabs)
+    .filter((t) => t.liveItem?.folderId === folderId)
+    .map((t) => t.id);
   if (tabs.length) s.closeTabs(tabs);
   removeFolder(folderId);
 }
@@ -160,8 +157,8 @@ export function startLiveEngine() {
   });
 
   useBrowser.subscribe((s, prev) => {
-    if (s.profiles === prev.profiles) return;
-    for (const f of Object.values(live().folders)) if (!s.profiles[f.profileId]) removeFolder(f.id);
+    if (s.spaces === prev.spaces) return;
+    for (const f of Object.values(live().folders)) if (!s.spaces[f.spaceId]) removeFolder(f.id);
   });
 
   const due = (id: string, maxAge: number) => {
@@ -171,7 +168,7 @@ export function startLiveEngine() {
   };
   setTimeout(() => live().folderOrder.forEach((id) => void refreshFolder(id)), 2500);
   setInterval(() => {
-    for (const id of live().folderOrder) if (due(id, INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
+    for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
   }, 30_000);
   onWindowEvent((e) => {
     if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);
@@ -181,7 +178,8 @@ export function startLiveEngine() {
     if (s.tabs === prev.tabs) return;
     for (const id in s.tabs) {
       const t = s.tabs[id]!;
-      if (t.pinned && t.liveItem && !prev.tabs[id]?.pinned) useBrowser.getState().updateTab(id, { liveItem: undefined });
+      // Pinned (a tile or a row), it leaves its live folder.
+      if (t.liveItem && pinnedPage(t) && !(prev.tabs[id] && pinnedPage(prev.tabs[id]!))) useBrowser.getState().updateTab(id, { liveItem: undefined });
     }
   });
 

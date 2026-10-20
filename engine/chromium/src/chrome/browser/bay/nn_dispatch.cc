@@ -22,6 +22,7 @@ NN_ENGINE_CALL(nn_downloads_pause);
 NN_ENGINE_CALL(nn_downloads_remove);
 NN_ENGINE_CALL(nn_downloads_resume);
 NN_ENGINE_CALL(nn_extensions_configure);
+NN_ENGINE_CALL(nn_extensions_import);
 NN_ENGINE_CALL(nn_extensions_install);
 NN_ENGINE_CALL(nn_extensions_install_crx);
 NN_ENGINE_CALL(nn_extensions_list);
@@ -95,6 +96,7 @@ bool DispatchEngineCall(std::string_view name,
       {"nn_downloads_remove", &nn_downloads_remove},
       {"nn_downloads_resume", &nn_downloads_resume},
       {"nn_extensions_configure", &nn_extensions_configure},
+      {"nn_extensions_import", &nn_extensions_import},
       {"nn_extensions_install", &nn_extensions_install},
       {"nn_extensions_install_crx", &nn_extensions_install_crx},
       {"nn_extensions_list", &nn_extensions_list},

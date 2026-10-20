@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
@@ -8,10 +8,7 @@ import { useBrowser } from "../../store/browser";
 import { defaultSearchEngine } from "../../store/settings";
 import { useHover } from "../primitives";
 import { searchSelection, setPageSelection, usePageSelection, type ClickModifiers, type PageSelection } from "./selection";
-
-const HEIGHT = 32;
-const GAP = 6;
-const SHOW_DELAY = 150;
+import { SELECTION_POPOVER_GAP, SELECTION_POPOVER_HEIGHT, SELECTION_SHOW_DELAY_MS } from "./constants";
 
 export function SelectionPopover({ tabId, zoom }: { tabId: string; zoom: number }) {
   const selection = usePageSelection((s) => s[tabId] ?? null);
@@ -19,7 +16,7 @@ export function SelectionPopover({ tabId, zoom }: { tabId: string; zoom: number 
   const [area, setArea] = useState({ width: 0, height: 0 });
   useEffect(() => {
     if (!selection) return setShown(null);
-    const timer = setTimeout(() => setShown(selection), SHOW_DELAY);
+    const timer = setTimeout(() => setShown(selection), SELECTION_SHOW_DELAY_MS);
     return () => clearTimeout(timer);
   }, [selection]);
   useEffect(() => () => setPageSelection(tabId, null), [tabId]);
@@ -42,7 +39,7 @@ function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageS
   const r = selection.rect;
   const top = r.y * zoom;
   const bottom = (r.y + r.height) * zoom;
-  const above = top - GAP - HEIGHT >= 4;
+  const above = top - SELECTION_POPOVER_GAP - SELECTION_POPOVER_HEIGHT >= 4;
   const measured = width > 0;
   const appearStyle = useAnimatedStyle(() => {
     const a = appear.get();
@@ -52,7 +49,9 @@ function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageS
     };
   }, [measured, above]);
   if (bottom < 0 || top > area.height) return null;
-  const y = above ? top - GAP - HEIGHT : Math.min(bottom + GAP, area.height - HEIGHT - 4);
+  const y = above
+    ? top - SELECTION_POPOVER_GAP - SELECTION_POPOVER_HEIGHT
+    : Math.min(bottom + SELECTION_POPOVER_GAP, area.height - SELECTION_POPOVER_HEIGHT - 4);
   const center = (r.x + r.width / 2) * zoom;
   const x = Math.max(8, Math.min(center - width / 2, area.width - width - 8));
 
@@ -70,7 +69,7 @@ function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageS
         shadowOpacity={theme.dark ? 0.45 : 0.16}
         shadowRadius={14}
         shadowOffset={[0, 6]}
-        style={{ height: HEIGHT, padding: 3, flexDirection: "row", alignItems: "center" }}
+        style={{ height: SELECTION_POPOVER_HEIGHT, padding: 3, flexDirection: "row", alignItems: "center" }}
       >
         <VisualEffect material="menu" cornerRadius={10} style={StyleSheet.absoluteFill} />
         <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: theme.dark ? "rgba(38,36,37,0.72)" : "rgba(252,251,252,0.7)" }} />
@@ -87,18 +86,23 @@ function SearchButton({ tabId, text }: { tabId: string; text: string }) {
   const quoted = text.length > 40 ? `${text.slice(0, 40).trimEnd()}…` : text;
   return (
     <View {...hoverProps} tooltip={`Search ${engine} for “${quoted.replace(/\s+/g, " ")}”`}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Search ${engine}`} onPress={(e) => searchSelection(tabId, text, e.nativeEvent as unknown as ClickModifiers)}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Search ${engine}`}
+        onPress={(e) => searchSelection(tabId, text, e.nativeEvent as unknown as ClickModifiers)}
+      >
         {({ pressed }) => (
           <View
             style={{
-              height: HEIGHT - 6,
+              height: SELECTION_POPOVER_HEIGHT - 6,
               paddingLeft: 7,
               paddingRight: 9,
               borderRadius: 7,
               flexDirection: "row",
               alignItems: "center",
               gap: 5,
-              backgroundColor: pressed || hovered ? (theme.dark ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})` : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`) : undefined,
+              backgroundColor:
+                pressed || hovered ? (theme.dark ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})` : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`) : undefined,
             }}
           >
             <Symbol name="magnifyingglass" size={12} weight="medium" color={theme.icon} style={{ width: 16, height: 16 }} />

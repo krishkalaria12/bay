@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/file_select_helper.cc b/chrome/browser/file_select_helper.cc
+--- a/chrome/browser/file_select_helper.cc
++++ b/chrome/browser/file_select_helper.cc
+@@ -762,9 +762,14 @@
+   // file.
+   base::HangWatcher::InvalidateActiveExpectations();
+ 
+-  // 1-based index of default extension to show.
++  // 1-based index of default extension to show. Bay: CEF puts a filter for each
++  // accept type ahead of the one that takes them all (GetFileTypesFromAcceptType);
++  // that last one is the default, as Chrome's only filter is, or just the first
++  // type's files could be chosen (".png,.jpg,.pdf" opened on PNG only).
+   int file_type_index =
+-      select_file_types_ && !select_file_types_->extensions.empty() ? 1 : 0;
++      select_file_types_ && !select_file_types_->extensions.empty()
++          ? static_cast<int>(select_file_types_->extensions.size())
++          : 0;
+ 
+   // TODO(https://crbug.com/340178601): this might go out of scope before
+   // SelectFile() finishes - isn't this a potential UAF? is it ever actually

@@ -34,6 +34,7 @@
 #include "bay/core/nn_context_menu.h"
 #include "bay/core/nn_navigation_hold.h"
 #include "bay/core/nn_page_channel.h"
+#include "bay/core/nn_peek_links.h"
 #include "bay/core/nn_strings.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "bay/core/renderer/nn_content_renderer_client.h"
@@ -154,6 +155,7 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
     ChromeContentBrowserClient::CreateThrottlesForNavigation(registry);
     AddAppSchemeThrottle(registry);
     MaybeAddNavigationHoldThrottle(registry);
+    MaybeAddPeekLinksThrottle(registry);
   }
   // The spare renderer that replaces one a navigation took starts a moment later, not
   // within that navigation's own start: its RenderProcessHostImpl::Init held the UI

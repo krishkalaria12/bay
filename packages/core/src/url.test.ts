@@ -79,10 +79,7 @@ test("dangerous patterns", () => {
 });
 
 test("cleanUrl drops campaign and click-id parameters", () => {
-  assert.equal(
-    cleanUrl("https://example.com/post?utm_source=newsletter&utm_medium=email&utm_campaign=fall"),
-    "https://example.com/post",
-  );
+  assert.equal(cleanUrl("https://example.com/post?utm_source=newsletter&utm_medium=email&utm_campaign=fall"), "https://example.com/post");
   assert.equal(cleanUrl("https://example.com/?fbclid=IwAR0abc"), "https://example.com/");
   assert.equal(cleanUrl("https://shop.example/item?id=42&gclid=Cj0KCQ&color=red"), "https://shop.example/item?id=42&color=red");
   assert.equal(cleanUrl("https://news.example/a?mc_eid=123&mc_cid=456&page=2"), "https://news.example/a?page=2");

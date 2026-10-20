@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // A static Worker: no script, only the built site in dist/.
+  "name": "bay-web",
+  "compatibility_date": "2026-10-09",
+  "assets": {
+    "directory": "./dist",
+    // Unknown paths get dist/404.html with a 404 status.
+    "not_found_handling": "404-page",
+    // Pages are folders (astro.config.mjs trailingSlash: "always"), so /switch-from-arc redirects to /switch-from-arc/.
+    "html_handling": "force-trailing-slash",
+  },
+  // The zone must be on Cloudflare, and the hostname must have no DNS record yet; deploy creates it.
+  "routes": [{ "pattern": "bay.krishkalaria.in", "custom_domain": true }],
+  // Branch builds run `wrangler preview`, which needs this block; previews use the settings above.
+  "previews": {},
+}

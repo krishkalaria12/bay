@@ -21,6 +21,7 @@ public struct BrowserDefinition: Sendable {
     dia,
     .init(id: "safari", name: "Safari", family: .safari, bundleIds: ["com.apple.Safari"]),
     .init(id: "firefox", name: "Firefox", family: .firefox, bundleIds: ["org.mozilla.firefox"], dataPath: "Firefox"),
+    .init(id: "zen", name: "Zen", family: .firefox, bundleIds: ["app.zen-browser.zen"], dataPath: "zen"),
     chromium("edge", "Microsoft Edge", ["com.microsoft.edgemac"], "Microsoft Edge", "Microsoft Edge"),
     chromium("brave", "Brave", ["com.brave.Browser"], "BraveSoftware/Brave-Browser", "Brave"),
     BrowserDefinition(id: "helium", name: "Helium", family: .chromium, bundleIds: ["net.imput.helium"],
@@ -88,6 +89,13 @@ public struct BrowserSource: Codable, Equatable, Sendable {
   public var profiles: [BrowserProfile]
 }
 
+public struct BrowserApplication: Codable, Equatable, Sendable {
+  public var id: String
+  public var name: String
+  public var appPath: String
+  public var iconPath: String?
+}
+
 public struct BrowserDiscovery {
   public var applicationSupport: URL
   public var locateApp: ([String]) -> URL?
@@ -106,6 +114,14 @@ public struct BrowserDiscovery {
       out.insert(tabs, at: out.firstIndex { $0.id == "dia" }.map { $0 + 1 } ?? out.count)
     }
     return out
+  }
+
+  // Onboarding shows installed apps even when they have no importable profiles yet.
+  public func installedApplications() -> [BrowserApplication] {
+    BrowserDefinition.all.compactMap { def in
+      guard let app = locateApp(def.bundleIds) else { return nil }
+      return BrowserApplication(id: def.id, name: def.name, appPath: app.path, iconPath: iconFor(app, def.id))
+    }
   }
 
   func diaTabsSource() -> BrowserSource? {
@@ -229,7 +245,7 @@ public struct BrowserDiscovery {
 
   func isProfile(_ dir: URL) -> Bool {
     let fm = FileManager.default
-    return ["Preferences", "Bookmarks", "History", "Login Data"].contains {
+    return ["Preferences", "Secure Preferences", "Bookmarks", "History", "Login Data"].contains {
       fm.fileExists(atPath: dir.appendingPathComponent($0).path)
     }
   }
@@ -244,6 +260,7 @@ public struct BrowserDiscovery {
     if has("Login Data", "Login Data For Account") { kinds.append(.passwords) }
     if has("Network/Cookies", "Cookies") { kinds.append(.cookies) }
     if has("Web Data") { kinds.append(.autofill) }
+    if !ChromiumExtensions.list(profile: dir).isEmpty { kinds.append(.extensions) }
     return kinds
   }
 
@@ -284,6 +301,7 @@ public struct BrowserDiscovery {
       if Firefox.sessionFile(profile: dir) != nil { kinds.append(.tabs) }
       if has("logins.json") { kinds.append(.passwords) }
       if has("cookies.sqlite") { kinds.append(.cookies) }
+      if !ExtensionsImport.list(profile: dir, browser: def).isEmpty { kinds.append(.extensions) }
       return BrowserProfile(id: p.path, name: p.name, path: dir.path, email: nil, avatarPath: nil, color: nil,
                             isDefault: p.isDefault, available: kinds, spaces: nil)
     }

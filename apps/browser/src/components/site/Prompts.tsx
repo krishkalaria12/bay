@@ -1,7 +1,15 @@
 import { Pressable, View } from "@bay/platform";
-import { getSiteSettings, resolveExternalApp, setSiteSetting, type AutofillPrompt as ChromeAutofillPrompt, type AutofillPromptAnswer, type PasswordPrompt as ChromePasswordPrompt, type PasswordPromptAnswer } from "@bay/nncore";
+import {
+  getSiteSettings,
+  resolveExternalApp,
+  setSiteSetting,
+  type AutofillPrompt as ChromeAutofillPrompt,
+  type AutofillPromptAnswer,
+  type PasswordPrompt as ChromePasswordPrompt,
+  type PasswordPromptAnswer,
+} from "@bay/nncore";
 import { Symbol } from "@bay/shell";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
@@ -42,7 +50,17 @@ function PromptBody({
       <View style={{ flexDirection: "row", gap: 6 }}>
         {image ? <Image source={{ uri: image }} style={{ width: 32, height: 32, marginLeft: -1, marginVertical: -1 }} /> : null}
         {icons.map((icon) => (
-          <View key={icon} style={{ width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)" }}>
+          <View
+            key={icon}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: theme.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
+            }}
+          >
             <Symbol name={icon} size={14} color={theme.icon} style={{ width: 20, height: 20 }} />
           </View>
         ))}
@@ -81,7 +99,16 @@ function CloseButton({ onPress, color }: { onPress: () => void; color: string })
   return (
     <View {...hoverProps} style={{ position: "absolute", top: 8, right: 8 }} tooltip="Dismiss">
       <Pressable onPress={onPress}>
-        <View style={{ width: 22, height: 22, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? theme.toolbarHover : undefined }}>
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: hovered ? theme.toolbarHover : undefined,
+          }}
+        >
           <Symbol name="xmark" size={9} weight="semibold" color={color} style={{ width: 14, height: 14 }} />
         </View>
       </Pressable>
@@ -101,7 +128,7 @@ export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string
     patchPage(tabId, { popups: [] });
     close();
   };
-  const profile = () => engineProfile(useBrowser.getState().tabs[tabId]?.profileId ?? "");
+  const profile = () => engineProfile(useBrowser.getState().tabs[tabId]?.spaceId ?? "");
   return (
     <Popover width={360} top={top} right={right} left={left} onDismiss={close}>
       <View style={{ paddingBottom: 6 }}>
@@ -147,7 +174,9 @@ export function BlockedPopupsPrompt({ tabId, right, left, top }: { tabId: string
             }}
           />
         ))}
-        {popups.length > 5 ? <Text style={{ fontSize: 11, color: theme.textSecondary, paddingHorizontal: 18, paddingTop: 2 }}>{`and ${popups.length - 5} more`}</Text> : null}
+        {popups.length > 5 ? (
+          <Text style={{ fontSize: 11, color: theme.textSecondary, paddingHorizontal: 18, paddingTop: 2 }}>{`and ${popups.length - 5} more`}</Text>
+        ) : null}
       </View>
     </Popover>
   );
@@ -237,22 +266,16 @@ export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: nu
   const well = theme.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
   const changes = prompt.changes ?? [];
   const values = (key: "to" | "from") => changes.filter((c) => c[key]).map((c) => c[key]);
-  const section = (lines: string[], label?: string) => (
-    <View key={label ?? "lines"} style={{ gap: 3 }}>
-      {label ? <Text style={{ fontSize: 11, color: theme.textSecondary }}>{label}</Text> : null}
-      {lines.map((line, i) => (
-        <Text key={i} numberOfLines={2} style={{ fontSize: 12, fontWeight: i === 0 && !label ? "500" : "400", color: i === 0 || label ? theme.textPrimary : theme.textSecondary }}>
-          {line}
-        </Text>
-      ))}
-    </View>
-  );
-  const sections =
-    prompt.kind !== "updateAddress"
-      ? [section(prompt.lines)]
-      : prompt.newLabel
-        ? [section(values("to"), prompt.newLabel), section(values("from"), prompt.oldLabel)]
-        : [section(values("to"))];
+  let sections: ReactNode;
+  if (prompt.kind !== "updateAddress") sections = <PromptLines lines={prompt.lines} />;
+  else if (prompt.newLabel) {
+    sections = (
+      <>
+        <PromptLines lines={values("to")} label={prompt.newLabel} />
+        <PromptLines lines={values("from")} label={prompt.oldLabel} />
+      </>
+    );
+  } else sections = <PromptLines lines={values("to")} />;
   return (
     <Popover key={prompt.id} width={350} top={top} right={right} modal={false}>
       <View>
@@ -273,6 +296,24 @@ export function AutofillPrompt({ tabId, right, top }: { tabId: string; right: nu
         <CloseButton color={theme.textSecondary} onPress={() => answer("dismiss")} />
       </View>
     </Popover>
+  );
+}
+
+function PromptLines({ lines, label }: { lines: string[]; label?: string }) {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: 3 }}>
+      {label ? <Text style={{ fontSize: 11, color: theme.textSecondary }}>{label}</Text> : null}
+      {lines.map((line, i) => (
+        <Text
+          key={i}
+          numberOfLines={2}
+          style={{ fontSize: 12, fontWeight: i === 0 && !label ? "500" : "400", color: i === 0 || label ? theme.textPrimary : theme.textSecondary }}
+        >
+          {line}
+        </Text>
+      ))}
+    </View>
   );
 }
 
@@ -333,7 +374,18 @@ function UsernameChoice({ name, selected, onPress }: { name: string; selected: b
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
-        <View style={{ height: 28, marginHorizontal: 3, paddingHorizontal: 7, borderRadius: 6, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: hovered ? theme.rowHover : undefined }}>
+        <View
+          style={{
+            height: 28,
+            marginHorizontal: 3,
+            paddingHorizontal: 7,
+            borderRadius: 6,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            backgroundColor: hovered ? theme.rowHover : undefined,
+          }}
+        >
           {selected ? (
             <Symbol name="checkmark" size={10} weight="semibold" color={theme.textPrimary} style={{ width: 14, height: 14 }} />
           ) : (

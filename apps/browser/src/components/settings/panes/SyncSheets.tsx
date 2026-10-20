@@ -7,8 +7,8 @@ import { useTheme } from "../../../lib/theme";
 import { enterRecoveryPhrase, stopSync } from "../../../sync/engine";
 import { Button, Checkbox, Sheet, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
-
-const WORDS = 24;
+import { MONO_FONT } from "../../../lib/constants";
+import { RECOVERY_WORDS } from "../constants";
 
 function Title({ children }: { children: string }) {
   const theme = useTheme();
@@ -75,8 +75,8 @@ function RecoveryKitSheet() {
           >
             <Symbol name="exclamationmark.triangle.fill" size={12} color="#FF9500" style={{ width: 16, height: 16 }} />
             <Text style={{ flex: 1, fontSize: 12, lineHeight: 16, color: theme.textPrimary }}>
-              Save a copy of your Recovery Kit to{" "}
-              <Text style={{ textDecorationLine: "underline" }}>another</Text> device or to the cloud. You’ll need it if you lose access to this device.
+              Save a copy of your Recovery Kit to <Text style={{ textDecorationLine: "underline" }}>another</Text> device or to the cloud. You’ll need it if you
+              lose access to this device.
             </Text>
           </View>
           {saved ? <Body style={{ marginTop: 10 }}>Saved to {saved.replace(/^\/Users\/[^/]+/, "~")}.</Body> : null}
@@ -132,7 +132,10 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const count = text.toLowerCase().split(/[^a-z]+/).filter(Boolean).length;
+  const count = text
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter(Boolean).length;
   const submit = async () => {
     if (!folder || busy) return;
     setBusy(true);
@@ -172,13 +175,13 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
           enableFocusRing={false}
           autoCorrect={false}
           spellCheck={false}
-          style={{ flex: 1, fontSize: 13, lineHeight: 18, color: theme.textPrimary, fontFamily: "Menlo" }}
+          style={{ flex: 1, fontSize: 13, lineHeight: 18, color: theme.textPrimary, fontFamily: MONO_FONT }}
         />
       </View>
       <View style={{ flexDirection: "row", marginTop: 6 }}>
         <Text style={{ flex: 1, fontSize: 11.5, lineHeight: 15, color: error ? colors.destructive : theme.textSecondary }}>{error ?? ""}</Text>
-        <Text style={{ fontSize: 11.5, color: count > WORDS ? colors.destructive : theme.textTertiary, fontVariant: ["tabular-nums"] }}>
-          {count > WORDS ? "too many words" : `${count}/${WORDS} words`}
+        <Text style={{ fontSize: 11.5, color: count > RECOVERY_WORDS ? colors.destructive : theme.textTertiary, fontVariant: ["tabular-nums"] }}>
+          {count > RECOVERY_WORDS ? "too many words" : `${count}/${RECOVERY_WORDS} words`}
         </Text>
       </View>
       {folder ? (
@@ -192,7 +195,7 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
       ) : null}
       <Buttons>
         <Button title="Cancel" onPress={closeSettingsSheet} />
-        <Button title={busy ? "Connecting…" : "Connect"} kind="primary" disabled={busy || count !== WORDS || !folder} onPress={() => void submit()} />
+        <Button title={busy ? "Connecting…" : "Connect"} kind="primary" disabled={busy || count !== RECOVERY_WORDS || !folder} onPress={() => void submit()} />
       </Buttons>
     </Sheet>
   );
@@ -214,8 +217,8 @@ function ConnectDeviceSheet() {
     <Sheet width={480} onClose={closeSettingsSheet}>
       <Title>Connect Another Device</Title>
       <Body>
-        On your other Mac, open Bay › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words
-        of your recovery phrase.
+        On your other Mac, open Bay › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words of your recovery
+        phrase.
       </Body>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginTop: 16 }}>
         <View style={{ width: 132, height: 132, borderRadius: 8, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}>
@@ -228,7 +231,7 @@ function ConnectDeviceSheet() {
       {words ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 14, padding: 10, borderRadius: 8, backgroundColor: colors.group }}>
           {words.map((w, i) => (
-            <Text key={i} style={{ width: "25%", paddingVertical: 3, fontSize: 12.5, color: theme.textPrimary, fontFamily: "Menlo" }}>
+            <Text key={i} style={{ width: "25%", paddingVertical: 3, fontSize: 12.5, color: theme.textPrimary, fontFamily: MONO_FONT }}>
               <Text style={{ color: theme.textTertiary }}>{`${i + 1}`.padStart(2, " ")} </Text>
               {w}
             </Text>
@@ -260,8 +263,8 @@ function StopSheet() {
     <Sheet width={420} onClose={closeSettingsSheet}>
       <Title>Stop Syncing This Device?</Title>
       <Body>
-        Syncing will stop on this device. To re-enable sync, you’ll need another device that is currently syncing, or the recovery phrase from your
-        Recovery Kit. Everything on this Mac stays as it is.
+        Syncing will stop on this device. To re-enable sync, you’ll need another device that is currently syncing, or the recovery phrase from your Recovery
+        Kit. Everything on this Mac stays as it is.
       </Body>
       <Buttons left={<Button title="Save Recovery Kit" onPress={() => showSettingsSheet(<RecoveryKitSheet />)} />}>
         <Button title="Cancel" onPress={closeSettingsSheet} />
@@ -283,8 +286,8 @@ function DeleteDataSheet() {
     <Sheet width={420} onClose={() => void finish(false)}>
       <Title>Delete Sync Data?</Title>
       <Body>
-        Would you also like to permanently delete your synced data from the sync folder? This will stop syncing on all your other devices too. To sync
-        again, you’ll need to set up each device from scratch. Your data on each Mac stays.
+        Would you also like to permanently delete your synced data from the sync folder? This will stop syncing on all your other devices too. To sync again,
+        you’ll need to set up each device from scratch. Your data on each Mac stays.
       </Body>
       <View style={{ marginTop: 12 }}>
         <Checkbox value={understood} onChange={setUnderstood} label="I understand this cannot be undone" />

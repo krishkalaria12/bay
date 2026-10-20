@@ -9,9 +9,9 @@ test("every registered desktop native module and view has a written contract", (
   for (const name of ["shell", "nncore", "shaders", "import", "sync"]) {
     const directory = new URL(`../../../packages/${name}/ios/`, import.meta.url);
     const config = JSON.parse(readFileSync(new URL(`../../../packages/${name}/expo-module.config.json`, import.meta.url), "utf8"));
-    assert.deepEqual(config.platforms, ["macos"]);
+    assert.deepEqual(config.platforms, ["apple"]);
     assert.ok(config.apple.modules.length);
-    for (const file of readdirSync(directory).filter(file => file.endsWith(".swift"))) {
+    for (const file of readdirSync(directory).filter((file) => file.endsWith(".swift"))) {
       for (const match of readFileSync(new URL(file, directory), "utf8").matchAll(/^\s*Name\("(Bay\w+)"\)/gm)) {
         registered.add(match[1]);
         assert.ok(nativeContracts.modules[match[1]] || nativeContracts.views[match[1]], `${match[1]} has no typed contract`);

@@ -120,6 +120,8 @@ if (is_mac) {
       "nn_page_channel.h",
       "nn_password_prompt.h",
       "nn_password_prompt.mm",
+      "nn_peek_links.h",
+      "nn_peek_links.mm",
       "nn_permissions.h",
       "nn_permissions.mm",
       "nn_picture_in_picture.h",

@@ -1,9 +1,8 @@
 import { useBrowser } from "../store/browser";
+import { GOOGLE_REDIRECT, GOOGLE_SCOPE } from "./constants";
 import { endpoints, form } from "./net";
 import { connectGoogle } from "./sources";
 
-const REDIRECT = "http://127.0.0.1:53682/bay-oauth";
-const SCOPE = "https://www.googleapis.com/auth/drive.metadata.readonly";
 const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 const random = (n: number) => Array.from({ length: n }, () => CHARS[Math.floor(Math.random() * CHARS.length)]).join("");
 
@@ -25,9 +24,9 @@ export function connectGoogleDrive(windowId: string, clientId: string, clientSec
   const state = random(24);
   const url = `${endpoints.googleAuth}?${form({
     client_id: clientId.trim(),
-    redirect_uri: REDIRECT,
+    redirect_uri: GOOGLE_REDIRECT,
     response_type: "code",
-    scope: SCOPE,
+    scope: GOOGLE_SCOPE,
     code_challenge: verifier,
     code_challenge_method: "plain",
     state,
@@ -40,14 +39,14 @@ export function connectGoogleDrive(windowId: string, clientId: string, clientSec
       if (s.tabs === prev.tabs) return;
       const tab = s.tabs[tabId];
       if (!tab) return finish(new Error("Sign-in was cancelled"));
-      if (!tab.url.startsWith(REDIRECT)) return;
+      if (!tab.url.startsWith(GOOGLE_REDIRECT)) return;
       const params = query(tab.url);
       if (params.get("state") !== state) return finish(new Error("Sign-in didn't match this request"));
       const code = params.get("code");
       stop();
       useBrowser.getState().closeTab(tabId);
       if (!code) return finish(new Error(params.get("error") ?? "Google didn't grant access"));
-      connectGoogle(clientId.trim(), clientSecret.trim(), code, verifier, REDIRECT).then(() => finish(), finish);
+      connectGoogle(clientId.trim(), clientSecret.trim(), code, verifier, GOOGLE_REDIRECT).then(() => finish(), finish);
     });
     const finish = (error?: unknown) => {
       stop();

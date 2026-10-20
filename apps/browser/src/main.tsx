@@ -2,6 +2,7 @@
 // First, so every native module listener the app adds applies held page reports before it runs.
 import "./lib/nativeEvents";
 import { batchedUpdates } from "@bay/platform";
+import { quietLaunchTabs } from "./components/BlankTabSurface";
 import { registerWindowApplication } from "./windowEntry";
 import { startTranslate } from "./components/site/translate";
 import { startAppIntegration } from "./lib/appIntegration";
@@ -26,6 +27,8 @@ startPersistence();
 // Before the native sync: a moved tab's page is handed off before the window it left closes (lib/tabPages.ts).
 startTabPages();
 startNativeSync();
+// After the first window is made: the tab each window starts on doesn't open the command bar.
+quietLaunchTabs();
 startAppIntegration();
 startTabLifecycle();
 startTranslate();

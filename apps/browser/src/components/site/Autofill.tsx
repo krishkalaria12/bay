@@ -13,8 +13,8 @@ export async function requestAutofill(windowId: string, arg: string | null) {
   if (browserId && (await showAutofillSuggestions(browserId, passwords ? "passwords" : "field"))) return;
   const s = useBrowser.getState();
   const w = s.windows[windowId];
-  const profileId = w && !w.incognito && s.profiles[w.profileId] ? w.profileId : null;
-  openSettings(passwords ? "passwords" : "autofill", profileId);
+  const spaceId = w && !w.incognito && s.spaces[w.spaceId] ? w.spaceId : null;
+  openSettings(passwords ? "passwords" : "autofill", spaceId);
 }
 
 const BADGES: Record<CardNetwork, { label: string; fill: string; text: string }> = {
@@ -31,14 +31,24 @@ const BADGES: Record<CardNetwork, { label: string; fill: string; text: string }>
 export function NetworkBadge({ network }: { network: CardNetwork }) {
   const badge = BADGES[network] ?? BADGES.card;
   return (
-    <View style={{ width: 28, height: 19, borderRadius: 3.5, backgroundColor: badge.fill, alignItems: "center", justifyContent: "center", flexDirection: "row" }}>
+    <View
+      style={{ width: 28, height: 19, borderRadius: 3.5, backgroundColor: badge.fill, alignItems: "center", justifyContent: "center", flexDirection: "row" }}
+    >
       {network === "mastercard" ? (
         <>
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#EB001B", marginRight: -3.5 }} />
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#F79E1B", opacity: 0.9 }} />
         </>
       ) : badge.label ? (
-        <Text style={{ fontSize: badge.label.length > 3 ? 7.5 : 8, fontWeight: "800", fontStyle: network === "visa" ? "italic" : "normal", color: badge.text, letterSpacing: 0.3 }}>
+        <Text
+          style={{
+            fontSize: badge.label.length > 3 ? 7.5 : 8,
+            fontWeight: "800",
+            fontStyle: network === "visa" ? "italic" : "normal",
+            color: badge.text,
+            letterSpacing: 0.3,
+          }}
+        >
           {badge.label}
         </Text>
       ) : (

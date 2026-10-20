@@ -18,8 +18,7 @@ import { useBrowser } from "../../../store/browser";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { openImport } from "../windows";
-
-const APP = "Bay";
+import { APP_NAME } from "../../../lib/constants";
 
 export function GeneralPane() {
   const settings = useBrowser((s) => s.settings);
@@ -36,41 +35,42 @@ export function GeneralPane() {
       <SectionHeader title="General" />
       <Group>
         <Row
-          title={`Open ${APP} at login`}
+          title={`Open ${APP_NAME} at login`}
           description={loginStatus === "requiresApproval" ? "Allow it in System Settings › General › Login Items." : undefined}
         >
           <Toggle
             value={loginStatus === "enabled" || loginStatus === "requiresApproval"}
-            onChange={(on) => void setLaunchAtLogin(on).catch(() => {}).finally(refreshLogin)}
+            onChange={(on) =>
+              void setLaunchAtLogin(on)
+                .catch(() => {})
+                .finally(refreshLogin)
+            }
           />
         </Row>
-        <Row title="Warn before quitting" description={isMac ? `Asks before ${APP} quits with ⌘Q.` : `Asks before ${APP} quits.`}>
+        <Row title="Warn before quitting" description={isMac ? `Asks before ${APP_NAME} quits with ⌘Q.` : `Asks before ${APP_NAME} quits.`}>
           <Toggle value={settings.warnBeforeQuitting} onChange={(v) => update({ warnBeforeQuitting: v })} />
         </Row>
         <Row title="Warn before closing a window with multiple tabs" description={shortcutLabel("Asks before ⇧⌘W or the close button closes its tabs.")}>
           <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => update({ warnBeforeClosingWindow: v })} />
         </Row>
-        <Row
-          title="Open links from other apps in"
-          description={
-            settings.openLinksInHarbor
-              ? shortcutLabel(`A link from Discord, Slack or Mail opens in Harbor, a small window of its own. ⌘O moves it into ${APP}; closing it throws it away.`)
-              : `A link from Discord, Slack or Mail opens as a new tab in your ${APP} window, in the default space.`
-          }
-        >
+      </Group>
+
+      <SectionHeader title={`When opening ${APP_NAME}:`} />
+      <Group>
+        <Row title="Start on" description="Your tabs stay in the sidebar either way.">
           <PopUp
-            value={settings.openLinksInHarbor ? "small" : "tab"}
+            value={settings.launchTab}
             options={[
-              { value: "small", title: "Harbor" },
-              { value: "tab", title: "A new tab" },
+              { value: "newTab", title: "A new tab" },
+              { value: "lastTab", title: "The last tab you viewed" },
             ]}
-            onChange={(v) => update({ openLinksInHarbor: v === "small" })}
+            onChange={(v) => update({ launchTab: v })}
             minWidth={190}
           />
         </Row>
       </Group>
 
-      <SectionHeader title={`When quitting ${APP}:`} />
+      <SectionHeader title={`When quitting ${APP_NAME}:`} />
       <Group>
         <Row title="Windows and tabs" description="What you see the next time you open it. Closed windows stay in History › Recently Closed.">
           <PopUp
@@ -137,14 +137,14 @@ function UpdatesSection() {
         <Row title="Check for updates automatically" description={SHARING_COPY.updateChecks}>
           <Toggle value={ready && state.automaticChecks} disabled={!ready} onChange={(v) => set({ automaticChecks: v })} />
         </Row>
-        <Row title={`Automatically update ${APP}`} description="Downloads updates in the background and installs them the next time it restarts.">
+        <Row title={`Automatically update ${APP_NAME}`} description="Downloads updates in the background and installs them the next time it restarts.">
           <Toggle
             value={ready && state.automaticChecks && state.automaticDownloads}
             disabled={!ready || !state.automaticChecks}
             onChange={(v) => set({ automaticDownloads: v })}
           />
         </Row>
-        <Row title={`${APP} ${state.version}`} description={ready ? lastCheck : undefined}>
+        <Row title={`${APP_NAME} ${state.version}`} description={ready ? lastCheck : undefined}>
           <Button title="Check Now" disabled={ready && (!state.canCheck || state.sessionInProgress)} onPress={() => void checkForUpdates().finally(refresh)} />
         </Row>
       </Group>
@@ -177,16 +177,11 @@ function DefaultBrowserBanner() {
         borderColor: colors.groupBorder,
       }}
     >
-      <Symbol
-        name={isDefault ? "checkmark.seal.fill" : "safari"}
-        size={20}
-        color={isDefault ? "#34C759" : theme.icon}
-        style={{ width: 28, height: 28 }}
-      />
+      <Symbol name={isDefault ? "checkmark.seal.fill" : "safari"} size={20} color={isDefault ? "#34C759" : theme.icon} style={{ width: 28, height: 28 }} />
       <Text style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
-        {isDefault ? `${APP} is your default browser` : `${APP} works best as your default browser`}
+        {isDefault ? `${APP_NAME} is your default browser` : `${APP_NAME} works best as your default browser`}
       </Text>
-      {!isDefault && <Button title={`Set ${APP} as Default`} kind="primary" onPress={() => void setAsDefaultBrowser().then(setIsDefault)} />}
+      {!isDefault && <Button title={`Set ${APP_NAME} as Default`} kind="primary" onPress={() => void setAsDefaultBrowser().then(setIsDefault)} />}
     </View>
   );
 }

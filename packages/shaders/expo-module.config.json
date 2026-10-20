@@ -1,13 +1,6 @@
 {
-  "platforms": [
-    "macos"
-  ],
+  "platforms": ["apple"],
   "apple": {
-    "modules": [
-      "AreaLightModule",
-      "WindowBackdropModule",
-      "EdgeLightModule",
-      "PowerUpModule"
-    ]
+    "modules": ["AreaLightModule", "WindowBackdropModule", "EdgeLightModule", "PowerUpModule"]
   }
 }

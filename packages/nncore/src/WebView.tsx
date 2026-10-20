@@ -48,7 +48,7 @@ export type OpenWindowRequest = {
 export type BlockedPopup = { id: string; url: string; origin: string };
 
 export type FindResult = { count: number; active: number; final: boolean };
-// "escape": an Esc the page left alone, outside a text field (Harbor closes on it).
+// "escape": an Esc the page left alone, outside a text field (Little Bay closes on it).
 // `modifiers`: the keys held when the menu item was picked ("search").
 export type PageCommand = {
   command: "search" | "ask" | "copyLinkToHighlight" | "escape";
@@ -157,6 +157,8 @@ export type WebViewProps = ViewProps & {
   warm?: boolean;
   pageBackgroundColor?: string;
   autoPictureInPicture?: boolean;
+  /** Arc's Peek: a link the user clicks to another site doesn't navigate the page; it comes to `onPeekLink`. */
+  peekLinks?: boolean;
   onNavigationChange?: (state: NavigationState) => void;
   onProgress?: (progress: number) => void;
   onFavicon?: (url: string, candidates: string[]) => void;
@@ -168,6 +170,7 @@ export type WebViewProps = ViewProps & {
   onFindResult?: (result: FindResult) => void;
   onFullscreen?: (fullscreen: boolean) => void;
   onStatus?: (text: string) => void;
+  onPeekLink?: (url: string) => void;
   onCrashed?: (info: CrashInfo) => void;
   onUnresponsive?: () => void;
   onResponsive?: () => void;
@@ -258,6 +261,7 @@ type NativeEvents = {
   onFindResult: FindResult;
   onFullscreen: { fullscreen: boolean };
   onStatus: { text: string };
+  onPeekLink: { url: string };
   onCrashed: CrashInfo;
   onUnresponsive: object;
   onResponsive: object;
@@ -296,6 +300,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onFindResult: (e) => [e],
   onFullscreen: (e) => [e.fullscreen],
   onStatus: (e) => [e.text],
+  onPeekLink: (e) => [e.url],
   onCrashed: (e) => [e],
   onUnresponsive: () => [],
   onResponsive: () => [],
@@ -320,10 +325,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onExternalApp: (e) => [e],
 };
 
-export type NativeHandle = Omit<
-  WebViewHandle,
-  "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"
-> & {
+export type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"> & {
   evaluate(code: string): Promise<string | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
   loadUrl(url: string, userInitiated?: boolean): Promise<void>;
@@ -358,8 +360,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
   useImperativeHandle(ref, () => {
     const call = <T,>(fallback: T, fn: (view: NativeHandle) => Promise<T>) => callView(native, fallback, fn);
     return {
-      loadUrl: (url, options) =>
-        call(undefined, (n) => n.loadUrl(toEngineUrl(url), options?.userInitiated ?? false)),
+      loadUrl: (url, options) => call(undefined, (n) => n.loadUrl(toEngineUrl(url), options?.userInitiated ?? false)),
       goBack: () => call(undefined, (n) => n.goBack()),
       goForward: () => call(undefined, (n) => n.goForward()),
       goToOffset: (offset) => call(undefined, (n) => n.goToOffset(offset)),
@@ -395,8 +396,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       getSecurityInfo: () => call(null, (n) => n.getSecurityInfo()),
       openBlockedPopup: (id, always) => call(undefined, (n) => n.openBlockedPopup(id, always)),
       clearSiteData: () => call({ cookies: false, storage: false }, (n) => n.clearSiteData()),
-      resolvePasswordPrompt: (answer, edits) =>
-        call(undefined, (n) => n.resolvePasswordPrompt(answer, edits?.username ?? null, edits?.password ?? null)),
+      resolvePasswordPrompt: (answer, edits) => call(undefined, (n) => n.resolvePasswordPrompt(answer, edits?.username ?? null, edits?.password ?? null)),
       resolveAutofillPrompt: (id, answer) => call(undefined, (n) => n.resolveAutofillPrompt(id, answer)),
       executeExtensionAction: (extensionId) => call(null, (n) => n.executeExtensionAction(extensionId)),
       resolveDisplayMedia: (id, sourceId) => call(undefined, (n) => n.resolveDisplayMedia(id, sourceId)),
@@ -416,15 +416,8 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
     }
     const map = unwrap[key as Handlers] as ((e: unknown) => unknown[]) | undefined;
     nativeProps[key] =
-      map && typeof value === "function"
-        ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent))
-        : value;
+      map && typeof value === "function" ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent)) : value;
   }
 
-  return (
-    <NativeWebView
-      ref={native}
-      {...(nativeProps as NativeProps)}
-    />
-  );
+  return <NativeWebView ref={native} {...(nativeProps as NativeProps)} />;
 });

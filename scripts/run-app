@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build and open the local Release app, with JavaScript bundled.
+# Build and open the local Release app, with JavaScript bundled, on the development data (an ad hoc build never
+# opens the installed app's).
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -7,4 +8,5 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 export XCODE_XCCONFIG_FILE="${XCODE_XCCONFIG_FILE:-$repo/apps/browser/macos/AdHoc.xcconfig}"
 
 "$repo/scripts/agent/build-app" --as dev --config Release
-open "$repo/apps/browser/build-dev/Build/Products/Release/Bay.app"
+open -n --env BAY_DATA_DIR="${BAY_DATA_DIR:-$HOME/Library/Application Support/Bay Dev}" \
+  "$repo/apps/browser/build-dev/Build/Products/Release/Bay.app"

@@ -7,7 +7,7 @@ export const writeDocument = (name, contents) => docs.set(name, contents);
 export const heldSaves = { on: false, queue: [], error: null };
 export const saveDocument = (name, contents) =>
   new Promise((resolve, reject) => {
-    const land = () => heldSaves.error ? reject(heldSaves.error) : (docs.set(name, contents), resolve());
+    const land = () => (heldSaves.error ? reject(heldSaves.error) : (docs.set(name, contents), resolve()));
     if (heldSaves.on) heldSaves.queue.push(land);
     else land();
   });
@@ -26,6 +26,8 @@ export const keychainDelete = () => Promise.resolve(true);
 export const confirm = () => Promise.resolve({ confirmed: false, suppressed: false });
 export const onWindowEvent = () => ({ remove() {} });
 export const focusedWindows = [];
+export const sidebarMoveUndoCalls = [];
+export const setSidebarMoveUndo = (windowId, available, focus = false) => (sidebarMoveUndoCalls.push({ windowId, available, focus }), Promise.resolve());
 export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise.resolve());
 export const onAppEvent = () => ({ remove() {} });
 export const postNotification = () => Promise.resolve(null);
@@ -37,7 +39,6 @@ export const deletedProfileData = [];
 export const profileDataLeft = new Map();
 export const deleteProfileData = (profile) => (deletedProfileData.push(profile), Promise.resolve(profileDataLeft.get(profile) ?? []));
 
-// expo-modules-core: a test installs native modules on globalThis.nnTestNativeModules.
 /** Validate injected native mocks against the same contracts used by the Windows dispatcher. */
 export function assertNativeStub(name, stub, { partial = false } = {}) {
   const contract = nativeContracts.modules[name];
@@ -59,11 +60,12 @@ export function assertNativeStub(name, stub, { partial = false } = {}) {
   }
   return stub;
 }
+// expo-modules-core: a test installs native modules on globalThis.nnTestNativeModules.
 export const requireOptionalNativeModule = (name) => {
   const stub = globalThis.nnTestNativeModules?.[name] ?? null;
   return stub == null ? null : assertNativeStub(name, stub, { partial: true });
 };
-export const requireNativeModule = () => ({});
+export const requireNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? {};
 export const nativeRandomUUID = (fallback) => fallback();
 export const nativeSnapshot = (_module, _method, _args, fallback) => fallback();
 // Saved passwords, one store per simulated device (sync tests).
@@ -161,7 +163,13 @@ export const chromeBookmarks = (profile = "", device = current.device) => {
   const dbs = bookmarkDbs.get(device);
   if (!dbs.has(profile)) {
     const folder = (id, t) => ({ id, k: "f", t, a: 0, parent: null, children: [] });
-    dbs.set(profile, new Map([["bar", folder("bar", "Bookmarks Bar")], ["other", folder("other", "Other Bookmarks")]]));
+    dbs.set(
+      profile,
+      new Map([
+        ["bar", folder("bar", "Bookmarks Bar")],
+        ["other", folder("other", "Other Bookmarks")],
+      ]),
+    );
   }
   return dbs.get(profile);
 };
@@ -171,7 +179,9 @@ export const watchBookmarks = async () => ({ ok: true });
 const treeOf = (db, id) => {
   const n = db.get(id);
   const key = n.key ? { key: n.key } : {};
-  return n.k === "u" ? { id: n.id, k: "u", t: n.t, u: n.u, a: n.a, ...key } : { id: n.id, k: "f", t: n.t, a: n.a, ...key, c: n.children.map((c) => treeOf(db, c)) };
+  return n.k === "u"
+    ? { id: n.id, k: "u", t: n.t, u: n.u, a: n.a, ...key }
+    : { id: n.id, k: "f", t: n.t, a: n.a, ...key, c: n.children.map((c) => treeOf(db, c)) };
 };
 export const bookmarkTree = async (profile) => {
   const db = chromeBookmarks(profile);

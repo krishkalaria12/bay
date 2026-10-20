@@ -2,7 +2,7 @@ import { applyBookmarkOps, bookmarkTree, onBookmarksChanged, watchBookmarks, typ
 import { readDocument, removeDocument, writeDocument } from "@bay/shell";
 import { bookmarkUuidFor, isBookmarkUuid, rootIdsFor } from "../store/bookmarks";
 import { useBrowser, type BrowserState, type BrowserStore } from "../store/browser";
-import { engineProfileFor, isIncognitoProfile } from "../store/model";
+import { engineProfileFor, isIncognitoSpace } from "../store/model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks } from "../store/types";
 
 // Bookmarks are Chrome's (BookmarkModel), so chrome.bookmarks and the app see one tree. The store's `bookmarks`
@@ -243,10 +243,10 @@ export function createBookmarksService(browser: BrowserStore) {
   // Sync may use a tree only once bookmarks.json is in Chrome: before, its bookmarks would read as deleted.
   let legacyMoved = false;
 
-  const engineProfiles = (s: Pick<BrowserState, "profiles">) =>
-    [...new Set(Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id)).map((id) => engineProfileFor(id, s.profiles)))];
-  const profilesUsing = (s: Pick<BrowserState, "profiles">, engine: string) =>
-    Object.keys(s.profiles).filter((id) => !isIncognitoProfile(id) && engineProfileFor(id, s.profiles) === engine);
+  const engineProfiles = (s: Pick<BrowserState, "spaces">) =>
+    [...new Set(Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id)).map((id) => engineProfileFor(id, s.spaces)))];
+  const profilesUsing = (s: Pick<BrowserState, "spaces">, engine: string) =>
+    Object.keys(s.spaces).filter((id) => !isIncognitoSpace(id) && engineProfileFor(id, s.spaces) === engine);
 
   // Puts a tree in the store: the engine's subtree is replaced; icons the store knew stay.
   function adopt(engine: string, flat: Flat, { ready = legacyMoved } = {}) {
@@ -381,9 +381,9 @@ export function createBookmarksService(browser: BrowserStore) {
     try {
       const legacy = (JSON.parse(readDocument(LEGACY_FILE) ?? "null") as { bookmarks?: Bookmarks } | null)?.bookmarks;
       const s = store();
-      for (const [profileId, roots] of Object.entries(legacy?.roots ?? {})) {
-        if (!s.profiles[profileId] || isIncognitoProfile(profileId)) continue;
-        const engine = engineProfileFor(profileId, s.profiles);
+      for (const [spaceId, roots] of Object.entries(legacy?.roots ?? {})) {
+        if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) continue;
+        const engine = engineProfileFor(spaceId, s.spaces);
         const ids = rootIdsFor(engine);
         const id = (old: string) => (old === roots.bar ? ids.bar : old === roots.other ? ids.other : bookmarkUuidFor(old));
         const nodes: Bookmarks["nodes"] = {};
@@ -439,9 +439,9 @@ export function createBookmarksService(browser: BrowserStore) {
     const s = store();
     const done = new Set<string>();
     try {
-      for (const [profileId, roots] of Object.entries(b.roots ?? {})) {
-        if (!s.profiles[profileId] || isIncognitoProfile(profileId)) continue;
-        const engine = engineProfileFor(profileId, s.profiles);
+      for (const [spaceId, roots] of Object.entries(b.roots ?? {})) {
+        if (!s.spaces[spaceId] || isIncognitoSpace(spaceId)) continue;
+        const engine = engineProfileFor(spaceId, s.spaces);
         if (done.has(engine)) continue;
         done.add(engine);
         const ops: BookmarkOp[] = [];
@@ -502,7 +502,7 @@ export function createBookmarksService(browser: BrowserStore) {
       if (active) for (const engine of engineProfiles(store())) read(engine);
     });
     const stop = browser.subscribe((s, prev) => {
-      if (s.profiles !== prev.profiles) {
+      if (s.spaces !== prev.spaces) {
         for (const engine of engineProfiles(s)) if (!stateOf(engine).shadow && !stateOf(engine).busy) read(engine);
       }
       if (s.bookmarks !== prev.bookmarks) {

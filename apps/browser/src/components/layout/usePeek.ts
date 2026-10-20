@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Easing, ReduceMotion, runOnJS, useSharedValue, withTiming, type WithTimingConfig } from "@bay/platform/motion";
+import { PEEK_HIDE_DELAY_MS, PEEK_SLIDE_MS } from "./constants";
 
-export const SLIDE_MS = 180;
 // The sidebar's and tab strip's slides: the peek's and the docked sidebar's. Instant under Reduce Motion.
-export const SLIDE: WithTimingConfig = { duration: SLIDE_MS, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System };
-const HIDE_DELAY_MS = 120;
-
+export const SLIDE: WithTimingConfig = { duration: PEEK_SLIDE_MS, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System };
 /**
  * A hidden sidebar or tab strip peeking out while the pointer is at the window's edge. The peek stays mounted, so a
  * reveal only slides it in: it never re-measures, remounts its rows or loses its scroll. `live`: it takes the pointer,
@@ -16,9 +14,11 @@ export function usePeek(enabled: boolean) {
   const [live, setLive] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const slideOut = () => {
-    slide.set(withTiming(0, SLIDE, (finished) => {
-      if (finished) runOnJS(setLive)(false);
-    }));
+    slide.set(
+      withTiming(0, SLIDE, (finished) => {
+        if (finished) runOnJS(setLive)(false);
+      }),
+    );
   };
   const show = () => {
     clearTimeout(hideTimer.current);
@@ -28,7 +28,7 @@ export function usePeek(enabled: boolean) {
   };
   const hide = () => {
     clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(slideOut, HIDE_DELAY_MS);
+    hideTimer.current = setTimeout(slideOut, PEEK_HIDE_DELAY_MS);
   };
   useEffect(() => {
     if (enabled) return;

@@ -30,7 +30,19 @@ export function startDevHarness() {
   }
 
   const nn = {
-    store: useBrowser, actions, runCommand, webviews, shell, omnibox: omniboxDrivers, pages: pagesDrivers,
+    store: useBrowser,
+    actions,
+    runCommand,
+    get externalLinks(): typeof import("../components/littleBay/actions") {
+      return require("../components/littleBay/actions");
+    },
+    get linkRules(): typeof import("../components/settings/panes/LinkRules") {
+      return require("../components/settings/panes/LinkRules");
+    },
+    webviews,
+    shell,
+    omnibox: omniboxDrivers,
+    pages: pagesDrivers,
     pageState: usePages,
     openSettings,
     favicons,
@@ -57,6 +69,58 @@ export function startDevHarness() {
     get switcher(): typeof import("../components/sidebar/switcher") {
       return require("../components/sidebar/switcher");
     },
+    // The sidebar's actions: menus a test can't click open what these do (the icon picker, renaming).
+    get sidebar(): typeof import("../components/sidebar/actions") {
+      return require("../components/sidebar/actions");
+    },
+    // Arc's previews: a test hands a site preview its data, as the signed-in site would.
+    get previews(): typeof import("../components/previews/SitePreview") {
+      return require("../components/previews/SitePreview");
+    },
+    // Onboarding's steps: a test goes to one without clicking through those before it.
+    get onboarding(): typeof import("../components/onboarding/state") {
+      return require("../components/onboarding/state");
+    },
+    // The sidebar's Clear (and its rows breaking up), which a test runs without the click.
+    get clear(): typeof import("../components/sidebar/clear") {
+      return require("../components/sidebar/clear");
+    },
+    // Split View's actions: the sidebar's + › Split View, its edge cases included.
+    get splits(): typeof import("../components/layout/splitActions") {
+      return require("../components/layout/splitActions");
+    },
+    // The sidebar's menus, which a test opens to see them (a hidden instance can't right-click).
+    get menus(): typeof import("../components/sidebar/menus") {
+      return require("../components/sidebar/menus");
+    },
+    // Nested-folder acceptance tests inspect the same tree and geometry the sidebar renders.
+    get folders(): {
+      model: typeof import("../store/folders");
+      entries: typeof import("../components/sidebar/entries");
+      geometry: typeof import("../components/sidebar/geometry");
+    } {
+      return {
+        model: require("../store/folders"),
+        entries: require("../components/sidebar/entries"),
+        geometry: require("../components/sidebar/geometry"),
+      };
+    },
+    // The update waiting for the user: a test shows the sidebar's Update row without a feed.
+    get updates(): typeof import("./updates") {
+      return require("./updates");
+    },
+    // New Space's panel: its steps, which a test goes through without clicks.
+    get newSpace(): typeof import("../components/spaces/NewSpace") {
+      return require("../components/spaces/NewSpace");
+    },
+    // A space's menu actions (renaming it in its dialog), which only a menu opens.
+    get spaces(): typeof import("../components/spaces/SpaceSwitcher") {
+      return require("../components/spaces/SpaceSwitcher");
+    },
+    // The space theme editor, which only a menu opens.
+    get themeEditor(): typeof import("../components/spaces/ThemeEditor") {
+      return require("../components/spaces/ThemeEditor");
+    },
     get toolbarAutoHide(): typeof import("../components/layout/toolbarAutoHide") {
       return require("../components/layout/toolbarAutoHide");
     },
@@ -77,21 +141,24 @@ export function startDevHarness() {
   (globalThis as { nn?: typeof nn }).nn = nn;
   const scriptId = (source: string | null) => source?.match(/^\/\/ *(\S+)/)?.[1];
   let lastId = scriptId(readDocument("dev-eval.js")) ?? "";
-  setInterval(function pollDevEval() {
-    const source = readDocument("dev-eval.js");
-    const id = scriptId(source);
-    if (!source || !id || id === lastId) return;
-    lastId = id;
-    const done = (body: object) => writeDocument("dev-eval-result.json", JSON.stringify({ id, ...body }));
-    try {
-      const fn = new Function("nn", source) as (n: typeof nn) => unknown;
-      Promise.resolve(fn(nn)).then(
-        (result) => done({ result: result ?? null }),
-        (error: unknown) => done({ error: String(error) }),
-      );
-    } catch (error) {
-      done({ error: String(error) });
-    }
-    // Test scripts wait on every answer (scripts/lib/instance.mjs); a Release build's perf probe keeps the slow poll.
-  }, __DEV__ ? 50 : 250);
+  setInterval(
+    function pollDevEval() {
+      const source = readDocument("dev-eval.js");
+      const id = scriptId(source);
+      if (!source || !id || id === lastId) return;
+      lastId = id;
+      const done = (body: object) => writeDocument("dev-eval-result.json", JSON.stringify({ id, ...body }));
+      try {
+        const fn = new Function("nn", source) as (n: typeof nn) => unknown;
+        Promise.resolve(fn(nn)).then(
+          (result) => done({ result: result ?? null }),
+          (error: unknown) => done({ error: String(error) }),
+        );
+      } catch (error) {
+        done({ error: String(error) });
+      }
+      // Test scripts wait on every answer (scripts/lib/instance.mjs); a Release build's perf probe keeps the slow poll.
+    },
+    __DEV__ ? 50 : 250,
+  );
 }

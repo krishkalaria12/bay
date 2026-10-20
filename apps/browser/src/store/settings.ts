@@ -12,6 +12,10 @@ import {
 } from "@bay/core";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
+import { layout } from "../lib/constants";
+import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/awakeSites";
+import { DEFAULT_SPACE_ID } from "./constants";
+import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
 
 export type SearchEngineId = string;
 
@@ -19,11 +23,14 @@ export type Settings = {
   warnBeforeQuitting: boolean;
   warnBeforeClosingWindow: boolean;
   restoreSession: boolean;
+  // What a window shows when Bay opens: a blank new tab (its tabs waiting in the sidebar), or the tab it showed.
+  launchTab: "newTab" | "lastTab";
   searchEngine: SearchEngineId;
   customSearchUrl: string;
   customSearchEngines: CustomSearchEngine[];
   extensionSearchEngines: ExtensionSearchEngine[];
   searchSuggestions: boolean;
+  calculatorEnabled: boolean;
   commandBarPreference: "website" | "search";
 
   tabLayout: "sidebar" | "top";
@@ -31,18 +38,26 @@ export type Settings = {
   hideToolbarWhileScrolling: boolean;
   newTabPosition: "top" | "bottom";
   warnBeforeClosingLastTab: boolean;
-  warnBeforeMovingTabsToProfile: boolean;
+  warnBeforeMovingTabsToSpace: boolean;
   tabReorderHaptics: boolean;
   extendWebsiteColor: boolean;
   cmdClickCreatesTabGroup: boolean;
   optShiftClickOpensInGroup: boolean;
   autoGroupMeetingTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
+  awakeSites: string[];
   mutedSites: string[];
   neverTranslateSites: Record<string, string[]>;
   // Sites in Developer Mode, by host and port ("localhost:3000"): components/developer/devMode.ts.
   developerSites: string[];
   autoPictureInPicture: boolean;
+  // Sites whose videos stay in their page when you leave them (Arc's per-site Picture-in-Picture switch), by host.
+  noAutoPictureInPictureSites: string[];
+  // Arc's Previews on hover (components/previews): a folder's or group's tabs, Gmail's unread mail, GitHub's pull
+  // requests. The calendar's is the calendar's own setting (live/store.ts).
+  previewFolders: boolean;
+  previewGmail: boolean;
+  previewGithub: boolean;
   sidebarWidth: number;
   // Which side of the window the sidebar docks on; the page takes the other. The window buttons stay at the top left.
   sidebarPosition: "left" | "right";
@@ -54,47 +69,58 @@ export type Settings = {
   hideBookmarksBarImport: boolean;
 
   appearance: "auto" | "light" | "dark";
+  density: "comfortable" | "compact";
   // The window behind the sidebar and the card: a solid colour (as yab and Arc have it), or glass that shows the
   // desktop through.
   windowMaterial: "solid" | "glass";
   addressBar: "toolbar" | "sidebar";
 
-  defaultProfileId: string;
+  defaultSpaceId: string;
 
   shortcuts: Record<string, string[]>;
 
-  openLinksInHarbor: boolean;
-  harborSize: [number, number];
+  openLinksInLittleBay: boolean;
+  externalLinkRules: ExternalLinkRule[];
+  // Arc's Peek: a link a pinned tab or a favourite opens in front shows over its page (store/peeks.ts).
+  peekLinksFromPinnedTabs: boolean;
+  littleBaySize: [number, number];
 };
-
-export const DEFAULT_PROFILE_ID = "default";
 
 export const DEFAULT_SETTINGS: Settings = {
   warnBeforeQuitting: false,
   warnBeforeClosingWindow: true,
   restoreSession: true,
+  launchTab: "newTab",
   searchEngine: "google",
   customSearchUrl: "",
   customSearchEngines: [],
   extensionSearchEngines: [],
   searchSuggestions: true,
+  calculatorEnabled: true,
   commandBarPreference: "website",
   tabLayout: "sidebar",
   hideToolbarWhileScrolling: true,
-  newTabPosition: "bottom",
+  newTabPosition: "top",
   warnBeforeClosingLastTab: true,
-  warnBeforeMovingTabsToProfile: true,
+  warnBeforeMovingTabsToSpace: true,
   tabReorderHaptics: true,
   extendWebsiteColor: true,
-  cmdClickCreatesTabGroup: true,
+  // Off: ⌘-click opens a plain background tab, as in Chrome and Arc; Settings › Links turns on Dia's grouping.
+  cmdClickCreatesTabGroup: false,
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
-  cleanUpInactiveTabsAfterHours: null,
+  // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
+  cleanUpInactiveTabsAfterHours: 12,
+  awakeSites: [...DEFAULT_AWAKE_SITES],
   mutedSites: [],
   neverTranslateSites: {},
   developerSites: [],
   autoPictureInPicture: true,
-  sidebarWidth: 190,
+  noAutoPictureInPictureSites: [],
+  previewFolders: true,
+  previewGmail: true,
+  previewGithub: true,
+  sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
   batterySaver: true,
   extensionSidePanelWidth: 360,
@@ -102,32 +128,54 @@ export const DEFAULT_SETTINGS: Settings = {
   bookmarksBar: "never",
   hideBookmarksBarImport: false,
   appearance: "auto",
+  density: "comfortable",
   windowMaterial: "solid",
   addressBar: "sidebar",
-  defaultProfileId: DEFAULT_PROFILE_ID,
+  defaultSpaceId: DEFAULT_SPACE_ID,
   shortcuts: {},
-  openLinksInHarbor: true,
-  harborSize: [900, 640],
+  openLinksInLittleBay: false,
+  externalLinkRules: [],
+  peekLinksFromPinnedTabs: true,
+  littleBaySize: [900, 640],
 };
 
-/** Read pre-Harbor profiles without resetting their external-link or window-size preferences. */
-export function restoreSettings(saved: Partial<Settings> & {
+type LegacySettings = Partial<Settings> & {
+  defaultProfileId?: string;
+  warnBeforeMovingTabsToProfile?: boolean;
+  openLinksInHarbor?: boolean;
+  harborSize?: [number, number];
   openLinksInSmallYahu?: boolean;
   smallYahuSize?: [number, number];
-} | null = {}): Settings {
-  const { openLinksInSmallYahu, smallYahuSize, ...current } = saved ?? {};
+};
+
+/** Preserve preferences and command bindings saved before profiles became spaces. */
+export function restoreSettings(saved: LegacySettings | null = {}): Settings {
+  const { defaultProfileId, warnBeforeMovingTabsToProfile, openLinksInHarbor, harborSize, openLinksInSmallYahu, smallYahuSize, ...current } = saved ?? {};
   const settings = { ...DEFAULT_SETTINGS, ...current };
-  if (current.openLinksInHarbor === undefined && typeof openLinksInSmallYahu === "boolean") {
-    settings.openLinksInHarbor = openLinksInSmallYahu;
+  if (current.defaultSpaceId === undefined && defaultProfileId) settings.defaultSpaceId = defaultProfileId;
+  if (current.warnBeforeMovingTabsToSpace === undefined && typeof warnBeforeMovingTabsToProfile === "boolean") {
+    settings.warnBeforeMovingTabsToSpace = warnBeforeMovingTabsToProfile;
   }
-  if (current.harborSize === undefined && Array.isArray(smallYahuSize) && smallYahuSize.length === 2 && smallYahuSize.every((n) => Number.isFinite(n) && n > 0)) {
-    settings.harborSize = [...smallYahuSize];
+  const externalLinks = openLinksInHarbor ?? openLinksInSmallYahu;
+  if (current.openLinksInLittleBay === undefined && typeof externalLinks === "boolean") settings.openLinksInLittleBay = externalLinks;
+  const size = harborSize ?? smallYahuSize;
+  if (current.littleBaySize === undefined && Array.isArray(size) && size.length === 2 && size.every((n) => Number.isFinite(n) && n > 0)) {
+    settings.littleBaySize = [...size];
   }
-  // Custom menu bindings persist command ids too.
   const shortcuts = { ...settings.shortcuts };
-  for (const [legacy, name] of [["newSmallYahu", "newHarbor"], ["toggleOpenLinksInSmallYahu", "toggleOpenLinksInHarbor"]]) {
-    if (shortcuts[legacy!] && !shortcuts[name!]) shortcuts[name!] = shortcuts[legacy!]!;
-    delete shortcuts[legacy!];
+  for (const [legacy, name] of [
+    ["newSmallYahu", "newLittleBay"],
+    ["newHarbor", "newLittleBay"],
+    ["toggleOpenLinksInSmallYahu", "toggleOpenLinksInLittleBay"],
+    ["toggleOpenLinksInHarbor", "toggleOpenLinksInLittleBay"],
+    ["moveTabToProfile", "moveTabToSpace"],
+    ["switchProfile", "switchSpace"],
+    ["nextProfile", "nextSpace"],
+    ["previousProfile", "previousSpace"],
+    ["openProfileMenu", "openSpaceMenu"],
+  ] as const) {
+    if (shortcuts[legacy] && !shortcuts[name]) shortcuts[name] = shortcuts[legacy]!;
+    delete shortcuts[legacy];
   }
   settings.shortcuts = shortcuts;
   return settings;
@@ -135,10 +183,7 @@ export function restoreSettings(saved: Partial<Settings> & {
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
 const NO_EXTENSION_ENGINES: ExtensionSearchEngine[] = [];
-const engineCache = new WeakMap<
-  readonly CustomSearchEngine[],
-  { legacyUrl: string; extension: readonly ExtensionSearchEngine[]; engines: SearchEngine[] }
->();
+const engineCache = new WeakMap<readonly CustomSearchEngine[], { legacyUrl: string; extension: readonly ExtensionSearchEngine[]; engines: SearchEngine[] }>();
 
 type SearchSettings = Readonly<Pick<Settings, "searchEngine" | "customSearchUrl">> & {
   readonly customSearchEngines: readonly CustomSearchEngine[];
@@ -191,7 +236,14 @@ const newEngineId = () => `engine-${Date.now().toString(36)}-${(++engineCounter)
 export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSlice> = (set, get) => ({
   settings: DEFAULT_SETTINGS,
   updateSettings(patch) {
-    set((s) => ({ settings: { ...s.settings, ...patch } }));
+    set((s) => ({
+      settings: {
+        ...s.settings,
+        ...patch,
+        ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : {}),
+        ...("awakeSites" in patch ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites } : {}),
+      },
+    }));
   },
 
   setSearchEngine(id) {

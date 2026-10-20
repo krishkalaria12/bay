@@ -14,7 +14,16 @@ test("a site is its host and port, for http(s) only", () => {
 });
 
 test("local servers are offered Developer Mode, other sites aren't", () => {
-  for (const url of ["http://localhost:3000", "http://127.0.0.1:5173/", "http://[::1]:8080", "http://app.localhost", "http://me.local:4000", "https://site.test", "http://192.168.1.20:3000", "http://10.0.0.5:8000"])
+  for (const url of [
+    "http://localhost:3000",
+    "http://127.0.0.1:5173/",
+    "http://[::1]:8080",
+    "http://app.localhost",
+    "http://me.local:4000",
+    "https://site.test",
+    "http://192.168.1.20:3000",
+    "http://10.0.0.5:8000",
+  ])
     assert.equal(isLocalDevSite(url), true, url);
   for (const url of ["https://example.com", "http://192.168.1.1/", "http://172.32.0.1:3000", "file:///tmp/a.html", "http://localhostx.com"])
     assert.equal(isLocalDevSite(url), false, url);

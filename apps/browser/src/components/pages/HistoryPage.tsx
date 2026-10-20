@@ -1,8 +1,9 @@
 import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { confirm, ContextMenuArea, copyText, MouseArea, showMenu, Symbol } from "@bay/shell";
+import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
-import { FlatList, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import type { HistoryEntry } from "../../store/types";
@@ -10,28 +11,27 @@ import { openModeFor, openUrl } from "../bookmarks/actions";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { Button, Checkbox, useFormColors } from "../settings/controls";
 import { ClearDataDialog, useClearDataRequest } from "./ClearDataDialog";
-import { dayLabel, dayStart, EmptyState, hostLabel, matchesQuery, PAGE_WIDTH, PageHeader, timeLabel } from "./PageLayout";
+import { dayLabel, dayStart, EmptyState, hostLabel, matchesQuery, PageHeader, timeLabel } from "./PageLayout";
+import { HISTORY_HEADER, HISTORY_ROW, PAGE_WIDTH } from "./constants";
+import { NO_HISTORY } from "../../store/constants";
+import { useResetOn } from "../../lib/useResetOn";
 
-const ROW = 38;
-const HEADER = 44;
-const NO_HISTORY: HistoryEntry[] = [];
+type Item = { type: "day"; key: string; label: string } | { type: "row"; key: string; entry: HistoryEntry; first: boolean; last: boolean };
 
-type Item =
-  | { type: "day"; key: string; label: string; offset: number }
-  | { type: "row"; key: string; entry: HistoryEntry; first: boolean; last: boolean; offset: number };
+const itemKey = (item: Item) => item.key;
+const itemType = (item: Item) => item.type;
+const itemSize = (item: Item) => (item.type === "day" ? HISTORY_HEADER : HISTORY_ROW);
 
-// The list: each day's header, then its pages, each at its offset down the list.
+// Each day's header followed by its pages.
 function listItems(history: HistoryEntry[], query: string): Item[] {
   const out: Item[] = [];
-  let offset = 0;
   let day = -1;
   const matches = history.filter((h) => matchesQuery(query, h.title, h.url));
   matches.forEach((entry, i) => {
     const start = dayStart(entry.lastVisit);
     if (start !== day) {
       day = start;
-      out.push({ type: "day", key: `d${start}`, label: dayLabel(start), offset });
-      offset += HEADER;
+      out.push({ type: "day", key: `d${start}`, label: dayLabel(start) });
     }
     const next = matches[i + 1];
     out.push({
@@ -40,24 +40,22 @@ function listItems(history: HistoryEntry[], query: string): Item[] {
       entry,
       first: out.at(-1)?.type === "day",
       last: !next || dayStart(next.lastVisit) !== start,
-      offset,
     });
-    offset += ROW;
   });
   return out;
 }
 
-export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string; profileId: string; initialQuery: string }) {
+export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; spaceId: string; initialQuery: string }) {
   const theme = useTheme();
   const windowId = useBrowser((s) => s.tabs[tabId]?.windowId ?? "");
-  const history = useBrowser((s) => s.history[profileId] ?? NO_HISTORY);
+  const history = useBrowser((s) => s.history[spaceId] ?? NO_HISTORY);
   const [query, setQuery] = useState(initialQuery);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [clearOpen, setClearOpen] = useState(false);
   const lastClicked = useRef<string | null>(null);
 
   const clearRequest = useClearDataRequest((r) => r.windowId);
-  const activeHere = useBrowser((s) => s.windows[windowId]?.activeTabIds[s.windows[windowId]!.profileId] === tabId);
+  const activeHere = useBrowser((s) => s.windows[windowId]?.activeTabIds[s.windows[windowId]!.spaceId] === tabId);
   useEffect(() => {
     if (clearRequest === windowId && activeHere) {
       setClearOpen(true);
@@ -65,9 +63,10 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
     }
   }, [clearRequest, activeHere]);
 
-  useEffect(() => setQuery(initialQuery), [initialQuery]);
+  useResetOn(initialQuery, () => setQuery(initialQuery));
 
   const items = listItems(history, query);
+  const listExtraData = { selected, theme, spaceId, windowId };
 
   const rowUrls = items.flatMap((i) => (i.type === "row" ? [i.entry.url] : []));
 
@@ -93,7 +92,7 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
       windowId,
     });
     if (!confirmed) return;
-    useBrowser.getState().removeHistory(profileId, [...selected]);
+    useBrowser.getState().removeHistory(spaceId, [...selected]);
     setSelected(new Set());
   };
 
@@ -117,25 +116,34 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
           title={query ? "No search results found" : "Your browsing history appears here"}
         />
       ) : (
-        <FlatList
+        <LegendList
+          style={{ flex: 1 }}
           data={items}
-          keyExtractor={(i) => i.key}
-          getItemLayout={(_, index) => {
-            const item = items[index]!;
-            return { length: item.type === "day" ? HEADER : ROW, offset: item.offset, index };
-          }}
-          initialNumToRender={30}
-          windowSize={8}
-          contentContainerStyle={{ paddingBottom: 40, alignItems: "center" }}
+          keyExtractor={itemKey}
+          getItemType={itemType}
+          getFixedItemSize={itemSize}
+          extraData={listExtraData}
+          recycleItems={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
           renderItem={({ item }) =>
             item.type === "day" ? (
-              <View style={{ width: PAGE_WIDTH, maxWidth: "100%", height: HEADER, justifyContent: "flex-end", paddingBottom: 8, paddingHorizontal: 30 }}>
+              <View
+                style={{
+                  alignSelf: "center",
+                  width: PAGE_WIDTH,
+                  maxWidth: "100%",
+                  height: HISTORY_HEADER,
+                  justifyContent: "flex-end",
+                  paddingBottom: 8,
+                  paddingHorizontal: 30,
+                }}
+              >
                 <Text style={{ fontSize: 12.5, fontWeight: "600", color: theme.textSecondary }}>{item.label}</Text>
               </View>
             ) : (
               <HistoryRow
                 entry={item.entry}
-                profileId={profileId}
+                spaceId={spaceId}
                 first={item.first}
                 last={item.last}
                 selected={selected.has(item.entry.url)}
@@ -143,20 +151,20 @@ export function HistoryPage({ tabId, profileId, initialQuery }: { tabId: string;
                 windowId={windowId}
                 onToggle={(shift) => toggle(item.entry.url, shift)}
                 onMoreFromSite={() => setQuery(hostLabel(item.entry.url))}
-                onRemove={() => useBrowser.getState().removeHistory(profileId, [item.entry.url])}
+                onRemove={() => useBrowser.getState().removeHistory(spaceId, [item.entry.url])}
               />
             )
           }
         />
       )}
-      {clearOpen && <ClearDataDialog profileId={profileId} onClose={() => setClearOpen(false)} />}
+      {clearOpen && <ClearDataDialog spaceId={spaceId} onClose={() => setClearOpen(false)} />}
     </View>
   );
 }
 
 function HistoryRow({
   entry,
-  profileId,
+  spaceId,
   first,
   last,
   selected,
@@ -167,7 +175,7 @@ function HistoryRow({
   onRemove,
 }: {
   entry: HistoryEntry;
-  profileId: string;
+  spaceId: string;
   first: boolean;
   last: boolean;
   selected: boolean;
@@ -203,9 +211,10 @@ function HistoryRow({
     <View
       {...hoverProps}
       style={{
+        alignSelf: "center",
         width: PAGE_WIDTH,
         maxWidth: "100%",
-        height: ROW,
+        height: HISTORY_ROW,
         paddingHorizontal: 16,
       }}
     >
@@ -237,7 +246,7 @@ function HistoryRow({
               }}
               style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
             >
-              <Favicon url={entry.url} favicon={entry.favicon} profileId={profileId} />
+              <Favicon url={entry.url} favicon={entry.favicon} spaceId={spaceId} />
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, color: theme.textPrimary }}>
                 {entry.title || entry.url}
               </Text>
@@ -251,7 +260,11 @@ function HistoryRow({
           </View>
         </View>
       </ContextMenuArea>
-      {!last && <View style={{ position: "absolute", left: 16 + 12, right: 16 + 12, bottom: 0, height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />}
+      {!last && (
+        <View
+          style={{ position: "absolute", left: 16 + 12, right: 16 + 12, bottom: 0, height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }}
+        />
+      )}
     </View>
   );
 }

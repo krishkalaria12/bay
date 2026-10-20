@@ -26,7 +26,12 @@ export const NOTION_SEARCH_BODY = {
 
 function notionTitle(p: NotionPage): string {
   const title = p.title ?? Object.values(p.properties ?? {}).find((v) => v.type === "title")?.title ?? [];
-  return title.map((t) => t.plain_text).join("").trim() || "Untitled";
+  return (
+    title
+      .map((t) => t.plain_text)
+      .join("")
+      .trim() || "Untitled"
+  );
 }
 
 export function mapNotion(json: NotionSearch, users: NotionUsers | null, workspace: string | null): LiveItem[] {
@@ -155,7 +160,13 @@ export function mapBitbucket(pr: BitbucketPR, statuses: BitbucketStatuses | null
       draft: !!pr.draft,
       headRef: pr.source.branch.name,
       baseRef: pr.destination.branch.name,
-      review: reviewers.some((p) => p.state === "changes_requested") ? "changesRequested" : reviewers.some((p) => p.state === "approved") ? "approved" : reviewers.length ? "required" : null,
+      review: reviewers.some((p) => p.state === "changes_requested")
+        ? "changesRequested"
+        : reviewers.some((p) => p.state === "approved")
+          ? "approved"
+          : reviewers.length
+            ? "required"
+            : null,
       mergeable: "unknown",
       checks: (statuses?.values ?? []).map((s) => ({
         name: s.name,

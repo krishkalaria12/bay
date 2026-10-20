@@ -1,0 +1,31 @@
+#!/bin/bash
+# Formats the files being committed with oxfmt (its .oxfmtrc.json and ignores), then stages the result. A file with
+# changes that aren't staged is left alone: formatting it would stage those too, so the commit stops and says so.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+oxfmt=./node_modules/.bin/oxfmt
+[[ -x $oxfmt ]] || { echo "pre-commit: oxfmt missing; run pnpm install" >&2; exit 1; }
+
+files=()
+while IFS= read -r -d '' f; do files+=("$f"); done < <(
+  git diff --cached --name-only --diff-filter=ACMR -z -- '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts' '*.tsx' '*.json' '*.jsonc'
+)
+((${#files[@]})) || exit 0
+
+unformatted=()
+for f in "${files[@]}"; do
+  git diff --quiet -- "$f" && continue
+  "$oxfmt" --check --no-error-on-unmatched-pattern "$f" >/dev/null 2>&1 || unformatted+=("$f")
+done
+if ((${#unformatted[@]})); then
+  echo "pre-commit: these have unstaged changes and need formatting; run pnpm fmt, then stage them:" >&2
+  printf '  %s\n' "${unformatted[@]}" >&2
+  exit 1
+fi
+
+whole=()
+for f in "${files[@]}"; do git diff --quiet -- "$f" && whole+=("$f"); done
+if ((${#whole[@]})); then
+  "$oxfmt" --no-error-on-unmatched-pattern "${whole[@]}" >/dev/null
+  git add -- "${whole[@]}"
+fi

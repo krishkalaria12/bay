@@ -1,12 +1,20 @@
 import { View } from "@bay/platform";
 import { useEffect, useState } from "react";
 import { Text, type TextStyle } from "react-native";
-import Animated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from "@bay/platform/motion";
-
-const SPEED = 30;
-const PAUSE_MS = 1500;
-const FADE = 12;
-const FADE_STEPS = 8;
+import Animated, {
+  cancelAnimation,
+  Easing,
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+  type SharedValue,
+} from "@bay/platform/motion";
+import { MARQUEE_FADE, MARQUEE_FADE_STEPS, MARQUEE_PAUSE_MS, MARQUEE_SPEED } from "./constants";
 
 export type MarqueeGroup = {
   progress: SharedValue<number>;
@@ -21,8 +29,8 @@ export function useMarqueeGroup(resetKey: string): MarqueeGroup {
     cancelAnimation(progress);
     progress.set(0);
     if (max < 1) return;
-    const duration = (max / SPEED) * 1000;
-    const leg = (toValue: number) => withDelay(PAUSE_MS, withTiming(toValue, { duration, easing: Easing.linear }));
+    const duration = (max / MARQUEE_SPEED) * 1000;
+    const leg = (toValue: number) => withDelay(MARQUEE_PAUSE_MS, withTiming(toValue, { duration, easing: Easing.linear }));
     progress.set(withRepeat(withSequence(leg(1), leg(0)), -1, false));
     return () => cancelAnimation(progress);
   }, [max, resetKey]);
@@ -72,13 +80,26 @@ export function Marquee({
   );
 }
 
-function Fade({ side, opacity, background, height }: { side: "left" | "right"; opacity: ReturnType<typeof useAnimatedStyle>; background: [number, number, number]; height: number }) {
+function Fade({
+  side,
+  opacity,
+  background,
+  height,
+}: {
+  side: "left" | "right";
+  opacity: ReturnType<typeof useAnimatedStyle>;
+  background: [number, number, number];
+  height: number;
+}) {
   const [r, g, b] = background;
-  const w = FADE / FADE_STEPS;
+  const w = MARQUEE_FADE / MARQUEE_FADE_STEPS;
   return (
-    <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, [side]: 0, width: FADE, height, flexDirection: side === "left" ? "row" : "row-reverse" }, opacity]}>
-      {Array.from({ length: FADE_STEPS }, (_, i) => (
-        <View key={i} style={{ width: w, height, backgroundColor: `rgba(${r},${g},${b},${1 - (i + 0.5) / FADE_STEPS})` }} />
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: "absolute", top: 0, [side]: 0, width: MARQUEE_FADE, height, flexDirection: side === "left" ? "row" : "row-reverse" }, opacity]}
+    >
+      {Array.from({ length: MARQUEE_FADE_STEPS }, (_, i) => (
+        <View key={i} style={{ width: w, height, backgroundColor: `rgba(${r},${g},${b},${1 - (i + 0.5) / MARQUEE_FADE_STEPS})` }} />
       ))}
     </Animated.View>
   );

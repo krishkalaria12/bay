@@ -1,0 +1,23 @@
+---
+interface Props {
+  id?: string;
+  eyebrow: string;
+  title: string;
+  /** Picture on the left, words on the right. */
+  flip?: boolean;
+}
+const { id, eyebrow, title, flip = false } = Astro.props;
+---
+
+<section id={id} class="mx-auto grid max-w-6xl scroll-mt-24 items-center gap-10 px-5 py-16 sm:py-24 lg:grid-cols-12 lg:gap-14">
+  <div class:list={["lg:col-span-5", flip && "lg:order-2"]}>
+    <p class="eyebrow">{eyebrow}</p>
+    <h2 class="mt-2 text-[34px] leading-[1.05] font-bold tracking-[-0.03em] text-balance sm:text-[44px]" set:html={title} />
+    <div class="mt-4 space-y-3 text-[17px] leading-relaxed text-pretty text-muted">
+      <slot />
+    </div>
+  </div>
+  <div class:list={["relative lg:col-span-7", flip && "lg:order-1"]}>
+    <slot name="visual" />
+  </div>
+</section>

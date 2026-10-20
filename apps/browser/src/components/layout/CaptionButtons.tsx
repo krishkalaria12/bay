@@ -28,7 +28,7 @@ export function CaptionButtons(props: Props) {
   return capabilities.captionButtons ? <Caption {...props} /> : null;
 }
 
-function Caption({ windowId, height, glyphCenter = height / 2, onHover = false }: Props) {
+function Caption({ windowId, height, glyphCenter, onHover = false }: Props) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const { hovered, hoverProps } = useHover();
@@ -50,7 +50,9 @@ function Caption({ windowId, height, glyphCenter = height / 2, onHover = false }
 
   // The buttons sit at the window's corner, so the maximize button's rect follows from its size alone.
   const dark = useRef(theme.dark);
-  dark.current = theme.dark;
+  useEffect(() => {
+    dark.current = theme.dark;
+  }, [theme.dark]);
   const shown = !state.fullscreen;
   useEffect(() => {
     const maximize: [number, number, number, number] | null = shown ? [width - 2 * CAPTION_BUTTON_WIDTH, 0, CAPTION_BUTTON_WIDTH, height] : null;
@@ -59,7 +61,7 @@ function Caption({ windowId, height, glyphCenter = height / 2, onHover = false }
   useEffect(() => () => void setWindowCaption(windowId, { maximize: null, dark: dark.current }).catch(() => {}), [windowId]);
 
   if (!shown) return null;
-  const glyphTop = glyphCenter - GLYPH / 2;
+  const glyphTop = (glyphCenter ?? height / 2) - GLYPH / 2;
   return (
     <View
       {...hoverProps}
@@ -104,7 +106,17 @@ function CaptionButton({
     <View {...hoverProps} tooltip={tooltip ? label : undefined}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
         {({ pressed }) => {
-          const fill = close ? (pressed ? CLOSE_PRESSED : hovered ? CLOSE_HOVER : undefined) : pressed ? theme.toolbarPressed : hovered ? theme.toolbarHover : undefined;
+          const fill = close
+            ? pressed
+              ? CLOSE_PRESSED
+              : hovered
+                ? CLOSE_HOVER
+                : undefined
+            : pressed
+              ? theme.toolbarPressed
+              : hovered
+                ? theme.toolbarHover
+                : undefined;
           return (
             <View style={{ width: CAPTION_BUTTON_WIDTH, height, backgroundColor: fill }}>
               <Symbol

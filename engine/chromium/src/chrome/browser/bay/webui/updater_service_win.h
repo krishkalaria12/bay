@@ -102,6 +102,7 @@ class UpdaterService {
   uint64_t quit_generation_ = 0;
   std::optional<double> last_check_;
   std::string status_ = "initializing";
+  std::string pending_version_;
   std::string error_;
   base::WeakPtrFactory<UpdaterService> weak_factory_{this};
 };

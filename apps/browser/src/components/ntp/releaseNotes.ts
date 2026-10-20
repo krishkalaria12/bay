@@ -1,6 +1,7 @@
 import { shortcutLabel } from "@bay/platform";
 import { launchEnvironment, readDocument, systemInfo, writeDocument } from "@bay/shell";
 import { create } from "zustand";
+import { POSTCARD_SECONDS, RELEASE_NOTES_DOC } from "./constants";
 
 export type ReleaseNotes = {
   version: string;
@@ -17,7 +18,10 @@ export const RELEASE_NOTES: ReleaseNotes[] = [
     title: "Hello, Bay",
     summary: "The first release: a calm, fast browser that keeps your tabs, your pages and your focus in one place.",
     items: [
-      { title: "A command bar for everything", body: shortcutLabel("Search, type an address or jump to an open tab from the New Tab page, or from any page with ⌘L.") },
+      {
+        title: "A command bar for everything",
+        body: shortcutLabel("Search, type an address or jump to an open tab from the New Tab page, or from any page with ⌘L."),
+      },
       { title: "Split view", body: "Drag a tab onto the page to see two or three side by side, stacked or in columns." },
       { title: "Tab groups and pinned tabs", body: "Group related tabs, pin the ones you live in, and let Clean Up Tabs tidy the rest." },
       { title: "Picture in Picture that stays out of the way", body: "Stash a video at the edge of the screen; click its site name to jump back to the tab." },
@@ -27,14 +31,11 @@ export const RELEASE_NOTES: ReleaseNotes[] = [
   },
 ];
 
-export const POSTCARD_SECONDS = 86_400;
-
-const DOC = "release-notes.json";
 type Saved = { version: 1; lastVersion: string; pending: { version: string; since: number } | null };
 
 function readSaved(): Saved | null {
   try {
-    const json = readDocument(DOC);
+    const json = readDocument(RELEASE_NOTES_DOC);
     return json ? (JSON.parse(json) as Saved) : null;
   } catch {
     return null;
@@ -43,7 +44,7 @@ function readSaved(): Saved | null {
 
 function save(saved: Omit<Saved, "version">) {
   try {
-    writeDocument(DOC, JSON.stringify({ version: 1, ...saved } satisfies Saved));
+    writeDocument(RELEASE_NOTES_DOC, JSON.stringify({ version: 1, ...saved } satisfies Saved));
   } catch (error) {
     console.warn("Couldn't save release notes state", error);
   }
@@ -105,4 +106,10 @@ export function queueReleaseNotes(version = systemInfo().appVersion) {
   save({ lastVersion: systemInfo().appVersion, pending });
 }
 
-if (__DEV__) (globalThis as { nnReleaseNotes?: unknown }).nnReleaseNotes = { store: useReleaseNotes, queue: queueReleaseNotes, retire: retireReleaseNotes, open: openReleaseNotes };
+if (__DEV__)
+  (globalThis as { nnReleaseNotes?: unknown }).nnReleaseNotes = {
+    store: useReleaseNotes,
+    queue: queueReleaseNotes,
+    retire: retireReleaseNotes,
+    open: openReleaseNotes,
+  };

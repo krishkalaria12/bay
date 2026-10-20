@@ -32,10 +32,8 @@ export type CardInput = { id?: string; name?: string; expMonth?: number; expYear
 export const getAutofillSettings = (profile = "") => Cef.getAutofillSettings(profile);
 export const setAutofillSettings = (settings: { addresses?: boolean; cards?: boolean }, profile = "") =>
   Cef.setAutofillSettings(profile, settings.addresses ?? null, settings.cards ?? null);
-export const listAddresses = async (profile: string): Promise<SavedAddress[]> =>
-  valueOr(await Cef.listAddresses(profile), { addresses: [] }).addresses;
-export const saveAddress = async (profile: string, address: AddressInput) =>
-  valueOr(await Cef.saveAddress(profile, address), { id: null }).id;
+export const listAddresses = async (profile: string): Promise<SavedAddress[]> => valueOr(await Cef.listAddresses(profile), { addresses: [] }).addresses;
+export const saveAddress = async (profile: string, address: AddressInput) => valueOr(await Cef.saveAddress(profile, address), { id: null }).id;
 export const deleteAddress = async (profile: string, id: string) => {
   valueOr(await Cef.deleteAutofillEntry(profile, id), null);
 };
@@ -45,8 +43,7 @@ export const saveCard = async (profile: string, card: CardInput, number?: string
 export const deleteCard = async (profile: string, id: string) => {
   valueOr(await Cef.deleteAutofillEntry(profile, id), null);
 };
-export const revealCardNumber = async (profile: string, id: string) =>
-  valueOr(await Cef.revealCardNumber(profile, id), { number: null }).number ?? null;
+export const revealCardNumber = async (profile: string, id: string) => valueOr(await Cef.revealCardNumber(profile, id), { number: null }).number ?? null;
 
 const NETWORK_NAMES: Record<CardNetwork, string> = {
   visa: "Visa",

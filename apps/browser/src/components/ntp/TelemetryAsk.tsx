@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol, VisualEffect } from "@bay/shell";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "@bay/platform/motion";
 import { useDefaultBrowserCheckIn } from "../../lib/defaultBrowserCheckIn";
@@ -12,8 +12,7 @@ import { onboardingCompletedAt, useOnboarding } from "../onboarding/state";
 import { useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
 import { usePendingReleaseNotes } from "./releaseNotes";
-
-const FRAME = { width: 300 };
+import { TELEMETRY_ASK_FRAME } from "./constants";
 
 export function TelemetryAsk({ windowId }: { windowId: string }) {
   const due = useTelemetry((s) => !s.decided && !s.askDone);
@@ -30,7 +29,7 @@ export function TelemetryAsk({ windowId }: { windowId: string }) {
       setLeaving(null);
     });
   return (
-    <View style={{ position: "absolute", left: 0, top: 0, width: FRAME.width, padding: 8 }} pointerEvents="box-none">
+    <View style={{ position: "absolute", left: 0, top: 0, width: TELEMETRY_ASK_FRAME.width, padding: 8 }} pointerEvents="box-none">
       <Card
         leaving={leaving}
         onShare={() => retire(() => setSharing(true, "ask"))}
@@ -122,7 +121,13 @@ function AskButton({ title, onPress }: { title: string; onPress: () => void }) {
   const fill = theme.dark ? (pressed ? "#FFFFFF2E" : hovered ? "#FFFFFF24" : "#FFFFFF17") : pressed ? "#0000001F" : hovered ? "#00000017" : "#0000000D";
   return (
     <View {...hoverProps} style={{ flex: 1 }}>
-      <Pressable onPress={onPress} onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)} accessibilityRole="button" accessibilityLabel={title}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+      >
         <View style={{ height: 26, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: fill }}>
           <Text style={{ fontSize: 12, fontWeight: "500", color: theme.dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)" }}>{title}</Text>
         </View>

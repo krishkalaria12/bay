@@ -1,6 +1,7 @@
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import { create } from "zustand";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
+import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 
 export type LiveConfig = {
   githubClientId: string;
@@ -58,12 +59,24 @@ export const DEFAULT_CALENDAR: CalendarSettings = {
   prompted: false,
 };
 
-const DOC = "live.json";
-const PERSISTED = ["folders", "folderOrder", "items", "known", "unread", "completed", "expandedStacks", "accounts", "config", "calendar", "meetingGroups", "dismissedAlerts"] as const;
+const PERSISTED = [
+  "folders",
+  "folderOrder",
+  "items",
+  "known",
+  "unread",
+  "completed",
+  "expandedStacks",
+  "accounts",
+  "config",
+  "calendar",
+  "meetingGroups",
+  "dismissedAlerts",
+] as const;
 
 function load(): Partial<LiveState> {
   try {
-    const json = readDocument(DOC);
+    const json = readDocument(LIVE_DOC);
     return json ? (JSON.parse(json) as Partial<LiveState>) : {};
   } catch {
     return {};
@@ -102,7 +115,9 @@ export function flushLivePersistence({ final = false } = {}): Promise<void> {
   return persistence?.flush(final) ?? Promise.resolve();
 }
 
-export function resumeLivePersistence() { persistence?.resume(); }
+export function resumeLivePersistence() {
+  persistence?.resume();
+}
 
 /** Load shared Live state once, before services and windows start using it. */
 export function startLivePersistence(): () => void {
@@ -114,16 +129,22 @@ export function startLivePersistence(): () => void {
   let finalFlush: Promise<void> | null = null;
   const json = () => {
     const state = live();
-    return JSON.stringify(Object.fromEntries(PERSISTED.map(key => [key, state[key]])));
+    return JSON.stringify(Object.fromEntries(PERSISTED.map((key) => [key, state[key]])));
   };
   const write = () => {
     timer = undefined;
-    try { writeDocument(DOC, json()); }
-    catch (error) { console.warn("Couldn't save live folders", error); }
+    try {
+      writeDocument(LIVE_DOC, json());
+    } catch (error) {
+      console.warn("Couldn't save live folders", error);
+    }
   };
   const save = (): Promise<void> => {
-    try { return Promise.resolve(saveDocument(DOC, json())); }
-    catch (error) { return Promise.reject(error); }
+    try {
+      return Promise.resolve(saveDocument(LIVE_DOC, json()));
+    } catch (error) {
+      return Promise.reject(error);
+    }
   };
   const unsubscribe = useLive.subscribe((s, prev) => {
     if (frozen || PERSISTED.every((key) => s[key] === prev[key])) return;
@@ -169,11 +190,11 @@ export const FOLDER_DEFAULTS: Record<LiveFolderKind, { name: string; sources: Li
   documents: { name: "Documents", sources: ["notion"] },
 };
 
-export function createFolder(profileId: string, kind: LiveFolderKind, sources?: LiveSourceId[]): string {
+export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: LiveSourceId[]): string {
   const id = newId();
   const folder: LiveFolder = {
     id,
-    profileId,
+    spaceId,
     kind,
     name: FOLDER_DEFAULTS[kind].name,
     icon: null,
@@ -190,7 +211,7 @@ export function createFolder(profileId: string, kind: LiveFolderKind, sources?: 
   return id;
 }
 
-export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "profileId" | "kind">>) {
+export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>) {
   setLive((s) => (s.folders[id] ? { folders: { ...s.folders, [id]: { ...s.folders[id]!, ...patch } } } : {}));
 }
 
@@ -223,9 +244,6 @@ export function moveFolder(id: string, delta: -1 | 1) {
   });
 }
 
-const MAX_KNOWN = 600;
-const MAX_COMPLETED = 20;
-
 export function applyFetch(folderId: string, next: LiveItem[], gone: Record<string, CompletionState>, now = Date.now(), quiet: Set<string> = new Set()) {
   setLive((s) => {
     if (!s.folders[folderId]) return {};
@@ -238,15 +256,16 @@ export function applyFetch(folderId: string, next: LiveItem[], gone: Record<stri
     const animating = new Set(s.completing[folderId] ?? []);
     const leaving = prev.filter((it) => !ids.has(it.id) && gone[it.id] && !animating.has(it.id));
     const merged = [...next];
-    for (const it of prev) if (!ids.has(it.id) && (animating.has(it.id) || leaving.includes(it))) merged.splice(Math.min(prev.indexOf(it), merged.length), 0, it);
+    for (const it of prev)
+      if (!ids.has(it.id) && (animating.has(it.id) || leaving.includes(it))) merged.splice(Math.min(prev.indexOf(it), merged.length), 0, it);
     const completed = [
       ...leaving.map((item) => ({ item, state: gone[item.id]!, at: now })),
       ...(s.completed[folderId] ?? []).filter((c) => !ids.has(c.item.id) && !leaving.some((l) => l.id === c.item.id)),
-    ].slice(0, MAX_COMPLETED);
+    ].slice(0, MAX_COMPLETED_ITEMS);
     const stillThere = new Set(merged.map((it) => it.id));
     return {
       items: { ...s.items, [folderId]: merged },
-      known: { ...s.known, [folderId]: [...known, ...fresh].slice(-MAX_KNOWN) },
+      known: { ...s.known, [folderId]: [...known, ...fresh].slice(-MAX_KNOWN_ITEMS) },
       unread: { ...s.unread, [folderId]: first ? [] : [...new Set([...(s.unread[folderId] ?? []), ...unreadFresh])].filter((id) => stillThere.has(id)) },
       completed: leaving.length || (s.completed[folderId] ?? []).length !== completed.length ? { ...s.completed, [folderId]: completed } : s.completed,
       completing: leaving.length ? { ...s.completing, [folderId]: [...(s.completing[folderId] ?? []), ...leaving.map((l) => l.id)] } : s.completing,
@@ -301,4 +320,4 @@ export function setMeetingGroup(group: MeetingGroup | null, groupId?: string) {
   });
 }
 
-export const profileFolders = (s: LiveState, profileId: string) => s.folderOrder.filter((id) => s.folders[id]?.profileId === profileId);
+export const profileFolders = (s: LiveState, spaceId: string) => s.folderOrder.filter((id) => s.folders[id]?.spaceId === spaceId);

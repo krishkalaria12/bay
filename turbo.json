@@ -5,31 +5,25 @@
   "globalEnv": ["DEVELOPER_DIR"],
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "build/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": ["build/**"]
     },
     "typecheck": {
-      "dependsOn": [
-        "^typecheck"
-      ]
+      "dependsOn": ["^typecheck"]
     },
     "shaders:check": {
-      "inputs": [
-        "ios/**/*.metal"
-      ]
+      "inputs": ["ios/**/*.metal"]
+    },
+    "compiler:check": {
+      "cache": false
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "test": {
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"],
+      "passThroughEnv": ["INCLUDE", "LIB", "LIBPATH"]
     }
   }
 }

@@ -3,14 +3,16 @@ import { Pressable, View } from "@bay/platform";
 import { prompt, Surface } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
-import { hex, layout, useTheme } from "../../lib/theme";
+import { hex, useTheme } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
 import { FolderTree } from "./FolderTree";
-import { SIDEBAR_HEADER_WITH_FIELD, useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
+import { SIDEBAR_FIELD } from "../layout/constants";
+import { useSidebarMetrics, useSidebarWidth } from "../sidebar/tokens";
 
 export function BookmarkDialog() {
   const windowId = useWindowId();
@@ -22,18 +24,19 @@ export function BookmarkDialog() {
 function DialogPanel({ state }: { state: BookmarkDialogState }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const field = useSidebarFieldShown();
+  const metrics = useSidebarMetrics();
   // Under the star it was opened from: the sidebar's field, or the toolbar's end (the sidebar's edge, on the right).
   const right = useSidebarOnRight();
   const sidebarOpen = useSidebarOpen();
+  const field = useSidebarFieldShown() && sidebarOpen;
   const sidebarWidth = useSidebarWidth(useWindowId());
   const fieldSide = right ? { right: layout.sidebarInset } : { left: layout.sidebarInset };
   const toolbarEnd = (right && sidebarOpen ? sidebarWidth : layout.cardInset) + 10;
   const bookmark = useBrowser((s) => (state.kind === "page" ? s.bookmarks.nodes[state.bookmarkId] : undefined));
-  const profileId = state.kind === "page" ? profileOfNode(state.bookmarkId) : state.profileId;
+  const spaceId = state.kind === "page" ? profileOfNode(state.bookmarkId) : state.spaceId;
   const [name, setName] = useState(() => (state.kind === "page" ? (bookmark?.title ?? "") : ""));
   const [folderId, setFolderId] = useState<string | null>(() =>
-    state.kind === "page" ? (bookmark?.parentId ?? null) : (useBrowser.getState().bookmarks.roots[state.profileId]?.bar ?? null),
+    state.kind === "page" ? (bookmark?.parentId ?? null) : (useBrowser.getState().bookmarks.roots[state.spaceId]?.bar ?? null),
   );
   const close = () => useBookmarkDialog.getState().set(null);
 
@@ -49,7 +52,7 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
       if (folderId && folderId !== bookmark?.parentId) s.moveBookmark(state.bookmarkId, folderId);
     } else {
       const title = name.trim() || "Tabs";
-      s.addBookmarkTree(state.profileId, [{ title, children: state.tabs.map((t) => ({ title: t.title, url: t.url })) }], folderId ?? undefined);
+      s.addBookmarkTree(state.spaceId, [{ title, children: state.tabs.map((t) => ({ title: t.title, url: t.url })) }], folderId ?? undefined);
     }
     close();
   };
@@ -61,8 +64,8 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
 
   const newFolder = async () => {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId: state.windowId });
-    if (!title || !profileId) return;
-    const id = useBrowser.getState().addBookmarkFolder({ profileId, title, parentId: folderId ?? undefined });
+    if (!title || !spaceId) return;
+    const id = useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: folderId ?? undefined });
     setFolderId(id);
   };
 
@@ -82,14 +85,24 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
         shadowOffset={[0, 10]}
         style={{
           position: "absolute",
-          ...(field ? { top: SIDEBAR_HEADER_WITH_FIELD + 4, ...fieldSide } : { top: layout.cardTop + layout.toolbarHeight - 2, right: toolbarEnd }),
+          ...(field
+            ? { top: SIDEBAR_FIELD.top + metrics.addressHeight + 4, ...fieldSide }
+            : { top: layout.cardTop + layout.toolbarHeight - 2, right: toolbarEnd }),
           width: 320,
           padding: 14,
         }}
       >
         <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>{heading}</Text>
         <Text style={{ fontSize: 11.5, marginTop: 12, marginBottom: 5, color: theme.textSecondary }}>{state.kind === "allTabs" ? "Folder name" : "Name"}</Text>
-        <TextField value={name} onChangeText={setName} autoFocus selectOnFocus placeholder={state.kind === "allTabs" ? "Tabs" : "Name"} onSubmit={done} onEscape={done} />
+        <TextField
+          value={name}
+          onChangeText={setName}
+          autoFocus
+          selectOnFocus
+          placeholder={state.kind === "allTabs" ? "Tabs" : "Name"}
+          onSubmit={done}
+          onEscape={done}
+        />
         <Text style={{ fontSize: 11.5, marginTop: 12, marginBottom: 5, color: theme.textSecondary }}>Folder</Text>
         <View
           style={{
@@ -102,7 +115,7 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
           }}
         >
           <ScrollView contentContainerStyle={{ padding: 4 }}>
-            {profileId && <FolderTree profileId={profileId} selectedId={folderId} onSelect={setFolderId} rowHeight={24} />}
+            {spaceId && <FolderTree spaceId={spaceId} selectedId={folderId} onSelect={setFolderId} rowHeight={24} />}
           </ScrollView>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>

@@ -1,7 +1,7 @@
 import { showMenu, translation, type MenuItem } from "@bay/shell";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { isIncognitoProfile } from "../../store/model";
+import { isIncognitoSpace } from "../../store/model";
 import { PopoverRow, PopoverSeparator, Toggle, ToolbarButton } from "../layout/controls";
 import type { ToolbarPalette } from "../layout/toolbarColors";
 import {
@@ -53,24 +53,26 @@ async function showTranslateMenu(tabId: string) {
   if (!tab) return;
   const translated = translateStateOf(tabId).status !== "idle";
   const items: MenuItem[] = [
-    translated ? { id: "original", title: "Show Original", symbol: "arrow.uturn.backward" } : { id: "translate", title: `Translate to ${languageName(defaultTarget())}`, symbol: "translate" },
+    translated
+      ? { id: "original", title: "Show Original", symbol: "arrow.uturn.backward" }
+      : { id: "translate", title: `Translate to ${languageName(defaultTarget())}`, symbol: "translate" },
     { id: "choose", title: "Choose Another Language…", symbol: "globe" },
   ];
-  if (!isIncognitoProfile(tab.profileId)) {
-    items.push({ separator: true }, { id: "never", title: "Never Translate This Site", checked: isNeverTranslated(tab.profileId, tab.url) });
+  if (!isIncognitoSpace(tab.spaceId)) {
+    items.push({ separator: true }, { id: "never", title: "Never Translate This Site", checked: isNeverTranslated(tab.spaceId, tab.url) });
   }
   const choice = await showMenu(items);
   if (choice === "original") void revertPage(tabId);
   else if (choice === "translate") void translatePage(tabId);
   else if (choice === "choose") void chooseLanguage(tabId);
-  else if (choice === "never") setNeverTranslate(tabId, !isNeverTranslated(tab.profileId, tab.url));
+  else if (choice === "never") setNeverTranslate(tabId, !isNeverTranslated(tab.spaceId, tab.url));
 }
 
 export function TranslateRows({ tabId, onClose }: { tabId: string; onClose: () => void }) {
   const state = useTranslateState(tabId);
   const tab = useBrowser((s) => s.tabs[tabId]);
   useBrowser((s) => s.settings.neverTranslateSites);
-  const never = tab ? isNeverTranslated(tab.profileId, tab.url) : false;
+  const never = tab ? isNeverTranslated(tab.spaceId, tab.url) : false;
   if (!translation || !tab || (!state.source && state.status === "idle" && !never)) return null;
   const translated = state.status !== "idle";
   return (
@@ -95,7 +97,7 @@ export function TranslateRows({ tabId, onClose }: { tabId: string; onClose: () =
           }}
         />
       )}
-      {!isIncognitoProfile(tab.profileId) && (
+      {!isIncognitoSpace(tab.spaceId) && (
         <PopoverRow icon="nosign" title="Never Translate This Site" accessory={<Toggle value={never} onChange={(v) => setNeverTranslate(tabId, v)} />} />
       )}
       <PopoverSeparator />

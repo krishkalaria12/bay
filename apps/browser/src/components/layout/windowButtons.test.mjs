@@ -8,18 +8,23 @@ if (!process.env.BAY_WINDOW_BUTTONS_CHILD) {
     test(`${platform} layouts clear only the window buttons it has`, () => {
       const env = { ...process.env, BAY_WINDOW_BUTTONS_CHILD: "1", BAY_TEST_PLATFORM: platform };
       delete env.NODE_TEST_CONTEXT;
-      const output = execFileSync(process.execPath, ["--no-warnings", "--import", "./src/test-loader.mjs", "--test", "src/components/layout/windowButtons.test.mjs"], {
-        cwd: new URL("../../../", import.meta.url),
-        env,
-        encoding: "utf8",
-      });
+      const output = execFileSync(
+        process.execPath,
+        ["--no-warnings", "--import", "./src/test-loader.mjs", "--test", "src/components/layout/windowButtons.test.mjs"],
+        {
+          cwd: new URL("../../../", import.meta.url),
+          env,
+          encoding: "utf8",
+        },
+      );
       assert.match(output, /pass 2\n/, "the platform child must run its geometry assertions");
     });
   }
 } else {
   const windows = process.env.BAY_TEST_PLATFORM === "windows";
   const { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } = await import("./windowButtons.ts");
-  const { CAPTION_END_ROOM, NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, SIDEBAR_BUTTON_END_ROOM, TRAFFIC_LIGHTS_OFFSET, toolbarEndRoom, toolbarGeometry } = await import("./geometry.ts");
+  const { CAPTION_END_ROOM, NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, toolbarEndRoom, toolbarGeometry } = await import("./geometry.ts");
+  const { SIDEBAR_BUTTON_END_ROOM, TRAFFIC_LIGHTS_OFFSET } = await import("./constants.ts");
 
   test("the window's buttons take one corner", () => {
     assert.equal(CAPTION_BUTTONS_WIDTH, windows ? 138 : 0);

@@ -1,18 +1,13 @@
 import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring } from "@bay/platform/motion";
-import { tensionSpring } from "../../lib/springs";
 import { create } from "zustand";
 import { hex, useTheme } from "../../lib/theme";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "../onboarding/personalize";
 import { useHover } from "../primitives";
-
-const INSET = 16;
-const BUTTON = 30;
-// The palette glyph is wider than tall: drop the button so its visible gaps to the right and bottom edges match.
-const GLYPH_DROP = 1.5;
+import { GLYPH_DROP, PERSONALIZE_BUTTON, PERSONALIZE_INSET, PERSONALIZE_SPRING } from "./constants";
 
 const usePanel = create<{ windowId: string | null }>(() => ({ windowId: null }));
 const setOpen = (windowId: string | null) => usePanel.setState({ windowId });
@@ -21,26 +16,39 @@ export function PersonalizeButton({ windowId }: { windowId: string }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const open = usePanel((s) => s.windowId === windowId);
-  useEffect(() => () => {
-    if (usePanel.getState().windowId === windowId) setOpen(null);
-  }, [windowId]);
+  useEffect(
+    () => () => {
+      if (usePanel.getState().windowId === windowId) setOpen(null);
+    },
+    [windowId],
+  );
   return (
     <>
       {open ? <PersonalizePanel windowId={windowId} onClose={() => setOpen(null)} /> : null}
-      <View {...hoverProps} tooltip="Personalize" style={{ position: "absolute", right: INSET, bottom: INSET - GLYPH_DROP }}>
-        <Pressable onPress={() => setOpen(open ? null : windowId)} accessibilityRole="button" accessibilityLabel="Personalize" accessibilityState={{ expanded: open }}>
+      <View {...hoverProps} tooltip="Personalize" style={{ position: "absolute", right: PERSONALIZE_INSET, bottom: PERSONALIZE_INSET - GLYPH_DROP }}>
+        <Pressable
+          onPress={() => setOpen(open ? null : windowId)}
+          accessibilityRole="button"
+          accessibilityLabel="Personalize"
+          accessibilityState={{ expanded: open }}
+        >
           {({ pressed }) => (
             <View
               style={{
-                width: BUTTON,
-                height: BUTTON,
-                borderRadius: BUTTON / 2,
+                width: PERSONALIZE_BUTTON,
+                height: PERSONALIZE_BUTTON,
+                borderRadius: PERSONALIZE_BUTTON / 2,
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: pressed ? theme.toolbarPressed : hovered || open ? theme.toolbarHover : undefined,
               }}
             >
-              <Symbol name="paintpalette" size={14} color={hovered || open ? theme.icon : theme.textTertiary} style={{ width: BUTTON, height: BUTTON }} />
+              <Symbol
+                name="paintpalette"
+                size={14}
+                color={hovered || open ? theme.icon : theme.textTertiary}
+                style={{ width: PERSONALIZE_BUTTON, height: PERSONALIZE_BUTTON }}
+              />
             </View>
           )}
         </Pressable>
@@ -49,14 +57,11 @@ export function PersonalizeButton({ windowId }: { windowId: string }) {
   );
 }
 
-// Animated's old spring: tension 90, friction 9.
-const PANEL_SPRING = tensionSpring(90, 9);
-
 function PersonalizePanel({ windowId, onClose }: { windowId: string; onClose: () => void }) {
   const theme = useTheme();
   const t = useSharedValue(0);
   useEffect(() => {
-    t.set(withSpring(1, PANEL_SPRING));
+    t.set(withSpring(1, PERSONALIZE_SPRING));
   }, []);
   const panelStyle = useAnimatedStyle(() => ({
     opacity: interpolate(t.get(), [0, 1], [0, 1], Extrapolation.CLAMP),
@@ -66,12 +71,15 @@ function PersonalizePanel({ windowId, onClose }: { windowId: string; onClose: ()
     <>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close Personalize" />
       <Animated.View
-        style={[{
-          position: "absolute",
-          right: INSET,
-          bottom: INSET + BUTTON + 8,
-          width: 352,
-        }, panelStyle]}
+        style={[
+          {
+            position: "absolute",
+            right: PERSONALIZE_INSET,
+            bottom: PERSONALIZE_INSET + PERSONALIZE_BUTTON + 8,
+            width: 352,
+          },
+          panelStyle,
+        ]}
       >
         <Surface
           fill={hex(theme.panel)}

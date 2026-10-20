@@ -1,16 +1,15 @@
-
 const FILE_EXTENSIONS =
   "json|jsonl|js|mjs|cjs|jsx|ts|tsx|map|bundle|jsbundle|hbc|html?|css|txt|md|rtf|csv|log|ips|plist|xml|ya?ml|pdf|docx?|xlsx?|pptx?|key|pages|numbers|png|jpe?g|gif|webp|heic|svg|ico|icns|mp[34]|m4[av]|mov|avi|mkv|webm|wav|aac|flac|zip|gz|tgz|tar|7z|rar|dmg|pkg|app|crx|xpi|db|sqlite|sqlite3|ldb|sst";
 
 // Match quoted text and URLs before tokens inside them.
 const RULES: [RegExp, string][] = [
   [/"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|`[^`\n]*`/g, "<text>"],
-  [/(^|[\s(\[{=:,])'[^'\n]*'(?=$|[\s)\]},.:;!?])/g, "$1<text>"],
+  [/(^|[\s([{=:,])'[^'\n]*'(?=$|[\s)\]},.:;!?])/g, "$1<text>"],
   [/\b(?:about|data|blob|javascript|mailto|file|chrome|bay|chrome-extension|devtools|view-source):\S+/gi, "<url>"],
   [/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)\]}]*/gi, "<url>"],
   [/[\w.%+-]+@[\w-]+(?:\.[\w-]+)+/g, "<email>"],
-  [/(^|[\s(\[{=:,"'])~?\/?(?:[^\s/"'<>()\[\]{}]+\/)+[^\s"'<>()\[\]{},;]*/g, "$1<path>"],
-  [/(^|[\s(\[{=:,])~(?=$|[\s)\]},;])/g, "$1<path>"],
+  [/(^|[\s([{=:,"'])~?\/?(?:[^\s/"'<>()[\]{}]+\/)+[^\s"'<>()[\]{},;]*/g, "$1<path>"],
+  [/(^|[\s([{=:,])~(?=$|[\s)\]},;])/g, "$1<path>"],
   [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<id>"],
   [/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, "<ip>"],
   [/\[[0-9a-f:]*:[0-9a-f:]*\]/gi, "<ip>"],
@@ -75,14 +74,19 @@ export type ExceptionFrame = {
 function frameFunction(name: string | undefined): string {
   const fn = (name ?? "").trim();
   if (!fn || fn === "?" || fn === "anonymous" || fn === "<anonymous>") return "<anonymous>";
-  return /^[\w$.<>\[\]# :-]{1,100}$/.test(fn) ? fn : "<anonymous>";
+  return /^[\w$.<>[\]# :-]{1,100}$/.test(fn) ? fn : "<anonymous>";
 }
 
 export function frameFile(location: string | undefined): string {
   const raw = (location ?? "").replace(/^address at /, "").trim();
   if (!raw || raw === "native") return raw || "<unknown>";
   // Metro puts bundle options after "//&".
-  const base = raw.split(/[?#]|\/\/&/, 1)[0]!.split("/").filter(Boolean).at(-1) ?? "";
+  const base =
+    raw
+      .split(/[?#]|\/\/&/, 1)[0]!
+      .split("/")
+      .filter(Boolean)
+      .at(-1) ?? "";
   return /^[\w.-]{1,80}$/.test(base) ? base : "<unknown>";
 }
 
@@ -116,7 +120,7 @@ export function parseStack(stack: unknown, limit = 50): ExceptionFrame[] {
       lineno: loc[2] ? Number(loc[2]) : null,
       colno: loc[3] ? Number(loc[3]) : null,
       resolved: false,
-      in_app: filename !== "native" && filename !== "<unknown>" && !/^InternalBytecode/.test(filename),
+      in_app: filename !== "native" && filename !== "<unknown>" && !filename.startsWith("InternalBytecode"),
     });
     if (frames.length >= limit) break;
   }
@@ -128,24 +132,30 @@ export type NativeFrame = { image: string; symbol?: string; offset?: number };
 const OUR_IMAGES = /^(Bay|BayNNCore|BayShell|Chromium Framework|Expo|ExpoModulesCore|React|hermes|RCT)/;
 
 export function nativeFrames(frames: NativeFrame[], limit = 64): ExceptionFrame[] {
-  return frames.slice(0, limit).map((f): ExceptionFrame => {
-    const image = frameFile(f.image.replace(/\s/g, "_")).replace(/_/g, " ");
-    const symbol =
-      typeof f.symbol === "string" && f.symbol
-        ? f.symbol.replace(/\S*\/\S*/g, "<path>").replace(/"[^"]*"/g, "<text>").slice(0, 200)
-        : null;
-    return {
-      platform: "custom",
-      lang: "native",
-      function: symbol ?? `${image} + 0x${(f.offset ?? 0).toString(16)}`,
-      module: image,
-      filename: image,
-      lineno: null,
-      colno: null,
-      resolved: !!symbol,
-      in_app: OUR_IMAGES.test(image),
-    };
-  }).reverse();
+  return frames
+    .slice(0, limit)
+    .map((f): ExceptionFrame => {
+      const image = frameFile(f.image.replace(/\s/g, "_")).replace(/_/g, " ");
+      const symbol =
+        typeof f.symbol === "string" && f.symbol
+          ? f.symbol
+              .replace(/\S*\/\S*/g, "<path>")
+              .replace(/"[^"]*"/g, "<text>")
+              .slice(0, 200)
+          : null;
+      return {
+        platform: "custom",
+        lang: "native",
+        function: symbol ?? `${image} + 0x${(f.offset ?? 0).toString(16)}`,
+        module: image,
+        filename: image,
+        lineno: null,
+        colno: null,
+        resolved: !!symbol,
+        in_app: OUR_IMAGES.test(image),
+      };
+    })
+    .reverse();
 }
 
 const SYSTEM_NAME = /^[A-Z][A-Z0-9_ ()]{1,40}$/;

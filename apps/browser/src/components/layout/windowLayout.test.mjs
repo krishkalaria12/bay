@@ -4,12 +4,12 @@ const { useBrowser } = await import("../../store/browser.ts");
 const { addressBarInSidebar, besideRow, sidebarOnRight, sidebarSiteControlsGeometry } = await import("./windowLayout.ts");
 const S = () => useBrowser.getState();
 
-test("the sidebar address bar defaults on and falls back for hidden sidebar and top tabs", () => {
+test("the sidebar address bar defaults on, stays with a hidden sidebar and falls back for top tabs", () => {
   S().hydrate({});
   const w = S().createWindow({ url: "example.com" });
   assert.equal(addressBarInSidebar(S(), w), true);
   S().toggleSidebar(w);
-  assert.equal(addressBarInSidebar(S(), w), false);
+  assert.equal(addressBarInSidebar(S(), w), true);
   S().toggleSidebar(w);
   S().updateSettings({ tabLayout: "top" });
   assert.equal(addressBarInSidebar(S(), w), false);
@@ -54,7 +54,8 @@ test("a card beside a sidebar row opens toward the page", () => {
 });
 
 test("with the sidebar on the right the toolbar's toggle moves to its end, clear of the window buttons", async () => {
-  const { toolbarGeometry, TRAFFIC_LIGHTS_OFFSET } = await import("./geometry.ts");
+  const { toolbarGeometry } = await import("./geometry.ts");
+  const { TRAFFIC_LIGHTS_OFFSET } = await import("./constants.ts");
   const left = toolbarGeometry({ sidebarButton: true, clearTrafficLights: false });
   assert.notEqual(left.sidebarButton, null);
   assert.equal(left.sidebarButtonEnd, false);

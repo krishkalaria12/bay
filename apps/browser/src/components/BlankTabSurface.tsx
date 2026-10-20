@@ -10,8 +10,20 @@ import { useWindowId } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { NewTabExtras } from "./ntp";
 import { tourAnchorRef } from "./onboarding/tour/anchors";
-import { themeEditorOpen } from "./profiles/ThemeEditor";
+import { themeEditorOpen } from "./spaces/ThemeEditor";
 import { useHover } from "./primitives";
+
+// The tabs windows show when Bay starts: a blank one waits quietly, its command bar opening when asked (⌘L, Open
+// search), not over the window on every launch.
+const launchTabs = new Set<string>();
+
+export function quietLaunchTabs() {
+  const s = browserRead.getState();
+  for (const windowId of s.windowOrder) {
+    const id = activeTabId(s, windowId);
+    if (id) launchTabs.add(id);
+  }
+}
 
 // Restored blank tabs and Back to New Tab retain their tab and history. Search lives in the window palette.
 export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: boolean }) {
@@ -20,14 +32,14 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { hovered, hoverProps } = useHover();
   const open = (sourceTabId?: string) => {
-    void dispatchBrowserCommand({ method: "openCommandPanel", windowId, initialText: "", ...(sourceTabId ? { sourceTabId } : {}) }).catch(error => {
+    void dispatchBrowserCommand({ method: "openCommandPanel", windowId, initialText: "", ...(sourceTabId ? { sourceTabId } : {}) }).catch((error) => {
       console.error("Couldn't open search", error);
       showToast(windowId, "Couldn't open search", "Please try again.");
     });
   };
 
   useEffect(() => {
-    if (!focused) return;
+    if (!focused || launchTabs.has(tabId)) return;
     const state = browserRead.getState();
     if (activeTabId(state, windowId) !== tabId || state.tabs[tabId]?.url || state.windowUi[windowId]?.panel.open || themeEditorOpen(windowId)) return;
     open(tabId);

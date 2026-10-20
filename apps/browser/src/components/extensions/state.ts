@@ -56,15 +56,31 @@ export const findExtension = (profile: string, id: string) => useExtensions.getS
 export function addFromWebStore(windowId: string, urlOrId: string, profile = extensionProfile(useBrowser.getState(), windowId)) {
   const id = webStoreExtensionId(urlOrId);
   if (!id) {
-    const pkg = { name: "Extension", version: "", description: "", manifestVersion: 3, icon: null, permissions: [], optionalPermissions: [], hostPermissions: [], hasAction: false, popup: null, optionsPage: null, sidePanel: null, path: "" };
-    useExtensions.setState({ install: { windowId, profile, source: "webStore", status: "error", pkg, error: "That isn't a link to an extension in the Chrome Web Store." } });
+    const pkg = {
+      name: "Extension",
+      version: "",
+      description: "",
+      manifestVersion: 3,
+      icon: null,
+      permissions: [],
+      optionalPermissions: [],
+      hostPermissions: [],
+      hasAction: false,
+      popup: null,
+      optionsPage: null,
+      sidePanel: null,
+      path: "",
+    };
+    useExtensions.setState({
+      install: { windowId, profile, source: "webStore", status: "error", pkg, error: "That isn't a link to an extension in the Chrome Web Store." },
+    });
     return;
   }
   const url = `https://chromewebstore.google.com/detail/${id}`;
   const s = useBrowser.getState();
   const target = s.windows[windowId] ? windowId : s.ui.focusOrder.find((w) => s.windows[w] && extensionProfile(s, w) === profile && !s.windows[w]!.incognito);
   if (target) s.newTab(target, { url });
-  else openWindow({ profileId: s.profileOrder.find((p) => engineProfile(p) === profile), url });
+  else openWindow({ spaceId: s.spaceOrder.find((p) => engineProfile(p) === profile), url });
 }
 
 export async function loadUnpacked(windowId: string, profile = extensionProfile(useBrowser.getState(), windowId)) {
@@ -185,8 +201,7 @@ export function openOptions(windowId: string, ext: InstalledExtension) {
 
 export const openManageExtensions = () => openSettings("extensions");
 export const openPinDialog = (windowId: string) => useExtensions.setState({ pinDialog: { windowId } });
-export const openWebStore = (windowId: string) =>
-  useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
+export const openWebStore = (windowId: string) => useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
 
 // MARK: Action popups
 
@@ -202,6 +217,8 @@ export async function activateExtension(windowId: string, ext: InstalledExtensio
   // The extensions menu and shortcuts pass no state; the tab's popup may not be the manifest's.
   const browserId = browserIdOf(tabId);
   if (!state && result === "popup" && browserId) state = (await extensionActionStates(browserId, [ext.id]))[ext.id];
+  // Private access may have been revoked while Chrome was answering the action.
+  if (!shownIn(windowId, ext.id)) return;
   const url = state ? state.popup : ext.popup ? `chrome-extension://${ext.id}/${ext.popup.replace(/^\//, "")}` : "";
   if (result === "none") return;
   if (result === "sidePanel") return void toggleSidePanel(windowId, ext.id);

@@ -5,8 +5,6 @@ import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { SearchField } from "../settings/controls";
 
-export const PAGE_WIDTH = 880;
-
 export function PageHeader({
   title,
   query,
@@ -76,6 +74,9 @@ export function hostLabel(url: string): string {
 export function matchesQuery(query: string, ...fields: string[]): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return true;
-  const hay = fields.map((f) => (/xn--/i.test(f) ? `${f} ${urlForDisplay(f)}` : f)).join(" ").toLowerCase();
+  const hay = fields
+    .map((f) => (/xn--/i.test(f) ? `${f} ${urlForDisplay(f)}` : f))
+    .join(" ")
+    .toLowerCase();
   return words.every((w) => hay.includes(w));
 }

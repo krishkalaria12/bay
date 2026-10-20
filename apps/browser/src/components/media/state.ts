@@ -18,6 +18,7 @@ type Store = {
   pipOpen: Record<string, PictureInPictureState["kind"]>;
   displayRequests: Record<string, DisplayMediaRequest>;
   tabShares: Record<string, TabShare>;
+  sessionList: { windowId: string; anchor: { x: number; y: number; width: number; height: number } } | null;
 };
 
 export type TabShare = {
@@ -26,7 +27,7 @@ export type TabShare = {
   dismissed: Record<string, true>;
 };
 
-export const useMedia = create<Store>()(() => ({ sessions: {}, dismissed: {}, pip: {}, pipOpen: {}, displayRequests: {}, tabShares: {} }));
+export const useMedia = create<Store>()(() => ({ sessions: {}, dismissed: {}, pip: {}, pipOpen: {}, displayRequests: {}, tabShares: {}, sessionList: null }));
 
 export function setPictureInPictureState(tabId: string, { kind, active }: PictureInPictureState) {
   useMedia.setState((s) => {
@@ -90,6 +91,47 @@ export function mediaCommand(tabId: string, action: MediaCommand, seconds?: numb
   void webviews.get(tabId)?.mediaCommand(action, seconds);
 }
 
+// Dismissing a compact player doesn't remove a session from the list: its tab can still be making sound.
+export function mediaTabsForWindow(s: Pick<BrowserState, "tabs">, m: Pick<Store, "sessions">, windowId: string): string[] {
+  return Object.keys(m.sessions).filter((id) => {
+    const session = m.sessions[id]!;
+    return s.tabs[id]?.windowId === windowId && (session.playbackState === "playing" || session.playbackState === "paused");
+  });
+}
+
+export function pauseAllMedia(windowId: string) {
+  const m = useMedia.getState();
+  for (const id of mediaTabsForWindow(useBrowser.getState(), m, windowId)) {
+    if (isPlaying(m.sessions[id])) mediaCommand(id, "pause");
+  }
+}
+
+export function toggleMediaTabMute(tabId: string) {
+  const s = useBrowser.getState();
+  const tab = s.tabs[tabId];
+  if (!tab) return;
+  const muted = !tab.muted;
+  s.setMuted([tabId], muted);
+  void webviews.get(tabId)?.setMuted(muted);
+}
+
+/**
+ * Skips `seconds` on or back. A site's own skip handlers take their own step whatever we ask (YouTube's is five
+ * seconds), so a site that can seek to a time is sent the time; the rest skip by the seconds asked.
+ */
+export function skip(tabId: string, session: Session, seconds: number) {
+  const now = Date.now();
+  const position = Math.max(0, Math.min(session.duration ?? Infinity, positionOf(session, now) + seconds));
+  setNowPlaying(tabId, { ...session, position, timestamp: now });
+  if (session.actions.includes("seekto")) mediaCommand(tabId, "seekTo", position);
+  else mediaCommand(tabId, "seekBy", seconds);
+}
+
+export function seekTo(tabId: string, session: Session, seconds: number) {
+  setNowPlaying(tabId, { ...session, position: seconds, timestamp: Date.now() });
+  mediaCommand(tabId, "seekTo", seconds);
+}
+
 export function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -99,8 +141,6 @@ export function hostOf(url: string): string {
 }
 
 export const hasTrackControls = (session: Session) => session.actions.includes("nexttrack") || session.actions.includes("previoustrack");
-
-export const SKIP_SECONDS = 15;
 
 export function isTabShown(s: BrowserState, tabId: string): boolean {
   const windowId = s.tabs[tabId]?.windowId;
@@ -133,6 +173,21 @@ export function playerTabFor(m: Pick<Store, "sessions" | "dismissed">, tabIds: s
 }
 
 // MARK: Picture in Picture
+
+/** Whether a tab's video floats out when you leave it: on in Settings, and not turned off for its site. */
+export function autoPictureInPictureFor(s: Pick<BrowserState, "settings" | "tabs">, tabId: string): boolean {
+  const host = hostOf(s.tabs[tabId]?.url ?? "");
+  return (s.settings.autoPictureInPicture ?? true) && !(host && (s.settings.noAutoPictureInPictureSites ?? []).includes(host));
+}
+
+/** Turns automatic Picture in Picture on or off for a tab's site. */
+export function setAutoPictureInPictureForSite(tabId: string, on: boolean) {
+  const s = useBrowser.getState();
+  const host = hostOf(s.tabs[tabId]?.url ?? "");
+  if (!host) return;
+  const sites = (s.settings.noAutoPictureInPictureSites ?? []).filter((h) => h !== host);
+  s.updateSettings({ noAutoPictureInPictureSites: on ? sites : [...sites, host] });
+}
 
 // A video in Picture in Picture, or the page's own document Picture in Picture window (a call's pop-out): either way the
 // page is in PiP, and a request for the video's would close the page's window.

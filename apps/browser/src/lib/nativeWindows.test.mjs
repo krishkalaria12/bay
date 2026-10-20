@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { activeTabId } from "../store/model.ts";
 import { createBrowserStore } from "../store/browser.ts";
 import { createNativeWindowReconciler } from "./nativeWindows.ts";
 
-const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+const settle = async () => {
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+};
 const deferred = () => {
   let resolve, reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
   return { promise, resolve, reject };
 };
 function harness({ syncOpen = false, throwOpen = false, holdClose = false } = {}) {
@@ -20,34 +26,57 @@ function harness({ syncOpen = false, throwOpen = false, holdClose = false } = {}
     open(id, options) {
       calls.push(["open", id, options]);
       if (throwOpen) throw new Error("cannot create");
-      if (syncOpen) { native.add(id); return; }
+      if (syncOpen) {
+        native.add(id);
+        return;
+      }
       const held = deferred();
       pending.set(id, held);
-      return held.promise.then(() => { native.add(id); });
+      return held.promise.then(() => {
+        native.add(id);
+      });
     },
     close(id) {
       calls.push(["close", id]);
-      if (!holdClose) { native.delete(id); return; }
+      if (!holdClose) {
+        native.delete(id);
+        return;
+      }
       const held = deferred();
       pendingClose.set(id, held);
-      return held.promise.then(() => { native.delete(id); });
+      return held.promise.then(() => {
+        native.delete(id);
+      });
     },
-    setTitle(id, title) { calls.push(["title", id, title]); },
-    focus(id) { calls.push(["focus", id]); },
-    openFailed(id) { store.getState().closeWindow(id); },
-    closed(id, options) { calls.push(["release", id, options.incognito]); },
-    report(operation, id, error) { errors.push([operation, id, error]); },
+    setTitle(id, title) {
+      calls.push(["title", id, title]);
+    },
+    focus(id) {
+      calls.push(["focus", id]);
+    },
+    openFailed(id) {
+      store.getState().closeWindow(id);
+    },
+    closed(id, options) {
+      calls.push(["release", id, options.incognito]);
+    },
+    report(operation, id, error) {
+      errors.push([operation, id, error]);
+    },
   });
   const sync = () => {
     const s = store.getState();
     const focused = s.ui.focusedWindowId;
-    const order = s.windowOrder.filter(id => id !== focused);
+    const order = s.windowOrder.filter((id) => id !== focused);
     if (focused && s.windows[focused]) order.push(focused);
-    reconciler.sync(order.map(id => {
-      const w = s.windows[id];
-      const title = s.tabs[w.activeTabIds[w.profileId]]?.title ?? "";
-      return { id, title, options: { incognito: w.incognito, title, focus: id === focused } };
-    }), focused);
+    reconciler.sync(
+      order.map((id) => {
+        const w = s.windows[id];
+        const title = s.tabs[w.activeTabIds[w.spaceId]]?.title ?? "";
+        return { id, title, options: { incognito: w.incognito, title, focus: id === focused } };
+      }),
+      focused,
+    );
   };
   const stop = store.subscribe(sync);
   return { store, pending, pendingClose, calls, native, errors, reconciler, sync, stop };
@@ -69,7 +98,10 @@ test("held opens dispatch once and close after acknowledgement when removed from
   assert.equal(h.calls.filter(([method]) => method === "release").length, 0);
   h.pendingClose.get(id).resolve();
   await settle();
-  assert.deepEqual(h.calls.slice(-2), [["close", id], ["release", id, true]]);
+  assert.deepEqual(h.calls.slice(-2), [
+    ["close", id],
+    ["release", id, true],
+  ]);
   assert.deepEqual([...h.native], h.store.getState().windowOrder);
 });
 
@@ -81,7 +113,10 @@ test("rejected opens remove invisible windows, clean up once and never retry on 
   await settle();
   assert.equal(h.store.getState().windows[id], undefined);
   assert.deepEqual([...h.native], h.store.getState().windowOrder);
-  assert.equal(h.store.getState().closedWindows.at(-1).tabs[0].url, "https://recoverable.example/");
+  const state = h.store.getState();
+  const closed = state.closedWindows.at(-1);
+  assert.equal(state.tabs[closed.window.shownTabId].url, "https://recoverable.example/");
+  assert.ok(state.tabLists[closed.window.spaceId].includes(closed.window.shownTabId));
   assert.equal(h.errors.length, 1);
   assert.equal(h.errors[0][0], "open");
   h.store.getState().updateSettings({ appearance: "dark" });
@@ -110,14 +145,14 @@ test("an acknowledged open receives the latest title and repairs stale requested
   const h = harness();
   t.after(h.stop);
   const first = h.store.getState().createWindow();
-  const firstTab = h.store.getState().windows[first].tabIds[0];
+  const firstTab = activeTabId(h.store.getState(), first);
   h.store.getState().updateTab(firstTab, { title: "Latest title" });
   const second = h.store.getState().createWindow();
   h.pending.get(second).resolve();
   await settle();
   h.pending.get(first).resolve();
   await settle();
-  assert.ok(h.calls.some(call => call[0] === "title" && call[1] === first && call[2] === "Latest title"));
+  assert.ok(h.calls.some((call) => call[0] === "title" && call[1] === first && call[2] === "Latest title"));
   assert.deepEqual(h.calls.at(-1), ["focus", second]);
   assert.equal(h.store.getState().ui.focusedWindowId, second);
 });
@@ -184,7 +219,13 @@ test("initial reconciliation dispatches the focused window last with the origina
   const focused = h.store.getState().createWindow();
   const background = h.store.getState().createWindow({ background: true });
   h.sync();
-  assert.deepEqual(h.calls.filter(([method]) => method === "open").map(([, id, options]) => [id, options.focus]), [[background, false], [focused, true]]);
+  assert.deepEqual(
+    h.calls.filter(([method]) => method === "open").map(([, id, options]) => [id, options.focus]),
+    [
+      [background, false],
+      [focused, true],
+    ],
+  );
   h.pending.get(background).resolve();
   h.pending.get(focused).resolve();
   await settle();

@@ -1,0 +1,174 @@
+{
+  "sidebar": {
+    "containers": [
+      {
+        "global": {}
+      },
+      {
+        "spaces": [
+          "personal",
+          {
+            "id": "personal",
+            "title": "Personal",
+            "profile": {
+              "default": true
+            },
+            "containerIDs": [
+              "pinned",
+              "pinned"
+            ]
+          }
+        ],
+        "items": [
+          "pinned",
+          {
+            "id": "pinned",
+            "childrenIds": [
+              "loose",
+              "work",
+              "empty-root"
+            ],
+            "title": null,
+            "data": {
+              "itemContainer": {}
+            }
+          },
+          "loose",
+          {
+            "id": "loose",
+            "childrenIds": [],
+            "title": null,
+            "data": {
+              "tab": {
+                "savedURL": "https://loose.example/",
+                "savedTitle": "Loose page"
+              }
+            }
+          },
+          "work",
+          {
+            "id": "work",
+            "childrenIds": [
+              "work-tab",
+              "inner",
+              "tail"
+            ],
+            "title": "Work",
+            "data": {
+              "list": {}
+            }
+          },
+          "work-tab",
+          {
+            "id": "work-tab",
+            "childrenIds": [],
+            "title": "My work",
+            "data": {
+              "tab": {
+                "savedURL": "https://work-tab.example/",
+                "savedTitle": "Work page"
+              }
+            }
+          },
+          "inner",
+          {
+            "id": "inner",
+            "childrenIds": [
+              "inner-tab",
+              "nested-empty",
+              "split",
+              "work",
+              "missing",
+              "inner-tab"
+            ],
+            "title": "Research",
+            "data": {
+              "list": {}
+            }
+          },
+          "inner-tab",
+          {
+            "id": "inner-tab",
+            "childrenIds": [],
+            "title": null,
+            "data": {
+              "tab": {
+                "savedURL": "https://inner-tab.example/",
+                "savedTitle": "Research page"
+              }
+            }
+          },
+          "nested-empty",
+          {
+            "id": "nested-empty",
+            "childrenIds": [],
+            "title": "Empty child",
+            "data": {
+              "list": {}
+            }
+          },
+          "split",
+          {
+            "id": "split",
+            "childrenIds": [
+              "left",
+              "right"
+            ],
+            "title": null,
+            "data": {
+              "splitView": {
+                "layout": "horizontal"
+              }
+            }
+          },
+          "left",
+          {
+            "id": "left",
+            "childrenIds": [],
+            "title": null,
+            "data": {
+              "tab": {
+                "savedURL": "https://left.example/",
+                "savedTitle": "Left page"
+              }
+            }
+          },
+          "right",
+          {
+            "id": "right",
+            "childrenIds": [],
+            "title": null,
+            "data": {
+              "tab": {
+                "savedURL": "https://right.example/",
+                "savedTitle": "Right page"
+              }
+            }
+          },
+          "tail",
+          {
+            "id": "tail",
+            "childrenIds": [],
+            "title": null,
+            "data": {
+              "tab": {
+                "savedURL": "https://tail.example/",
+                "savedTitle": "Last work page"
+              }
+            }
+          },
+          "empty-root",
+          {
+            "id": "empty-root",
+            "childrenIds": [],
+            "title": "Empty root",
+            "data": {
+              "list": {}
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "version": 1
+}

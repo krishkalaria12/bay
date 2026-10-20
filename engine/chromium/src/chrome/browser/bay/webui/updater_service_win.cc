@@ -157,6 +157,7 @@ struct UpdaterInitialization {
   bool checks = true;
   bool downloads = false;
   bool staged = false;
+  std::string pending_version;
   std::optional<double> last_check;
   std::string error;
 };
@@ -205,7 +206,8 @@ UpdaterCommandResult RunUpdater(const base::FilePath& executable,
                                 const base::FilePath& script,
                                 const base::DictValue& policy,
                                 const std::string& mode,
-                                bool deferred) {
+                                bool deferred,
+                                bool use_staged) {
   UpdaterCommandResult result;
   // Revalidate before each operation, including installation after a prompt.
   // PowerShell independently enforces the embedded policy and publisher pins.
@@ -244,10 +246,10 @@ UpdaterCommandResult RunUpdater(const base::FilePath& executable,
   if (mode == "Install") {
     command.AppendArgNative(L"-ParentProcessId");
     command.AppendArg(base::NumberToString(base::GetCurrentProcId()));
-    if (deferred) {
+    if (deferred)
       command.AppendArgNative(L"-Deferred");
+    if (use_staged)
       command.AppendArgNative(L"-UseStaged");
-    }
   }
   base::LaunchOptions options;
   options.start_hidden = true;
@@ -383,13 +385,15 @@ UpdaterInitialization ReadInitialState() {
     return result;
   }
   auto checked = RunUpdater(result.executable, result.powershell, result.script,
-                            result.policy, "State", false);
+                            result.policy, "State", false, false);
   if (!checked.error.empty()) {
     result.error = std::move(checked.error);
     return result;
   }
   result.configured = true;
   result.staged = checked.value.FindBool("staged").value_or(false);
+  if (result.staged)
+    result.pending_version = *checked.value.FindString("version");
   std::string settings;
   if (base::ReadFileToStringWithMaxSize(result.settings, &settings,
                                         kMaximumJsonBytes)) {
@@ -443,6 +447,7 @@ void UpdaterService::Prepared(UpdaterInitialization initial) {
   automatic_checks_ = initial.checks;
   automatic_downloads_ = initial.downloads;
   staged_ = initial.staged;
+  pending_version_ = std::move(initial.pending_version);
   last_check_ = initial.last_check;
   error_ = std::move(initial.error);
   status_ = configured_ ? (staged_ ? "staged" : "ready") : "disabled";
@@ -475,6 +480,11 @@ base::DictValue UpdaterService::State() const {
             last_check_ ? base::Value(*last_check_) : base::Value());
   state.Set("status", status_);
   state.Set("staged", staged_);
+  state.Set("pending", pending_version_.empty()
+                           ? base::Value()
+                           : base::Value(base::DictValue()
+                                             .Set("version", pending_version_)
+                                             .Set("ready", staged_)));
   if (!error_.empty()) {
     state.Set("error", error_);
   }
@@ -489,7 +499,8 @@ bool UpdaterService::Dispatch(BrowserWindowInterface* browser,
     std::move(callback).Run(Success(base::Value(State())));
     return true;
   }
-  if (method != "checkForUpdates" && method != "setAutomaticUpdateChecks" &&
+  if (method != "checkForUpdates" && method != "installPendingUpdate" &&
+      method != "setAutomaticUpdateChecks" &&
       method != "setAutomaticUpdateDownloads") {
     return false;
   }
@@ -504,14 +515,23 @@ bool UpdaterService::Dispatch(BrowserWindowInterface* browser,
         Failure("An update operation is already in progress"));
     return true;
   }
-  if (method == "checkForUpdates") {
+  if (method == "checkForUpdates" || method == "installPendingUpdate") {
     if (!args.empty() || !browser) {
       std::move(callback).Run(
           Failure("A manual check requires a browser window"));
       return true;
     }
     prompt_browser_ = browser->GetWeakPtr();
-    Start(Operation::kCheck, true, std::move(callback));
+    if (method == "installPendingUpdate" && !pending_version_.empty()) {
+      if (staged_) {
+        Start(Operation::kInstall, true, std::move(callback));
+      } else {
+        PromptForUpdate(pending_version_);
+        std::move(callback).Run(Success());
+      }
+    } else {
+      Start(Operation::kCheck, true, std::move(callback));
+    }
     return true;
   }
   if (args.size() != 1 || !args[0].is_bool()) {
@@ -546,7 +566,9 @@ void UpdaterService::Start(Operation operation,
       FROM_HERE,
       base::BindOnce(&RunUpdater, executable_, powershell_, script_,
                      policy_.Clone(), mode,
-                     operation == Operation::kDeferredInstall),
+                     operation == Operation::kDeferredInstall,
+                     operation == Operation::kDeferredInstall ||
+                         (operation == Operation::kInstall && staged_)),
       base::BindOnce(&UpdaterService::Completed, weak_factory_.GetWeakPtr(),
                      operation, manual, quit_generation_, std::move(callback)));
 }
@@ -559,8 +581,14 @@ void UpdaterService::Completed(Operation operation,
   busy_ = false;
   install_in_flight_ = false;
   if (const auto* status = result.value.FindString("status");
-      status && (*status == "installing" || *status == "staged")) {
-    staged_ = true;
+      status && (*status == "available" || *status == "installing" ||
+                 *status == "staged")) {
+    const auto& version = *result.value.FindString("version");
+    if (pending_version_ != version)
+      staged_ = false;
+    pending_version_ = version;
+    if (*status != "available")
+      staged_ = true;
   }
   if ((operation == Operation::kInstall ||
        operation == Operation::kDeferredInstall) &&
@@ -620,6 +648,7 @@ void UpdaterService::Completed(Operation operation,
     staged_ = true;
   } else if (status_ == "up-to-date") {
     staged_ = false;
+    pending_version_.clear();
   } else if (status_ == "installing") {
     installing_ = true;
   }

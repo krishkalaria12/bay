@@ -51,7 +51,8 @@ function siteFromTitles(host: string, titles: string[]): string | undefined {
     const s = squash(site);
     return !!s && !!label && (s === label || (s.length >= 3 && (label.includes(s) || s.includes(label))));
   };
-  for (const [site] of ends(titles[0]!)) if (site.split(" ").length <= 3 && looksLikeHost(site) && titles.every((t) => ends(t).some(([s]) => s === site))) return site;
+  for (const [site] of ends(titles[0]!))
+    if (site.split(" ").length <= 3 && looksLikeHost(site) && titles.every((t) => ends(t).some(([s]) => s === site))) return site;
   if (titles.length < 2) return undefined;
   for (const [site] of ends(titles[0]!)) if (titles.every((t) => ends(t).some(([s]) => s === site))) return site;
   return undefined;

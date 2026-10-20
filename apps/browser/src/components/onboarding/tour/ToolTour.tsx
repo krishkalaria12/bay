@@ -2,8 +2,20 @@ import { Pressable, View } from "@bay/platform";
 import { Surface } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
-import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from "@bay/platform/motion";
-import { tensionSpring } from "../../../lib/springs";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  interpolate,
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from "@bay/platform/motion";
 import { hex, useTheme } from "../../../lib/theme";
 import { useWindowId } from "../../../store/hooks";
 import type { Rect } from "../../layout/geometry";
@@ -11,11 +23,7 @@ import { useHover } from "../../primitives";
 import { useOnboardingColors } from "../ui";
 import { locateAnchor } from "./anchors";
 import { endToolTour, openVideoTour, stepToolTour, useTour, videoTourUrl, type TourStop } from "./state";
-
-const CARD_WIDTH = 296;
-const GAP = 14;
-const MARGIN = 12;
-const SCRIM_REACH = 6000;
+import { TOUR_CARD_WIDTH, TOUR_GAP, TOUR_MARGIN, TOUR_SCRIM_REACH, TOUR_SPOT_SPRING } from "../constants";
 
 export function ToolTour() {
   const windowId = useWindowId();
@@ -49,8 +57,6 @@ export function ToolTour() {
 
 type Hole = Rect & { radius: number };
 type HoleValues = { x: SharedValue<number>; y: SharedValue<number>; w: SharedValue<number>; h: SharedValue<number>; r: SharedValue<number> };
-// Animated's old spring: tension 70, friction 10.
-const SPOT_SPRING = tensionSpring(70, 10);
 
 function Tour({ windowId }: { windowId: string }) {
   const theme = useTheme();
@@ -94,7 +100,7 @@ function Tour({ windowId }: { windowId: string }) {
       return;
     }
     // Layout (left/top/width/height), and the radius Ring follows.
-    const spring = (v: SharedValue<number>, toValue: number) => v.set(withSpring(toValue, SPOT_SPRING));
+    const spring = (v: SharedValue<number>, toValue: number) => v.set(withSpring(toValue, TOUR_SPOT_SPRING));
     (Object.keys(to) as (keyof typeof to)[]).forEach((k) => spring(hole[k], to[k]));
     spring(card.x, cardTo.x);
     spring(card.y, cardTo.y);
@@ -102,11 +108,11 @@ function Tour({ windowId }: { windowId: string }) {
 
   // The scrim: a frame whose border reaches past the window, around the hole, and four panes that take the clicks.
   const frame = useAnimatedStyle(() => ({
-    left: hole.x.get() - SCRIM_REACH,
-    top: hole.y.get() - SCRIM_REACH,
-    width: hole.w.get() + SCRIM_REACH * 2,
-    height: hole.h.get() + SCRIM_REACH * 2,
-    borderRadius: hole.r.get() + SCRIM_REACH,
+    left: hole.x.get() - TOUR_SCRIM_REACH,
+    top: hole.y.get() - TOUR_SCRIM_REACH,
+    width: hole.w.get() + TOUR_SCRIM_REACH * 2,
+    height: hole.h.get() + TOUR_SCRIM_REACH * 2,
+    borderRadius: hole.r.get() + TOUR_SCRIM_REACH,
   }));
   const above = useAnimatedStyle(() => ({ height: hole.y.get() }));
   const below = useAnimatedStyle(() => ({ top: hole.y.get() + hole.h.get() }));
@@ -117,15 +123,19 @@ function Tour({ windowId }: { windowId: string }) {
   const scrim = theme.dark ? "#00000080" : "#0000004D";
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
-      <Animated.View pointerEvents="none" style={[{ position: "absolute", borderWidth: SCRIM_REACH, borderColor: scrim, overflow: "hidden" }, frame]} />
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="box-none"
+      onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+    >
+      <Animated.View pointerEvents="none" style={[{ position: "absolute", borderWidth: TOUR_SCRIM_REACH, borderColor: scrim, overflow: "hidden" }, frame]} />
       <Animated.View style={[{ position: "absolute", left: 0, right: 0, top: 0 }, above]} />
       <Animated.View style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, below]} />
       <Animated.View style={[{ position: "absolute", left: 0 }, leftOf]} />
       <Animated.View style={[{ position: "absolute", right: 0 }, rightOf]} />
       {stop.anchor ? <Ring hole={hole} /> : null}
       <Animated.View
-        style={[{ position: "absolute", width: CARD_WIDTH }, cardStyle]}
+        style={[{ position: "absolute", width: TOUR_CARD_WIDTH }, cardStyle]}
         onLayout={(e) => setCardHeight(Math.round(e.nativeEvent.layout.height))}
       >
         <CoachMark stop={stop} index={index} count={stops.length} windowId={windowId} />
@@ -177,9 +187,7 @@ function CoachMark({ stop, index, count, windowId }: { stop: TourStop; index: nu
       shadowOffset={[0, 10]}
     >
       <View style={{ paddingHorizontal: 18, paddingTop: 15, paddingBottom: 14, gap: 7 }} accessibilityRole="none">
-        <Text style={{ fontSize: 10.5, fontWeight: "600", letterSpacing: 0.4, color: theme.textTertiary }}>
-          {`${index + 1} OF ${count}`}
-        </Text>
+        <Text style={{ fontSize: 10.5, fontWeight: "600", letterSpacing: 0.4, color: theme.textTertiary }}>{`${index + 1} OF ${count}`}</Text>
         <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.1, color: theme.textPrimary }}>{stop.title}</Text>
         <Text style={{ fontSize: 12.5, lineHeight: 18, color: theme.textSecondary }}>{stop.body}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 7, gap: 6 }}>
@@ -239,26 +247,32 @@ const sameRect = (a: Rect | null, b: Rect | null) =>
 function spotlight(stop: TourStop | undefined, target: Rect | null, size: { width: number; height: number }): Hole {
   if (!stop?.anchor || !target) return { x: size.width / 2, y: size.height / 2, width: 0, height: 0, radius: 0 };
   const pad = stop.pad ?? 4;
-  return { x: target.x - pad, y: target.y - pad, width: target.width + pad * 2, height: target.height + pad * 2, radius: (stop.radius ?? 8) + Math.max(0, pad) };
+  return {
+    x: target.x - pad,
+    y: target.y - pad,
+    width: target.width + pad * 2,
+    height: target.height + pad * 2,
+    radius: (stop.radius ?? 8) + Math.max(0, pad),
+  };
 }
 
 function placeCard(stop: TourStop | undefined, spot: Hole, size: { width: number; height: number }, height: number) {
-  const clampX = (x: number) => Math.min(Math.max(x, MARGIN), Math.max(MARGIN, size.width - CARD_WIDTH - MARGIN));
-  const clampY = (y: number) => Math.min(Math.max(y, MARGIN), Math.max(MARGIN, size.height - height - MARGIN));
-  const centre = { x: clampX(size.width / 2 - CARD_WIDTH / 2), y: clampY(size.height * 0.62 - height / 2) };
+  const clampX = (x: number) => Math.min(Math.max(x, TOUR_MARGIN), Math.max(TOUR_MARGIN, size.width - TOUR_CARD_WIDTH - TOUR_MARGIN));
+  const clampY = (y: number) => Math.min(Math.max(y, TOUR_MARGIN), Math.max(TOUR_MARGIN, size.height - height - TOUR_MARGIN));
+  const centre = { x: clampX(size.width / 2 - TOUR_CARD_WIDTH / 2), y: clampY(size.height * 0.62 - height / 2) };
   if (!stop?.anchor || !spot.width) return centre;
   switch (stop.placement) {
     case "right": {
-      const x = spot.x + spot.width + GAP;
-      if (x + CARD_WIDTH > size.width - MARGIN) return { x: clampX(spot.x), y: clampY(spot.y + spot.height + GAP) };
+      const x = spot.x + spot.width + TOUR_GAP;
+      if (x + TOUR_CARD_WIDTH > size.width - TOUR_MARGIN) return { x: clampX(spot.x), y: clampY(spot.y + spot.height + TOUR_GAP) };
       return { x, y: clampY(spot.y + spot.height / 2 - 36) };
     }
     case "inside":
-      return { x: clampX(spot.x + spot.width / 2 - CARD_WIDTH / 2), y: clampY(spot.y + spot.height * 0.7 - height / 2) };
+      return { x: clampX(spot.x + spot.width / 2 - TOUR_CARD_WIDTH / 2), y: clampY(spot.y + spot.height * 0.7 - height / 2) };
     default: {
-      const below = spot.y + spot.height + GAP;
-      const y = below + height > size.height - MARGIN ? spot.y - GAP - height : below;
-      const x = spot.width < CARD_WIDTH / 2 ? spot.x - 10 : spot.x + spot.width / 2 - CARD_WIDTH / 2;
+      const below = spot.y + spot.height + TOUR_GAP;
+      const y = below + height > size.height - TOUR_MARGIN ? spot.y - TOUR_GAP - height : below;
+      const x = spot.width < TOUR_CARD_WIDTH / 2 ? spot.x - 10 : spot.x + spot.width / 2 - TOUR_CARD_WIDTH / 2;
       return { x: clampX(x), y: clampY(y) };
     }
   }

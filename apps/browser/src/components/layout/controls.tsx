@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, Surface, Symbol, VisualEffect, type SymbolProps } from "@bay/shell";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { StyleSheet, Text, type GestureResponderEvent, type ViewStyle } from "react-native";
 import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
@@ -44,12 +44,7 @@ export function ToolbarButton({
 }) {
   const { hovered, hoverProps } = useHover();
   const button = (
-    <Pressable
-      onPress={(e) => onPress?.(modifiersOf(e))}
-      onLongPress={onLongPress}
-      delayLongPress={450}
-      disabled={disabled}
-    >
+    <Pressable onPress={(e) => onPress?.(modifiersOf(e))} onLongPress={onLongPress} delayLongPress={450} disabled={disabled}>
       {({ pressed }) => (
         <View
           style={{
@@ -61,7 +56,13 @@ export function ToolbarButton({
             backgroundColor: disabled ? undefined : pressed ? palette.pressed : hovered ? palette.hover : undefined,
           }}
         >
-          <Symbol name={icon} size={size} weight={weight} color={color ?? (disabled ? palette.iconDisabled : palette.icon)} style={{ width: box, height: box }} />
+          <Symbol
+            name={icon}
+            size={size}
+            weight={weight}
+            color={color ?? (disabled ? palette.iconDisabled : palette.icon)}
+            style={{ width: box, height: box }}
+          />
         </View>
       )}
     </Pressable>
@@ -156,7 +157,12 @@ export function PopoverRow({
         alignItems: "center",
         gap: 9,
         opacity: disabled ? 0.45 : 1,
-        backgroundColor: onPress && !disabled && (pressed || hovered) ? (theme.dark ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})` : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`) : undefined,
+        backgroundColor:
+          onPress && !disabled && (pressed || hovered)
+            ? theme.dark
+              ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})`
+              : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`
+            : undefined,
       }}
     >
       {icon ? <Symbol name={icon} size={13} color={iconColor ?? (destructive ? tint : theme.icon)} style={{ width: 18, height: 18 }} /> : null}
@@ -185,7 +191,16 @@ export function PopoverRow({
 
 export function PopoverSeparator() {
   const theme = useTheme();
-  return <View style={{ height: StyleSheet.hairlineWidth, marginVertical: 5, marginHorizontal: 13, backgroundColor: theme.dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)" }} />;
+  return (
+    <View
+      style={{
+        height: StyleSheet.hairlineWidth,
+        marginVertical: 5,
+        marginHorizontal: 13,
+        backgroundColor: theme.dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)",
+      }}
+    />
+  );
 }
 
 export function PromptButton({ title, onPress, primary, flex }: { title: string; onPress: () => void; primary?: boolean; flex?: boolean }) {
@@ -204,8 +219,16 @@ export function PromptButton({ title, onPress, primary, flex }: { title: string;
               justifyContent: "center",
               backgroundColor: primary
                 ? theme.dark
-                  ? pressed ? "#C9B8C5" : hovered ? "#E6D8E2" : theme.goButton
-                  : pressed ? "#26314A" : hovered ? "#1B2640" : theme.goButton
+                  ? pressed
+                    ? "#C9B8C5"
+                    : hovered
+                      ? "#E6D8E2"
+                      : theme.goButton
+                  : pressed
+                    ? "#26314A"
+                    : hovered
+                      ? "#1B2640"
+                      : theme.goButton
                 : theme.dark
                   ? `rgba(255,255,255,${pressed ? 0.18 : hovered ? 0.14 : 0.1})`
                   : `rgba(0,0,0,${pressed ? 0.12 : hovered ? 0.09 : 0.06})`,

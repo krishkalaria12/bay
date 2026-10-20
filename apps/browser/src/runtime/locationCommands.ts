@@ -1,5 +1,5 @@
 import type { BrowserState, BrowserStore } from "../store/browser";
-import { activeTabId, isIncognitoProfile } from "../store/model";
+import { activeTabId, isIncognitoSpace, tabListKey } from "../store/model";
 import { mainWindowFor } from "../store/small";
 
 export type LocationCommand =
@@ -20,7 +20,9 @@ export class LocationCommandError extends Error {
   }
 }
 
-const invalid = (message: string): never => { throw new LocationCommandError(message); };
+const invalid = (message: string): never => {
+  throw new LocationCommandError(message);
+};
 const MAX_TEXT_LENGTH = 1_048_576;
 const MAX_ID_LENGTH = 1024;
 function text(value: unknown, limit: number, empty = false): string {
@@ -28,9 +30,10 @@ function text(value: unknown, limit: number, empty = false): string {
   return value;
 }
 
-/** Only user intents cross this boundary; profiles and opener relationships come from the store. */
+/** Only user intents cross this boundary; spaces and opener relationships come from the store. */
 export function parseLocationCommand(value: unknown): LocationCommand {
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return invalid("expected a command object");
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype)
+    return invalid("expected a command object");
   const c = value as Record<string, unknown>;
   const fields = (...allowed: string[]) => {
     if (Object.keys(c).some((key) => !allowed.includes(key))) invalid("unexpected command field");
@@ -40,7 +43,8 @@ export function parseLocationCommand(value: unknown): LocationCommand {
     case "openLocation": {
       fields("method", "sourceTabId", "url", "disposition");
       const disposition = c.disposition;
-      if (disposition !== "current" && disposition !== "newTab" && disposition !== "backgroundTab" && disposition !== "newWindow") return invalid("invalid location disposition");
+      if (disposition !== "current" && disposition !== "newTab" && disposition !== "backgroundTab" && disposition !== "newWindow")
+        return invalid("invalid location disposition");
       return { method: c.method, sourceTabId: text(c.sourceTabId, MAX_ID_LENGTH), url: text(c.url, MAX_TEXT_LENGTH), disposition };
     }
     case "switchToExistingTab":
@@ -58,25 +62,39 @@ export function parseLocationCommand(value: unknown): LocationCommand {
     case "openCommandPanel":
       fields("method", "windowId", "initialText", "sourceTabId");
       return {
-        method: c.method, windowId: windowId(),
+        method: c.method,
+        windowId: windowId(),
         ...(c.initialText !== undefined ? { initialText: text(c.initialText, MAX_TEXT_LENGTH, true) } : {}),
         ...(c.sourceTabId !== undefined ? { sourceTabId: text(c.sourceTabId, MAX_ID_LENGTH) } : {}),
       };
-    default: return invalid("unknown location command");
+    default:
+      return invalid("unknown location command");
   }
 }
 
 function requireWindow(s: BrowserState, id: string) {
   const window = s.windows[id];
-  if (!window || window.id !== id || (window.incognito ? window.profileId !== `incognito:${id}` : !s.profiles[window.profileId])) return invalid("window no longer exists");
+  if (!window || window.id !== id || (window.incognito ? window.spaceId !== `incognito:${id}` : !s.spaces[window.spaceId]))
+    return invalid("window no longer exists");
   return window;
 }
 
-function requireTab(s: BrowserState, id: string) {
+function requireStoredTab(s: BrowserState, id: string) {
   const tab = s.tabs[id];
-  if (!tab || tab.id !== id) return invalid("tab no longer exists");
+  if (!tab || tab.id !== id || !s.tabLists[tabListKey(s, tab)]?.includes(id)) return invalid("tab no longer exists");
+  if (isIncognitoSpace(tab.spaceId)) {
+    const window = requireWindow(s, tab.windowId);
+    if (!window.incognito || tab.spaceId !== window.spaceId) return invalid("tab does not belong to its private window");
+  } else {
+    if (!s.spaces[tab.spaceId]) return invalid("tab space no longer exists");
+    if (tab.windowId && requireWindow(s, tab.windowId).incognito) return invalid("tab does not belong to its window");
+  }
+  return tab;
+}
+
+function requireTab(s: BrowserState, id: string) {
+  const tab = requireStoredTab(s, id);
   const window = requireWindow(s, tab.windowId);
-  if (!window.tabIds.includes(id) || (window.incognito ? tab.profileId !== window.profileId : isIncognitoProfile(tab.profileId) || !s.profiles[tab.profileId])) return invalid("tab does not belong to its window");
   return { tab, window };
 }
 
@@ -91,33 +109,37 @@ export function executeLocationCommand(store: BrowserStore, command: LocationCom
     case "openLocation": {
       const { tab, window } = requireTab(s, command.sourceTabId);
       if (command.disposition === "current") s.navigate(tab.id, command.url);
-      else if (command.disposition === "backgroundTab") s.newTab(window.id, { url: command.url, profileId: tab.profileId, background: true });
+      else if (command.disposition === "backgroundTab") s.newTab(window.id, { url: command.url, spaceId: tab.spaceId, background: true });
       else {
         s.closePanel(window.id);
-        if (command.disposition === "newTab") store.getState().newTab(window.id, { url: command.url, profileId: tab.profileId, openerId: tab.url ? tab.id : undefined });
-        else store.getState().createWindow(window.incognito ? { incognito: true, url: command.url } : { profileId: tab.profileId, url: command.url });
+        if (command.disposition === "newTab")
+          store.getState().newTab(window.id, { url: command.url, spaceId: tab.spaceId, openerId: tab.url ? tab.id : undefined });
+        else store.getState().createWindow(window.incognito ? { incognito: true, url: command.url } : { spaceId: tab.spaceId, url: command.url });
       }
       break;
     }
     case "switchToExistingTab": {
       const source = requireTab(s, command.sourceTabId);
-      const target = requireTab(s, command.targetTabId);
-      if (source.window.incognito || target.window.incognito) {
-        if (source.window.id !== target.window.id) return invalid("target tab is outside this private window");
+      const target = requireStoredTab(s, command.targetTabId);
+      if (source.window.incognito || isIncognitoSpace(target.spaceId)) {
+        if (source.window.id !== target.windowId) return invalid("target tab is outside this private window");
       }
       s.closePanel(source.window.id);
-      store.getState().activate(target.tab.id);
-      if (target.window.id !== store.getState().ui.focusedWindowId) focus(target.window.id);
+      // Match switchToTab: keep a tab with its page owner, otherwise let the
+      // store choose a main window for its shared space list.
+      store.getState().activate(target.id, target.windowId || undefined);
+      const shown = store.getState().tabs[target.id]!.windowId;
+      if (shown && shown !== store.getState().ui.focusedWindowId) focus(shown);
       break;
     }
     case "requestNewTab": {
       const window = requireWindow(s, command.windowId);
       if (command.groupId) {
         const group = s.groups[command.groupId];
-        if (!group || group.windowId !== window.id || group.profileId !== window.profileId) return invalid("group does not belong to this window and profile");
+        if (!group || group.spaceId !== window.spaceId) return invalid("group does not belong to this window and space");
       }
-      const main = window.kind === "small" ? mainWindowFor(s, window.profileId) : window.id;
-      const target = main ?? s.createWindow({ profileId: window.profileId });
+      const main = window.kind === "small" ? mainWindowFor(s, window.spaceId) : window.id;
+      const target = main ?? s.createWindow({ spaceId: window.spaceId });
       if (main) store.getState().openNewTabPanel(target, target === window.id ? command.groupId : undefined);
       else store.getState().openPanel(target);
       if (target !== window.id) focus(target);

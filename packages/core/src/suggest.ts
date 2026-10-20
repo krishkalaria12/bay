@@ -1,4 +1,6 @@
 import { calculate } from "./calculator.ts";
+import { parseCurrency, type CurrencyAnswer } from "./currency.ts";
+import { findEmoji } from "./emoji.ts";
 import { BUILT_IN_ENGINES, searchUrl, type SearchEngine } from "./engines.ts";
 import { matchActions, type ActionCandidate } from "./fuzzy.ts";
 import { fixupUrl, hostOf, urlForDisplay } from "./omnibox.ts";
@@ -9,6 +11,8 @@ export type SuggestionSource = {
   tabs: readonly { id: string; url: string; title: string; favicon: string | null }[];
   history: readonly { url: string; title: string; favicon: string | null; visits: number; lastVisit: number }[];
   bookmarks?: readonly { url: string; title: string; favicon: string | null }[];
+  // Tabs the clean up put away (Arc's archive), newest first: a row for one restores it rather than opening its page.
+  cleaned?: readonly { id: string; url: string; title: string; favicon: string | null; closedAt: number }[];
 };
 
 export type CommandAction = ActionCandidate & { icon?: string; hint?: string };
@@ -20,11 +24,13 @@ export type Suggestion =
       title: string;
       favicon: string | null;
       tabId?: string;
+      cleanedId?: string;
       bookmarked?: boolean;
       visited?: boolean;
     }
   | { kind: "search"; query: string; url: string; engine: string; suggested?: boolean }
-  | { kind: "calc"; expression: string; value: string; url: string }
+  | { kind: "calc"; expression: string; value: string; url: string; detail?: string }
+  | { kind: "emoji"; value: string; name: string }
   | { kind: "action"; id: string; title: string; icon?: string; hint?: string }
   | { kind: "create"; id: string; title: string; url: string; site: string };
 
@@ -48,6 +54,8 @@ export type SuggestOptions = {
   currentTabId?: string;
   currentUrl?: string;
   scope?: SearchScope | null;
+  currency?: CurrencyAnswer | null;
+  calculatorEnabled?: boolean;
 };
 
 export function displayUrl(url: string): string {
@@ -60,6 +68,7 @@ const pageKey = (url: string) => url.replace(/#.*$/, "").replace(/\/$/, "");
 type HistoryRow = SuggestionSource["history"][number];
 type BookmarkRow = NonNullable<SuggestionSource["bookmarks"]>[number];
 type TabRow = SuggestionSource["tabs"][number];
+type CleanedRow = NonNullable<SuggestionSource["cleaned"]>[number];
 
 type PageText = {
   url: string;
@@ -94,6 +103,7 @@ type Candidate = {
   lastVisit: number;
   bookmarked: boolean;
   tabId?: string;
+  cleanedId?: string;
   text: PageText;
 };
 
@@ -116,6 +126,7 @@ type Builder = {
 const bases = new WeakMap<readonly BookmarkRow[], BookmarkBase>();
 const builders = new WeakMap<readonly HistoryRow[], WeakMap<readonly BookmarkRow[], Builder>>();
 const NO_BOOKMARKS: readonly BookmarkRow[] = [];
+const NO_CLEANED: readonly CleanedRow[] = [];
 // A history row's candidate, kept while its bookmark flag holds, so a new history list reuses them.
 const historyCandidates = new WeakMap<HistoryRow, Candidate>();
 const SLICE_CHECK = 64;
@@ -203,17 +214,28 @@ export function prepareSuggestions(source: SuggestionSource, deadline: number): 
   return advance(b, bookmarks, deadline);
 }
 
-function tabsOver(pool: Pool, tabs: readonly TabRow[], now: number, currentTabId?: string) {
+// Open tabs, then cleaned up ones, over the pool: a page open in a tab switches to it rather than restoring a copy.
+function tabsOver(pool: Pool, tabs: readonly TabRow[], cleaned: readonly CleanedRow[], now: number, currentTabId?: string) {
   const tabIds = new Map<string, string>();
+  const cleanedIds = new Map<string, string>();
   const extra: Candidate[] = [];
   for (const t of tabs) {
     if (!t.url || t.id === currentTabId) continue;
     const text = pageText(t);
     if (tabIds.has(text.key)) continue;
     tabIds.set(text.key, t.id);
-    if (!pool.byKey.has(text.key)) extra.push({ url: t.url, title: t.title, favicon: t.favicon, visits: 0, lastVisit: now, bookmarked: false, tabId: t.id, text });
+    if (!pool.byKey.has(text.key))
+      extra.push({ url: t.url, title: t.title, favicon: t.favicon, visits: 0, lastVisit: now, bookmarked: false, tabId: t.id, text });
   }
-  return { tabIds, extra };
+  for (const c of cleaned) {
+    if (!c.url) continue;
+    const text = pageText(c);
+    if (tabIds.has(text.key) || cleanedIds.has(text.key)) continue;
+    cleanedIds.set(text.key, c.id);
+    if (!pool.byKey.has(text.key))
+      extra.push({ url: c.url, title: c.title, favicon: c.favicon, visits: 0, lastVisit: c.closedAt, bookmarked: false, cleanedId: c.id, text });
+  }
+  return { tabIds, cleanedIds, extra };
 }
 
 const isWordChar = (code: number) => (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
@@ -266,9 +288,9 @@ function matchScore(t: PageText, query: Query): number {
   return s;
 }
 
-function frecency(c: Candidate, tabId: string | undefined, now: number): number {
+function frecency(c: Candidate, tabId: string | undefined, cleanedId: string | undefined, now: number): number {
   const ageDays = c.lastVisit ? Math.max(0, (now - c.lastVisit) / DAY) : 10;
-  return Math.log2(1 + c.visits) * 8 - Math.min(ageDays, 30) + (c.bookmarked ? 20 : 0) + (tabId ? 6 : 0);
+  return Math.log2(1 + c.visits) * 8 - Math.min(ageDays, 30) + (c.bookmarked ? 20 : 0) + (tabId ? 6 : cleanedId ? 4 : 0);
 }
 
 let lastMatches: { pool: Pool; q: string; tokens: string[]; pages: Candidate[] } | null = null;
@@ -281,7 +303,7 @@ function narrowing(pool: Pool, q: string, tokens: readonly string[]): Candidate[
   return i === 0 || word === tokens[i] || word.length >= 3 ? last.pages : null;
 }
 
-type Ranked = { c: Candidate; tabId: string | undefined; m: number; s: number };
+type Ranked = { c: Candidate; tabId: string | undefined; cleanedId: string | undefined; m: number; s: number };
 
 class TopList {
   readonly items: Ranked[] = [];
@@ -299,12 +321,12 @@ class TopList {
   }
 }
 
-const pageSuggestion = (c: Candidate, tabId = c.tabId): Suggestion => ({
+const pageSuggestion = (c: Candidate, tabId = c.tabId, cleanedId = c.cleanedId): Suggestion => ({
   kind: "page",
   url: c.url,
   title: c.title,
   favicon: c.favicon,
-  ...(tabId ? { tabId } : {}),
+  ...(tabId ? { tabId } : cleanedId ? { cleanedId } : {}),
   ...(c.bookmarked ? { bookmarked: true } : {}),
   ...(c.visits > 0 ? { visited: true } : {}),
 });
@@ -317,6 +339,8 @@ export function suggestionKey(s: Suggestion): string {
       return `search:${s.url}`;
     case "calc":
       return `calc:${s.expression}`;
+    case "emoji":
+      return `emoji:${s.value}`;
     case "action":
       return `action:${s.id}`;
     case "create":
@@ -336,17 +360,21 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
     if (!text) return { items: [], completion: "" };
     const out = new Output(limit);
     out.push({ kind: "search", query: text, url: searchUrl(engine, text), engine: engine.name });
-    out.push(...dedupeSuggestions(remote, text).slice(0, remoteLimit).map((t): Suggestion => ({ kind: "search", query: t, url: searchUrl(engine, t), engine: engine.name, suggested: true })));
+    out.push(
+      ...dedupeSuggestions(remote, text)
+        .slice(0, remoteLimit)
+        .map((t): Suggestion => ({ kind: "search", query: t, url: searchUrl(engine, t), engine: engine.name, suggested: true })),
+    );
     return { items: out.items, completion: "" };
   }
 
   const pool = poolFor(source.history, source.bookmarks ?? NO_BOOKMARKS);
-  const { tabIds, extra } = tabsOver(pool, source.tabs, now, options.currentTabId);
+  const { tabIds, cleanedIds, extra } = tabsOver(pool, source.tabs, source.cleaned ?? NO_CLEANED, now, options.currentTabId);
   const currentKey = options.currentUrl ? pageKey(options.currentUrl) : null;
   const known = (url: string) => {
     const key = pageKey(url);
     const c = pool.byKey.get(key) ?? extra.find((x) => x.text.key === key);
-    return c && pageSuggestion(c, tabIds.get(key));
+    return c && pageSuggestion(c, tabIds.get(key), cleanedIds.get(key));
   };
 
   const websiteFirst = preference === "website";
@@ -364,8 +392,9 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
       if (m <= 0) continue;
       if (list === pages) matched.push(c);
       const tabId = c.tabId ?? tabIds.get(c.text.key);
+      const cleanedId = tabId ? undefined : (c.cleanedId ?? cleanedIds.get(c.text.key));
       const derank = currentKey !== null && c.text.key === currentKey ? 80 : 0;
-      const r: Ranked = { c, tabId, m, s: m + frecency(c, tabId, now) - derank };
+      const r: Ranked = { c, tabId, cleanedId, m, s: m + frecency(c, tabId, cleanedId, now) - derank };
       top.offer(r);
       if (onSite) {
         const host = hostOfPage(c.text);
@@ -387,13 +416,17 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
     const scopedUrl = (text: string) => scopedSearchUrl(scope, text, engine);
     out.push({ kind: "search", query, url: scopedUrl(query), engine: scope.name });
     out.push(...remoteRows(scopedUrl, scope.name));
-    out.push(...onSite!.items.map((x) => pageSuggestion(x.c, x.tabId)));
+    out.push(...onSite!.items.map((x) => pageSuggestion(x.c, x.tabId, x.cleanedId)));
     return { items: out.items, completion: "" };
   }
 
   const search: Suggestion = { kind: "search", query, url: searchUrl(engine, query), engine: engine.name };
   const typedUrl = fixupUrl(query);
-  const calc = calculate(query);
+  const calculatorEnabled = options.calculatorEnabled !== false;
+  const calc = calculatorEnabled ? calculate(query) : null;
+  const currency = calculatorEnabled && options.currency?.expression === parseCurrency(query)?.expression ? options.currency : null;
+  const answer = currency ?? calc;
+  const emoji = findEmoji(query).map((match): Suggestion => ({ kind: "emoji", ...match }));
   const creates = matchQuickCreate(raw.trimStart());
   const actionMatches = matchActions(query, actions, 3).filter((m) => m.exact || m.score >= 50);
 
@@ -406,20 +439,28 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   else if (actionMatches[0]?.exact) first = actionRow(actionMatches[0].action);
   else if (target && completion) first = known(target.url) ?? { kind: "page", url: target.url, title: "", favicon: target.favicon };
   else if (typedUrl) first = known(typedUrl) ?? { kind: "page", url: typedUrl, title: "", favicon: null };
-  else if (websiteFirst && best && best.m >= 40) first = pageSuggestion(best.c, best.tabId);
+  else if (websiteFirst && best && best.m >= 40) first = pageSuggestion(best.c, best.tabId, best.cleanedId);
   else first = search;
 
+  out.push(...emoji);
+  if (answer)
+    out.push({
+      kind: "calc",
+      expression: answer.expression,
+      value: answer.display,
+      url: searchUrl(engine, answer.expression),
+      ...(currency ? { detail: currency.detail } : {}),
+    });
   out.push(first);
   out.push(search);
-  if (calc) out.push({ kind: "calc", expression: calc.expression, value: calc.display, url: searchUrl(engine, calc.expression) });
   out.push(...actionMatches.slice(0, 2).map((m) => actionRow(m.action)));
   out.push(...creates.map(createRow));
-  const pageRows = ranked.map((x) => pageSuggestion(x.c, x.tabId));
+  const pageRows = ranked.map((x) => pageSuggestion(x.c, x.tabId, x.cleanedId));
   const ahead = options.remoteFirst ? 0 : 3;
   out.push(...pageRows.slice(0, ahead));
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));
   out.push(...pageRows.slice(ahead));
-  return { items: out.items, completion };
+  return { items: out.items, completion: answer || emoji.length ? "" : completion };
 }
 
 function inlineMatch(t: PageText, q: string): boolean {
@@ -453,7 +494,13 @@ class Output {
   }
 }
 
-const createRow = (c: { id: string; title: string; url: string; site: string }): Suggestion => ({ kind: "create", id: c.id, title: c.title, url: c.url, site: c.site });
+const createRow = (c: { id: string; title: string; url: string; site: string }): Suggestion => ({
+  kind: "create",
+  id: c.id,
+  title: c.title,
+  url: c.url,
+  site: c.site,
+});
 
 const actionRow = (a: CommandAction): Suggestion => ({
   kind: "action",

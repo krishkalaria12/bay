@@ -7,7 +7,7 @@ import { create } from "zustand";
 import { pruneProfileFavicons } from "../../lib/favicons";
 import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
-import { engineProfile, isIncognitoProfile, profileFor } from "../../store/model";
+import { engineProfile, isIncognitoSpace, spaceFor } from "../../store/model";
 import { Button, Checkbox, PopUp } from "../settings/controls";
 
 const RANGES = [
@@ -24,10 +24,9 @@ export const useClearDataRequest = create<{ windowId: string | null; request(win
   request: (windowId) => set({ windowId }),
 }));
 
-export function ClearDataDialog({ profileId, onClose }: { profileId: string; onClose: () => void }) {
+export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const theme = useTheme();
-  const profileName = useBrowser((s) => profileFor(s, profileId).name);
-  const multipleProfiles = useBrowser((s) => s.profileOrder.length > 1);
+  const spaceName = useBrowser((s) => spaceFor(s, spaceId).name);
   const [range, setRange] = useState<Range>("hour");
   const [history, setHistory] = useState(true);
   const [siteData, setSiteData] = useState(true);
@@ -38,11 +37,11 @@ export function ClearDataDialog({ profileId, onClose }: { profileId: string; onC
     const ms = RANGES.find((r) => r.value === range)!.ms;
     const since = ms === Infinity ? undefined : Date.now() - ms;
     if (history) {
-      useBrowser.getState().clearHistory(profileId, since);
-      pruneProfileFavicons(profileId);
+      useBrowser.getState().clearHistory(spaceId, since);
+      pruneProfileFavicons(spaceId);
     }
     const types: BrowsingDataType[] = [...(history ? ["history" as const] : []), ...(siteData ? ["siteData" as const, "cache" as const] : [])];
-    if (types.length && !isIncognitoProfile(profileId)) await clearBrowsingData(engineProfile(profileId), types, since);
+    if (types.length && !isIncognitoSpace(spaceId)) await clearBrowsingData(engineProfile(spaceId), types, since);
     setBusy(false);
     onClose();
   };
@@ -62,19 +61,14 @@ export function ClearDataDialog({ profileId, onClose }: { profileId: string; onC
         style={{ width: 440, padding: 20 }}
       >
         <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>Clear Browsing Data</Text>
-        {multipleProfiles && <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>{`From your ${profileName} space`}</Text>}
+        <Text style={{ fontSize: 12, marginTop: 4, color: theme.textSecondary }}>{`From your ${spaceName} space`}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 16, gap: 10 }}>
           <Text style={{ fontSize: 13, color: theme.textPrimary }}>Time range</Text>
           <PopUp value={range} options={RANGES.map(({ value, title }) => ({ value, title }))} onChange={setRange} minWidth={150} />
         </View>
         <View style={{ marginTop: 16, gap: 12 }}>
           <Option value={history} onChange={setHistory} title="Browsing history" subtitle="Clears the pages you visited from History and the command bar." />
-          <Option
-            value={siteData}
-            onChange={setSiteData}
-            title="Cookies, site data and cached files"
-            subtitle="Signs you out of most sites."
-          />
+          <Option value={siteData} onChange={setSiteData} title="Cookies, site data and cached files" subtitle="Signs you out of most sites." />
         </View>
         <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 22 }}>
           <Button title="Cancel" onPress={onClose} />

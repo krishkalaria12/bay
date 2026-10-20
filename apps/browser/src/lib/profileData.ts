@@ -1,9 +1,10 @@
 import { deleteProfileData } from "@bay/nncore";
 import { useBrowser, type BrowserStore } from "../store/browser";
+import { engineIdOf } from "../store/spaces";
+import { PROFILE_CLOSE_DELAY_MS } from "./constants";
 
 // A deleted profile's engine data goes once its web views have closed. What can't be deleted stays queued
 // (in session.json) and is tried again at the next launch.
-const CLOSE_DELAY_MS = 1500;
 
 export function createProfileDataCleanup(browser: BrowserStore) {
   const failed = new Set<string>();
@@ -22,13 +23,19 @@ export function createProfileDataCleanup(browser: BrowserStore) {
         if (engine === undefined) return;
         await new Promise<void>((resolve) => {
           releaseDelay = resolve;
-          delay = setTimeout(resolve, CLOSE_DELAY_MS);
+          delay = setTimeout(resolve, PROFILE_CLOSE_DELAY_MS);
         });
         if (generation !== run || !stopListening) return;
         delay = undefined;
         releaseDelay = undefined;
+        const state = browser.getState();
         // A profile restored during the delay must retain its data.
-        if (!browser.getState().orphanedProfileData.includes(engine)) continue;
+        if (!state.orphanedProfileData.includes(engine)) continue;
+        // Another space still signs in with it.
+        if (Object.values(state.spaces).some((space) => engineIdOf(space) === engine)) {
+          state.profileDataDeleted(engine);
+          continue;
+        }
         const remaining = await deleteProfileData(engine).catch((error: unknown) => [String(error)]);
         if (generation !== run || !stopListening) return;
         if (remaining.length) {
@@ -58,7 +65,9 @@ export function createProfileDataCleanup(browser: BrowserStore) {
   function start() {
     if (stopListening) {
       const run = generation;
-      return () => { if (generation === run) dispose(); };
+      return () => {
+        if (generation === run) dispose();
+      };
     }
     failed.clear();
     const run = generation;
@@ -66,7 +75,9 @@ export function createProfileDataCleanup(browser: BrowserStore) {
       if (s.orphanedProfileData !== prev.orphanedProfileData) void drain(run);
     });
     void drain(run);
-    return () => { if (generation === run) dispose(); };
+    return () => {
+      if (generation === run) dispose();
+    };
   }
 
   return { start, dispose };

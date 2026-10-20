@@ -3,21 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "description": "End-to-end-encrypted sync through a folder the user chooses (iCloud Drive, Dropbox, a NAS, a USB drive)",
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "node ../../scripts/test-native.mjs sync && node --test \"src/**/*.test.ts\""
   },
-  "peerDependencies": {
-    "expo": "*",
-    "react-native": "*"
+  "dependencies": {
+    "@bay/platform": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.13.6"
   },
-  "dependencies": {
-    "@bay/platform": "workspace:*"
+  "peerDependencies": {
+    "expo": "*",
+    "react-native": "*"
   }
 }

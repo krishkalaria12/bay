@@ -6,9 +6,7 @@ import { useTheme } from "../../lib/theme";
 import { Popover } from "../layout/controls";
 import { useHover } from "../primitives";
 import { answerDeveloperOffer, useDeveloperOffer } from "./devMode";
-import { DEVELOPER_YELLOW } from "./sites";
-
-const WIDTH = 380;
+import { DEVELOPER_OFFER_WIDTH, DEVELOPER_YELLOW } from "./constants";
 
 /**
  * "Turn on Developer Mode for localhost:3000?", over a local server's page the first time it's shown. It takes the
@@ -17,7 +15,7 @@ const WIDTH = 380;
 export function DeveloperOffer({ tabId, left, top, paneWidth }: { tabId: string; left: number; top: number; paneWidth: number }) {
   const site = useDeveloperOffer(tabId);
   if (!site) return null;
-  return <Offer key={site} tabId={tabId} site={site} left={left} top={top} width={Math.min(WIDTH, paneWidth - 2 * left)} />;
+  return <Offer key={site} tabId={tabId} site={site} left={left} top={top} width={Math.min(DEVELOPER_OFFER_WIDTH, paneWidth - 2 * left)} />;
 }
 
 function Offer({ tabId, site, left, top, width }: { tabId: string; site: string; left: number; top: number; width: number }) {
@@ -56,7 +54,9 @@ function Offer({ tabId, site, left, top, width }: { tabId: string; site: string;
           </View>
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={{ fontSize: 14, fontWeight: "600", color: theme.textPrimary }}>Turn on Developer Mode for {site}?</Text>
-            <Text style={{ fontSize: 12, lineHeight: 16, color: theme.textSecondary }}>Its whole address over the page, with an inspector, screenshots and DevTools a click away.</Text>
+            <Text style={{ fontSize: 12, lineHeight: 16, color: theme.textSecondary }}>
+              Its whole address over the page, with an inspector, screenshots and DevTools a click away.
+            </Text>
           </View>
         </View>
         <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
@@ -81,9 +81,21 @@ function KeyButton({ title, keyLabel, primary, onPress }: { title: string; keyLa
   return (
     <View {...hoverProps}>
       <Pressable onPress={onPress}>
-        <View style={{ height: 30, borderRadius: 8, paddingLeft: 11, paddingRight: 4, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: fill }}>
+        <View
+          style={{ height: 30, borderRadius: 8, paddingLeft: 11, paddingRight: 4, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: fill }}
+        >
           <Text style={{ fontSize: 13, fontWeight: "500", color: text }}>{title}</Text>
-          <View style={{ minWidth: 24, height: 22, borderRadius: 5, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", backgroundColor: light ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.12)" }}>
+          <View
+            style={{
+              minWidth: 24,
+              height: 22,
+              borderRadius: 5,
+              paddingHorizontal: 5,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: light ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.12)",
+            }}
+          >
             <Text style={{ fontSize: 11.5, fontWeight: "500", color: text, opacity: 0.75 }}>{keyLabel}</Text>
           </View>
         </View>

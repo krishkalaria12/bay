@@ -58,9 +58,25 @@ test("actions run their handlers with the row's URL", () => {
 });
 
 test("rows without a URL only offer their primary action", () => {
-  assert.deepEqual(summary(rowMenuActions({ kind: "action", id: "copyUrl", title: "Copy Link", icon: "link" }, false, [], handlers)), [["Copy Link", "↩", false]]);
+  assert.deepEqual(summary(rowMenuActions({ kind: "action", id: "copyUrl", title: "Copy Link", icon: "link" }, false, [], handlers)), [
+    ["Copy Link", "↩", false],
+  ]);
   assert.equal(forgettable(page({ visited: false })), false);
   assert.equal(forgettable({ kind: "search", query: "q", url: "https://s/?q", engine: "e" }), false);
+});
+
+test("emoji rows only copy the emoji, including from the new tab panel", () => {
+  const emoji = { kind: "emoji", value: "👩🏽‍💻", name: "woman technologist: medium skin tone" };
+  const chosen = [];
+  const copyHandlers = { ...handlers, choose: (...args) => chosen.push(args) };
+  for (const newTabPanel of [false, true]) {
+    const actions = rowMenuActions(emoji, newTabPanel, [], copyHandlers);
+    assert.deepEqual(summary(actions), [["Copy Emoji", "↩", false]]);
+    assert.equal(actions[0].icon, "doc.on.doc");
+    actions[0].run();
+    assert.equal(forgettable(emoji), false);
+  }
+  assert.deepEqual(chosen, [[emoji], [emoji]]);
 });
 
 const engines = ["https://www.google.com/search?q=%s", "https://duckduckgo.com/?q=%s", "https://www.google.com/maps/search/%s"];
@@ -68,9 +84,15 @@ const engines = ["https://www.google.com/search?q=%s", "https://duckduckgo.com/?
 test("search suggestions and visited search results pages can't be forgotten", () => {
   const results = page({ url: "https://www.google.com/search?q=bay+browser&sca_esv=1", title: "bay browser - Google Search" });
   assert.equal(forgettable(results, engines), false);
-  assert.equal(rowMenuActions(results, false, engines, handlers).some((a) => a.id === "forget"), false);
+  assert.equal(
+    rowMenuActions(results, false, engines, handlers).some((a) => a.id === "forget"),
+    false,
+  );
   const suggestion = { kind: "search", query: "bay", url: "https://www.google.com/search?q=bay", engine: "Google", suggested: true };
-  assert.equal(rowMenuActions(suggestion, false, engines, handlers).some((a) => a.id === "forget"), false);
+  assert.equal(
+    rowMenuActions(suggestion, false, engines, handlers).some((a) => a.id === "forget"),
+    false,
+  );
 });
 
 test("search results pages are matched by engine host, path and query key", () => {

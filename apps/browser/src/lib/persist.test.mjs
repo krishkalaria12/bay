@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createBrowserStore, useBrowser } from "../store/browser.ts";
+import { activeTabId } from "../store/model.ts";
 import { bookmarkDbs, docs, heldSaves, historyWatches } from "../test-native-stub.mjs";
 import { createPersistence, flushPersistence, resumePersistence, startPersistence } from "./persist.ts";
 
@@ -12,13 +13,15 @@ test("final persistence waits for disk acknowledgements and freezes closing wind
   try {
     const windowId = useBrowser.getState().createWindow({ url: "https://saved.example/" });
     let done = false;
-    const final = flushPersistence({ final: true }).then(() => { done = true; });
+    const final = flushPersistence({ final: true }).then(() => {
+      done = true;
+    });
     assert.equal(heldSaves.queue.length, 2);
     useBrowser.getState().closeWindow(windowId);
     assert.strictEqual(flushPersistence({ final: true }), flushPersistence({ final: true }));
     await Promise.resolve();
     assert.equal(done, false);
-    heldSaves.queue.splice(0).forEach(release => release());
+    heldSaves.queue.splice(0).forEach((release) => release());
     await final;
     assert.equal(done, true);
     assert.equal(JSON.parse(docs.get("session.json")).windows[0].id, windowId);
@@ -27,7 +30,7 @@ test("final persistence waits for disk acknowledgements and freezes closing wind
     assert.equal(JSON.parse(docs.get("session.json")).windows.length, 0);
   } finally {
     heldSaves.on = false;
-    heldSaves.queue.splice(0).forEach(release => release());
+    heldSaves.queue.splice(0).forEach((release) => release());
     resumePersistence();
     stop();
   }
@@ -63,7 +66,7 @@ test("a final save acknowledged after cancellation cannot replace the newer save
     useBrowser.getState().updateSettings({ appearance: "dark" });
     resumePersistence();
     const newer = docs.get("session.json");
-    heldSaves.queue.splice(0).forEach(release => release());
+    heldSaves.queue.splice(0).forEach((release) => release());
     await final;
     // Native's newer write is ordered after the pending final save.
     docs.set("session.json", newer);
@@ -72,7 +75,7 @@ test("a final save acknowledged after cancellation cannot replace the newer save
     assert.equal(JSON.parse(docs.get("session.json")).settings.appearance, "auto");
   } finally {
     heldSaves.on = false;
-    heldSaves.queue.splice(0).forEach(release => release());
+    heldSaves.queue.splice(0).forEach((release) => release());
     resumePersistence();
     stop();
   }
@@ -81,32 +84,47 @@ test("a final save acknowledged after cancellation cannot replace the newer save
 test("an explicit owner restores only its store and starts no global data services", async () => {
   docs.clear();
   const seed = createBrowserStore();
+  seed.getState().updateSettings({ launchTab: "lastTab" });
   const windowId = seed.getState().createWindow({ url: "https://restored.example/" });
   const seedOwner = createPersistence({ store: seed, restoreSession: false });
-  await seedOwner.flush({ final: true }); seedOwner.dispose();
+  await seedOwner.flush({ final: true });
+  seedOwner.dispose();
   // Let callbacks from the preceding compatibility-wrapper tests finish first.
   await new Promise(setImmediate);
-  const original = useBrowser.getState(), watches = historyWatches.length, bookmarkProfiles = bookmarkDbs.size;
-  const store = createBrowserStore(), owner = createPersistence({ store });
+  const original = useBrowser.getState(),
+    watches = historyWatches.length,
+    bookmarkProfiles = bookmarkDbs.size;
+  const store = createBrowserStore(),
+    owner = createPersistence({ store });
   try {
     assert.ok(store.getState().windows[windowId]);
-    assert.equal(store.getState().tabs[store.getState().windows[windowId].tabIds[0]].url, "https://restored.example/");
+    assert.equal(store.getState().tabs[activeTabId(store.getState(), windowId)].url, "https://restored.example/");
     await new Promise(setImmediate);
     assert.equal(useBrowser.getState(), original);
     assert.equal(historyWatches.length, watches);
     assert.equal(bookmarkDbs.size, bookmarkProfiles);
-  } finally { owner.dispose(); }
+  } finally {
+    owner.dispose();
+  }
 });
 
 test("recovery persistence skips hydrate and preserves accepted native and UI state", async () => {
-  docs.clear(); docs.set("session.json", "invalid stale disk session");
+  docs.clear();
+  docs.set("session.json", "invalid stale disk session");
   const store = createBrowserStore();
-  const windowId = store.getState().createWindow({ url: "https://live.example/" }), tabId = store.getState().windows[windowId].tabIds[0];
+  const windowId = store.getState().createWindow({ url: "https://live.example/" }),
+    tabId = activeTabId(store.getState(), windowId);
   store.getState().updateTab(tabId, { adoptId: "native-page-42" }, { progress: 0.7, isLoading: true });
   store.getState().openPanel(windowId, "retained query");
   let hydrated = 0;
-  store.setState({ hydrate() { hydrated++; throw new Error("recovery must not hydrate"); } });
-  const accepted = store.getState(), owner = createPersistence({ store, restoreSession: false });
+  store.setState({
+    hydrate() {
+      hydrated++;
+      throw new Error("recovery must not hydrate");
+    },
+  });
+  const accepted = store.getState(),
+    owner = createPersistence({ store, restoreSession: false });
   try {
     assert.equal(store.getState(), accepted);
     await owner.flush({ final: true });
@@ -116,62 +134,95 @@ test("recovery persistence skips hydrate and preserves accepted native and UI st
     assert.equal(store.getState().live[tabId].progress, 0.7);
     assert.equal(store.getState().windowUi[windowId].panel.initialText, "retained query");
     assert.equal(JSON.parse(docs.get("session.json")).windows[0].id, windowId);
-  } finally { owner.dispose(); }
+  } finally {
+    owner.dispose();
+  }
 });
 
 test("one owner's final freeze does not freeze another owner or its resume", async () => {
   docs.clear();
-  const a = createBrowserStore(), b = createBrowserStore();
-  const ownerA = createPersistence({ store: a, restoreSession: false }), ownerB = createPersistence({ store: b, restoreSession: false });
+  const a = createBrowserStore(),
+    b = createBrowserStore();
+  const ownerA = createPersistence({ store: a, restoreSession: false }),
+    ownerB = createPersistence({ store: b, restoreSession: false });
   try {
     const windowA = a.getState().createWindow({ url: "https://a.example/" });
-    const frozen = ownerA.flush({ final: true }); await frozen;
+    const frozen = ownerA.flush({ final: true });
+    await frozen;
     a.getState().closeWindow(windowA);
     const windowB = b.getState().createWindow({ url: "https://b.example/" });
     await ownerB.flush();
     assert.equal(JSON.parse(docs.get("session.json")).windows[0].id, windowB);
     assert.equal(ownerA.flush({ final: true }), frozen);
-    ownerA.resume(); assert.equal(JSON.parse(docs.get("session.json")).windows.length, 0);
-    b.getState().updateSettings({ appearance: "dark" }); await ownerB.flush();
+    ownerA.resume();
+    assert.equal(JSON.parse(docs.get("session.json")).windows.length, 0);
+    b.getState().updateSettings({ appearance: "dark" });
+    await ownerB.flush();
     assert.equal(JSON.parse(docs.get("session.json")).settings.appearance, "dark");
-  } finally { ownerA.dispose(); ownerB.dispose(); }
+  } finally {
+    ownerA.dispose();
+    ownerB.dispose();
+  }
 });
 
 test("disposal cancels only its timer and subscription", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   docs.clear();
-  const a = createBrowserStore(), b = createBrowserStore();
-  const ownerA = createPersistence({ store: a, restoreSession: false }), ownerB = createPersistence({ store: b, restoreSession: false });
+  const a = createBrowserStore(),
+    b = createBrowserStore();
+  const ownerA = createPersistence({ store: a, restoreSession: false }),
+    ownerB = createPersistence({ store: b, restoreSession: false });
   try {
-    a.getState().createWindow({ url: "https://cancelled.example/" }); context.mock.timers.tick(400);
-    ownerA.dispose(); ownerA.dispose();
+    a.getState().createWindow({ url: "https://cancelled.example/" });
+    context.mock.timers.tick(400);
+    ownerA.dispose();
+    ownerA.dispose();
     const windowB = b.getState().createWindow({ url: "https://saved.example/" });
-    context.mock.timers.tick(400); assert.equal(docs.has("session.json"), false);
-    context.mock.timers.tick(400); assert.equal(JSON.parse(docs.get("session.json")).windows[0].id, windowB);
-    ownerB.dispose(); const saved = docs.get("session.json");
-    b.getState().closeWindow(windowB); ownerB.resume(); context.mock.timers.tick(1000);
+    context.mock.timers.tick(400);
+    assert.equal(docs.has("session.json"), false);
+    context.mock.timers.tick(400);
+    assert.equal(JSON.parse(docs.get("session.json")).windows[0].id, windowB);
+    ownerB.dispose();
+    const saved = docs.get("session.json");
+    b.getState().closeWindow(windowB);
+    ownerB.resume();
+    context.mock.timers.tick(1000);
     assert.equal(docs.get("session.json"), saved);
-    await assert.rejects(ownerA.flush(), /disposed/); await assert.rejects(ownerB.flush({ final: true }), /disposed/);
-  } finally { ownerA.dispose(); ownerB.dispose(); context.mock.timers.reset(); }
+    await assert.rejects(ownerA.flush(), /disposed/);
+    await assert.rejects(ownerB.flush({ final: true }), /disposed/);
+  } finally {
+    ownerA.dispose();
+    ownerB.dispose();
+    context.mock.timers.reset();
+  }
 });
 
 test("late acknowledgements from a disposed owner cannot alter its replacement's save cache", async () => {
   docs.clear();
-  const store = createBrowserStore(), old = createPersistence({ store, restoreSession: false });
-  store.getState().createWindow({ url: "https://replace.example/" }); heldSaves.on = true;
-  const pending = old.flush({ final: true }); old.dispose();
+  const store = createBrowserStore(),
+    old = createPersistence({ store, restoreSession: false });
+  store.getState().createWindow({ url: "https://replace.example/" });
+  heldSaves.on = true;
+  const pending = old.flush({ final: true });
+  old.dispose();
   const replacement = createPersistence({ store, restoreSession: false });
   try {
-    store.getState().updateSettings({ appearance: "dark" }); await replacement.flush();
+    store.getState().updateSettings({ appearance: "dark" });
+    await replacement.flush();
     const newer = docs.get("session.json");
-    heldSaves.queue.splice(0).forEach((release) => release()); await pending;
+    heldSaves.queue.splice(0).forEach((release) => release());
+    await pending;
     // Production queues the newer write after the old save. Reproduce that disk
     // order while leaving both owners' completion/cache callbacks untouched.
     docs.set("session.json", newer);
-    store.getState().updateSettings({ appearance: "auto" }); await replacement.flush();
+    store.getState().updateSettings({ appearance: "auto" });
+    await replacement.flush();
     assert.equal(JSON.parse(docs.get("session.json")).settings.appearance, "auto");
-    old.resume(); await assert.rejects(old.flush(), /disposed/);
+    old.resume();
+    await assert.rejects(old.flush(), /disposed/);
   } finally {
-    heldSaves.on = false; heldSaves.queue.splice(0).forEach((release) => release()); replacement.dispose();
+    heldSaves.on = false;
+    heldSaves.queue.splice(0).forEach((release) => release());
+    replacement.dispose();
   }
 });

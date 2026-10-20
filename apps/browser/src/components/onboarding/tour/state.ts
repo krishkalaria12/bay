@@ -57,7 +57,9 @@ export const TOUR_STOPS: TourStop[] = [
   {
     id: "done",
     title: "You're all set",
-    body: capabilities.menuBar ? "Everything else is in the menu bar and in Settings (⌘,). You can take this tour again from the Help menu." : shortcutLabel("Everything else is in the Bay menu and in Settings (⌘,). You can take this tour again from Settings."),
+    body: capabilities.menuBar
+      ? "Everything else is in the menu bar and in Settings (⌘,). You can take this tour again from the Help menu."
+      : shortcutLabel("Everything else is in the Bay menu and in Settings (⌘,). You can take this tour again from Settings."),
   },
 ];
 

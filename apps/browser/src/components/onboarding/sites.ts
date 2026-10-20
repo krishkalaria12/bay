@@ -44,7 +44,12 @@ export function pinSites(windowId: string, ids: string[]) {
   const s = useBrowser.getState();
   const w = s.windows[windowId];
   if (!w) return;
-  const pinned = new Set(viewTabIds(s, w.id).map((id) => s.tabs[id]!).filter((t) => t.pinned).map((t) => t.url));
+  const pinned = new Set(
+    viewTabIds(s, w.id)
+      .map((id) => s.tabs[id]!)
+      .filter((t) => t.pinned)
+      .map((t) => t.url),
+  );
   const selectedTab = activeTabId(s, w.id);
   for (const site of PINNABLE_SITES) {
     if (ids.includes(site.id) && !pinned.has(site.url)) {

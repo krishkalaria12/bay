@@ -1,4 +1,3 @@
-
 // MARK: Punycode (RFC 3492)
 
 const BASE = 36;
@@ -32,7 +31,7 @@ export function punycodeDecode(input: string): string | null {
   let n = INITIAL_N;
   let bias = INITIAL_BIAS;
   let i = 0;
-  for (let index = delimiter > 0 ? delimiter + 1 : 0; index < input.length; ) {
+  for (let index = delimiter > 0 ? delimiter + 1 : 0; index < input.length;) {
     const oldI = i;
     for (let w = 1, k = BASE; ; k += BASE) {
       if (index >= input.length) return null;
@@ -55,7 +54,10 @@ export function punycodeDecode(input: string): string | null {
 
 export function punycodeEncode(input: string): string {
   const points = Array.from(input, (c) => c.codePointAt(0)!);
-  let output = points.filter((c) => c < 0x80).map((c) => String.fromCharCode(c)).join("");
+  let output = points
+    .filter((c) => c < 0x80)
+    .map((c) => String.fromCharCode(c))
+    .join("");
   const basic = output.length;
   let handled = basic;
   if (basic) output += "-";
@@ -90,9 +92,35 @@ export function punycodeEncode(input: string): string {
 // MARK: Characters and scripts
 
 const SCRIPTS = [
-  "Latin", "Greek", "Cyrillic", "Armenian", "Hebrew", "Arabic", "Thaana", "Devanagari", "Bengali", "Gurmukhi",
-  "Gujarati", "Oriya", "Tamil", "Telugu", "Kannada", "Malayalam", "Sinhala", "Thai", "Lao", "Tibetan", "Myanmar",
-  "Georgian", "Hangul", "Ethiopic", "Khmer", "Hiragana", "Katakana", "Bopomofo", "Han",
+  "Latin",
+  "Greek",
+  "Cyrillic",
+  "Armenian",
+  "Hebrew",
+  "Arabic",
+  "Thaana",
+  "Devanagari",
+  "Bengali",
+  "Gurmukhi",
+  "Gujarati",
+  "Oriya",
+  "Tamil",
+  "Telugu",
+  "Kannada",
+  "Malayalam",
+  "Sinhala",
+  "Thai",
+  "Lao",
+  "Tibetan",
+  "Myanmar",
+  "Georgian",
+  "Hangul",
+  "Ethiopic",
+  "Khmer",
+  "Hiragana",
+  "Katakana",
+  "Bopomofo",
+  "Han",
 ] as const;
 type Script = (typeof SCRIPTS)[number];
 function scx(name: string): string {
@@ -122,7 +150,14 @@ const EXCLUDED = new RegExp(
     "]",
   "u",
 );
-const ALLOWED_COMMON = /^[-\u00b7\u30fb\u30fc\u3005-\u3007\u0300-\u0304\u0306-\u030c\u030f\u0311\u0313\u0314\u031b\u0323-\u0328\u032d\u032e\u0330\u0331\u0335\u0338\u0339]$/u;
+// The combining marks come first: after a base character they would read as one glyph with it.
+const ALLOWED_COMMON =
+  /^[\u0300-\u0304\u0306-\u030c\u030f\u0311\u0313\u0314\u031b\u0323-\u0328\u032d\u032e\u0330\u0331\u0335\u0338\u0339\u00b7\u30fb\u30fc\u3005-\u3007-]$/u;
+
+const isAscii = (s: string) => {
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) > 0x7f) return false;
+  return true;
+};
 
 function isAllowed(c: string): boolean {
   if (ALLOWED_COMMON.test(c)) return true;
@@ -180,7 +215,7 @@ const DIGIT_LOOKALIKES = /[θ२২੨૨೩೭Շзҙӡउওਤ੩૩౩ဒვ�
 const KANA_EXCEPTIONS = /[\u3078-\u307a\u30d8-\u30da\u30fb-\u30fe]/u;
 const COMBINING_DIACRITICS = /[\u0300-\u0339]/u;
 const NON_ASCII_LATIN = /(?![a-z])\p{Script=Latin}/u;
-const LGC_OR_ASCII = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}0-9._\u0300-\u0339-]*$/u;
+const LGC_OR_ASCII = /^[\u0300-\u0339\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}0-9._-]*$/u;
 
 const WHOLE_SCRIPT_CONFUSABLES: { script: RegExp; lookalikes: RegExp; tlds: string[] }[] = [
   { script: /\p{Script=Armenian}/u, lookalikes: /[ագզէլհյնոսւօՙ]/u, tlds: ["am"] },
@@ -265,7 +300,7 @@ function decodeLabel(label: string): string | null {
   if (!/^xn--/i.test(label)) return null;
   const ascii = label.slice(4).toLowerCase();
   const unicode = punycodeDecode(ascii);
-  if (!unicode || /^[\x00-\x7f]*$/.test(unicode)) return null;
+  if (!unicode || isAscii(unicode)) return null;
   if (unicode.normalize("NFC") !== unicode || unicode.toLowerCase() !== unicode || punycodeEncode(unicode) !== ascii) return null;
   return unicode;
 }
@@ -292,12 +327,68 @@ const TOP_DOMAINS = (
 ).split(" ");
 
 const CONFUSABLES: Record<string, string> = {
-  ø: "o", đ: "d", ħ: "h", ı: "i", ł: "l", ŧ: "t", ð: "d", þ: "p", ə: "e", ß: "ss", œ: "oe", æ: "ae",
-  а: "a", в: "b", е: "e", з: "3", и: "u", к: "k", м: "m", н: "h", о: "o", п: "n", р: "p", с: "c", т: "t", у: "y",
-  х: "x", ь: "b", ѕ: "s", і: "i", ј: "j", ԁ: "d", һ: "h", ӏ: "l", ԛ: "q", ԝ: "w", ҽ: "e", ѵ: "v", ѡ: "w", г: "r",
-  α: "a", ι: "i", κ: "k", ν: "v", ο: "o", ρ: "p", τ: "t", υ: "u", χ: "x", ω: "w", ϲ: "c",
-  օ: "o", ս: "u", հ: "h", ց: "g", ք: "p", զ: "q", ո: "n",
-  "0": "o", "1": "l", m: "rn", w: "vv",
+  ø: "o",
+  đ: "d",
+  ħ: "h",
+  ı: "i",
+  ł: "l",
+  ŧ: "t",
+  ð: "d",
+  þ: "p",
+  ə: "e",
+  ß: "ss",
+  œ: "oe",
+  æ: "ae",
+  а: "a",
+  в: "b",
+  е: "e",
+  з: "3",
+  и: "u",
+  к: "k",
+  м: "m",
+  н: "h",
+  о: "o",
+  п: "n",
+  р: "p",
+  с: "c",
+  т: "t",
+  у: "y",
+  х: "x",
+  ь: "b",
+  ѕ: "s",
+  і: "i",
+  ј: "j",
+  ԁ: "d",
+  һ: "h",
+  ӏ: "l",
+  ԛ: "q",
+  ԝ: "w",
+  ҽ: "e",
+  ѵ: "v",
+  ѡ: "w",
+  г: "r",
+  α: "a",
+  ι: "i",
+  κ: "k",
+  ν: "v",
+  ο: "o",
+  ρ: "p",
+  τ: "t",
+  υ: "u",
+  χ: "x",
+  ω: "w",
+  ϲ: "c",
+  օ: "o",
+  ս: "u",
+  հ: "h",
+  ց: "g",
+  ք: "p",
+  զ: "q",
+  ո: "n",
+  "0": "o",
+  "1": "l",
+  m: "rn",
+  w: "vv",
 };
 
 function skeleton(text: string): string {
@@ -345,7 +436,7 @@ export function hostSpoofReason(host: string): SpoofReason | null {
   const labels = host.toLowerCase().split(".");
   const tld = labels[labels.length - 1] || "";
   for (const label of labels) {
-    if (!/^xn--/.test(label)) continue;
+    if (!label.startsWith("xn--")) continue;
     const unicode = decodeLabel(label);
     if (!unicode) return "invalid";
     const reason = labelSpoofReason(unicode, tld);

@@ -41,32 +41,41 @@ export class NativeBridgeError extends Error {
 export function validateNativeHostInfo(value: unknown): asserts value is NativeHostInfo {
   if (!record(value)) throw new NativeBridgeError("invalid_host_info", "Bay native host info must be an object");
   if (value.contractVersion !== NATIVE_CONTRACT_VERSION) {
-    throw new NativeBridgeError("contract_mismatch", `Bay native contract mismatch: JavaScript ${NATIVE_CONTRACT_VERSION}, native ${String(value.contractVersion)}. Rebuild Bay from this checkout.`);
+    throw new NativeBridgeError(
+      "contract_mismatch",
+      `Bay native contract mismatch: JavaScript ${NATIVE_CONTRACT_VERSION}, native ${String(value.contractVersion)}. Rebuild Bay from this checkout.`,
+    );
   }
-  if (!["macos", "windows", "linux"].includes(String(value.platform))) throw new NativeBridgeError("unsupported_platform", "Bay's native host must identify a supported desktop OS");
+  if (!["macos", "windows", "linux"].includes(String(value.platform)))
+    throw new NativeBridgeError("unsupported_platform", "Bay's native host must identify a supported desktop OS");
   for (const name of ["modules", "views", "optionalMethods"] as const) {
     const list = value[name];
     if (name === "optionalMethods" && list === undefined) continue;
-    if (!Array.isArray(list) || list.some(item => typeof item !== "string") || new Set(list).size !== list.length) {
+    if (!Array.isArray(list) || list.some((item) => typeof item !== "string") || new Set(list).size !== list.length) {
       throw new NativeBridgeError("invalid_host_info", `Bay native ${name} catalog is invalid`);
     }
   }
   for (const name of ["constants", "snapshots"] as const) {
     const map = value[name];
     if (name === "snapshots" && map === undefined) continue;
-    if (!record(map) || Object.values(map).some(module => !record(module))) throw new NativeBridgeError("invalid_host_info", `Bay native ${name} map is invalid`);
+    if (!record(map) || Object.values(map).some((module) => !record(module)))
+      throw new NativeBridgeError("invalid_host_info", `Bay native ${name} map is invalid`);
   }
 }
 
 /** Native errors are transport envelopes. An engine's domain Result stays inside value. */
 export function decodeNativeResult(json: string): unknown {
   let result: unknown;
-  try { result = JSON.parse(json); }
-  catch { throw new NativeBridgeError("invalid_result", "Bay native result is not valid JSON"); }
-  if (!record(result) || ("error" in result) === ("value" in result)) throw new NativeBridgeError("invalid_result", "Invalid Bay native result envelope");
+  try {
+    result = JSON.parse(json);
+  } catch {
+    throw new NativeBridgeError("invalid_result", "Bay native result is not valid JSON");
+  }
+  if (!record(result) || "error" in result === "value" in result) throw new NativeBridgeError("invalid_result", "Invalid Bay native result envelope");
   if ("error" in result) {
     const detail = result.error;
-    if (!record(detail) || typeof detail.code !== "string" || typeof detail.message !== "string") throw new NativeBridgeError("invalid_result", "Invalid Bay native error envelope");
+    if (!record(detail) || typeof detail.code !== "string" || typeof detail.message !== "string")
+      throw new NativeBridgeError("invalid_result", "Invalid Bay native error envelope");
     throw new NativeBridgeError(detail.code, detail.message);
   }
   return result.value;
@@ -78,12 +87,14 @@ export function installNativeTransport(transport: NativeTransport): EventSubscri
   if (installed) throw new NativeBridgeError("already_initialized", "Bay's native transport is already initialized");
   installed = transport;
   let removed = false;
-  return { remove() {
-    if (removed) return;
-    removed = true;
-    if (installed === transport) installed = null;
-    transport.dispose?.();
-  } };
+  return {
+    remove() {
+      if (removed) return;
+      removed = true;
+      if (installed === transport) installed = null;
+      transport.dispose?.();
+    },
+  };
 }
 export function getNativeTransport(): NativeTransport {
   if (!installed) throw new NativeBridgeError("not_initialized", "Initialize Bay's native transport before importing the application");
@@ -98,7 +109,7 @@ export function getNativeHostInfo(): NativeHostInfo {
 /** Cached host state, never a synchronous native invocation. Missing state stays distinguishable. */
 export function readNativeSnapshot<T>(module: string, key: string): T | undefined {
   const values = getNativeHostInfo().snapshots?.[module];
-  return values && Object.prototype.hasOwnProperty.call(values, key) ? values[key] as T : undefined;
+  return values && Object.prototype.hasOwnProperty.call(values, key) ? (values[key] as T) : undefined;
 }
 
 export async function invokeNative<T = unknown>(module: string, method: string, args: readonly unknown[] = []): Promise<T> {
@@ -124,18 +135,21 @@ export function bindNativeModule<T>(transport: NativeTransport, name: string): T
       const constants = hostInfo.constants[name];
       if (constants && Object.prototype.hasOwnProperty.call(constants, key)) return constants[key];
       if (key === "addListener") {
-        if (!functions.has(key)) functions.set(key, (event: string, listener: (payload: unknown) => void) => {
-          if (!contract.events.includes(event)) throw new NativeBridgeError("unknown_event", `Unknown native event ${name}.${event}`);
-          return transport.subscribe(name, event, listener);
-        });
+        if (!functions.has(key))
+          functions.set(key, (event: string, listener: (payload: unknown) => void) => {
+            if (!contract.events.includes(event)) throw new NativeBridgeError("unknown_event", `Unknown native event ${name}.${event}`);
+            return transport.subscribe(name, event, listener);
+          });
         return functions.get(key);
       }
       const method = contract.methods[key];
       if (!method || (method.optional && !hostInfo.optionalMethods?.includes(`${name}.${key}`))) return undefined;
-      if (!functions.has(key)) functions.set(key, async (...args: unknown[]) => {
-        if (args.length < method.minArgs || (method.maxArgs >= 0 && args.length > method.maxArgs)) throw new NativeBridgeError("invalid_arguments", `Invalid argument count for ${name}.${key}`);
-        return decodeNativeResult(await transport.invoke(name, key, JSON.stringify(args)));
-      });
+      if (!functions.has(key))
+        functions.set(key, async (...args: unknown[]) => {
+          if (args.length < method.minArgs || (method.maxArgs >= 0 && args.length > method.maxArgs))
+            throw new NativeBridgeError("invalid_arguments", `Invalid argument count for ${name}.${key}`);
+          return decodeNativeResult(await transport.invoke(name, key, JSON.stringify(args)));
+        });
       return functions.get(key);
     },
   }) as T;

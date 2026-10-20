@@ -116,5 +116,4 @@ export const stopCapture = (capturer: number) => ChromeUI.stopCapture(capturer);
 
 // MARK: Autofill
 
-export const showAutofillSuggestions = (browserId: number, kind: "passwords" | "field") =>
-  ChromeUI.showAutofillSuggestions(browserId, kind === "passwords");
+export const showAutofillSuggestions = (browserId: number, kind: "passwords" | "field") => ChromeUI.showAutofillSuggestions(browserId, kind === "passwords");

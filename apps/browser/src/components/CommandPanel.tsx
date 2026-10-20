@@ -10,21 +10,22 @@ import { DEFAULT_WINDOW_UI } from "../store/ui";
 import { showToast } from "./layout/splitActions";
 import { useWindowId } from "../store/hooks";
 import { activeTabId } from "../store/model";
-import { PAGE_MS, SWITCH_EASING } from "./layout/switchMotion";
+import { SWITCH_EASING } from "./layout/switchMotion";
+import { PAGE_SWITCH_MS } from "./layout/constants";
 import { useUrlAnchors } from "./layout/windowLayout";
 import { Omnibox } from "./Omnibox";
 import { PaletteSurface } from "./omnibox/PaletteSurface";
 import { webviews } from "../lib/webviews";
-
-// Dia: 37.4pt offset, 5.5pt rise, 888pt max, 12pt margin/radius.
-const LEFT_OF_URL = 37.4;
-const ABOVE_PANE = 5.5;
-const MAX_WIDTH = 888;
-const MIN_WIDTH = 420;
-const WINDOW_MARGIN = 12;
-const DROPDOWN_MIN_WIDTH = 350;
-const DROPDOWN_PAST_FIELD = 137;
-const DROPDOWN_RADIUS = 12;
+import {
+  DROPDOWN_MIN_WIDTH,
+  DROPDOWN_PAST_FIELD,
+  DROPDOWN_RADIUS,
+  PANEL_ABOVE_PANE,
+  PANEL_LEFT_OF_URL,
+  PANEL_MAX_WIDTH,
+  PANEL_MIN_WIDTH,
+  PANEL_WINDOW_MARGIN,
+} from "./omnibox/constants";
 
 export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth: number; windowHeight?: number }) {
   const theme = useTheme();
@@ -56,9 +57,9 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
   }
   if (!panel.open || !activeId || !anchor) return null;
 
-  const room = (left: number, fallback: number) => (windowWidth > 0 ? windowWidth - left - WINDOW_MARGIN : fallback);
+  const room = (left: number, fallback: number) => (windowWidth > 0 ? windowWidth - left - PANEL_WINDOW_MARGIN : fallback);
   const onCancel = () => {
-    void dispatchBrowserCommand({ method: "dismissCommandPanel", windowId }).catch(error => {
+    void dispatchBrowserCommand({ method: "dismissCommandPanel", windowId }).catch((error) => {
       console.error("Couldn't close search", error);
       showToast(windowId, "Couldn't close search", "Please try again.");
     });
@@ -83,10 +84,10 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
     );
   }
 
-  const left = Math.max(WINDOW_MARGIN, anchor.left - LEFT_OF_URL);
-  const top = Math.max(0.5, anchor.top - ABOVE_PANE);
-  const fitted = Math.min(MAX_WIDTH, anchor.width + LEFT_OF_URL);
-  const width = Math.min(Math.max(fitted, MIN_WIDTH), room(left, fitted));
+  const left = Math.max(PANEL_WINDOW_MARGIN, anchor.left - PANEL_LEFT_OF_URL);
+  const top = Math.max(0.5, anchor.top - PANEL_ABOVE_PANE);
+  const fitted = Math.min(PANEL_MAX_WIDTH, anchor.width + PANEL_LEFT_OF_URL);
+  const width = Math.min(Math.max(fitted, PANEL_MIN_WIDTH), room(left, fitted));
   return (
     <Surface
       fill={hex(theme.panel)}
@@ -104,8 +105,15 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
   );
 }
 
-
-function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHeight, initialText, closing, onClosed }: {
+function CenteredPalette({
+  windowId,
+  tabId,
+  width: windowWidth,
+  height: windowHeight,
+  initialText,
+  closing,
+  onClosed,
+}: {
   windowId: string;
   tabId: string;
   width: number;
@@ -124,7 +132,7 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
     }
     // Out with a tab switch's crossfade (switchMotion.ts).
     appear.set(
-      withTiming(0, { duration: PAGE_MS, easing: SWITCH_EASING, reduceMotion: ReduceMotion.System }, (finished) => {
+      withTiming(0, { duration: PAGE_SWITCH_MS, easing: SWITCH_EASING, reduceMotion: ReduceMotion.System }, (finished) => {
         if (finished) runOnJS(onClosed)();
       }),
     );
@@ -140,7 +148,10 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
     try {
       await dispatchBrowserCommand({ method: "dismissCommandPanel", windowId });
       const active = activeTabId(browserRead.getState(), windowId);
-      if (active) await webviews.get(active)?.focus();
+      if (active) {
+        const view = webviews.get(active);
+        if (view) await view.focus();
+      }
     } catch (error) {
       console.error("Couldn't close search", error);
       showToast(windowId, "Couldn't close search", "Please try again.");
@@ -152,7 +163,11 @@ function CenteredPalette({ windowId, tabId, width: windowWidth, height: windowHe
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={closing ? "none" : "box-none"} accessibilityViewIsModal={!closing}>
       <Animated.View style={[StyleSheet.absoluteFill, dimStyle]}>
-        <Pressable accessibilityLabel="Dismiss search" onPress={dismiss} style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]} />
+        <Pressable
+          accessibilityLabel="Dismiss search"
+          onPress={dismiss}
+          style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]}
+        />
       </Animated.View>
       <Animated.View style={[{ position: "absolute", width, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2) }, appearStyle]}>
         <PaletteSurface>

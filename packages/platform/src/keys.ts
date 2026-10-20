@@ -181,7 +181,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   showOnboarding: { key: "F1" },
   keyboardShortcuts: { key: "/", mod: true },
   openFile: { key: "O", mod: true },
-  newHarbor: { key: "N", mod: true, alt: true },
+  newLittleBay: { key: "N", mod: true, alt: true },
   openProfileMenu: { key: "P", mod: true, shift: true },
   moveTabUp: { key: "Up", mod: true, shift: true },
   moveTabDown: { key: "Down", mod: true, shift: true },
@@ -199,7 +199,10 @@ export function windowsShortcutLabel(command: string, os: PlatformOS = "windows"
 }
 
 /** Whether a key event (React Native's shape) is this stroke, for the Windows shell's key handling. */
-export function strokeMatches(stroke: ShortcutStroke, event: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }): boolean {
+export function strokeMatches(
+  stroke: ShortcutStroke,
+  event: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean },
+): boolean {
   const key = keyLabel(event.key, "windows");
   const wanted = keyLabel(stroke.key, "windows");
   const same = key === wanted || event.key === stroke.key;
@@ -207,7 +210,8 @@ export function strokeMatches(stroke: ShortcutStroke, event: { key: string; meta
   const control = event.ctrlKey ?? false;
   return (
     same &&
-    (!command && control === !!(stroke.mod || stroke.ctrl)) &&
+    !command &&
+    control === !!(stroke.mod || stroke.ctrl) &&
     (stroke.shift ?? false) === (event.shiftKey ?? false) &&
     (stroke.alt ?? false) === (event.altKey ?? false)
   );

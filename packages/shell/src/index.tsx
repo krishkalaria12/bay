@@ -3,17 +3,19 @@ import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
 import { requireNativeModule, requireOptionalNativeModule, nativeSnapshot, nativeDocumentWrite, nativeDocumentSave, type EventSubscription } from "@bay/platform/native";
 
-
 export * from "./system";
 export * from "./app";
 export * from "./live";
 
 export type BrowserCommand =
+  | "undoPinnedFolderMove"
   | "newTab"
   | "newWindow"
   | "newIncognitoWindow"
-  | "newHarbor"
-  | "toggleOpenLinksInHarbor"
+  | "newLittleBay"
+  | "toggleOpenLinksInLittleBay"
+  | "removeFromSplit"
+  | "togglePinRow"
   | "reopenClosedTab"
   | "reopenClosedWindow"
   | "restoreClosed"
@@ -58,7 +60,7 @@ export type BrowserCommand =
   | "selectLastTab"
   | "togglePin"
   | "duplicateTab"
-  | "moveTabToProfile"
+  | "moveTabToSpace"
   | "moveTabToWindow"
   | "bookmarkPage"
   | "addBookmarkToFolder"
@@ -66,10 +68,10 @@ export type BrowserCommand =
   | "toggleMute"
   | "downloads"
   | "mergeAllWindows"
-  | "switchProfile"
-  | "nextProfile"
-  | "previousProfile"
-  | "newProfile"
+  | "switchSpace"
+  | "nextSpace"
+  | "previousSpace"
+  | "newSpace"
   | "openSettings"
   | "importBrowserData"
   | "showHistory"
@@ -112,7 +114,7 @@ export type BrowserCommand =
   | "moveTabDown"
   | "moveTabUp"
   | "closeTabGroup"
-  | "openProfileMenu";
+  | "openSpaceMenu";
 
 export type CommandEvent = {
   command: BrowserCommand;
@@ -147,7 +149,7 @@ export type AppEvent =
 
 type ShellEvents = {
   onCommand: (e: CommandEvent) => void;
-  onOpenURLs: (e: { urls: string[] }) => void;
+  onOpenURLs: (e: { urls: string[]; sourceApp?: string }) => void;
   onWindowEvent: (e: WindowEvent) => void;
   onAppEvent: (e: AppEvent) => void;
 };
@@ -173,7 +175,7 @@ export type OpenWindowOptions = {
   focus?: boolean;
   kind?: "browser" | "small" | "settings" | "import" | "taskManager";
   profile?: string;
-  // Harbor: its remembered size; the window opens centred on the active screen.
+  // Little Bay: its remembered size; the window opens centred on the active screen.
   size?: [number, number];
 };
 
@@ -184,7 +186,7 @@ export type MenuState = {
   checked: string[];
   disabled: string[];
   titles: Record<string, string>;
-  profiles: MenuEntry[];
+  spaces: MenuEntry[];
   windows: MenuEntry[];
   bookmarkFolders: MenuEntry[];
   recentBookmarks: MenuBookmark[];
@@ -217,8 +219,6 @@ export type PromptOptions = {
   confirmTitle?: string;
   windowId?: string;
 };
-
-type Frame = [number, number, number, number];
 
 const Shell = requireNativeModule<{
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
@@ -254,6 +254,7 @@ const Shell = requireNativeModule<{
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
+  setSidebarMoveUndo?(windowId: string, available: boolean, focus: boolean): Promise<void>;
   setMenuBookmarks(bookmarks: Pick<MenuState, MenuBookmarkKey>): Promise<void>;
   replyToTerminate(ok: boolean): Promise<void>;
   confirm(options: ConfirmOptions): Promise<{ confirmed: boolean; suppressed: boolean }>;
@@ -265,6 +266,10 @@ export const writeDocument = (name: string, contents: string) => nativeDocumentW
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
 export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
+
+/** Claims sidebar focus only after a move; ordinary text/page focus retains its own Undo. */
+export const setSidebarMoveUndo = (windowId: string, available: boolean, focus = false) =>
+  Shell.setSidebarMoveUndo?.(windowId, available, focus) ?? Promise.resolve();
 
 export const startDictation = () => Shell.startDictation();
 export const setSwitcherCapture = (active: boolean) => void Shell.setSwitcherCapture(active);
@@ -297,7 +302,7 @@ export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitl
 export const setTrafficLightsCenter = (id: string, center: [number, number] | null) =>
   capabilities.trafficLights ? Shell.setTrafficLightsCenter(id, center) : Promise.resolve();
 /** The window's buttons shown only while the pointer is over the window's top (always in full screen). */
-export const setTrafficLightsOnHover = (id: string, on: boolean) => capabilities.trafficLights ? Shell.setTrafficLightsOnHover(id, on) : Promise.resolve();
+export const setTrafficLightsOnHover = (id: string, on: boolean) => (capabilities.trafficLights ? Shell.setTrafficLightsOnHover(id, on) : Promise.resolve());
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›
@@ -351,8 +356,8 @@ export const prompt = (options: PromptOptions) => Shell.prompt(options);
 export const onCommand = (listener: (e: CommandEvent) => void) => Shell.addListener("onCommand", listener);
 export const onWindowEvent = (listener: (e: WindowEvent) => void) => Shell.addListener("onWindowEvent", listener);
 export const onAppEvent = (listener: (e: AppEvent) => void) => Shell.addListener("onAppEvent", listener);
-export const onOpenURLs = (listener: (urls: string[]) => void) =>
-  Shell.addListener("onOpenURLs", ({ urls }) => listener(urls));
+export const onOpenURLs = (listener: (urls: string[], sourceApp?: string) => void) =>
+  Shell.addListener("onOpenURLs", ({ urls, sourceApp }) => listener(urls, sourceApp));
 
 export const WindowDragRegion = requireNativeViewManager<ViewProps>("BayShell");
 
@@ -361,6 +366,8 @@ export type SymbolProps = ViewProps & {
   size?: number;
   weight?: "light" | "regular" | "medium" | "semibold" | "bold";
   color?: string;
+  /** "hierarchical": `color`, the symbol's secondary layers lighter. "multicolor": its own colours where it has them. */
+  rendering?: "monochrome" | "hierarchical" | "multicolor";
 };
 
 export const Symbol = requireNativeViewManager<SymbolProps>("BaySymbol");
@@ -382,9 +389,7 @@ export type ContextMenuAreaProps = ViewProps & {
   captureDescendants?: boolean;
 };
 
-const NativeContextMenuArea = requireNativeViewManager<Omit<ContextMenuAreaProps, "onContextMenu"> & { onContextMenu?: () => void }>(
-  "BayContextMenuArea",
-);
+const NativeContextMenuArea = requireNativeViewManager<Omit<ContextMenuAreaProps, "onContextMenu"> & { onContextMenu?: () => void }>("BayContextMenuArea");
 
 export function ContextMenuArea(props: ContextMenuAreaProps) {
   return <NativeContextMenuArea {...props} />;

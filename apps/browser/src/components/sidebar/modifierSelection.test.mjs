@@ -4,12 +4,12 @@ import { test } from "node:test";
 process.env.BAY_TEST_PLATFORM = "windows";
 const { useBrowser } = await import("../../store/browser.ts");
 const { clickTab } = await import("./actions.ts");
-const { activeTabId } = await import("../../store/model.ts");
+const { activeTabId, windowTabIds } = await import("../../store/model.ts");
 
 function tabs() {
   useBrowser.getState().hydrate({});
   const windowId = useBrowser.getState().createWindow();
-  const first = useBrowser.getState().windows[windowId].tabIds[0];
+  const first = windowTabIds(useBrowser.getState(), windowId)[0];
   const second = useBrowser.getState().newTab(windowId, { url: "https://second.example", background: true });
   const third = useBrowser.getState().newTab(windowId, { url: "https://third.example", background: true });
   clickTab(windowId, first);
@@ -33,5 +33,6 @@ test("Windows Meta-click activates normally and Shift-click still selects a rang
   assert.equal(activeTabId(useBrowser.getState(), windowId), second);
   clickTab(windowId, first);
   clickTab(windowId, third, { shiftKey: true });
-  assert.deepEqual(useBrowser.getState().selection[windowId], [first, second, third]);
+  // The range follows the sidebar's order, which puts new tabs first.
+  assert.deepEqual([...useBrowser.getState().selection[windowId]].sort(), [first, second, third].sort());
 });

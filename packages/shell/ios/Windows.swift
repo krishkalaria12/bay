@@ -14,7 +14,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private weak var lastPlaced: NSWindow?
   private var legacyFrame = UserDefaults.standard.string(forKey: "NSWindow Frame BrowserWindow")
   private(set) var auxKinds: [String: String] = [:]
-  // Harbor windows (Arc's Little Arc): browser windows that open centred at their remembered size.
+  // Little Bay windows (Arc's Little Arc): browser windows that open centred at their remembered size.
   private(set) var smallIds = Set<String>()
 
   private func isBrowserWindow(_ window: NSWindow?) -> Bool {
@@ -112,7 +112,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     } else if focus {
       window.makeKeyAndOrderFront(nil)
     } else if let key = NSApp.keyWindow, key !== window {
-      // A window opened without focus (tabs Harbor sends behind with no main window open) goes behind the
+      // A window opened without focus (tabs Little Bay sends behind with no main window open) goes behind the
       // key window instead of over it.
       window.order(.below, relativeTo: key.windowNumber)
     } else {
@@ -457,6 +457,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   func windowWillClose(_ notification: Notification) {
     guard let window = notification.object as? NSWindow, let id = id(of: window) else { return }
     NotificationCenter.default.removeObserver(self, name: nil, object: window)
+    SidebarMoveUndoView.remove(windowId: id)
     windows[id] = nil
     stopKeepingContentSized(id)
     lightsCenters[id] = nil

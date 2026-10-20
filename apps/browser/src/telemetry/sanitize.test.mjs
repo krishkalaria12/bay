@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanProperties, errorCode, errorMessage, errorType, nativeCrashExceptions, nativeFrames, parseStack, scrubText } from "./sanitize.ts";
+import { cleanProperties, nativeCrashExceptions, parseStack, scrubText } from "./sanitize.ts";
 
 const leaks = (text, ...secrets) => secrets.filter((s) => text.includes(s));
 
 test("web addresses, hosts and app URLs are stripped", () => {
-  const out = scrubText(
-    "Failed to load https://mail.example.com/inbox?q=secret#frag, then bay://settings/passwords and chrome://version from bank.co.uk:8443",
-  );
+  const out = scrubText("Failed to load https://mail.example.com/inbox?q=secret#frag, then bay://settings/passwords and chrome://version from bank.co.uk:8443");
   assert.deepEqual(leaks(out, "example", "inbox", "secret", "passwords", "settings", "version", "bank"), []);
   assert.match(out, /^Failed to load <url> then <url> and <url> from <host>$/);
   assert.equal(scrubText("blob:https://x.test/abc data:text/html,<h1>hi</h1> about:blank"), "<url> <url> <url>");
@@ -75,7 +73,10 @@ test("an uncaught NSException sends its name and throw site first, never its rea
     exceptionType: "EXC_BREAKPOINT",
     signal: "SIGTRAP",
     exceptionName: "NSRangeException",
-    frames: [{ image: "AppKit", symbol: "+[NSApplication _crashOnException:]" }, { image: "Bay", symbol: "main" }],
+    frames: [
+      { image: "AppKit", symbol: "+[NSApplication _crashOnException:]" },
+      { image: "Bay", symbol: "main" },
+    ],
     exceptionFrames: [
       { image: "CoreFoundation", symbol: "__exceptionPreprocess" },
       { image: "libobjc.A.dylib", symbol: "objc_exception_throw" },
@@ -84,10 +85,13 @@ test("an uncaught NSException sends its name and throw site first, never its rea
   });
   assert.equal(name, "NSRangeException");
   assert.equal(signal, "SIGTRAP");
-  assert.deepEqual(exceptions.map((e) => [e.type, e.value]), [
-    ["NSRangeException", "Uncaught NSRangeException"],
-    ["EXC_BREAKPOINT", "EXC_BREAKPOINT (SIGTRAP)"],
-  ]);
+  assert.deepEqual(
+    exceptions.map((e) => [e.type, e.value]),
+    [
+      ["NSRangeException", "Uncaught NSRangeException"],
+      ["EXC_BREAKPOINT", "EXC_BREAKPOINT (SIGTRAP)"],
+    ],
+  );
   assert.equal(exceptions[0].frames.at(-1).function, "__exceptionPreprocess");
   assert.equal(exceptions[0].frames[0].function, "TabStrip.select(_:)");
   assert.equal(exceptions[0].frames[0].in_app, true);

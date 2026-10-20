@@ -1,27 +1,8 @@
-import {
-  closeWindow as closeNativeWindow,
-  copyText,
-  openExternalURL,
-  pickFiles,
-  prompt,
-  setAppearance,
-  sharePage,
-  type CommandEvent,
-} from "@bay/shell";
+import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/shell";
 import { markdownLink } from "@bay/core";
 import { useBrowser } from "../store/browser";
-import { activeTabId, bookmarkProfileId, resolveWindowId } from "../store/model";
-import {
-  closeTab,
-  createProfile,
-  cycleProfile,
-  focus,
-  moveTabToProfile,
-  moveTabToWindow,
-  openWindow,
-  switchProfile,
-  toggleMute,
-} from "./actions";
+import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
+import { closeTab, createSpace, cycleSpace, focus, moveTabToSpace, moveTabToWindow, openWindow, switchSpace, toggleMute } from "./actions";
 import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/actions";
 import { useClearDataRequest } from "../components/pages/ClearDataDialog";
 import { openInternalPage } from "../components/pages/urls";
@@ -38,10 +19,11 @@ import { openManageExtensions, openPinDialog, openWebStore } from "../components
 import { requestAutofill } from "../components/site/Autofill";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
-import { openProfileMenu } from "../components/ProfileIndicator";
+import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
+import { shownPeek } from "../store/peeks";
 import { isSmall, mainWindowFor } from "../store/small";
-import { closeHarbor, openInMainWindow, openHarbor } from "../components/harbor/actions";
+import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
 
 export function runCommand({ command, arg, windowId: requested }: CommandEvent) {
   const s = useBrowser.getState();
@@ -50,18 +32,23 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     if (command === "closeTab") return void closeNativeWindow(requested!);
     requested = null;
   }
-  if (isSmall(s, requested) && runHarborCommand(command, requested!)) return;
+  if (isSmall(s, requested) && runLittleBayCommand(command, requested!)) return;
+  // A peek on screen takes ⌘W and ⌘O first (⌘O is Open File… otherwise), unless the command bar is open over it.
+  const peekWindow = resolveWindowId(s, requested);
+  if (peekWindow && !s.windowUi[peekWindow]?.panel.open && runPeekCommand(command, peekWindow)) return;
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
   switch (command) {
+    case "undoPinnedFolderMove":
+      return s.undoPinnedFolderMove();
     case "newWindow":
-      return void openWindow({ profileId: arg ?? undefined });
+      return void openWindow({ spaceId: arg ?? undefined });
     case "newIncognitoWindow":
       return void openWindow({ incognito: true });
-    case "newHarbor":
-      return void openHarbor();
-    case "toggleOpenLinksInHarbor":
-      return s.updateSettings({ openLinksInHarbor: !s.settings.openLinksInHarbor });
+    case "newLittleBay":
+      return void openLittleBay();
+    case "toggleOpenLinksInLittleBay":
+      return s.updateSettings({ openLinksInLittleBay: !s.settings.openLinksInLittleBay });
     case "reopenClosedWindow":
       return s.reopenClosedWindow();
     case "setAppearance":
@@ -98,9 +85,9 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     }
   }
 
-  // From Harbor, tabs, windows and the sidebar's commands act on the main window.
-  if (isSmall(s, requested) && !HARBOR_PAGE_COMMANDS.has(command)) {
-    requested = mainWindowFor(s, s.windows[requested!]!.profileId) ?? null;
+  // From Little Bay, tabs, windows and the sidebar's commands act on the main window.
+  if (isSmall(s, requested) && !LITTLE_BAY_PAGE_COMMANDS.has(command)) {
+    requested = mainWindowFor(s, s.windows[requested!]!.spaceId) ?? null;
     if (requested) focus(requested);
   }
 
@@ -128,6 +115,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "newTab":
       return openNewTabPanel(windowId);
     case "reopenClosedTab":
+      // A peek closed last comes back over its tab, as Arc's (store/peeks.ts).
+      if (s.reopenPeek(windowId)) return;
       return s.reopenClosed(windowId);
     case "restoreClosed":
       return arg ? s.restoreClosed(arg, windowId) : undefined;
@@ -148,9 +137,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void web?.runPageCommand("caretBrowsing");
     case "emailPageLocation":
       if (!page || !/^https?:/i.test(page.url)) return;
-      return void openExternalURL(
-        `mailto:?subject=${encodeURIComponent(page.customTitle || page.title || page.url)}&body=${encodeURIComponent(page.url)}`,
-      );
+      return void openExternalURL(`mailto:?subject=${encodeURIComponent(page.customTitle || page.title || page.url)}&body=${encodeURIComponent(page.url)}`);
     case "stop":
       return void web?.stopLoading();
     case "share":
@@ -187,6 +174,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return s.focusPane(windowId, 1);
     case "focusPreviousPane":
       return s.focusPane(windowId, -1);
+    case "removeFromSplit":
+      return tab ? s.removeTabFromSplit(tab.id) : undefined;
     case "toggleSidebar":
       return s.toggleSidebar(windowId);
     case "zoomIn":
@@ -207,7 +196,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void web?.showDevTools("console");
     case "viewSource":
       if (!page || !web || !/^(https?|file):/.test(page.url)) return;
-      return void s.newTab(windowId, { url: `view-source:${page.url}`, openerId: page.id, profileId: page.profileId });
+      return void s.newTab(windowId, { url: `view-source:${page.url}`, openerId: page.id, spaceId: page.spaceId });
     case "back":
       return tabId ? goBack(tabId) : undefined;
     case "forward":
@@ -220,14 +209,16 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "selectLastTab": {
       const rows = numberedTabs(s, windowId);
       const id = command === "selectLastTab" ? rows.at(-1) : rows[Number(arg) - 1];
-      return id ? s.activate(id) : undefined;
+      return id ? s.activate(id, windowId) : undefined;
     }
     case "togglePin":
       return tab ? s.togglePin(tab.id) : undefined;
+    case "togglePinRow":
+      return tab ? s.pinRows([tab.id], !tab.pinnedRow) : undefined;
     case "moveTabDown":
     case "moveTabUp": {
       if (!tab) return;
-      const section = s.windows[windowId]!.tabIds.filter((id) => s.tabs[id]?.profileId === tab.profileId && !!s.tabs[id]?.pinned === tab.pinned);
+      const section = viewTabIds(s, windowId, tab.spaceId).filter((id) => !!s.tabs[id]?.pinned === tab.pinned);
       const at = section.indexOf(tab.id) + (command === "moveTabDown" ? 1 : -1);
       return at >= 0 && at < section.length ? s.moveTab(tab.id, at) : undefined;
     }
@@ -235,12 +226,12 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       const group = groupOf(s, tabId);
       return group ? s.closeGroup(group.id) : undefined;
     }
-    case "openProfileMenu":
-      return s.windows[windowId]?.incognito ? undefined : void openProfileMenu(windowId);
+    case "openSpaceMenu":
+      return s.windows[windowId]?.incognito ? undefined : void openSpaceMenu(windowId);
     case "duplicateTab":
       return tab ? void s.duplicateTab(tab.id) : undefined;
-    case "moveTabToProfile":
-      return tab && arg ? void moveTabToProfile(tab.id, arg) : undefined;
+    case "moveTabToSpace":
+      return tab && arg ? void moveTabToSpace(tab.id, arg) : undefined;
     case "moveTabToWindow":
       return tab && arg ? moveTabToWindow(tab.id, arg) : undefined;
     case "bookmarkPage":
@@ -268,12 +259,12 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return bookmarkAllTabs(windowId);
     case "mergeAllWindows":
       return s.mergeAllWindows(windowId);
-    case "switchProfile":
-      return arg ? switchProfile(windowId, arg, true) : undefined;
-    case "nextProfile":
-      return cycleProfile(windowId, 1);
-    case "previousProfile":
-      return cycleProfile(windowId, -1);
+    case "switchSpace":
+      return arg ? switchSpace(windowId, arg, true) : undefined;
+    case "nextSpace":
+      return cycleSpace(windowId, 1);
+    case "previousSpace":
+      return cycleSpace(windowId, -1);
     case "openExtension":
       return arg ? openExtensionFromMenu(windowId, arg) : undefined;
     case "addExtension":
@@ -282,37 +273,85 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return openPinDialog(windowId);
     case "autofill":
       return void requestAutofill(windowId, arg);
-    case "newProfile":
-      return void createProfile(windowId).then((id) => id && switchProfile(windowId, id));
+    case "newSpace":
+      return void createSpace(windowId).then((id) => id && switchSpace(windowId, id));
   }
 }
 
-// What Harbor runs on its own page; everything else goes to the main window (menuState disables the tab and
+// What Little Bay runs on its own page; everything else goes to the main window (menuState disables the tab and
 // sidebar commands that make no sense from there).
-const HARBOR_PAGE_COMMANDS = new Set<string>([
-  "print", "printWithSystemDialog", "savePage", "caretBrowsing", "emailPageLocation", "stop", "share", "copyUrl",
-  "copyUrlAsMarkdown", "findInPage", "findAndReplace", "jumpToSelection", "useSelectionForFind", "findNext", "findPrevious",
-  "reload", "forceReload", "zoomIn", "zoomOut", "zoomReset", "devTools", "toggleDevTools", "inspectElements",
-  "javaScriptConsole", "viewSource", "back", "forward", "bookmarkPage", "addBookmarkToFolder", "openBookmark", "toggleMute",
-  "cast", "openExtension", "addExtension", "autofill", "reopenClosedTab", "restoreClosed", "downloads",
+const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
+  "print",
+  "printWithSystemDialog",
+  "savePage",
+  "caretBrowsing",
+  "emailPageLocation",
+  "stop",
+  "share",
+  "copyUrl",
+  "copyUrlAsMarkdown",
+  "findInPage",
+  "findAndReplace",
+  "jumpToSelection",
+  "useSelectionForFind",
+  "findNext",
+  "findPrevious",
+  "reload",
+  "forceReload",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
+  "devTools",
+  "toggleDevTools",
+  "inspectElements",
+  "javaScriptConsole",
+  "viewSource",
+  "back",
+  "forward",
+  "bookmarkPage",
+  "addBookmarkToFolder",
+  "openBookmark",
+  "toggleMute",
+  "cast",
+  "openExtension",
+  "addExtension",
+  "autofill",
+  "reopenClosedTab",
+  "restoreClosed",
+  "downloads",
 ]);
 
-function runHarborCommand(command: string, windowId: string): boolean {
+function runLittleBayCommand(command: string, windowId: string): boolean {
   const s = useBrowser.getState();
   const tabId = activeTabId(s, windowId);
   const tab = tabId ? s.tabs[tabId] : undefined;
   switch (command) {
     case "closeTab":
-      // A blank Harbor (⌘⌥N, nothing typed yet) closes with its field open.
+      // A blank Little Bay (⌘⌥N, nothing typed yet) closes with its field open.
       if (s.windowUi[windowId]?.panel.open && tab?.url) s.closePanel(windowId);
       else if (tabId && s.find[tabId]?.open) closeFind(tabId);
-      else closeHarbor(windowId);
+      else closeLittleBay(windowId);
       return true;
     case "focusCommandBar":
       s.openPanel(windowId, tab?.url ?? "");
       return true;
     case "openFile":
       openInMainWindow(windowId);
+      return true;
+  }
+  return false;
+}
+
+// A link's peek on screen (store/peeks.ts): ⌘W closes it and ⌘O keeps it as a tab, as Arc's; Little Bay's keys.
+function runPeekCommand(command: string, windowId: string): boolean {
+  const s = useBrowser.getState();
+  if (!shownPeek(s, windowId)) return false;
+  switch (command) {
+    case "closeTab":
+      s.closePeek(windowId);
+      return true;
+    case "openFile":
+      s.keepPeek(windowId);
       return true;
   }
   return false;
@@ -329,14 +368,14 @@ async function addBookmarkToFolder(windowId: string, folder: string) {
   const tabId = activeTabId(s, windowId);
   const tab = tabId ? s.tabs[tabId] : undefined;
   if (!tab?.url) return;
-  const profileId = bookmarkProfileId(s, s.windows[windowId]);
+  const spaceId = bookmarkSpaceId(s, s.windows[windowId]);
   let parentId = folder;
   if (folder === "new") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (!title) return;
-    parentId = useBrowser.getState().addBookmarkFolder({ profileId, title });
+    parentId = useBrowser.getState().addBookmarkFolder({ spaceId, title });
   }
-  useBrowser.getState().addBookmark({ profileId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
+  useBrowser.getState().addBookmark({ spaceId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
 }
 
 async function openFiles(windowId: string | null) {
@@ -347,5 +386,5 @@ async function openFiles(windowId: string | null) {
   if (!target) return void openWindow({ url: urls[0] });
   let last: string | undefined;
   for (const url of urls) last = useBrowser.getState().newTab(target, { url });
-  if (last) useBrowser.getState().activate(last);
+  if (last) useBrowser.getState().activate(last, target);
 }

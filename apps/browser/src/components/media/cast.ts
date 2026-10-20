@@ -1,15 +1,7 @@
-import {
-  closeCastDialog,
-  onCastDialog,
-  onCastRoutes,
-  showCastDialog,
-  watchCastRoutes,
-  type CastDialog,
-  type CastRoute,
-} from "@bay/nncore";
+import { closeCastDialog, onCastDialog, onCastRoutes, showCastDialog, watchCastRoutes, type CastDialog, type CastRoute } from "@bay/nncore";
 import { create } from "zustand";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { activeTabId, engineProfile, incognitoProfileId } from "../../store/model";
+import { activeTabId, engineProfile, incognitoSpaceId } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
 import { tabForBrowser } from "../layout/pageState";
 
@@ -23,7 +15,7 @@ if (__DEV__) (globalThis as { nnCast?: unknown }).nnCast = { useCast };
 
 export function castProfile(s: BrowserState, windowId: string): string {
   const w = s.windows[windowId];
-  return !w ? "" : w.incognito ? incognitoProfileId(windowId) : engineProfile(w.profileId);
+  return !w ? "" : w.incognito ? incognitoSpaceId(windowId) : engineProfile(w.spaceId);
 }
 
 let started = false;

@@ -1,6 +1,6 @@
 {
   "name": "@bay/browser",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "main": "index",
   "scripts": {
@@ -9,6 +9,11 @@
     "pods": "cd macos && pod install",
     "build": "xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS -derivedDataPath build -destination 'platform=macOS,arch=arm64' -quiet -configuration Release",
     "typecheck": "tsc -p .",
+    "compiler:check": "node scripts/compiler-check.mjs",
+    "test:folders": "node scripts/nested-folders-test.mjs",
+    "dev:folders": "node scripts/nested-folders-demo.mjs",
+    "test:links": "node scripts/external-link-rules-test.mjs",
+    "dev:links": "node scripts/external-link-rules-demo.mjs",
     "test": "node --no-warnings --import ./src/test-loader.mjs --test \"src/**/*.test.mjs\"",
     "web": "node ../../scripts/web.mjs dev",
     "build:web": "node ../../scripts/web.mjs build",
@@ -23,6 +28,7 @@
     "@bay/shell": "workspace:*",
     "@bay/sync": "workspace:*",
     "@expo/metro-runtime": "~6.1.2",
+    "@legendapp/list": "^3.6.0",
     "expo": "~54.0.37",
     "expo-modules-core": "~3.0.29",
     "react": "19.1.4",

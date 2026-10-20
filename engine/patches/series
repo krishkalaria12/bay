@@ -38,6 +38,7 @@ chromium mac chromium-devtools-redock-display.patch
 chromium all chromium-devtools-window-title.patch
 chromium all chromium-extension-install-prompt-hook.patch
 chromium all chromium-extension-updates.patch
+chromium all chromium-extension-import.patch
 chromium all chromium-extension-window-hidden.patch
 chromium all chromium-branding.patch
 chromium win chromium-bay-branding-win.patch
@@ -56,6 +57,7 @@ chromium all chromium-extension-installed-bubble.patch
 chromium all chromium-pip-close-keeps-playing.patch
 chromium all chromium-pip-overlay-window.patch
 chromium all chromium-tab-sharing-capturer.patch
+chromium all chromium-file-chooser-all-accepted-types.patch
 chromium mac chromium-bay-layer.patch
 chromium win chromium-bay-layer-win.patch
 chromium win chromium-bay-webui-window.patch

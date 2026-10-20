@@ -18,13 +18,15 @@ import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { engineProfile, plural } from "../../../store/model";
 import { importModule } from "../../import/module";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
 import { Favicon, IconButton } from "../../primitives";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, Sheet, TextField, Toggle } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { MONO_FONT } from "../../../lib/constants";
+import { PASSWORDS_UNLOCK_MS } from "../constants";
 
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
@@ -34,14 +36,13 @@ function passwordManagerAppsNote() {
     : `${apps} For 1Password, add Bay once: in the 1Password app, open Settings › Browser › Add Browser and choose Bay.`;
 }
 
-const UNLOCK_MS = 5 * 60_000;
 const unlockedUntil = new Map<string, number>();
 const isUnlocked = (profile: string) => Date.now() < (unlockedUntil.get(profile) ?? 0);
 
-export function PasswordsPane({ profileId: initial }: { profileId?: string | null }) {
+export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => initial ?? useBrowser.getState().settings.defaultProfileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
   const [, setUnlockedAt] = useState(0);
   const [list, setList] = useState<SavedPassword[] | null>(null);
   const [never, setNever] = useState<string[]>([]);
@@ -49,21 +50,31 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
   const [query, setQuery] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [exportStatus, setExportStatus] = useState("");
-  const profile = engineProfile(profileId);
+  const profile = engineProfile(spaceId);
   const unlocked = isUnlocked(profile);
 
   const load = () => {
-    void listPasswords(profile).then(setList).catch(() => setList([]));
-    void getNeverSavePasswordOrigins(profile).then(setNever).catch(() => {});
+    void listPasswords(profile)
+      .then(setList)
+      .catch(() => setList([]));
+    void getNeverSavePasswordOrigins(profile)
+      .then(setNever)
+      .catch(() => {});
   };
   useEffect(() => {
     if (unlocked) load();
-  }, [unlocked, profileId]);
-  useEffect(() => void getPasswordAutofill(profile).then(setAutofill).catch(() => {}), [profile]);
+  }, [unlocked, spaceId]);
+  useEffect(
+    () =>
+      void getPasswordAutofill(profile)
+        .then(setAutofill)
+        .catch(() => {}),
+    [profile],
+  );
 
   const unlock = async () => {
     if (!(await unlockPasswords(profile))) return;
-    unlockedUntil.set(profile, Date.now() + UNLOCK_MS);
+    unlockedUntil.set(profile, Date.now() + PASSWORDS_UNLOCK_MS);
     setUnlockedAt(Date.now());
   };
 
@@ -98,13 +109,14 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
         title="Passwords"
         description="Saved on this Mac, separately for each profile, and encrypted with a key in your Keychain."
         action={
-          profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
-          ) : undefined
+          profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
-        <Row title="Offer to save and fill passwords" description="Offers to save a login after you sign in, and suggests saved ones when you click a login field.">
+        <Row
+          title="Offer to save and fill passwords"
+          description="Offers to save a login after you sign in, and suggests saved ones when you click a login field."
+        >
           <Toggle value={autofill} onChange={(v) => void setPasswordAutofill(v, profile).then(() => setAutofill(v))} />
         </Row>
         <Row title="Import passwords" description={importStatus || "From a CSV exported by Chrome, Safari, Firefox, 1Password, Bitwarden…"}>
@@ -125,7 +137,10 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
         </View>
       ) : (
         <>
-          <SectionHeader title={list ? plural(list.length, "Saved Password") : "Saved Passwords"} action={<SearchField value={query} onChangeText={setQuery} placeholder="Search" width={200} />} />
+          <SectionHeader
+            title={list ? plural(list.length, "Saved Password") : "Saved Passwords"}
+            action={<SearchField value={query} onChangeText={setQuery} placeholder="Search" width={200} />}
+          />
           <Group>
             {list && shown.length === 0 ? (
               <Row title={query ? "No passwords match" : "No saved passwords"} />
@@ -226,10 +241,17 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
               <TextField value={password ?? ""} onChangeText={setPassword} secure={!revealed} style={{ width: 220 }} />
             ) : (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <Text selectable style={{ fontSize: 13, color: theme.textPrimary, fontFamily: revealed ? "Menlo" : undefined }}>
+                <Text selectable style={{ fontSize: 13, color: theme.textPrimary, fontFamily: revealed ? MONO_FONT : undefined }}>
                   {password === null ? "…" : revealed ? password : "•".repeat(Math.min(password.length, 12))}
                 </Text>
-                <IconButton icon={revealed ? "eye.slash" : "eye"} size={11} box={24} radius={6} onPress={() => setRevealed(!revealed)} tooltip={revealed ? "Hide" : "Show"} />
+                <IconButton
+                  icon={revealed ? "eye.slash" : "eye"}
+                  size={11}
+                  box={24}
+                  radius={6}
+                  onPress={() => setRevealed(!revealed)}
+                  tooltip={revealed ? "Hide" : "Show"}
+                />
                 <IconButton icon="doc.on.doc" size={11} box={24} radius={6} onPress={() => password && copyText(password)} tooltip="Copy Password" />
               </View>
             )}

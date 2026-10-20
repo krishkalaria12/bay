@@ -1,0 +1,9 @@
+# Cloudflare reads this from dist/ and doesn't serve it. Everything else revalidates by ETag.
+
+# Astro fingerprints these file names, so they never change in place.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

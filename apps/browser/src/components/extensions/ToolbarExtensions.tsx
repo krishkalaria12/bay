@@ -21,8 +21,7 @@ import {
   windowExtensions,
   type Anchor,
 } from "./state";
-
-const BUTTON = 28;
+import { EXTENSION_BUTTON } from "./constants";
 
 function useToolbarExtensions(windowId: string) {
   const shown = useWindowExtensions(windowId);
@@ -33,7 +32,7 @@ export function useToolbarExtensionsWidth(windowId: string): number {
   const { pinned, overflow } = useToolbarExtensions(windowId);
   const casting = useCastRoutes(windowId).length > 0;
   const count = pinned.length + (overflow ? 1 : 0) + (casting ? 1 : 0);
-  return count ? count * BUTTON + 6 : 0;
+  return count ? count * EXTENSION_BUTTON + 6 : 0;
 }
 
 // Memoized: the toolbar re-renders with its page (title, loading), and these props rarely change.
@@ -73,7 +72,7 @@ function useAnchor(key: string) {
   const measure = () =>
     new Promise<Anchor>((resolve) => {
       const view = ref.current;
-      if (!view) return resolve({ x: 0, y: 0, width: BUTTON, height: BUTTON });
+      if (!view) return resolve({ x: 0, y: 0, width: EXTENSION_BUTTON, height: EXTENSION_BUTTON });
       view.measureInWindow((x, y, width, height) => {
         const anchor = { x, y, width, height };
         toolbarAnchors.set(key, anchor);
@@ -104,8 +103,8 @@ function ExtensionButton({ ext, windowId, browserId, palette }: { ext: Installed
           {({ pressed }) => (
             <View
               style={{
-                width: BUTTON,
-                height: BUTTON,
+                width: EXTENSION_BUTTON,
+                height: EXTENSION_BUTTON,
                 borderRadius: 7,
                 alignItems: "center",
                 justifyContent: "center",
@@ -177,8 +176,8 @@ function CastButton({ windowId, routes, palette }: { windowId: string; routes: C
           {({ pressed }) => (
             <View
               style={{
-                width: BUTTON,
-                height: BUTTON,
+                width: EXTENSION_BUTTON,
+                height: EXTENSION_BUTTON,
                 borderRadius: 7,
                 alignItems: "center",
                 justifyContent: "center",
@@ -219,8 +218,8 @@ function OverflowButton({ windowId, palette }: { windowId: string; palette: Tool
         {({ pressed }) => (
           <View
             style={{
-              width: BUTTON,
-              height: BUTTON,
+              width: EXTENSION_BUTTON,
+              height: EXTENSION_BUTTON,
               borderRadius: 7,
               alignItems: "center",
               justifyContent: "center",

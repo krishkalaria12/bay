@@ -9,7 +9,6 @@ const config = mergeConfig(getDefaultConfig(projectRoot), {
   watchFolders: [workspaceRoot],
   resolver: {
     nodeModulesPaths: [path.resolve(workspaceRoot, "node_modules")],
-    blockList: [/[/\\]windows[/\\](?:x64|ARM64|Generated Files|packages|bundle)[/\\]/, /\.ProjectImports\.zip$/],
     resolveRequest(context, moduleName, platform) {
       if (platform === "macos" && (moduleName === "react-native" || moduleName.startsWith("react-native/"))) {
         moduleName = moduleName.replace(/^react-native/, "react-native-macos");

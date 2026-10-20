@@ -1,18 +1,10 @@
 import { Pressable, View, shortcutForCommand, capabilities, shortcutLabel } from "@bay/platform";
-import {
-  addToDock,
-  fileExists,
-  fileIcon,
-  isDefaultBrowser,
-  isInDock,
-  launchAtLoginStatus,
-  setAsDefaultBrowser,
-  setLaunchAtLogin,
-  Symbol,
-} from "@bay/shell";
+import { listInstalledBrowsers, type BrowserApplication } from "@bay/import";
+import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, StyleSheet, Text } from "react-native";
-import { PROFILE_COLORS, themeFor, useTheme } from "../../lib/theme";
+import { interpolateColor } from "@bay/platform/motion";
+import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
@@ -20,8 +12,8 @@ import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personali
 import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, recordDefaultBrowserTrial, useOnboarding } from "./state";
 import { CheckMark, CheckRow, PrimaryButton, Reveal, SecondaryButton, StepProgress, StepTitle, useOnboardingColors } from "./ui";
-
-const ICON = require("../../../assets/app-icon.png");
+import { APP_ICON } from "../../lib/assets";
+import { BrowserIcon } from "../import/BrowserIcon";
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
@@ -80,10 +72,12 @@ export function DefaultBrowserStep() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(([isDefault, inDock, login]) => {
-      setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
-      if (login === "enabled") setLogin(true);
-    });
+    void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(
+      ([isDefault, inDock, login]) => {
+        setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
+        if (login === "enabled") setLogin(true);
+      },
+    );
   }, []);
 
   const apply = async () => {
@@ -131,11 +125,10 @@ export function DefaultBrowserStep() {
   );
 }
 
-function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
+function SystemChip({ on, icon, label }: { on: boolean; icon: string; label: string }) {
   const colors = useOnboardingColors();
-  const chip = (on: boolean, icon: string, label: string) => (
+  return (
     <View
-      key={label}
       style={{
         flexDirection: "row",
         alignItems: "center",
@@ -155,13 +148,16 @@ function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: b
       <CheckMark on={on} size={16} />
     </View>
   );
+}
+
+function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
   return (
     <View style={{ alignItems: "center", gap: 28 }}>
-      <Image source={ICON} style={{ width: 132, height: 132 }} />
+      <Image source={APP_ICON} style={{ width: 132, height: 132 }} />
       <View style={{ gap: 8, alignItems: "center" }}>
-        {chip(isDefault, "globe", "Default browser")}
-        {capabilities.dock && chip(dock, "dock.rectangle", "In your Dock")}
-        {chip(login, "power", "Opens at login")}
+        <SystemChip on={isDefault} icon="globe" label="Default browser" />
+        {capabilities.dock && <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />}
+        <SystemChip on={login} icon="power" label="Opens at login" />
       </View>
     </View>
   );
@@ -189,13 +185,21 @@ export function PersonalizeStep() {
   );
 }
 
+// The preview's gradient: bands this many, top to bottom.
+const PREVIEW_BANDS = 16;
+
 function WindowPreview({ windowId }: { windowId: string }) {
   const colors = useOnboardingColors();
   const dark = useTheme().dark;
-  const color = useBrowser((s) => s.profiles[s.windows[windowId]?.profileId ?? ""]?.color ?? "plum");
+  // The space's whole look, as its window shows it: a gradient theme (a new install's Twilight) or a preset colour.
+  const key = useBrowser((s) => spaceThemeKey(s.spaces[s.windows[windowId]?.spaceId ?? ""], dark));
+  const accent = useBrowser((s) => {
+    const space = s.spaces[s.windows[windowId]?.spaceId ?? ""];
+    return space?.theme?.colors[0] ?? SPACE_COLORS[space?.color ?? "plum"]?.swatch ?? SPACE_COLORS.plum.swatch;
+  });
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
-  const theme = themeFor(`${color}:${dark ? "dark" : "light"}`);
-  const swatch = PROFILE_COLORS[color]?.swatch ?? PROFILE_COLORS.plum.swatch;
+  const theme = themeFor(key);
+  const [top, bottom] = theme.windowTint;
   const line = { height: 6, borderRadius: 3, backgroundColor: colors.progressTrack };
   return (
     <View
@@ -205,12 +209,29 @@ function WindowPreview({ windowId }: { windowId: string }) {
         borderRadius: 12,
         padding: 7,
         gap: 6,
-        backgroundColor: theme.windowTint[0],
+        backgroundColor: top,
         borderWidth: StyleSheet.hairlineWidth * 2,
         borderColor: colors.rowBorder,
         flexDirection: layout === "sidebar" ? "row" : "column",
+        overflow: "hidden",
       }}
     >
+      {/* Top to bottom, the window's two colours (one, for a preset), in bands fine enough to read as a gradient. */}
+      {top !== bottom
+        ? Array.from({ length: PREVIEW_BANDS }, (_, i) => (
+            <View
+              key={i}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: `${(i / PREVIEW_BANDS) * 100}%`,
+                height: `${100 / PREVIEW_BANDS + 1}%`,
+                backgroundColor: interpolateColor(i / (PREVIEW_BANDS - 1), [0, 1], [top, bottom]),
+              }}
+            />
+          ))
+        : null}
       {layout === "sidebar" ? (
         <View style={{ width: 70, gap: 6, paddingTop: 4 }}>
           <View style={{ flexDirection: "row", gap: 4, marginBottom: 6 }}>
@@ -237,7 +258,7 @@ function WindowPreview({ windowId }: { windowId: string }) {
         </View>
       )}
       <View style={{ flex: 1, borderRadius: 7, backgroundColor: theme.card, alignItems: "center", justifyContent: "center" }}>
-        <View style={{ width: "62%", height: 22, borderRadius: 7, backgroundColor: colors.card, borderWidth: 1, borderColor: `${swatch}99` }} />
+        <View style={{ width: "62%", height: 22, borderRadius: 7, backgroundColor: colors.card, borderWidth: 1, borderColor: `${accent}99` }} />
       </View>
     </View>
   );
@@ -245,37 +266,24 @@ function WindowPreview({ windowId }: { windowId: string }) {
 
 // MARK: Import
 
-const BROWSERS = [
-  { name: "Chrome", path: "/Applications/Google Chrome.app" },
-  { name: "Safari", path: "/Applications/Safari.app" },
-  { name: "Arc", path: "/Applications/Arc.app" },
-  { name: "Dia", path: "/Applications/Dia.app" },
-  { name: "Helium", path: "/Applications/Helium.app" },
-  { name: "Firefox", path: "/Applications/Firefox.app" },
-  { name: "Edge", path: "/Applications/Microsoft Edge.app" },
-  { name: "Brave", path: "/Applications/Brave Browser.app" },
-  { name: "Opera", path: "/Applications/Opera.app" },
-  { name: "Vivaldi", path: "/Applications/Vivaldi.app" },
-];
-
 export function ImportStep() {
   const next = useOnboarding((s) => s.next);
   const colors = useOnboardingColors();
   const [opened, setOpened] = useState(false);
-  const [icons, setIcons] = useState<{ name: string; uri: string }[]>([]);
+  const [browsers, setBrowsers] = useState<BrowserApplication[]>([]);
 
   useEffect(() => {
-    let live = true;
-    void Promise.all(
-      BROWSERS.map(async (b) => ({ browser: b, installed: await fileExists(b.path).catch(() => false) })),
-    ).then(async (results) => {
-      if (!live) return;
-      const installed = results.filter((result) => result.installed).slice(0, 6).map((result) => result.browser);
-      const list = await Promise.all(installed.map(async (b) => ({ name: b.name, uri: (await fileIcon(b.path, 56).catch(() => null)) ?? "" })));
-      if (live) setIcons(list.filter((i) => i.uri));
-    }).catch(() => undefined);
+    let active = true;
+    void listInstalledBrowsers().then(
+      (installed) => {
+        if (active) setBrowsers(installed);
+      },
+      () => {
+        if (active) setBrowsers([]);
+      },
+    );
     return () => {
-      live = false;
+      active = false;
     };
   }, []);
 
@@ -299,15 +307,19 @@ export function ImportStep() {
       preview={
         <View style={{ alignItems: "center", gap: 22 }}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, maxWidth: 300 }}>
-            {icons.map((i) => (
-              <View key={i.name} style={{ alignItems: "center", gap: 6, width: 72 }}>
-                <Image source={{ uri: i.uri }} style={{ width: 56, height: 56 }} />
-                <Text style={{ fontSize: 11, color: colors.subtitle }}>{i.name}</Text>
-              </View>
-            ))}
+            {browsers.length ? (
+              browsers.map((browser) => (
+                <View key={browser.id} style={{ alignItems: "center", gap: 6, width: 72 }}>
+                  <BrowserIcon iconPath={browser.iconPath} size={56} color={colors.steps} />
+                  <Text style={{ fontSize: 11, color: colors.subtitle }}>{browser.name}</Text>
+                </View>
+              ))
+            ) : (
+              <Symbol name="globe" size={40} color={colors.steps} style={{ width: 56, height: 56 }} />
+            )}
           </View>
           <Symbol name="arrow.down" size={18} weight="medium" color={colors.steps} style={{ width: 24, height: 24 }} />
-          <Image source={ICON} style={{ width: 72, height: 72 }} />
+          <Image source={APP_ICON} style={{ width: 72, height: 72 }} />
         </View>
       }
     >
@@ -330,7 +342,7 @@ export function ImportStep() {
 export function PinnedTabsStep() {
   const next = useOnboarding((s) => s.next);
   const windowId = useOnboarding((s) => s.windowId);
-  const history = useBrowser((s) => s.history[s.windows[windowId ?? ""]?.profileId ?? ""]);
+  const history = useBrowser((s) => s.history[s.windows[windowId ?? ""]?.spaceId ?? ""]);
   // Preselected from the history as the step opens.
   const [selected, setSelected] = useState<string[]>(() => preselectedSites(history ?? []));
 
@@ -405,7 +417,17 @@ function PinnedPreview({ selected }: { selected: string[] }) {
   const sites = PINNABLE_SITES.filter((s) => selected.includes(s.id));
   const slots = Math.max(6, Math.ceil(sites.length / 3) * 3);
   return (
-    <View style={{ width: 236, padding: 14, borderRadius: 14, backgroundColor: colors.row, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.rowBorder, gap: 12 }}>
+    <View
+      style={{
+        width: 236,
+        padding: 14,
+        borderRadius: 14,
+        backgroundColor: colors.row,
+        borderWidth: StyleSheet.hairlineWidth * 2,
+        borderColor: colors.rowBorder,
+        gap: 12,
+      }}
+    >
       <View style={{ flexDirection: "row", gap: 6 }}>
         {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
           <View key={c} style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: c }} />
@@ -469,7 +491,17 @@ export function OutroStep() {
           [shortcutForCommand("toggleSidebar", "⌘S"), "Hide the sidebar for more room"],
         ].map(([keys, label]) => (
           <View key={keys} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <View style={{ minWidth: 38, height: 24, paddingHorizontal: 7, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: colors.button }}>
+            <View
+              style={{
+                minWidth: 38,
+                height: 24,
+                paddingHorizontal: 7,
+                borderRadius: 6,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: colors.button,
+              }}
+            >
               <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{shortcutLabel(keys ?? "")}</Text>
             </View>
             <Text style={{ fontSize: 13, color: colors.subtitle }}>{label}</Text>
@@ -505,7 +537,7 @@ function Postcard() {
       <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />
       <View style={{ width: 104, paddingLeft: 14, justifyContent: "space-between", alignItems: "flex-end" }}>
         <View style={{ padding: 4, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.rowBorder, borderRadius: 3 }}>
-          <Image source={ICON} style={{ width: 46, height: 46 }} />
+          <Image source={APP_ICON} style={{ width: 46, height: 46 }} />
         </View>
         <View style={{ alignSelf: "stretch", gap: 12 }}>
           {[0, 1, 2].map((i) => (

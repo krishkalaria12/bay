@@ -27,7 +27,10 @@ final class AppDelegate: ExpoAppDelegate {
   }
 
   override func application(_ application: NSApplication, open urls: [URL]) {
-    OpenURLInbox.receive(urls)
+    let senderPID = NSAppleEventManager.shared().currentAppleEvent?
+      .attributeDescriptor(forKeyword: AEKeyword(keySenderPIDAttr))?.int32Value
+    let sourceApp = senderPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
+    OpenURLInbox.receive(urls, sourceApp: sourceApp)
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

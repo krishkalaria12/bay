@@ -33,13 +33,14 @@ const here = fileURLToPath(import.meta.url);
 // MARK: Processes
 
 /** A port nothing listens on yet (another instance's DevTools would answer for the wrong app). */
-export const freePort = () => new Promise((resolve) => {
-  const probe = createNetServer();
-  probe.listen(0, "127.0.0.1", () => {
-    const { port } = probe.address();
-    probe.close(() => resolve(port));
+export const freePort = () =>
+  new Promise((resolve) => {
+    const probe = createNetServer();
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
   });
-});
 export function parsePort(value) {
   const n = Number(value);
   if (!/^\d+$/.test(String(value)) || n < 1 || n > 65535) throw new Error(`a port is an integer 1..65535, got ${value}`);
@@ -65,8 +66,13 @@ export function processInfo(pid) {
 export function binaryPids(binary) {
   const r = spawnSync("ps", ["-ww", "-ax", "-o", "pid=", "-o", "command="], { encoding: "utf8", timeout: 5000 });
   if (r.status !== 0) throw new Error(`ps failed: ${r.stderr}`);
-  return new Set(r.stdout.split("\n").map((l) => /^\s*(\d+)\s+(.*)$/.exec(l))
-    .filter((m) => m && commandIsBinary(m[2], binary)).map((m) => Number(m[1])));
+  return new Set(
+    r.stdout
+      .split("\n")
+      .map((l) => /^\s*(\d+)\s+(.*)$/.exec(l))
+      .filter((m) => m && commandIsBinary(m[2], binary))
+      .map((m) => Number(m[1])),
+  );
 }
 /** null while nothing listens yet; throws when the port's holder can't be this launch's app. */
 export function ownedCandidate(listeners, before, commandOf, binary) {
@@ -78,49 +84,95 @@ export function ownedCandidate(listeners, before, commandOf, binary) {
   if (!commandIsBinary(command, binary)) throw new Error(`port listener ${pid} is not ${binary}: ${command}`);
   return pid;
 }
-export const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; } };
+export const isAlive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+};
 /** The app bundle's main executable. */
-export const binaryOf = (app) => join(app, "Contents/MacOS",
-  execFileSync("plutil", ["-extract", "CFBundleExecutable", "raw", join(app, "Contents/Info.plist")]).toString().trim());
+export const binaryOf = (app) =>
+  join(
+    app,
+    "Contents/MacOS",
+    execFileSync("plutil", ["-extract", "CFBundleExecutable", "raw", join(app, "Contents/Info.plist")])
+      .toString()
+      .trim(),
+  );
 /** The app's windows on screen (CoreGraphics' numbers, layer 0), for screencapture -l. */
-export const onScreenWindows = (pid) => JSON.parse(execFileSync("osascript", ["-l", "JavaScript", "-e",
-  `ObjC.import("CoreGraphics"); JSON.stringify(ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0)))
-     .filter((w) => w.kCGWindowOwnerPID === ${pid} && w.kCGWindowLayer === 0).map((w) => w.kCGWindowNumber))`], { timeout: 20000 }).toString());
+export const onScreenWindows = (pid) =>
+  JSON.parse(
+    execFileSync(
+      "osascript",
+      [
+        "-l",
+        "JavaScript",
+        "-e",
+        `ObjC.import("CoreGraphics"); JSON.stringify(ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0)))
+     .filter((w) => w.kCGWindowOwnerPID === ${pid} && w.kCGWindowLayer === 0).map((w) => w.kCGWindowNumber))`,
+      ],
+      { timeout: 20000 },
+    ).toString(),
+  );
 
 // MARK: Fixtures
 
 const profileColors = ["plum", "blue", "green", "orange", "red"];
 /**
  * A session.json the app restores at launch (store version 2). Everything is optional and filled in:
- *   profiles: ["Personal", "Work"] or [{ id, name, color }] (the first one's id is "default")
- *   windows:  [{ id, profileId, tabIds, activeTabIds, frame, sidebarOpen, incognito }] (default one window, w1)
- *   tabs:     [{ id, windowId, profileId, url, title, pinned, … }] (windowId defaults to the first window)
+ *   spaces: ["Personal", "Work"] or [{ id, name, color }] (the first one's id is "default")
+ *   windows:  [{ id, spaceId, tabIds, activeTabIds, frame, sidebarOpen, incognito }] (default one window, w1)
+ *   tabs:     [{ id, windowId, spaceId, url, title, pinned, … }] (windowId defaults to the first window)
  * and anything else the store keeps (settings, groups, splits, focusedWindowId…) is passed through.
  */
-export function session({ profiles = ["Personal"], windows = [{}], tabs = [], ...rest } = {}) {
-  const ps = profiles.map((p, i) => {
+export function session({ spaces = ["Personal"], windows = [{}], tabs = [], ...rest } = {}) {
+  const ps = spaces.map((p, i) => {
     const o = typeof p === "string" ? { name: p } : p;
     return { id: o.id ?? (i ? o.name.toLowerCase() : "default"), name: o.name ?? o.id, color: o.color ?? profileColors[i % 5], icon: null, createdAt: i, ...o };
   });
-  const ws = windows.map((w, i) => ({ id: w.id ?? `w${i + 1}`, profileId: ps[0].id, ...w }));
+  const ws = windows.map((w, i) => ({ id: w.id ?? `w${i + 1}`, spaceId: ps[0].id, ...w }));
   const ts = tabs.map((t) => {
     const windowId = t.windowId ?? ws[0].id;
-    return { windowId, profileId: ws.find((w) => w.id === windowId)?.profileId ?? ps[0].id, url: "", title: "", favicon: null,
-      pinned: false, muted: false, zoom: 1, customTitle: null, customIcon: null, pinnedUrl: null, openerId: null,
-      createdAt: 1, lastActiveAt: 1, ...t };
+    return {
+      windowId,
+      spaceId: ws.find((w) => w.id === windowId)?.spaceId ?? ps[0].id,
+      url: "",
+      title: "",
+      favicon: null,
+      pinned: false,
+      muted: false,
+      zoom: 1,
+      customTitle: null,
+      customIcon: null,
+      pinnedUrl: null,
+      openerId: null,
+      createdAt: 1,
+      lastActiveAt: 1,
+      ...t,
+    };
   });
   const fullWindows = ws.map((w, i) => {
     const tabIds = w.tabIds ?? ts.filter((t) => t.windowId === w.id).map((t) => t.id);
-    const activeTabIds = w.activeTabIds ?? Object.fromEntries(ps.map((p) => [p.id, ts.find((t) => t.windowId === w.id && t.profileId === p.id)?.id])
-      .filter(([, id]) => id));
+    const activeTabIds =
+      w.activeTabIds ?? Object.fromEntries(ps.map((p) => [p.id, ts.find((t) => t.windowId === w.id && t.spaceId === p.id)?.id]).filter(([, id]) => id));
     return { incognito: false, sidebarOpen: true, frame: [80, 80, 1280, 800], createdAt: i + 1, ...w, tabIds, activeTabIds };
   });
   return {
     version: 2,
-    profiles: Object.fromEntries(ps.map((p) => [p.id, p])),
-    profileOrder: ps.map((p) => p.id),
-    windows: fullWindows, windowOrder: fullWindows.map((w) => w.id), focusedWindowId: fullWindows[0]?.id ?? null, tabs: ts,
-    groups: [], splits: [], closedTabs: [], closedWindows: [], closedGroups: [], cleanedTabs: [],
+    spaces: Object.fromEntries(ps.map((p) => [p.id, p])),
+    spaceOrder: ps.map((p) => p.id),
+    windows: fullWindows,
+    windowOrder: fullWindows.map((w) => w.id),
+    focusedWindowId: fullWindows[0]?.id ?? null,
+    tabs: ts,
+    groups: [],
+    splits: [],
+    closedTabs: [],
+    closedWindows: [],
+    closedGroups: [],
+    cleanedTabs: [],
     ...rest,
   };
 }
@@ -145,7 +197,9 @@ async function metroProxyMain(data, metroPort) {
   let seen = Date.now();
   setInterval(() => {
     let pid = null;
-    try { pid = JSON.parse(readFileSync(join(data, "instance.json"), "utf8")).pid; } catch {}
+    try {
+      pid = JSON.parse(readFileSync(join(data, "instance.json"), "utf8")).pid;
+    } catch {}
     if (pid && isAlive(pid)) seen = Date.now();
     else if (Date.now() - seen > (pid ? 60_000 : 5 * 60_000)) process.exit(0);
   }, 2000);
@@ -154,7 +208,10 @@ async function startMetroProxy(data, metroPort) {
   const child = spawn(process.execPath, [here, "--metro-proxy", data, String(metroPort)], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
   const port = await new Promise((r, j) => {
     let out = "";
-    child.stdout.on("data", (d) => { out += d; if (out.includes("\n")) r(Number(out.trim())); });
+    child.stdout.on("data", (d) => {
+      out += d;
+      if (out.includes("\n")) r(Number(out.trim()));
+    });
     child.on("exit", (code) => j(new Error(`the Metro proxy exited (${code})`)));
     setTimeout(() => j(new Error("the Metro proxy didn't start")), 5000);
   });
@@ -169,8 +226,10 @@ async function startMetroProxy(data, metroPort) {
 async function devtools(target, { name = target.url } = {}) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = () => j(new Error(`DevTools connection to ${name} failed`)))));
-  let seq = 0, closed = false;
-  const pending = new Map(), listeners = new Map();
+  let seq = 0,
+    closed = false;
+  const pending = new Map(),
+    listeners = new Map();
   ws.onmessage = (m) => {
     const msg = JSON.parse(m.data);
     if (msg.id && pending.has(msg.id)) {
@@ -205,10 +264,20 @@ async function devtools(target, { name = target.url } = {}) {
     },
     on(event, fn) {
       listeners.set(event, [...(listeners.get(event) ?? []), fn]);
-      return () => listeners.set(event, (listeners.get(event) ?? []).filter((f) => f !== fn));
+      return () =>
+        listeners.set(
+          event,
+          (listeners.get(event) ?? []).filter((f) => f !== fn),
+        );
     },
-    get closed() { return closed; },
-    close() { try { ws.close(); } catch {} },
+    get closed() {
+      return closed;
+    },
+    close() {
+      try {
+        ws.close();
+      } catch {}
+    },
   };
 }
 
@@ -220,16 +289,21 @@ class Instance {
     this.evalQueue = Promise.resolve();
     this.evalSeq = 0;
   }
-  get alive() { return isAlive(this.pid) && this.stillOwned(); }
+  get alive() {
+    return isAlive(this.pid) && this.stillOwned();
+  }
   /** The same start time and binary: the same process (a reused pid has another start time). */
   stillOwned() {
     const info = processInfo(this.pid);
     return !!info && info.started === this.started && commandIsBinary(info.command, this.binary);
   }
-  get exited() { return !isAlive(this.pid); }
+  get exited() {
+    return !isAlive(this.pid);
+  }
   save(meta) {
     if (meta) this.meta = { ...this.meta, ...meta };
-    const { evalQueue, evalSeq, ...record } = this;
+    // The instance's own fields, less its eval bookkeeping.
+    const record = Object.fromEntries(Object.entries(this).filter(([key]) => key !== "evalQueue" && key !== "evalSeq"));
     writeFileSync(join(this.data, "instance.json"), JSON.stringify(record, null, 2));
     return this;
   }
@@ -277,7 +351,9 @@ class Instance {
     throw new Error(`the app's dev harness never answered (is Metro running on :${this.js?.metroPort ?? 8081}?); last: ${last}`);
   }
 
-  async targets() { return (await fetch(`http://127.0.0.1:${this.port}/json/list`)).json(); }
+  async targets() {
+    return (await fetch(`http://127.0.0.1:${this.port}/json/list`)).json();
+  }
   /** The first page target whose URL contains `urlPart` (or matches the predicate), or null. */
   async pageTarget(urlPart) {
     const test = typeof urlPart === "function" ? urlPart : (t) => t.url.includes(urlPart);
@@ -299,7 +375,9 @@ class Instance {
     const version = await (await fetch(`http://127.0.0.1:${this.port}/json/version`)).json();
     return devtools({ url: "browser", webSocketDebuggerUrl: version.webSocketDebuggerUrl });
   }
-  windows() { return onScreenWindows(this.pid); }
+  windows() {
+    return onScreenWindows(this.pid);
+  }
 
   /**
    * Quits as ⌘Q and Sparkle's updates do (the quit Apple event, to this pid only), then SIGTERM, then SIGKILL; with
@@ -310,7 +388,9 @@ class Instance {
     const how = await this.#quit(opts);
     // The Metro proxy goes with it (a relaunch starts another).
     if (this.js?.mode === "pinned" && (processInfo(this.js.pid)?.command ?? "").includes(`--metro-proxy ${this.data} `))
-      try { process.kill(this.js.pid); } catch {}
+      try {
+        process.kill(this.js.pid);
+      } catch {}
     return how;
   }
   async #quit({ timeout = 15000, graceful = true }) {
@@ -320,8 +400,16 @@ class Instance {
     };
     if (!this.stillOwned()) return { how: "gone" };
     if (graceful) {
-      spawnSync("osascript", ["-l", "JavaScript", "-e",
-        `ObjC.import("AppKit"); const a = $.NSRunningApplication.runningApplicationWithProcessIdentifier(${this.pid}); a.isNil() ? "none" : a.terminate`], { timeout: 10000 });
+      spawnSync(
+        "osascript",
+        [
+          "-l",
+          "JavaScript",
+          "-e",
+          `ObjC.import("AppKit"); const a = $.NSRunningApplication.runningApplicationWithProcessIdentifier(${this.pid}); a.isNil() ? "none" : a.terminate`,
+        ],
+        { timeout: 10000 },
+      );
       if (await gone(timeout)) return { how: "quit" };
     }
     if (!this.stillOwned()) return { how: "gone" };
@@ -331,9 +419,13 @@ class Instance {
     await gone(2000);
     return { how: "SIGKILL" };
   }
-  kill(signal = "SIGKILL") { if (this.stillOwned()) process.kill(this.pid, signal); }
+  kill(signal = "SIGKILL") {
+    if (this.stillOwned()) process.kill(this.pid, signal);
+  }
   /** The app's stdout and stderr so far. */
-  output() { return existsSync(this.log) ? readFileSync(this.log, "utf8") : ""; }
+  output() {
+    return existsSync(this.log) ? readFileSync(this.log, "utf8") : "";
+  }
 }
 
 /**
@@ -360,7 +452,9 @@ export async function launch(app, opts = {}) {
   mkdirSync(data, { recursive: true });
   // A relaunch on this data dir keeps the Metro proxy its last instance had, while it runs.
   let previous = null;
-  try { previous = JSON.parse(readFileSync(join(data, "instance.json"), "utf8")); } catch {}
+  try {
+    previous = JSON.parse(readFileSync(join(data, "instance.json"), "utf8"));
+  } catch {}
   for (const f of ["dev-eval.js", "dev-eval-result.json", "instance.json"]) rmSync(join(data, f), { force: true });
   if (opts.session) writeFileSync(join(data, "session.json"), JSON.stringify(opts.session));
   if (opts.onboarded) writeFileSync(join(data, "onboarding.json"), JSON.stringify({ version: 1, completedAt: 1 }));
@@ -375,13 +469,17 @@ export async function launch(app, opts = {}) {
   let js = { mode: jsMode, metroPort };
   if (jsMode === "pinned") {
     const kept = previous?.js;
-    js = kept?.mode === "pinned" && kept.metroPort === metroPort && isAlive(kept.pid) && listenerPids(kept.port).includes(kept.pid)
-      ? kept : { mode: "pinned", ...(await startMetroProxy(data, metroPort)) };
+    js =
+      kept?.mode === "pinned" && kept.metroPort === metroPort && isAlive(kept.pid) && listenerPids(kept.port).includes(kept.pid)
+        ? kept
+        : { mode: "pinned", ...(await startMetroProxy(data, metroPort)) };
   }
   const location = jsMode === "pinned" ? `localhost:${js.port}` : jsMode === "live" ? `localhost:${metroPort}` : jsMode === "none" ? null : jsMode;
   const switches = [opts.switches].flat().filter(Boolean).join(" ");
   const env = {
-    BAY_BACKGROUND: "1", BAY_DATA_DIR: data, BAY_REMOTE_DEBUGGING_PORT: String(port),
+    BAY_BACKGROUND: "1",
+    BAY_DATA_DIR: data,
+    BAY_REMOTE_DEBUGGING_PORT: String(port),
     ...(location ? { BAY_JS_LOCATION: location } : {}),
     ...(switches ? { BAY_CHROMIUM_SWITCHES: switches } : {}),
     ...opts.env,
@@ -390,8 +488,19 @@ export async function launch(app, opts = {}) {
   const before = binaryPids(binary);
   const launchedAt = Date.now();
   // `open -g -n` with the environment, never a plain open, so it can't take focus.
-  execFileSync("open", ["-g", "-n", ...Object.entries(env).filter(([, v]) => v !== null && v !== undefined).flatMap(([k, v]) => ["--env", `${k}=${v}`]),
-    "--stdout", log, "--stderr", log, ...(opts.urls?.length ? ["-a", app, ...opts.urls] : [app]), ...(opts.args?.length ? ["--args", ...opts.args] : [])]);
+  execFileSync("open", [
+    "-g",
+    "-n",
+    ...Object.entries(env)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .flatMap(([k, v]) => ["--env", `${k}=${v}`]),
+    "--stdout",
+    log,
+    "--stderr",
+    log,
+    ...(opts.urls?.length ? ["-a", app, ...opts.urls] : [app]),
+    ...(opts.args?.length ? ["--args", ...opts.args] : []),
+  ]);
   let owned = null;
   for (const end = Date.now() + (opts.startTimeout ?? 60000); !owned && Date.now() < end; await sleep(100)) {
     let info;
@@ -481,16 +590,22 @@ export function reporter(logFile, { name = "run" } = {}) {
         r.record(checkName, { ms: Date.now() - t0, evidence });
         return true;
       } catch (error) {
-        if (onFail) try { await onFail(error); } catch {}
+        if (onFail)
+          try {
+            await onFail(error);
+          } catch {}
         r.record(checkName, { ms: Date.now() - t0, error });
         return false;
       }
     },
-    get failed() { return results.filter((x) => !x.ok); },
+    get failed() {
+      return results.filter((x) => !x.ok);
+    },
     summary() {
       const ran = results.filter((x) => !x.skipped);
       const failed = ran.filter((x) => !x.ok);
-      const line = `${ran.length - failed.length}/${ran.length} passed in ${((Date.now() - started) / 1000).toFixed(1)} s` +
+      const line =
+        `${ran.length - failed.length}/${ran.length} passed in ${((Date.now() - started) / 1000).toFixed(1)} s` +
         `${failed.length ? `; failed: ${failed.map((x) => x.name).join(", ")}` : ""}. Log: ${logFile}`;
       appendFileSync(logFile, `\n${line}\n`);
       console.log(line);
@@ -526,10 +641,10 @@ if (process.argv[1] === here) {
     assert.throws(() => ownedCandidate([7], new Set(), cmd({}), bin), /is not/);
     assert.throws(() => ownedCandidate([7, 8], new Set(), cmd({ 7: bin, 8: bin }), bin), /2 listeners/);
     assert.ok(isAlive(process.pid));
-    const s = session({ profiles: ["Personal", "Work"], tabs: [{ id: "t1" }, { id: "t2", profileId: "work" }] });
+    const s = session({ spaces: ["Personal", "Work"], tabs: [{ id: "t1" }, { id: "t2", spaceId: "work" }] });
     assert.deepEqual(s.windows[0].tabIds, ["t1", "t2"]);
     assert.deepEqual(s.windows[0].activeTabIds, { default: "t1", work: "t2" });
-    assert.deepEqual(s.profileOrder, ["default", "work"]);
+    assert.deepEqual(s.spaceOrder, ["default", "work"]);
     console.log("PASS self-test");
   }
 }

@@ -7,23 +7,22 @@ import { useMedia } from "../components/media/state";
 import { isInternalTab } from "../components/pages";
 import { openSettings } from "../components/settings/windows";
 import { useBrowser, type BrowserState } from "../store/browser";
-import { activeTabId, engineProfile, isIncognitoProfile, wake } from "../store/model";
+import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace, wake } from "../store/model";
+import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
+import { FREEZE_SWEEP_MS, LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
+import { siteKeptAwake } from "./awakeSites";
 
 export const POLICY = {
   protectedRecent: 10,
-  idleMs: 30 * 60_000,
-  profileIdleMs: 10 * 60_000,
+  idleMs: 2 * 60 * 60_000,
+  profileIdleMs: 2 * 60 * 60_000,
   perSweep: 6,
   busyCpu: 10,
   freezeAfterMs: 60_000,
 };
-
-const SWEEP_MS = 15_000;
-const FREEZE_SWEEP_MS = 30_000;
-const EVAL_TIMEOUT_MS = 2_000;
 
 // Whether a page is frozen is the engine's alone (showing a page unfreezes it), so nothing here keeps a copy.
 type Lifecycle = {
@@ -64,6 +63,9 @@ function shownTabIds(s: BrowserState): Set<string> {
     if (!id) continue;
     shown.add(id);
     for (const pane of splitOf(s, id)?.tabIds ?? []) shown.add(pane);
+    // A peek over the page is on screen too.
+    const peek = shownPeek(s, w.id);
+    if (peek) shown.add(peek.tabId);
   }
   return shown;
 }
@@ -109,15 +111,19 @@ for (let i = 0; !unsaved && i < frames.length; i++) {
 }
 post("result", JSON.stringify(unsaved));`;
 
-const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T) =>
+const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T) =>
   Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
 
 async function hasUnsavedInput(handle: WebViewHandle): Promise<boolean | null> {
-  const result = await withTimeout(handle.evaluate<boolean>(UNSAVED_INPUT_CHECK).catch(() => null), EVAL_TIMEOUT_MS, null);
+  const result = await withTimeout(
+    handle.evaluate<boolean>(UNSAVED_INPUT_CHECK).catch(() => null),
+    LIFECYCLE_EVAL_TIMEOUT_MS,
+    null,
+  );
   return typeof result === "boolean" ? result : null;
 }
 
-export async function sleepTab(id: string): Promise<boolean> {
+export async function sleepTab(id: string, automatic = false): Promise<boolean> {
   const handle = webviews.get(id);
   if (!handle || useLifecycle.getState().discarded[id]) return false;
   // Asked now, never remembered: a page can be shown and typed in at any moment before this.
@@ -126,6 +132,11 @@ export async function sleepTab(id: string): Promise<boolean> {
   applyHeldReports();
   const s = store();
   if (shownTabIds(s).has(id) || keepAliveReason(s, id) || webviews.get(id) !== handle) return false;
+  if (
+    automatic &&
+    (s.tabs[id]?.kept || inPinnedContainer(s, id) || (currentSystem()?.memoryPressure !== "critical" && siteKeptAwake(s.tabs[id]?.url, s.settings.awakeSites)))
+  )
+    return false;
   // Only what Chrome did counts, and its onDiscarded records it (a later onReady, the tab woken, clears it): a refusal
   // leaves the tab awake.
   return (await handle.discard()) === "discarded";
@@ -135,7 +146,7 @@ export async function sleepTab(id: string): Promise<boolean> {
 
 export function noteReady(tabId: string) {
   const tab = store().tabs[tabId];
-  if (tab) loadedProfiles.add(engineProfile(tab.profileId));
+  if (tab) loadedProfiles.add(engineProfile(tab.spaceId));
   forget(tabId, false);
 }
 
@@ -186,15 +197,20 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     const candidates = [...webviews.keys()].filter((id) => {
       const tab = s.tabs[id];
       // A kept tab sleeps only when asked (the tab menu's Put Tab to Sleep).
-      if (!tab || tab.kept || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
+      if (!tab || tab.kept || inPinnedContainer(s, id) || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
+      if (pressure !== "critical" && siteKeptAwake(tab.url, s.settings.awakeSites)) return false;
       const idle = now - (hiddenAt.get(id) ?? now);
-      if (!unused.has(tab.profileId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
+      if (!unused.has(tab.spaceId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
       return !keepAliveReason(s, id);
     });
-    candidates.sort((a, b) => (hiddenAt.get(a) ?? now) - (hiddenAt.get(b) ?? now));
+    candidates.sort(
+      (a, b) =>
+        Number(siteKeptAwake(s.tabs[a]?.url, s.settings.awakeSites)) - Number(siteKeptAwake(s.tabs[b]?.url, s.settings.awakeSites)) ||
+        (hiddenAt.get(a) ?? now) - (hiddenAt.get(b) ?? now),
+    );
     for (const id of candidates) {
       if (slept.length >= policy.perSweep) break;
-      if (await sleepTab(id)) slept.push(id);
+      if (await sleepTab(id, true)) slept.push(id);
     }
     releaseUnusedProfiles();
   } finally {
@@ -204,9 +220,9 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
 }
 
 function unusedProfiles(s: BrowserState, now: number, idleMs: number): Set<string> {
-  const shownProfiles = new Set(Object.values(s.windows).map((w) => w.profileId));
+  const shownProfiles = new Set(Object.values(s.windows).map((w) => w.spaceId));
   const unused = new Set<string>();
-  for (const id of Object.keys(s.profiles)) {
+  for (const id of Object.keys(s.spaces)) {
     if (shownProfiles.has(id)) {
       unusedSince.delete(id);
       continue;
@@ -214,19 +230,19 @@ function unusedProfiles(s: BrowserState, now: number, idleMs: number): Set<strin
     if (!unusedSince.has(id)) unusedSince.set(id, now);
     if (now - unusedSince.get(id)! >= idleMs) unused.add(id);
   }
-  for (const id of unusedSince.keys()) if (!s.profiles[id]) unusedSince.delete(id);
+  for (const id of unusedSince.keys()) if (!s.spaces[id]) unusedSince.delete(id);
   return unused;
 }
 
 function releaseUnusedProfiles() {
   const s = store();
-  const inUse = new Set(Object.values(s.windows).map((w) => engineProfile(w.profileId)));
+  const inUse = new Set(Object.values(s.windows).map((w) => engineProfile(w.spaceId)));
   for (const id of webviews.keys()) {
     const tab = s.tabs[id];
-    if (tab) inUse.add(engineProfile(tab.profileId));
+    if (tab) inUse.add(engineProfile(tab.spaceId));
   }
-  for (const profile of [...loadedProfiles]) {
-    if (!profile || isIncognitoProfile(profile) || inUse.has(profile)) continue;
+  for (const profile of Array.from(loadedProfiles)) {
+    if (!profile || isIncognitoSpace(profile) || inUse.has(profile)) continue;
     loadedProfiles.delete(profile);
     void releaseProfile(profile);
   }
@@ -300,7 +316,7 @@ export async function freezeTab(id: string): Promise<boolean> {
   if (!handle || !useLifecycle.getState().batterySaver) return false;
   applyHeldReports();
   const s = store();
-  if (shownTabIds(s).has(id) || keepAliveReason(s, id)) return false;
+  if (shownTabIds(s).has(id) || keepAliveReason(s, id) || siteKeptAwake(s.tabs[id]?.url, s.settings.awakeSites)) return false;
   await handle.setFrozen(true);
   return true;
 }
@@ -316,15 +332,18 @@ export function reloadRecentTabs(sys: SystemState) {
   const since = Date.now() - 24 * 60 * 60_000;
   const ids = Object.values(s.tabs)
     .filter((t) => t.url && !t.navigation && !t.adoptId && !t.unloaded && !shown.has(t.id) && !isInternalTab(t) && t.lastActiveAt >= since)
-    .filter((t) => s.windows[t.windowId]?.profileId === t.profileId)
+    .filter((t) => s.windows[t.windowId]?.spaceId === t.spaceId)
     .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
     .slice(0, count)
     .map((t) => t.id);
   ids.forEach((id, i) =>
-    setTimeout(() => {
-      const t = store().tabs[id];
-      if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
-    }, 2000 * (i + 1)),
+    setTimeout(
+      () => {
+        const t = store().tabs[id];
+        if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
+      },
+      2000 * (i + 1),
+    ),
   );
   return ids;
 }
@@ -379,7 +398,7 @@ export function startTabLifecycle() {
   setInterval(() => {
     track(store());
     void sweep();
-  }, SWEEP_MS);
+  }, LIFECYCLE_SWEEP_MS);
   setInterval(() => {
     if (useLifecycle.getState().batterySaver) void freezeBusyTabs();
   }, FREEZE_SWEEP_MS);
@@ -416,7 +435,11 @@ export function startTabLifecycle() {
               byType[t.type] = (byType[t.type] ?? 0) + t.memory / 2 ** 20;
             }
             const total = Object.values(byType).reduce((a, b) => a + b, 0);
-            return { totalMB: Math.round(total), byTypeMB: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, Math.round(v)])), tasks: tasks.length };
+            return {
+              totalMB: Math.round(total),
+              byTypeMB: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, Math.round(v)])),
+              tasks: tasks.length,
+            };
           }),
       simulate: (patch: Partial<SystemState> | null) => {
         systemOverride = patch;

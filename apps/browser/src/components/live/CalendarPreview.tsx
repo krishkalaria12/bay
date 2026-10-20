@@ -1,6 +1,6 @@
 import { Pressable, View } from "@bay/platform";
 import { FadeLabel } from "@bay/shell";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Text } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
@@ -14,6 +14,7 @@ import { dismissHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
 import { Avatar, HoverSurface, SmallButton } from "./LiveItemCard";
 import { useLiveColors } from "./colors";
+import { JOINABLE_BEFORE_MS } from "./constants";
 
 export function useIsCalendarTab(tabId: string | null): boolean {
   const pinnedCalendar = useBrowser((s) => {
@@ -23,8 +24,6 @@ export function useIsCalendarTab(tabId: string | null): boolean {
   const on = useLive((s) => s.calendar.showPreview);
   return pinnedCalendar && on;
 }
-
-const JOINABLE_BEFORE_MS = 10 * 60_000;
 
 export function CalendarPreview({ tabId, windowId, anchor }: { tabId: string; windowId: string; anchor: Anchor }) {
   const theme = useTheme();
@@ -141,13 +140,27 @@ function EventRow({ event, now, windowId, tabId }: { event: CalendarEvent; now: 
           useBrowser.getState().activate(tabId);
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8, backgroundColor: hovered ? theme.rowHover : undefined, opacity: past ? 0.5 : 1 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            paddingVertical: 6,
+            paddingHorizontal: 4,
+            borderRadius: 8,
+            backgroundColor: hovered ? theme.rowHover : undefined,
+            opacity: past ? 0.5 : 1,
+          }}
+        >
           <View style={{ width: 3, alignSelf: "stretch", borderRadius: 1.5, backgroundColor: event.color }} />
           <View style={{ flex: 1, gap: 2 }}>
             <FadeLabel text={event.title || "Untitled event"} fontSize={13} weight="medium" color={theme.textPrimary} style={{ height: 17 }} />
             <Text numberOfLines={1} style={{ fontSize: 11.5, color: theme.textSecondary }}>
               {timeRange(event)}
-              <Text style={{ fontWeight: "500", color: running ? colors.now : theme.textSecondary }}> · {running ? "Now" : relativeTime(event.start, now)}</Text>
+              <Text style={{ fontWeight: "500", color: running ? colors.now : theme.textSecondary }}>
+                {" "}
+                · {running ? "Now" : relativeTime(event.start, now)}
+              </Text>
             </Text>
           </View>
           {others.length && !joinable ? <OverlappingAvatars people={others} /> : null}
@@ -177,4 +190,3 @@ export function OverlappingAvatars({ people, size = 18 }: { people: CalendarEven
     </View>
   );
 }
-

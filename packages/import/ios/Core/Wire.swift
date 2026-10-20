@@ -5,6 +5,9 @@ import Foundation
 
 public enum CookieWire {
   /// Splits `cookies` into NUL-terminated `{"cookies":[…]}` payloads of at most `size` cookies each.
+  /// A domain's cookies travel in one payload: each call replaces the cookies of the domains it carries
+  /// (engine nn_cookies.h), so a domain split across two would lose the first part. Only a domain with more
+  /// than `size` cookies (Chrome keeps ~180 at most) is split.
   /// A cookie whose value isn't valid UTF-8 can't travel in JSON: it's left out and counted in `dropped`.
   public static func batches(_ cookies: [Cookie], size: Int = 500) -> (batches: [SecretBytes], dropped: Int) {
     let size = max(1, size)
@@ -22,20 +25,32 @@ public enum CookieWire {
       inBatch = 0
     }
 
+    var order: [String] = []
+    var byDomain: [String: [Cookie]] = [:]
     for cookie in cookies {
       guard cookie.value.isValidUTF8 else {
         dropped += 1
         continue
       }
-      if writer == nil {
-        writer = SecretWriter(capacity: 64 * 1024)
-        writer!.append("{\"cookies\":[")
+      let domain = cookie.domain.lowercased()
+      if byDomain[domain] == nil { order.append(domain) }
+      byDomain[domain, default: []].append(cookie)
+    }
+
+    for domain in order {
+      let group = byDomain[domain]!
+      if inBatch > 0 && inBatch + group.count > size { close() }
+      for cookie in group {
+        if writer == nil {
+          writer = SecretWriter(capacity: 64 * 1024)
+          writer!.append("{\"cookies\":[")
+        }
+        let w = writer!
+        if inBatch > 0 { w.append(UInt8(ascii: ",")) }
+        write(cookie, to: w)
+        inBatch += 1
+        if inBatch == size { close() }
       }
-      let w = writer!
-      if inBatch > 0 { w.append(UInt8(ascii: ",")) }
-      write(cookie, to: w)
-      inBatch += 1
-      if inBatch == size { close() }
     }
     close()
     return (out, dropped)

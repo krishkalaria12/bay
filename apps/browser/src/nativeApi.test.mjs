@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { createBrowserStore } from "./store/browser.ts";
+import { createBrowserProjector } from "./runtime/projection.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -12,4 +14,18 @@ test("the JS bundle and the native build declare the same API version", () => {
   assert.equal(js, native);
   const chrome = read("../../../engine/chromium/src/chrome/browser/bay/webui/native_host.cc").match(/Set\("apiVersion", (\d+)\)/)?.[1];
   assert.equal(js, chrome, "Chrome WebUI and macOS must expose the same application API");
+});
+
+test("the native runtime accepts every slice of the coordinator's current state schema", () => {
+  const native = read("../../../engine/chromium/src/chrome/browser/bay/webui/runtime_state.cc");
+  const fields = (name) => {
+    const body = native.match(new RegExp(`${name}\\[\\]\\s*=\\s*\\{([^}]+)\\}`))?.[1];
+    assert.ok(body, `${name} declaration found`);
+    return [...body.matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort();
+  };
+  const state = createBrowserProjector()(createBrowserStore().getState());
+  for (const [name, isList] of [["kRecords", false], ["kLists", true]]) {
+    const expected = Object.keys(state).filter((key) => Array.isArray(state[key]) === isList).sort();
+    assert.deepEqual(fields(name), expected, `${name} must match the published coordinator projection`);
+  }
 });

@@ -9,11 +9,15 @@ if (!process.env.BAY_MENU_TEST_CHILD) {
     test(`${platform} command and app menus use existing desktop handlers`, () => {
       const env = { ...process.env, BAY_MENU_TEST_CHILD: "1", BAY_TEST_PLATFORM: platform };
       delete env.NODE_TEST_CONTEXT;
-      const output = execFileSync(process.execPath, ["--no-warnings", "--import", "./src/test-loader.mjs", "--test", "src/components/omnibox/menuActions.test.mjs"], {
-        cwd: new URL("../../../", import.meta.url),
-        env,
-        encoding: "utf8",
-      });
+      const output = execFileSync(
+        process.execPath,
+        ["--no-warnings", "--import", "./src/test-loader.mjs", "--test", "src/components/omnibox/menuActions.test.mjs"],
+        {
+          cwd: new URL("../../../", import.meta.url),
+          env,
+          encoding: "utf8",
+        },
+      );
       assert.match(output, /tests 3/, "the platform child must actually run its menu assertions");
     });
   }
@@ -38,72 +42,99 @@ if (!process.env.BAY_MENU_TEST_CHILD) {
   const stubUrl = `data:text/javascript,${encodeURIComponent(stub)}`;
   registerHooks({
     resolve(specifier, context, next) {
-      if (context.parentURL?.includes("/components/omnibox/") &&
-          ["../../lib/commands", "../../lib/appIntegration", "../../lib/releaseNotesPage", "../onboarding", "../settings/windows", "../pages/urls"].includes(specifier))
+      if (
+        context.parentURL?.includes("/components/omnibox/") &&
+        ["../../lib/commands", "../../lib/appIntegration", "../../lib/releaseNotesPage", "../onboarding", "../settings/windows", "../pages/urls"].includes(
+          specifier,
+        )
+      )
         return { url: stubUrl, shortCircuit: true };
-      if (specifier === "@bay/shell" && context.parentURL?.includes("/omnibox/paletteAppActions.ts"))
-        return { url: stubUrl, shortCircuit: true };
+      if (specifier === "@bay/shell" && context.parentURL?.includes("/omnibox/paletteAppActions.ts")) return { url: stubUrl, shortCircuit: true };
       return next(specifier, context);
     },
   });
   const { createBrowserStore } = await import("../../store/browser.ts");
   const { barActions, runBarAction } = await import("./actions.ts");
+  const { activeTabId } = await import("../../store/model.ts");
   const { appPaletteActions } = await import("./paletteAppActions.ts");
   const { isMac } = await import("@bay/platform");
   const store = createBrowserStore();
   const windowId = store.getState().createWindow({ url: "https://example.com/" });
-  const tabId = store.getState().windows[windowId].tabIds[0];
-  const ids = (id = windowId) => barActions(store.getState(), id).map(action => action.id);
+  const tabId = activeTabId(store.getState(), windowId);
+  const ids = (id = windowId) => barActions(store.getState(), id).map((action) => action.id);
 
   test("Settings shortcut and asynchronous app menu dismissal follow the platform", async () => {
     let dismissed = 0;
-    const settings = appPaletteActions(windowId, () => { dismissed++; }).find(action => action.id === "settings");
+    const settings = appPaletteActions(windowId, () => {
+      dismissed++;
+    }).find((action) => action.id === "settings");
     assert.equal(settings.hint, isMac ? "⌘," : "Ctrl+,");
     await settings.run();
     assert.deepEqual(calls.at(-1), ["settings", undefined]);
     assert.equal(dismissed, 1);
     globalThis.nnMenuTest.defaultBrowser = false;
-    const makeDefault = appPaletteActions(windowId, () => { dismissed++; }).find(action => action.id === "default-browser");
+    const makeDefault = appPaletteActions(windowId, () => {
+      dismissed++;
+    }).find((action) => action.id === "default-browser");
     await assert.rejects(makeDefault.run(), /wasn't changed/);
     assert.equal(dismissed, 1, "failed actions leave the app menu open");
   });
 
   test("desktop commands are discoverable only without the native menu", () => {
-    const desktop = ["openFile", "savePage", "printWithSystemDialog", "findNext", "findPrevious", "viewSource", "openSplitPane", "toggleTabLayout", "bookmarkAllTabs", "manageExtensions", "addExtension", "cast"];
+    const desktop = [
+      "openFile",
+      "newLittleBay",
+      "toggleOpenLinksInLittleBay",
+      "savePage",
+      "printWithSystemDialog",
+      "findNext",
+      "findPrevious",
+      "viewSource",
+      "openSplitPane",
+      "toggleTabLayout",
+      "bookmarkAllTabs",
+      "manageExtensions",
+      "addExtension",
+      "cast",
+    ];
     for (const command of desktop) assert.equal(ids().includes(command), !isMac, command);
     assert.equal(ids().includes("share"), isMac, "Windows has no native share handler yet");
     if (!isMac) {
       const actions = barActions(store.getState(), windowId);
-      assert.equal(actions.find(action => action.id === "openFile").hint, "Ctrl+O");
-      assert.equal(actions.find(action => action.id === "openFile").title, "Open File…");
-      assert.equal(actions.find(action => action.id === "savePage").hint, "Ctrl+S");
-      assert.equal(actions.find(action => action.id === "viewSource").hint, "Ctrl+U");
+      assert.equal(actions.find((action) => action.id === "openFile").hint, "Ctrl+O");
+      assert.equal(actions.find((action) => action.id === "openFile").title, "Open File…");
+      assert.equal(actions.find((action) => action.id === "savePage").hint, "Ctrl+S");
+      assert.equal(actions.find((action) => action.id === "viewSource").hint, "Ctrl+U");
       for (const action of actions) assert.ok(!/[⌃⌥⇧⌘]/.test(action.hint ?? ""), action.id);
-      const handlers = readFileSync(new URL("../../lib/commands.ts", import.meta.url), "utf8") + readFileSync(new URL("../sidebar/commands.ts", import.meta.url), "utf8");
+      const handlers =
+        readFileSync(new URL("../../lib/commands.ts", import.meta.url), "utf8") + readFileSync(new URL("../sidebar/commands.ts", import.meta.url), "utf8");
       for (const command of desktop) assert.ok(handlers.includes(`case "${command}"`), `${command} has a real command handler`);
       calls.length = 0;
       for (const command of desktop) runBarAction(command, windowId);
-      assert.deepEqual(calls.map(call => [call.command, call.arg, call.windowId]), desktop.map(command => [command, null, windowId]));
+      assert.deepEqual(
+        calls.map((call) => [call.command, call.arg, call.windowId]),
+        desktop.map((command) => [command, null, windowId]),
+      );
     }
   });
 
-  test("blank/internal pages and Harbor hide commands without an applicable page or tab layout", () => {
+  test("blank/internal pages and Little Bay hide commands without an applicable page or tab layout", () => {
     if (isMac) return;
     store.getState().updateTab(tabId, { url: "", navigation: null });
     for (const id of ["savePage", "viewSource", "printWithSystemDialog", "cast", "findNext"]) assert.ok(!ids().includes(id), id);
     assert.ok(ids().includes("openFile"));
     store.getState().updateTab(tabId, { url: "bay://history", navigation: null });
     for (const id of ["savePage", "printWithSystemDialog", "cast", "findNext"]) assert.ok(!ids().includes(id), id);
-    const harbor = store.getState().createWindow({ small: true, url: "https://harbor.example/" });
-    const openInMain = barActions(store.getState(), harbor).find(action => action.id === "openFile");
+    const littleBay = store.getState().createWindow({ small: true, url: "https://little-bay.example/" });
+    const openInMain = barActions(store.getState(), littleBay).find((action) => action.id === "openFile");
     assert.equal(openInMain.title, "Open in Main Window");
-    runBarAction(openInMain.id, harbor);
-    assert.deepEqual(calls.at(-1), { command: "openFile", arg: null, windowId: harbor });
-    // The existing Harbor command intentionally moves its page instead of
+    runBarAction(openInMain.id, littleBay);
+    assert.deepEqual(calls.at(-1), { command: "openFile", arg: null, windowId: littleBay });
+    // The existing Little Bay command intentionally moves its page instead of
     // opening a picker. Keep the palette label aligned with that handler.
     const commandSource = readFileSync(new URL("../../lib/commands.ts", import.meta.url), "utf8");
-    const harborHandler = commandSource.slice(commandSource.indexOf("function runHarborCommand"));
-    assert.match(harborHandler, /case "openFile":\s*openInMainWindow\(windowId\);/);
-    for (const id of ["toggleTabLayout", "openSplitPane", "nextTab", "bookmarkAllTabs"]) assert.ok(!ids(harbor).includes(id), id);
+    const littleBayHandler = commandSource.slice(commandSource.indexOf("function runLittleBayCommand"));
+    assert.match(littleBayHandler, /case "openFile":\s*openInMainWindow\(windowId\);/);
+    for (const id of ["toggleTabLayout", "openSplitPane", "nextTab", "bookmarkAllTabs"]) assert.ok(!ids(littleBay).includes(id), id);
   });
 }

@@ -8,9 +8,12 @@ const { controllingSearchExtension, defaultSearchEngine, searchUrlPrefix } = awa
 const media = await import("../components/media/state.ts");
 
 const S = () => useBrowser.getState();
+const tabLists = await import("./model.ts");
+// A window's list: its space's tabs, in sidebar order (store/model.ts).
+const tabsOf = (w) => tabLists.listIds(S(), tabLists.windowListKey(S(), S().windows[w]));
 const view = (w) => model.viewTabIds(S(), w).map((id) => S().tabs[id].url);
 const short = (url) => url.replace(/^https:\/\/|\.com$/g, "");
-const hosts = (w) => S().windows[w].tabIds.map((id) => short(S().tabs[id].url));
+const hosts = (w) => tabsOf(w).map((id) => short(S().tabs[id].url));
 const shown = (w) => short(S().tabs[model.activeTabId(S(), w)].url);
 
 // Chrome's opener rules (store/openers.ts).
@@ -21,7 +24,7 @@ const reset = (settings = {}) => {
 const open = (w, url, opener, background = true) => S().newTab(w, { url: `${url}.com`, openerId: opener, background });
 const setup = (...urls) => {
   const w = S().createWindow({ url: `${urls[0]}.com` });
-  const ids = [S().windows[w].tabIds[0], ...urls.slice(1).map((u) => S().newTab(w, { url: `${u}.com` }))];
+  const ids = [tabsOf(w)[0], ...urls.slice(1).map((u) => S().newTab(w, { url: `${u}.com` }))];
   S().activate(ids[0]);
   return [w, ...ids];
 };
@@ -66,6 +69,18 @@ test("closing goes to the page's own tabs, then its siblings, then its opener", 
   assert.equal(shown(w), "g", "a sibling");
   S().closeTab(g);
   assert.equal(shown(w), "a", "no siblings left: the opener");
+});
+
+test("a link ⌘-clicked into a collapsed group opens the group, so its tab is seen", () => {
+  reset({ cmdClickCreatesTabGroup: true });
+  const [w, a] = setup("a", "b");
+  open(w, "c1", a);
+  const group = Object.values(S().groups)[0];
+  assert.equal(group.tabIds.length, 2, "the opener and its link, together");
+  S().updateGroup(group.id, { collapsed: true });
+  const c2 = open(w, "c2", a);
+  assert.equal(S().groups[group.id].collapsed, false);
+  assert.ok(S().groups[group.id].tabIds.includes(c2));
 });
 
 test("closing a group that holds the shown tab shows the tab just above the group", () => {
@@ -114,7 +129,7 @@ test("groups stay contiguous; splits need two panes", () => {
   const c = S().newTab(w, { url: "c.com" });
   const a = model.viewTabIds(S(), w)[0];
   const g = S().createGroup([a, c], { name: "G" });
-  assert.deepEqual(S().windows[w].tabIds, [a, c, b]);
+  assert.deepEqual(tabsOf(w), [a, c, b]);
   assert.deepEqual(S().groups[g].tabIds, [a, c]);
   S().addTabsToGroup(g, [b]);
   assert.deepEqual(S().groups[g].tabIds, [a, c, b]);
@@ -123,8 +138,10 @@ test("groups stay contiguous; splits need two panes", () => {
   const sp = S().createSplit([a, b]);
   S().closeTab(b);
   assert.equal(S().splits[sp], undefined);
+  // The window's last tab: it closes with its group's name kept for ⇧⌘T, and the window goes.
   S().closeTab(a);
-  assert.equal(S().closedWindows.at(-1).groups.length, 1);
+  assert.equal(S().closedTabs.at(-1).group?.name, "G");
+  assert.equal(S().windows[w], undefined);
 });
 
 test("hydrate drops broken splits", () => {
@@ -169,18 +186,18 @@ test("abandoned New Tab cleanup never closes a window or the tab it shows", () =
   S().newTab(w, { background: true });
   const front = S().newTab(w);
   S().closeAbandonedNewTabs();
-  assert.deepEqual(S().windows[w].tabIds, [front]);
-  const p = S().createProfile({ name: "Work" });
-  S().switchProfile(w, p);
+  assert.deepEqual(tabsOf(w), [front]);
+  const p = S().createSpace({ name: "Work" });
+  S().switchSpace(w, p);
   const work = model.activeTabId(S(), w);
-  S().switchProfile(w, "default");
+  S().switchSpace(w, "default");
   S().closeAbandonedNewTabs();
   assert.ok(S().tabs[work] && S().tabs[front]);
   const w2 = S().createWindow();
   S().newTab(w2);
   useBrowser.setState((s) => ({ windows: { ...s.windows, [w2]: { ...s.windows[w2], activeTabIds: {} } } }));
   S().closeAbandonedNewTabs();
-  assert.equal(S().windows[w2].tabIds.length, 1);
+  assert.equal(model.windowTabIds(S(), w2).length, 1, "the window keeps a tab");
 });
 
 test("an extension that took the default search engine controls it until it goes", () => {
@@ -194,7 +211,15 @@ test("an extension that took the default search engine controls it until it goes
     url: "https://duckduckgo.com/?q=%s&t=nnfixture",
     isDefault: true,
   };
-  const wiki = { ...ddg, extensionId: "lfkochledepkdapbginilfnephdpkfjc", extensionName: "Search Fixture Extra", name: "Wikipedia Fixture", keyword: "wfix", url: "https://en.wikipedia.org/w/index.php?search=%s", isDefault: false };
+  const wiki = {
+    ...ddg,
+    extensionId: "lfkochledepkdapbginilfnephdpkfjc",
+    extensionName: "Search Fixture Extra",
+    name: "Wikipedia Fixture",
+    keyword: "wfix",
+    url: "https://en.wikipedia.org/w/index.php?search=%s",
+    isDefault: false,
+  };
   S().updateSettings({ searchEngine: "bing", extensionSearchEngines: [ddg, wiki] });
   assert.equal(controllingSearchExtension(S().settings)?.extensionId, ddg.extensionId);
   assert.equal(defaultSearchEngine(S().settings).id, `extension:${ddg.extensionId}`);
@@ -214,8 +239,18 @@ test("an extension that took the default search engine controls it until it goes
 test("closing the mini player lasts until its tab plays again", async () => {
   const M = () => media.useMedia.getState();
   const report = (overrides = {}) => ({
-    title: "Song", artist: "Band", album: "", artwork: null, playbackState: "playing", position: 10, duration: 200,
-    playbackRate: 1, timestamp: Date.now(), hasVideo: false, actions: ["play", "pause"], ...overrides,
+    title: "Song",
+    artist: "Band",
+    album: "",
+    artwork: null,
+    playbackState: "playing",
+    position: 10,
+    duration: 200,
+    playbackRate: 1,
+    timestamp: Date.now(),
+    hasVideo: false,
+    actions: ["play", "pause"],
+    ...overrides,
   });
   reset();
   const w = S().createWindow({ url: "a.com" });

@@ -20,7 +20,9 @@ export class BrowserClientError extends Error {
   }
 }
 
-const invalid = (): never => { throw new BrowserClientError("invalid_protocol", "invalid browser runtime message"); };
+const invalid = (): never => {
+  throw new BrowserClientError("invalid_protocol", "invalid browser runtime message");
+};
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return invalid();
   return value as Record<string, unknown>;
@@ -37,10 +39,12 @@ function copyJson(value: unknown, previous?: unknown, ancestors = new Set<object
       const copied = Array.from(value, (item, index) => copyJson(item, before?.[index], ancestors, depth + 1, omitUndefined));
       return before?.length === copied.length && copied.every((item, index) => item === before[index]) ? before : Object.freeze(copied);
     }
-    const before = previous && typeof previous === "object" && !Array.isArray(previous) ? previous as Record<string, unknown> : undefined;
-    const entries = Object.entries(value).filter(([, item]) => !omitUndefined || item !== undefined)
+    const before = previous && typeof previous === "object" && !Array.isArray(previous) ? (previous as Record<string, unknown>) : undefined;
+    const entries = Object.entries(value)
+      .filter(([, item]) => !omitUndefined || item !== undefined)
       .map(([key, item]) => [key, copyJson(item, before?.[key], ancestors, depth + 1, omitUndefined)] as const);
-    if (before && Object.keys(before).length === entries.length && entries.every(([key, item]) => Object.hasOwn(before, key) && before[key] === item)) return before;
+    if (before && Object.keys(before).length === entries.length && entries.every(([key, item]) => Object.hasOwn(before, key) && before[key] === item))
+      return before;
     return Object.freeze(Object.fromEntries(entries));
   } finally {
     ancestors.delete(value);
@@ -49,13 +53,38 @@ function copyJson(value: unknown, previous?: unknown, ancestors = new Set<object
 // Every data slice is required. This is a complete snapshot, never a partial
 // object passed through hydrate. Native facts and domain repair stay at source.
 const projectionFields: Record<keyof BrowserProjection, "array" | "record"> = {
-  profiles: "record", profileOrder: "array", orphanedProfileData: "array",
-  windows: "record", windowOrder: "array", closedWindows: "array", parkedPins: "record",
-  tabs: "record", live: "record", closedTabs: "array", groups: "record", selection: "record",
-  cleanedTabs: "array", privateCleanedTabs: "record", privateSiteMutes: "record",
-  closedGroups: "array", deletedGroups: "array", splits: "record", history: "record",
-  historyReady: "record", historyFloor: "record", bookmarks: "record", bookmarksReady: "record",
-  settings: "record", ui: "record", windowUi: "record", find: "record", downloads: "array",
+  spaces: "record",
+  spaceOrder: "array",
+  orphanedProfileData: "array",
+  windows: "record",
+  windowOrder: "array",
+  closedWindows: "array",
+  pinnedFolders: "record",
+  folderMoveUndo: "array",
+  tabs: "record",
+  tabLists: "record",
+  peeks: "record",
+  closedPeeks: "record",
+  live: "record",
+  closedTabs: "array",
+  groups: "record",
+  selection: "record",
+  cleanedTabs: "array",
+  privateCleanedTabs: "record",
+  privateSiteMutes: "record",
+  closedGroups: "array",
+  deletedGroups: "array",
+  splits: "record",
+  history: "record",
+  historyReady: "record",
+  historyFloor: "record",
+  bookmarks: "record",
+  bookmarksReady: "record",
+  settings: "record",
+  ui: "record",
+  windowUi: "record",
+  find: "record",
+  downloads: "array",
 };
 export function decodeBrowserCommit(value: unknown, previous: BrowserCommit | null = null): BrowserCommit {
   const input = record(copyJson(value, previous));
@@ -64,22 +93,31 @@ export function decodeBrowserCommit(value: unknown, previous: BrowserCommit | nu
   const state = record(input.state);
   if (Object.keys(state).length !== Object.keys(projectionFields).length || Object.keys(state).some((key) => !Object.hasOwn(projectionFields, key))) invalid();
   for (const [key, kind] of Object.entries(projectionFields)) {
-    if (kind === "array") { if (!Array.isArray(state[key])) invalid(); }
-    else record(state[key]);
+    if (kind === "array") {
+      if (!Array.isArray(state[key])) invalid();
+    } else record(state[key]);
   }
-  for (const key of ["profileOrder", "windowOrder", "orphanedProfileData"]) {
+  for (const key of ["spaceOrder", "windowOrder", "orphanedProfileData"]) {
     if (!(state[key] as unknown[]).every((item) => typeof item === "string")) invalid();
   }
   const settings = record(state.settings);
   for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS)) {
     const item = settings[key];
-    if (fallback === null) { if (item !== null && (typeof item !== "number" || !Number.isFinite(item))) invalid(); }
-    else if (Array.isArray(fallback)) { if (!Array.isArray(item)) invalid(); }
-    else if (typeof fallback === "object") record(item);
+    if (fallback === null) {
+      if (item !== null && (typeof item !== "number" || !Number.isFinite(item))) invalid();
+    } else if (Array.isArray(fallback)) {
+      if (!Array.isArray(item)) invalid();
+    } else if (typeof fallback === "object") record(item);
     else if (typeof item !== typeof fallback) invalid();
   }
   const ui = record(state.ui);
-  if ((ui.focusedWindowId !== null && typeof ui.focusedWindowId !== "string") || typeof ui.appDark !== "boolean" || !Array.isArray(ui.focusOrder) || !ui.focusOrder.every((id) => typeof id === "string")) invalid();
+  if (
+    (ui.focusedWindowId !== null && typeof ui.focusedWindowId !== "string") ||
+    typeof ui.appDark !== "boolean" ||
+    !Array.isArray(ui.focusOrder) ||
+    !ui.focusOrder.every((id) => typeof id === "string")
+  )
+    invalid();
   const bookmarks = record(state.bookmarks);
   record(bookmarks.nodes);
   record(bookmarks.roots);
@@ -88,7 +126,10 @@ export function decodeBrowserCommit(value: unknown, previous: BrowserCommit | nu
 function barrier() {
   let resolve!: (commit: BrowserCommit) => void;
   let reject!: (error: unknown) => void;
-  const promise = new Promise<BrowserCommit>((ok, fail) => { resolve = ok; reject = fail; });
+  const promise = new Promise<BrowserCommit>((ok, fail) => {
+    resolve = ok;
+    reject = fail;
+  });
   // The bootstrap owner may attach its ready handler after a synchronous close.
   void promise.catch(() => {});
   return { promise, resolve, reject };
@@ -115,8 +156,13 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
   const pending = new Map<number, Pending>();
 
   function notify() {
+    // oxlint-disable-next-line no-useless-spread -- callbacks can change the next delivery's subscribers
     for (const listener of [...listeners]) {
-      try { listener(); } catch (error) { console.error("[runtime] mirror subscriber failed", error); }
+      try {
+        listener();
+      } catch (error) {
+        console.error("[runtime] mirror subscriber failed", error);
+      }
     }
   }
   function fail(error: BrowserClientError) {
@@ -128,7 +174,11 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     pending.clear();
     buffered = null;
     for (const dispose of [unsubscribeCommits, unsubscribeClose]) {
-      try { dispose(); } catch (cause) { console.error("[runtime] transport cleanup failed", cause); }
+      try {
+        dispose();
+      } catch (cause) {
+        console.error("[runtime] transport cleanup failed", cause);
+      }
     }
     notify();
     listeners.clear();
@@ -153,13 +203,22 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     if (!current || commit.revision > current.revision) current = commit;
   }
   function beginResync() {
-    if (status === "ready") { status = "resyncing"; availability = barrier(); notify(); }
+    if (status === "ready") {
+      status = "resyncing";
+      availability = barrier();
+      notify();
+    }
     requestSnapshot();
   }
   function acceptCommit(input: unknown) {
     if (terminalError) return;
     let commit: BrowserCommit;
-    try { commit = decodeBrowserCommit(input, current); } catch { fail(new BrowserClientError("invalid_protocol", "invalid browser runtime commit")); return; }
+    try {
+      commit = decodeBrowserCommit(input, current);
+    } catch {
+      fail(new BrowserClientError("invalid_protocol", "invalid browser runtime commit"));
+      return;
+    }
     acceptValidatedCommit(commit);
   }
   function acceptValidatedCommit(commit: BrowserCommit) {
@@ -182,41 +241,49 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     if (snapshotInFlight || terminalError) return;
     snapshotInFlight = true;
     const minimumRevision = buffered?.revision ?? current?.revision ?? 0;
-    void Promise.resolve().then(() => {
-      if (terminalError) throw terminalError;
-      return transport.getSnapshot();
-    }).then((input) => {
-      snapshotInFlight = false;
-      if (terminalError) return;
-      const commit = decodeBrowserCommit(input, current);
-      if (!sameEpoch(commit)) return;
-      if (commit.revision < minimumRevision || (current && commit.revision < current.revision)) return invalid();
-      install(commit);
-      const waiting = buffered;
-      buffered = null;
-      if (waiting && waiting.revision > current!.revision) {
-        if (waiting.revision === current!.revision + 1) install(waiting);
-        else {
-          buffered = waiting;
-          notify();
-          requestSnapshot();
-          return;
+    void Promise.resolve()
+      .then(() => {
+        if (terminalError) throw terminalError;
+        return transport.getSnapshot();
+      })
+      .then((input) => {
+        snapshotInFlight = false;
+        if (terminalError) return;
+        const commit = decodeBrowserCommit(input, current);
+        if (!sameEpoch(commit)) return;
+        if (commit.revision < minimumRevision || (current && commit.revision < current.revision)) return invalid();
+        install(commit);
+        const waiting = buffered;
+        buffered = null;
+        if (waiting && waiting.revision > current!.revision) {
+          if (waiting.revision === current!.revision + 1) install(waiting);
+          else {
+            buffered = waiting;
+            notify();
+            requestSnapshot();
+            return;
+          }
         }
-      }
-      status = "ready";
-      availability.resolve(current!);
-      notify();
-      settle();
-    }).catch((error: unknown) => {
-      snapshotInFlight = false;
-      if (!terminalError) fail(error instanceof BrowserClientError ? error : new BrowserClientError("snapshot_failed", "browser runtime snapshot failed"));
-    });
+        status = "ready";
+        availability.resolve(current!);
+        notify();
+        settle();
+      })
+      .catch((error: unknown) => {
+        snapshotInFlight = false;
+        if (!terminalError) fail(error instanceof BrowserClientError ? error : new BrowserClientError("snapshot_failed", "browser runtime snapshot failed"));
+      });
   }
   function receiveReply(command: Pending, input: unknown) {
     if (terminalError || !pending.has(command.request.requestId)) return;
     try {
       const reply = record(input);
-      if (Object.keys(reply).some((key) => !["clientId", "requestId", "commit", "value"].includes(key)) || reply.clientId !== clientId || reply.requestId !== command.request.requestId) invalid();
+      if (
+        Object.keys(reply).some((key) => !["clientId", "requestId", "commit", "value"].includes(key)) ||
+        reply.clientId !== clientId ||
+        reply.requestId !== command.request.requestId
+      )
+        invalid();
       const createsId = command.request.command.method === "createWindow" || command.request.command.method === "newTab";
       if (createsId ? typeof reply.value !== "string" : reply.value !== null) invalid();
       const commit = decodeBrowserCommit(reply.commit, current);
@@ -244,33 +311,42 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     return new Promise<BrowserCommandValue<C>>((resolve, reject) => {
       const item: Pending = { request, baseRevision: current!.revision, resolve: (value) => resolve(value as BrowserCommandValue<C>), reject };
       pending.set(request.requestId, item);
-      void Promise.resolve().then(async () => {
-        while (status !== "ready") {
+      void Promise.resolve()
+        .then(async () => {
+          while (status !== "ready") {
+            if (terminalError) throw terminalError;
+            await availability.promise;
+          }
           if (terminalError) throw terminalError;
-          await availability.promise;
-        }
-        if (terminalError) throw terminalError;
-        if (!pending.has(request.requestId)) throw new BrowserClientError("closed", "browser command is no longer pending");
-        if (request.epoch !== current!.epoch) throw new BrowserClientError("epoch_changed", "browser runtime changed before the command was sent");
-        item.baseRevision = current!.revision;
-        return transport.dispatch(request);
-      }).then((reply) => receiveReply(item, reply), (error: unknown) => {
-        if (terminalError || !pending.has(request.requestId)) return;
-        if (error && typeof error === "object" && "code" in error && error.code === "stale_epoch") {
-          fail(new BrowserClientError("epoch_changed", "browser runtime changed; the command outcome is uncertain"));
-          return;
-        }
-        pending.delete(request.requestId);
-        reject(error);
-      });
+          if (!pending.has(request.requestId)) throw new BrowserClientError("closed", "browser command is no longer pending");
+          if (request.epoch !== current!.epoch) throw new BrowserClientError("epoch_changed", "browser runtime changed before the command was sent");
+          item.baseRevision = current!.revision;
+          return transport.dispatch(request);
+        })
+        .then(
+          (reply) => receiveReply(item, reply),
+          (error: unknown) => {
+            if (terminalError || !pending.has(request.requestId)) return;
+            if (error && typeof error === "object" && "code" in error && error.code === "stale_epoch") {
+              fail(new BrowserClientError("epoch_changed", "browser runtime changed; the command outcome is uncertain"));
+              return;
+            }
+            pending.delete(request.requestId);
+            reject(error);
+          },
+        );
     });
   }
 
   try {
     const releaseCommits = transport.subscribeCommits(acceptCommit);
-    if (terminalError) releaseCommits(); else unsubscribeCommits = releaseCommits;
-    const releaseClose = transport.subscribeClose(() => fail(new BrowserClientError("transport_closed", "browser runtime transport closed; pending command outcomes are uncertain")));
-    if (terminalError) releaseClose(); else unsubscribeClose = releaseClose;
+    if (terminalError) releaseCommits();
+    else unsubscribeCommits = releaseCommits;
+    const releaseClose = transport.subscribeClose(() =>
+      fail(new BrowserClientError("transport_closed", "browser runtime transport closed; pending command outcomes are uncertain")),
+    );
+    if (terminalError) releaseClose();
+    else unsubscribeClose = releaseClose;
     requestSnapshot();
   } catch {
     fail(new BrowserClientError("transport_closed", "browser runtime transport could not connect"));
@@ -282,9 +358,13 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
     subscribe(listener: () => void) {
       if (terminalError) throw terminalError;
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     dispatch,
-    close() { fail(new BrowserClientError("closed", "browser runtime client closed")); },
+    close() {
+      fail(new BrowserClientError("closed", "browser runtime client closed"));
+    },
   };
 }

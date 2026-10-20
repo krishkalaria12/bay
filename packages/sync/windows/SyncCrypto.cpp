@@ -5,8 +5,8 @@
 #include <cctype>
 #include <limits>
 #ifdef _WIN32
+// First: bcrypt, wincred and wincrypt use its types.
 #include <windows.h>
-
 #include <bcrypt.h>
 #include <sddl.h>
 #include <wincred.h>

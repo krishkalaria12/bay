@@ -23,15 +23,21 @@ writeFileSync(file, "%PDF-1.4\n");
 const ids = ["pin1", "pin2", "a1", "a2", "a3", "b1", "b2", ...Array.from({ length: 12 }, (_, i) => `t${i}`)];
 const tab = (id) => {
   const pinned = id.startsWith("pin");
-  return { id, url: `https://example.com/?${id}`, title: `Tab ${id} with a title long enough to fade`, pinned,
-    pinnedUrl: pinned ? `https://example.com/?${id}` : null };
+  return {
+    id,
+    url: `https://example.com/?${id}`,
+    title: `Tab ${id} with a title long enough to fade`,
+    pinned,
+    pinnedUrl: pinned ? `https://example.com/?${id}` : null,
+  };
 };
 
 let app;
 try {
   app = await launch(resolve(appArg), {
-    data, port,
-    session: session({ profiles: ["Personal", "Work"], windows: [{ id: "w1", tabIds: ids, activeTabIds: { default: "t2" } }], tabs: ids.map(tab) }),
+    data,
+    port,
+    session: session({ spaces: ["Personal", "Work"], windows: [{ id: "w1", tabIds: ids, activeTabIds: { default: "t2" } }], tabs: ids.map(tab) }),
     ready: "return !!nn.hoverShift",
   });
   const nn = (body) => app.eval(body, { timeout: 120000 });
@@ -71,8 +77,12 @@ try {
       const { hovered, shifts } = await nn(`return nn.hoverShift.check({ scopes: ${JSON.stringify(scopes)} });`);
       if (!hovered) throw new Error("nothing hover-tracked found");
       if (shifts.length) {
-        throw new Error([`${shifts.length} views moved or resized (${hovered} hovered)`,
-          ...shifts.slice(0, 20).flatMap((s) => [`hovering ${s.hovered}`, `  ${s.view}: ${s.before.join(", ")} -> ${s.after.join(", ")}`])].join("\n"));
+        throw new Error(
+          [
+            `${shifts.length} views moved or resized (${hovered} hovered)`,
+            ...shifts.slice(0, 20).flatMap((s) => [`hovering ${s.hovered}`, `  ${s.view}: ${s.before.join(", ")} -> ${s.after.join(", ")}`]),
+          ].join("\n"),
+        );
       }
       return `${hovered} hovered views, nothing moved`;
     });

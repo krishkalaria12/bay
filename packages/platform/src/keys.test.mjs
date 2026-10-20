@@ -18,7 +18,20 @@ test("Windows shortcut matches Control, Alt navigation and explicit Control stro
 });
 test("Windows never advertises Apple-only features, even if a bridge shares module names", () => {
   const windows = capabilitiesFor("windows", () => true);
-  for (const key of ["liquidGlass", "vibrancy", "shaders", "dock", "dockSelection", "calendar", "translation", "appleScript", "handoff", "introMusic", "trafficLights"]) assert.equal(windows[key], false, key);
+  for (const key of [
+    "liquidGlass",
+    "vibrancy",
+    "shaders",
+    "dock",
+    "dockSelection",
+    "calendar",
+    "translation",
+    "appleScript",
+    "handoff",
+    "introMusic",
+    "trafficLights",
+  ])
+    assert.equal(windows[key], false, key);
   assert.equal(windows.keychain, true);
   const mac = capabilitiesFor("macos", () => false);
   assert.equal(mac.shaders, false);

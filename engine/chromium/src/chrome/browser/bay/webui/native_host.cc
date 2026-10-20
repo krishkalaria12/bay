@@ -84,13 +84,21 @@ bool g_quit_requested = false;
 bool g_quit_prepared = false;
 UpdaterService& AppUpdater() {
   static base::NoDestructor<UpdaterService> updater(
-      base::BindRepeating([](base::DictValue) {
+      base::BindRepeating([](base::DictValue state) {
         // Updater preferences and operation state are shared by every window.
         // A host-info update also refreshes the synchronous systemInfo
         // snapshot.
         for (const auto& [owner, host] : Hosts()) {
-          if (host)
+          if (host) {
             host->PublishHostInfo();
+            if (!AppRuntime::Enabled() || host->is_coordinator()) {
+              const auto* pending = state.Find("pending");
+              host->Emit("BayApp", "onUpdatePending",
+                         base::Value(base::DictValue().Set(
+                             "pending", pending ? pending->Clone()
+                                                : base::Value())));
+            }
+          }
         }
       }),
       base::BindRepeating(&chrome::AttemptExit));
@@ -469,7 +477,7 @@ base::DictValue NativeHost::Info() const {
           .Set("optionalMethods", std::move(engine_methods))
           .Set("constants",
                base::DictValue()
-                   .Set("BayApp", base::DictValue().Set("apiVersion", 9))
+                   .Set("BayApp", base::DictValue().Set("apiVersion", 10))
                    .Set("BayShell", std::move(shell)))
           .Set("snapshots",
                base::DictValue()
@@ -510,7 +518,8 @@ base::DictValue NativeHost::Info() const {
     methods.Append(method);
   methods.Append("BayShell.replyToTerminate");
   for (const auto* method :
-       {"BayApp.checkForUpdates", "BayApp.setAutomaticUpdateChecks",
+       {"BayApp.checkForUpdates", "BayApp.installPendingUpdate",
+        "BayApp.setAutomaticUpdateChecks",
         "BayApp.setAutomaticUpdateDownloads"})
     methods.Append(method);
   for (const auto& module : data::ModuleNames())
@@ -702,7 +711,8 @@ void NativeHost::Invoke(const std::string& module,
     return;
   }
   if (module == "BayApp") {
-    if (method == "checkForUpdates" && !context_.window()) {
+    if ((method == "checkForUpdates" || method == "installPendingUpdate") &&
+        !context_.window()) {
       std::move(callback).Run(Failure(
           "window_required", "A manual update check requires a window"));
       return;

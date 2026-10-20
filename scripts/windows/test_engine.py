@@ -87,9 +87,8 @@ class WindowsIdentityTests(unittest.TestCase):
                     if row["subkey"] == subkey and row.get("valuename", "") == name)
 
     def test_windows_branding_applies_after_repository_branding_creation(self):
-        # A Mac development checkout may contain later local bundle changes.
-        # The Windows baseline is the preceding repository patch, not that
-        # already-patched checkout's BRANDING file.
+        # The Windows baseline is the preceding repository patch. Windows
+        # branding changes must preserve its macOS bundle identity.
         steps = series.read_series("win")
         creator = next(step for step in steps if step.name == "chromium-branding.patch")
         branding = next(step for step in steps if step.name == "chromium-bay-branding-win.patch")
@@ -98,14 +97,15 @@ class WindowsIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.assertIsNone(series.apply_step(creator, directory))
             baseline = (pathlib.Path(directory) / path).read_bytes()
-            self.assertIn(b"MAC_BUNDLE_ID=com.bay.browser", baseline)
+            bundle_id = next(line for line in baseline.decode().splitlines()
+                             if line.startswith("MAC_BUNDLE_ID="))
             for arguments in (("--check",), (), ("--reverse", "--check"), ("--reverse",)):
                 subprocess.run(["git", "apply", *arguments, f"--include={path}", branding.patch],
                                cwd=directory, capture_output=True, text=True, check=True)
                 if not arguments:
                     result = (pathlib.Path(directory) / path).read_text()
                     self.assertIn("PRODUCT_FULLNAME=Bay", result)
-                    self.assertIn("MAC_BUNDLE_ID=com.bay.browser", result)
+                    self.assertIn(bundle_id, result.splitlines())
             self.assertEqual((pathlib.Path(directory) / path).read_bytes(), baseline)
 
     def test_native_default_browser_identity_matches_installer(self):

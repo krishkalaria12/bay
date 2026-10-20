@@ -1,4 +1,4 @@
-// OTLP/HTTP JSON log records for bay.com/otel/v1/logs.
+// OTLP/HTTP JSON log records for bay.krishkalaria.in/otel/v1/logs.
 // Events keep their PostHog names so old and new data query the same.
 
 export type OtlpValue = { stringValue: string } | { intValue: string } | { doubleValue: number } | { boolValue: boolean };
@@ -12,9 +12,6 @@ export type OtlpLogRecord = {
 };
 
 export type QueuedEvent = { uuid: string; event: string; distinct_id: string; timestamp: string; properties: Record<string, unknown> };
-
-export const EVENTS_SCOPE = "bay.analytics";
-export const LOGS_SCOPE = "bay.app";
 
 // OTLP JSON has no nested values here: objects and arrays go as JSON text, int64 as a decimal string.
 export function otlpValue(value: unknown): OtlpValue | null {

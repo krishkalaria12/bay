@@ -36,5 +36,4 @@ export const setContentBlockerEnabled = (enabled: boolean) => Cef.setContentBloc
 export const setFilterListEnabled = (id: string, enabled: boolean) => Cef.setFilterListEnabled(id, enabled);
 export const isContentBlockerAllowed = (host: string) => Cef.isContentBlockerAllowed(host);
 export const setContentBlockerAllowed = (host: string, allowed: boolean) => Cef.setContentBlockerAllowed(host, allowed);
-export const onContentBlockerChange = (listener: (stats: ContentBlockerStats) => void) =>
-  Cef.addListener("onContentBlocker", listener);
+export const onContentBlockerChange = (listener: (stats: ContentBlockerStats) => void) => Cef.addListener("onContentBlocker", listener);

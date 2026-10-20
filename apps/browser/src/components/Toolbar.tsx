@@ -1,28 +1,32 @@
 import { Pressable, View, shortcutForCommand, modKey } from "@bay/platform";
+import { useSidebarMetrics } from "./sidebar/tokens";
 import { breadcrumb, urlForDisplay } from "@bay/core";
 import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/shell";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { StyleSheet, Text, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
-import { layout, useTheme } from "../lib/theme";
+import { useTheme } from "../lib/theme";
+import { layout } from "../lib/constants";
 import { webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
 import { useIsBookmarked, useSettings, useTabLive } from "../store/hooks";
-import { bookmarkProfileId } from "../store/model";
+import { bookmarkSpaceId } from "../store/model";
 import type { Tab } from "../store/types";
 import { ToolbarButton, type ClickModifiers } from "./layout/controls";
 import { CAPTION_END_ROOM, toolbarEndRoom, type ToolbarGeometry } from "./layout/geometry";
+import { SIDEBAR_FIELD, TOOLBAR_BUTTON_MID, TOOLBAR_BUTTON_TOP } from "./layout/constants";
 import { setPopover, usePage, usePages } from "./layout/pageState";
 import { closeHistoryMenu, goBack, goForward, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu } from "./layout/history";
 import { openModeFor, openUrl } from "./bookmarks/actions";
 import { closePane, openSplitPane, showSplitMenu } from "./layout/splitActions";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type ToolbarPalette } from "./layout/toolbarColors";
-import { SIDEBAR_FIELD, useSidebarSymbol } from "./layout/windowLayout";
+import { useSidebarSymbol } from "./layout/windowLayout";
 import { showUrlBarMenu } from "./omnibox/paste";
+import { CAPTURE_RED } from "./media/tokens";
 import { useHover } from "./primitives";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "./extensions/ToolbarExtensions";
-import { GlassFill, liquidGlass } from "./glass";
+import { GlassFill, useLiquidGlass } from "./glass";
 import { TranslateButton } from "./site/TranslateControls";
 import { ZoomIndicator } from "./site/ZoomControls";
 import { copyPageUrl } from "./site/selection";
@@ -33,8 +37,7 @@ const toolbarTab = (t: Tab | undefined): ToolbarTab | undefined => t && { id: t.
 
 // Where the toolbar's buttons sit, each centred on its place along the bar.
 function buttonPlaces(geometry: ToolbarGeometry) {
-  const top = 21.2 - layout.toolbarButton / 2;
-  const place = (center: number | null) => ({ position: "absolute" as const, top, left: (center ?? 0) - layout.toolbarButton / 2 });
+  const place = (center: number | null) => ({ position: "absolute" as const, top: TOOLBAR_BUTTON_TOP, left: (center ?? 0) - layout.toolbarButton / 2 });
   return { sidebarButton: place(geometry.sidebarButton), back: place(geometry.back), forward: place(geometry.forward), reload: place(geometry.reload) };
 }
 
@@ -75,53 +78,63 @@ export function Toolbar({
     dim.set(withTiming(focused ? 1 : 0.5, { duration: 160, easing: Easing.out(Easing.quad) }));
   }, [focused]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
-  // Kept stable by the compiler: the buttons are memoized, and a loading or history change re-renders only theirs.
+  // Kept stable by the compiler, as are the buttons' elements: a loading or history change re-renders only theirs.
   const focus = () => {
     if (!focused) useBrowser.getState().activate(tabId);
   };
-  const at = useMemo(() => buttonPlaces(geometry), [geometry]);
-  const sidebarSymbol = useSidebarSymbol();
+  const at = buttonPlaces(geometry);
   // A toggle at the end (the sidebar on the right) is outermost but for the caption buttons: the split buttons,
   // extensions and field move in for them.
   const end = toolbarEndRoom(geometry);
   const toggleRight = 8 + (geometry.captionEnd ? CAPTION_END_ROOM : 0);
   const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
-  const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: 21.2 - 15 };
+  const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: TOOLBAR_BUTTON_MID - 15 };
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
-  const top = 21.2 - layout.toolbarButton / 2;
-  const sidebarToggle = (style: ViewStyle) => (
-    <ToolbarButton style={style} palette={palette} icon={sidebarSymbol} onPress={() => useBrowser.getState().toggleSidebar(windowId)} tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`} />
-  );
 
   return (
     <View style={{ height: layout.toolbarHeight }}>
       {!bare && <Animated.View style={[StyleSheet.absoluteFill, band]} />}
       <WindowDragRegion style={StyleSheet.absoluteFill} />
       <Animated.View style={[StyleSheet.absoluteFill, dimStyle]} pointerEvents="box-none">
-        {geometry.sidebarButton !== null && sidebarToggle(at.sidebarButton)}
-        {geometry.sidebarButtonEnd && sidebarToggle({ position: "absolute", top, right: toggleRight })}
+        {geometry.sidebarButton !== null && <SidebarToggle style={at.sidebarButton} palette={palette} windowId={windowId} />}
+        {geometry.sidebarButtonEnd && (
+          <SidebarToggle style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: toggleRight }} palette={palette} windowId={windowId} />
+        )}
         <HistoryButton style={at.back} tab={tab} direction={-1} disabled={!history.back} palette={palette} onFocus={focus} />
         <HistoryButton style={at.forward} tab={tab} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
         <ReloadButton style={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} />
-        <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={21.2 - 14} right={(inSplit ? 8 + 60 : 8) + end} />
-        {tab.url ? (
-          <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} />
-        ) : null}
+        <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={TOOLBAR_BUTTON_MID - 14} right={(inSplit ? 8 + 60 : 8) + end} />
+        {tab.url ? <UrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} onFocus={focus} style={urlStyle} /> : null}
         {inSplit && (
-          <View style={{ position: "absolute", top, right: 8 + end, flexDirection: "row", gap: -2 }}>
+          <View style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: 8 + end, flexDirection: "row", gap: -2 }}>
             <ToolbarButton palette={palette} icon="rectangle.split.2x1" size={14} box={30} onPress={() => showSplitMenu(tab.id)} tooltip="Split View" />
             <ToolbarButton palette={palette} icon="xmark" size={12} weight="medium" box={30} onPress={() => closePane(tab.id)} tooltip="Close Pane" />
           </View>
         )}
       </Animated.View>
 
-      {tab.url && !bare ? <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} /> : null}
+      {tab.url && !bare ? (
+        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} />
+      ) : null}
       {isLoading && <TabProgressBar tabId={tabId} color={palette.background ? palette.icon : theme.accent} />}
     </View>
   );
 }
 
-export const ReloadButton = memo(function ReloadButton({
+function SidebarToggle({ style, palette, windowId }: { style: ViewStyle; palette: ToolbarPalette; windowId: string }) {
+  const icon = useSidebarSymbol();
+  return (
+    <ToolbarButton
+      style={style}
+      palette={palette}
+      icon={icon}
+      onPress={() => useBrowser.getState().toggleSidebar(windowId)}
+      tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
+    />
+  );
+}
+
+export function ReloadButton({
   tab,
   loading,
   palette,
@@ -151,11 +164,11 @@ export const ReloadButton = memo(function ReloadButton({
       tooltip={loading ? "Stop Loading This Page" : "Refresh (⌘R)"}
     />
   );
-});
+}
 
-export const TabProgressBar = memo(function TabProgressBar({ tabId, color }: { tabId: string; color: string }) {
+export function TabProgressBar({ tabId, color }: { tabId: string; color: string }) {
   return <ProgressBar progress={useTabLive(tabId, (l) => l.progress)} color={color} />;
-});
+}
 
 function ProgressBar({ progress, color }: { progress: number; color: string }) {
   const width = useSharedValue(Math.max(progress, 0.08));
@@ -172,7 +185,7 @@ function ProgressBar({ progress, color }: { progress: number; color: string }) {
   return <Animated.View style={[{ position: "absolute", left: 0, bottom: 0, height: 1.5, backgroundColor: color, opacity: 0.85 }, widthStyle]} />;
 }
 
-export const HistoryButton = memo(function HistoryButton({
+export function HistoryButton({
   tab,
   direction,
   disabled,
@@ -215,9 +228,9 @@ export const HistoryButton = memo(function HistoryButton({
       />
     </MouseArea>
   );
-});
+}
 
-export const UrlField = memo(function UrlField({
+export function UrlField({
   tab,
   palette,
   windowId,
@@ -235,10 +248,15 @@ export const UrlField = memo(function UrlField({
   // In the sidebar, the page shows its load (PageLoadGlow).
   sidebar?: { height: number };
 }) {
+  const metrics = useSidebarMetrics();
+  const fieldHeight = sidebar?.height ?? metrics.toolbarAddressHeight;
   const theme = useTheme();
+  const glass = useLiquidGlass();
   const showFullUrl = useSettings((s) => s.showFullUrl);
   const bookmarked = useIsBookmarked(tab.url);
-  const insecure = usePage(tab.id, (p) => (p.security && (p.security.level === "insecure" || p.security.level === "certificateError") ? p.security.level : null));
+  const insecure = usePage(tab.id, (p) =>
+    p.security && (p.security.level === "insecure" || p.security.level === "certificateError") ? p.security.level : null,
+  );
   const popups = usePage(tab.id, (p) => p.popups.length);
   const capture = usePage(tab.id, (p) => p.mediaAccess);
   const controlsOpen = usePages((s) => s.popover[tab.id] === "siteControls");
@@ -250,7 +268,7 @@ export const UrlField = memo(function UrlField({
     const s = useBrowser.getState();
     // The whole tab (its favicon too) as it is now; the field itself follows only what it shows.
     const page = s.tabs[tab.id];
-    if (page) s.toggleBookmark(bookmarkProfileId(s, s.windows[windowId]), page);
+    if (page) s.toggleBookmark(bookmarkSpaceId(s, s.windows[windowId]), page);
   };
   const toggleSiteControls = () => {
     onFocus();
@@ -275,14 +293,14 @@ export const UrlField = memo(function UrlField({
               height: sidebar.height,
               borderRadius: SIDEBAR_FIELD.radius,
               borderWidth: StyleSheet.hairlineWidth * 2,
-              borderColor: liquidGlass ? "transparent" : theme.pinnedRestingStroke,
-              backgroundColor: liquidGlass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
+              borderColor: glass ? "transparent" : theme.pinnedRestingStroke,
+              backgroundColor: glass ? undefined : hovered ? theme.tabHover : theme.pinnedResting,
               overflow: "hidden",
             }
-          : { height: 30, borderRadius: 8, backgroundColor: hovered && !liquidGlass ? palette.pill : undefined },
+          : { height: fieldHeight, borderRadius: 8, backgroundColor: hovered && !glass ? palette.pill : undefined },
       ]}
     >
-      {liquidGlass ? (
+      {glass ? (
         sidebar ? (
           <GlassFill radius={SIDEBAR_FIELD.radius} border={StyleSheet.hairlineWidth * 2} fill={hovered ? theme.tabHover : theme.pinnedResting} />
         ) : (
@@ -295,32 +313,29 @@ export const UrlField = memo(function UrlField({
             name="lock.open.trianglebadge.exclamationmark.fill"
             size={12}
             color={insecure === "certificateError" ? "#FF5F57" : palette.secondary}
-            style={{ width: 18, height: 30 }}
+            style={{ width: 18, height: fieldHeight }}
           />
         </Pressable>
       )}
       <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => void showUrlBarMenu(tab)}>
-      <Pressable onPress={() => openPanel(tab.url)} style={{ flex: 1, height: sidebar?.height ?? 30, justifyContent: "center", paddingLeft: insecure ? 3 : sidebar ? 10 : 8 }}>
-        {sidebar ? (
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, fontWeight: "500", color: palette.text }}>
-              {host}
+        <Pressable
+          onPress={() => openPanel(tab.url)}
+          style={{ flex: 1, height: fieldHeight, justifyContent: "center", paddingLeft: insecure ? 3 : sidebar ? 10 : 8 }}
+        >
+          {sidebar ? (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, fontWeight: "500", color: palette.text }}>
+                {host}
+              </Text>
+              <FadeLabel text={trail} fontSize={13} color={palette.secondary} fadeWidth={14} style={{ flex: 1, height: 18, marginLeft: -2 }} />
+            </View>
+          ) : (
+            <Text numberOfLines={1} style={{ fontSize: 13, color: palette.text }}>
+              <Text style={{ fontWeight: "500" }}>{host}</Text>
+              {trail ? <Text style={{ color: palette.secondary }}>{trail}</Text> : null}
             </Text>
-            <FadeLabel
-              text={trail}
-              fontSize={13}
-              color={palette.secondary}
-              fadeWidth={14}
-              style={{ flex: 1, height: 18, marginLeft: -2 }}
-            />
-          </View>
-        ) : (
-          <Text numberOfLines={1} style={{ fontSize: 13, color: palette.text }}>
-            <Text style={{ fontWeight: "500" }}>{host}</Text>
-            {trail ? <Text style={{ color: palette.secondary }}>{trail}</Text> : null}
-          </Text>
-        )}
-      </Pressable>
+          )}
+        </Pressable>
       </ContextMenuArea>
       <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 3 }}>
         {capture && <CaptureIndicator camera={capture.camera} microphone={capture.microphone} screen={capture.screen} onPress={toggleSiteControls} />}
@@ -342,8 +357,16 @@ export const UrlField = memo(function UrlField({
         )}
         {hovered && !sidebar && (
           <>
-            <ToolbarButton palette={palette} icon={bookmarked ? "bookmark.fill" : "bookmark"} size={13} box={24} radius={6} onPress={toggleBookmark} tooltip={bookmarked ? "Remove Bookmark" : "Bookmark This Page (⌘D)"} />
-            {!inSplit && !sidebar && (
+            <ToolbarButton
+              palette={palette}
+              icon={bookmarked ? "bookmark.fill" : "bookmark"}
+              size={13}
+              box={24}
+              radius={6}
+              onPress={toggleBookmark}
+              tooltip={bookmarked ? "Remove Bookmark" : "Bookmark This Page (⌘D)"}
+            />
+            {!inSplit && (
               <ToolbarButton
                 palette={palette}
                 icon="rectangle.split.2x1"
@@ -360,20 +383,29 @@ export const UrlField = memo(function UrlField({
         {sidebar ? (
           <>
             <ToolbarButton palette={palette} icon="link" size={14} box={26} radius={6} onPress={() => void copyPageUrl(tab.id)} tooltip="Copy Link" />
-            <ToolbarButton palette={palette} icon="slider.horizontal.3" size={15} box={28} radius={7} style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : undefined }} onPress={toggleSiteControls} tooltip="Site Controls" />
+            <ToolbarButton
+              palette={palette}
+              icon="slider.horizontal.3"
+              size={15}
+              box={28}
+              radius={7}
+              style={{ borderRadius: 7, backgroundColor: controlsOpen ? palette.pressed : undefined }}
+              onPress={toggleSiteControls}
+              tooltip="Site Controls"
+            />
           </>
         ) : null}
       </View>
     </View>
   );
-});
+}
 
 function CaptureIndicator({ camera, microphone, screen, onPress }: { camera: boolean; microphone: boolean; screen: boolean; onPress: () => void }) {
   const icon = screen ? "rectangle.inset.filled.on.rectangle" : camera ? "video.fill" : "mic.fill";
   const what = [camera && "camera", microphone && "microphone", screen && "screen"].filter(Boolean).join(" and ");
   return (
     <Pressable onPress={onPress} tooltip={`This page is using your ${what}`} style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
-      <Symbol name={icon} size={12} color="#FF453A" style={{ width: 18, height: 18 }} />
+      <Symbol name={icon} size={12} color={CAPTURE_RED} style={{ width: 18, height: 18 }} />
     </Pressable>
   );
 }

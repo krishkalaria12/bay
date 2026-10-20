@@ -20,5 +20,4 @@ export type ExternalAppAllowance = { origin: string; scheme: string; app: string
 
 export const resolveExternalApp = (id: string, open: boolean, remember = false) => Cef.resolveExternalApp(id, open, remember);
 export const getExternalAppAllowances = (profile: string) => Cef.getExternalAppAllowances(profile);
-export const removeExternalAppAllowance = (profile: string, origin: string, scheme: string) =>
-  Cef.removeExternalAppAllowance(profile, origin, scheme);
+export const removeExternalAppAllowance = (profile: string, origin: string, scheme: string) => Cef.removeExternalAppAllowance(profile, origin, scheme);

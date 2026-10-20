@@ -1,11 +1,13 @@
 import { useBrowser } from "../../store/browser";
-import type { HistoryEntry } from "../../store/types";
+import { NO_HISTORY } from "../../store/constants";
 import { paletteStart } from "./paletteStart";
 
-const NO_HISTORY: HistoryEntry[] = [];
-
-export function usePaletteStart(windowId: string, profileId: string, tabId: string) {
+export function usePaletteStart(windowId: string, spaceId: string, tabId: string) {
   const tabs = useBrowser((s) => s.tabs);
-  const history = useBrowser((s) => s.history[profileId] ?? NO_HISTORY);
-  return paletteStart(Object.values(tabs).filter((t) => t.windowId === windowId && t.profileId === profileId), history, tabId);
+  const history = useBrowser((s) => s.history[spaceId] ?? NO_HISTORY);
+  return paletteStart(
+    Object.values(tabs).filter((t) => t.windowId === windowId && t.spaceId === spaceId),
+    history,
+    tabId,
+  );
 }

@@ -60,7 +60,7 @@ export function startExtensionsBridge() {
 function openRequestedTab(request: TabsRequest) {
   if (!request.url) return;
   const s = useBrowser.getState();
-  const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.profileId) === request.profile;
+  const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.spaceId) === request.profile;
   const windowId =
     (request.window && s.windows[request.window] ? request.window : undefined) ??
     s.ui.focusOrder.find(ofProfile) ??
@@ -68,12 +68,14 @@ function openRequestedTab(request: TabsRequest) {
   const background = request.active === false;
   // A live tab Chrome made keeps its profile's cookies and storage: adopted only under an app profile on that profile,
   // in a window showing it, else in a new window of it. Without one, the URL opens afresh (and Chrome's tab goes).
-  const profileId = request.adoptId
-    ? windowId && ofProfile(windowId) ? s.windows[windowId]!.profileId : s.profileOrder.find((p) => engineProfile(p) === request.profile)
+  const spaceId = request.adoptId
+    ? windowId && ofProfile(windowId)
+      ? s.windows[windowId]!.spaceId
+      : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
     : undefined;
-  if (request.adoptId && profileId) {
-    if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, profileId, background });
-    else openWindow({ url: request.url, adoptId: request.adoptId, profileId });
+  if (request.adoptId && spaceId) {
+    if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
+    else openWindow({ url: request.url, adoptId: request.adoptId, spaceId });
     return;
   }
   if (windowId) s.newTab(windowId, { url: request.url, background });
@@ -104,7 +106,13 @@ function startActionStates() {
   useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows || s.ui.focusedWindowId !== prev.ui.focusedWindowId) return void refreshActionStates();
     if (s.tabs === prev.tabs) return;
-    if (s.windowOrder.some((id) => { const active = activeTabId(s, id); return !!active && s.tabs[active] !== prev.tabs[active]; })) void refreshActionStates();
+    if (
+      s.windowOrder.some((id) => {
+        const active = activeTabId(s, id);
+        return !!active && s.tabs[active] !== prev.tabs[active];
+      })
+    )
+      void refreshActionStates();
   });
   useExtensions.subscribe((e, prev) => {
     if (e.lists !== prev.lists || e.popup !== prev.popup) void refreshActionStates();
@@ -134,7 +142,7 @@ function startSidePanels() {
   });
   const active = (s: BrowserState) => s.windowOrder.map((id) => `${id}:${activeTabId(s, id) ?? ""}`).join(",");
   useBrowser.subscribe((s, prev) => {
-    if (s.windows === prev.windows && s.tabs === prev.tabs) return;
+    if (s.windows === prev.windows && s.tabs === prev.tabs && s.tabLists === prev.tabLists) return;
     if (active(s) === active(prev)) return;
     for (const [windowId] of wantedSidePanels()) {
       if (!s.windows[windowId]) closeSidePanel(windowId);
@@ -187,7 +195,7 @@ if (store.queued.length) post("result", JSON.stringify(store.queued.shift()));
 else store.waiting = (id) => post("result", JSON.stringify(id));
 `;
 
-const isStorePage = (url: string | undefined) => !!url && /^https:\/\/chromewebstore\.google\.com\//.test(url);
+const isStorePage = (url: string | undefined) => !!url && url.startsWith("https://chromewebstore.google.com/");
 
 function startWebStoreIntegration() {
   onExtensionInstallPrompt((prompt) => {

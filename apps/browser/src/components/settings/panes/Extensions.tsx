@@ -4,19 +4,10 @@ import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { engineProfile, resolveWindowId } from "../../../store/model";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";
-import {
-  addFromWebStore,
-  configure,
-  loadUnpacked,
-  refreshExtensions,
-  removeExtension,
-  setEnabled,
-  setPinned,
-  useExtensionList,
-} from "../../extensions/state";
+import { addFromWebStore, configure, loadUnpacked, refreshExtensions, removeExtension, setEnabled, setPinned, useExtensionList } from "../../extensions/state";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, Toggle } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { SETTINGS_WINDOW_ID } from "../windows";
@@ -32,9 +23,9 @@ const siteAccessOf = (ext: InstalledExtension): SiteAccess =>
 
 export function ExtensionsPane() {
   const theme = useTheme();
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => useBrowser.getState().settings.defaultProfileId);
-  const profile = engineProfile(profileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const profile = engineProfile(spaceId);
   const list = useExtensionList(profile);
   const [detail, setDetail] = useState<string | null>(null);
   const [link, setLink] = useState("");
@@ -42,8 +33,7 @@ export function ExtensionsPane() {
     void refreshExtensions(profile);
   }, [profile]);
 
-  const showInstall = () =>
-    showSettingsSheet(<InstallDialogHost windowId={SETTINGS_WINDOW_ID} onClosed={closeSettingsSheet} />);
+  const showInstall = () => showSettingsSheet(<InstallDialogHost windowId={SETTINGS_WINDOW_ID} onClosed={closeSettingsSheet} />);
   const addLink = () => {
     if (!link.trim()) return;
     void addFromWebStore(SETTINGS_WINDOW_ID, link.trim(), profile);
@@ -60,9 +50,7 @@ export function ExtensionsPane() {
         title="Extensions"
         description="Add features to Bay with extensions from the Chrome Web Store. Each profile has its own."
         action={
-          profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
-          ) : undefined
+          profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       {list.length ? (
@@ -146,11 +134,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
 
       <SectionHeader title="Permissions" />
       <Group>
-        {ext.permissions.length ? (
-          ext.permissions.map((p) => <Row key={p} title={p} />)
-        ) : (
-          <Row title="This extension requires no special permissions." />
-        )}
+        {ext.permissions.length ? ext.permissions.map((p) => <Row key={p} title={p} />) : <Row title="This extension requires no special permissions." />}
         {ext.siteAccess ? (
           <Row title="Site access" description="Which sites the extension can read and change.">
             <PopUp value={siteAccessOf(ext)} options={SITE_ACCESS} onChange={(siteAccess) => void configure(profile, ext.id, { siteAccess })} />
@@ -163,8 +147,19 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
         <Row title="Pin to toolbar" description="Show its button next to the address.">
           <Toggle value={ext.pinned} onChange={(pinned) => void setPinned(profile, ext.id, pinned)} />
         </Row>
-        <Row title="Allow in Incognito" description="Incognito can't stop extensions from recording your browsing.">
-          <Toggle value={ext.incognito} onChange={(incognito) => void configure(profile, ext.id, { incognito })} />
+        <Row
+          title="Allow in Private Windows"
+          description={
+            ext.incognitoAllowed === false
+              ? "This extension doesn't support private windows."
+              : "Extensions can read and record your browsing in private windows."
+          }
+        >
+          <Toggle
+            value={ext.incognito}
+            disabled={!ext.mayModify || ext.incognitoAllowed === false}
+            onChange={(incognito) => void configure(profile, ext.id, { incognito })}
+          />
         </Row>
         {ext.optionsUrl ? (
           <Row title="Extension options">
@@ -186,12 +181,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
       </Group>
 
       <View style={{ alignItems: "flex-start", marginTop: 18 }}>
-        <Button
-          title="Remove Extension…"
-          kind="destructive"
-          disabled={!ext.mayModify}
-          onPress={() => void removeExtension(profile, ext, SETTINGS_WINDOW_ID)}
-        />
+        <Button title="Remove Extension…" kind="destructive" disabled={!ext.mayModify} onPress={() => void removeExtension(profile, ext, SETTINGS_WINDOW_ID)} />
       </View>
     </View>
   );

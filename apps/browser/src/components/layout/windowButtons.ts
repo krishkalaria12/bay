@@ -1,5 +1,5 @@
 import { capabilities } from "@bay/platform";
-import { layout } from "../../lib/theme";
+import { layout } from "../../lib/constants";
 
 // The window's own buttons: macOS's traffic lights at its top left, or the caption buttons Bay draws at its top right
 // on Windows (CaptionButtons.tsx). Layouts clear whichever the platform has, and nothing where it has neither.

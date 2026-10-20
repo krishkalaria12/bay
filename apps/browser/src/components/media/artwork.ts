@@ -2,9 +2,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
-
-const MAX_PIXELS = 256;
-const MAX_ENTRIES = 24;
+import { ARTWORK_CACHE_ENTRIES, ARTWORK_MAX_PIXELS } from "./constants";
 
 // Keep artwork in memory only; incognito images must not reach disk or another context.
 type Entry = { uri: string | null; at: number };
@@ -20,14 +18,14 @@ function load(tabId: string, url: string) {
   if (!view) return;
   inflight.add(key);
   void view
-    .downloadImage(url, MAX_PIXELS)
+    .downloadImage(url, ARTWORK_MAX_PIXELS)
     .catch(() => null)
     .then((image) => {
       inflight.delete(key);
       useArtworks.setState((s) => {
         const entries = { ...s.entries, [key]: { uri: image?.uri ?? null, at: Date.now() } };
         const keys = Object.keys(entries).sort((a, b) => entries[a]!.at - entries[b]!.at);
-        for (const old of keys.slice(0, Math.max(0, keys.length - MAX_ENTRIES))) delete entries[old];
+        for (const old of keys.slice(0, Math.max(0, keys.length - ARTWORK_CACHE_ENTRIES))) delete entries[old];
         return { entries };
       });
     });

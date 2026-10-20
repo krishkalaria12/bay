@@ -23,6 +23,8 @@ function rows(items: Suggestion[]): string[] {
         return `${i.suggested ? "suggest" : "search"}:${i.query}`;
       case "calc":
         return `calc:${i.value}`;
+      case "emoji":
+        return `emoji:${i.value}`;
       case "action":
         return `action:${i.id}`;
       case "create":
@@ -35,7 +37,13 @@ test("inline completion never takes a long query URL: 'm' completes to the host"
   const signIn =
     "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fmail.google.com%2Fmail%2Fu%2F0%2F&service=mail&flowName=GlifWebSignIn&flowEntry=AccountChooser&ec=asw-gmail-globalnav-signin#inbox";
   const hist = [
-    { url: "https://mail.google.com/mail/u/0/?service=mail&continue=" + encodeURIComponent(signIn) + "#inbox", title: "Inbox - me@gmail.com - Gmail", favicon: "gmail.ico", visits: 50, lastVisit: now - 1000 },
+    {
+      url: "https://mail.google.com/mail/u/0/?service=mail&continue=" + encodeURIComponent(signIn) + "#inbox",
+      title: "Inbox - me@gmail.com - Gmail",
+      favicon: "gmail.ico",
+      visits: 50,
+      lastVisit: now - 1000,
+    },
     { url: signIn, title: "Sign in - Google Accounts", favicon: null, visits: 3, lastVisit: now - 2000 },
   ];
   const m = buildSuggestions("m", { tabs: [], history: hist }, { now });
@@ -62,6 +70,42 @@ test("open tabs are marked so the bar can switch to them, except the bar's own t
   assert.equal(own.items[0]?.kind === "page" && own.items[0].tabId, undefined);
 });
 
+test("cleaned up tabs are found and marked so the bar can restore them", () => {
+  const cleaned = [{ id: "c1", url: "https://linear.app/team/issue/BAY-12", title: "BAY-12 Archive search", favicon: null, closedAt: now - DAY }];
+  const { items } = buildSuggestions("archive", { tabs: [], history, cleaned }, { now });
+  const row = items.find((i) => i.kind === "page" && i.url === cleaned[0]!.url);
+  assert.equal(row?.kind === "page" && row.cleanedId, "c1");
+  // Its page in history is the same row, restored rather than opened.
+  const visited = buildSuggestions(
+    "notif",
+    { tabs: [], history, cleaned: [{ id: "c2", url: "https://x.com/notifications", title: "Notifications / X", favicon: null, closedAt: now }] },
+    { now },
+  );
+  const rowsFor = visited.items.filter((i) => i.kind === "page" && i.url === "https://x.com/notifications");
+  assert.equal(rowsFor.length, 1);
+  assert.equal(rowsFor[0]?.kind === "page" && rowsFor[0].cleanedId, "c2");
+});
+
+test("an open tab wins over a cleaned up copy of its page, and the newest cleaned entry wins over older ones", () => {
+  const tabs = [{ id: "t1", url: "https://github.com/", title: "GitHub", favicon: null }];
+  const cleaned = [
+    { id: "new", url: "https://github.com/", title: "GitHub", favicon: null, closedAt: now },
+    { id: "docs-new", url: "https://docs.rs/", title: "Docs.rs", favicon: null, closedAt: now },
+    { id: "docs-old", url: "https://docs.rs/", title: "Docs.rs", favicon: null, closedAt: now - DAY },
+  ];
+  const gh = buildSuggestions("gith", { tabs, history, cleaned }, { now }).items[0];
+  assert.equal(gh?.kind === "page" && gh.tabId, "t1");
+  assert.equal(gh?.kind === "page" && gh.cleanedId, undefined);
+  const docs = buildSuggestions("docs", { tabs, history, cleaned }, { now }).items.filter((i) => i.kind === "page" && i.url === "https://docs.rs/");
+  assert.deepEqual(
+    docs.map((i) => i.kind === "page" && i.cleanedId),
+    ["docs-new"],
+  );
+  // The bar's own tab isn't offered, so its page's cleaned copy is.
+  const own = buildSuggestions("gith", { tabs, history, cleaned }, { now, currentTabId: "t1" }).items[0];
+  assert.equal(own?.kind === "page" && own.cleanedId, "new");
+});
+
 test("frecency: frequent + recent beats old, and multi-word queries match words", () => {
   const hist = [
     { url: "https://a.com/docs", title: "Rust docs", favicon: null, visits: 2, lastVisit: now - DAY * 60 },
@@ -70,17 +114,6 @@ test("frecency: frequent + recent beats old, and multi-word queries match words"
   const { items } = buildSuggestions("docs rust", { tabs: [], history: hist }, { now });
   assert.deepEqual(rows(items), ["search:docs rust", "https://b.com/docs", "https://a.com/docs"]);
 });
-
-const fresh = <T,>(list: readonly T[]) => [...list];
-
-const vocabulary = ["react", "native", "banana", "nano", "layout", "github", "news", "notion", "an", "na"];
-const bigHistory = Array.from({ length: 400 }, (_, i) => ({
-  url: `https://${["github.com", "news.ycombinator.com", "notion.so", "example.org"][i % 4]}/${vocabulary[i % 10]}/${i}`,
-  title: `${vocabulary[(i * 3) % 10]} ${vocabulary[(i * 7) % 10]}${i % 5 ? "" : "ish"} page`,
-  favicon: null,
-  visits: 1 + (i % 13),
-  lastVisit: now - (i % 40) * DAY,
-}));
 
 const google = engineById(BUILT_IN_ENGINES, "google");
 const flush = () => new Promise((r) => setImmediate(r));
@@ -115,7 +148,6 @@ test("a newer request aborts the one in flight, which never answers", async () =
     mock.timers.reset();
   }
 });
-
 
 test("remoteFirst lists the engine's suggestions before matching pages, the best one aside", () => {
   const remote = Array.from({ length: 10 }, (_, i) => `what is the best ${i}`);

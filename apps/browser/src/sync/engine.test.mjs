@@ -48,7 +48,7 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
   const first = await import("./engine.ts?first");
   first.startSync();
   assert.ok("ok" in (await first.turnOnSync("/sync")));
-  S().addBookmark({ profileId: "default", url: "https://one.example/", title: "One" });
+  S().addBookmark({ spaceId: "default", url: "https://one.example/", title: "One" });
   await first.syncNow();
 
   // The app quits the moment the batch with "Two" is in the folder: the disk stays as it is then.
@@ -56,7 +56,7 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
   onWrite = (file) => {
     if (!disk && file.ops?.some((op) => op.v?.t === "Two")) disk = new Map(shell.docs);
   };
-  S().addBookmark({ profileId: "default", url: "https://two.example/", title: "Two" });
+  S().addBookmark({ spaceId: "default", url: "https://two.example/", title: "Two" });
   await first.syncNow();
   onWrite = null;
   assert.ok(disk);
@@ -66,7 +66,7 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
   const second = await import("./engine.ts?second");
   second.startSync();
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
-  S().addBookmark({ profileId: "default", url: "https://three.example/", title: "Three" });
+  S().addBookmark({ spaceId: "default", url: "https://three.example/", title: "Three" });
   await second.syncNow();
 
   const batches = new Map();
@@ -78,7 +78,11 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
     batches.set(key, payload);
   }
   const three = [...folder.values()].map((f) => JSON.parse(f.payload)).find((f) => f.ops?.some((op) => op.v?.t === "Three"));
-  assert.deepEqual(three.ops.map((op) => op.v?.t), ["Three"], "only what's new");
+  assert.deepEqual(
+    three.ops.map((op) => op.v?.t),
+    ["Three"],
+    "only what's new",
+  );
   assert.equal(shell.docs.get("sync-journal.nns"), "", "the journal is emptied once the saved state has its batches");
 });
 
@@ -91,7 +95,7 @@ test("a batch is published only once the journal holding it is on disk", async (
   const published = () => [...folder.values()].map((f) => JSON.parse(f.payload)).filter((f) => f.ops?.some((op) => op.v?.t === "Held"));
 
   shell.heldSaves.on = true;
-  S().addBookmark({ profileId: "default", url: "https://held.example/", title: "Held" });
+  S().addBookmark({ spaceId: "default", url: "https://held.example/", title: "Held" });
   const syncing = engine.syncNow();
   for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(published().length, 0, "nothing goes out while the journal save is still pending");

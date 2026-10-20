@@ -3,19 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "description": "Import bookmarks, history, tabs, passwords and Arc spaces from other browsers",
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "node ../../scripts/test-native.mjs import",
     "fixtures": "python3 fixtures/generate.py"
   },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
+  },
   "peerDependencies": {
     "expo": "*",
     "react-native": "*"
-  },
-  "dependencies": {
-    "@bay/platform": "workspace:*"
   }
 }

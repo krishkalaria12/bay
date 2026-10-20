@@ -1,0 +1,99 @@
+import { Pressable, View } from "@bay/platform";
+import { Symbol, showMenu, type MenuItem } from "@bay/shell";
+import { Text } from "react-native";
+import { createSpace, switchSpace } from "../lib/actions";
+import { SPACE_COLORS, profileNameColor, useTheme } from "../lib/theme";
+import { useBrowser } from "../store/browser";
+import { useIsIncognito, useSpaces, useWindowId, useWindowSpace } from "../store/hooks";
+import { setMeasuredWidth, useMeasuredWidth } from "./layout/measuredWidths";
+import { useHover } from "./primitives";
+import { openSettings } from "./settings/windows";
+import { INDICATOR_HEIGHT, INDICATOR_ICON_WIDTH, INDICATOR_MIN_CUT_NAME, INDICATOR_PAD } from "./spaces/constants";
+
+function useIndicator(room: number) {
+  const theme = useTheme();
+  const incognito = useIsIncognito();
+  const profiles = useSpaces();
+  const profile = useWindowSpace();
+  const title = incognito ? "Incognito" : profile.name;
+  const textWidth = useMeasuredWidth(`profile-name|${title}`);
+  const shown = (incognito || profiles.length >= 2) && room >= INDICATOR_ICON_WIDTH;
+  const nameRoom = room - 2 * INDICATOR_PAD;
+  const showName = !!textWidth && (textWidth <= nameRoom || nameRoom >= INDICATOR_MIN_CUT_NAME);
+  const width = !shown ? 0 : showName ? Math.min(room, textWidth + 2 * INDICATOR_PAD) : INDICATOR_ICON_WIDTH;
+  const color = incognito ? theme.textPrimary : profileNameColor(profile.color, theme.dark);
+  return { incognito, title, textWidth, shown, showName, width, color };
+}
+
+/** The indicator's width at `room` (0 when it isn't shown), known before it lays out: the tab strip sizes its tabs by it. */
+export const useSpaceIndicatorWidth = (room: number) => useIndicator(room).width;
+
+export function SpaceIndicator({ room }: { room: number }) {
+  const theme = useTheme();
+  const windowId = useWindowId();
+  const { hovered, hoverProps } = useHover();
+  const { incognito, title, textWidth, shown, showName, width, color } = useIndicator(room);
+  if (!shown) return null;
+
+  return (
+    <View {...hoverProps} tooltip={incognito ? undefined : "Switch between spaces"} style={{ marginTop: 0.5 }}>
+      <View pointerEvents="none" style={{ position: "absolute", width: 1000, height: 0, overflow: "hidden", opacity: 0 }}>
+        <Text
+          numberOfLines={1}
+          style={{ alignSelf: "flex-start", fontSize: 13, fontWeight: "600" }}
+          onLayout={(e) => setMeasuredWidth(`profile-name|${title}`, Math.ceil(e.nativeEvent.layout.width))}
+        >
+          {title}
+        </Text>
+      </View>
+      <Pressable onPress={() => !incognito && void openSpaceMenu(windowId)} disabled={incognito}>
+        {({ pressed }) => (
+          <View
+            style={{
+              height: INDICATOR_HEIGHT,
+              width,
+              borderRadius: 10,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingHorizontal: showName ? INDICATOR_PAD : 0,
+              backgroundColor: incognito ? undefined : pressed ? theme.tabPressed : hovered ? theme.tabHover : undefined,
+            }}
+          >
+            {showName ? (
+              <Text numberOfLines={1} ellipsizeMode="tail" style={{ flexShrink: 1, fontSize: 13, fontWeight: "600", color }}>
+                {title}
+              </Text>
+            ) : textWidth ? (
+              <Symbol name="person.fill" size={14} weight="semibold" color={color} style={{ width: 16, height: 16 }} />
+            ) : null}
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+export async function openSpaceMenu(windowId: string) {
+  const s = useBrowser.getState();
+  const current = s.windows[windowId]?.spaceId;
+  const items: MenuItem[] = [
+    ...s.spaceOrder.map((id, i) => ({
+      id: `switch:${id}`,
+      title: s.spaces[id]!.name,
+      checked: id === current,
+      swatch: SPACE_COLORS[s.spaces[id]!.color]?.swatch,
+      ...(i < 9 ? { key: String(i + 1), modifiers: ["control" as const] } : {}),
+    })),
+    { separator: true },
+    { id: "new", title: "New Space", symbol: "plus" },
+    { id: "edit", title: "Edit Spaces…", symbol: "pencil" },
+  ];
+  const choice = await showMenu(items);
+  if (!choice) return;
+  if (choice.startsWith("switch:")) switchSpace(windowId, choice.slice("switch:".length), true);
+  else if (choice === "new") {
+    const id = await createSpace(windowId);
+    if (id) switchSpace(windowId, id);
+  } else if (choice === "edit") openSettings("spaces", current);
+}

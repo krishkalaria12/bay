@@ -3,7 +3,8 @@ import { create } from "zustand";
 import { closeTab } from "../../lib/actions";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
-import { MAX_SPLIT_PANES, slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
+import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
+import { MAX_SPLIT_PANES } from "../../store/constants";
 
 const store = () => useBrowser.getState();
 
@@ -25,8 +26,7 @@ export function hideKeyedToast(windowId: string, key: string) {
   useToasts.setState((s) => (s.toasts[windowId]?.key === key ? { toasts: { ...s.toasts, [windowId]: null } } : s));
 }
 
-const maxedOut = (windowId: string) =>
-  showToast(windowId, "Cannot Add New Pane", `Split View can show up to ${MAX_SPLIT_PANES} tabs at once.`);
+const maxedOut = (windowId: string) => showToast(windowId, "Cannot Add New Pane", `Split View can show up to ${MAX_SPLIT_PANES} tabs at once.`);
 
 export function openSplitPane(windowId: string, options: OpenPaneOptions = {}): string | null {
   const result = store().openSplitPane(windowId, options);
@@ -38,6 +38,14 @@ export function openSplitPane(windowId: string, options: OpenPaneOptions = {}): 
 }
 
 export const openNewTabInSplit = (windowId: string) => openSplitPane(windowId);
+
+/** The sidebar's + › Split View: a new pane beside the window's tab, or with no tab to split, just a new tab. */
+export function splitWithCurrentTab(windowId: string) {
+  const result = store().openSplitPane(windowId);
+  if (result.ok) return;
+  if (result.reason === "max") maxedOut(windowId);
+  else store().openNewTabPanel(windowId);
+}
 
 export function openInSplit(tabId: string, side: SplitSide = "right") {
   const tab = store().tabs[tabId];
@@ -81,13 +89,34 @@ export async function showSplitMenu(tabId: string) {
   const full = split.tabIds.length >= MAX_SPLIT_PANES;
   const stacked = slotsOf(split).some((slot) => slot.length === 2 && slot.includes(tabId));
   const items: MenuItem[] = [
-    { id: "add", title: horizontal ? "Add Vertical Split View" : "Add Horizontal Split View", symbol: horizontal ? "rectangle.split.2x1" : "rectangle.split.1x2", enabled: !full, key: "=", modifiers: ["control", "shift"] },
-    { id: "bottom", title: horizontal ? "Add Bottom Split" : "Add Right Split", symbol: horizontal ? "rectangle.bottomhalf.inset.filled" : "rectangle.righthalf.inset.filled", enabled: !full && !stacked },
+    {
+      id: "add",
+      title: horizontal ? "Add Vertical Split View" : "Add Horizontal Split View",
+      symbol: horizontal ? "rectangle.split.2x1" : "rectangle.split.1x2",
+      enabled: !full,
+      key: "=",
+      modifiers: ["control", "shift"],
+    },
+    {
+      id: "bottom",
+      title: horizontal ? "Add Bottom Split" : "Add Right Split",
+      symbol: horizontal ? "rectangle.bottomhalf.inset.filled" : "rectangle.righthalf.inset.filled",
+      enabled: !full && !stacked,
+    },
     { separator: true },
     { id: "left", title: horizontal ? "Move Pane Left" : "Move Pane Up", symbol: "rectangle.lefthalf.inset.filled.arrow.left", enabled: index > 0 },
-    { id: "right", title: horizontal ? "Move Pane Right" : "Move Pane Down", symbol: "rectangle.righthalf.inset.filled.arrow.right", enabled: index < split.tabIds.length - 1 },
+    {
+      id: "right",
+      title: horizontal ? "Move Pane Right" : "Move Pane Down",
+      symbol: "rectangle.righthalf.inset.filled.arrow.right",
+      enabled: index < split.tabIds.length - 1,
+    },
     { id: "flip", title: "Flip Split View", symbol: horizontal ? "arrow.left.arrow.right" : "arrow.up.arrow.down" },
-    { id: "convert", title: horizontal ? "Convert to Vertical Split View" : "Convert to Horizontal Split View", symbol: horizontal ? "rectangle.split.1x2" : "rectangle.split.2x1" },
+    {
+      id: "convert",
+      title: horizontal ? "Convert to Vertical Split View" : "Convert to Horizontal Split View",
+      symbol: horizontal ? "rectangle.split.1x2" : "rectangle.split.2x1",
+    },
     { separator: true },
     { id: "remove", title: "Remove from Split View", symbol: "rectangle.portrait.and.arrow.right" },
     { id: "separate", title: "Separate All Tabs", symbol: "rectangle.split.3x1" },

@@ -15,14 +15,19 @@ export function createLocalBrowserReadSource(store: BrowserStore): BrowserReadSo
   return {
     getState() {
       const state = store.getState();
-      if (state !== previous) { snapshot = project(state); previous = state; }
+      if (state !== previous) {
+        snapshot = project(state);
+        previous = state;
+      }
       return snapshot;
     },
-    subscribe: listener => store.subscribe(listener),
+    subscribe: (listener) => store.subscribe(listener),
   };
 }
 
-export function createClientBrowserReadSource(client: Pick<ReturnType<typeof createBrowserClient>, "getSnapshot" | "getStatus" | "subscribe">): BrowserReadSource {
+export function createClientBrowserReadSource(
+  client: Pick<ReturnType<typeof createBrowserClient>, "getSnapshot" | "getStatus" | "subscribe">,
+): BrowserReadSource {
   return {
     getState() {
       const snapshot = client.getSnapshot();
@@ -40,15 +45,27 @@ export function createBrowserReader(initial: BrowserReadSource) {
   const bindings = [{ source: initial }];
   let source = initial;
   const listeners = new Set<() => void>();
-  const notify = () => { for (const listener of [...listeners]) listener(); };
+  const notify = () => {
+    // oxlint-disable-next-line no-useless-spread -- Subscription changes during delivery apply to the next notification.
+    for (const listener of [...listeners]) listener();
+  };
   let unsubscribe: (() => void) | undefined;
-  const connect = () => { unsubscribe?.(); unsubscribe = listeners.size ? source.subscribe(notify) : undefined; };
+  const connect = () => {
+    unsubscribe?.();
+    unsubscribe = listeners.size ? source.subscribe(notify) : undefined;
+  };
   return {
     getState: () => source.getState(),
     subscribe(listener: () => void) {
       listeners.add(listener);
       if (listeners.size === 1) connect();
-      return () => { listeners.delete(listener); if (!listeners.size) { unsubscribe?.(); unsubscribe = undefined; } };
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) {
+          unsubscribe?.();
+          unsubscribe = undefined;
+        }
+      };
     },
     install(next: BrowserReadSource) {
       next.getState(); // A visible window must have a complete snapshot first.
@@ -62,7 +79,11 @@ export function createBrowserReader(initial: BrowserReadSource) {
         if (index < 0) return;
         const current = index === bindings.length - 1;
         bindings.splice(index, 1);
-        if (current) { source = bindings[bindings.length - 1]!.source; connect(); notify(); }
+        if (current) {
+          source = bindings[bindings.length - 1]!.source;
+          connect();
+          notify();
+        }
       };
     },
   };
@@ -71,5 +92,9 @@ export function createBrowserReader(initial: BrowserReadSource) {
 export const browserRead = createBrowserReader(createLocalBrowserReadSource(useBrowser));
 export const installBrowserReadSource = browserRead.install;
 export function useBrowserRead<T>(select: (state: BrowserProjection) => T): T {
-  return useSyncExternalStore(browserRead.subscribe, () => select(browserRead.getState()), () => select(browserRead.getState()));
+  return useSyncExternalStore(
+    browserRead.subscribe,
+    () => select(browserRead.getState()),
+    () => select(browserRead.getState()),
+  );
 }

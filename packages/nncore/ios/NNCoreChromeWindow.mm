@@ -377,6 +377,7 @@ NSNotificationName const NNCoreWindowSeenDidChange = @"NNCoreWindowSeenDidChange
   BOOL _settling;          // A transition started and macOS hasn't reported the window visible since it ended.
   BOOL _seen;
   BOOL _closed;
+  NSUInteger _returns;     // Each time the user comes back to the window; a late check of an older one does nothing.
   NSArray *_observers;
 }
 
@@ -462,6 +463,15 @@ NSNotificationName const NNCoreWindowSeenDidChange = @"NNCoreWindowSeenDidChange
   if (seen == _seen) return;
   _seen = seen;
   if (NSWindow *window = _coreWindow.window) [NSNotificationCenter.defaultCenter postNotificationName:NNCoreWindowSeenDidChange object:window];
+  if (!seen) return;
+  // Back to a window kept in full screen while the user was away (-sync): its page may go back into full screen as
+  // the user returns (automatic Picture in Picture hands the video back); the window leaves only if it doesn't.
+  const NSUInteger turn = ++_returns;
+  __weak NNWindowFullScreen *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    NNWindowFullScreen *state = weakSelf;
+    if (state && state->_returns == turn && state->_seen) [state sync];
+  });
 }
 
 - (BOOL)seen {
@@ -494,6 +504,10 @@ NSNotificationName const NNCoreWindowSeenDidChange = @"NNCoreWindowSeenDidChange
     _asked = 1;
     ToggleWindowFullScreen(coreWindow);
   } else if (!page && full && _entered) {
+    // A page that leaves full screen while the user is on another Space (its video went into Picture in Picture,
+    // which takes the page out of full screen) keeps the window's: leaving it would bring the window onto the
+    // Space the user is on, where it counts as seen and takes the video back out of Picture in Picture.
+    if (!_seen) return;
     _entered = NO;
     _asked = -1;
     ToggleWindowFullScreen(coreWindow);
@@ -790,7 +804,7 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
 }
 
 - (BOOL)window:(NNCoreWindow *)window handleKeyEvent:(NSEvent *)event {
-  // An Esc the page left alone (Harbor closes on it): onCommand "escape" on the shown tab.
+  // An Esc the page left alone (Little Bay closes on it): onCommand "escape" on the shown tab.
   const NSEventModifierFlags mods = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if (event.type == NSEventTypeKeyDown && event.keyCode == 53 && !(mods & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl))) {
     // The page holding focus, whichever profile's Browser has it (the window's active profile can be another one

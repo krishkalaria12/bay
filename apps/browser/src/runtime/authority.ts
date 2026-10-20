@@ -3,8 +3,9 @@ import { createBrowserProjector, type BrowserProjection } from "./projection";
 import { executeLocationCommand, parseLocationCommand, type LocationCommand, type LocationCommandEffects } from "./locationCommands";
 
 // Native facts (for example updateLive) and hydration are deliberately absent.
-export type BrowserCommand = LocationCommand
-  | { method: "createWindow"; options?: { profileId?: string; incognito?: boolean; url?: string } }
+export type BrowserCommand =
+  | LocationCommand
+  | { method: "createWindow"; options?: { spaceId?: string; incognito?: boolean; url?: string } }
   | { method: "newTab"; windowId: string; options?: { url?: string; background?: boolean } }
   | { method: "activate" | "closeTab"; tabId: string }
   | { method: "navigate"; tabId: string; url: string }
@@ -24,7 +25,9 @@ export class AuthorityError extends Error {
   }
 }
 
-const invalid = (message: string): never => { throw new AuthorityError("invalid_request", message); };
+const invalid = (message: string): never => {
+  throw new AuthorityError("invalid_request", message);
+};
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return invalid("expected an object");
   return value as Record<string, unknown>;
@@ -55,7 +58,7 @@ function commandFrom(value: unknown): BrowserCommand {
   switch (c.method) {
     case "createWindow":
       keys(c, ["method", "options"]);
-      return { method: c.method, options: options(c.options, { profileId: "string", incognito: "boolean", url: "string" }) };
+      return { method: c.method, options: options(c.options, { spaceId: "string", incognito: "boolean", url: "string" }) };
     case "newTab":
       keys(c, ["method", "windowId", "options"]);
       return { method: c.method, windowId: text(c.windowId), options: options(c.options, { url: "string", background: "boolean" }) };
@@ -82,7 +85,15 @@ function commandFrom(value: unknown): BrowserCommand {
 }
 
 /** In-process authority only. It does not authenticate renderer client identities. */
-export function createBrowserAuthority({ epoch, store = createBrowserStore(), effects }: { epoch: string; store?: BrowserStore; effects?: LocationCommandEffects }) {
+export function createBrowserAuthority({
+  epoch,
+  store = createBrowserStore(),
+  effects,
+}: {
+  epoch: string;
+  store?: BrowserStore;
+  effects?: LocationCommandEffects;
+}) {
   text(epoch);
   const project = createBrowserProjector();
   let observed = store.getState();
@@ -110,26 +121,44 @@ export function createBrowserAuthority({ epoch, store = createBrowserStore(), ef
     try {
       while (pendingCommits.length) {
         const next = pendingCommits.shift()!;
+        // oxlint-disable-next-line no-useless-spread -- callbacks can change the next delivery's subscribers
         for (const listener of [...listeners]) {
-          try { listener(next); } catch (error) { console.error("[runtime] commit subscriber failed", error); }
+          try {
+            listener(next);
+          } catch (error) {
+            console.error("[runtime] commit subscriber failed", error);
+          }
         }
       }
     } finally {
       notifying = false;
     }
   }
-  const unsubscribe = store.subscribe(() => { if (!executing) publish(); });
+  const unsubscribe = store.subscribe(() => {
+    if (!executing) publish();
+  });
 
   function run(command: BrowserCommand): string | null {
     const s = store.getState();
     switch (command.method) {
-      case "createWindow": return s.createWindow(command.options);
-      case "newTab": return s.newTab(command.windowId, command.options);
-      case "activate": s.activate(command.tabId); break;
-      case "navigate": s.navigate(command.tabId, command.url); break;
-      case "closeTab": s.closeTab(command.tabId); break;
-      case "closeWindow": s.closeWindow(command.windowId); break;
-      default: return executeLocationCommand(store, command, effects);
+      case "createWindow":
+        return s.createWindow(command.options);
+      case "newTab":
+        return s.newTab(command.windowId, command.options);
+      case "activate":
+        s.activate(command.tabId);
+        break;
+      case "navigate":
+        s.navigate(command.tabId, command.url);
+        break;
+      case "closeTab":
+        s.closeTab(command.tabId);
+        break;
+      case "closeWindow":
+        s.closeWindow(command.windowId);
+        break;
+      default:
+        return executeLocationCommand(store, command, effects);
     }
     return null;
   }
@@ -146,7 +175,10 @@ export function createBrowserAuthority({ epoch, store = createBrowserStore(), ef
       const command = commandFrom(request.command);
       const fingerprint = JSON.stringify(command);
       let client = clients.get(clientId);
-      if (!client) { client = { lastRequestId: 0, replies: new Map() }; clients.set(clientId, client); }
+      if (!client) {
+        client = { lastRequestId: 0, replies: new Map() };
+        clients.set(clientId, client);
+      }
       const previous = client.replies.get(requestId);
       if (previous) {
         if (previous.fingerprint !== fingerprint) throw new AuthorityError("request_conflict", "request id was reused for another command");
@@ -158,18 +190,28 @@ export function createBrowserAuthority({ epoch, store = createBrowserStore(), ef
         if (closed) throw new AuthorityError("closed", "authority is closed");
         executing = true;
         let value: string | null;
-        try { value = run(command); } finally { executing = false; publish(); }
+        try {
+          value = run(command);
+        } finally {
+          executing = false;
+          publish();
+        }
         // This exact immutable commit exists before the result is exposed.
         return Object.freeze({ clientId, requestId, commit, value });
       });
-      queue = reply.then(() => {}, () => {});
+      queue = reply.then(
+        () => {},
+        () => {},
+      );
       client.replies.set(requestId, { fingerprint, reply });
       // Retain recent replies, but never re-execute an evicted request. Sequence
       // numbers are scoped to a browser-authenticated client and epoch.
       const acceptedClient = client;
-      void reply.finally(() => {
-        while (acceptedClient.replies.size > 128) acceptedClient.replies.delete(acceptedClient.replies.keys().next().value!);
-      }).catch(() => {});
+      void reply
+        .finally(() => {
+          while (acceptedClient.replies.size > 128) acceptedClient.replies.delete(acceptedClient.replies.keys().next().value!);
+        })
+        .catch(() => {});
       return reply;
     } catch (error) {
       return Promise.reject(error);
@@ -181,9 +223,16 @@ export function createBrowserAuthority({ epoch, store = createBrowserStore(), ef
     subscribe(listener: (commit: BrowserCommit) => void) {
       if (closed) throw new AuthorityError("closed", "authority is closed");
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     dispatch,
-    close() { closed = true; unsubscribe(); listeners.clear(); clients.clear(); },
+    close() {
+      closed = true;
+      unsubscribe();
+      listeners.clear();
+      clients.clear();
+    },
   };
 }

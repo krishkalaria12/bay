@@ -1,0 +1,41 @@
+# The website (apps/web, its own pnpm workspace): checked and built on every change. Cloudflare deploys it from main
+# on its own, so this only proves it builds.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web.yml"
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Check and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+          cache_dependency_path: apps/web/pnpm-lock.yaml
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Astro check
+        run: pnpm typecheck
+      - run: pnpm build

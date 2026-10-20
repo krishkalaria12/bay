@@ -20,9 +20,34 @@ export function hostOf(url: string): string {
 }
 
 const KNOWN_SCHEMES = new Set([
-  "http", "https", "file", "about", "data", "blob", "mailto", "tel", "sms", "facetime", "ftp", "view-source",
-  "bay", "chrome", "chrome-extension", "devtools", "x-apple.systempreferences", "itms-apps", "slack", "zoommtg", "vscode",
-  "cursor", "notion", "figma", "spotify", "linear", "obsidian", "raycast",
+  "http",
+  "https",
+  "file",
+  "about",
+  "data",
+  "blob",
+  "mailto",
+  "tel",
+  "sms",
+  "facetime",
+  "ftp",
+  "view-source",
+  "bay",
+  "chrome",
+  "chrome-extension",
+  "devtools",
+  "x-apple.systempreferences",
+  "itms-apps",
+  "slack",
+  "zoommtg",
+  "vscode",
+  "cursor",
+  "notion",
+  "figma",
+  "spotify",
+  "linear",
+  "obsidian",
+  "raycast",
 ]);
 
 const KNOWN_TLDS = new Set(
@@ -48,15 +73,11 @@ const KNOWN_TLDS = new Set(
 );
 
 function isLocalHost(host: string): boolean {
-  return (
-    host === "localhost" ||
-    host.startsWith("[") ||
-    /^(\d{1,3}\.){3}\d{1,3}$/.test(host) ||
-    /\.(local|localhost|test|internal|lan|home\.arpa)$/.test(host)
-  );
+  return host === "localhost" || host.startsWith("[") || /^(\d{1,3}\.){3}\d{1,3}$/.test(host) || /\.(local|localhost|test|internal|lan|home\.arpa)$/.test(host);
 }
 
-const HOST = /^(localhost|\[[0-9a-f:.]+\]|(\d{1,3}\.){3}\d{1,3}|([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z][a-z0-9-]*[a-z0-9]|xn--[a-z0-9-]+))\.?(:\d{1,5})?(?=[/?#]|$)/i;
+const HOST =
+  /^(localhost|\[[0-9a-f:.]+\]|(\d{1,3}\.){3}\d{1,3}|([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z][a-z0-9-]*[a-z0-9]|xn--[a-z0-9-]+))\.?(:\d{1,5})?(?=[/?#]|$)/i;
 
 export function fixupUrl(raw: string): string | null {
   const url = fixup(raw);

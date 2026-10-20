@@ -12,7 +12,7 @@ const stubs = {
   "@bay/nncore": `export * from ${JSON.stringify(nncore)};
     export const listTasks = async () => [];
     export const onSystemState = () => ({ remove() {} });
-    export const systemState = async () => null;
+    export const systemState = async () => ({ memoryPressure: "normal", physicalMemory: 8 * 2 ** 30, onBattery: false, lowPowerMode: false });
     export const releaseProfile = async () => {};`,
   "../components/layout/splitActions": "export const showToast = () => {};",
   "../components/settings/windows": "export const openSettings = () => {};",
@@ -45,7 +45,7 @@ function fakePage() {
 test("a tab shown and typed in while it was being frozen doesn't sleep", async () => {
   S().hydrate({});
   const w = S().createWindow({ url: "https://a.com" });
-  const a = S().windows[w].tabIds[0];
+  const a = S().windows[w].activeTabIds[S().windows[w].spaceId];
   const b = S().newTab(w, { url: "https://b.com", background: true });
   const page = fakePage();
   webviews.set(b, page.handle);
@@ -75,4 +75,93 @@ test("a tab without unsaved input sleeps", async () => {
   assert.equal(await lifecycle.sleepTab(b), true);
   assert.equal(page.discarded, 1);
   webviews.delete(b);
+});
+
+test("a site added while the automatic sleep check is pending stays awake", async () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://a.com" });
+  const b = S().newTab(w, { url: "https://new.example.com", background: true });
+  const page = fakePage();
+  let answer;
+  page.handle.evaluate = () =>
+    new Promise((resolve) => {
+      answer = resolve;
+    });
+  webviews.set(b, page.handle);
+  try {
+    const sleeping = lifecycle.sleepTab(b, true);
+    S().updateSettings({ awakeSites: [...S().settings.awakeSites, "example.com"] });
+    answer(false);
+    assert.equal(await sleeping, false);
+    assert.equal(page.discarded, 0);
+  } finally {
+    webviews.delete(b);
+  }
+});
+
+test("awake sites survive two idle hours and sleep last only under critical memory pressure", async (t) => {
+  const now = Date.now();
+  t.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"], now });
+  globalThis.__DEV__ = true;
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://a.com" });
+  const awake = S().newTab(w, { url: "https://web.whatsapp.com", background: true });
+  const normal = S().newTab(w, { url: "https://example.com", background: true });
+  const pinned = S().newTab(w, { url: "https://pinned.com", background: true });
+  const row = S().newTab(w, { url: "https://row.com", background: true });
+  const folder = S().newTab(w, { url: "https://folder.com", background: true });
+  const grouped = S().newTab(w, { url: "https://grouped.com", background: true });
+  const otherSpace = S().createSpace({ name: "Other" });
+  const inactive = S().newTab(w, { url: "https://inactive.com", spaceId: otherSpace, background: true });
+  S().updateTab(pinned, { pinned: true });
+  S().pinRows([row], true);
+  S().newPinnedFolder(w, { name: "Pinned", tabIds: [folder] });
+  S().updateGroup(S().createGroup([grouped]), { pinned: true });
+  const pages = new Map([awake, normal, pinned, row, folder, grouped, inactive].map((id) => [id, fakePage()]));
+  const load = (id, page) => {
+    page.handle.discard = async () => {
+      page.discarded++;
+      lifecycle.noteDiscarded(id);
+      return "discarded";
+    };
+    webviews.set(id, page.handle);
+  };
+  for (const [id, page] of pages) load(id, page);
+  lifecycle.startTabLifecycle();
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(lifecycle.POLICY.idleMs, 2 * 60 * 60_000);
+    assert.equal(lifecycle.POLICY.profileIdleMs, lifecycle.POLICY.idleMs);
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), []);
+    t.mock.timers.setTime(now + 10 * 60_000);
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), [], "inactive spaces use the longer timer too");
+    t.mock.timers.setTime(now + 119 * 60_000);
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), []);
+    t.mock.timers.setTime(now + 2 * 60 * 60_000);
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), [normal, inactive]);
+    assert.equal(pages.get(awake).discarded, 0);
+    lifecycle.useLifecycle.setState({ batterySaver: true });
+    assert.equal(await lifecycle.freezeTab(awake), false, "Battery Saver keeps the protected site running");
+    globalThis.nnLifecycle.simulate({ memoryPressure: "warning" });
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0, perSweep: 10 }), []);
+    assert.equal(pages.get(awake).discarded, 0);
+    const urgent = S().newTab(w, { url: "https://another.com", background: true });
+    pages.set(urgent, fakePage());
+    load(urgent, pages.get(urgent));
+    globalThis.nnLifecycle.simulate({ memoryPressure: "critical" });
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0, perSweep: 1 }), [urgent]);
+    assert.equal(pages.get(awake).discarded, 0, "ordinary tabs take the first sweep's budget");
+    assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0, perSweep: 1 }), [awake]);
+    for (const id of [pinned, row, folder, grouped]) {
+      assert.equal(pages.get(id).discarded, 0, `${S().tabs[id].url} stays pinned under critical pressure`);
+    }
+    // The explicit tab-menu command still honors a user's request to sleep a protected site.
+    lifecycle.noteReady(awake);
+    globalThis.nnLifecycle.simulate(null);
+    assert.equal(await lifecycle.sleepTab(awake), true);
+  } finally {
+    globalThis.nnLifecycle.simulate(null);
+    globalThis.__DEV__ = false;
+    for (const id of pages.keys()) webviews.delete(id);
+  }
 });

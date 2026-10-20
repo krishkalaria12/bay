@@ -31,7 +31,7 @@ remain only so both platforms patch the same tree. GN sets `enable_cef=false` an
 builds `chrome` using ordinary GN arguments. Do not run macOS shell scripts on
 Windows.
 
-The artifact contains `runtime/`, headers/import libraries and `manifest.json`;
+The artifact contains `runtime/` and `manifest.json`;
 matching PDBs are in a separate symbols ZIP. Its identity includes the engine
 pin and Bay source/patch digest. Archiving refuses a build whose source digest
 has changed since the last successful compilation. The generated

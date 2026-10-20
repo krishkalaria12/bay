@@ -10,9 +10,9 @@ import { useFormColors } from "../settings/controls";
 
 type FolderRow = { id: string; title: string; depth: number; hasChildren: boolean };
 
-function useFolderRows(profileId: string, expanded: Set<string>): FolderRow[] {
+function useFolderRows(spaceId: string, expanded: Set<string>): FolderRow[] {
   const key = useBrowser((s) => {
-    const roots = s.bookmarks.roots[profileId];
+    const roots = s.bookmarks.roots[spaceId];
     if (!roots) return "";
     const lines: string[] = [];
     const walk = (id: string, depth: number) => {
@@ -34,13 +34,13 @@ function useFolderRows(profileId: string, expanded: Set<string>): FolderRow[] {
 }
 
 export function FolderTree({
-  profileId,
+  spaceId,
   selectedId,
   onSelect,
   rowHeight = 26,
   wrapRow,
 }: {
-  profileId: string;
+  spaceId: string;
   selectedId: string | null;
   onSelect: (id: string) => void;
   rowHeight?: number;
@@ -48,7 +48,7 @@ export function FolderTree({
 }) {
   const [expanded, setExpanded] = useState(() => {
     const s = useBrowser.getState();
-    const roots = s.bookmarks.roots[profileId];
+    const roots = s.bookmarks.roots[spaceId];
     const open = new Set<string>(roots ? [roots.bar, roots.other] : []);
     if (selectedId) for (const a of bookmarkAncestors(s.bookmarks, selectedId)) open.add(a.id);
     return open;
@@ -58,7 +58,7 @@ export function FolderTree({
     const hidden = bookmarkAncestors(useBrowser.getState().bookmarks, selectedId).filter((a) => !expanded.has(a.id));
     if (hidden.length) setExpanded((prev) => new Set([...prev, ...hidden.map((a) => a.id)]));
   }, [selectedId]);
-  const rows = useFolderRows(profileId, expanded);
+  const rows = useFolderRows(spaceId, expanded);
   const toggle = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);

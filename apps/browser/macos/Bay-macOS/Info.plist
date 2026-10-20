@@ -70,9 +70,9 @@
 	<key>NNFeedbackEmail</key>
 	<string></string>
 	<key>NNFeedbackURL</key>
-	<string>https://github.com/mantrakp04/bay/issues/new?body=%s</string>
+	<string>https://github.com/krishkalaria12/bay/issues/new?body=%s</string>
 	<key>NNReleaseNotesURL</key>
-	<string>https://bay.com/release-notes</string>
+	<string>https://bay.krishkalaria.in/release-notes/</string>
 	<key>NNVideoTourURL</key>
 	<string></string>
 	<key>NSAppTransportSecurity</key>
@@ -117,9 +117,9 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://bay.com/appcast.xml</string>
+	<string>https://bay.krishkalaria.in/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>gi1pBCemmSVpHM36dT5BJPPTcKC98QwS19mztCTyd4s=</string>
+	<string>NlcAKNGYmgQ9Nffs7CyuzHP9NIMpn0DpWlZmMXvQQZw=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>28800</integer>
 </dict>

@@ -1,15 +1,8 @@
 import { create } from "zustand";
-import {
-  defaultBrowserCheckInDoneAt,
-  defaultBrowserTrialStartedAt,
-  recordDefaultBrowserCheckInDone,
-} from "../components/onboarding/state";
+import { defaultBrowserCheckInDoneAt, defaultBrowserTrialStartedAt, recordDefaultBrowserCheckInDone } from "../components/onboarding/state";
 import { useBrowser } from "../store/browser";
 import { sendFeedback } from "./appIntegration";
-
-export const CHECK_IN_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
-
-export const CHECK_IN_COPY = { title: "How are you liking Bay?", action: "Leave us feedback" } as const;
+import { CHECK_IN_AFTER_MS } from "./constants";
 
 type CheckIn = { trialStartedAt: number | null; doneAt: number | null };
 

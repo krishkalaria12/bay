@@ -14,7 +14,13 @@ const history = [
     visits: 60,
     lastVisit: now - 1000,
   },
-  { url: "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fmail.google.com&flowName=GlifWebSignIn", title: "Sign in", favicon: null, visits: 5, lastVisit: now - 5000 },
+  {
+    url: "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fmail.google.com&flowName=GlifWebSignIn",
+    title: "Sign in",
+    favicon: null,
+    visits: 5,
+    lastVisit: now - 5000,
+  },
   { url: "https://x.com/home", title: "Home / X", favicon: null, visits: 30, lastVisit: now - 2000 },
 ];
 const suggest = (text) => (text.trim() ? buildSuggestions(text, { tabs: [], history }, { now }).completion : "");
@@ -198,7 +204,10 @@ test("a completion computed for older text is never applied", () => {
   const w = world();
   w.key("m");
   w.onEvent(w.events.shift());
-  assert.deepEqual(w.main.map((op) => op.kind), ["complete"]);
+  assert.deepEqual(
+    w.main.map((op) => op.kind),
+    ["complete"],
+  );
   w.key("f");
   w.onMain(w.main.shift());
   assert.equal(w.field.text, "mf");

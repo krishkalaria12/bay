@@ -18,7 +18,7 @@ export function positionBetween(a: string, b: string | null): string {
 
 export function assignPositions(existing: (string | undefined)[]): string[] {
   const tails: number[] = [];
-  const previous = new Array<number>(existing.length).fill(-1);
+  const previous = Array.from({ length: existing.length }, () => -1);
   existing.forEach((p, i) => {
     if (p === undefined || !p || p.endsWith("0")) return;
     let lo = 0;
@@ -34,7 +34,7 @@ export function assignPositions(existing: (string | undefined)[]): string[] {
   const keep = new Set<number>();
   for (let i = tails.length ? tails[tails.length - 1]! : -1; i >= 0; i = previous[i]!) keep.add(i);
 
-  const out = new Array<string>(existing.length);
+  const out: string[] = Array.from({ length: existing.length }, () => "");
   for (const i of keep) out[i] = existing[i]!;
   let before = "";
   for (let i = 0; i < existing.length; i++) {

@@ -3,6 +3,15 @@ import { useTheme, type Theme } from "../lib/theme";
 
 export const liquidGlass = isLiquidGlass();
 
+/**
+ * Whether the window's controls are glass: Liquid Glass on this macOS, and Appearance › Window set to Glass. A
+ * solid window keeps solid controls (its tiles and fields are part of it, not floating over the desktop).
+ */
+export function useLiquidGlass(): boolean {
+  const theme = useTheme();
+  return liquidGlass && theme.glass;
+}
+
 const PROFILE_SHARE = 0.15;
 
 export function glassTint(theme: Theme, fill: string, raised = false, dark = theme.dark): string {
@@ -52,4 +61,12 @@ function rgba(color: string): [number, number, number, number] {
   return [ch(0), ch(1), ch(2), h.length >= 8 ? ch(3) / 255 : 1];
 }
 
-const toHex = (c: number[]) => `#${c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+const toHex = (c: number[]) =>
+  `#${c
+    .map((v) =>
+      Math.round(Math.min(255, Math.max(0, v)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase()}`;

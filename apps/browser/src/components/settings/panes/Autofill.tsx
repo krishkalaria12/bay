@@ -18,25 +18,29 @@ import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
-import { useProfiles } from "../../../store/hooks";
+import { useSpaces } from "../../../store/hooks";
 import { engineProfile } from "../../../store/model";
 import { IconButton } from "../../primitives";
 import { NetworkBadge } from "../../site/Autofill";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, type Option } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
-export function AutofillPane({ profileId: initial }: { profileId?: string | null }) {
+export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
-  const profiles = useProfiles();
-  const [profileId, setProfileId] = useState(() => initial ?? useBrowser.getState().settings.defaultProfileId);
+  const profiles = useSpaces();
+  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
   const [addresses, setAddresses] = useState<SavedAddress[] | null>(null);
   const [cards, setCards] = useState<SavedCard[] | null>(null);
   const [enabled, setEnabled] = useState<{ addresses: boolean; cards: boolean } | null>(null);
-  const profile = engineProfile(profileId);
+  const profile = engineProfile(spaceId);
 
   const load = () => {
-    const addressesLoaded = listAddresses(profile).then(setAddresses).catch(() => setAddresses([]));
-    void listCards(profile).then(setCards).catch(() => setCards([]));
+    const addressesLoaded = listAddresses(profile)
+      .then(setAddresses)
+      .catch(() => setAddresses([]));
+    void listCards(profile)
+      .then(setCards)
+      .catch(() => setCards([]));
     return addressesLoaded;
   };
   useEffect(() => {
@@ -49,7 +53,7 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
         .catch(() => {}),
     );
     return () => void (current = false);
-  }, [profileId]);
+  }, [spaceId]);
   const toggle = (key: "addresses" | "cards", value: boolean) =>
     void setAutofillSettings({ [key]: value }, profile).then(() => setEnabled((e) => e && { ...e, [key]: value }));
 
@@ -59,9 +63,7 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
         title="Autofill"
         description={`Addresses and cards you save are offered when you fill in a form, separately for each profile. Card numbers are kept in ${isMac ? "your macOS Keychain" : "Windows Credential Manager"}.`}
         action={
-          profiles.length > 1 ? (
-            <PopUp value={profileId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setProfileId} />
-          ) : undefined
+          profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
@@ -202,7 +204,10 @@ function AddressSheet({ profile, saved, onChanged }: { profile: string; saved?: 
 
   const save = async () => {
     const { line1, line2, ...rest } = values;
-    const street = [line1, line2].map((l) => l!.trim()).filter(Boolean).join("\n");
+    const street = [line1, line2]
+      .map((l) => l!.trim())
+      .filter(Boolean)
+      .join("\n");
     await saveAddress(profile, { ...rest, street, id: saved?.id });
     onChanged();
     closeSettingsSheet();
@@ -221,7 +226,13 @@ function AddressSheet({ profile, saved, onChanged }: { profile: string; saved?: 
         <Group>
           {ADDRESS_FIELDS.map((f, i) => (
             <FormRow key={f.key} title={f.title}>
-              <TextField value={values[f.key] ?? ""} onChangeText={set(f.key)} autoFocus={i === 0 && !saved} onSubmit={() => !empty && void save()} style={{ width: 250 }} />
+              <TextField
+                value={values[f.key] ?? ""}
+                onChangeText={set(f.key)}
+                autoFocus={i === 0 && !saved}
+                onSubmit={() => !empty && void save()}
+                style={{ width: 250 }}
+              />
             </FormRow>
           ))}
         </Group>
@@ -311,12 +322,7 @@ function CardSheet({ profile, saved, onChanged }: { profile: string; saved?: Sav
         </Group>
       </View>
       {error ? <Text style={{ fontSize: 12, color: "#FF453A", marginTop: 10 }}>{error}</Text> : null}
-      <SheetButtons
-        canDelete={!!saved}
-        onDelete={() => void remove()}
-        onSave={() => void save()}
-        saveDisabled={number !== null && digits.length < 12}
-      />
+      <SheetButtons canDelete={!!saved} onDelete={() => void remove()} onSave={() => void save()} saveDisabled={number !== null && digits.length < 12} />
     </Sheet>
   );
 }

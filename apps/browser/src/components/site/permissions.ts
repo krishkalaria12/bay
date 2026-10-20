@@ -47,7 +47,11 @@ function drop(id: string) {
   for (const [tabId, page] of Object.entries(usePages.getState().pages)) {
     if (page.permission?.id === id) next(tabId);
   }
-  for (const [tabId, queue] of queues) queues.set(tabId, queue.filter((r) => r.id !== id));
+  for (const [tabId, queue] of queues)
+    queues.set(
+      tabId,
+      queue.filter((r) => r.id !== id),
+    );
 }
 
 // The answer to the prompt the user saw (`requestId`): a second click, or one that lands after the prompt

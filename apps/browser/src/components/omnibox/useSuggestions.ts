@@ -1,10 +1,13 @@
 import {
   buildSuggestions,
+  createCurrencyConverter,
   createSuggestFetcher,
   engineById,
   findScope,
   hostOf,
   prepareSuggestions,
+  parseCurrency,
+  type CurrencyAnswer,
   type SearchEngine,
   type SearchScope,
   type SuggestionResult,
@@ -12,30 +15,50 @@ import {
 import { useEffect, useState } from "react";
 import { bookmarksByUrl } from "../../store/bookmarks";
 import { useBrowser, type BrowserState } from "../../store/browser";
-import { bookmarkProfileId } from "../../store/model";
+import { bookmarkSpaceId } from "../../store/model";
+import { cleanedTabsFor } from "../../store/organize";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
-import type { Bookmarks, HistoryEntry } from "../../store/types";
+import type { Bookmarks, ClosedTab, HistoryEntry } from "../../store/types";
 import { currentBarActions } from "./actions";
+import { NO_HISTORY } from "../../store/constants";
+import { SUGGEST_WARM_SLICE_MS } from "./constants";
 
-const NO_HISTORY: HistoryEntry[] = [];
 const NO_REMOTE: string[] = [];
 const EMPTY: SuggestionResult = { items: [], completion: "" };
-const WARM_SLICE_MS = 4;
 
 type BookmarkRow = { url: string; title: string; favicon: string | null };
 const bookmarkCache = new WeakMap<Bookmarks, Map<string, BookmarkRow[]>>();
 
-function profileBookmarks(b: Bookmarks, profileId: string): BookmarkRow[] {
+function profileBookmarks(b: Bookmarks, spaceId: string): BookmarkRow[] {
   let perProfile = bookmarkCache.get(b);
   if (!perProfile) bookmarkCache.set(b, (perProfile = new Map()));
-  let rows = perProfile.get(profileId);
+  let rows = perProfile.get(spaceId);
   if (!rows) {
     rows = [];
-    for (const [url, ids] of bookmarksByUrl(b, profileId)) {
+    for (const [url, ids] of bookmarksByUrl(b, spaceId)) {
       const node = b.nodes[ids[0]!];
       if (node?.kind === "url") rows.push({ url, title: node.title, favicon: node.favicon });
     }
-    perProfile.set(profileId, rows);
+    perProfile.set(spaceId, rows);
+  }
+  return rows;
+}
+
+type CleanedRow = { id: string; url: string; title: string; favicon: string | null; closedAt: number };
+const cleanedCache = new WeakMap<ClosedTab[], Map<string, CleanedRow[]>>();
+
+// The space's cleaned up tabs (Arc's archive), newest first, for the bar to find and restore.
+function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
+  let perSpace = cleanedCache.get(list);
+  if (!perSpace) cleanedCache.set(list, (perSpace = new Map()));
+  let rows = perSpace.get(spaceId);
+  if (!rows) {
+    rows = [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const { id, tab, closedAt } = list[i]!;
+      if (tab.spaceId === spaceId && tab.url) rows.push({ id, url: tab.url, title: tab.customTitle || tab.title, favicon: tab.favicon, closedAt });
+    }
+    perSpace.set(spaceId, rows);
   }
   return rows;
 }
@@ -53,16 +76,16 @@ function historyHosts(history: HistoryEntry[]): string[] {
   return hosts;
 }
 
-function knownHosts(s: BrowserState, profileId: string): string[] {
+function knownHosts(s: BrowserState, spaceId: string): string[] {
   const hosts: string[] = [];
-  for (const t of Object.values(s.tabs)) if (t.profileId === profileId && t.url) hosts.push(hostOf(t.url));
-  return hosts.concat(historyHosts(s.history[profileId] ?? NO_HISTORY));
+  for (const t of Object.values(s.tabs)) if (t.spaceId === spaceId && t.url) hosts.push(hostOf(t.url));
+  return hosts.concat(historyHosts(s.history[spaceId] ?? NO_HISTORY));
 }
 
 export function scopeFor(text: string, windowId: string): SearchScope | null {
   const s = useBrowser.getState();
-  const profileId = s.windows[windowId]?.profileId ?? "";
-  return findScope(text, { engines: searchEngines(s.settings), hosts: knownHosts(s, profileId) });
+  const spaceId = s.windows[windowId]?.spaceId ?? "";
+  return findScope(text, { engines: searchEngines(s.settings), hosts: knownHosts(s, spaceId) });
 }
 
 function suggestEngine(scope: SearchScope | null, engines: SearchEngine[], fallback: SearchEngine): SearchEngine {
@@ -81,7 +104,7 @@ export function useSuggestions({
   text,
   active,
   windowId,
-  profileId,
+  spaceId,
   currentTabId,
   currentUrl,
   scope,
@@ -92,7 +115,7 @@ export function useSuggestions({
   text: string;
   active: boolean;
   windowId: string;
-  profileId: string;
+  spaceId: string;
   currentTabId?: string;
   currentUrl?: string;
   scope: SearchScope | null;
@@ -101,22 +124,24 @@ export function useSuggestions({
   remoteFirst?: boolean;
 }): SuggestionResult {
   const allTabs = useBrowser((s) => s.tabs);
-  const history = useBrowser((s) => s.history[profileId] ?? NO_HISTORY);
+  const history = useBrowser((s) => s.history[spaceId] ?? NO_HISTORY);
   const bookmarks = useBrowser((s) => s.bookmarks);
-  const bookmarkProfile = useBrowser((s) => bookmarkProfileId(s, s.windows[windowId]));
+  const cleanedTabs = useBrowser((s) => cleanedTabsFor(s, windowId));
+  const bookmarkProfile = useBrowser((s) => bookmarkSpaceId(s, s.windows[windowId]));
   const engines = useBrowser((s) => searchEngines(s.settings));
   const engine = useBrowser((s) => defaultSearchEngine(s.settings));
   const preference = useBrowser((s) => s.settings.commandBarPreference);
   const suggestionsOn = useBrowser((s) => s.settings.searchSuggestions);
+  const calculatorEnabled = useBrowser((s) => s.settings.calculatorEnabled);
 
-  const tabs = Object.values(allTabs).filter((t) => t.profileId === profileId);
+  const tabs = Object.values(allTabs).filter((t) => t.spaceId === spaceId);
   const bookmarkRows = profileBookmarks(bookmarks, bookmarkProfile);
-  const source = { tabs, history, bookmarks: bookmarkRows };
+  const source = { tabs, history, bookmarks: bookmarkRows, cleaned: spaceCleaned(cleanedTabs, spaceId) };
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const step = () => {
-      timer = prepareSuggestions(source, Date.now() + WARM_SLICE_MS) ? undefined : setTimeout(step, 16);
+      timer = prepareSuggestions(source, Date.now() + SUGGEST_WARM_SLICE_MS) ? undefined : setTimeout(step, 16);
       if (!timer) historyHosts(source.history);
     };
     timer = setTimeout(step, 0);
@@ -126,6 +151,21 @@ export function useSuggestions({
   const [remote, setRemote] = useState<{ text: string; list: string[] }>({ text: "", list: [] });
   const [fetcher] = useState(() => createSuggestFetcher({ fetch: (url, init) => fetch(url, init) }));
   const query = text.trim();
+  const [currency, setCurrency] = useState<CurrencyAnswer | null>(null);
+  const [convertCurrency] = useState(() => createCurrencyConverter({ fetch: (url, init) => fetch(url, init) }));
+  useEffect(() => {
+    if (!active || !calculatorEnabled || scope || !parseCurrency(query)) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void convertCurrency(query).then((answer) => {
+        if (!cancelled) setCurrency(answer);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [active, calculatorEnabled, scope, query, convertCurrency]);
   const fromEngine = suggestEngine(scope, engines, engine);
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
@@ -149,5 +189,7 @@ export function useSuggestions({
     limit,
     remoteLimit,
     remoteFirst,
+    currency,
+    calculatorEnabled,
   });
 }
