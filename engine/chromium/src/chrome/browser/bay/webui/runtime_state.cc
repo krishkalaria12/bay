@@ -159,11 +159,20 @@ bool IsRuntimeCommit(const base::DictValue& commit,
          revision && *revision == expected_revision && state &&
          IsRuntimeState(*state);
 }
+RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command) {
+  const auto* method = command.FindString("method");
+  if (method && (*method == "newTab" || *method == "createWindow" ||
+                 *method == "addCustomEngine"))
+    return RuntimeResultKind::kRequiredId;
+  if (method && (*method == "duplicateTab" || *method == "moveTabsToWindow"))
+    return RuntimeResultKind::kOptionalId;
+  return RuntimeResultKind::kNone;
+}
 bool IsRuntimeReply(const base::DictValue& reply,
                     const std::string& epoch,
                     double minimum_revision,
                     double accepted_revision,
-                    bool creates_id) {
+                    RuntimeResultKind result_kind) {
   const auto* incoming_epoch = reply.FindString("epoch");
   if (!incoming_epoch || *incoming_epoch != epoch)
     return false;
@@ -174,7 +183,9 @@ bool IsRuntimeReply(const base::DictValue& reply,
   const auto* value = reply.Find("value");
   return reply.size() == 3 && revision && *revision >= minimum_revision &&
          *revision <= accepted_revision && value &&
-         (creates_id ? value->is_string() : value->is_none());
+         ((value->is_none() && result_kind != RuntimeResultKind::kRequiredId) ||
+          (result_kind != RuntimeResultKind::kNone && value->is_string() &&
+           value->GetString().size() <= 1024));
 }
 
 bool IsRuntimeState(const base::DictValue& state) {
@@ -507,50 +518,341 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   const auto* method = command.FindString("method");
   if (!method)
     return false;
-  const auto own_tab = [&](std::string_view field) -> const base::DictValue* {
-    const auto* id = command.FindString(field);
-    const auto* tab = id ? tabs->FindDict(*id) : nullptr;
+  const bool is_private = own_window->FindBool("incognito").value_or(false);
+  const auto tab_owned = [&](const std::string& id) -> const base::DictValue* {
+    const auto* tab = tabs->FindDict(id);
     const auto* owner = tab ? tab->FindString("windowId") : nullptr;
     return owner && *owner == window_id && StoredTab(state, *tab) ? tab
                                                                   : nullptr;
+  };
+  const auto own_tab = [&](std::string_view field) -> const base::DictValue* {
+    const auto* id = command.FindString(field);
+    return id ? tab_owned(*id) : nullptr;
   };
   const auto own_target = [&] {
     const auto* id = command.FindString("windowId");
     return id && *id == window_id;
   };
+  const auto visible_window = [&](const std::string& id) {
+    const auto* window = windows->FindDict(id);
+    return window &&
+           (is_private ? id == window_id
+                       : !window->FindBool("incognito").value_or(false));
+  };
+  const auto public_space = [&](const base::DictValue& input,
+                                std::string_view field) {
+    const auto* id = input.FindString(field);
+    return id && !PrivateSpace(*id) && state.FindDict("spaces")->FindDict(*id);
+  };
+  const auto owned_tabs = [&](const base::DictValue& input) {
+    const auto* ids = input.FindList("tabIds");
+    if (!ids || ids->size() > 10000)
+      return false;
+    std::set<std::string> seen;
+    for (const auto& id : *ids)
+      if (!id.is_string() || !seen.insert(id.GetString()).second ||
+          !tab_owned(id.GetString()))
+        return false;
+    return true;
+  };
+  const auto index = [&](const char* field, double minimum = 0) {
+    const auto value = command.FindDouble(field);
+    return value && std::isfinite(*value) && std::floor(*value) == *value &&
+           *value >= minimum && *value <= 1000000;
+  };
   const auto* kind = own_window->FindString("kind");
   const bool harbor = kind && *kind == "small";
   constexpr size_t kMaximumInput = 1024 * 1024;
-  if (*method == "newTab" || *method == "closeWindow") {
-    // Harbor tab creation can redirect to a new main window.
-    if (*method == "newTab" && harbor)
-      return false;
-    if (!CommandFields(command, {"method", "windowId"},
-                       *method == "newTab"
-                           ? std::initializer_list<std::string_view>{"options"}
-                           : std::initializer_list<std::string_view>{}) ||
+  if (*method == "newTab") {
+    if (!CommandFields(command, {"method", "windowId"}, {"options"}) ||
         !own_target())
       return false;
     if (!command.contains("options"))
       return true;
     const auto* options = command.FindDict("options");
-    return options && CommandFields(*options, {}, {"url", "background"}) &&
-           (!options->contains("url") ||
-            CommandText(*options, "url", kMaximumInput, true)) &&
-           (!options->contains("background") ||
-            options->FindBool("background").has_value());
+    if (!options || !CommandFields(*options, {},
+                                   {"url", "background", "openerId", "spaceId",
+                                    "pinned", "index"}))
+      return false;
+    if (options->contains("url") &&
+        !CommandText(*options, "url", kMaximumInput, true))
+      return false;
+    for (const char* field : {"background", "pinned"})
+      if (options->contains(field) && !options->FindBool(field).has_value())
+        return false;
+    const auto* space = options->FindString("spaceId");
+    if (options->contains("spaceId") &&
+        (!space || (is_private ? *space != *own_window->FindString("spaceId")
+                               : !public_space(*options, "spaceId"))))
+      return false;
+    if (options->contains("openerId")) {
+      const auto* id = options->FindString("openerId");
+      const auto* opener = id ? tab_owned(*id) : nullptr;
+      if (!opener || *opener->FindString("spaceId") !=
+                         (space ? *space : *own_window->FindString("spaceId")))
+        return false;
+    }
+    const auto position = RuntimeInteger(*options, "index");
+    return !options->contains("index") || (position && *position <= 1000000);
   }
-  if (*method == "activate" || *method == "closeTab" || *method == "navigate") {
-    return CommandFields(
+  if (*method == "activate" || *method == "showTab" || *method == "closeTab" ||
+      *method == "removeTab" || *method == "duplicateTab" ||
+      *method == "togglePin" || *method == "navigate" || *method == "moveTab") {
+    if (*method == "showTab") {
+      const auto* id = command.FindString("tabId");
+      const auto* tab = id ? tabs->FindDict(*id) : nullptr;
+      const auto* space = tab ? tab->FindString("spaceId") : nullptr;
+      if (!tab || !StoredTab(state, *tab) || !space ||
+          (is_private ? !own_tab("tabId") : PrivateSpace(*space)))
+        return false;
+    } else if (!own_tab("tabId")) {
+      return false;
+    }
+    if (*method == "activate" || *method == "showTab") {
+      if (!CommandFields(command, {"method", "tabId"}, {"windowId"}))
+        return false;
+      const auto* target = command.Find("windowId");
+      return !target || target->is_none() ||
+             (target->is_string() && visible_window(target->GetString()));
+    }
+    if (*method == "navigate") {
+      if (!CommandFields(command, {"method", "tabId", "url"}, {"options"}) ||
+          !CommandText(command, "url", kMaximumInput, true))
+        return false;
+      const auto* options = command.FindDict("options");
+      return !command.contains("options") ||
+             (options && CommandFields(*options, {}, {"userInitiated"}) &&
+              (!options->contains("userInitiated") ||
+               options->FindBool("userInitiated").has_value()));
+    }
+    if (*method == "moveTab")
+      return CommandFields(command, {"method", "tabId", "toIndex"}) &&
+             index("toIndex");
+    return CommandFields(command, {"method", "tabId"});
+  }
+  if (*method == "closeTabs")
+    return CommandFields(command, {"method", "tabIds"}) && owned_tabs(command);
+  if (*method == "activateIndex" || *method == "cycle") {
+    if (!CommandFields(command, {"method", "windowId",
+                                 *method == "cycle" ? "delta" : "index"}) ||
+        !own_target())
+      return false;
+    const auto delta = command.FindDouble("delta");
+    return *method == "cycle" ? delta && (*delta == -1 || *delta == 1)
+                              : index("index", -1);
+  }
+  if (*method == "openInMainWindow")
+    return CommandFields(command, {"method", "windowId"}) && own_target() &&
+           harbor && !is_private;
+  if (*method == "focusWindow") {
+    const auto* target = command.FindString("windowId");
+    return CommandFields(command, {"method", "windowId"}) && target &&
+           visible_window(*target);
+  }
+  if (*method == "closeWindow" || *method == "toggleSidebar" ||
+      *method == "mergeAllWindows")
+    return CommandFields(command, {"method", "windowId"}) && own_target() &&
+           (*method != "mergeAllWindows" || (!is_private && !harbor));
+  if (*method == "switchSpace")
+    return CommandFields(command, {"method", "windowId", "spaceId"}) &&
+           own_target() && !is_private && !harbor &&
+           public_space(command, "spaceId");
+  if (*method == "moveTabToSpace")
+    return CommandFields(command, {"method", "tabId", "spaceId"}) &&
+           own_tab("tabId") && !is_private && public_space(command, "spaceId");
+  if (*method == "moveTabsToWindow") {
+    if (!CommandFields(command, {"method", "tabIds", "windowId"}) ||
+        !owned_tabs(command))
+      return false;
+    const auto* target = command.Find("windowId");
+    if (target->is_none())
+      return !is_private;
+    if (!target->is_string() || !visible_window(target->GetString()))
+      return false;
+    const auto* target_kind =
+        windows->FindDict(target->GetString())->FindString("kind");
+    return !target_kind || *target_kind != "small";
+  }
+  if (*method == "createWindow") {
+    if (!CommandFields(command, {"method"}, {"options", "openPanel"}) ||
+        (command.contains("openPanel") &&
+         !command.FindBool("openPanel").has_value()))
+      return false;
+    if (!command.contains("options"))
+      return !is_private;
+    const auto* options = command.FindDict("options");
+    if (!options || !CommandFields(*options, {},
+                                   {"spaceId", "incognito", "url", "tabIds",
+                                    "frame", "small", "background"}))
+      return false;
+    for (const char* field : {"incognito", "small", "background"})
+      if (options->contains(field) && !options->FindBool(field).has_value())
+        return false;
+    const bool private_target = options->FindBool("incognito").value_or(false);
+    const bool small_target = options->FindBool("small").value_or(false);
+    if ((is_private && !private_target) ||
+        (options->contains("spaceId") && !public_space(*options, "spaceId")) ||
+        (options->contains("url") &&
+         !CommandText(*options, "url", kMaximumInput, true)) ||
+        (options->contains("tabIds") && !owned_tabs(*options)))
+      return false;
+    const auto* ids = options->FindList("tabIds");
+    if ((private_target && (options->contains("spaceId") || small_target ||
+                            (ids && !ids->empty()))) ||
+        (small_target && ids && !ids->empty()))
+      return false;
+    const auto* frame = options->Find("frame");
+    if (frame && !frame->is_none()) {
+      if (!frame->is_list() || frame->GetList().size() != 4)
+        return false;
+      size_t i = 0;
+      for (const auto& component : frame->GetList()) {
+        if (!component.is_double() && !component.is_int())
+          return false;
+        const double number = component.GetDouble();
+        if (!std::isfinite(number) || std::abs(number) > 1000000 ||
+            (i >= 2 && number <= 0))
+          return false;
+        ++i;
+      }
+    }
+    return true;
+  }
+  if (*method == "reopenClosed" || *method == "reopenClosedTab" ||
+      *method == "reopenClosedWindow" || *method == "restoreClosed") {
+    if (!CommandFields(
+            command,
+            *method == "restoreClosed"
+                ? std::initializer_list<std::string_view>{"method", "entryId",
+                                                          "windowId"}
+            : *method == "reopenClosedWindow"
+                ? std::initializer_list<std::string_view>{"method"}
+                : std::initializer_list<std::string_view>{"method",
+                                                          "windowId"}))
+      return false;
+    // A reducer's default window comes from global focus, which can name a
+    // different private window. Remote restores always name their own target.
+    if (*method != "reopenClosedWindow" && !own_target())
+      return false;
+    const auto allowed_tab_entry = [&](const base::Value& entry) {
+      const auto* closed = entry.is_dict() ? &entry.GetDict() : nullptr;
+      const auto* snapshot = closed ? closed->FindDict("tab") : nullptr;
+      const auto* owner = closed ? closed->FindString("windowId") : nullptr;
+      const auto* space = snapshot ? snapshot->FindString("spaceId") : nullptr;
+      return snapshot && space &&
+             (is_private ? owner && *owner == window_id &&
+                               *space == *own_window->FindString("spaceId")
+                         : !HasPrivateData(entry));
+    };
+    if (*method == "restoreClosed") {
+      if (!CommandText(command, "entryId", 1024))
+        return false;
+      const auto& entry_id = *command.FindString("entryId");
+      for (const char* key :
+           {"closedTabs", "closedWindows", "closedGroups", "deletedGroups"}) {
+        for (const auto& entry : *state.FindList(key)) {
+          const auto* id =
+              entry.is_dict() ? entry.GetDict().FindString("id") : nullptr;
+          if (id && *id == entry_id)
+            return std::string_view(key) == "closedTabs"
+                       ? allowed_tab_entry(entry)
+                       : !is_private && !HasPrivateData(entry);
+        }
+      }
+      return false;
+    }
+    if (*method == "reopenClosedWindow") {
+      const auto* entries = state.FindList("closedWindows");
+      return !is_private &&
+             (entries->empty() || !HasPrivateData(entries->back()));
+    }
+    // Private targets only restore their own closed tabs. Public targets skip
+    // private closed tabs in the reducer, so unrelated private history must not
+    // disable reopening a public tab.
+    if (is_private || *method == "reopenClosedTab")
+      return true;
+    for (const char* key : {"closedWindows", "closedGroups"}) {
+      const auto* entries = state.FindList(key);
+      if (!entries->empty() && HasPrivateData(entries->back()))
+        return false;
+    }
+    return true;
+  }
+  if (*method == "updateSettings") {
+    const auto* patch = command.FindDict("patch");
+    return !is_private && CommandFields(command, {"method", "patch"}) &&
+           patch &&
+           CommandFields(*patch, {},
+                         {"warnBeforeQuitting",
+                          "warnBeforeClosingWindow",
+                          "restoreSession",
+                          "launchTab",
+                          "searchEngine",
+                          "customSearchUrl",
+                          "searchSuggestions",
+                          "calculatorEnabled",
+                          "commandBarPreference",
+                          "tabLayout",
+                          "hideToolbarWhileScrolling",
+                          "newTabPosition",
+                          "warnBeforeClosingLastTab",
+                          "warnBeforeMovingTabsToSpace",
+                          "tabReorderHaptics",
+                          "extendWebsiteColor",
+                          "cmdClickCreatesTabGroup",
+                          "optShiftClickOpensInGroup",
+                          "autoGroupMeetingTabs",
+                          "cleanUpInactiveTabsAfterHours",
+                          "awakeSites",
+                          "mutedSites",
+                          "neverTranslateSites",
+                          "developerSites",
+                          "autoPictureInPicture",
+                          "noAutoPictureInPictureSites",
+                          "previewFolders",
+                          "previewGmail",
+                          "previewGithub",
+                          "sidebarWidth",
+                          "sidebarPosition",
+                          "batterySaver",
+                          "extensionSidePanelWidth",
+                          "showFullUrl",
+                          "bookmarksBar",
+                          "hideBookmarksBarImport",
+                          "appearance",
+                          "density",
+                          "windowMaterial",
+                          "addressBar",
+                          "defaultSpaceId",
+                          "shortcuts",
+                          "openLinksInLittleBay",
+                          "externalLinkRules",
+                          "peekLinksFromPinnedTabs",
+                          "littleBaySize"});
+  }
+  if (*method == "setTabLayout") {
+    const auto* layout = command.FindString("layout");
+    return !is_private && CommandFields(command, {"method", "layout"}) &&
+           layout && (*layout == "sidebar" || *layout == "top");
+  }
+  if (*method == "setSearchEngine" || *method == "removeCustomEngine")
+    return !is_private && CommandFields(command, {"method", "id"}) &&
+           CommandText(command, "id", 1024);
+  if (*method == "addCustomEngine" || *method == "updateCustomEngine") {
+    const auto* input = command.FindDict("input");
+    return !is_private &&
+           CommandFields(
                command,
-               *method == "navigate"
-                   ? std::initializer_list<std::string_view>{"method", "tabId",
-                                                             "url"}
-                   : std::initializer_list<std::string_view>{"method",
-                                                             "tabId"}) &&
-           own_tab("tabId") &&
-           (*method != "navigate" ||
-            CommandText(command, "url", kMaximumInput));
+               *method == "addCustomEngine"
+                   ? std::initializer_list<std::string_view>{"method", "input"}
+                   : std::initializer_list<std::string_view>{"method", "id",
+                                                             "input"}) &&
+           (*method == "addCustomEngine" || CommandText(command, "id", 1024)) &&
+           input && CommandFields(*input, {"name", "url"}, {"keyword"}) &&
+           CommandText(*input, "name", 1024) &&
+           CommandText(*input, "url", kMaximumInput) &&
+           (!input->contains("keyword") ||
+            CommandText(*input, "keyword", 1024, true));
   }
   if (*method == "openLocation") {
     if (!CommandFields(command,
@@ -558,10 +860,9 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
         !own_tab("sourceTabId") || !CommandText(command, "url", kMaximumInput))
       return false;
     const auto* disposition = command.FindString("disposition");
-    // New native application windows remain gated during UI migration.
-    return disposition && (*disposition == "current" ||
-                           (!harbor && (*disposition == "newTab" ||
-                                        *disposition == "backgroundTab")));
+    return disposition &&
+           (*disposition == "current" || *disposition == "newTab" ||
+            *disposition == "backgroundTab" || *disposition == "newWindow");
   }
   if (*method == "switchToExistingTab") {
     if (!CommandFields(command, {"method", "sourceTabId", "targetTabId"}) ||
@@ -585,10 +886,6 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   if (*method == "requestNewTab") {
     if (!CommandFields(command, {"method", "windowId"}, {"groupId"}) ||
         !own_target())
-      return false;
-    // A Harbor request can create a main window. Enable that path only with
-    // the rest of the native multiwindow acceptance gate.
-    if (harbor)
       return false;
     if (!command.contains("groupId"))
       return true;
@@ -616,8 +913,6 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   if (*method == "dismissCommandPanel") {
     return CommandFields(command, {"method", "windowId"}) && own_target();
   }
-  // Creating another native window is still gated until the complete command
-  // migration and native two-window tests pass.
   return false;
 }
 }  // namespace bay

@@ -166,8 +166,7 @@ class RuntimeConnection final
     request->Set("clientId", id_);
     const auto token = ID();
     runtime_->Queue(*this, token, *request_id,
-                    *command->FindString("method") == "newTab",
-                    std::move(callback));
+                    RuntimeCommandResultKind(*command), std::move(callback));
     runtime_->coordinator_->client_->OnCommand(token,
                                                Json(std::move(*request)));
   }
@@ -256,7 +255,7 @@ struct AppRuntime::Pending {
   base::WeakPtr<RuntimeConnection> connection;
   double request_id = 0;
   double minimum_revision = 0;
-  bool creates_id = false;
+  RuntimeResultKind result_kind = RuntimeResultKind::kNone;
   mojom::AppRuntime::DispatchCallback callback;
   base::OneShotTimer deadline;
 };
@@ -281,7 +280,7 @@ void RuntimeConnection::Resolve(const std::string& token,
                           : std::nullopt;
   if (!reply || !accepted_revision ||
       !IsRuntimeReply(*reply, runtime_->epoch_, found->second->minimum_revision,
-                      *accepted_revision, found->second->creates_id)) {
+                      *accepted_revision, found->second->result_kind)) {
     std::move(callback).Run(Failure(
         "invalid_reply",
         "Command reply precedes its accepted commit or has an invalid result"));
@@ -428,12 +427,12 @@ void AppRuntime::Bind(content::WebUI* web_ui,
 void AppRuntime::Queue(RuntimeConnection& connection,
                        const std::string& token,
                        double request_id,
-                       bool creates_id,
+                       RuntimeResultKind result_kind,
                        mojom::AppRuntime::DispatchCallback callback) {
   auto pending = std::make_unique<Pending>();
   pending->connection = connection.weak_factory_.GetWeakPtr();
   pending->request_id = request_id;
-  pending->creates_id = creates_id;
+  pending->result_kind = result_kind;
   pending->minimum_revision = *RuntimeInteger(*accepted_, "revision");
   pending->callback = std::move(callback);
   pending->deadline.Start(

@@ -13,6 +13,7 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "chrome/browser/bay/webui/native_host.mojom.h"
+#include "chrome/browser/bay/webui/runtime_state.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -64,7 +65,7 @@ class AppRuntime final : public ProfileManagerObserver,
   void Queue(RuntimeConnection& connection,
              const std::string& token,
              double request_id,
-             bool creates_id,
+             RuntimeResultKind result_kind,
              mojom::AppRuntime::DispatchCallback callback);
   void Timeout(const std::string& token);
   std::optional<base::DictValue> Snapshot(RuntimeConnection& connection) const;

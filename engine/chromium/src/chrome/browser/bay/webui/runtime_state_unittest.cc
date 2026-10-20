@@ -217,7 +217,7 @@ TEST(RuntimeStateTest, AuthorizesOnlyCommandsOwnedByActualWindow) {
         state, "normal",
         base::DictValue().Set("method", method).Set("windowId", "private")));
   }
-  EXPECT_FALSE(CanDispatchRuntimeCommand(
+  EXPECT_TRUE(CanDispatchRuntimeCommand(
       state, "normal", base::DictValue().Set("method", "createWindow")));
   EXPECT_FALSE(CanDispatchRuntimeCommand(
       state, "unregistered",
@@ -268,25 +268,29 @@ TEST(RuntimeStateTest, CommandReplyCannotPrecedeItsCommitOrSpoofResultType) {
                    .Set("epoch", "epoch")
                    .Set("revision", 3)
                    .Set("value", base::Value());
-  EXPECT_TRUE(IsRuntimeReply(reply, "epoch", 2, 3, false));
-  EXPECT_FALSE(IsRuntimeReply(reply, "other-epoch", 2, 3, false));
-  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 4, 5, false));
-  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 2, 2, false));
-  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 2, 3, true));
+  EXPECT_TRUE(IsRuntimeReply(reply, "epoch", 2, 3, RuntimeResultKind::kNone));
+  EXPECT_FALSE(
+      IsRuntimeReply(reply, "other-epoch", 2, 3, RuntimeResultKind::kNone));
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 4, 5, RuntimeResultKind::kNone));
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 2, 2, RuntimeResultKind::kNone));
+  EXPECT_FALSE(
+      IsRuntimeReply(reply, "epoch", 2, 3, RuntimeResultKind::kRequiredId));
   reply.Set("value", "created-tab-id");
-  EXPECT_TRUE(IsRuntimeReply(reply, "epoch", 2, 3, true));
-  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 2, 3, false));
+  EXPECT_TRUE(
+      IsRuntimeReply(reply, "epoch", 2, 3, RuntimeResultKind::kRequiredId));
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 2, 3, RuntimeResultKind::kNone));
   // A newTab routed to app UI legitimately returns an empty id.
   reply.Set("value", "");
-  EXPECT_TRUE(IsRuntimeReply(reply, "epoch", 2, 3, true));
+  EXPECT_TRUE(
+      IsRuntimeReply(reply, "epoch", 2, 3, RuntimeResultKind::kRequiredId));
   auto error = base::DictValue()
                    .Set("epoch", "epoch")
                    .Set("error", base::DictValue()
                                      .Set("code", "failed")
                                      .Set("message", "failed command"));
-  EXPECT_TRUE(IsRuntimeReply(error, "epoch", 2, 3, false));
+  EXPECT_TRUE(IsRuntimeReply(error, "epoch", 2, 3, RuntimeResultKind::kNone));
   error.Set("revision", 3);
-  EXPECT_FALSE(IsRuntimeReply(error, "epoch", 2, 3, false));
+  EXPECT_FALSE(IsRuntimeReply(error, "epoch", 2, 3, RuntimeResultKind::kNone));
 }
 TEST(RuntimeStateTest, PrivateGroupsCannotClaimAnotherPrivateNamespace) {
   auto state = State();
@@ -334,7 +338,7 @@ TEST(RuntimeStateTest, LocationCommandsUseOwnedSourceAndClosedFieldAllowlist) {
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
   command.Set("sourceTabId", "normal-tab");
   command.Set("disposition", "newWindow");
-  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
   command.Set("disposition", "current");
   command.Set("spaceId", "forged-profile");
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
@@ -390,7 +394,7 @@ TEST(RuntimeStateTest, PanelAndNewTabIntentsValidateWindowAndGroupOwnership) {
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", request));
   request.Remove("groupId");
   state.FindDict("windows")->FindDict("normal")->Set("kind", "small");
-  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", request));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", request));
 }
 TEST(RuntimeStateTest, RejectsUnexpectedOptionsAndMalformedPanelText) {
   auto state = State();
@@ -558,14 +562,14 @@ TEST(RuntimeStateTest, WindowLookPreviewsAreAcceptedAndPrivacyScoped) {
   state.FindDict("ui")->Set("unknownPrivateField", base::DictValue());
   EXPECT_FALSE(IsRuntimeState(state));
 }
-TEST(RuntimeStateTest, HarborTabCreationCannotBypassTheNewWindowGate) {
+TEST(RuntimeStateTest, SharedBrokerAuthorizesHarborWindowCreation) {
   auto state = State();
   AddWindow(state, "harbor", false);
   state.FindDict("windows")->FindDict("harbor")->Set("kind", "small");
   state.FindDict("tabLists")
       ->Set("harbor", state.FindDict("tabLists")->FindList("default")->Clone());
   state.FindDict("tabLists")->Remove("default");
-  EXPECT_FALSE(CanDispatchRuntimeCommand(
+  EXPECT_TRUE(CanDispatchRuntimeCommand(
       state, "harbor",
       base::DictValue().Set("method", "newTab").Set("windowId", "harbor")));
   auto command = base::DictValue()
@@ -574,10 +578,273 @@ TEST(RuntimeStateTest, HarborTabCreationCannotBypassTheNewWindowGate) {
                      .Set("url", "https://example.com/");
   for (const auto* disposition : {"newTab", "backgroundTab", "newWindow"}) {
     command.Set("disposition", disposition);
-    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "harbor", command));
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "harbor", command));
   }
   command.Set("disposition", "current");
   EXPECT_TRUE(CanDispatchRuntimeCommand(state, "harbor", command));
+}
+
+TEST(RuntimeStateTest, MigratedTabListsValidateEverySourceBeforeDispatch) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  for (const auto* method : {"closeTabs", "moveTabsToWindow"}) {
+    auto command = base::DictValue()
+                       .Set("method", method)
+                       .Set("tabIds", base::ListValue().Append("normal-tab"));
+    if (std::string_view(method) == "moveTabsToWindow")
+      command.Set("windowId", "other");
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    command.FindList("tabIds")->Append("other-tab");
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+    command.Set("tabIds",
+                base::ListValue().Append("normal-tab").Append("private-tab"));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+    command.Set("tabIds",
+                base::ListValue().Append("normal-tab").Append("normal-tab"));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  }
+}
+TEST(RuntimeStateTest, MigratedWindowTargetsCannotCrossPrivateBoundaries) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  AddWindow(state, "private-other", true);
+  for (const auto* method : {"activate", "showTab", "moveTabsToWindow"}) {
+    auto command =
+        base::DictValue().Set("method", method).Set("windowId", "other");
+    if (std::string_view(method) != "moveTabsToWindow")
+      command.Set("tabId", "normal-tab");
+    else
+      command.Set("tabIds", base::ListValue().Append("normal-tab"));
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    command.Set("windowId", "private");
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+    if (std::string_view(method) != "moveTabsToWindow")
+      command.Set("tabId", "private-tab");
+    else
+      command.Set("tabIds", base::ListValue().Append("private-tab"));
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", command));
+    command.Set("windowId", "private-other");
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+    command.Set("windowId", "normal");
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  }
+  auto move = base::DictValue()
+                  .Set("method", "moveTabsToWindow")
+                  .Set("tabIds", base::ListValue().Append("private-tab"))
+                  .Set("windowId", base::Value());
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", move));
+  move.Set("method", "moveTabToSpace");
+  move.Remove("tabIds");
+  move.Remove("windowId");
+  move.Set("tabId", "private-tab");
+  move.Set("spaceId", "default");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", move));
+}
+TEST(RuntimeStateTest, WindowCreationCannotImportForeignOrPrivateTabs) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  auto command =
+      base::DictValue()
+          .Set("method", "createWindow")
+          .Set("options",
+               base::DictValue().Set("tabIds",
+                                     base::ListValue().Append("normal-tab")));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Set("openPanel", true);
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Set("openPanel", "true");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Remove("openPanel");
+  command.FindDict("options")->FindList("tabIds")->Append("other-tab");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.FindDict("options")->Set("tabIds",
+                                   base::ListValue().Append("private-tab"));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("options", base::DictValue().Set("incognito", true));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", command));
+  command.FindDict("options")->Set("adoptId", "native-page-id");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+}
+TEST(RuntimeStateTest, GlobalSettingsRejectPrivateCallersAndNativeOwnedFields) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  auto command = base::DictValue()
+                     .Set("method", "updateSettings")
+                     .Set("patch", base::DictValue().Set("appearance", "dark"));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  for (const auto* field :
+       {"customSearchEngines", "extensionSearchEngines", "unknown"}) {
+    command.Set("patch", base::DictValue().Set(field, base::ListValue()));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  }
+  for (const auto* method : {"setSearchEngine", "removeCustomEngine"}) {
+    command = base::DictValue().Set("method", method).Set("id", "google");
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  }
+  for (const auto* method : {"addCustomEngine", "updateCustomEngine"}) {
+    command = base::DictValue()
+                  .Set("method", method)
+                  .Set("input", base::DictValue()
+                                    .Set("name", "Example")
+                                    .Set("keyword", "ex")
+                                    .Set("url", "https://example.com/?q=%s"));
+    if (std::string_view(method) == "updateCustomEngine")
+      command.Set("id", "custom:example");
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+    command.FindDict("input")->Set("extensionId", "forged");
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  }
+}
+TEST(RuntimeStateTest, OptionalResultsAcceptNoIdWithoutWeakeningRequiredIds) {
+  auto reply = base::DictValue()
+                   .Set("epoch", "epoch")
+                   .Set("revision", 1)
+                   .Set("value", base::Value());
+  EXPECT_TRUE(
+      IsRuntimeReply(reply, "epoch", 0, 1, RuntimeResultKind::kOptionalId));
+  EXPECT_FALSE(
+      IsRuntimeReply(reply, "epoch", 0, 1, RuntimeResultKind::kRequiredId));
+  reply.Set("value", "created-id");
+  EXPECT_TRUE(
+      IsRuntimeReply(reply, "epoch", 0, 1, RuntimeResultKind::kOptionalId));
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 0, 1, RuntimeResultKind::kNone));
+  reply.Set("value", 1);
+  EXPECT_FALSE(
+      IsRuntimeReply(reply, "epoch", 0, 1, RuntimeResultKind::kOptionalId));
+  for (const auto* method : {"newTab", "createWindow", "addCustomEngine"})
+    EXPECT_EQ(RuntimeCommandResultKind(base::DictValue().Set("method", method)),
+              RuntimeResultKind::kRequiredId);
+  for (const auto* method : {"duplicateTab", "moveTabsToWindow"})
+    EXPECT_EQ(RuntimeCommandResultKind(base::DictValue().Set("method", method)),
+              RuntimeResultKind::kOptionalId);
+  EXPECT_EQ(RuntimeCommandResultKind(
+                base::DictValue().Set("method", "updateSettings")),
+            RuntimeResultKind::kNone);
+}
+
+TEST(RuntimeStateTest,
+     RestoresRequireOwnedTargetAndSelectOnlyVisibleSnapshots) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  AddWindow(state, "other-private", true);
+  for (const auto* id : {"normal", "private", "other-private"}) {
+    state.FindList("closedTabs")
+        ->Append(base::DictValue()
+                     .Set("id", std::string(id) + "-closed")
+                     .Set("windowId", id)
+                     .Set("tab", base::DictValue().Set(
+                                     "spaceId",
+                                     id == std::string_view("normal")
+                                         ? "default"
+                                         : std::string("incognito:") + id)));
+  }
+  for (const auto* method : {"reopenClosed", "reopenClosedTab"}) {
+    auto command =
+        base::DictValue().Set("method", method).Set("windowId", "normal");
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    command.Set("windowId", "private");
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", command));
+    command.Remove("windowId");
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+    command.Set("windowId", base::Value());
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  }
+  auto command = base::DictValue()
+                     .Set("method", "restoreClosed")
+                     .Set("windowId", "normal")
+                     .Set("entryId", "normal-closed");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Set("entryId", "private-closed");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Set("windowId", "private");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("entryId", "other-private-closed");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("entryId", "normal-closed");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+}
+TEST(RuntimeStateTest,
+     FocusAndLayoutIntentsRejectForeignTargetsAndPrivateSettings) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  auto command =
+      base::DictValue().Set("method", "focusWindow").Set("windowId", "normal");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("windowId", "private");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", command));
+  command =
+      base::DictValue().Set("method", "setTabLayout").Set("layout", "top");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("layout", "unknown");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+}
+
+TEST(RuntimeStateTest, ShowTabAcceptsPublicSharedAndRetainedTargetsOnly) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  auto command =
+      base::DictValue().Set("method", "showTab").Set("tabId", "other-tab");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  state.FindDict("tabs")->FindDict("other-tab")->Set("windowId", "");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Set("windowId", "normal");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Set("windowId", "private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Remove("windowId");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("tabId", "private-tab");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  command =
+      base::DictValue().Set("method", "focusWindow").Set("windowId", "other");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("windowId", "private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+}
+
+TEST(RuntimeStateTest, OpenInMainWindowRequiresOwnedRegularSmallWindow) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "small", false);
+  AddWindow(state, "other-small", false);
+  AddWindow(state, "private", true);
+  for (const auto* id : {"small", "other-small", "private"})
+    state.FindDict("windows")->FindDict(id)->Set("kind", "small");
+  auto command = base::DictValue()
+                     .Set("method", "openInMainWindow")
+                     .Set("windowId", "small");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "small", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other-small", command));
+  command.Set("windowId", "normal");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.Set("windowId", "private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command));
+  command.Set("windowId", "small");
+  command.Set("targetWindowId", "normal");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "small", command));
+  EXPECT_EQ(RuntimeCommandResultKind(command), RuntimeResultKind::kNone);
 }
 }  // namespace
 }  // namespace bay

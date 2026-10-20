@@ -19,11 +19,13 @@ RuntimeRequestStatus ValidateRuntimeRequest(const base::DictValue& request,
 bool IsRuntimeCommit(const base::DictValue& commit,
                      const std::string& epoch,
                      double expected_revision);
+enum class RuntimeResultKind { kNone, kRequiredId, kOptionalId };
+RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command);
 bool IsRuntimeReply(const base::DictValue& reply,
                     const std::string& epoch,
                     double minimum_revision,
                     double accepted_revision,
-                    bool creates_id);
+                    RuntimeResultKind result_kind);
 std::optional<base::DictValue> ProjectRuntimeState(
     const base::DictValue& state,
     const std::string& window_id);
