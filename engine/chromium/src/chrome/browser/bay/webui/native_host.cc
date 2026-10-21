@@ -443,6 +443,7 @@ base::DictValue NativeHost::Info() const {
   base::DictValue shell;
   shell.Set("role", context_.role_name());
   shell.Set("sharedRuntime", AppRuntime::Enabled());
+  shell.Set("runtimeRole", context_.role_name());
   if (auto* window = context_.window()) {
     const std::string window_id = WindowRegistry::Get().IdFor(window);
     if (!window_id.empty())
@@ -763,6 +764,17 @@ void NativeHost::Invoke(const std::string& module,
       const auto* system = info.FindByDottedPath("snapshots.BayApp.systemInfo");
       std::move(callback).Run(
           Success(system ? system->Clone() : base::Value()));
+      return;
+    }
+  }
+  if (module == "BaySync" && AppRuntime::Enabled() && !is_coordinator()) {
+    bool local = false;
+    for (const char* name : {"chooseFolder", "folderInfo", "revealFolder", "deviceName", "newDeviceId",
+                             "recoveryKitPreview", "saveRecoveryKit", "copyRecoveryKit", "shareRecoveryKit",
+                             "qrCode", "recoveryWords", "copyRecoveryPhrase"})
+      local |= method == name;
+    if (!local) {
+      std::move(callback).Run(Failure("forbidden", "The application coordinator owns sync operations"));
       return;
     }
   }

@@ -12,6 +12,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "base/uuid.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/native_host.mojom.h"
@@ -197,6 +198,11 @@ class RuntimeConnection final
           "invalid_commit", "Page adoption does not match its native offer"));
       return;
     }
+    // Park live pages before either renderer sees ownership change. A source
+    // unmount or native window close may otherwise destroy the destination page.
+    TabBroker::Get().PreserveTransfers(
+        runtime_->accepted_ ? runtime_->accepted_->FindDict("state") : nullptr,
+        *commit->FindDict("state"));
     runtime_->accepted_ = std::move(*commit);
     runtime_->ReconcilePageOpens();
     runtime_->page_events_.Prune(*runtime_->accepted_->FindDict("state"));
@@ -329,8 +335,14 @@ void RuntimeConnection::Resolve(const std::string& token,
 
 bool AppRuntime::Enabled() {
   const auto* command = base::CommandLine::ForCurrentProcess();
-  return command->HasSwitch("bay-shared-runtime") &&
-         !command->HasSwitch("bay-hosting-spike");
+  if (command->HasSwitch("bay-legacy-runtime") ||
+      command->HasSwitch("bay-hosting-spike"))
+    return false;
+#if BUILDFLAG(IS_WIN)
+  return true;
+#else
+  return command->HasSwitch("bay-shared-runtime");
+#endif
 }
 AppRuntime* AppRuntime::GetIfStarted() {
   return Instance().get();

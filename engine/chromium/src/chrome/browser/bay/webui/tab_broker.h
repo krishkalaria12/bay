@@ -38,6 +38,10 @@ class TabBroker final {
   Result Mount(BrowserWindowInterface* browser, const base::DictValue& props);
   std::optional<std::string> PrepareTransfer(const std::string& key);
   void ReleaseTransfer(const std::string& key);
+  // Parks every page whose accepted window changes, so neither window's
+  // unmount closes it before the destination mounts it.
+  void PreserveTransfers(const base::DictValue* previous,
+                         const base::DictValue& next);
   void Unmount(content::WebContents* contents, uint64_t lease);
   bool IsCurrent(content::WebContents* contents, uint64_t lease) const;
   bool IsLastLease(content::WebContents* contents, uint64_t lease) const;

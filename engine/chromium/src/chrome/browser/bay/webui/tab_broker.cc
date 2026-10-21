@@ -2,11 +2,13 @@
 #include "chrome/browser/bay/webui/tab_broker.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/uuid.h"
@@ -366,6 +368,39 @@ void TabBroker::ReleaseTransfer(const std::string& key) {
     if (entry->parked)
       Close(*entry);
   }
+}
+void TabBroker::PreserveTransfers(const base::DictValue* previous,
+                                  const base::DictValue& next) {
+  PruneDestroyed();
+  if (!previous)
+    return;
+  const auto* before = previous->FindDict("tabs");
+  const auto* after = next.FindDict("tabs");
+  std::vector<std::string> release;
+  for (const auto& [contents, entry] : entries_) {
+    if (entry->key.empty())
+      continue;
+    const auto* prior = before ? before->FindDict(entry->key) : nullptr;
+    const auto* target = after ? after->FindDict(entry->key) : nullptr;
+    if (!target) {
+      if (entry->prepared)
+        release.push_back(entry->key);
+      continue;
+    }
+    const auto* from = prior ? prior->FindString("windowId") : nullptr;
+    const auto* to = target->FindString("windowId");
+    if (!from || !to || *from == *to)
+      continue;
+    // Best effort: a page that cannot be parked loads its URL afresh in the
+    // destination, which is better than refusing the user's accepted move.
+    if (auto error = Park(*entry)) {
+      LOG(WARNING) << "Bay could not keep a moved page live: " << *error;
+      continue;
+    }
+    entry->prepared = true;
+  }
+  for (const auto& key : release)
+    ReleaseTransfer(key);
 }
 void TabBroker::Unmount(content::WebContents* contents, uint64_t lease) {
   PruneDestroyed();

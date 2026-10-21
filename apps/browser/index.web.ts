@@ -5,6 +5,12 @@ import { createMojoTransport, type WebNativeBridgeOptions } from "../../packages
 
 declare global {
   var __bayNativeHostReady: Promise<WebNativeBridgeOptions> | undefined;
+  var __bayAppRuntimeReady:
+    | Promise<{
+        remote: import("@bay/platform/runtimeTransport").MojoAppRuntimeRemote;
+        client: import("@bay/platform/runtimeTransport").MojoAppRuntimeClientRouter;
+      }>
+    | undefined;
 }
 
 async function start() {
@@ -57,10 +63,46 @@ async function start() {
     startHostingSpike(root);
     return;
   }
-  // The legacy entry owns global document writers. Keep experimental shared
-  // mode closed until coordinator and window entries own separate services.
-  if (getNativeHostInfo().constants.BayShell?.sharedRuntime === true) {
-    throw new Error("The shared runtime entry is not ready. Launch without --bay-shared-runtime.");
+  const shell = getNativeHostInfo().constants.BayShell;
+  if (shell?.sharedRuntime === true) {
+    const role = shell.runtimeRole;
+    if (role !== "coordinator" && role !== "window") throw new Error("The native host did not assign a runtime role");
+    const windowId = shell.windowId;
+    if (role === "window" && (typeof windowId !== "string" || !windowId)) throw new Error("The native host did not assign a window");
+    const ready = globalThis.__bayAppRuntimeReady;
+    if (!ready) throw new Error("Bay's authenticated runtime bootstrap did not load");
+    const { createAppRuntimeTransport } = await import("@bay/platform/runtimeTransport");
+    let runtimeTimer: ReturnType<typeof setTimeout> | undefined;
+    let expired = false;
+    const pending = ready.then((endpoints) => {
+      if (expired) {
+        endpoints.remote.$.close();
+        endpoints.client.$.close();
+      }
+      return endpoints;
+    });
+    const endpoints = await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => {
+        runtimeTimer = setTimeout(() => {
+          expired = true;
+          reject(new Error("Bay's runtime bootstrap did not finish loading"));
+        }, 15000);
+      }),
+    ]).finally(() => clearTimeout(runtimeTimer));
+    const transport = await createAppRuntimeTransport<
+      import("./src/runtime/projection").BrowserProjection,
+      import("./src/runtime/userCommands").BrowserCommand,
+      unknown
+    >({ ...endpoints, expectedRole: role, ...(role === "window" ? { expectedWindowId: windowId as string } : {}) });
+    const { startSharedRuntime } = await import("./src/runtime/startup");
+    const owner = await startSharedRuntime({
+      transport,
+      coordinator: async (transport) => (await import("./src/runtime/coordinatorEntry")).startCoordinatorEntry(transport, showStartupError),
+      window: async (transport) => (await import("./src/runtime/windowRuntimeEntry")).startWindowRuntimeEntry(transport, showStartupError),
+    });
+    addEventListener("pagehide", () => owner.dispose(), { once: true });
+    return;
   }
   await import("./src/main");
   const [{ AppRegistry }, { useBrowser }] = await Promise.all([import("react-native"), import("./src/store/browser")]);
@@ -71,11 +113,12 @@ async function start() {
   if (!rootTag) throw new Error("The WebUI root element is missing");
   AppRegistry.runApplication("main", { rootTag, initialProps: { windowId } });
 }
-void start().catch((error) => {
+function showStartupError(error: unknown) {
   console.error(error);
   const root = document.getElementById("root");
   if (root) {
     root.textContent = `Bay could not start: ${error instanceof Error ? error.message : String(error)}`;
     root.setAttribute("role", "alert");
   }
-});
+}
+void start().catch(showStartupError);

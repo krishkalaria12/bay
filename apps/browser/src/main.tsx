@@ -29,7 +29,7 @@ quietLaunchTabs();
 startAppIntegration();
 startTabLifecycle();
 startTranslate();
-startSync();
+startSync(useBrowser);
 startTelemetry();
 if (__DEV__ || perfProbeEnabled) require("./lib/devHarness").startDevHarness();
 
