@@ -241,14 +241,27 @@ a macOS-only patch; it is rebased.
 
 ## Windows Chrome opens itself
 
-Until the shared runtime owns every window, one full UI document runs per
-process. A normal window Chrome opens on its own while a Bay window exists (a
-second launch with `--new-window`, a taskbar task, an extension's
-`chrome.windows.create`) is absorbed: it is never shown, its document refuses
-to start, and its tabs move into the most recently active Bay window. Pages in
-another regular profile reopen there; private pages are dropped rather than
-copied into a regular profile. Bay's own additional windows (private, Harbor,
-settings, import) remain gated, and the taskbar jump list waits for them.
+With `--bay-legacy-runtime`, one full UI document runs per process. A normal
+window Chrome opens on its own while a Bay window exists (a second launch with
+`--new-window`, a taskbar task, an extension's `chrome.windows.create`) is
+absorbed: it is never shown, its document refuses to start, and its tabs move
+into the most recently active Bay window. Pages in another regular profile
+reopen there; private pages are dropped rather than copied into a regular
+profile. Bay's own additional windows stay unavailable in that mode.
+
+With the shared runtime only the coordinator opens additional windows, from
+accepted state; window documents cannot open them directly.
+
+## Not yet working in the shared runtime
+
+- Windows Chrome opens itself are not absorbed and get no Bay window id, so
+  their document cannot connect. Their tabs need a native page offer without a
+  source tab, which the coordinator places in a regular window.
+- The Settings, Import and Task Manager utility windows are not in the shared
+  state. Their documents fail the assigned-window check and the broker rejects
+  their commands. They need a utility-window client that reads the projection
+  and dispatches settings, import and task commands on behalf of the app.
+- The taskbar jump list waits for both.
 
 ## Validation still required on Windows
 
