@@ -3,13 +3,13 @@ import { ContextMenuArea, hapticTick, showMenu, Symbol } from "@bay/shell";
 import { useLayoutEffect, useState } from "react";
 import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "@bay/platform/motion";
-import { useBrowserRead } from "../../../store/read";
+import { browserRead, useBrowserRead } from "../../../store/read";
 import { createSpace, deleteSpace } from "../../../lib/actions";
 import { hex, SPACE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser, type BrowserState } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
 import { plural, resolveWindowId } from "../../../store/model";
-import type { Space, SpaceColor } from "../../../store/types";
+import type { SpaceColor } from "../../../store/types";
 import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../primitives";
 import { IconGrid } from "../../IconGrid";
@@ -19,6 +19,9 @@ import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } fr
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { useSettingsNav } from "../windows";
 import { CLEAN_UP_CHOICES, PROFILE_ROW_HEIGHT, SPACE_PANE_ICON_COLUMNS } from "../constants";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { reorderSpaces, setDefaultSpace, updateSpace } from "../../../runtime/spaceActions";
+import type { UserSpacePatch } from "../../../runtime/spaceCommands";
 
 const cleanUpTitle = (hours: number) => CLEAN_UP_CHOICES.find((c) => c.value === String(hours))?.title ?? plural(hours, "hour");
 
@@ -29,8 +32,8 @@ function cleanUpChoice(hours: number | null | undefined): string {
   return String(hours);
 }
 
-function cleanUpHoursOf(choice: string): number | null | undefined {
-  if (choice === "app") return undefined;
+function cleanUpHoursOf(choice: string): number | null | "app" {
+  if (choice === "app") return "app";
   if (choice === "never") return null;
   return Number(choice);
 }
@@ -53,7 +56,7 @@ export function SpacesPane() {
           <PopUp
             value={defaultId}
             options={spaces.map((p) => ({ value: p.id, title: p.name }))}
-            onChange={(id) => useBrowser.getState().setDefaultSpace(id)}
+            onChange={(id) => reportBrowserCommand(setDefaultSpace(id))}
             minWidth={160}
           />
         </Row>
@@ -131,10 +134,10 @@ function profileReorder(setDragging: (id: string | null) => void) {
         offsets.forEach((v) => settle(v, 0));
         return;
       }
-      const ids = useBrowser.getState().spaceOrder.filter((x) => x !== id);
+      const ids = browserRead.getState().spaceOrder.filter((x) => x !== id);
       ids.splice(to, 0, id);
       drag.reorderPending = true;
-      useBrowser.getState().reorderSpaces(ids);
+      reportBrowserCommand(reorderSpaces(ids));
     },
   };
 }
@@ -175,7 +178,7 @@ function SpaceRow({
 
   const description = isDefault ? "Default" : null;
   const openMenu = async () => {
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     const choice = await showMenu([
       { id: "details", title: "Show Space Details" },
       { id: "default", title: "Make Default Space", enabled: !isDefault },
@@ -183,7 +186,7 @@ function SpaceRow({
       { id: "delete", title: "Delete Space…", enabled: s.spaceOrder.length > 1 },
     ]);
     if (choice === "details") go("spaces", spaceId);
-    else if (choice === "default") s.setDefaultSpace(spaceId);
+    else if (choice === "default") reportBrowserCommand(setDefaultSpace(spaceId));
     else if (choice === "delete") void deleteSpace(spaceId);
   };
 
@@ -256,7 +259,7 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
   const [picking, setPicking] = useState(false);
   const colors = useFormColors();
   if (!profile) return null;
-  const update = (patch: Partial<Pick<Space, "name" | "color" | "icon" | "theme" | "cleanUpAfterHours">>) => useBrowser.getState().updateSpace(spaceId, patch);
+  const update = (patch: UserSpacePatch) => reportBrowserCommand(updateSpace(spaceId, patch));
   // The editor shows in a browser window (settings is its own), on this space, so the window is its preview.
   const customize = () => {
     const windowId = resolveWindowId(useBrowser.getState());
@@ -355,7 +358,7 @@ export function SpaceDetailsPane({ spaceId }: { spaceId: string }) {
       <SectionHeader title="Browsing Data" />
       <Group>
         <Row title="Make Default Space" description={isDefault ? "New windows already open with this space." : "Open new windows with this space."}>
-          <Button title="Make Default" disabled={isDefault} onPress={() => useBrowser.getState().setDefaultSpace(spaceId)} />
+          <Button title="Make Default" disabled={isDefault} onPress={() => reportBrowserCommand(setDefaultSpace(spaceId))} />
         </Row>
         <Row title="Clear Browsing Data" description="History, cookies, site data and cached files for this space.">
           <Button title="Clear…" onPress={() => showSettingsSheet(<ClearDataDialog spaceId={spaceId} onClose={closeSettingsSheet} />)} />

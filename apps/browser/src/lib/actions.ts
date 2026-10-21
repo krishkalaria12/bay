@@ -15,6 +15,7 @@ import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
 import { closeWindowDialog } from "./windowClose";
 import { setSiteMuted } from "../runtime/organizeActions";
+import * as spaceActions from "../runtime/spaceActions";
 
 const store = () => useBrowser.getState();
 
@@ -59,7 +60,7 @@ export function createSpace(windowId?: string, preset?: CreateSpacePreset): Prom
 }
 
 export async function deleteSpace(spaceId: string, windowId?: string) {
-  const s = store();
+  const s = browserRead.getState();
   const profile = s.spaces[spaceId];
   if (!profile || s.spaceOrder.length <= 1) return;
   const { confirmed } = await confirm({
@@ -71,7 +72,7 @@ export async function deleteSpace(spaceId: string, windowId?: string) {
   });
   if (!confirmed) return;
   // The store queues its engine data for deletion (lib/profileData.ts).
-  store().deleteSpace(spaceId);
+  await spaceActions.deleteSpace(spaceId);
 }
 
 // Chrome won't remove the original profile's extensions without asking, so they're only turned off

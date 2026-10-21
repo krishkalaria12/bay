@@ -129,8 +129,8 @@ export function withSpaceEmoji(spaces: Record<string, Space>, order: string[]): 
 }
 
 // Each space owns a native profile. profileId preserves existing native directories after upgrades.
-export const profileIdOf = (space: Space) => space.profileId || space.id;
-export const engineIdOf = (space: Space) => (profileIdOf(space) === DEFAULT_SPACE_ID ? "" : profileIdOf(space));
+export const profileIdOf = (space: Pick<Space, "id" | "profileId">) => space.profileId || space.id;
+export const engineIdOf = (space: Pick<Space, "id" | "profileId">) => (profileIdOf(space) === DEFAULT_SPACE_ID ? "" : profileIdOf(space));
 
 /**
  * The space that syncs its profile's data (bookmarks, history, passwords): with shared sign-ins several spaces use one

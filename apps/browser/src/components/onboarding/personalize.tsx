@@ -10,6 +10,7 @@ import { useHover } from "../primitives";
 import { useOnboardingColors } from "./ui";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { toggleTabLayout } from "../../runtime/splitActions";
+import { updateSpace } from "../../runtime/spaceActions";
 
 export const PERSONALIZE_COPY = {
   title: "Make it yours",
@@ -37,7 +38,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
         colors={TWILIGHT.colors}
         size={size}
         selected={twilight}
-        onPress={() => useBrowser.getState().updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } })}
+        onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: "purple", theme: { ...TWILIGHT } }))}
       />
       {COLORS.map((c) => (
         <ColorButton
@@ -46,7 +47,7 @@ export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; si
           colors={[SPACE_COLORS[c].swatch]}
           size={size}
           selected={!themed && current === c}
-          onPress={() => useBrowser.getState().updateSpace(spaceId, { color: c, theme: null })}
+          onPress={() => reportBrowserCommand(updateSpace(spaceId, { color: c, theme: null }))}
         />
       ))}
     </View>

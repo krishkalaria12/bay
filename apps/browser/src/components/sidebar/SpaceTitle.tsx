@@ -7,6 +7,9 @@ import { useHover } from "../primitives";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { openSpaceMenu } from "../spaces/SpaceSwitcher";
 import { useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSpace } from "../../runtime/spaceActions";
+import { browserRead } from "../../store/read";
 
 /** The title folds the pinned section; its menu lives on the ellipsis and right-click. */
 export function SpaceTitle({ windowId, spaceId }: { windowId: string; spaceId: string }) {
@@ -28,7 +31,7 @@ export function SpaceTitle({ windowId, spaceId }: { windowId: string; spaceId: s
           style={{ height: metrics.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: 8, paddingRight: 4, gap: 7 }}
         >
           <Pressable
-            onPress={() => useBrowser.getState().updateSpace(spaceId, { folded: !useBrowser.getState().spaces[spaceId]?.folded })}
+            onPress={() => reportBrowserCommand(updateSpace(spaceId, { folded: !browserRead.getState().spaces[spaceId]?.folded }))}
             accessibilityLabel={`${folded ? "Expand" : "Fold"} ${name}`}
             accessibilityState={{ expanded: !folded }}
             style={{ flex: 1, alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 7 }}

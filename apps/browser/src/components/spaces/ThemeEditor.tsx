@@ -42,6 +42,8 @@ import {
   THEME_WHEEL_RADIUS,
 } from "./constants";
 import { dialPoint, dialValue, segment, wavePoints } from "./themeControls";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSpace } from "../../runtime/spaceActions";
 
 // Arc's and Zen's space theme editor: a floating panel by the sidebar that changes the space's theme as you go, so
 // the window is the preview. Light, dark or automatic over a colour wheel of up to three colours (a gradient): the
@@ -121,7 +123,7 @@ function ThemeEditor({ request }: { request: Request }) {
         <View ref={keys} focusable enableFocusRing={false} keyDownEvents={[{ key: "Escape" }]} onKeyDown={close} style={{ padding: THEME_EDITOR_PAD }}>
           <ThemeControls
             look={{ color: space.color, theme: space.theme ?? null, followSite: space.followSite }}
-            onChange={(next) => useBrowser.getState().updateSpace(request.spaceId, next)}
+            onChange={(next) => reportBrowserCommand(updateSpace(request.spaceId, next))}
           />
         </View>
       </Surface>

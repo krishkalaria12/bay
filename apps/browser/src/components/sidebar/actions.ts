@@ -21,6 +21,7 @@ import { groupOf, selectedTabIds } from "../../store/organize";
 import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
+import { updateSpace } from "../../runtime/spaceActions";
 
 const store = () => browserRead.getState();
 // An Essential or a pinned row: never in a group.
@@ -119,7 +120,7 @@ export function setIcon(target: Target, icon: string | null) {
   // A live folder's header row ("livefolder|<id>").
   else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
   else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { icon }));
-  else if (target.kind === "space") useBrowser.getState().updateSpace(target.id, { icon });
+  else if (target.kind === "space") reportBrowserCommand(updateSpace(target.id, { icon }));
   else reportBrowserCommand(updateGroup(target.id, { icon }));
 }
 

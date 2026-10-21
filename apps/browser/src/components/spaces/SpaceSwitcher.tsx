@@ -31,6 +31,7 @@ import {
   SPACE_SIDE,
 } from "./constants";
 import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSpace } from "../../runtime/spaceActions";
 
 // Each icon selects a space with its own browsing profile. Dots replace icons once they no longer fit.
 
@@ -140,5 +141,5 @@ export async function renameSpace(windowId: string, id: string) {
     placeholder: "Space name",
     icon: <SpaceGlyph spaceId={id} size={26} />,
   });
-  if (name) useBrowser.getState().updateSpace(id, { name });
+  if (name) await updateSpace(id, { name });
 }
