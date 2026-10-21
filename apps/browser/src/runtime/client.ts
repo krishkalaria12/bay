@@ -81,6 +81,7 @@ const projectionFields: Record<keyof BrowserProjection, "array" | "record"> = {
   historyFloor: "record",
   bookmarks: "record",
   bookmarksReady: "record",
+  bookmarkUndo: "array",
   settings: "record",
   ui: "record",
   windowUi: "record",

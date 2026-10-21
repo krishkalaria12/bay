@@ -1,13 +1,15 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import type { DeepReadonly } from "../runtime/projection";
-import { engineProfile, engineProfileFor, without } from "./model";
+import { engineProfile, engineProfileFor, newId, without } from "./model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks, Space } from "./types";
 
 export type BookmarksSlice = {
   bookmarks: Bookmarks;
   // Profiles whose tree has been read from Chrome (until then it's empty, not "no bookmarks").
   bookmarksReady: Record<string, true>;
+  // Recent removals Undo can put back, newest last. Not saved.
+  bookmarkUndo: BookmarkUndo[];
 
   addBookmark(options: { spaceId: string; url: string; title: string; favicon?: string | null; parentId?: string; index?: number }): string;
   addBookmarkFolder(options: { spaceId: string; title: string; parentId?: string; index?: number }): string;
@@ -18,11 +20,16 @@ export type BookmarksSlice = {
   addBookmarkTree(spaceId: string, drafts: BookmarkDraft[], parentId?: string, index?: number): string[];
   removeBookmarks(ids: string[]): RemovedBookmarks;
   restoreBookmarks(removed: RemovedBookmarks): void;
+  /** Removes the bookmarks and keeps them for Undo; the entry's id, or "" when nothing was removed. */
+  removeBookmarksWithUndo(spaceId: string, ids: string[]): string;
+  restoreRemovedBookmarks(undoId: string): void;
 };
 
 export type BookmarkDraft = { title: string; url?: string; addedAt?: number; children?: BookmarkDraft[] };
 
 export type RemovedBookmarks = { nodes: BookmarkNode[]; places: { id: string; parentId: string; index: number }[] };
+export type BookmarkUndo = { id: string; spaceId: string; removed: RemovedBookmarks };
+const MAX_BOOKMARK_UNDO = 10;
 
 export const EMPTY_BOOKMARKS: Bookmarks = { nodes: {}, roots: {} };
 
@@ -169,6 +176,7 @@ export function folderLinks(b: DeepReadonly<Bookmarks>, folderId: string): Extra
 export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksSlice> = (set, get) => ({
   bookmarks: EMPTY_BOOKMARKS,
   bookmarksReady: {},
+  bookmarkUndo: [],
 
   addBookmark({ spaceId, url, title, favicon = null, parentId, index }) {
     const [b, roots] = ensureRoots(get().bookmarks, spaceId, get().spaces);
@@ -268,6 +276,21 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
       }
       return { bookmarks: { ...s.bookmarks, nodes: next } };
     });
+  },
+
+  removeBookmarksWithUndo(spaceId, ids) {
+    const removed = get().removeBookmarks(ids);
+    if (!removed.places.length) return "";
+    const entry = { id: newId("bu"), spaceId, removed };
+    set((s) => ({ bookmarkUndo: [...s.bookmarkUndo, entry].slice(-MAX_BOOKMARK_UNDO) }));
+    return entry.id;
+  },
+
+  restoreRemovedBookmarks(undoId) {
+    const entry = get().bookmarkUndo.find((u) => u.id === undoId);
+    if (!entry) return;
+    get().restoreBookmarks(entry.removed);
+    set((s) => ({ bookmarkUndo: s.bookmarkUndo.filter((u) => u.id !== undoId) }));
   },
 
   toggleBookmark(spaceId, page) {

@@ -29,6 +29,9 @@ export function commandBoolean(value: unknown): boolean {
 export function commandIndex(value: unknown, minimum = 0): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum && value <= 1_000_000 ? value : invalidCommand("invalid command index");
 }
+export function commandTimestamp(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : invalidCommand("invalid command time");
+}
 export function commandIds(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > 10_000) return invalidCommand("invalid command ids");
   const ids = Array.from(value, (id) => commandText(id));

@@ -6,8 +6,19 @@ import { executeSettingsCommand, parseSettingsCommand, SETTINGS_COMMAND_METHODS,
 import { executeOrganizeCommand, ORGANIZE_COMMAND_METHODS, parseOrganizeCommand, type OrganizeCommand } from "./organizeCommands";
 import { executeSplitCommand, parseSplitCommand, SPLIT_COMMAND_METHODS, type SplitCommand } from "./splitCommands";
 import { executeSpaceCommand, parseSpaceCommand, SPACE_COMMAND_METHODS, type SpaceCommand } from "./spaceCommands";
+import { BOOKMARK_COMMAND_METHODS, executeBookmarkCommand, parseBookmarkCommand, type BookmarkCommand } from "./bookmarkCommands";
+import { executeHistoryCommand, HISTORY_COMMAND_METHODS, parseHistoryCommand, type HistoryCommand } from "./historyCommands";
 
-export type BrowserCommand = LocationCommand | TabCommand | WindowCommand | SettingsCommand | OrganizeCommand | SplitCommand | SpaceCommand;
+export type BrowserCommand =
+  | LocationCommand
+  | TabCommand
+  | WindowCommand
+  | SettingsCommand
+  | OrganizeCommand
+  | SplitCommand
+  | SpaceCommand
+  | BookmarkCommand
+  | HistoryCommand;
 
 // Keep in sync with RuntimeCommandResultKind in runtime_state.cc.
 const ID_METHODS = [
@@ -21,8 +32,10 @@ const ID_METHODS = [
   "newPinnedFolder",
   "createSplit",
   "createSpace",
+  "addBookmark",
+  "addBookmarkFolder",
 ] as const;
-const OPTIONAL_ID_METHODS = ["duplicateTab", "moveTabsToWindow", "restoreCleaned", "openSplitPane", "openPeek"] as const;
+const OPTIONAL_ID_METHODS = ["duplicateTab", "moveTabsToWindow", "restoreCleaned", "openSplitPane", "openPeek", "removeBookmarks"] as const;
 export type BrowserCommandValue<C extends BrowserCommand> = C extends { method: (typeof ID_METHODS)[number] }
   ? string
   : C extends { method: (typeof OPTIONAL_ID_METHODS)[number] }
@@ -44,6 +57,8 @@ export function parseBrowserCommand(value: unknown): BrowserCommand {
     if ((ORGANIZE_COMMAND_METHODS as readonly string[]).includes(method)) return parseOrganizeCommand(value);
     if ((SPLIT_COMMAND_METHODS as readonly string[]).includes(method)) return parseSplitCommand(value);
     if ((SPACE_COMMAND_METHODS as readonly string[]).includes(method)) return parseSpaceCommand(value);
+    if ((BOOKMARK_COMMAND_METHODS as readonly string[]).includes(method)) return parseBookmarkCommand(value);
+    if ((HISTORY_COMMAND_METHODS as readonly string[]).includes(method)) return parseHistoryCommand(value);
   }
   return parseLocationCommand(value);
 }
@@ -55,5 +70,7 @@ export function executeBrowserCommand(store: BrowserStore, command: BrowserComma
   if ((ORGANIZE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeOrganizeCommand(store, command as OrganizeCommand);
   if ((SPLIT_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeSplitCommand(store, command as SplitCommand);
   if ((SPACE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeSpaceCommand(store, command as SpaceCommand);
+  if ((BOOKMARK_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeBookmarkCommand(store, command as BookmarkCommand);
+  if ((HISTORY_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeHistoryCommand(store, command as HistoryCommand);
   return executeLocationCommand(store, command as LocationCommand, effects);
 }

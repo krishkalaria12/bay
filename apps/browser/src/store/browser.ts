@@ -226,6 +226,7 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
             .map((saved: PinnedFolder & { windowId?: string }) => [saved.id, withoutWindowId(saved)]),
         ),
         folderMoveUndo: [],
+        bookmarkUndo: [],
         splits,
         closedTabs: data.closedTabs ?? [],
         closedWindows: data.closedWindows ?? [],
