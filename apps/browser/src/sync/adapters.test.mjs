@@ -7,6 +7,8 @@ const { Clock, emptyScope, syncScope } = await import("@bay/sync");
 const adapters = await import("./adapters.ts");
 const stub = await import("../test-native-stub.mjs");
 
+const { configureSyncStore } = await import("./store.ts");
+configureSyncStore(useBrowser);
 const S = () => useBrowser.getState();
 
 class Folder {

@@ -302,3 +302,65 @@ test("native handoff mutations share command order and publish one final commit"
   assert.ok(b.commit.state.peeks[windowId]);
   authority.close();
 });
+
+test("service IO deduplicates without blocking tab commands or service-only publications", async () => {
+  const store = createBrowserStore();
+  const windowId = store.getState().createWindow();
+  let complete, entered;
+  const running = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const io = new Promise((resolve) => {
+    complete = resolve;
+  });
+  let calls = 0;
+  const authority = createBrowserAuthority({
+    epoch: "epoch-1",
+    store,
+    executeAsync: async () => {
+      calls++;
+      entered();
+      await io;
+      return null;
+    },
+  });
+  const input = request(1, { method: "serviceAction", action: "calendarRefresh", args: [] });
+  const service = authority.dispatch(input);
+  assert.equal(authority.dispatch(input), service);
+  await running;
+  const tab = await authority.dispatch(request(2, { method: "newTab", windowId, options: { url: "https://while-service-runs.example/" } }));
+  assert.ok(store.getState().tabs[tab.value]);
+  store.setState({ services: { calendar: { access: "notDetermined", calendars: [], events: [], loading: false, error: null, lastFetch: null } } });
+  const latest = authority.getSnapshot();
+  assert.ok(latest.revision > tab.commit.revision);
+  complete();
+  assert.equal((await service).commit, latest);
+  assert.equal(calls, 1);
+  authority.close();
+});
+
+test("retired authority rejects a late service reply without replay", async () => {
+  let complete, entered;
+  const running = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const io = new Promise((resolve) => {
+    complete = resolve;
+  });
+  let active;
+  const authority = createBrowserAuthority({
+    epoch: "epoch-1",
+    executeAsync: async (_command, isActive) => {
+      active = isActive;
+      entered();
+      await io;
+      return null;
+    },
+  });
+  const reply = authority.dispatch(request(1, { method: "serviceAction", action: "calendarRefresh", args: [] }));
+  await running;
+  authority.close();
+  assert.equal(active(), false);
+  complete();
+  await assert.rejects(reply, { code: "closed" });
+});

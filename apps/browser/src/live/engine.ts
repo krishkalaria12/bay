@@ -1,4 +1,5 @@
 import { onWindowEvent } from "@bay/shell";
+import { hasServiceClient, requestService, sendService } from "../runtime/serviceClient";
 import { useBrowser, type BrowserStore } from "../store/browser";
 import { activeTabId, pinnedPage, viewTabIds } from "../store/model";
 import { SOURCES } from "./sources";
@@ -8,6 +9,15 @@ import { COMPLETION_MS, REFRESH_INTERVAL_MS, STALE_ON_FOCUS_MS } from "./constan
 
 type RefreshScope = { active: boolean; timers: Set<ReturnType<typeof setTimeout>> };
 const inflight = new Map<string, { promise: Promise<void>; scope?: RefreshScope }>();
+let owner: BrowserStore = useBrowser;
+export function bindLiveBrowser(browser: BrowserStore): () => void {
+  const previous = owner;
+  owner = browser;
+  return () => {
+    if (owner === browser) owner = previous;
+  };
+}
+
 let engine: { scope: RefreshScope; stop: () => void } | undefined;
 
 function later(scope: RefreshScope | undefined, callback: () => void, delay: number) {
@@ -26,6 +36,7 @@ function order(items: LiveItem[]): LiveItem[] {
 }
 
 export function refreshFolder(folderId: string): Promise<void> {
+  if (hasServiceClient()) return requestService("liveRefresh", [folderId]);
   const running = inflight.get(folderId);
   if (running) return running.promise;
   const scope = engine?.scope;
@@ -127,8 +138,9 @@ export function errorText(kind: LiveError["kind"], source: LiveSourceId): string
 
 // MARK: Folder actions
 
-export function newLiveFolder(windowId: string, kind: LiveFolderKind): string | null {
-  const w = useBrowser.getState().windows[windowId];
+export function newLiveFolder(windowId: string, kind: LiveFolderKind, browser: BrowserStore = owner): string | null | Promise<string | null> {
+  if (hasServiceClient()) return requestService("liveCreate", [windowId, kind]);
+  const w = browser.getState().windows[windowId];
   if (!w || w.incognito) return null;
   const s = live();
   const sources: LiveSourceId[] =
@@ -140,8 +152,15 @@ export function newLiveFolder(windowId: string, kind: LiveFolderKind): string | 
   return id;
 }
 
-export function openLiveItem(windowId: string, folderId: string, item: LiveItem, options: { background?: boolean } = {}) {
-  const s = useBrowser.getState();
+export function openLiveItem(
+  windowId: string,
+  folderId: string,
+  item: LiveItem,
+  options: { background?: boolean } = {},
+  browser: BrowserStore = owner,
+): string | Promise<string> {
+  if (hasServiceClient()) return requestService("liveOpen", [windowId, folderId, item.id, !!options.background]);
+  const s = browser.getState();
   markRead(folderId, [item.id]);
   const existing = viewTabIds(s, windowId).find((id) => s.tabs[id]?.liveItem?.itemId === item.id && s.tabs[id]?.liveItem?.folderId === folderId);
   if (existing) {
@@ -149,12 +168,13 @@ export function openLiveItem(windowId: string, folderId: string, item: LiveItem,
     return existing;
   }
   const id = s.newTab(windowId, { url: item.url, background: options.background });
-  useBrowser.getState().updateTab(id, { liveItem: { folderId, itemId: item.id } });
+  browser.getState().updateTab(id, { liveItem: { folderId, itemId: item.id } });
   return id;
 }
 
-export function deleteLiveFolder(folderId: string) {
-  const s = useBrowser.getState();
+export function deleteLiveFolder(folderId: string, browser: BrowserStore = owner) {
+  if (sendService("liveRemove", [folderId])) return;
+  const s = browser.getState();
   const tabs = Object.values(s.tabs)
     .filter((t) => t.liveItem?.folderId === folderId)
     .map((t) => t.id);

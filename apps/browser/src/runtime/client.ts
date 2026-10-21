@@ -9,7 +9,7 @@ export type BrowserClientTransport = {
   subscribeClose(listener: () => void): () => void;
 };
 export type BrowserClientStatus = "initializing" | "ready" | "resyncing" | "closed";
-import { browserCommandResultKind, type BrowserCommandValue } from "./userCommands";
+import { validateBrowserCommandResult, type BrowserCommandValue } from "./userCommands";
 export type { BrowserCommandValue } from "./userCommands";
 type ClientErrorCode = "closed" | "transport_closed" | "epoch_changed" | "invalid_protocol" | "snapshot_failed";
 export class BrowserClientError extends Error {
@@ -54,6 +54,7 @@ function copyJson(value: unknown, previous?: unknown, ancestors = new Set<object
 // Every data slice is required. This is a complete snapshot, never a partial
 // object passed through hydrate. Native facts and domain repair stay at source.
 const projectionFields: Record<keyof BrowserProjection, "array" | "record"> = {
+  services: "record",
   spaces: "record",
   spaceOrder: "array",
   orphanedProfileData: "array",
@@ -154,7 +155,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
   let unsubscribeCommits = () => {};
   let unsubscribeClose = () => {};
   const listeners = new Set<() => void>();
-  type Pending = { request: CommandRequest; baseRevision: number; reply?: CommandReply; resolve(value: string | null): void; reject(error: unknown): void };
+  type Pending = { request: CommandRequest; baseRevision: number; reply?: CommandReply; resolve(value: unknown): void; reject(error: unknown): void };
   const pending = new Map<number, Pending>();
 
   function notify() {
@@ -286,19 +287,11 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
         reply.requestId !== command.request.requestId
       )
         invalid();
-      const result = browserCommandResultKind(command.request.command.method);
-      if (
-        result === "id"
-          ? typeof reply.value !== "string"
-          : result === "optionalId"
-            ? reply.value !== null && typeof reply.value !== "string"
-            : reply.value !== null
-      )
-        invalid();
+      if (!validateBrowserCommandResult(command.request.command, reply.value)) invalid();
       const commit = decodeBrowserCommit(reply.commit, current);
       if (!sameEpoch(commit)) return;
       if (commit.revision < command.baseRevision) invalid();
-      command.reply = Object.freeze({ clientId, requestId: command.request.requestId, commit, value: reply.value as string | null });
+      command.reply = Object.freeze({ clientId, requestId: command.request.requestId, commit, value: copyJson(reply.value) });
       acceptValidatedCommit(commit);
       settle();
     } catch {

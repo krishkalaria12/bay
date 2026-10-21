@@ -2,7 +2,7 @@ import { listTasks, onExtensionsChanged } from "@bay/nncore";
 import { useTranslate } from "../components/site/translate";
 import { useBrowser } from "../store/browser";
 import { useSync } from "../sync/engine";
-import { capture, endSession, flush, isSharing, resumeClientAfterQuit, startClient } from "./client";
+import { capture, endSession, flush, isSharing, resumeClientAfterQuit, startClient, stopClient } from "./client";
 import { reportNativeCrashes } from "./errors";
 import { takeOmniboxLatency } from "./track";
 import { EXTENSION_SETTLE_MS, FIRST_MEMORY_SAMPLE_MS } from "./config";
@@ -28,7 +28,7 @@ function emitCounts() {
 const size = (o: object) => Object.keys(o).length;
 
 function watchStore() {
-  useBrowser.subscribe((s, prev) => {
+  return useBrowser.subscribe((s, prev) => {
     if (!isSharing()) return;
     if (s.tabs !== prev.tabs) counts.tabs += Math.max(0, size(s.tabs) - size(prev.tabs));
     if (s.windows !== prev.windows) {
@@ -55,7 +55,7 @@ function profileSwitched(profiles: number) {
 
 function watchSync() {
   let last = useSync.getState().status;
-  useSync.subscribe(({ status }) => {
+  return useSync.subscribe(({ status }) => {
     const was = last;
     last = status;
     if (was === status || !isSharing()) return;
@@ -65,28 +65,32 @@ function watchSync() {
 }
 
 function watchTranslate() {
-  useTranslate.subscribe((s, prev) => {
+  return useTranslate.subscribe((s, prev) => {
     if (!isSharing()) return;
     for (const tabId in s) if (s[tabId]?.status === "translating" && prev[tabId]?.status !== "translating") capture("translate_used");
   });
 }
 
 function watchExtensions() {
-  onExtensionsChanged((e) => {
+  const subscription = onExtensionsChanged((e) => {
     if (e.event === "installed" && Date.now() - startedAt > EXTENSION_SETTLE_MS) capture("extension_installed");
   });
+  return () => subscription.remove();
 }
 
 // MARK: Performance
 
 const mb = (bytes: number) => Math.round(bytes / 1_048_576);
 
+let usageGeneration = 0;
 async function sampleMemory() {
+  const generation = usageGeneration;
   if (!isSharing()) return;
   try {
     await listTasks();
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const tasks = await listTasks();
+    if (generation !== usageGeneration) return;
     let total = 0;
     let browser = 0;
     let gpu = 0;
@@ -123,19 +127,32 @@ function hourly() {
   void sampleMemory();
 }
 
-export function startUsage() {
+let stopUsage: (() => void) | undefined;
+export function startUsage(): () => void {
+  if (stopUsage) return stopUsage;
+  usageGeneration++;
   const session = startClient();
+  let crashes: ReturnType<typeof setTimeout> | undefined;
   if (session) {
     capture("app_launched", { previous_session: session.previous });
     if (session.updatedFrom) capture("app_updated", { from_version: session.updatedFrom });
-    setTimeout(() => void reportNativeCrashes(), 5000);
+    crashes = setTimeout(() => void reportNativeCrashes(), 5000);
   }
-  watchStore();
-  watchSync();
-  watchTranslate();
-  watchExtensions();
-  setTimeout(() => void sampleMemory(), FIRST_MEMORY_SAMPLE_MS);
-  setInterval(hourly, HOUR_MS);
+  const stops = [watchStore(), watchSync(), watchTranslate(), watchExtensions()];
+  const sample = setTimeout(() => void sampleMemory(), FIRST_MEMORY_SAMPLE_MS);
+  const interval = setInterval(hourly, HOUR_MS);
+  const stop = () => {
+    if (stopUsage !== stop) return;
+    stopUsage = undefined;
+    usageGeneration++;
+    clearTimeout(crashes);
+    clearTimeout(sample);
+    clearInterval(interval);
+    for (const remove of stops) remove();
+    stopClient();
+  };
+  stopUsage = stop;
+  return stop;
 }
 
 let quitPrepared = false;

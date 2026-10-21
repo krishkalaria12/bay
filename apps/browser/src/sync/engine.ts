@@ -14,9 +14,12 @@ import {
   type LogFile,
   type PhraseResult,
   type ScopeState,
+  type Transport,
 } from "@bay/sync";
 import { create } from "zustand";
-import { useBrowser } from "../store/browser";
+import type { BrowserStore } from "../store/browser";
+import { assertSyncGeneration, configureSyncStore, syncGeneration, syncStore } from "./store";
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import { isIncognitoSpace } from "../store/model";
 import { DEFAULT_SPACE_ID } from "../store/constants";
 import type { Space } from "../store/types";
@@ -91,7 +94,7 @@ export type SyncedDevice = { id: string; name: string; lastSeen: number | null; 
 export type RemoteTabs = { deviceId: string; name: string; tabs: { url: string; title: string }[] };
 export type RemoteProfile = { syncId: string; name: string; color: Space["color"]; icon: string | null };
 
-type SyncUi = {
+export type SyncUi = {
   status: SyncStatus;
   enabled: boolean;
   folder: string | null;
@@ -124,6 +127,7 @@ let savedJson = "";
 let running = false;
 let again = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
+let slowTimer: ReturnType<typeof setTimeout> | undefined;
 let forcePasswords = false;
 const passwordAdapters = new Map<string, Adapter>();
 let started = false;
@@ -195,6 +199,7 @@ async function openSealed<T>(name: string, fallback: T): Promise<T> {
 }
 
 async function loadState() {
+  const generation = syncGeneration();
   const owner = doc;
   const scopes = await openSealed<SyncDoc["scopes"]>(SYNC_STATE_FILE, {});
   const journalDoc = await openSealed<{ journal?: Journal }>(SYNC_JOURNAL_FILE, {});
@@ -219,6 +224,7 @@ async function loadState() {
   ) {
     throw new Error("Invalid saved sync data. Existing sync files have been preserved.");
   }
+  assertSyncGeneration(generation);
   const loadedJournal = journalDoc.journal ?? {};
   if (doc !== owner) return false;
   journal = loadedJournal;
@@ -234,14 +240,20 @@ async function loadState() {
   return true;
 }
 
-const persistJournal = (scope: string) => async (batches: LogFile[]) => {
-  const list = (journal[scope] ??= []);
-  for (const file of batches) if (!list.some((f) => f.seq === file.seq)) list.push(file);
-  const sealed = await SyncNative!.sealLocal(JSON.stringify({ journal }));
-  // The journal must be on disk before the batches are published: after a crash, it's how this device knows
-  // which sequence numbers it already used.
-  await saveDocument(SYNC_JOURNAL_FILE, sealed);
-  journalOnDisk = true;
+const persistJournal = (scope: string) => {
+  const generation = syncGeneration();
+  return async (batches: LogFile[]) => {
+    assertSyncGeneration(generation);
+    const list = (journal[scope] ??= []);
+    for (const file of batches) if (!list.some((f) => f.seq === file.seq)) list.push(file);
+    const sealed = await SyncNative!.sealLocal(JSON.stringify({ journal }));
+    assertSyncGeneration(generation);
+    // The journal must be on disk before the batches are published: after a crash, it's how this device knows
+    // which sequence numbers it already used.
+    await saveDocument(SYNC_JOURNAL_FILE, sealed);
+    assertSyncGeneration(generation);
+    journalOnDisk = true;
+  };
 };
 
 function pruneJournal(saved: Record<string, number>) {
@@ -287,7 +299,8 @@ function save() {
   if (sealing) return;
   const seqs = Object.fromEntries(Object.entries(doc.scopes).map(([k, s]) => [k, s.seq]));
   const generation = saveGeneration;
-  sealing = (async () => {
+  let task!: Promise<void>;
+  task = (async () => {
     let saved = false;
     try {
       const sealed = await SyncNative?.sealLocal(state);
@@ -304,12 +317,13 @@ function save() {
     } catch (error) {
       console.warn("[sync] couldn't save the sync state", error);
     } finally {
-      sealing = null;
+      if (sealing === task) sealing = null;
     }
     // Coalesce edits made during a successful save. A failed seal/write waits
     // for a later cycle or explicit checkpoint instead of retrying forever.
-    if (saved && !quitPaused && doc.enabled && JSON.stringify(doc.scopes) !== savedState) save();
+    if (saved && generation === saveGeneration && !quitPaused && doc.enabled && JSON.stringify(doc.scopes) !== savedState) save();
   })();
+  sealing = task;
 }
 
 // Leave time for the other quit owners and the native 20-second deadline.
@@ -476,7 +490,7 @@ function profileAdapters(spaceId: string, retiring: boolean): Adapter[] {
   let passwords = passwordAdapters.get(spaceId);
   if (!passwords) passwordAdapters.set(spaceId, (passwords = passwordsAdapter(spaceId, () => forcePasswords)));
   // Spaces sharing sign-ins share one profile's bookmarks, history and passwords: one of them syncs those.
-  const owns = ownsProfileData(useBrowser.getState(), spaceId);
+  const owns = ownsProfileData(syncStore().getState(), spaceId);
   return [
     ...(t.pinned ? [pinnedAdapter(spaceId)] : []),
     ...(t.bookmarks && owns ? [bookmarksAdapter(spaceId)] : []),
@@ -486,21 +500,61 @@ function profileAdapters(spaceId: string, retiring: boolean): Adapter[] {
   ];
 }
 
+// A stopped coordinator cannot let a suspended syncScope begin another adapter operation.
+function guardAdapters(adapters: Adapter[], generation: number): Adapter[] {
+  return adapters.map((adapter) => ({
+    ...adapter,
+    extract: (...args) => {
+      assertSyncGeneration(generation);
+      return adapter.extract(...args);
+    },
+    apply: (...args) => {
+      assertSyncGeneration(generation);
+      return adapter.apply(...args);
+    },
+  }));
+}
+
+function guardTransport(transport: Transport, generation: number): Transport {
+  return {
+    read: async (...args) => {
+      assertSyncGeneration(generation);
+      const result = await transport.read(...args);
+      assertSyncGeneration(generation);
+      return result;
+    },
+    write: async (...args) => {
+      assertSyncGeneration(generation);
+      const result = await transport.write(...args);
+      assertSyncGeneration(generation);
+      return result;
+    },
+    remove: async (...args) => {
+      assertSyncGeneration(generation);
+      await transport.remove(...args);
+      assertSyncGeneration(generation);
+    },
+  };
+}
+
 // MARK: The cycle
 
 export function scheduleSync(delay = SYNC_AFTER_EDIT_MS) {
-  if (!doc.enabled || quitPaused) return;
+  if (!started || !doc.enabled || quitPaused) return;
   clearTimeout(timer);
   timer = setTimeout(() => void runCycle(), delay);
 }
 
 export async function syncNow() {
+  if (hasServiceClient()) return requestService<void>("syncNow");
   if (quitPaused) {
     if (activeCycle) await activeCycle;
     return;
   }
+  const generation = syncGeneration();
   forcePasswords = true;
   await startup;
+  assertSyncGeneration(generation);
   if (activeCycle) await activeCycle;
   else if (!quitPaused) await runCycle();
 }
@@ -522,14 +576,17 @@ function runCycle({ retiring = false } = {}): Promise<CycleOutcome> {
 }
 
 async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
+  const generation = syncGeneration();
+  const isCurrent = () => started && syncGeneration() === generation;
   const native = SyncNative;
   if (!native || !doc.enabled || !doc.folder || !doc.deviceId) return {};
   running = true;
   clearTimeout(timer);
-  const slow = setTimeout(() => useSync.getState().status === "updated" && publishUi({ status: "updating" }), 1000);
+  const slow = (slowTimer = setTimeout(() => isCurrent() && useSync.getState().status === "updated" && publishUi({ status: "updating" }), 1000));
   let cycleClock: Clock | null = null;
   try {
     const status = await native.chainStatus(doc.folder);
+    assertSyncGeneration(generation);
     if (status === "unavailable") {
       publishUi({ status: "offline", error: null });
       return {};
@@ -538,7 +595,7 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
       await resetFromElsewhere();
       return {};
     }
-    const transport = folderTransport(native, doc.folder);
+    const transport = guardTransport(folderTransport(native, doc.folder), generation);
     const clock = new Clock(doc.deviceId, doc.clock);
     cycleClock = clock;
     const device = doc.deviceId;
@@ -548,15 +605,16 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
       scope: APP_SCOPE,
       state: app,
       transport,
-      adapters: appAdapters(retiring),
+      adapters: guardAdapters(appAdapters(retiring), generation),
       clock,
       device,
       options: { persist: persistJournal(APP_SCOPE) },
     });
+    assertSyncGeneration(generation);
     if (app.joined) linkProfiles(app);
     if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
     let pending = app.pending;
-    const s = useBrowser.getState();
+    const s = syncStore().getState();
     for (const [spaceId, link] of Object.entries(doc.profiles)) {
       const exists = !!s.spaces[spaceId];
       const retire = retiring || !!link.retire || !exists;
@@ -567,11 +625,12 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
         scope,
         state,
         transport,
-        adapters: profileAdapters(spaceId, retire),
+        adapters: guardAdapters(profileAdapters(spaceId, retire), generation),
         clock,
         device,
         options: { expired: historyExpired, persist: persistJournal(scope) },
       });
+      assertSyncGeneration(generation);
       pending += state.pending;
       if (retire) {
         delete link.retire;
@@ -588,20 +647,24 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
     publishUi({ status: "updated", error: null, pending });
     return {};
   } catch (error) {
+    if (!isCurrent()) return { error };
     console.warn("[sync] cycle failed", error);
     publishUi({ status: "stalled", error: errorText(error) });
     return { error };
   } finally {
     clearTimeout(slow);
-    running = false;
-    if (cycleClock) doc.clock = cycleClock.last;
-    save();
-    if (doc.enabled) {
-      if (again) {
-        again = false;
-        scheduleSync(0);
-      } else {
-        scheduleSync(SYNC_CYCLE_MS);
+    if (slowTimer === slow) slowTimer = undefined;
+    if (isCurrent()) {
+      running = false;
+      if (cycleClock) doc.clock = cycleClock.last;
+      save();
+      if (doc.enabled) {
+        if (again) {
+          again = false;
+          scheduleSync(0);
+        } else {
+          scheduleSync(SYNC_CYCLE_MS);
+        }
       }
     }
   }
@@ -610,7 +673,7 @@ async function executeCycle({ retiring = false } = {}): Promise<CycleOutcome> {
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 function linkProfiles(app: ScopeState) {
-  const s = useBrowser.getState();
+  const s = syncStore().getState();
   const remote = [...visible(app, "prof:")].map(([k, v]) => [k.slice(5), v as ProfileRecord] as const);
   const taken = new Set(Object.values(doc.profiles).map((l) => l.syncId));
   for (const id of s.spaceOrder) {
@@ -627,9 +690,11 @@ function linkProfiles(app: ScopeState) {
 }
 
 async function resetFromElsewhere() {
+  const generation = syncGeneration();
   saveGeneration++;
   savedState = null;
   await SyncNative?.forget(doc.deviceId!);
+  assertSyncGeneration(generation);
   doc = { ...emptyDoc(), folder: doc.folder, types: doc.types };
   stateLoaded = true;
   clearJournal();
@@ -671,10 +736,11 @@ function summarize(): Pick<SyncUi, "devices" | "remoteTabs" | "remoteProfiles"> 
 // MARK: Setup
 
 export async function folderInfo(path?: string | null): Promise<FolderInfo | null> {
-  return (await SyncNative?.folderInfo(path ?? doc.folder ?? null)) ?? null;
+  return (await SyncNative?.folderInfo(path ?? useSync.getState().folder ?? null)) ?? null;
 }
 
-export function setSyncFolder(path: string) {
+export function setSyncFolder(path: string): void | Promise<void> {
+  if (hasServiceClient()) return requestService<void>("setSyncFolder", [path]);
   if (doc.enabled || quitPaused) return;
   doc.folder = path;
   save();
@@ -682,8 +748,8 @@ export function setSyncFolder(path: string) {
 }
 
 export async function chooseSyncFolder(): Promise<string | null> {
-  const picked = (await SyncNative?.chooseFolder(doc.folder)) ?? null;
-  if (picked) setSyncFolder(picked);
+  const picked = (await SyncNative?.chooseFolder(useSync.getState().folder)) ?? null;
+  if (picked) await setSyncFolder(picked);
   return picked;
 }
 
@@ -700,41 +766,50 @@ function begin(folder: string, deviceId: string, joining: boolean) {
 }
 
 export function turnOnSync(folder: string): Promise<{ ok: true } | { error: string }> {
+  if (hasServiceClient()) return requestService("turnOnSync", [folder]);
   if (quitPaused) return Promise.resolve({ error: "Sync is paused while Bay is quitting. Cancel quit to try again." });
   return trackMutation(() => turnOnSyncInternal(folder));
 }
 
 async function turnOnSyncInternal(folder: string): Promise<{ ok: true } | { error: string }> {
+  const generation = syncGeneration();
   const native = SyncNative;
   if (!native) return { error: "Sync isn’t available in this build." };
   const deviceId = native.newDeviceId();
   try {
     if (!(await native.createPhrase(deviceId))) return { error: "Couldn’t save the sync key in your Keychain." };
+    assertSyncGeneration(generation);
     await native.createChain(folder);
   } catch (error) {
     await native.forget(deviceId);
     return { error: `Couldn’t use that folder: ${errorText(error)}` };
   }
+  assertSyncGeneration(generation);
   begin(folder, deviceId, false);
   return { ok: true };
 }
 
 export function enterRecoveryPhrase(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" | "quitting" | "savedData" }> {
+  if (hasServiceClient()) return requestService("enterRecoveryPhrase", [folder, text]);
   if (quitPaused) return Promise.resolve({ error: "quitting" });
   return trackMutation(() => enterRecoveryPhraseInternal(folder, text));
 }
 
 async function enterRecoveryPhraseInternal(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" | "savedData" }> {
+  const generation = syncGeneration();
   const native = SyncNative;
   if (!native) return { error: "unavailable" };
   if (doc.enabled && doc.deviceId && useSync.getState().status === "locked") {
     const result = await native.enterPhrase(doc.deviceId, text, doc.folder ?? folder);
+    assertSyncGeneration(generation);
     if ("ok" in result) {
       try {
         await loadState();
+        assertSyncGeneration(generation);
         publishUi({ status: "starting", error: null });
         scheduleSync(0);
       } catch (error) {
+        assertSyncGeneration(generation);
         stateLoaded = false;
         doc.scopes = {};
         publishUi({ status: "locked", error: errorText(error) });
@@ -745,25 +820,30 @@ async function enterRecoveryPhraseInternal(folder: string, text: string): Promis
   }
   const deviceId = native.newDeviceId();
   const result = await native.enterPhrase(deviceId, text, folder);
+  assertSyncGeneration(generation);
   if ("ok" in result) begin(folder, deviceId, true);
   return result;
 }
 
 export function stopSync(options: { deleteData?: boolean } = {}): Promise<void> {
+  if (hasServiceClient()) return requestService<void>("stopSync", [options]);
   if (quitPaused) return Promise.resolve();
   return trackMutation(() => stopSyncInternal(options));
 }
 
 async function stopSyncInternal({ deleteData = false } = {}) {
+  const generation = syncGeneration();
   const native = SyncNative;
   if (!native || !doc.enabled) return;
   clearTimeout(timer);
   await startup;
   if (activeCycle) await activeCycle;
+  assertSyncGeneration(generation);
   try {
     if (useSync.getState().status !== "locked") await runCycle({ retiring: true });
   } catch {}
   clearTimeout(timer);
+  assertSyncGeneration(generation);
   const folder = doc.folder;
   if (deleteData && folder) {
     try {
@@ -774,7 +854,9 @@ async function stopSyncInternal({ deleteData = false } = {}) {
   }
   saveGeneration++;
   savedState = null;
+  assertSyncGeneration(generation);
   if (doc.deviceId) await native.forget(doc.deviceId);
+  assertSyncGeneration(generation);
   doc = { ...emptyDoc(), folder, types: doc.types };
   stateLoaded = true;
   passwordAdapters.clear();
@@ -783,7 +865,8 @@ async function stopSyncInternal({ deleteData = false } = {}) {
   publishUi({ status: "off", error: null });
 }
 
-export function setTypeSynced(type: DataType, enabled: boolean) {
+export function setTypeSynced(type: DataType, enabled: boolean): void | Promise<void> {
+  if (hasServiceClient()) return requestService<void>("setTypeSynced", [type, enabled]);
   if (quitPaused) return;
   doc.types = { ...doc.types, [type]: enabled };
   save();
@@ -791,7 +874,8 @@ export function setTypeSynced(type: DataType, enabled: boolean) {
   scheduleSync(0);
 }
 
-export function setProfileSynced(spaceId: string, enabled: boolean) {
+export function setProfileSynced(spaceId: string, enabled: boolean): void | Promise<void> {
+  if (hasServiceClient()) return requestService<void>("setProfileSynced", [spaceId, enabled]);
   if (quitPaused) return;
   const link = doc.profiles[spaceId];
   if (!link) return;
@@ -801,12 +885,13 @@ export function setProfileSynced(spaceId: string, enabled: boolean) {
   scheduleSync(0);
 }
 
-export function addRemoteProfile(syncId: string): string | null {
+export function addRemoteProfile(syncId: string): string | null | Promise<string | null> {
+  if (hasServiceClient()) return requestService<string | null>("addRemoteProfile", [syncId]);
   if (quitPaused) return null;
   const record = doc.scopes[APP_SCOPE]?.records[`prof:${syncId}`]?.v as ProfileRecord | undefined;
   if (!record) return null;
-  const id = useBrowser.getState().createSpace({ name: record.n, color: record.c, icon: record.i });
-  if (typeof record.f === "boolean") useBrowser.getState().updateSpace(id, { folded: record.f });
+  const id = syncStore().getState().createSpace({ name: record.n, color: record.c, icon: record.i });
+  if (typeof record.f === "boolean") syncStore().getState().updateSpace(id, { folded: record.f });
   doc.profiles[id] = { syncId, enabled: true };
   if (doc.types.settings) resolveLinkRuleSpaces(doc.profiles);
   doc.scopes[`p:${syncId}`] = { ...emptyScope(), awaitRemote: true };
@@ -818,8 +903,47 @@ export function addRemoteProfile(syncId: string): string | null {
 
 // MARK: Launch
 
-export function startSync() {
-  if (!SyncNative || started || quitPaused) return;
+let releaseOwner: (() => void) | undefined;
+let unsubscribe: (() => void) | undefined;
+
+export function stopSyncEngine() {
+  started = false;
+  saveGeneration++;
+  quitPaused = false;
+  clearTimeout(timer);
+  timer = undefined;
+  again = false;
+  clearTimeout(slowTimer);
+  slowTimer = undefined;
+  unsubscribe?.();
+  unsubscribe = undefined;
+  releaseOwner?.();
+  releaseOwner = undefined;
+  // Detach old asynchronous cycles from the next owner.
+  doc = emptyDoc();
+  running = false;
+  activeCycle = null;
+  startup = Promise.resolve();
+  sealing = null;
+  journal = {};
+  journalOnDisk = false;
+  savedState = null;
+  savedJson = "";
+  passwordAdapters.clear();
+  mutations.clear();
+  forcePasswords = false;
+  if (quitAttempt) {
+    quitAttempt.valid = false;
+    clearTimeout(quitAttempt.deadline);
+    quitAttempt.reject(quitError("sync_owner_stopped", "Sync owner stopped"));
+    quitAttempt = null;
+  }
+}
+
+export function startSync(store: BrowserStore): () => void {
+  if (!SyncNative || started || quitPaused || hasServiceClient()) return () => {};
+  releaseOwner = configureSyncStore(store);
+  const generation = syncGeneration();
   started = true;
   load();
   stateLoaded = !metadataLoadError && !doc.enabled;
@@ -844,7 +968,7 @@ export function startSync() {
       }
     })();
   }
-  useBrowser.subscribe((s, prev) => {
+  unsubscribe = syncStore().subscribe((s, prev) => {
     if (!doc.enabled || running || quitPaused) return;
     if (s.bookmarks !== prev.bookmarks || s.settings !== prev.settings || s.spaces !== prev.spaces || s.groups !== prev.groups) scheduleSync();
   });
@@ -870,4 +994,7 @@ export function startSync() {
       },
     };
   }
+  return () => {
+    if (syncGeneration() === generation) stopSyncEngine();
+  };
 }

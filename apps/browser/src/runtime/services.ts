@@ -11,7 +11,15 @@ const owners = new WeakMap<BrowserStore, PersistenceOwner>();
  * The coordinator supplies an already restored/recovered store; the legacy
  * single-runtime entry restores its disk session here until the startup gate lifts.
  */
-export function startCoordinatorServices({ store, restoreSession = false }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
+export function startCoordinatorServices({
+  store,
+  restoreSession = false,
+  afterLiveRestore,
+}: {
+  store: BrowserStore;
+  restoreSession?: boolean;
+  afterLiveRestore?: () => () => void;
+}): PersistenceOwner {
   const existing = owners.get(store);
   if (existing) return existing;
   const stops: (() => void)[] = [];
@@ -31,6 +39,7 @@ export function startCoordinatorServices({ store, restoreSession = false }: { st
   try {
     // Live state must be loaded before the browser and meeting watchers run.
     stops.push(startLivePersistence());
+    if (afterLiveRestore) stops.push(afterLiveRestore());
     const persistence = createBrowserPersistence({ store, restoreSession });
     stops.push(() => persistence.dispose());
     stops.push(startLive(store));

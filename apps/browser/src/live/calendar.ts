@@ -11,11 +11,12 @@ import {
 } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import type { CalendarEvent } from "./meetings";
 import { live, updateCalendarSettings, useLive } from "./store";
 import { CALENDAR_HORIZON_MS } from "./constants";
 
-type CalendarData = {
+export type CalendarData = {
   access: CalendarAuthorization | "fixture";
   calendars: SystemCalendar[];
   events: CalendarEvent[];
@@ -67,6 +68,7 @@ let service: { scope: CalendarScope; stop: () => void } | undefined;
 let inflight: { promise: Promise<void>; scope?: CalendarScope } | undefined;
 
 export function refreshCalendar(): Promise<void> {
+  if (hasServiceClient()) return requestService("calendarRefresh");
   if (inflight) return inflight.promise;
   const scope = service?.scope;
   const active = () => !scope || scope.active;
@@ -110,6 +112,7 @@ export function refreshCalendar(): Promise<void> {
 
 // Request EventKit access only from an explicit click.
 export async function connectCalendar(active: () => boolean = () => true): Promise<boolean> {
+  if (hasServiceClient()) return active() ? requestService("calendarConnect") : false;
   if (!active()) return false;
   if (fixtureMode) {
     await refreshCalendar();

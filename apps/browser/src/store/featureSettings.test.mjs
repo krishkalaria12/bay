@@ -8,6 +8,8 @@ const { entryHeight, entriesHeight, rowSpan } = await import("../components/side
 const { flushPersistence, loadSession, startPersistence } = await import("../lib/persist.ts");
 const { settingsAdapter, profilesAdapter } = await import("../sync/adapters.ts");
 const stub = await import("../test-native-stub.mjs");
+const { configureSyncStore } = await import("../sync/store.ts");
+configureSyncStore(useBrowser);
 const S = () => useBrowser.getState();
 
 test("calculator defaults on, and an explicit off choice survives persistence and sync", () => {

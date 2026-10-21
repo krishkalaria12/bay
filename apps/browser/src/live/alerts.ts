@@ -1,3 +1,4 @@
+import { sendService } from "../runtime/serviceClient";
 import { onAppEvent, onWindowEvent, postNotification, removeNotifications } from "@bay/shell";
 import { create } from "zustand";
 import { useBrowser, type BrowserStore } from "../store/browser";
@@ -36,6 +37,7 @@ function check() {
 }
 
 export function joinEvent(event: CalendarEvent, openAll = false, windowId = frontWindow()) {
+  if (windowId && sendService("alertJoin", [windowId, event.occurrence, openAll])) return;
   const link = joinLink(event);
   if (!link || !windowId) return;
   reportBrowserCommand(joinMeeting(windowId, event, link.url, openAll));
@@ -43,6 +45,7 @@ export function joinEvent(event: CalendarEvent, openAll = false, windowId = fron
 }
 
 export function dismiss(event: CalendarEvent) {
+  if (sendService("alertDismiss", [event.occurrence])) return;
   dismissAlert(event.occurrence);
   void removeNotifications([`meeting:${event.occurrence}`]);
   if (useMeetingAlert.getState().event?.occurrence === event.occurrence) useMeetingAlert.setState({ event: null });

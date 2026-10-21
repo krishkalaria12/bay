@@ -1,3 +1,4 @@
+import type { ServiceState } from "../runtime/serviceState";
 import { create, type StateCreator } from "zustand";
 import { createBookmarksSlice, EMPTY_BOOKMARKS, engineRoots, rootIdsFor, type BookmarksSlice } from "./bookmarks";
 import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./folders";
@@ -28,6 +29,7 @@ export type BrowserState = SpacesSlice &
   BookmarksSlice &
   SettingsSlice &
   UiSlice & {
+    services: Partial<ServiceState>;
     hydrate(data: HydrateData): void;
   };
 
@@ -103,6 +105,7 @@ const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener):
     ...createSettingsSlice(...a),
     ...createUiSlice(...a),
 
+    services: {},
     hydrate(data) {
       const [set, get] = a;
       const s = get();

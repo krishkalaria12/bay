@@ -1,3 +1,4 @@
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import { confirm } from "@bay/shell";
 import { reportBrowserCommand } from "../runtime/commands";
 import { addTabsToGroup, closeGroup, createGroup } from "../runtime/organizeActions";
@@ -47,6 +48,7 @@ function meetingTarget(s: Pick<BrowserProjection, "tabs" | "groups">, tabId: str
 }
 
 export async function groupCall(tabId: string, event?: CalendarEvent | null): Promise<string> {
+  if (hasServiceClient()) return requestService("meetingGroup", [tabId, event?.occurrence ?? null]);
   const target = meetingTarget(browserRead.getState(), tabId, event);
   if ("groupId" in target) {
     if (target.add) await addTabsToGroup(target.groupId, [tabId]);
@@ -59,14 +61,15 @@ export async function groupCall(tabId: string, event?: CalendarEvent | null): Pr
 
 // Coordinator watchers use the authority directly so later changes in the same
 // notification see the group immediately, without a renderer command round trip.
-function groupCallInStore(browser: BrowserStore, tabId: string) {
-  const target = meetingTarget(browser.getState(), tabId);
+export function groupCallInStore(browser: BrowserStore, tabId: string, event?: CalendarEvent | null): string {
+  const target = meetingTarget(browser.getState(), tabId, event);
   if ("groupId" in target) {
     if (target.add) browser.getState().addTabsToGroup(target.groupId, [tabId]);
-    return;
+    return target.groupId;
   }
   const groupId = browser.getState().createGroup([tabId], { name: target.meeting.title });
   if (groupId) setMeetingGroup({ ...target.meeting, groupId });
+  return groupId;
 }
 
 export async function joinMeeting(windowId: string, event: CalendarEvent, joinUrl: string, openAll = false) {
@@ -166,4 +169,17 @@ export function tick(s: BrowserState, now: number, browser?: BrowserStore) {
       else reportBrowserCommand(closeGroup(m.groupId));
     }
   }
+}
+
+export function joinMeetingInStore(browser: BrowserStore, windowId: string, event: CalendarEvent, joinUrl: string, openAll = false) {
+  const s = browser.getState();
+  if (!s.windows[windowId] || s.windows[windowId]!.incognito) return;
+  const callTab = s.newTab(windowId, { url: joinUrl });
+  const grouped = s.settings.autoGroupMeetingTabs ? groupCallInStore(browser, callTab, event) : "";
+  if (openAll)
+    for (const url of relatedLinks(event)) {
+      const id = browser.getState().newTab(windowId, { url, background: true, openerId: callTab });
+      if (grouped && !groupOf(browser.getState(), id)) browser.getState().addTabsToGroup(grouped, [id]);
+    }
+  browser.getState().activate(callTab);
 }

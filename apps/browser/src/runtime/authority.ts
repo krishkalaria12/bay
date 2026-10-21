@@ -6,7 +6,7 @@ export type { BrowserCommand } from "./userCommands";
 
 export type BrowserCommit = Readonly<{ epoch: string; revision: number; state: BrowserProjection }>;
 export type CommandRequest = Readonly<{ epoch: string; clientId: string; requestId: number; command: BrowserCommand }>;
-export type CommandReply = Readonly<{ clientId: string; requestId: number; commit: BrowserCommit; value: string | null }>;
+export type CommandReply = Readonly<{ clientId: string; requestId: number; commit: BrowserCommit; value: unknown }>;
 
 type AuthorityErrorCode = "invalid_request" | "stale_epoch" | "request_conflict" | "request_expired" | "closed";
 export class AuthorityError extends Error {
@@ -37,10 +37,12 @@ export function createBrowserAuthority({
   epoch,
   store = createBrowserStore(),
   effects,
+  executeAsync,
 }: {
   epoch: string;
   store?: BrowserStore;
   effects?: LocationCommandEffects;
+  executeAsync?: (command: BrowserCommand, isActive: () => boolean) => Promise<unknown>;
 }) {
   text(epoch);
   const project = createBrowserProjector();
@@ -86,11 +88,11 @@ export function createBrowserAuthority({
     if (!executing) publish();
   });
 
-  function enqueue(apply: () => string | null) {
+  function enqueue<T>(apply: () => T) {
     const reply = queue.then(() => {
       if (closed) throw new AuthorityError("closed", "authority is closed");
       executing = true;
-      let value: string | null;
+      let value: T;
       try {
         value = apply();
       } finally {
@@ -129,9 +131,19 @@ export function createBrowserAuthority({
       }
       if (requestId <= client.lastRequestId) throw new AuthorityError("request_expired", "request is too old to replay");
       client.lastRequestId = requestId;
-      const reply = enqueue(() => executeBrowserCommand(store, command, effects)).then(({ commit, value }) =>
-        Object.freeze({ clientId, requestId, commit, value }),
-      );
+      // External service work may await network/native IO. It retains request
+      // deduplication, while ordinary reducer commands continue through queue.
+      const action =
+        command.method === "serviceAction"
+          ? enqueue(() => {
+              if (!executeAsync) throw new AuthorityError("invalid_request", "Service owner is unavailable");
+              return executeAsync(command, () => !closed);
+            }).then(async ({ value }) => {
+              const result = await value;
+              return enqueue(() => result);
+            })
+          : enqueue(() => executeBrowserCommand(store, command, effects));
+      const reply = action.then(({ commit, value }) => Object.freeze({ clientId, requestId, commit, value }));
       client.replies.set(requestId, { fingerprint, reply });
       // Retain recent replies, but never re-execute an evicted request. Sequence
       // numbers are scoped to a browser-authenticated client and epoch.

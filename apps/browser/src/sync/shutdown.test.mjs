@@ -113,7 +113,7 @@ async function fixture(context, { enabled = true, scopes = { app: emptyScope() }
     await tick();
     context.mock.timers.reset();
   });
-  if (start) engine.startSync();
+  if (start) engine.startSync(useBrowser);
   await tick();
   return {
     engine,
@@ -317,7 +317,7 @@ test("cancelling quit without native sync support preserves existing sync docume
     shell.docs.set("sync-journal.nns", "existing-journal");
     const before = new Map(shell.docs);
     const engine = await import("./src/sync/engine.ts");
-    engine.startSync();
+    engine.startSync((await import("./src/store/browser.ts")).useBrowser);
     await engine.prepareSyncForQuit();
     engine.resumeSyncAfterQuit();
     await new Promise(setImmediate);

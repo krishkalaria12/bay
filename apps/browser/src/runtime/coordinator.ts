@@ -10,7 +10,7 @@ import { finishPageOpen, onPageEvent, onPageOpen, startPageEvents, stopPageEvent
 import { createPageFactConsumer } from "./pageFacts";
 import { applyPageOpen, parsePageOpen } from "./pageOpen";
 
-export type BrowserCoordinatorTransport = CoordinatorRuntimeTransport<BrowserProjection, BrowserCommand, string | null>;
+export type BrowserCoordinatorTransport = CoordinatorRuntimeTransport<BrowserProjection, BrowserCommand, unknown>;
 
 /** Coordinator-only recovery. This full projection contains private data.
  * Merge into the sole authority store, retaining its actions and all accepted
@@ -40,11 +40,13 @@ export async function createBrowserCoordinator({
   effects,
   startServices = startCoordinatorServices,
   onAcceptedCommit,
+  executeAsync,
   onError = (error) => console.error("[runtime] coordinator failed", error),
 }: {
   store: BrowserStore;
   transport: BrowserCoordinatorTransport;
   effects?: LocationCommandEffects;
+  executeAsync?: (command: BrowserCommand, isActive: () => boolean) => Promise<unknown>;
   startServices?: (options: { store: BrowserStore }) => PersistenceOwner;
   /** Shared native window reconciliation runs after browser acceptance, so
    * offered private profiles are reserved before creating their windows.
@@ -67,7 +69,7 @@ export async function createBrowserCoordinator({
     )
       throw new Error("A browser-assigned coordinator connection is required");
     if (identity.recoveryState !== undefined) recover(store, identity.epoch, identity.recoveryState);
-    authority = createBrowserAuthority({ epoch: identity.epoch, store, effects });
+    authority = createBrowserAuthority({ epoch: identity.epoch, store, effects, executeAsync });
   } catch (error) {
     transport.dispose();
     throw error;
@@ -129,7 +131,7 @@ export async function createBrowserCoordinator({
     void task.catch(stop);
     return task;
   }
-  async function resolve(token: string, reply: RuntimeResolution<string | null>) {
+  async function resolve(token: string, reply: RuntimeResolution<unknown>) {
     active();
     await transport.resolve(token, reply);
     active();
@@ -138,7 +140,7 @@ export async function createBrowserCoordinator({
     try {
       await initial;
       active();
-      let response: RuntimeResolution<string | null>;
+      let response: RuntimeResolution<unknown>;
       try {
         const reply = await authority.dispatch(request);
         await publications;

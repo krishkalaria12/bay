@@ -1,3 +1,4 @@
+import { sendService } from "../runtime/serviceClient";
 import { isMac } from "@bay/platform";
 import { engineInfo } from "@bay/nncore";
 import { launchEnvironment, readDocument, saveDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
@@ -337,6 +338,7 @@ export async function flush() {
 export type SharingSource = "settings" | "onboarding" | "ask";
 
 export function setSharing(on: boolean, source: SharingSource) {
+  if (sendService("telemetrySetSharing", [on, source])) return;
   const now = Date.now();
   if (on === saved.sharing) return save({ decidedAt: now, askDoneAt: saved.askDoneAt ?? now });
   generation++;
@@ -362,7 +364,9 @@ export function setSharing(on: boolean, source: SharingSource) {
   capture("sharing_turned_on", { source });
 }
 
-export const dismissAsk = () => save({ askDoneAt: Date.now() });
+export const dismissAsk = () => {
+  if (!sendService("telemetryDismissAsk")) save({ askDoneAt: Date.now() });
+};
 
 // MARK: Lifecycle
 
@@ -395,6 +399,17 @@ export function startClient(): { previous: PreviousSession; updatedFrom: string 
   save({ sessionOpen: true, lastVersion: version });
   scheduleFlush(10_000);
   return { previous, updatedFrom };
+}
+
+/** Stop a retired coordinator without marking a crashed session as clean. */
+export function stopClient() {
+  suspended = true;
+  generation++;
+  quitGeneration++;
+  clearTimeout(flushTimer);
+  clearTimeout(persistTimer);
+  flushTimer = persistTimer = undefined;
+  for (const abort of inflight) abort.abort();
 }
 
 function checkpointDocuments(attempt: number): Promise<void> {

@@ -1,5 +1,6 @@
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import { create } from "zustand";
+import { sendService } from "../runtime/serviceClient";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
 import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 
@@ -30,7 +31,7 @@ export type MeetingGroup = {
   endedAt: number | null;
 };
 
-type LiveState = {
+export type LiveState = {
   folders: Record<string, LiveFolder>;
   folderOrder: string[];
   items: Record<string, LiveItem[]>;
@@ -212,6 +213,7 @@ export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: Li
 }
 
 export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>) {
+  if (sendService("liveUpdate", [id, patch])) return;
   setLive((s) => (s.folders[id] ? { folders: { ...s.folders, [id]: { ...s.folders[id]!, ...patch } } } : {}));
 }
 
@@ -221,6 +223,7 @@ const without = <T>(record: Record<string, T>, key: string) => {
 };
 
 export function removeFolder(id: string) {
+  if (sendService("liveRemove", [id])) return;
   setLive((s) => ({
     folders: without(s.folders, id),
     folderOrder: s.folderOrder.filter((f) => f !== id),
@@ -234,6 +237,7 @@ export function removeFolder(id: string) {
 }
 
 export function moveFolder(id: string, delta: -1 | 1) {
+  if (sendService("liveMove", [id, delta])) return;
   setLive((s) => {
     const order = [...s.folderOrder];
     const i = order.indexOf(id);
@@ -290,6 +294,7 @@ export function setStatus(folderId: string, status: Partial<FolderStatus>) {
 }
 
 export function markRead(folderId: string, itemIds?: string[]) {
+  if (sendService("liveRead", [folderId, itemIds ?? null])) return;
   setLive((s) => {
     const unread = s.unread[folderId] ?? [];
     const next = itemIds ? unread.filter((id) => !itemIds.includes(id)) : [];
@@ -306,8 +311,12 @@ export function setAccount(source: LiveSourceId, account: LiveAccount | null) {
   });
 }
 
-export const updateConfig = (patch: Partial<LiveConfig>) => setLive((s) => ({ config: { ...s.config, ...patch } }));
-export const updateCalendarSettings = (patch: Partial<CalendarSettings>) => setLive((s) => ({ calendar: { ...s.calendar, ...patch } }));
+export const updateConfig = (patch: Partial<LiveConfig>) => {
+  if (!sendService("liveConfig", [patch])) setLive((s) => ({ config: { ...s.config, ...patch } }));
+};
+export const updateCalendarSettings = (patch: Partial<CalendarSettings>) => {
+  if (!sendService("calendarSettings", [patch])) setLive((s) => ({ calendar: { ...s.calendar, ...patch } }));
+};
 
 export function dismissAlert(occurrence: string) {
   setLive((s) => (s.dismissedAlerts.includes(occurrence) ? {} : { dismissedAlerts: [...s.dismissedAlerts, occurrence].slice(-200) }));
@@ -321,3 +330,12 @@ export function setMeetingGroup(group: MeetingGroup | null, groupId?: string) {
 }
 
 export const profileFolders = (s: LiveState, spaceId: string) => s.folderOrder.filter((id) => s.folders[id]?.spaceId === spaceId);
+
+export function markUnread(folderId: string, itemId: string) {
+  if (sendService("liveUnread", [folderId, itemId])) return;
+  setLive((s) => ({ unread: { ...s.unread, [folderId]: [...new Set([...(s.unread[folderId] ?? []), itemId])] } }));
+}
+export function setLiveView(field: "expandedStacks" | "showAll", key: string, value: boolean) {
+  if (sendService("liveView", [field, key, value])) return;
+  setLive((s) => ({ [field]: { ...s[field], [key]: value } }));
+}
