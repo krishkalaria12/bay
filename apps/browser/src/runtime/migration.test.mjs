@@ -341,3 +341,42 @@ test("a disconnected mirror rejects helper actions without replaying them into t
   assert.equal(store.getState(), authorityState);
   assert.equal(useBrowser.getState(), legacy);
 });
+
+test("Chrome page facts converge in both mirrors while commands run without renderer writes", async (t) => {
+  const legacy = useBrowser.getState();
+  const {
+    store,
+    first,
+    second,
+    coordinator,
+    clients: [one, two],
+  } = await start(t);
+  const { emitPageEvent } = await import("../test-native-stub.mjs");
+  const tabId = activeTabId(store.getState(), first);
+  const fact = (sequence, event, payload) => emitPageEvent({ tabId, profile: "", browserId: 21, sequence, event, payload });
+  fact(1, "onNavigationChange", {
+    url: "https://chrome.example/",
+    title: "Chrome title",
+    isLoading: true,
+    canGoBack: false,
+    canGoForward: false,
+    themeColor: null,
+  });
+  const command = two.dispatch({ method: "updateSettings", patch: { sidebarWidth: 321 } });
+  fact(2, "onProgress", { progress: 0.5 });
+  fact(3, "onMedia", { playing: true, muted: false });
+  await command;
+  await coordinator.flushPublications();
+  assertConverged(coordinator, [one, two]);
+  for (const client of [one, two]) {
+    const state = client.getSnapshot().state;
+    assert.equal(state.tabs[tabId].title, "Chrome title");
+    assert.equal(state.live[tabId].progress, 0.5);
+    assert.equal(state.live[tabId].playingAudio, true);
+    assert.ok(state.windows[second]);
+  }
+  fact(2, "onMedia", { playing: false, muted: false });
+  await coordinator.flushPublications();
+  assert.equal(store.getState().live[tabId].playingAudio, true, "stale page reports do not overwrite a later fact");
+  assert.equal(useBrowser.getState(), legacy);
+});

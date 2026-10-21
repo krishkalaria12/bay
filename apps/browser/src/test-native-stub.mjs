@@ -36,6 +36,16 @@ export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise
 export const appEventListeners = new Set();
 export const onAppEvent = (listener) => (appEventListeners.add(listener), { remove: () => appEventListeners.delete(listener) });
 export const emitAppEvent = (event) => appEventListeners.forEach((listener) => listener(event));
+export const pageEventListeners = new Set();
+export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
+export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
+export const pageEventSource = { replay: [], error: null, starts: 0, stops: 0 };
+export const startPageEvents = () => {
+  pageEventSource.starts++;
+  pageEventSource.replay.forEach(emitPageEvent);
+  return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
+};
+export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);

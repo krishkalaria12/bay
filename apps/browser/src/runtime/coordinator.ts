@@ -6,6 +6,8 @@ import type { BrowserProjection } from "./projection";
 import type { LocationCommandEffects } from "./locationCommands";
 import type { PersistenceOwner } from "../lib/persist";
 import { startCoordinatorServices } from "./services";
+import { onPageEvent, startPageEvents, stopPageEvents } from "@bay/nncore";
+import { createPageFactConsumer } from "./pageFacts";
 
 export type BrowserCoordinatorTransport = CoordinatorRuntimeTransport<BrowserProjection, BrowserCommand, string | null>;
 
@@ -73,6 +75,8 @@ export async function createBrowserCoordinator({
   let unsubscribeCommands = () => {};
   let unsubscribeClose = () => {};
   let services: PersistenceOwner | undefined;
+  const pageFacts = createPageFactConsumer(store);
+  let unsubscribePages = () => {};
 
   function active() {
     if (failure) throw failure;
@@ -82,7 +86,8 @@ export async function createBrowserCoordinator({
     if (disposed) return;
     disposed = true;
     failure = error === undefined ? null : error instanceof Error ? error : new Error(String(error));
-    for (const remove of [() => services?.dispose(), unsubscribeAuthority, unsubscribeCommands, unsubscribeClose]) {
+    pageFacts.dispose();
+    for (const remove of [unsubscribePages, unsubscribeAuthority, unsubscribeCommands, unsubscribeClose, () => services?.dispose()]) {
       try {
         remove();
       } catch {}
@@ -161,7 +166,19 @@ export async function createBrowserCoordinator({
     const owner = startServices({ store });
     if (disposed) owner.dispose();
     else services = owner;
+    active();
+    const pages = onPageEvent((event) => {
+      if (!disposed) pageFacts.apply(event);
+    });
+    unsubscribePages = () => {
+      pages.remove();
+      void stopPageEvents().catch((error) => console.error("[runtime] page event cleanup failed", error));
+    };
     await initial;
+    active();
+    // Native authorizes page identity against its accepted projection. The
+    // first commit must reach the browser before requesting cached page facts.
+    await startPageEvents();
     active();
     return {
       getSnapshot: authority.getSnapshot,

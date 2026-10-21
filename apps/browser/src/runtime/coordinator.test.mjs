@@ -4,6 +4,7 @@ import { viewTabIds } from "../store/model.ts";
 import { createBrowserStore } from "../store/browser.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserCoordinator as createCoordinator } from "./coordinator.ts";
+import { emitPageEvent, pageEventListeners, pageEventSource } from "../test-native-stub.mjs";
 const createBrowserCoordinator = (options) =>
   createCoordinator({
     startServices: () => ({ flush: async () => {}, resume() {}, dispose() {} }),
@@ -113,14 +114,17 @@ test("commands resolve their native token only after their commit is accepted", 
   const store = createBrowserStore(),
     native = coordinatorTransport({ manualPublish: true }),
     errors = [];
+  const pageStarts = pageEventSource.starts;
   const starting = createBrowserCoordinator({ store, transport: native.transport, onError: (error) => errors.push(error) });
   await tick();
   assert.equal(native.published[0].revision, 0);
+  assert.equal(pageEventSource.starts, pageStarts, "native page replay waits for accepted revision zero");
   native.command("token-1", { method: "createWindow", options: { url: "https://example.com/" } });
   await tick();
   assert.equal(store.getState().windowOrder.length, 0);
   native.publicationAcks[0].resolve();
   const runtime = await starting;
+  assert.equal(pageEventSource.starts, pageStarts + 1);
   await tick();
   assert.equal(native.published[1].revision, 1);
   assert.equal(native.resolutions.length, 0);
@@ -330,4 +334,68 @@ test("coordinator publication failure disposes services before startup rejects",
   native.publicationAcks[0].reject(new Error("startup publication refused"));
   await assert.rejects(starting, /startup publication refused/);
   assert.equal(stopped, 1);
+});
+
+test("native page replay reaches the authority before readiness and stops with the coordinator", async (t) => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport();
+  const windowId = store.getState().createWindow({ url: "https://requested.example/" });
+  const tabId = viewTabIds(store.getState(), windowId)[0];
+  const event = { tabId, profile: "", browserId: 7, sequence: 1, event: "onProgress", payload: { progress: 0.6 } };
+  const before = pageEventListeners.size,
+    starts = pageEventSource.starts,
+    stops = pageEventSource.stops;
+  pageEventSource.replay = [event];
+  t.after(() => {
+    pageEventSource.replay = [];
+  });
+  const runtime = await createBrowserCoordinator({ store, transport: native.transport });
+  t.after(() => runtime.dispose());
+  await runtime.announceReady();
+  assert.equal(store.getState().live[tabId].progress, 0.6);
+  assert.equal(native.published.at(-1).state.live[tabId].progress, 0.6);
+  assert.equal(native.calls.at(-1)[0], "ready");
+  assert.equal(pageEventSource.starts, starts + 1);
+  assert.equal(pageEventListeners.size, before + 1);
+  emitPageEvent({ ...event, sequence: 2, event: "onMedia", payload: { playing: true, muted: false } });
+  await runtime.flushPublications();
+  assert.equal(native.published.at(-1).state.live[tabId].playingAudio, true);
+  runtime.dispose();
+  assert.equal(pageEventSource.stops, stops + 1);
+  assert.equal(pageEventListeners.size, before);
+  const revision = runtime.getSnapshot().revision;
+  emitPageEvent({ ...event, sequence: 3, payload: { progress: 1 } });
+  assert.equal(store.getState().live[tabId].progress, 0.6);
+  assert.equal(runtime.getSnapshot().revision, revision);
+});
+
+test("native page startup rejection unwinds services and native subscriptions", async (t) => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport(),
+    errors = [];
+  const before = pageEventListeners.size;
+  let stopped = 0;
+  pageEventSource.error = new Error("native page replay unavailable");
+  t.after(() => {
+    pageEventSource.error = null;
+  });
+  await assert.rejects(
+    createBrowserCoordinator({
+      store,
+      transport: native.transport,
+      onError: (error) => errors.push(error),
+      startServices: () => ({
+        flush: async () => {},
+        resume() {},
+        dispose() {
+          stopped++;
+        },
+      }),
+    }),
+    /native page replay unavailable/,
+  );
+  assert.equal(pageEventListeners.size, before);
+  assert.equal(stopped, 1);
+  assert.equal(native.disposed, 1);
+  assert.equal(errors.length, 1);
 });
