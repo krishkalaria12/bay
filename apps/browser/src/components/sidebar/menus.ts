@@ -274,7 +274,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "resetIcon") useBrowser.getState().updateTab(tab.id, { customIcon: null });
   else if (choice === "mute") toggleMute(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.
-  else if (choice === "bookmark") bookmarkTab(windowId, tab.id);
+  else if (choice === "bookmark") reportBrowserCommand(bookmarkTab(windowId, tab.id));
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, [tab.id], choice.slice(7));
   else if (choice === "ungroupTab") reportBrowserCommand(removeTabsFromGroup([tab.id]));
   else if (choice === "newGroup") reportBrowserCommand(newGroupWithSelection(windowId, [tab.id]));

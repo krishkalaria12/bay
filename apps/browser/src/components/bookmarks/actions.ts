@@ -3,11 +3,12 @@ import { confirm } from "@bay/shell";
 import { create } from "zustand";
 import { focus, openWindow } from "../../lib/actions";
 import { folderLinks } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
 import { browserRead } from "../../store/read";
 import { navigate, newTab } from "../../runtime/tabActions";
 import { activeTabId, bookmarkSpaceId, listIds, resolveWindowId, viewTabIds, windowListKey } from "../../store/model";
 import { openSplitPane } from "../../runtime/splitActions";
+import { addBookmark } from "../../runtime/bookmarkActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 
 export type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";
 
@@ -83,26 +84,25 @@ export const useBookmarkDialog = create<{ open: BookmarkDialogState | null; set(
 }));
 
 export function bookmarkActivePage(windowId: string | null | undefined) {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const id = resolveWindowId(s, windowId);
   const tabId = id ? activeTabId(s, id) : undefined;
-  if (id && tabId) bookmarkTab(id, tabId);
+  if (id && tabId) reportBrowserCommand(bookmarkTab(id, tabId));
 }
 
-export function bookmarkTab(windowId: string, tabId: string) {
-  const s = useBrowser.getState();
-  const id = windowId;
+export async function bookmarkTab(windowId: string, tabId: string) {
+  const s = browserRead.getState();
   const tab = s.tabs[tabId];
-  if (!s.windows[id] || !tab?.url) return;
-  const spaceId = bookmarkSpaceId(s, s.windows[id]);
+  if (!s.windows[windowId] || !tab?.url) return;
+  const spaceId = bookmarkSpaceId(s, s.windows[windowId]);
   const roots = s.bookmarks.roots[spaceId];
   const existing = Object.values(s.bookmarks.nodes).find((n) => n.kind === "url" && n.url === tab.url && roots && isUnder(n.id, [roots.bar, roots.other]));
-  const bookmarkId = existing?.id ?? s.addBookmark({ spaceId, url: tab.url, title: tab.customTitle || tab.title || tab.url, favicon: tab.favicon });
-  useBookmarkDialog.getState().set({ kind: "page", windowId: id, bookmarkId });
+  const bookmarkId = existing?.id ?? (await addBookmark({ spaceId, url: tab.url, title: tab.customTitle || tab.title || tab.url, favicon: tab.favicon }));
+  useBookmarkDialog.getState().set({ kind: "page", windowId, bookmarkId });
 }
 
 export function bookmarkAllTabs(windowId: string | null | undefined) {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const id = resolveWindowId(s, windowId);
   if (!id) return;
   const tabs = viewTabIds(s, id)
@@ -114,7 +114,7 @@ export function bookmarkAllTabs(windowId: string | null | undefined) {
 }
 
 function isUnder(id: string, roots: string[]): boolean {
-  const { nodes } = useBrowser.getState().bookmarks;
+  const { nodes } = browserRead.getState().bookmarks;
   let node = nodes[id];
   for (let i = 0; node && i < 64; i++) {
     if (roots.includes(node.id)) return true;

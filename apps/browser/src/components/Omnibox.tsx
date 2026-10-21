@@ -7,7 +7,7 @@ import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowser } from "../store/browser";
 import { useBrowserRead } from "../store/read";
-import { dispatchBrowserCommand } from "../runtime/commands";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
 import { showToast } from "./layout/splitActions";
 import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
@@ -29,6 +29,8 @@ import { appPaletteActions } from "./omnibox/paletteAppActions";
 import { forgettable, rowMenuActions } from "./omnibox/paletteRowActions";
 import { currentPageActions, type PaletteSuggestion } from "./omnibox/paletteStart";
 import { isEscapeKey } from "../lib/escapeKey";
+import { removeHistory } from "../runtime/bookmarkActions";
+import { isIncognitoSpace } from "../store/model";
 
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
@@ -437,7 +439,8 @@ export function Omnibox({
 
   // Stable, so the rows (memoized) don't re-render as the bar does.
   const chooseRow = useEffectEvent((s: Suggestion) => choose(s));
-  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(spaceId, [url]));
+  // A private window keeps no history to remove from.
+  const removeRow = useEffectEvent((url: string) => !isIncognitoSpace(spaceId) && reportBrowserCommand(removeHistory(spaceId, [url])));
   const rowActions: RowActions = { choose: chooseRow, hover: setSelected, remove: removeRow };
   const suggestionList = (
     <SuggestionList

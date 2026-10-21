@@ -31,6 +31,8 @@ import { TranslateButton } from "./site/TranslateControls";
 import { ZoomIndicator } from "./site/ZoomControls";
 import { copyPageUrl } from "./site/selection";
 import { reportBrowserCommand } from "../runtime/commands";
+import { toggleBookmark as togglePageBookmark } from "../runtime/bookmarkActions";
+import { browserRead } from "../store/read";
 
 // What the toolbar shows of its tab: the page's favicon and the tab's bookkeeping (last active, …) don't re-render it.
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
@@ -266,10 +268,10 @@ export function UrlField({
     useBrowser.getState().openPanel(windowId, text);
   };
   const toggleBookmark = () => {
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     // The whole tab (its favicon too) as it is now; the field itself follows only what it shows.
     const page = s.tabs[tab.id];
-    if (page) s.toggleBookmark(bookmarkSpaceId(s, s.windows[windowId]), page);
+    if (page) reportBrowserCommand(togglePageBookmark(bookmarkSpaceId(s, s.windows[windowId]), page));
   };
   const toggleSiteControls = () => {
     onFocus();

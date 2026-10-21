@@ -15,6 +15,8 @@ import { dayLabel, dayStart, EmptyState, hostLabel, matchesQuery, PageHeader, ti
 import { HISTORY_HEADER, HISTORY_ROW, PAGE_WIDTH } from "./constants";
 import { NO_HISTORY } from "../../store/constants";
 import { useResetOn } from "../../lib/useResetOn";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { removeHistory } from "../../runtime/bookmarkActions";
 
 type Item = { type: "day"; key: string; label: string } | { type: "row"; key: string; entry: HistoryEntry; first: boolean; last: boolean };
 
@@ -92,7 +94,7 @@ export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; s
       windowId,
     });
     if (!confirmed) return;
-    useBrowser.getState().removeHistory(spaceId, [...selected]);
+    reportBrowserCommand(removeHistory(spaceId, [...selected]));
     setSelected(new Set());
   };
 
@@ -151,7 +153,7 @@ export function HistoryPage({ tabId, spaceId, initialQuery }: { tabId: string; s
                 windowId={windowId}
                 onToggle={(shift) => toggle(item.entry.url, shift)}
                 onMoreFromSite={() => setQuery(hostLabel(item.entry.url))}
-                onRemove={() => useBrowser.getState().removeHistory(spaceId, [item.entry.url])}
+                onRemove={() => reportBrowserCommand(removeHistory(spaceId, [item.entry.url]))}
               />
             )
           }

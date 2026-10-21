@@ -9,6 +9,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { engineProfile, isIncognitoSpace, spaceFor } from "../../store/model";
 import { Button, Checkbox, PopUp } from "../settings/controls";
+import { clearHistory } from "../../runtime/bookmarkActions";
 
 const RANGES = [
   { value: "hour", title: "Last hour", ms: 3_600_000 },
@@ -37,7 +38,8 @@ export function ClearDataDialog({ spaceId, onClose }: { spaceId: string; onClose
     const ms = RANGES.find((r) => r.value === range)!.ms;
     const since = ms === Infinity ? undefined : Date.now() - ms;
     if (history) {
-      useBrowser.getState().clearHistory(spaceId, since);
+      // A private window's history is Chrome's alone, cleared below.
+      if (!isIncognitoSpace(spaceId)) await clearHistory(spaceId, since);
       pruneProfileFavicons(spaceId);
     }
     const types: BrowsingDataType[] = [...(history ? ["history" as const] : []), ...(siteData ? ["siteData" as const, "cache" as const] : [])];

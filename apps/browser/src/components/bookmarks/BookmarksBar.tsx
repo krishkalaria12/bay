@@ -18,6 +18,8 @@ import { openImport } from "../settings/windows";
 import { openFolder, openModeFor, openUrl } from "./actions";
 import { editBookmark } from "./edit";
 import { BOOKMARK_ITEM_HEIGHT, BOOKMARKS_BAR_HEIGHT, BOOKMARKS_OVERFLOW_WIDTH } from "./constants";
+import { addBookmarkFolder, moveBookmark, removeBookmark } from "../../runtime/bookmarkActions";
+import { updateSettings } from "../../runtime/settingsActions";
 
 export function BookmarksBar({ tabId, placeholder }: { tabId: string; placeholder?: boolean }) {
   const windowId = useWindowId();
@@ -85,10 +87,9 @@ function Bar({ windowId }: { windowId: string }) {
   const onDrop = (id: string, target: { index: number; into: string | null } | null) => {
     setDrop(null);
     if (!target || !barId) return;
-    const s = useBrowser.getState();
-    if (target.into) return s.moveBookmark(id, target.into);
+    if (target.into) return reportBrowserCommand(moveBookmark(id, target.into));
     const from = children.indexOf(id);
-    s.moveBookmark(id, barId, target.index > from ? target.index - 1 : target.index);
+    reportBrowserCommand(moveBookmark(id, barId, target.index > from ? target.index - 1 : target.index));
   };
 
   const indicatorX = (() => {
@@ -400,14 +401,14 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
     if (choice === "openAllIncognito") reportBrowserCommand(openFolder(node.id, windowId, "incognito"));
     if (choice === "rename") void editBookmark(node.id, windowId);
   }
-  if (choice === "delete" && node) useBrowser.getState().removeBookmark(node.id);
+  if (choice === "delete" && node) reportBrowserCommand(removeBookmark(node.id));
   const parentId = node?.parentId ?? bar;
   const index = node && parentId ? folderChildren(useBrowser.getState().bookmarks, parentId).findIndex((n) => n.id === node.id) + 1 : undefined;
   if (choice === "addPage") void editBookmark(null, windowId, { spaceId, parentId: parentId ?? undefined, index });
   if (choice === "addFolder") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
-    if (title) useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index });
+    if (title) reportBrowserCommand(addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index }));
   }
   if (choice === "manage") reportBrowserCommand(openInternalPage("bookmarks", windowId));
-  if (choice.startsWith("bar:")) useBrowser.getState().updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode });
+  if (choice.startsWith("bar:")) reportBrowserCommand(updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode }));
 }

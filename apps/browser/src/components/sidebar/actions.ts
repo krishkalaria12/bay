@@ -22,6 +22,7 @@ import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
 import { updateSpace } from "../../runtime/spaceActions";
+import { addBookmark, addBookmarkFolder } from "../../runtime/bookmarkActions";
 
 const store = () => browserRead.getState();
 // An Essential or a pinned row: never in a group.
@@ -154,11 +155,11 @@ export async function bookmarkTabs(windowId: string, ids: string[], folder: stri
   if (folder === "new") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (!title) return;
-    parentId = useBrowser.getState().addBookmarkFolder({ spaceId, title });
+    parentId = await addBookmarkFolder({ spaceId, title });
   }
   for (const id of ids) {
     const t = store().tabs[id];
-    if (t?.url) useBrowser.getState().addBookmark({ spaceId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId });
+    if (t?.url) await addBookmark({ spaceId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId });
   }
 }
 

@@ -34,6 +34,9 @@ import { TranslateRows } from "./TranslateControls";
 import { ZoomStepper } from "./ZoomControls";
 import { activateExtension, loadUnpacked, openManageExtensions, openWebStore, useExtensions, useWindowExtensions, type Anchor } from "../extensions/state";
 import { defaultTarget, languageName, toggleTranslation, useTranslateState } from "./translate";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleBookmark } from "../../runtime/bookmarkActions";
+import { browserRead } from "../../store/read";
 
 const PERMISSIONS: { type: SiteSettingType; title: string; icon: string; choices: SiteSettingValue[] }[] = [
   { type: "popups", title: "Pop-ups and Redirects", icon: "macwindow.on.rectangle", choices: ["allow", "block"] },
@@ -245,8 +248,8 @@ export function SiteControls({
                 icon={bookmarked ? "star.fill" : "star"}
                 title={bookmarked ? "Remove Bookmark" : "Bookmark Page"}
                 onPress={() => {
-                  const s = useBrowser.getState();
-                  s.toggleBookmark(bookmarkSpaceId(s, s.windows[tab.windowId]), tab);
+                  const s = browserRead.getState();
+                  reportBrowserCommand(toggleBookmark(bookmarkSpaceId(s, s.windows[tab.windowId]), tab));
                 }}
               />
               <ActionTile icon="plus.magnifyingglass" title="Zoom and Site Settings" onPress={() => setDetailsOpen((open) => !open)} />

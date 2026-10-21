@@ -31,6 +31,7 @@ import { closePeek, focusPane, keepPeek, removeTabFromSplit, reopenPeekOrClosed,
 import { activate, cycle, duplicateTab, moveTab, navigate, newTab, togglePin } from "../runtime/tabActions";
 import { mergeAllWindows, reopenClosed, reopenClosedWindow, restoreClosed, toggleSidebar } from "../runtime/windowActions";
 import { browserRead } from "../store/read";
+import { addBookmark, addBookmarkFolder } from "../runtime/bookmarkActions";
 
 export function runCommand({ command, arg, windowId: requested }: CommandEvent) {
   const s = browserRead.getState();
@@ -375,9 +376,9 @@ async function addBookmarkToFolder(windowId: string, folder: string) {
   if (folder === "new") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (!title) return;
-    parentId = useBrowser.getState().addBookmarkFolder({ spaceId, title });
+    parentId = await addBookmarkFolder({ spaceId, title });
   }
-  useBrowser.getState().addBookmark({ spaceId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
+  await addBookmark({ spaceId, url: tab.url, title: tab.title, favicon: tab.favicon, parentId });
 }
 
 async function openFiles(windowId: string | null) {
