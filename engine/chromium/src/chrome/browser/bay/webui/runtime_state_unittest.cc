@@ -707,6 +707,67 @@ TEST(RuntimeStateTest, GlobalSettingsRejectPrivateCallersAndNativeOwnedFields) {
     EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
   }
 }
+TEST(RuntimeStateTest, SpaceCommandsNamePublicSpacesFromRegularWindowsOnly) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  AddWindow(state, "harbor", false);
+  state.FindDict("windows")->FindDict("harbor")->Set("kind", "small");
+  const auto allowed = [&](const char* window, base::DictValue command) {
+    return CanDispatchRuntimeCommand(state, window, command);
+  };
+  auto create = base::DictValue()
+                    .Set("method", "createSpace")
+                    .Set("options", base::DictValue()
+                                        .Set("name", "Work")
+                                        .Set("color", "blue")
+                                        .Set("shareWith", "default"));
+  EXPECT_TRUE(allowed("normal", create.Clone()));
+  EXPECT_TRUE(allowed("harbor", create.Clone()));
+  EXPECT_FALSE(allowed("private", create.Clone()));
+  EXPECT_EQ(RuntimeCommandResultKind(create), RuntimeResultKind::kRequiredId);
+  for (const char* shared : {"incognito:private", "missing"}) {
+    create.FindDict("options")->Set("shareWith", shared);
+    EXPECT_FALSE(allowed("normal", create.Clone()));
+  }
+  create.FindDict("options")->Set("shareWith", base::Value());
+  EXPECT_TRUE(allowed("normal", create.Clone()));
+  create.FindDict("options")->Set("profileId", "default");
+  EXPECT_FALSE(allowed("normal", create.Clone()));
+
+  auto update = base::DictValue()
+                    .Set("method", "updateSpace")
+                    .Set("spaceId", "default")
+                    .Set("patch", base::DictValue()
+                                      .Set("name", "Home")
+                                      .Set("cleanUpAfterHours", "app"));
+  EXPECT_TRUE(allowed("normal", update.Clone()));
+  EXPECT_FALSE(allowed("private", update.Clone()));
+  update.FindDict("patch")->Set("profileId", "other");
+  EXPECT_FALSE(allowed("normal", update.Clone()));
+  update.FindDict("patch")->Remove("profileId");
+  update.Set("spaceId", "incognito:private");
+  EXPECT_FALSE(allowed("normal", update.Clone()));
+
+  for (const char* method : {"deleteSpace", "setDefaultSpace"}) {
+    auto command =
+        base::DictValue().Set("method", method).Set("spaceId", "default");
+    EXPECT_TRUE(allowed("normal", command.Clone()));
+    EXPECT_FALSE(allowed("private", command.Clone()));
+    command.Set("spaceId", "incognito:private");
+    EXPECT_FALSE(allowed("normal", command.Clone()));
+  }
+  auto order =
+      base::DictValue()
+          .Set("method", "reorderSpaces")
+          .Set("spaceIds", base::ListValue().Append("default"));
+  EXPECT_TRUE(allowed("normal", order.Clone()));
+  EXPECT_FALSE(allowed("private", order.Clone()));
+  for (const char* id : {"default", "incognito:private", "missing"}) {
+    order.Set("spaceIds", base::ListValue().Append("default").Append(id));
+    EXPECT_FALSE(allowed("normal", order.Clone()));
+  }
+}
 TEST(RuntimeStateTest, OptionalResultsAcceptNoIdWithoutWeakeningRequiredIds) {
   auto reply = base::DictValue()
                    .Set("epoch", "epoch")

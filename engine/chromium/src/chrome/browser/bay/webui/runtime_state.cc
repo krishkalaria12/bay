@@ -166,7 +166,8 @@ RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command) {
   // Keep in sync with browserCommandResultKind in runtime/userCommands.ts.
   for (const char* name :
        {"newTab", "createWindow", "addCustomEngine", "createGroup", "groupTabs",
-        "duplicateGroup", "newTabInGroup", "newPinnedFolder", "createSplit"})
+        "duplicateGroup", "newTabInGroup", "newPinnedFolder", "createSplit",
+        "createSpace"})
     if (*method == name)
       return RuntimeResultKind::kRequiredId;
   for (const char* name : {"duplicateTab", "moveTabsToWindow", "restoreCleaned",
@@ -1258,6 +1259,42 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   if (*method == "openPeek")
     return CommandFields(command, {"method", "fromTabId", "url"}) &&
            own_tab("fromTabId") && CommandText(command, "url", kMaximumInput);
+  // Spaces are app-wide preferences, as settings are: never from a private
+  // window, and only public spaces are named.
+  if (*method == "createSpace") {
+    const auto* options = command.FindDict("options");
+    return !is_private && CommandFields(command, {"method", "options"}) &&
+           options &&
+           CommandFields(*options, {"name"},
+                         {"color", "theme", "icon", "shareWith"}) &&
+           CommandText(*options, "name", 1024, true) &&
+           nullable(*options, "shareWith", public_space);
+  }
+  if (*method == "updateSpace") {
+    const auto* patch = command.FindDict("patch");
+    return !is_private &&
+           CommandFields(command, {"method", "spaceId", "patch"}) &&
+           public_space(command, "spaceId") && patch &&
+           CommandFields(*patch, {},
+                         {"name", "color", "icon", "theme", "followSite",
+                          "folded", "cleanUpAfterHours"});
+  }
+  if (*method == "deleteSpace" || *method == "setDefaultSpace")
+    return !is_private && CommandFields(command, {"method", "spaceId"}) &&
+           public_space(command, "spaceId");
+  if (*method == "reorderSpaces") {
+    const auto* ids = command.FindList("spaceIds");
+    if (is_private || !CommandFields(command, {"method", "spaceIds"}) || !ids ||
+        ids->size() > 10000)
+      return false;
+    std::set<std::string> seen;
+    for (const auto& id : *ids)
+      if (!id.is_string() || !seen.insert(id.GetString()).second ||
+          PrivateSpace(id.GetString()) ||
+          !state.FindDict("spaces")->FindDict(id.GetString()))
+        return false;
+    return true;
+  }
   return false;
 }
 }  // namespace bay
