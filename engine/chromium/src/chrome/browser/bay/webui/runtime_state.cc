@@ -666,7 +666,7 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     return optional_text(input, "name") &&
            (!icon || icon->is_none() || CommandText(input, "icon", 1024, true));
   };
-  const auto delta = [&] {
+  const auto unit_delta = [&] {
     const auto value = command.FindDouble("delta");
     return value && (*value == -1 || *value == 1);
   };
@@ -1221,7 +1221,7 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
            visible_field(command, "tabId");
   if (*method == "movePane")
     return CommandFields(command, {"method", "tabId", "delta"}) &&
-           visible_field(command, "tabId") && delta();
+           visible_field(command, "tabId") && unit_delta();
   if (*method == "separateSplit" || *method == "flipSplit" ||
       *method == "toggleSplitOrientation")
     return CommandFields(command, {"method", "splitId"}) && visible_split();
@@ -1248,7 +1248,7 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   }
   if (*method == "focusPane")
     return CommandFields(command, {"method", "windowId", "delta"}) &&
-           own_target() && delta();
+           own_target() && unit_delta();
   if (*method == "toggleTabLayout")
     return CommandFields(command, {"method", "windowId"}) && own_target() &&
            !is_private;
