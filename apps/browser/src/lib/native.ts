@@ -33,8 +33,7 @@ import { openExternalUrls } from "../components/littleBay/actions";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./commands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
-import { flushPersistence, resumePersistence } from "./persist";
-import { flushLivePersistence, resumeLivePersistence } from "../live/store";
+import type { PersistenceOwner } from "./persist";
 import { prepareSyncForQuit, resumeSyncAfterQuit } from "../sync/engine";
 import { prepareTelemetryForQuit, resumeTelemetryAfterQuit } from "../telemetry/usage";
 import { prepareApplicationQuit } from "./quitPreparation";
@@ -47,7 +46,7 @@ let quitting = false;
 let quitAttempt = 0;
 export const isQuitting = () => quitting;
 
-export function startNativeSync() {
+export function startNativeSync({ persistence }: { persistence: Pick<PersistenceOwner, "flush" | "resume"> }) {
   const store = useBrowser;
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
@@ -74,8 +73,9 @@ export function startNativeSync() {
       void prepareApplicationQuit({
         isCurrent,
         prepareSync: prepareSyncForQuit,
-        flushSession: () => flushPersistence({ final: true }),
-        flushLive: () => flushLivePersistence({ final: true }),
+        flushSession: () => persistence.flush({ final: true }),
+        // The service owner acknowledges Live alongside session/downloads.
+        flushLive: () => Promise.resolve(),
         flushTelemetry: prepareTelemetryForQuit,
       })
         .then(
@@ -93,8 +93,7 @@ export function startNativeSync() {
       quitting = false;
       quitAttempt++;
       resumeSyncAfterQuit();
-      resumePersistence();
-      resumeLivePersistence();
+      persistence.resume();
       void resumeTelemetryAfterQuit().catch((error) => console.error("Couldn't restore telemetry after cancelled quit", error));
     }
   });

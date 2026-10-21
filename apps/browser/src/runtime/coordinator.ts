@@ -4,6 +4,8 @@ import { createBrowserAuthority, type BrowserCommand, type BrowserCommit, type C
 import { decodeBrowserCommit } from "./client";
 import type { BrowserProjection } from "./projection";
 import type { LocationCommandEffects } from "./locationCommands";
+import type { PersistenceOwner } from "../lib/persist";
+import { startCoordinatorServices } from "./services";
 
 export type BrowserCoordinatorTransport = CoordinatorRuntimeTransport<BrowserProjection, BrowserCommand, string | null>;
 
@@ -25,18 +27,21 @@ function commandError(error: unknown): { code: string; message: string } {
   return { code, message };
 }
 
-/** Starts no services or windows. The owner calls announceReady only after
- * restoring state and reconciling native windows, then starts visible clients.
+/** The caller supplies restored state. Recovery replaces it before authority
+ * creation. Services run once here, after publication is subscribed, and stop
+ * with the coordinator. Native windows are reconciled before announceReady.
  */
 export async function createBrowserCoordinator({
   store,
   transport,
   effects,
+  startServices = startCoordinatorServices,
   onError = (error) => console.error("[runtime] coordinator failed", error),
 }: {
   store: BrowserStore;
   transport: BrowserCoordinatorTransport;
   effects?: LocationCommandEffects;
+  startServices?: (options: { store: BrowserStore }) => PersistenceOwner;
   onError?: (error: Error) => void;
 }) {
   const identity = transport.bootstrap;
@@ -67,6 +72,7 @@ export async function createBrowserCoordinator({
   let unsubscribeAuthority = () => {};
   let unsubscribeCommands = () => {};
   let unsubscribeClose = () => {};
+  let services: PersistenceOwner | undefined;
 
   function active() {
     if (failure) throw failure;
@@ -76,7 +82,7 @@ export async function createBrowserCoordinator({
     if (disposed) return;
     disposed = true;
     failure = error === undefined ? null : error instanceof Error ? error : new Error(String(error));
-    for (const remove of [unsubscribeAuthority, unsubscribeCommands, unsubscribeClose]) {
+    for (const remove of [() => services?.dispose(), unsubscribeAuthority, unsubscribeCommands, unsubscribeClose]) {
       try {
         remove();
       } catch {}
@@ -151,10 +157,22 @@ export async function createBrowserCoordinator({
     });
     if (disposed) releaseCommands();
     else unsubscribeCommands = releaseCommands;
+    active();
+    const owner = startServices({ store });
+    if (disposed) owner.dispose();
+    else services = owner;
     await initial;
     active();
     return {
       getSnapshot: authority.getSnapshot,
+      flushPersistence(options?: { final?: boolean }) {
+        active();
+        return services!.flush(options);
+      },
+      resumePersistence() {
+        active();
+        services!.resume();
+      },
       async flushPublications() {
         active();
         await publications;

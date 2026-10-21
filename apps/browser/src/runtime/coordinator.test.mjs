@@ -3,7 +3,12 @@ import { test } from "node:test";
 import { viewTabIds } from "../store/model.ts";
 import { createBrowserStore } from "../store/browser.ts";
 import { createBrowserAuthority } from "./authority.ts";
-import { createBrowserCoordinator } from "./coordinator.ts";
+import { createBrowserCoordinator as createCoordinator } from "./coordinator.ts";
+const createBrowserCoordinator = (options) =>
+  createCoordinator({
+    startServices: () => ({ flush: async () => {}, resume() {}, dispose() {} }),
+    ...options,
+  });
 const tick = () => new Promise(setImmediate);
 const deferred = () => {
   let resolve, reject;
@@ -267,4 +272,62 @@ test("readiness waits for outstanding publications and is never automatic", asyn
   await ready;
   assert.equal(native.ready, 1);
   runtime.dispose();
+});
+
+test("coordinator owns one service lifecycle and publishes startup mutations before readiness", async () => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport();
+  let starts = 0,
+    stops = 0,
+    flushes = 0,
+    resumes = 0;
+  const runtime = await createBrowserCoordinator({
+    store,
+    transport: native.transport,
+    startServices({ store: authority }) {
+      starts++;
+      assert.equal(authority, store);
+      authority.getState().createWindow();
+      return {
+        flush: async () => {
+          flushes++;
+        },
+        resume() {
+          resumes++;
+        },
+        dispose() {
+          stops++;
+        },
+      };
+    },
+  });
+  await Promise.all([runtime.announceReady(), runtime.announceReady()]);
+  assert.deepEqual(native.calls, [["publish", 0], ["publish", 1], ["ready"]]);
+  await runtime.flushPersistence({ final: true });
+  runtime.resumePersistence();
+  runtime.dispose();
+  runtime.dispose();
+  assert.deepEqual([starts, stops, flushes, resumes], [1, 1, 1, 1]);
+});
+
+test("coordinator publication failure disposes services before startup rejects", async () => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport({ manualPublish: true });
+  let stopped = 0;
+  const starting = createBrowserCoordinator({
+    store,
+    transport: native.transport,
+    onError() {},
+    startServices: () => ({
+      flush: async () => {},
+      resume() {},
+      dispose() {
+        stopped++;
+      },
+    }),
+  });
+  await tick();
+  native.publicationAcks[0].reject(new Error("startup publication refused"));
+  await assert.rejects(starting, /startup publication refused/);
+  assert.equal(stopped, 1);
 });

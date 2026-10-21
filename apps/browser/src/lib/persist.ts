@@ -4,10 +4,10 @@ import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } fr
 import { inPinnedContainer, isIncognitoSpace, makeTab, newId, snapshotTab } from "../store/model";
 import type { BrowserWindow, ClosedTab, Tab, TabSnapshot } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
-import { startFavicons } from "./favicons";
-import { startBookmarks } from "./bookmarks";
-import { startHistory } from "./history";
-import { startProfileDataCleanup } from "./profileData";
+import { createFaviconService, startFavicons } from "./favicons";
+import { createBookmarksService, startBookmarks } from "./bookmarks";
+import { createHistoryService, startHistory } from "./history";
+import { createProfileDataCleanup, startProfileDataCleanup } from "./profileData";
 import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
 
 type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
@@ -461,36 +461,49 @@ export function resumePersistence() {
   defaultPersistence?.resume();
 }
 
-/** macOS compatibility entry. These services still use the default store; an
- * isolated coordinator must start its own parameterized services explicitly.
- */
-export function startPersistence() {
-  stopDefault?.();
-  const owner = createPersistence({ store: useBrowser });
-  defaultPersistence = owner;
+/** All document/native-data watchers belong to the same authority store. */
+export function createBrowserPersistence({ store, restoreSession = true }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
+  const owner = createPersistence({ store, restoreSession });
   const stops: (() => void)[] = [];
   let stopped = false;
   const stop = () => {
     if (stopped) return;
     stopped = true;
     try {
-      for (const stopService of stops) stopService();
+      for (const stopService of stops.reverse()) {
+        try {
+          stopService();
+        } catch (error) {
+          console.error("[runtime] persistence service cleanup failed", error);
+        }
+      }
     } finally {
       owner.dispose();
-      if (defaultPersistence === owner) defaultPersistence = null;
-      if (stopDefault === stop) stopDefault = null;
     }
   };
-  stopDefault = stop;
   try {
-    stops.push(startFavicons());
-    stops.push(startHistory());
-    stops.push(startBookmarks());
-    stops.push(startProfileDataCleanup());
+    stops.push(store === useBrowser ? startFavicons() : createFaviconService(store).start());
+    stops.push(store === useBrowser ? startHistory() : createHistoryService(store).start());
+    stops.push(store === useBrowser ? startBookmarks() : createBookmarksService(store).start());
+    stops.push(store === useBrowser ? startProfileDataCleanup() : createProfileDataCleanup(store).start());
   } catch (error) {
     stop();
     throw error;
   }
+  return { flush: owner.flush, resume: owner.resume, dispose: stop };
+}
+
+/** Compatibility entry for the single-runtime host and existing integrations. */
+export function startPersistence() {
+  stopDefault?.();
+  const owner = createBrowserPersistence({ store: useBrowser });
+  defaultPersistence = owner;
+  const stop = () => {
+    owner.dispose();
+    if (defaultPersistence === owner) defaultPersistence = null;
+    if (stopDefault === stop) stopDefault = null;
+  };
+  stopDefault = stop;
   return stop;
 }
 

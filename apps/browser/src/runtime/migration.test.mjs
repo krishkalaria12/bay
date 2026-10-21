@@ -5,7 +5,6 @@ import { browserRead, createClientBrowserReadSource, installBrowserReadSource } 
 import { activeTabId } from "../store/model.ts";
 import { docs } from "../test-native-stub.mjs";
 import { createNativeWindowReconciler } from "../lib/nativeWindows.ts";
-import { createPersistence } from "../lib/persist.ts";
 import { createBrowserCoordinator } from "./coordinator.ts";
 import { createBrowserClient } from "./client.ts";
 import { createClientBrowserCommands, installBrowserCommands } from "./commands.ts";
@@ -289,8 +288,6 @@ test("settings from both mirrors persist once at the explicit owner and optional
     coordinator,
     clients: [one, two],
   } = await start(t);
-  const persistence = createPersistence({ store, restoreSession: false });
-  t.after(() => persistence.dispose());
   const writes = [];
   const setDocument = docs.set;
   docs.set = function (name, json) {
@@ -304,16 +301,15 @@ test("settings from both mirrors persist once at the explicit owner and optional
     one.dispatch({ method: "updateSettings", patch: { appearance: "dark" } }),
     two.dispatch({ method: "updateSettings", patch: { sidebarWidth: 333 } }),
   ]);
-  await persistence.flush();
-  assert.equal(writes.length, 1);
-  assert.equal(writes[0].name, "session.json");
-  const saved = JSON.parse(writes[0].json);
+  await coordinator.flushPersistence();
+  assert.equal(writes.filter((entry) => entry.name === "session.json").length, 1);
+  const saved = JSON.parse(writes.find((entry) => entry.name === "session.json").json);
   assert.equal(saved.settings.appearance, "dark");
   assert.equal(saved.settings.sidebarWidth, 333);
   assert.equal(useBrowser.getState(), legacy);
   assertConverged(coordinator, [one, two]);
-  await persistence.flush();
-  assert.equal(writes.length, 1, "unchanged mirror installation must not write the session again");
+  await coordinator.flushPersistence();
+  assert.equal(writes.filter((entry) => entry.name === "session.json").length, 1, "unchanged mirror installation must not write the session again");
   // These optional-result reducers legitimately return undefined when no page
   // or destination can be produced. Their wire replies must normalize to null.
   store.setState({ duplicateTab() {}, moveTabsToWindow() {} });
