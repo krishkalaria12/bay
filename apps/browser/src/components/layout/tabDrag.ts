@@ -8,6 +8,8 @@ import type { Frame } from "../../store/types";
 import { splitOf, type SplitSide } from "../../store/splits";
 import { dropTabIntoSplit } from "./splitActions";
 import { dropTabsOutside, screenPoint, windowUnder } from "./windowDrop";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { placeTabs } from "../../runtime/organizeActions";
 
 export type DropTarget = { tabId: string; side: SplitSide };
 
@@ -252,7 +254,7 @@ export function endTabDrag(): boolean {
       if (dragSeq !== endingSequence) return;
       // A new window: the picture grows into it after its ID is acknowledged.
       dragPreview.end(asked.frame ? moved : null, asked.frame);
-      if (moved && moved === overWindow && insertBefore !== undefined) useBrowser.getState().placeTabs(tabIds, { pinned: false, beforeId: insertBefore });
+      if (moved && moved === overWindow && insertBefore !== undefined) reportBrowserCommand(placeTabs(tabIds, { pinned: false, beforeId: insertBefore }));
       if (moved) focus(moved);
     },
     (error) => {

@@ -7,6 +7,7 @@ import { useBrowser } from "../../store/browser";
 import { browserRead } from "../../store/read";
 import { navigate, newTab } from "../../runtime/tabActions";
 import { activeTabId, bookmarkSpaceId, listIds, resolveWindowId, viewTabIds, windowListKey } from "../../store/model";
+import { openSplitPane } from "../../runtime/splitActions";
 
 export type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";
 
@@ -29,8 +30,7 @@ export async function openUrl(url: string, windowId: string | null | undefined, 
   }
   const tabId = activeTabId(s, id);
   if (mode === "split") {
-    const result = useBrowser.getState().openSplitPane(id, { url });
-    if (result.ok) return;
+    if (await openSplitPane(id, { url })) return;
     return void (await newTab(id, { url }));
   }
   if (mode === "current" && tabId) return navigate(tabId, url);

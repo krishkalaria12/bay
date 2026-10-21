@@ -30,6 +30,7 @@ import {
   SPACE_SELECTED_OPACITY,
   SPACE_SIDE,
 } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
 
 // Each icon selects a space with its own browsing profile. Dots replace icons once they no longer fit.
 
@@ -121,7 +122,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
   else if (choice === "look") openThemeEditor(windowId, id);
   else if (choice === "newFolder") {
     here();
-    newPinnedFolderWith(windowId);
+    reportBrowserCommand(newPinnedFolderWith(windowId));
   } else if (choice.startsWith("live:")) {
     here();
     runNewLiveFolder(windowId, choice);

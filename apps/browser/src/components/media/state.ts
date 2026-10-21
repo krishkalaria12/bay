@@ -6,6 +6,9 @@ import { useBrowser } from "../../store/browser";
 import type { BrowserState } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { splitOf } from "../../store/splits";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { setMuted } from "../../runtime/organizeActions";
+import { browserRead } from "../../store/read";
 
 export type Session = NowPlaying & {
   playedAt: number;
@@ -107,11 +110,10 @@ export function pauseAllMedia(windowId: string) {
 }
 
 export function toggleMediaTabMute(tabId: string) {
-  const s = useBrowser.getState();
-  const tab = s.tabs[tabId];
+  const tab = browserRead.getState().tabs[tabId];
   if (!tab) return;
   const muted = !tab.muted;
-  s.setMuted([tabId], muted);
+  reportBrowserCommand(setMuted([tabId], muted));
   void webviews.get(tabId)?.setMuted(muted);
 }
 

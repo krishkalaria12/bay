@@ -74,6 +74,10 @@ import { DEV_BAR_HEIGHT } from "./developer/constants";
 import { DeveloperOffer } from "./developer/DeveloperOffer";
 import { onDeveloperMessage, startDeveloperMode } from "./developer/devMode";
 import { useIsDeveloperTab } from "./developer/sites";
+import { reportBrowserCommand } from "../runtime/commands";
+import { closePeek, openPeek } from "../runtime/splitActions";
+import { activate, closeTab, navigate } from "../runtime/tabActions";
+import { browserRead } from "../store/read";
 
 // Where the card's panes are: the active tab's (or its split's), or the full-screen tab's over everything.
 function cardPanes(split: SplitView | undefined, activeId: string | undefined, fullscreenTab: string | null | undefined, width: number, height: number) {
@@ -578,8 +582,8 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         // The engine judged it another site (Chrome's own rule); the tab stayed. A tab that has just stopped peeking
         // still gets its click: the link loads in it.
         if (!/^https?:/i.test(url)) return;
-        if (peeksLinks(store(), tabId)) store().openPeek(tabId, url);
-        else store().navigate(tabId, url, { userInitiated: false });
+        const s = browserRead.getState();
+        reportBrowserCommand(peeksLinks(s, tabId) ? openPeek(tabId, url) : navigate(tabId, url, { userInitiated: false }));
       }}
       onCrashed={(crashed) => {
         if (!isQuitting()) patchPage(tabId, { crashed, unresponsive: false, fullscreen: false, status: "" });
@@ -602,10 +606,11 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
       onExternalApp={(externalApp) => patchPage(tabId, { externalApp })}
       onPageFocus={() => {
         const t = tab();
-        if (t && splitOf(store(), tabId) && store().windows[t.windowId]?.activeTabIds[t.spaceId] !== tabId) store().activate(tabId);
+        const s = browserRead.getState();
+        if (t && splitOf(s, tabId) && s.windows[t.windowId]?.activeTabIds[t.spaceId] !== tabId) reportBrowserCommand(activate(tabId));
       }}
       // Engine close callbacks also fire during quit; don't remove saved-session tabs then.
-      onWindowClose={() => !isQuitting() && store().closeTab(tabId)}
+      onWindowClose={() => !isQuitting() && reportBrowserCommand(closeTab(tabId))}
       onNotification={(notification) => showWebNotification(tabId, notification)}
       onCommand={({ command, text, modifiers }) => {
         if (command === "search") searchSelection(tabId, text, modifiers);
@@ -614,7 +619,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
           // Esc in a page closes the theme editor over it; in a peek's page, the peek; in Little Bay's, Little Bay.
           const t = tab();
           if (t && closeThemeEditorOnEscape(t.windowId)) return;
-          if (t?.peekOf) store().closePeek(t.windowId);
+          if (t?.peekOf) reportBrowserCommand(closePeek(t.windowId));
           else closeLittleBayOnEscape(tabId);
         }
       }}

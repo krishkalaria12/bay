@@ -16,6 +16,8 @@ import { useWindowId } from "../../store/hooks";
 import { zoneHit, zoneRect, type ZoneStage } from "./splitDrop";
 import { setDropTarget, setOnPage, setTargetResolver, useTabDrag } from "./tabDrag";
 import { SPLIT_TOAST_SPRING, ZONE_SLIDE_MS, ZONE_SPRING } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSplit } from "../../runtime/splitActions";
 
 export function SplitDividers({ split, dividers, width, height }: { split: SplitView; dividers: Divider[]; width: number; height: number }) {
   return (
@@ -41,10 +43,10 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
     const delta = divider.vertical ? dx : dy;
     const room = divider.vertical ? width : height;
     if (divider.kind === "root") {
-      useBrowser.getState().updateSplit(split.id, { sizes: resize(start.current.sizes, divider.index, delta, room) });
+      reportBrowserCommand(updateSplit(split.id, { sizes: resize(start.current.sizes, divider.index, delta, room) }));
     } else if (start.current.stack) {
       const next = resize(start.current.stack, 0, delta, room) as [number, number];
-      useBrowser.getState().updateSplit(split.id, { stackSizes: next });
+      reportBrowserCommand(updateSplit(split.id, { stackSizes: next }));
     }
   });
 

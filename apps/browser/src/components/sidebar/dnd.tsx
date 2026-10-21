@@ -14,7 +14,8 @@ import Animated, {
   type SharedValue,
 } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
-import { armSidebarMoveUndo } from "../../lib/folderUndo";
+import { withFolderMoveUndo } from "../../lib/folderUndo";
+import { moveGroup, movePinnedFolder, placeTabs } from "../../runtime/organizeActions";
 import { useTheme } from "../../lib/theme";
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
@@ -231,13 +232,13 @@ class DragController {
       !splitDrop && this.measured && ghost && sources.length === 1 && sources[0]!.kind !== "tile" && !this.into
         ? this.landingSpot(commit ? drop : { type: "none" })
         : null;
-    const undoBefore = useBrowser.getState().folderMoveUndo;
     if (commit && !splitDrop && this.measured && sources.length) {
-      const s = useBrowser.getState();
       const ids = sources.flatMap((i) => i.tabIds);
-      if (drop.type === "tabs") s.placeTabs(ids, drop.placement);
-      else if (drop.type === "group" && sources[0]!.groupId) s.moveGroup(sources[0]!.groupId, drop.placement);
-      else if (drop.type === "folder") s.movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId);
+      const groupId = sources[0]!.groupId;
+      // A local command commits before it returns, so the gaps below still close in the same frame.
+      if (drop.type === "tabs") withFolderMoveUndo(this.windowId, () => placeTabs(ids, drop.placement));
+      else if (drop.type === "group" && groupId) withFolderMoveUndo(this.windowId, () => moveGroup(groupId, drop.placement));
+      else if (drop.type === "folder") withFolderMoveUndo(this.windowId, () => movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId));
     }
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
     for (const i of this.items.values()) {
@@ -256,7 +257,6 @@ class DragController {
     this.setSources(new Set());
     this.setDropInto(null);
     this.marks.setState({ pins: false });
-    if (useBrowser.getState().folderMoveUndo !== undoBefore) armSidebarMoveUndo(this.windowId);
     if (!spot || !ghost) {
       this.token = null;
       this.setLanding(null);

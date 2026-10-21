@@ -8,6 +8,8 @@ import { DEFAULT_SPACE } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
 import { useOnboardingColors } from "./ui";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { toggleTabLayout } from "../../runtime/splitActions";
 
 export const PERSONALIZE_COPY = {
   title: "Make it yours",
@@ -107,7 +109,7 @@ function ColorButton({ name, colors, size, selected, onPress }: { name: string; 
 export function TabLayoutPicker({ windowId }: { windowId: string }) {
   const layout = useBrowser((s) => s.windows[windowId]?.tabLayout ?? s.settings.tabLayout);
   const pick = (next: "sidebar" | "top") => {
-    if (next !== layout) useBrowser.getState().toggleTabLayout(windowId);
+    if (next !== layout) reportBrowserCommand(toggleTabLayout(windowId));
   };
   return (
     <View style={{ flexDirection: "row", gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel="Tab layout">

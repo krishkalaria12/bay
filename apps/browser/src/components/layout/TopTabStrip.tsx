@@ -84,6 +84,9 @@ import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, set
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "./toolbarColors";
 import { listOfTab } from "../../store/model";
 import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "./windowButtons";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { closeGroup, moveGroup, placeTabs, updateGroup } from "../../runtime/organizeActions";
+import { browserRead } from "../../store/read";
 
 // The drop-down strip (full screen, auto-hidden tabs) has no card to attach the selected tab to.
 const FloatingStrip = createContext(false);
@@ -633,7 +636,7 @@ function reorder(ids: string[], { geometry, from, pinned, groupId }: StripDrag, 
     const last = w.tabIds.indexOf(others.at(-1)?.tabIds.at(-1) ?? "");
     beforeId = last < 0 ? null : (w.tabIds.slice(last + 1).find((id) => !ids.includes(id)) ?? null);
   }
-  s.placeTabs(ids, { pinned, beforeId, groupId });
+  reportBrowserCommand(placeTabs(ids, { pinned, beforeId, groupId }));
   return true;
 }
 
@@ -689,7 +692,7 @@ function DraggableChip({
       const index = dock.ids.filter(
         (_, i) => dock.left + i * (STRIP_PINNED_CELL + STRIP_PINNED_SPACING) + STRIP_PINNED_CELL / 2 < left + STRIP_PINNED_CELL / 2,
       ).length;
-      useBrowser.getState().placeTabs(ids, { pinned: true, beforeId: dock.ids[index] ?? null });
+      reportBrowserCommand(placeTabs(ids, { pinned: true, beforeId: dock.ids[index] ?? null }));
       return true;
     },
   });
@@ -965,7 +968,7 @@ function PinnedCell({ tabId, geometry, from }: { tabId: string; geometry: DragGe
       const left = dock.left + geometry.lefts[from]! + dx;
       if (left + STRIP_PINNED_CELL / 2 < -STRIP_DOCK_GAP / 2) return false;
       const k = top.slots.filter((slot, i) => top.lefts[i]! + slot.width / 2 < left + STRIP_PINNED_CELL).length;
-      useBrowser.getState().placeTabs(ids, { pinned: false, beforeId: top.slots[k]?.tabIds[0] ?? null });
+      reportBrowserCommand(placeTabs(ids, { pinned: false, beforeId: top.slots[k]?.tabIds[0] ?? null }));
       return true;
     },
   });
@@ -1100,8 +1103,8 @@ function StripGroup({
       const to = dropIndex(geometry, from, dx);
       if (to === from) return true;
       const others = geometry.slots.filter((_, i) => i !== from);
-      const s = useBrowser.getState();
-      s.moveGroup(entry.id, { pinned: !!s.groups[entry.id]?.pinned, beforeId: others[to]?.tabIds[0] ?? null });
+      const pinned = !!browserRead.getState().groups[entry.id]?.pinned;
+      reportBrowserCommand(moveGroup(entry.id, { pinned, beforeId: others[to]?.tabIds[0] ?? null }));
       return true;
     },
   });
@@ -1172,7 +1175,7 @@ function StripGroup({
           box={24}
           radius={6}
           style={{ marginLeft: 1 }}
-          onPress={() => useBrowser.getState().closeGroup(entry.id)}
+          onPress={() => reportBrowserCommand(closeGroup(entry.id))}
           tooltip="Close Group"
         />
       </Animated.View>
@@ -1186,7 +1189,7 @@ function StripGroup({
       >
         <ContextMenuArea onContextMenu={() => void openGroupMenu(windowId, entry.id)}>
           <Pressable
-            onPress={() => useBrowser.getState().updateGroup(entry.id, { collapsed: expanded })}
+            onPress={() => reportBrowserCommand(updateGroup(entry.id, { collapsed: expanded }))}
             style={{ height: STRIP_ITEM_HEIGHT, flexDirection: "row", alignItems: "center", paddingLeft: 8.5, paddingRight: 7 }}
           >
             {group.icon ? (

@@ -194,7 +194,11 @@ export function Omnibox({
           void switchFromBar(s.tabId, s.url, tabId, disposition).catch(openingFailed);
           return;
         }
-        if (s.cleanedId && disposition === "current" && restoreFromBar(s.cleanedId, tabId)) return;
+        if (s.cleanedId && disposition === "current") {
+          const url = s.url;
+          void restoreFromBar(s.cleanedId, tabId).then((restored) => restored || go(url), openingFailed);
+          return;
+        }
         return go(s.url, disposition);
       case "search":
       case "create":

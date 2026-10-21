@@ -53,6 +53,9 @@ import {
   SPACE_TITLE_GAP,
   ROWS_PER_FRAME,
 } from "./sidebar/constants";
+import { reportBrowserCommand } from "../runtime/commands";
+import { cleanUpTabs } from "../runtime/organizeActions";
+import { updateSettings } from "../runtime/settingsActions";
 
 // The list's room and its height: with new tabs at the bottom, the New Tab row docks below the list once the list
 // leaves no room for it (at the top it stays the list's first row).
@@ -638,15 +641,14 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
           title="Clean Up Once"
           primary
           onPress={() => {
-            useBrowser.getState().cleanUpTabs(windowId);
+            reportBrowserCommand(cleanUpTabs(windowId));
             dismiss();
           }}
         />
         <UpsellButton
           title="Clean Up Daily"
           onPress={() => {
-            useBrowser.getState().updateSettings({ cleanUpInactiveTabsAfterHours: 24 });
-            useBrowser.getState().cleanUpTabs(windowId);
+            reportBrowserCommand(updateSettings({ cleanUpInactiveTabsAfterHours: 24 }).then(() => cleanUpTabs(windowId)));
           }}
         />
         <UpsellButton title="Not Now" onPress={dismiss} />

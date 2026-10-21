@@ -30,6 +30,7 @@ import { GlassFill, useLiquidGlass } from "./glass";
 import { TranslateButton } from "./site/TranslateControls";
 import { ZoomIndicator } from "./site/ZoomControls";
 import { copyPageUrl } from "./site/selection";
+import { reportBrowserCommand } from "../runtime/commands";
 
 // What the toolbar shows of its tab: the page's favicon and the tab's bookkeeping (last active, …) don't re-render it.
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
@@ -373,7 +374,7 @@ export function UrlField({
                 size={13}
                 box={24}
                 radius={6}
-                onPress={() => openSplitPane(windowId, { anchorTabId: tab.id })}
+                onPress={() => reportBrowserCommand(openSplitPane(windowId, { anchorTabId: tab.id }))}
                 tooltip="Open Split View (⌃⇧=)"
               />
             )}

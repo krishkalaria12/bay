@@ -8,6 +8,8 @@ import { useBrowser } from "../../store/browser";
 import { spaceTabIds, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { replaceSplitPane } from "../../runtime/splitActions";
 
 export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: boolean }) {
   const theme = useTheme();
@@ -87,7 +89,7 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
         )}
         {suggestions.length > 0 && <View style={{ height: 6 }} />}
         {suggestions.map((id) => (
-          <Suggestion key={id} tabId={id} onPress={() => useBrowser.getState().replaceSplitPane(tabId, id)} />
+          <Suggestion key={id} tabId={id} onPress={() => reportBrowserCommand(replaceSplitPane(tabId, id))} />
         ))}
       </Surface>
     </View>

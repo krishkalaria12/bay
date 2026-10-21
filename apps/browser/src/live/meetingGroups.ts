@@ -1,9 +1,11 @@
 import { confirm } from "@bay/shell";
+import { reportBrowserCommand } from "../runtime/commands";
+import { addTabsToGroup, closeGroup, createGroup } from "../runtime/organizeActions";
 import { activate, newTab } from "../runtime/tabActions";
 import { browserRead } from "../store/read";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { changedIds } from "../store/changes";
-import { activeTabId } from "../store/model";
+import { activeTabId, pinnedPage } from "../store/model";
 import { groupOf } from "../store/organize";
 import { connectCalendar, useCalendar } from "./calendar";
 import { eventForCall, isCalendarUrl, meetingOf, relatedLinks, type CalendarEvent } from "./meetings";
@@ -12,11 +14,12 @@ import { MEETING_CLEANUP_IDLE_MS, MEETING_FALLBACK_TITLE } from "./constants";
 
 const store = () => useBrowser.getState();
 
-export function groupCall(tabId: string, event?: CalendarEvent | null): string {
-  const s = store();
+export async function groupCall(tabId: string, event?: CalendarEvent | null): Promise<string> {
+  const s = browserRead.getState();
   const tab = s.tabs[tabId];
   const call = tab && meetingOf(tab.url);
-  if (!tab || !call || tab.pinned) return "";
+  // A pinned page never joins a group, and a group command must create one.
+  if (!tab || !call || pinnedPage(tab)) return "";
   const current = groupOf(s, tabId);
   if (current) return live().meetingGroups[current.id] ? current.id : "";
   const match = event ?? eventForCall(useCalendar.getState().events, tab.url, Date.now());
@@ -31,12 +34,11 @@ export function groupCall(tabId: string, event?: CalendarEvent | null): string {
     );
   });
   if (same) {
-    s.addTabsToGroup(same.groupId, [tabId]);
+    await addTabsToGroup(same.groupId, [tabId]);
     return same.groupId;
   }
   const title = match?.title || MEETING_FALLBACK_TITLE;
-  const groupId = s.createGroup([tabId], { name: title });
-  if (!groupId) return "";
+  const groupId = await createGroup([tabId], { name: title });
   setMeetingGroup({
     groupId,
     callTabId: tabId,
@@ -53,11 +55,11 @@ export async function joinMeeting(windowId: string, event: CalendarEvent, joinUr
   const s = browserRead.getState();
   if (!s.windows[windowId]) return;
   const callTab = await newTab(windowId, { url: joinUrl });
-  const grouped = s.settings.autoGroupMeetingTabs ? groupCall(callTab, event) : "";
+  const grouped = s.settings.autoGroupMeetingTabs ? await groupCall(callTab, event) : "";
   if (openAll) {
     for (const url of relatedLinks(event)) {
       const id = await newTab(windowId, { url, background: true, openerId: callTab });
-      if (grouped && !groupOf(store(), id)) store().addTabsToGroup(grouped, [id]);
+      if (grouped && !groupOf(browserRead.getState(), id)) await addTabsToGroup(grouped, [id]);
     }
   }
   await activate(callTab);
@@ -75,10 +77,10 @@ export function startMeetingGroups() {
       if (!tab) continue;
       const before = prev.tabs[id];
       if (before && before.url === tab.url && before.pinned === tab.pinned) continue;
-      if (s.settings.autoGroupMeetingTabs && !tab.pinned && meetingOf(tab.url) && (!before || !meetingOf(before.url))) groupCall(id);
+      if (s.settings.autoGroupMeetingTabs && !tab.pinned && meetingOf(tab.url) && (!before || !meetingOf(before.url))) reportBrowserCommand(groupCall(id));
       if (!before && tab.openerId && !groupOf(s, id)) {
         const opener = groupOf(s, tab.openerId);
-        if (opener && live().meetingGroups[opener.id] && !live().meetingGroups[opener.id]!.endedAt) store().addTabsToGroup(opener.id, [id]);
+        if (opener && live().meetingGroups[opener.id] && !live().meetingGroups[opener.id]!.endedAt) reportBrowserCommand(addTabsToGroup(opener.id, [id]));
       }
       if (tab.pinned && isCalendarUrl(tab.url) && (!before || !before.pinned) && !live().calendar.prompted) void offerAlerts(tab.windowId);
     }
@@ -118,7 +120,7 @@ export function tick(s: BrowserState, now: number) {
     const lastUse = Math.max(m.endedAt, ...g.tabIds.map((id) => s.tabs[id]?.lastActiveAt ?? 0));
     if (!busy && now - lastUse >= MEETING_CLEANUP_IDLE_MS) {
       setMeetingGroup(null, m.groupId);
-      store().closeGroup(m.groupId);
+      reportBrowserCommand(closeGroup(m.groupId));
     }
   }
 }

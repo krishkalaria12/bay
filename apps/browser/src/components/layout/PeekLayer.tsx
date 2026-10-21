@@ -11,6 +11,8 @@ import type { Peek } from "../../store/peeks";
 import { useHover } from "../primitives";
 import type { Rect } from "./geometry";
 import { PEEK_BUTTON, PEEK_CARD_GAP, PEEK_INSET_MIN, PEEK_INSET_SHARE, PEEK_OPEN_MS } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { closePeek, keepPeek, splitPeek } from "../../runtime/splitActions";
 
 // Arc's Peek, over the page it was opened from (store/peeks.ts): the page dims away, the link's page sits on it in a
 // card nearly its size, and beside the card are buttons for Close, Open as Tab and Split View (their names are their
@@ -37,7 +39,7 @@ export function startPeeks() {
 
 export function PeekLayer({ windowId, peek, rect, children }: { windowId: string; peek: Peek; rect: Rect; children: ReactNode }) {
   const theme = useTheme();
-  const close = () => useBrowser.getState().closePeek(windowId);
+  const close = () => reportBrowserCommand(closePeek(windowId));
   const inset = Math.round(Math.max(PEEK_INSET_MIN, rect.width * PEEK_INSET_SHARE));
 
   // In: the dim and the card fade up together, the card rising a little; each new peek plays it again.
@@ -88,9 +90,9 @@ export function PeekLayer({ windowId, peek, rect, children }: { windowId: string
           icon="arrow.up.left.and.arrow.down.right"
           label="Open as Tab"
           tooltip="Open as Tab (⌘O)"
-          onPress={() => useBrowser.getState().keepPeek(windowId)}
+          onPress={() => reportBrowserCommand(keepPeek(windowId))}
         />
-        <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" onPress={() => useBrowser.getState().splitPeek(windowId)} />
+        <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" onPress={() => reportBrowserCommand(splitPeek(windowId))} />
       </Animated.View>
     </View>
   );

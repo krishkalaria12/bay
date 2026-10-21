@@ -21,6 +21,8 @@ import { TabIcon } from "./TabIcon";
 import { RenameField, TabRowItem } from "./TabRow";
 import { useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
 import { folderDepth, folderTabIds, MAX_FOLDER_DEPTH } from "../../store/folders";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updatePinnedFolder } from "../../runtime/organizeActions";
 
 /**
  * A folder of the Pinned section (Arc's, Zen's): a header row with its name, and its pinned rows indented below it.
@@ -136,7 +138,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
         <Pressable
           onPress={() => {
             dismissHover();
-            if (!renaming) useBrowser.getState().updatePinnedFolder(folderId, { collapsed: !collapsed });
+            if (!renaming) reportBrowserCommand(updatePinnedFolder(folderId, { collapsed: !collapsed }));
           }}
         >
           {({ pressed }) => (

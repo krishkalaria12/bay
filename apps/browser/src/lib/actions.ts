@@ -14,6 +14,7 @@ import { engineIdOf } from "../store/spaces";
 import { applyHeldReports } from "./nativeEvents";
 import { webviews } from "./webviews";
 import { closeWindowDialog } from "./windowClose";
+import { setSiteMuted } from "../runtime/organizeActions";
 
 const store = () => useBrowser.getState();
 
@@ -47,9 +48,9 @@ export async function closeTab(tabId: string) {
 }
 
 export function toggleMute(tabId: string) {
-  const tab = store().tabs[tabId];
+  const tab = browserRead.getState().tabs[tabId];
   if (!tab) return;
-  store().setSiteMuted(tabId, !tab.muted);
+  reportBrowserCommand(setSiteMuted(tabId, !tab.muted));
   void webviews.get(tabId)?.setMuted(!tab.muted);
 }
 
