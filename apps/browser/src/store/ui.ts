@@ -1,5 +1,6 @@
 import type { Download } from "@bay/nncore";
 import type { StateCreator } from "zustand";
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { isIncognitoSpace, newId } from "./model";
 import type { FindState, Space, WindowUi } from "./types";
@@ -37,7 +38,7 @@ export function downloadVisibleIn(d: Pick<Download, "profile">, window: { incogn
   return window.incognito ? d.profile === window.spaceId : !incognito;
 }
 
-export const downloadsIn = (s: Pick<BrowserState, "downloads" | "windows">, windowId: string) =>
+export const downloadsIn = (s: Pick<BrowserProjection, "downloads" | "windows">, windowId: string) =>
   s.downloads.filter((d) => downloadVisibleIn(d, s.windows[windowId]));
 
 export const DEFAULT_WINDOW_UI: WindowUi = { panel: { open: false, initialText: "" }, downloadsOpen: false };

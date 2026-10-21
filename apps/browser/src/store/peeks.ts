@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
 import { insertionIndex } from "./openers";
@@ -70,7 +71,7 @@ export function siteOf(host: string): string {
 const hostOf = (url: string) => url.match(/^https?:\/\/([^/?#:]*)/i)?.[1] ?? "";
 
 /** Whether `fromId` peeks its links: a pinned tab or a favourite in a main window, with the setting on. */
-export function peeksLinks(s: BrowserState, fromId: string): boolean {
+export function peeksLinks(s: BrowserState | BrowserProjection, fromId: string): boolean {
   const from = s.tabs[fromId];
   if (!s.settings.peekLinksFromPinnedTabs || !from || isPeek(from) || !pinnedPage(from)) return false;
   const w = s.windows[from.windowId];
@@ -78,13 +79,13 @@ export function peeksLinks(s: BrowserState, fromId: string): boolean {
 }
 
 /** Whether a link `fromId` opens goes to a peek: one to another site, from a tab that peeks its links (Arc's rule). */
-export function opensInPeek(s: BrowserState, fromId: string, url: string): boolean {
+export function opensInPeek(s: BrowserState | BrowserProjection, fromId: string, url: string): boolean {
   const host = hostOf(url);
   return !!host && peeksLinks(s, fromId) && siteOf(host) !== siteOf(hostOf(s.tabs[fromId]!.url));
 }
 
 /** The window's peek while it's on screen: its opener is the shown tab, or a pane of the shown split. */
-export function shownPeek(s: BrowserState, windowId: string): Peek | undefined {
+export function shownPeek(s: BrowserState | BrowserProjection, windowId: string): Peek | undefined {
   const peek = s.peeks[windowId];
   if (!peek || !s.tabs[peek.tabId]) return undefined;
   const shown = activeTabId(s, windowId);

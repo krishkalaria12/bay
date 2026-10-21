@@ -1,3 +1,4 @@
+import { reportBrowserCommand } from "../../runtime/commands";
 import { Pressable, View, shortcutForCommand, capabilities, shortcutLabel } from "@bay/platform";
 import { listInstalledBrowsers, type BrowserApplication } from "@bay/import";
 import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
@@ -5,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Image, StyleSheet, Text } from "react-native";
 import { interpolateColor } from "@bay/platform/motion";
 import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personalize";
@@ -349,7 +350,7 @@ export function PinnedTabsStep() {
   const toggle = (id: string) => setSelected((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
 
   const pinSelected = () => {
-    if (windowId) pinSites(windowId, selected);
+    if (windowId) reportBrowserCommand(pinSites(windowId, selected));
     next();
   };
 

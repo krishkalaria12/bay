@@ -278,7 +278,7 @@ test("favicons: incognito icons stay in memory and in their own profile; nothing
   stop();
 });
 
-test("incognito windows neither give nor take dragged tabs", () => {
+test("incognito windows neither give nor take dragged tabs", async () => {
   S().hydrate({});
   const b = S().createWindow({ url: "c.com" });
   S().setWindowFrame(b, [1000, 100, 800, 600]);
@@ -287,7 +287,7 @@ test("incognito windows neither give nor take dragged tabs", () => {
   S().setWindowFrame(i, [0, 100, 800, 600]);
   const [tab] = model.viewTabIds(S(), i);
   assert.deepEqual(drop.windowUnder(S(), i, 1200, 300), { outside: true, overWindow: null });
-  assert.equal(drop.dropTabsOutside([tab], i, 1200, 300), null);
+  assert.equal(await drop.dropTabsOutside([tab], i, 1200, 300), null);
   assert.equal(S().tabs[tab].windowId, i);
 });
 

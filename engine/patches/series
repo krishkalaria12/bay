@@ -8,28 +8,28 @@
 # Lines run top to bottom; a patch is made against the tree as every line above it leaves it.
 # One concern per patch, named for it; a new patch goes where it belongs, not where its name sorts.
 
-cef all cef-chrome-tabs.patch
-cef all cef-tab-capture.patch
-cef all cef-tab-state.patch
-cef all cef-ui-surfaces.patch
-cef all cef-ui-triggers.patch
-cef all cef-idle-pump.patch
-cef all cef-window-client.patch
-cef all cef-window-keys.patch
-cef all cef-window-translucent.patch
-cef all cef-window-devtools.patch
-cef all cef-devtools-toolbox.patch
-cef all cef-media-router-shutdown.patch
-cef all cef-media-source.patch
-cef all cef-open-url-params.patch
-cef all cef-pump-wake.patch
-cef all cef-alloy-history.patch
-cef all cef-extension-requests.patch
-cef all cef-bay-layer.patch
+cef mac cef-chrome-tabs.patch
+cef mac cef-tab-capture.patch
+cef mac cef-tab-state.patch
+cef mac cef-ui-surfaces.patch
+cef mac cef-ui-triggers.patch
+cef mac cef-idle-pump.patch
+cef mac cef-window-client.patch
+cef mac cef-window-keys.patch
+cef mac cef-window-translucent.patch
+cef mac cef-window-devtools.patch
+cef mac cef-devtools-toolbox.patch
+cef mac cef-media-router-shutdown.patch
+cef mac cef-media-source.patch
+cef mac cef-open-url-params.patch
+cef mac cef-pump-wake.patch
+cef mac cef-alloy-history.patch
+cef mac cef-extension-requests.patch
+cef mac cef-bay-layer.patch
 
 chromium mac chromium-autofill-card-touchbar.patch
 chromium all chromium-autofill-address-bubble-window.patch
-chromium all chromium-browser-view-hosted-fullscreen.patch
+chromium mac chromium-browser-view-hosted-fullscreen.patch
 chromium all chromium-device-chooser-hook.patch
 chromium all chromium-cast-dialog-hook.patch
 chromium all chromium-side-panel-hook.patch
@@ -41,6 +41,7 @@ chromium all chromium-extension-updates.patch
 chromium all chromium-extension-import.patch
 chromium all chromium-extension-window-hidden.patch
 chromium all chromium-branding.patch
+chromium win chromium-bay-branding-win.patch
 chromium mac chromium-icloud-keychain-window.patch
 # Load-bearing for every user's data: the Safe Storage item ("Bay Safe Storage" / "Bay") holds the key to
 # their saved passwords and cookies. It must survive any re-sync (plain Chromium for NNCore, a version bump), unchanged.
@@ -49,9 +50,9 @@ chromium all chromium-password-bubble-hook.patch
 chromium all chromium-password-generation-local.patch
 chromium all chromium-tab-strip-notify-before-insert.patch
 chromium all chromium-ui-update-before-insert.patch
-chromium all chromium-webview-native-hosted.patch
-chromium all chromium-window-docked-devtools.patch
-chromium all chromium-window-hosted.patch
+chromium mac chromium-webview-native-hosted.patch
+chromium mac chromium-window-docked-devtools.patch
+chromium mac chromium-window-hosted.patch
 chromium all chromium-extension-installed-bubble.patch
 chromium all chromium-pip-close-keeps-playing.patch
 chromium all chromium-pip-overlay-window.patch
@@ -59,6 +60,11 @@ chromium all chromium-tab-sharing-capturer.patch
 chromium all chromium-file-chooser-all-accepted-types.patch
 chromium mac chromium-bay-layer.patch
 chromium win chromium-bay-layer-win.patch
+chromium win chromium-bay-webui-window.patch
+chromium win chromium-bay-lifecycle.patch
+chromium win chromium-bay-extension-hooks.patch
+chromium win chromium-bay-notifications-win.patch
+chromium win chromium-bay-frame-win.patch
 
 layer all engine/chromium
 layer all engine/nncore

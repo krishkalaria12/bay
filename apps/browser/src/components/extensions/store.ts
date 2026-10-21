@@ -1,7 +1,8 @@
 import type { ActionState, ExtensionInstallPrompt, ExtensionPackage, InstalledExtension } from "@bay/nncore";
 
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId, engineProfile } from "../../store/model";
 import { usePages } from "../layout/pageState";
 

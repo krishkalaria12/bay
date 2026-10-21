@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import { layout } from "../../lib/constants";
 import { bouncySpring } from "../../lib/springs";
 
@@ -8,7 +9,8 @@ import { bouncySpring } from "../../lib/springs";
 
 export const PANE_GAP = 7;
 export const MIN_PANE = 220;
-export const TRAFFIC_LIGHTS_OFFSET = 70;
+// The traffic lights' room in a toolbar; none where the platform has none (Windows draws caption buttons).
+export const TRAFFIC_LIGHTS_OFFSET = capabilities.trafficLights ? 70 : 0;
 // The toolbar's buttons and field centre on this line.
 export const TOOLBAR_BUTTON_MID = 21.2;
 export const TOOLBAR_BUTTON_TOP = TOOLBAR_BUTTON_MID - layout.toolbarButton / 2;

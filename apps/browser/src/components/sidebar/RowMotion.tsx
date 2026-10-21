@@ -7,7 +7,7 @@ import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle
 import { reduceMotion } from "../../lib/reduceMotion";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import type { Tab } from "../../store/types";
 import { tabTitle } from "./actions";

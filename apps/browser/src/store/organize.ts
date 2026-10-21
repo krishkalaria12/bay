@@ -1,5 +1,6 @@
 import { folderInsertionBeforeId, folderTabIds, withFolderPlacementUndo } from "./folders";
 import type { StateCreator } from "zustand";
+import type { BrowserProjection, DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { autoGroupName } from "./groupNames";
 import { leaveGroups, orderSections, placeBlock, syncGroupOrder } from "./groups";
@@ -68,12 +69,15 @@ export type OrganizeSlice = {
   closeAbandonedNewTabs(): void;
 };
 
-export const keptDeletedGroups = (list: ClosedGroup[], now = Date.now()) => list.filter((c) => now - c.closedAt < DELETED_GROUP_MS);
+export const keptDeletedGroups = <G extends Pick<ClosedGroup, "closedAt">>(list: readonly G[], now = Date.now()) =>
+  list.filter((c) => now - c.closedAt < DELETED_GROUP_MS);
 
-export const groupOf = (s: Pick<BrowserState, "groups">, tabId: string | undefined): TabGroup | undefined =>
-  tabId ? Object.values(s.groups).find((g) => g.tabIds.includes(tabId)) : undefined;
+export const groupOf = <S extends Pick<BrowserState, "groups"> | Pick<BrowserProjection, "groups">>(
+  s: S,
+  tabId: string | undefined,
+): S["groups"][string] | undefined => (tabId ? (Object.values(s.groups) as S["groups"][string][]).find((g) => g.tabIds.includes(tabId)) : undefined);
 
-export function selectedTabIds(s: BrowserState, windowId: string): string[] {
+export function selectedTabIds(s: BrowserState | BrowserProjection, windowId: string): string[] {
   const view = viewTabIds(s, windowId);
   const selected = (s.selection[windowId] ?? []).filter((id) => view.includes(id));
   if (selected.length) return view.filter((id) => selected.includes(id));
@@ -98,10 +102,11 @@ export const awayFromPin = (t: Pick<Tab, "pinned" | "pinnedRow" | "url" | "pinne
   pinnedPage(t) && !!t.pinnedUrl && !!t.url && !samePage(t.url, t.pinnedUrl);
 
 // A name the user gave wins; otherwise one from the tabs' titles (store/groupNames.ts).
-const autoLabels = new WeakMap<TabGroup, { tabs: object; members: (Tab | undefined)[]; label: string }>();
+type ReadTab = DeepReadonly<Tab>;
+const autoLabels = new WeakMap<object, { tabs: object; members: (ReadTab | undefined)[]; label: string }>();
 
 // Memoized per group on its member tabs: headers ask on every store update, and naming reads every title.
-export function groupLabel(s: Pick<BrowserState, "tabs">, g: TabGroup): string {
+export function groupLabel(s: Pick<BrowserProjection, "tabs">, g: DeepReadonly<TabGroup>): string {
   if (g.name) return g.name;
   const cached = autoLabels.get(g);
   if (cached && (cached.tabs === s.tabs || g.tabIds.every((id, i) => s.tabs[id] === cached.members[i]))) {
@@ -109,7 +114,7 @@ export function groupLabel(s: Pick<BrowserState, "tabs">, g: TabGroup): string {
     return cached.label;
   }
   const members = g.tabIds.map((id) => s.tabs[id]);
-  const label = autoGroupName(members.filter((t): t is Tab => !!t?.url)) || "New Group";
+  const label = autoGroupName(members.filter((t): t is ReadTab => !!t?.url)) || "New Group";
   autoLabels.set(g, { tabs: s.tabs, members, label });
   return label;
 }
@@ -119,8 +124,12 @@ export function isSiteMuted(s: Pick<BrowserState, "settings" | "privateSiteMutes
   return own ?? (s.settings.mutedSites ?? []).includes(host);
 }
 
-export const cleanedTabsFor = (s: Pick<BrowserState, "windows" | "cleanedTabs" | "privateCleanedTabs">, windowId: string): ClosedTab[] =>
-  s.windows[windowId]?.incognito ? (s.privateCleanedTabs[windowId] ?? NO_CLEANED) : s.cleanedTabs;
+export const cleanedTabsFor = <
+  S extends Pick<BrowserState, "windows" | "cleanedTabs" | "privateCleanedTabs"> | Pick<BrowserProjection, "windows" | "cleanedTabs" | "privateCleanedTabs">,
+>(
+  s: S,
+  windowId: string,
+): S["cleanedTabs"] => (s.windows[windowId]?.incognito ? (s.privateCleanedTabs[windowId] ?? NO_CLEANED) : s.cleanedTabs);
 const NO_CLEANED: ClosedTab[] = [];
 
 export function onUrlChange(s: BrowserState, tab: Tab, url: string): Partial<Tab> {
@@ -343,7 +352,7 @@ export function cleanUpHours(s: Pick<BrowserState, "spaces" | "settings">, space
   return own === undefined ? s.settings.cleanUpInactiveTabsAfterHours : own;
 }
 
-export function cleanUpCandidates(s: BrowserState, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): string[] {
+export function cleanUpCandidates(s: BrowserProjection, windowId: string, inactiveForMs = CLEAN_UP_AFTER_MS, now = Date.now(), spaceId?: string): string[] {
   const view = viewTabIds(s, windowId, spaceId);
   // The tab any window shows for the space stays.
   const space = spaceId ?? s.windows[windowId]?.spaceId ?? "";
@@ -387,7 +396,7 @@ export function abandonedNewTabs(s: BrowserState, windowId: string): string[] {
 }
 
 /** As Arc's ⌃Tab: the most recent tabs of every space the window can show (not one another window shows now). */
-export function recentTabIds(s: BrowserState, windowId: string): string[] {
+export function recentTabIds(s: BrowserProjection, windowId: string): string[] {
   const w = s.windows[windowId];
   if (!w) return [];
   const spaces = w.incognito || w.kind === "small" ? [w.spaceId] : s.spaceOrder;

@@ -8,5 +8,6 @@
   "platform": "windows",
   "architecture": "x64",
   "minimumWindowsBuild": 22621,
-  "outputDirectory": "out/Release_GN_x64"
+  "outputDirectory": "out/Release_GN_x64",
+  "runtime": "chrome-webui"
 }

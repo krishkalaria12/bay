@@ -1,12 +1,13 @@
 import { View } from "@bay/platform";
 import { useEffect } from "react";
 import { StyleSheet } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { bookmarkSpaceId } from "../../store/model";
 import { BookmarksPage } from "./BookmarksPage";
 import { DownloadsPage } from "./DownloadsPage";
 import { HistoryPage } from "./HistoryPage";
-import { INTERNAL_PAGES, internalPageOf, internalQuery, tabDestination } from "./urls";
+import { internalPageOf, internalQuery, tabDestination } from "./urls";
 
 export function InternalPage({ tabId }: { tabId: string }) {
   const url = useBrowser((s) => {
@@ -19,10 +20,7 @@ export function InternalPage({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     if (!page) return;
-    const t = useBrowser.getState().tabs[tabId];
-    const title = INTERNAL_PAGES[page].title;
-    if (t && (t.url !== url || t.title !== title)) useBrowser.getState().updateTab(tabId, { url, title, favicon: null });
-    useBrowser.getState().updateLive(tabId, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false });
+    reportBrowserCommand(dispatchBrowserCommand({ method: "syncInternalPage", tabId }));
   }, [page, url]);
 
   if (!page) return null;

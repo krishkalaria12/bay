@@ -1,18 +1,20 @@
 import { View } from "@bay/platform";
 import type { SystemCalendar } from "@bay/shell";
 import { Linking, Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
 import { connectCalendar, setCalendarHidden, useCalendar } from "../../../live/calendar";
 import { ALERT_LEADS } from "../../../live/meetings";
 import { updateCalendarSettings, useLive } from "../../../live/store";
-import { useBrowser } from "../../../store/browser";
 import { Button, Checkbox, Group, PopUp, Row, SectionHeader, Toggle } from "../controls";
 
 export function CalendarPane() {
   const theme = useTheme();
   const settings = useLive((s) => s.calendar);
   const { access, calendars } = useCalendar();
-  const autoGroup = useBrowser((s) => s.settings.autoGroupMeetingTabs);
+  const autoGroup = useBrowserRead((s) => s.settings.autoGroupMeetingTabs);
   const connected = access === "fullAccess" || access === "fixture";
   const denied = access === "denied" || access === "restricted";
   const owned = calendars.filter((c) => c.owned);
@@ -88,7 +90,7 @@ export function CalendarPane() {
           title="Automatically group tabs for meetings"
           description="Joining a call makes a tab group for it; links you open from the meeting join the group."
         >
-          <Toggle value={autoGroup} onChange={(v) => useBrowser.getState().updateSettings({ autoGroupMeetingTabs: v })} />
+          <Toggle value={autoGroup} onChange={(v) => reportBrowserCommand(updateSettings({ autoGroupMeetingTabs: v }))} />
         </Row>
       </Group>
 

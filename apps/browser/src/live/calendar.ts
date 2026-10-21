@@ -11,11 +11,12 @@ import {
 } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
+import { hasServiceClient, requestService } from "../runtime/serviceClient";
 import type { CalendarEvent } from "./meetings";
 import { live, updateCalendarSettings, useLive } from "./store";
 import { CALENDAR_HORIZON_MS } from "./constants";
 
-type CalendarData = {
+export type CalendarData = {
   access: CalendarAuthorization | "fixture";
   calendars: SystemCalendar[];
   events: CalendarEvent[];
@@ -62,10 +63,15 @@ const visible = (calendars: SystemCalendar[]) => {
   return calendars.filter((c) => !hidden.has(c.id)).map((c) => c.id);
 };
 
-let inflight: Promise<void> | null = null;
+type CalendarScope = { active: boolean };
+let service: { scope: CalendarScope; stop: () => void } | undefined;
+let inflight: { promise: Promise<void>; scope?: CalendarScope } | undefined;
 
 export function refreshCalendar(): Promise<void> {
-  if (inflight) return inflight;
+  if (hasServiceClient()) return requestService("calendarRefresh");
+  if (inflight) return inflight.promise;
+  const scope = service?.scope;
+  const active = () => !scope || scope.active;
   const run = async () => {
     useCalendar.setState({ loading: true });
     try {
@@ -81,28 +87,39 @@ export function refreshCalendar(): Promise<void> {
         return;
       }
       const calendars = await systemCalendars();
+      if (!active()) return;
       const ids = visible(calendars);
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       const events = ids.length ? await systemCalendarEvents(start.getTime(), Date.now() + CALENDAR_HORIZON_MS, ids) : [];
+      if (!active()) return;
       useCalendar.setState({ access, calendars, events: events.sort((a, b) => a.start - b.start), error: null, lastFetch: Date.now() });
     } catch (error) {
-      useCalendar.setState({ error: String((error as Error)?.message ?? error) });
+      if (active()) useCalendar.setState({ error: String((error as Error)?.message ?? error) });
     } finally {
-      useCalendar.setState({ loading: false });
+      if (active()) useCalendar.setState({ loading: false });
     }
   };
-  inflight = run().finally(() => (inflight = null));
-  return inflight;
+  const task = {
+    scope,
+    promise: run().finally(() => {
+      if (inflight === task) inflight = undefined;
+    }),
+  };
+  inflight = task;
+  return task.promise;
 }
 
 // Request EventKit access only from an explicit click.
-export async function connectCalendar(): Promise<boolean> {
+export async function connectCalendar(active: () => boolean = () => true): Promise<boolean> {
+  if (hasServiceClient()) return active() ? requestService("calendarConnect") : false;
+  if (!active()) return false;
   if (fixtureMode) {
     await refreshCalendar();
     return true;
   }
   const granted = await requestCalendarAccess();
+  if (!active()) return granted;
   await refreshCalendar();
   return granted;
 }
@@ -112,17 +129,45 @@ export const calendarConnected = () => {
   return access === "fullAccess" || access === "fixture";
 };
 
-let started = false;
-
-export function startCalendar() {
-  if (started) return;
-  started = true;
-  void refreshCalendar();
-  onCalendarChanged(() => void refreshCalendar());
-  setInterval(() => void refreshCalendar(), 5 * 60_000);
-  useLive.subscribe((s, prev) => {
-    if (s.calendar.hiddenCalendarIds !== prev.calendar.hiddenCalendarIds) void refreshCalendar();
-  });
+export function startCalendar(): () => void {
+  if (service) return service.stop;
+  const scope: CalendarScope = { active: true };
+  const disposers: (() => void)[] = [];
+  const stop = () => {
+    if (!scope.active) return;
+    scope.active = false;
+    if (service?.scope === scope) service = undefined;
+    for (const dispose of disposers) {
+      try {
+        dispose();
+      } catch (error) {
+        console.warn("Couldn't stop calendar watcher", error);
+      }
+    }
+    if (inflight?.scope === scope) {
+      inflight = undefined;
+      useCalendar.setState({ loading: false });
+    }
+  };
+  service = { scope, stop };
+  try {
+    void refreshCalendar();
+    const changed = onCalendarChanged(() => {
+      if (scope.active) void refreshCalendar();
+    });
+    disposers.push(() => changed.remove());
+    const interval = setInterval(() => void refreshCalendar(), 5 * 60_000);
+    disposers.push(() => clearInterval(interval));
+    disposers.push(
+      useLive.subscribe((s, prev) => {
+        if (s.calendar.hiddenCalendarIds !== prev.calendar.hiddenCalendarIds) void refreshCalendar();
+      }),
+    );
+  } catch (error) {
+    stop();
+    throw error;
+  }
+  return stop;
 }
 
 export const setCalendarHidden = (id: string, hidden: boolean) => {

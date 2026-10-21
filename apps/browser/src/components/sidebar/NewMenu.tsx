@@ -6,13 +6,14 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
 import { createSpace, switchSpace } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { installUpdate, updateTitle, usePendingUpdate } from "../../lib/updates";
-import { useBrowser } from "../../store/browser";
 import { splitWithCurrentTab } from "../layout/splitActions";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import { useHover } from "../primitives";
 import { newPinnedFolderWith } from "./actions";
 import { measureRow, setSidebarUi, useSidebarUi } from "./state";
 import { NEW_MENU_ID, NEW_MENU_MS, NEW_MENU_WIDTH } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { openNewTabPanel } from "../../lib/newTab";
 
 // yab's + at the sidebar's foot: not a system menu but a panel of its own, rising out of the + (which turns to ×),
 // with icons by the things it makes and the shortcuts that make them.
@@ -43,9 +44,9 @@ async function newSpace(windowId: string) {
 function run(windowId: string, id: string) {
   if (id === "update") installUpdate();
   else if (id === "space") void newSpace(windowId);
-  else if (id === "folder") newPinnedFolderWith(windowId);
+  else if (id === "folder") reportBrowserCommand(newPinnedFolderWith(windowId));
   else if (id === "split") splitWithCurrentTab(windowId);
-  else if (id === "tab") useBrowser.getState().openNewTabPanel(windowId);
+  else if (id === "tab") reportBrowserCommand(openNewTabPanel(windowId));
 }
 
 export function NewMenu({ windowId, windowWidth, windowHeight }: { windowId: string; windowWidth: number; windowHeight: number }) {

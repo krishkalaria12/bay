@@ -4,10 +4,10 @@ export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
 export const writeDocument = (name, contents) => docs.set(name, contents);
 // saveDocument lands at once, or, while heldSaves.on, when a test runs the queued releases.
-export const heldSaves = { on: false, queue: [] };
+export const heldSaves = { on: false, queue: [], error: null };
 export const saveDocument = (name, contents) =>
-  new Promise((resolve) => {
-    const land = () => (docs.set(name, contents), resolve());
+  new Promise((resolve, reject) => {
+    const land = () => (heldSaves.error ? reject(heldSaves.error) : (docs.set(name, contents), resolve()));
     if (heldSaves.on) heldSaves.queue.push(land);
     else land();
   });
@@ -19,17 +19,39 @@ export const calendarAuthorization = () => "notDetermined";
 export const requestCalendarAccess = () => Promise.resolve(false);
 export const systemCalendars = () => Promise.resolve([]);
 export const systemCalendarEvents = () => Promise.resolve([]);
-export const onCalendarChanged = () => ({ remove() {} });
+export const calendarChangedListeners = new Set();
+export const onCalendarChanged = (listener) => (calendarChangedListeners.add(listener), { remove: () => calendarChangedListeners.delete(listener) });
+export const emitCalendarChanged = () => calendarChangedListeners.forEach((listener) => listener());
 export const keychainGet = () => Promise.resolve(null);
 export const keychainSet = () => Promise.resolve(true);
 export const keychainDelete = () => Promise.resolve(true);
 export const confirm = () => Promise.resolve({ confirmed: false, suppressed: false });
-export const onWindowEvent = () => ({ remove() {} });
+export const windowEventListeners = new Set();
+export const onWindowEvent = (listener) => (windowEventListeners.add(listener), { remove: () => windowEventListeners.delete(listener) });
+export const emitWindowEvent = (event) => windowEventListeners.forEach((listener) => listener(event));
 export const focusedWindows = [];
 export const sidebarMoveUndoCalls = [];
 export const setSidebarMoveUndo = (windowId, available, focus = false) => (sidebarMoveUndoCalls.push({ windowId, available, focus }), Promise.resolve());
 export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise.resolve());
-export const onAppEvent = () => ({ remove() {} });
+export const appEventListeners = new Set();
+export const onAppEvent = (listener) => (appEventListeners.add(listener), { remove: () => appEventListeners.delete(listener) });
+export const emitAppEvent = (event) => appEventListeners.forEach((listener) => listener(event));
+export const pageEventListeners = new Set();
+export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
+export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
+export const pageOpenListeners = new Set();
+export const onPageOpen = (listener) => (pageOpenListeners.add(listener), { remove: () => pageOpenListeners.delete(listener) });
+export const emitPageOpen = (event) => pageOpenListeners.forEach((listener) => listener(event));
+export const finishedPageOpens = [];
+export const finishPageOpen = (offerId, tabId) => (finishedPageOpens.push({ offerId, tabId }), Promise.resolve());
+export const pageEventSource = { replay: [], openReplay: [], error: null, starts: 0, stops: 0 };
+export const startPageEvents = () => {
+  pageEventSource.starts++;
+  pageEventSource.replay.forEach(emitPageEvent);
+  pageEventSource.openReplay.forEach(emitPageOpen);
+  return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
+};
+export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);
@@ -61,8 +83,13 @@ export function assertNativeStub(name, stub, { partial = false } = {}) {
   return stub;
 }
 // expo-modules-core: a test installs native modules on globalThis.nnTestNativeModules.
-export const requireOptionalNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? null;
+export const requireOptionalNativeModule = (name) => {
+  const stub = globalThis.nnTestNativeModules?.[name] ?? null;
+  return stub == null ? null : assertNativeStub(name, stub, { partial: true });
+};
 export const requireNativeModule = (name) => globalThis.nnTestNativeModules?.[name] ?? {};
+export const nativeRandomUUID = (fallback) => fallback();
+export const nativeSnapshot = (_module, _method, _args, fallback) => fallback();
 // Saved passwords, one store per simulated device (sync tests).
 export const passwordStores = new Map();
 export const current = { device: null };

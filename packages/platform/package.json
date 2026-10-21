@@ -12,7 +12,9 @@
     "./motion": "./motion.ts",
     "./keys": "./src/keys.ts",
     "./capabilities": "./src/capabilities.ts",
-    "./nativeBridge": "./nativeBridge.ts"
+    "./nativeBridge": "./nativeBridge.ts",
+    "./webViewHost": "./webViewHost.ts",
+    "./runtimeTransport": "./src/runtimeTransport.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

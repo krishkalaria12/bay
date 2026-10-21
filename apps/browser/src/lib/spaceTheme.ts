@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "../runtime/projection";
 import type { SpaceTheme } from "../store/types";
 import { BOTTOM_LIGHTNESS, DEFAULT_GRAIN, DEFAULT_INTENSITY, SATURATION, TOP_LIGHTNESS } from "./constants";
 import { hexFromHsl, hslOf } from "./windowTint";
@@ -59,6 +60,8 @@ export const THEME_PRESETS: { name: string; colors: string[] }[] = [
 ];
 
 /** The editor's starting point for a space: its own theme, or one from its preset colour. */
-export function editableTheme(theme: SpaceTheme | null | undefined, swatch: string): SpaceTheme {
-  return theme?.colors.length ? theme : { colors: [swatch.slice(0, 7).toUpperCase()], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN };
+export function editableTheme(theme: DeepReadonly<SpaceTheme> | null | undefined, swatch: string): SpaceTheme {
+  return theme?.colors.length
+    ? { ...theme, colors: [...theme.colors] }
+    : { colors: [swatch.slice(0, 7).toUpperCase()], intensity: DEFAULT_INTENSITY, grain: DEFAULT_GRAIN };
 }

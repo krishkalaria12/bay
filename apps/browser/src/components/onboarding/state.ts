@@ -1,7 +1,7 @@
 import { capabilities } from "@bay/platform";
 import { launchEnvironment, readDocument, stopIntroMusic, writeDocument } from "@bay/shell";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { resolveWindowId } from "../../store/model";
 import { pinSites } from "./sites";
 import { endToolTour, startToolTour } from "./tour/state";

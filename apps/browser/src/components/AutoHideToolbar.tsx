@@ -6,7 +6,7 @@ import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTi
 import { reduceMotion } from "../lib/reduceMotion";
 import { useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { useSettings, useTabLive } from "../store/hooks";
 import type { ToolbarGeometry } from "./layout/geometry";
 import { toolbarPalette, useEasedColor, useEasedColorStyle } from "./layout/toolbarColors";

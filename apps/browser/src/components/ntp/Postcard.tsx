@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { AccessibilityInfo, Image, StyleSheet, Text } from "react-native";
 import Animated, { Easing, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "@bay/platform/motion";
 import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { useHover } from "../primitives";
 import type { ReleaseNotes } from "./releaseNotes";

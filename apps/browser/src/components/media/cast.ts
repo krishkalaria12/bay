@@ -1,6 +1,7 @@
 import { closeCastDialog, onCastDialog, onCastRoutes, showCastDialog, watchCastRoutes, type CastDialog, type CastRoute } from "@bay/nncore";
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId, engineProfile, incognitoSpaceId } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
 import { tabForBrowser } from "../layout/pageState";

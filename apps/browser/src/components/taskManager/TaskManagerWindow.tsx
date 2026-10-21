@@ -8,7 +8,7 @@ import { switchToTab } from "../../lib/actions";
 import { APP_NAME } from "../../lib/constants";
 import { APP_ICON } from "../../lib/assets";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Tab } from "../../store/types";
 import { usePages } from "../layout/pageState";
 import { Favicon, useHover } from "../primitives";

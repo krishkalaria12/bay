@@ -1,7 +1,14 @@
 import { capabilities } from "@bay/platform";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
-import { requireNativeModule, requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
+import {
+  requireNativeModule,
+  requireOptionalNativeModule,
+  nativeSnapshot,
+  nativeDocumentWrite,
+  nativeDocumentSave,
+  type EventSubscription,
+} from "@bay/platform/native";
 
 export * from "./system";
 export * from "./app";
@@ -126,7 +133,14 @@ export type WindowEvent =
   | { type: "focus"; id: string }
   | { type: "close"; id: string }
   | { type: "frame"; id: string; frame: [number, number, number, number] }
-  | { type: "closeRequest"; id: string };
+  | { type: "closeRequest"; id: string }
+  | ({ type: "state"; id: string } & WindowState);
+
+/** A window's placement, as its caption buttons show it (Windows). */
+export type WindowState = { maximized: boolean; fullscreen: boolean };
+/** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
+ *  its theme, which the system backdrop follows. */
+export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean };
 
 export type AppEvent =
   | { type: "reopen" }
@@ -240,6 +254,10 @@ const Shell = requireNativeModule<{
   dragPreviewEnd?(windowId: string | null, frame: Rect4 | null): Promise<void>;
   setWindowTitle(id: string, title: string): Promise<void>;
   windowIds(): Promise<string[]>;
+  minimizeWindow?(id: string): Promise<void>;
+  toggleMaximizeWindow?(id: string): Promise<void>;
+  windowState?(id: string): Promise<WindowState>;
+  setWindowCaption?(id: string, caption: WindowCaption): Promise<void>;
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
@@ -250,11 +268,11 @@ const Shell = requireNativeModule<{
   prompt(options: PromptOptions): Promise<string | null>;
 }>("BayShell");
 
-export const readDocument = (name: string) => Shell.readDocument(name);
-export const writeDocument = (name: string, contents: string) => Shell.writeDocument(name, contents);
+export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
-export const saveDocument = (name: string, contents: string) => Shell.saveDocument(name, contents);
-export const removeDocument = (name: string) => Shell.removeDocument(name);
+export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
+export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
 
 /** Claims sidebar focus only after a move; ordinary text/page focus retains its own Undo. */
 export const setSidebarMoveUndo = (windowId: string, available: boolean, focus = false) =>
@@ -269,8 +287,8 @@ export function copyText(text: string) {
 }
 
 /** An image (base64 PNG or JPEG) on the clipboard; false if it isn't one. */
-export function copyImage(base64: string): boolean {
-  return Shell.copyImage(base64);
+export async function copyImage(base64: string): Promise<boolean> {
+  return await Shell.copyImage(base64);
 }
 
 export function showMenu(items: MenuItem[]): Promise<string | null> {
@@ -316,6 +334,12 @@ export const raiseView = (tag: number | null, levels: number, raised: boolean) =
 /** The window's frame now, on screen (AppKit's coordinates); null on builds without it. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
+
+// The window's own caption buttons (capabilities.captionButtons): no-ops on hosts whose system draws them.
+export const minimizeWindow = (id: string) => Shell.minimizeWindow?.(id) ?? Promise.resolve();
+export const toggleMaximizeWindow = (id: string) => Shell.toggleMaximizeWindow?.(id) ?? Promise.resolve();
+export const windowState = (id: string): Promise<WindowState> => Shell.windowState?.(id) ?? Promise.resolve({ maximized: false, fullscreen: false });
+export const setWindowCaption = (id: string, caption: WindowCaption) => Shell.setWindowCaption?.(id, caption) ?? Promise.resolve();
 
 export const setAppearance = (mode: "auto" | "light" | "dark") => Shell.setAppearance(mode);
 export const isDarkAppearance = () => Shell.isDarkAppearance();

@@ -5,7 +5,10 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
+import { useBrowserRead } from "../store/read";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
+import { showToast } from "./layout/splitActions";
 import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
@@ -26,6 +29,8 @@ import { appPaletteActions } from "./omnibox/paletteAppActions";
 import { forgettable, rowMenuActions } from "./omnibox/paletteRowActions";
 import { currentPageActions, type PaletteSuggestion } from "./omnibox/paletteStart";
 import { isEscapeKey } from "../lib/escapeKey";
+import { removeHistory } from "../runtime/bookmarkActions";
+import { isIncognitoSpace } from "../store/model";
 
 type Variant = "palette" | "sidebar";
 type Selection = { start: number; end: number };
@@ -81,14 +86,14 @@ export function Omnibox({
   const theme = useTheme();
   const windowId = useWindowId();
   const spaceId = useWindowSpaceId();
-  const engine = useBrowser((s) => defaultSearchEngine(s.settings));
-  const engines = useBrowser((s) => searchEngines(s.settings));
+  const engine = useBrowserRead((s) => defaultSearchEngine(s.settings));
+  const engines = useBrowserRead((s) => searchEngines(s.settings));
   const searchTemplates = engines.map((e) => e.url);
-  const currentUrl = useBrowser((s) => s.tabs[tabId]?.url ?? "");
-  const currentTitle = useBrowser((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
-  const currentFavicon = useBrowser((s) => s.tabs[tabId]?.favicon ?? null);
+  const currentUrl = useBrowserRead((s) => s.tabs[tabId]?.url ?? "");
+  const currentTitle = useBrowserRead((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
+  const currentFavicon = useBrowserRead((s) => s.tabs[tabId]?.favicon ?? null);
   const palette = variant === "palette";
-  const newTab = useBrowser((s) => s.windowUi[windowId]?.panel.mode === "newTab");
+  const newTab = useBrowserRead((s) => s.windowUi[windowId]?.panel.mode === "newTab");
   const [menu, setMenu] = useState<PaletteMenu | null>(null);
   const dropdown = variant === "sidebar";
 
@@ -160,10 +165,20 @@ export function Omnibox({
     requestAnimationFrame(() => input.current?.focus());
   };
 
+  const openingFailed = (error: unknown) => {
+    console.error("Couldn't open the address", error);
+    showToast(windowId, "Couldn't open the address", "Please try again.");
+  };
+  const background = (url: string) => {
+    void openInBackground(url, tabId).catch(openingFailed);
+  };
   const go = (url: string, disposition: Disposition = "current") => {
     if (!url) return;
-    if (palette && newTab && disposition !== "newWindow") useBrowser.getState().submitNewTabPanel(windowId, url);
-    else openFromBar(url, tabId, disposition);
+    const result =
+      palette && newTab && disposition !== "newWindow"
+        ? dispatchBrowserCommand({ method: "submitNewTab", windowId, url })
+        : openFromBar(url, tabId, disposition);
+    void result.catch(openingFailed);
   };
 
   const choose = (s: Suggestion | undefined, disposition: Disposition = "current") => {
@@ -178,10 +193,14 @@ export function Omnibox({
       case "page":
         if (s.tabId) {
           if (palette && newTab && disposition !== "current") return go(s.url, disposition);
-          switchFromBar(s.tabId, s.url, tabId, disposition);
+          void switchFromBar(s.tabId, s.url, tabId, disposition).catch(openingFailed);
           return;
         }
-        if (s.cleanedId && disposition === "current" && restoreFromBar(s.cleanedId, tabId)) return;
+        if (s.cleanedId && disposition === "current") {
+          const url = s.url;
+          void restoreFromBar(s.cleanedId, tabId).then((restored) => restored || go(url), openingFailed);
+          return;
+        }
         return go(s.url, disposition);
       case "search":
       case "create":
@@ -233,9 +252,9 @@ export function Omnibox({
   };
 
   const forget = (s: PaletteSuggestion) => {
-    const { history, removeHistory } = useBrowser.getState();
+    const { history } = useBrowser.getState();
     const urls = s.host ? (history[spaceId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
-    removeHistory(spaceId, urls);
+    if (urls.length) reportBrowserCommand(removeHistory(spaceId, urls));
   };
 
   const openRowMenu = (target = current) => {
@@ -250,7 +269,7 @@ export function Omnibox({
             : target.title;
     const actions = rowMenuActions(target, newTab, searchTemplates, {
       choose,
-      openInBackground: (url) => openInBackground(url, tabId),
+      openInBackground: background,
       copyLink: copyText,
       closeTab,
       forget,
@@ -293,7 +312,7 @@ export function Omnibox({
       if (metaKey && shiftKey) return forceSearch();
       if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim()) return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
-      if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return openInBackground(current.url, tabId);
+      if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return background(current.url);
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent));
       return choose(current);
     }
@@ -420,7 +439,8 @@ export function Omnibox({
 
   // Stable, so the rows (memoized) don't re-render as the bar does.
   const chooseRow = useEffectEvent((s: Suggestion) => choose(s));
-  const removeRow = useEffectEvent((url: string) => useBrowser.getState().removeHistory(spaceId, [url]));
+  // A private window keeps no history to remove from.
+  const removeRow = useEffectEvent((url: string) => !isIncognitoSpace(spaceId) && reportBrowserCommand(removeHistory(spaceId, [url])));
   const rowActions: RowActions = { choose: chooseRow, hover: setSelected, remove: removeRow };
   const suggestionList = (
     <SuggestionList

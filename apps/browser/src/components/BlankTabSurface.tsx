@@ -3,7 +3,9 @@ import { Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { useTheme } from "../lib/theme";
-import { useBrowser } from "../store/browser";
+import { browserRead } from "../store/read";
+import { dispatchBrowserCommand } from "../runtime/commands";
+import { showToast } from "./layout/splitActions";
 import { useWindowId } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { NewTabExtras } from "./ntp";
@@ -16,7 +18,7 @@ import { useHover } from "./primitives";
 const launchTabs = new Set<string>();
 
 export function quietLaunchTabs() {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   for (const windowId of s.windowOrder) {
     const id = activeTabId(s, windowId);
     if (id) launchTabs.add(id);
@@ -29,13 +31,18 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
   const windowId = useWindowId();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { hovered, hoverProps } = useHover();
-  const open = () => useBrowser.getState().openPanel(windowId, "");
+  const open = (sourceTabId?: string) => {
+    void dispatchBrowserCommand({ method: "openCommandPanel", windowId, initialText: "", ...(sourceTabId ? { sourceTabId } : {}) }).catch((error) => {
+      console.error("Couldn't open search", error);
+      showToast(windowId, "Couldn't open search", "Please try again.");
+    });
+  };
 
   useEffect(() => {
     if (!focused || launchTabs.has(tabId)) return;
-    const state = useBrowser.getState();
+    const state = browserRead.getState();
     if (activeTabId(state, windowId) !== tabId || state.tabs[tabId]?.url || state.windowUi[windowId]?.panel.open || themeEditorOpen(windowId)) return;
-    state.openPanel(windowId, "");
+    open(tabId);
   }, [tabId, windowId, focused]);
 
   return (
@@ -44,7 +51,7 @@ export function BlankTabSurface({ tabId, focused }: { tabId: string; focused: bo
         <Symbol name="plus" size={34} weight="light" color={theme.textTertiary} style={{ width: 48, height: 48 }} />
         <View ref={tourAnchorRef(windowId, "commandBar", true)} {...hoverProps}>
           <Pressable
-            onPress={open}
+            onPress={() => open()}
             accessibilityRole="button"
             accessibilityLabel="Open search"
             style={({ pressed }) => ({

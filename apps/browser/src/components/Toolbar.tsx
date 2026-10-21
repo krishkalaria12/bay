@@ -1,3 +1,5 @@
+import * as windowCommands from "../runtime/windowActions";
+import * as tabCommands from "../runtime/tabActions";
 import { Pressable, View, shortcutForCommand, modKey } from "@bay/platform";
 import { useSidebarMetrics } from "./sidebar/tokens";
 import { breadcrumb, urlForDisplay } from "@bay/core";
@@ -9,13 +11,13 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "
 import { useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
 import { webviews } from "../lib/webviews";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { useIsBookmarked, useSettings, useTabLive } from "../store/hooks";
 import { bookmarkSpaceId } from "../store/model";
 import type { Tab } from "../store/types";
 import { ToolbarButton, type ClickModifiers } from "./layout/controls";
-import type { ToolbarGeometry } from "./layout/geometry";
-import { SIDEBAR_BUTTON_END_ROOM, SIDEBAR_FIELD, TOOLBAR_BUTTON_MID, TOOLBAR_BUTTON_TOP } from "./layout/constants";
+import { CAPTION_END_ROOM, toolbarEndRoom, type ToolbarGeometry } from "./layout/geometry";
+import { SIDEBAR_FIELD, TOOLBAR_BUTTON_MID, TOOLBAR_BUTTON_TOP } from "./layout/constants";
 import { setPopover, usePage, usePages } from "./layout/pageState";
 import { closeHistoryMenu, goBack, goForward, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu } from "./layout/history";
 import { openModeFor, openUrl } from "./bookmarks/actions";
@@ -30,6 +32,10 @@ import { GlassFill, useLiquidGlass } from "./glass";
 import { TranslateButton } from "./site/TranslateControls";
 import { ZoomIndicator } from "./site/ZoomControls";
 import { copyPageUrl } from "./site/selection";
+import { reportBrowserCommand } from "../runtime/commands";
+import { toggleBookmark as togglePageBookmark } from "../runtime/bookmarkActions";
+import { browserRead } from "../store/read";
+import { openCommandPanel } from "../runtime/windowUiActions";
 
 // What the toolbar shows of its tab: the page's favicon and the tab's bookkeeping (last active, …) don't re-render it.
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
@@ -80,11 +86,13 @@ export function Toolbar({
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
   // Kept stable by the compiler, as are the buttons' elements: a loading or history change re-renders only theirs.
   const focus = () => {
-    if (!focused) useBrowser.getState().activate(tabId);
+    if (!focused) reportBrowserCommand(tabCommands.activate(tabId));
   };
   const at = buttonPlaces(geometry);
-  // A toggle at the end (the sidebar on the right) is outermost: the split buttons, extensions and field move in for it.
-  const end = geometry.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0;
+  // A toggle at the end (the sidebar on the right) is outermost but for the caption buttons: the split buttons,
+  // extensions and field move in for them.
+  const end = toolbarEndRoom(geometry);
+  const toggleRight = 8 + (geometry.captionEnd ? CAPTION_END_ROOM : 0);
   const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
   const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: TOOLBAR_BUTTON_MID - 15 };
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;
@@ -96,7 +104,7 @@ export function Toolbar({
       <Animated.View style={[StyleSheet.absoluteFill, dimStyle]} pointerEvents="box-none">
         {geometry.sidebarButton !== null && <SidebarToggle style={at.sidebarButton} palette={palette} windowId={windowId} />}
         {geometry.sidebarButtonEnd && (
-          <SidebarToggle style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: 8 }} palette={palette} windowId={windowId} />
+          <SidebarToggle style={{ position: "absolute", top: TOOLBAR_BUTTON_TOP, right: toggleRight }} palette={palette} windowId={windowId} />
         )}
         <HistoryButton style={at.back} tab={tab} direction={-1} disabled={!history.back} palette={palette} onFocus={focus} />
         <HistoryButton style={at.forward} tab={tab} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
@@ -126,7 +134,7 @@ function SidebarToggle({ style, palette, windowId }: { style: ViewStyle; palette
       style={style}
       palette={palette}
       icon={icon}
-      onPress={() => useBrowser.getState().toggleSidebar(windowId)}
+      onPress={() => reportBrowserCommand(windowCommands.toggleSidebar(windowId))}
       tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
     />
   );
@@ -156,7 +164,7 @@ export function ReloadButton({
       onPress={(m) => {
         onFocus();
         if (loading) return void web()?.stopLoading();
-        if (modKey(m)) return void useBrowser.getState().newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id });
+        if (modKey(m)) return void reportBrowserCommand(tabCommands.newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id }));
         void (m.shiftKey ? web()?.forceReload() : web()?.reload());
       }}
       tooltip={loading ? "Stop Loading This Page" : "Refresh (⌘R)"}
@@ -260,13 +268,13 @@ export function UrlField({
   const controlsOpen = usePages((s) => s.popover[tab.id] === "siteControls");
   const openPanel = (text: string) => {
     onFocus();
-    useBrowser.getState().openPanel(windowId, text);
+    reportBrowserCommand(openCommandPanel(windowId, text));
   };
   const toggleBookmark = () => {
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     // The whole tab (its favicon too) as it is now; the field itself follows only what it shows.
     const page = s.tabs[tab.id];
-    if (page) s.toggleBookmark(bookmarkSpaceId(s, s.windows[windowId]), page);
+    if (page) reportBrowserCommand(togglePageBookmark(bookmarkSpaceId(s, s.windows[windowId]), page));
   };
   const toggleSiteControls = () => {
     onFocus();
@@ -371,7 +379,7 @@ export function UrlField({
                 size={13}
                 box={24}
                 radius={6}
-                onPress={() => openSplitPane(windowId, { anchorTabId: tab.id })}
+                onPress={() => reportBrowserCommand(openSplitPane(windowId, { anchorTabId: tab.id }))}
                 tooltip="Open Split View (⌃⇧=)"
               />
             )}

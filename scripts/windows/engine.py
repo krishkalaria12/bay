@@ -11,6 +11,7 @@ import argparse
 import contextlib
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -23,9 +24,12 @@ import zipfile
 REPO = pathlib.Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO / "engine/patches/build/engine-lock.json"
 LOCK = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+WEB_SPEC = importlib.util.spec_from_file_location("bay_web_artifacts", pathlib.Path(__file__).with_name("web-artifacts.py"))
+web_artifacts = importlib.util.module_from_spec(WEB_SPEC)
+WEB_SPEC.loader.exec_module(web_artifacts)
 GN_ARGS = {
     "is_official_build": False, "is_debug": False, "is_component_build": False,
-    "target_cpu": "x64", "cef_api_version": "999999", "dcheck_always_on": False, "use_thin_lto": False,
+    "target_cpu": "x64", "enable_cef": False, "dcheck_always_on": False, "use_thin_lto": False,
     "chrome_pgo_phase": 0, "symbol_level": 1, "blink_symbol_level": 0,
     "v8_symbol_level": 0, "proprietary_codecs": True, "ffmpeg_branding": "Chrome",
     "enable_mse_mpeg2ts_stream_parser": True, "enable_widevine": True,
@@ -49,12 +53,15 @@ def sha256(path):
 
 def source_digest():
     digest = hashlib.sha256()
-    for directory in ("engine/patches", "engine/chromium", "engine/nncore"):
+    for directory in ("engine/patches", "engine/chromium", "engine/nncore",
+                      "packages/import/windows", "packages/sync/windows"):
         for path in sorted((REPO / directory).rglob("*")):
-            if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
+            package_test = directory.startswith("packages/") and "tests" in path.relative_to(REPO / directory).parts
+            if path.is_file() and not package_test and "__pycache__" not in path.parts and path.suffix != ".pyc":
                 digest.update(path.relative_to(REPO).as_posix().encode() + b"\0")
                 digest.update(bytes.fromhex(sha256(path)))
     digest.update(bytes.fromhex(sha256(pathlib.Path(__file__))))
+    digest.update(bytes.fromhex(sha256(pathlib.Path(__file__).with_name("web-artifacts.py"))))
     return digest.hexdigest()
 
 
@@ -76,6 +83,10 @@ def run(command, cwd=None, env=None):
 def clone_pin(url, destination, revision):
     if not destination.exists():
         run(["git", "clone", "--no-checkout", url, destination])
+        # --no-checkout still creates HEAD at the remote default branch. A
+        # fresh clone must select our pin before inspecting reusable state.
+        run(["git", "checkout", "--detach", revision], cwd=destination)
+        return
     current = subprocess.run(["git", "rev-parse", "HEAD"], cwd=destination,
                              capture_output=True, text=True)
     if current.returncode == 0:
@@ -168,12 +179,12 @@ def prepare(root, env):
             completed.append(name)
             state.write_text(json.dumps(completed, indent=2) + "\n")
 
-    def cef():
-        series(root, env, "capture-base", "--phase", "cef")
-        series(root, env, "apply", "--phase", "cef")
-        run([sys.executable, "tools/version_manager.py", "-u", "--fast-check"], cwd=src / "cef", env=env)
+    def compatibility():
+        # Retain the pinned source patch baseline shared with macOS, while
+        # compiling Chrome with ENABLE_CEF=false. Bay's CEF-only API patches
+        # are macOS-only in series and are never installed on Windows.
         run([sys.executable, "tools/patcher.py"], cwd=src / "cef", env=env)
-    step("cef", cef)
+    step("chromium-compat", compatibility)
     step("ungoogled", lambda: run([sys.executable, REPO / "engine/patches/build/03-ungoogled.py"], env=env))
 
     def substitute():
@@ -191,27 +202,30 @@ def prepare(root, env):
     step("domains", substitute)
     series(root, env, "capture-base", "--phase", "chromium")
     series(root, env, "apply", "--phase", "chromium")
-    # Generate without rerunning CEF's patcher over the now-ungoogled tree.
-    generate = """import gn_args, pathlib, sys
-for name, args in gn_args.GetAllPlatformConfigs({}).items():
-    directory = pathlib.Path(sys.argv[1]) / name
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / 'args.gn').write_text(gn_args.GetConfigFileContents(args) + '\\n')
-"""
-    run([sys.executable, "-c", generate, src / "out"], cwd=src / "cef/tools", env=env)
-    run(["gn", "gen", LOCK["outputDirectory"]], cwd=src, env=env)
+    generate_gn(root, env)
     (root / "bay-engine-source.json").write_text(json.dumps({"lock": LOCK, "sourceDigest": source_digest()}, indent=2) + "\n")
+
+
+def generate_gn(root, env):
+    src = pathlib.Path(env["CHROMIUM_SRC"])
+    # Chrome uses ordinary GN args. CEF's config merger would add client API
+    # and CDM requirements that this desktop Chrome target does not need.
+    directory = src / LOCK["outputDirectory"]
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "args.gn").write_text("\n".join(f"{key} = {json.dumps(value)}" for key, value in GN_ARGS.items()) + "\n")
+    run(["gn", "gen", LOCK["outputDirectory"]], cwd=src, env=env)
 
 
 def build(root, env, targets, jobs):
     verify_checkout(root)
     series(root, env, "apply", "--phase", "chromium")
     series(root, env, "check")
+    generate_gn(root, env)
     src = pathlib.Path(env["CHROMIUM_SRC"])
     args = ["autoninja", "-C", LOCK["outputDirectory"]]
     if jobs:
         args += ["-j", str(jobs)]
-    run([*args, *(targets or ["nncore", "nncore_subprocess", "libcef", "cefclient"])], cwd=src, env=env)
+    run([*args, *(targets or ["chrome"])], cwd=src, env=env)
     (root / "bay-engine-build.json").write_text(json.dumps({"lock": LOCK, "sourceDigest": source_digest()}, indent=2) + "\n")
 
 
@@ -222,7 +236,7 @@ def archive(root, output):
         raise RuntimeError("engine sources changed since the last successful build; run build before archiving")
     src = root / "chromium_git/chromium/src"
     binaries = src / LOCK["outputDirectory"]
-    for required in ("nncore.dll", "nncore_subprocess.exe", "nncore_subprocess.dll", "bootstrap.exe", "libcef.dll", "chrome_elf.dll", "icudtl.dat", "resources.pak", "locales"):
+    for required in ("chrome.exe", "chrome.dll", "chrome_elf.dll", "notification_helper.exe", "icudtl.dat", "resources.pak", "locales"):
         if not (binaries / required).exists():
             raise RuntimeError(f"missing engine output: {binaries / required}")
     files = {}
@@ -230,20 +244,20 @@ def archive(root, output):
     if not pdbs:
         raise RuntimeError("no PDBs found; symbol_level=1 and a full build are required for release artifacts")
     for path in binaries.iterdir():
-        if path.is_file() and path.suffix.lower() in (".dll", ".exe", ".lib", ".pak", ".dat", ".bin", ".json"):
+        if path.is_file() and path.suffix.lower() in (".dll", ".exe", ".pak", ".dat", ".bin", ".json"):
             files[f"runtime/{path.name}"] = path
-    for name in ("locales", "swiftshader"):
+    for name in ("locales", "swiftshader", "resources", "WidevineCdm", "MEIPreload", "PrivacySandboxAttestationsPreloaded", "hyphen-data"):
         if (binaries / name).is_dir():
             for path in (binaries / name).rglob("*"):
                 if path.is_file():
                     files[f"runtime/{path.relative_to(binaries).as_posix()}"] = path
-    for prefix, directory in (("include/cef/include", src / "cef/include"),
-                              ("include/nncore", REPO / "engine/nncore/src/bay/core/public"),
-                              ("include/bay", REPO / "engine/chromium/src/chrome/browser/bay/public")):
-        for path in directory.rglob("*.h"):
-            files[f"{prefix}/{path.relative_to(directory).as_posix()}"] = path
+    generated_mojo = binaries / "gen/chrome/browser/bay/webui/resources/tsc"
+    modules, shared_imports = web_artifacts.mojo_files(generated_mojo)
+    for name, path in modules.items():
+        files[f"runtime/bay-ui/{name}"] = path
     manifest = {"schemaVersion": 1, "id": artifact_id(), "lock": LOCK, "sourceDigest": source_digest(),
-                "files": {name: sha256(path) for name, path in sorted(files.items())}}
+                "files": {name: sha256(path) for name, path in sorted(files.items())},
+                "mojo": {"entrypoint": "runtime/bay-ui/" + web_artifacts.MOJO_ENTRY, "sharedImports": shared_imports}}
     output.mkdir(parents=True, exist_ok=True)
     artifact = output / f"{artifact_id()}.zip"
     with zipfile.ZipFile(artifact, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zip_file:

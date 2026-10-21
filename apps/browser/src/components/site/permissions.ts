@@ -1,6 +1,6 @@
 import { onPermission, onPermissionDismissed, resolvePermission, type PermissionKind, type PermissionRequest, type PermissionResult } from "@bay/nncore";
 import { ensureNotificationPermission } from "../../lib/webNotifications";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { patchPage, pageOf, tabForBrowser, usePages } from "../layout/pageState";
 import { startDeviceChoosers } from "./DeviceChooser";
 

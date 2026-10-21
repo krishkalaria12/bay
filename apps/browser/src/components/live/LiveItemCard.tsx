@@ -9,7 +9,8 @@ import { summarizeChecks } from "../../live/github";
 import { ago } from "../../live/meetings";
 import { useLive } from "../../live/store";
 import type { LiveItem, PullRequestCheck } from "../../live/types";
-import { useBrowser } from "../../store/browser";
+import { newTab } from "../../runtime/tabActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { useHover } from "../primitives";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
@@ -88,7 +89,7 @@ export function Avatar({ uri, name, size = 20 }: { uri: string | null; name: str
 
 const open = (windowId: string, url: string) => {
   dismissHover();
-  useBrowser.getState().newTab(windowId, { url });
+  reportBrowserCommand(newTab(windowId, { url }));
 };
 
 function PullRequestPreview({ item, folderId, windowId }: { item: LiveItem; folderId: string; windowId: string }) {

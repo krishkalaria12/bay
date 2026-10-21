@@ -16,7 +16,7 @@ import Animated, {
   type SharedValue,
 } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { Favicon, NewTabIcon } from "../primitives";
 import { HistoryPopover } from "./HistoryPopover";
 import {

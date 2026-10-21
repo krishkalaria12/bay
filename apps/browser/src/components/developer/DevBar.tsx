@@ -1,3 +1,5 @@
+import * as windowCommands from "../../runtime/windowActions";
+import * as tabCommands from "../../runtime/tabActions";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, Symbol, WindowDragRegion } from "@bay/shell";
 import { useState } from "react";
@@ -6,10 +8,10 @@ import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
 import { layout, MONO_FONT } from "../../lib/constants";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useTabLive } from "../../store/hooks";
 import { ToolbarButton } from "../layout/controls";
-import type { ToolbarGeometry } from "../layout/geometry";
+import { CAPTION_END_ROOM, type ToolbarGeometry } from "../layout/geometry";
 import { useHistoryAvailability } from "../layout/history";
 import { setPopover, usePages } from "../layout/pageState";
 import { closePane, showSplitMenu } from "../layout/splitActions";
@@ -24,6 +26,8 @@ import { toggleInspecting, useIsInspecting } from "./devMode";
 import { isLocalDevSite } from "./sites";
 import { DEV_BAR_HEIGHT, STRIPE_GAP } from "./constants";
 import { TOOLBAR_BUTTON_MID } from "../layout/constants";
+import { openCommandPanel } from "../../runtime/windowUiActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 
 /**
  * A page in Developer Mode's bar, as yab has it: its whole address on a hatched band, with the inspector, DevTools, its
@@ -55,7 +59,7 @@ export function DevBar({
   const [width, setWidth] = useState(0);
   const sidebarSymbol = useSidebarSymbol();
   const focus = () => {
-    if (!focused) useBrowser.getState().activate(tabId);
+    if (!focused) reportBrowserCommand(tabCommands.activate(tabId));
   };
   const height = navigation ? layout.toolbarHeight : DEV_BAR_HEIGHT;
   if (!tab) return <View style={{ height }} />;
@@ -86,7 +90,7 @@ export function DevBar({
           style={at(geometry.sidebarButton)}
           palette={palette}
           icon={sidebarSymbol}
-          onPress={() => useBrowser.getState().toggleSidebar(windowId)}
+          onPress={() => reportBrowserCommand(windowCommands.toggleSidebar(windowId))}
           tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}
@@ -102,7 +106,7 @@ export function DevBar({
         style={{
           position: "absolute",
           left: navigation ? geometry.urlLeft : geometry.urlLeft - 2,
-          right: 6,
+          right: 6 + (geometry.captionEnd ? CAPTION_END_ROOM : 0),
           top: 0,
           bottom: 0,
           flexDirection: "row",
@@ -127,7 +131,9 @@ export function DevBar({
           </>
         ) : null}
         {navigation && geometry.sidebarButtonEnd
-          ? button(sidebarSymbol, `Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`, () => useBrowser.getState().toggleSidebar(windowId))
+          ? button(sidebarSymbol, `Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`, () =>
+              reportBrowserCommand(windowCommands.toggleSidebar(windowId)),
+            )
           : null}
       </View>
       <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.divider }} />
@@ -155,7 +161,7 @@ function Address({ url, tabId, windowId, onFocus }: { url: string; tabId: string
         <Pressable
           onPress={() => {
             onFocus();
-            useBrowser.getState().openPanel(windowId, url);
+            reportBrowserCommand(openCommandPanel(windowId, url));
           }}
           style={{
             flex: 1,

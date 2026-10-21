@@ -46,7 +46,7 @@ const reset = () => (S().hydrate({}), useBrowser.setState({ bookmarksReady: { de
 test("a crash after a batch lands: after the restart it's sent again as it was, and the next batch gets a new seq", async () => {
   reset();
   const first = await import("./engine.ts?first");
-  first.startSync();
+  first.startSync(useBrowser);
   assert.ok("ok" in (await first.turnOnSync("/sync")));
   S().addBookmark({ spaceId: "default", url: "https://one.example/", title: "One" });
   await first.syncNow();
@@ -64,7 +64,7 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
   for (const [name, contents] of disk) shell.docs.set(name, contents);
 
   const second = await import("./engine.ts?second");
-  second.startSync();
+  second.startSync(useBrowser);
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
   S().addBookmark({ spaceId: "default", url: "https://three.example/", title: "Three" });
   await second.syncNow();
@@ -89,7 +89,7 @@ test("a crash after a batch lands: after the restart it's sent again as it was, 
 test("a batch is published only once the journal holding it is on disk", async () => {
   reset();
   const engine = await import("./engine.ts?held");
-  engine.startSync();
+  engine.startSync(useBrowser);
   assert.ok("ok" in (await engine.turnOnSync("/sync")));
   await engine.syncNow();
   const published = () => [...folder.values()].map((f) => JSON.parse(f.payload)).filter((f) => f.ops?.some((op) => op.v?.t === "Held"));

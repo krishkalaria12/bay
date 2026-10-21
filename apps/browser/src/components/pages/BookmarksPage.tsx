@@ -7,10 +7,11 @@ import { PanResponder, StyleSheet, Text } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
-import { bookmarkAncestors, folderChildren, folderLinks, type RemovedBookmarks } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { bookmarkAncestors, folderChildren, folderLinks } from "../../store/bookmarks";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { plural } from "../../store/model";
-import type { BookmarkNode } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type BookmarkNode = DeepReadonly<import("../../store/types").BookmarkNode>;
 import { openFolder, openUrl } from "../bookmarks/actions";
 import { editBookmark } from "../bookmarks/edit";
 import { FolderTree } from "../bookmarks/FolderTree";
@@ -21,6 +22,9 @@ import { DropTargets } from "./dropTargets";
 import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
 import { BOOKMARK_ROW } from "./constants";
 import { useResetOn } from "../../lib/useResetOn";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { moveBookmark, removeBookmarks, restoreBookmarks } from "../../runtime/bookmarkActions";
+import { browserRead } from "../../store/read";
 
 type Target = { kind: "folder"; id: string } | { kind: "row"; id: string; index: number; folder: boolean };
 type Drop = { into: string } | { parentId: string; index: number };
@@ -33,7 +37,7 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
   const [folderId, setFolderId] = useState<string | null>(roots?.bar ?? null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  const [undo, setUndo] = useState<{ removed: RemovedBookmarks; count: number } | null>(null);
+  const [undo, setUndo] = useState<{ undoId: string; count: number } | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
   const anchor = useRef<string | null>(null);
   const [targets] = useState(() => new DropTargets<Target>());
@@ -72,9 +76,14 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
 
   const remove = (list: string[]) => {
     if (!list.length) return;
-    const removed = useBrowser.getState().removeBookmarks(list);
     setSelected([]);
-    setUndo({ removed, count: removed.places.length });
+    reportBrowserCommand(
+      removeBookmarks(spaceId, list).then((undoId) => {
+        // The coordinator keeps what Undo puts back; the toast counts the items it took.
+        const entry = undoId ? browserRead.getState().bookmarkUndo.find((u) => u.id === undoId) : undefined;
+        if (undoId && entry) setUndo({ undoId, count: entry.removed.places.length });
+      }),
+    );
   };
   useEffect(() => {
     if (!undo) return;
@@ -106,15 +115,14 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
     const target = dropFor(x, y);
     setDrop(null);
     if (!target) return;
-    const s = useBrowser.getState();
     const moving = dragging.current;
-    if ("into" in target) return moving.forEach((id) => s.moveBookmark(id, target.into));
+    if ("into" in target) return moving.forEach((id) => reportBrowserCommand(moveBookmark(id, target.into)));
     // The rows moving from above the drop take their room with them.
     const above = moving.filter((id) => {
       const from = ids.indexOf(id);
       return from >= 0 && from < target.index;
     }).length;
-    moving.forEach((id, i) => useBrowser.getState().moveBookmark(id, target.parentId, target.index - above + i));
+    moving.forEach((id, i) => reportBrowserCommand(moveBookmark(id, target.parentId, target.index - above + i)));
   };
 
   const addMenu = async () => {
@@ -232,7 +240,7 @@ export function BookmarksPage({ tabId, spaceId }: { tabId: string; spaceId: stri
         <UndoToast
           message={`${plural(undo.count, "item")} deleted`}
           onUndo={() => {
-            useBrowser.getState().restoreBookmarks(undo.removed);
+            reportBrowserCommand(restoreBookmarks(undo.undoId));
             setUndo(null);
           }}
         />

@@ -8,7 +8,7 @@ import {
   requestNotificationPermission,
   type NotificationResponse,
 } from "@bay/shell";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { focus, switchToTab } from "./actions";
 import { webviews } from "./webviews";
 import { NOTIFICATION_ICON_PIXELS, NOTIFICATION_ICON_TIMEOUT_MS } from "./constants";

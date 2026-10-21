@@ -3,8 +3,12 @@ import { confirm } from "@bay/shell";
 import { create } from "zustand";
 import { focus, openWindow } from "../../lib/actions";
 import { folderLinks } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { browserRead } from "../../store/read";
+import { navigate, newTab } from "../../runtime/tabActions";
 import { activeTabId, bookmarkSpaceId, listIds, resolveWindowId, viewTabIds, windowListKey } from "../../store/model";
+import { openSplitPane } from "../../runtime/splitActions";
+import { addBookmark } from "../../runtime/bookmarkActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 
 export type OpenMode = "current" | "background" | "foreground" | "window" | "incognito" | "split";
 
@@ -15,28 +19,27 @@ export function openModeFor(e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?
   return "current";
 }
 
-export function openUrl(url: string, windowId: string | null | undefined, mode: OpenMode) {
-  const s = useBrowser.getState();
+export async function openUrl(url: string, windowId: string | null | undefined, mode: OpenMode) {
+  const s = browserRead.getState();
   const id = resolveWindowId(s, windowId);
-  if (mode === "incognito") return void openWindow({ incognito: true, url });
+  if (mode === "incognito") return void (await openWindow({ incognito: true, url }));
   if (!id || mode === "window") {
     const w = id ? s.windows[id] : undefined;
     // From a private window, a new window stays private.
-    const created = openWindow(w?.incognito ? { incognito: true, url } : { url, spaceId: w?.spaceId });
+    const created = await openWindow(w?.incognito ? { incognito: true, url } : { url, spaceId: w?.spaceId });
     return focus(created);
   }
   const tabId = activeTabId(s, id);
   if (mode === "split") {
-    const result = s.openSplitPane(id, { url });
-    if (result.ok) return;
-    return void s.newTab(id, { url });
+    if (await openSplitPane(id, { url })) return;
+    return void (await newTab(id, { url }));
   }
-  if (mode === "current" && tabId) return s.navigate(tabId, url);
-  s.newTab(id, { url, background: mode === "background", openerId: mode === "background" ? tabId : undefined });
+  if (mode === "current" && tabId) return navigate(tabId, url);
+  await newTab(id, { url, background: mode === "background", openerId: mode === "background" ? tabId : undefined });
 }
 
 export async function openFolder(folderId: string, windowId: string | null | undefined, mode: "tabs" | "window" | "incognito" = "tabs") {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const links = folderLinks(s.bookmarks, folderId);
   if (!links.length) return;
   if (links.length > 15) {
@@ -52,22 +55,22 @@ export async function openFolder(folderId: string, windowId: string | null | und
   const source = id ? s.windows[id] : undefined;
   if (mode !== "tabs" || !id) {
     const incognito = mode === "incognito" || !!source?.incognito;
-    const created = openWindow({ url: links[0]!.url, incognito, spaceId: incognito ? undefined : source?.spaceId });
-    openInOrder(created, links.slice(1), activeTabId(useBrowser.getState(), created));
+    const created = await openWindow({ url: links[0]!.url, incognito, spaceId: incognito ? undefined : source?.spaceId });
+    await openInOrder(created, links.slice(1), activeTabId(browserRead.getState(), created));
     return focus(created);
   }
-  const first = useBrowser.getState().newTab(id, { url: links[0]!.url });
-  openInOrder(id, links.slice(1), first);
+  const first = await newTab(id, { url: links[0]!.url });
+  await openInOrder(id, links.slice(1), first);
 }
 
 // The folder's order, whatever the new-tab position setting.
-function openInOrder(windowId: string, links: { url: string }[], after: string | undefined) {
+async function openInOrder(windowId: string, links: { url: string }[], after: string | undefined) {
   for (const link of links) {
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     const w = s.windows[windowId];
     const tabIds = w ? listIds(s, windowListKey(s, w)) : [];
     const index = after && tabIds.includes(after) ? tabIds.indexOf(after) + 1 : undefined;
-    after = useBrowser.getState().newTab(windowId, { url: link.url, background: true, index }) || after;
+    after = (await newTab(windowId, { url: link.url, background: true, index })) || after;
   }
 }
 
@@ -81,26 +84,25 @@ export const useBookmarkDialog = create<{ open: BookmarkDialogState | null; set(
 }));
 
 export function bookmarkActivePage(windowId: string | null | undefined) {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const id = resolveWindowId(s, windowId);
   const tabId = id ? activeTabId(s, id) : undefined;
-  if (id && tabId) bookmarkTab(id, tabId);
+  if (id && tabId) reportBrowserCommand(bookmarkTab(id, tabId));
 }
 
-export function bookmarkTab(windowId: string, tabId: string) {
-  const s = useBrowser.getState();
-  const id = windowId;
+export async function bookmarkTab(windowId: string, tabId: string) {
+  const s = browserRead.getState();
   const tab = s.tabs[tabId];
-  if (!s.windows[id] || !tab?.url) return;
-  const spaceId = bookmarkSpaceId(s, s.windows[id]);
+  if (!s.windows[windowId] || !tab?.url) return;
+  const spaceId = bookmarkSpaceId(s, s.windows[windowId]);
   const roots = s.bookmarks.roots[spaceId];
   const existing = Object.values(s.bookmarks.nodes).find((n) => n.kind === "url" && n.url === tab.url && roots && isUnder(n.id, [roots.bar, roots.other]));
-  const bookmarkId = existing?.id ?? s.addBookmark({ spaceId, url: tab.url, title: tab.customTitle || tab.title || tab.url, favicon: tab.favicon });
-  useBookmarkDialog.getState().set({ kind: "page", windowId: id, bookmarkId });
+  const bookmarkId = existing?.id ?? (await addBookmark({ spaceId, url: tab.url, title: tab.customTitle || tab.title || tab.url, favicon: tab.favicon }));
+  useBookmarkDialog.getState().set({ kind: "page", windowId, bookmarkId });
 }
 
 export function bookmarkAllTabs(windowId: string | null | undefined) {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const id = resolveWindowId(s, windowId);
   if (!id) return;
   const tabs = viewTabIds(s, id)
@@ -112,7 +114,7 @@ export function bookmarkAllTabs(windowId: string | null | undefined) {
 }
 
 function isUnder(id: string, roots: string[]): boolean {
-  const { nodes } = useBrowser.getState().bookmarks;
+  const { nodes } = browserRead.getState().bookmarks;
   let node = nodes[id];
   for (let i = 0; node && i < 64; i++) {
     if (roots.includes(node.id)) return true;

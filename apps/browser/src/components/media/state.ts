@@ -1,11 +1,15 @@
+import * as settingsCommands from "../../runtime/settingsActions";
 import type { DisplayMediaRequest, MediaCommand, NowPlaying, PictureInPictureState } from "@bay/nncore";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
-import type { BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId } from "../../store/model";
 import { splitOf } from "../../store/splits";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { setMuted } from "../../runtime/organizeActions";
+import { browserRead } from "../../store/read";
 
 export type Session = NowPlaying & {
   playedAt: number;
@@ -107,11 +111,10 @@ export function pauseAllMedia(windowId: string) {
 }
 
 export function toggleMediaTabMute(tabId: string) {
-  const s = useBrowser.getState();
-  const tab = s.tabs[tabId];
+  const tab = browserRead.getState().tabs[tabId];
   if (!tab) return;
   const muted = !tab.muted;
-  s.setMuted([tabId], muted);
+  reportBrowserCommand(setMuted([tabId], muted));
   void webviews.get(tabId)?.setMuted(muted);
 }
 
@@ -186,7 +189,7 @@ export function setAutoPictureInPictureForSite(tabId: string, on: boolean) {
   const host = hostOf(s.tabs[tabId]?.url ?? "");
   if (!host) return;
   const sites = (s.settings.noAutoPictureInPictureSites ?? []).filter((h) => h !== host);
-  s.updateSettings({ noAutoPictureInPictureSites: on ? sites : [...sites, host] });
+  reportBrowserCommand(settingsCommands.updateSettings({ noAutoPictureInPictureSites: on ? sites : [...sites, host] }));
 }
 
 // A video in Picture in Picture, or the page's own document Picture in Picture window (a call's pop-out): either way the

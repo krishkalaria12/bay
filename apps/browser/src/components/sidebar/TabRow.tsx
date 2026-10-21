@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import { Pressable, TextInput, View } from "@bay/platform";
 import { ActivitySpinner, ContextMenuArea, FadeLabel, MouseArea, Surface, Symbol } from "@bay/shell";
 import { memo, useEffect, useRef, useState } from "react";
@@ -5,7 +7,8 @@ import { type GestureResponderEvent } from "react-native";
 import Animated from "@bay/platform/motion";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId, pinnedPage } from "../../store/model";
 import type { Tab } from "../../store/types";
 import { useIsActiveTab, usePageSpaceId, useTab, useWindowId } from "../../store/hooks";
@@ -70,7 +73,7 @@ function rowFlags(s: BrowserState, windowId: string, tabId: string): number {
 // it, as Arc's does.
 function closeButton(tab: Pick<Tab, "id" | "pinnedRow" | "unloaded">) {
   if (!tab.pinnedRow) return { icon: "xmark", tooltip: "Close Tab (⌘W)", onPress: () => void closeTab(tab.id) };
-  if (tab.unloaded) return { icon: "xmark", tooltip: "Remove Pinned Tab", onPress: () => useBrowser.getState().removeTab(tab.id) };
+  if (tab.unloaded) return { icon: "xmark", tooltip: "Remove Pinned Tab", onPress: () => reportBrowserCommand(tabCommands.removeTab(tab.id)) };
   return { icon: "minus", tooltip: "Unload Tab (⌘W)", onPress: () => void closeTab(tab.id) };
 }
 

@@ -1,5 +1,7 @@
 import { displayUrl, hostOf, parseUrl, type Suggestion } from "@bay/core";
-import type { HistoryEntry, Tab } from "../../store/types";
+import type { Tab } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 
 // `host` marks a frequent site: a whole site, not one page.
 export type PaletteSuggestion = Suggestion & { detail?: string; host?: string };
@@ -19,7 +21,7 @@ export function currentPageActions(tab: Pick<Tab, "url" | "title" | "customTitle
   ];
 }
 
-export function paletteStart(tabs: Tab[], history: HistoryEntry[], currentTabId: string): PaletteSection[] {
+export function paletteStart(tabs: Tab[], history: readonly HistoryEntry[], currentTabId: string): PaletteSection[] {
   const recent: Suggestion[] = tabs
     .filter((t) => t.id !== currentTabId && !!t.url)
     .sort((a, b) => b.lastActiveAt - a.lastActiveAt)

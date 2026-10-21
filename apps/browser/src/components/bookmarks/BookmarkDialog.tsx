@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";
@@ -13,6 +13,9 @@ import { FolderTree } from "./FolderTree";
 import { useSidebarFieldShown, useSidebarOnRight } from "../layout/windowLayout";
 import { SIDEBAR_FIELD } from "../layout/constants";
 import { useSidebarMetrics, useSidebarWidth } from "../sidebar/tokens";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { addBookmarkFolder, addBookmarkTree, moveBookmark, removeBookmark, updateBookmark } from "../../runtime/bookmarkActions";
+import { browserRead } from "../../store/read";
 
 export function BookmarkDialog() {
   const windowId = useWindowId();
@@ -45,28 +48,28 @@ function DialogPanel({ state }: { state: BookmarkDialogState }) {
   }, [bookmark]);
 
   const done = () => {
-    const s = useBrowser.getState();
     if (state.kind === "page") {
-      if (!s.bookmarks.nodes[state.bookmarkId]) return close();
-      if (name.trim() && name !== bookmark?.title) s.updateBookmark(state.bookmarkId, { title: name.trim() });
-      if (folderId && folderId !== bookmark?.parentId) s.moveBookmark(state.bookmarkId, folderId);
+      if (!browserRead.getState().bookmarks.nodes[state.bookmarkId]) return close();
+      if (name.trim() && name !== bookmark?.title) reportBrowserCommand(updateBookmark(state.bookmarkId, { title: name.trim() }));
+      if (folderId && folderId !== bookmark?.parentId) reportBrowserCommand(moveBookmark(state.bookmarkId, folderId));
     } else {
       const title = name.trim() || "Tabs";
-      s.addBookmarkTree(state.spaceId, [{ title, children: state.tabs.map((t) => ({ title: t.title, url: t.url })) }], folderId ?? undefined);
+      reportBrowserCommand(
+        addBookmarkTree(state.spaceId, [{ title, children: state.tabs.map((t) => ({ title: t.title, url: t.url })) }], folderId ?? undefined),
+      );
     }
     close();
   };
 
   const remove = () => {
-    if (state.kind === "page") useBrowser.getState().removeBookmark(state.bookmarkId);
+    if (state.kind === "page") reportBrowserCommand(removeBookmark(state.bookmarkId));
     close();
   };
 
   const newFolder = async () => {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId: state.windowId });
     if (!title || !spaceId) return;
-    const id = useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: folderId ?? undefined });
-    setFolderId(id);
+    setFolderId(await addBookmarkFolder({ spaceId, title, parentId: folderId ?? undefined }));
   };
 
   const heading = state.kind === "allTabs" ? `Bookmark ${state.tabs.length} Tabs` : "Bookmark Added";

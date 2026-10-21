@@ -14,11 +14,12 @@ import Animated, {
   type SharedValue,
 } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
-import { armSidebarMoveUndo } from "../../lib/folderUndo";
+import { withFolderMoveUndo } from "../../lib/folderUndo";
+import { moveGroup, movePinnedFolder, placeTabs } from "../../runtime/organizeActions";
 import { useTheme } from "../../lib/theme";
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { canMoveFolder, folderDepth } from "../../store/folders";
@@ -231,13 +232,13 @@ class DragController {
       !splitDrop && this.measured && ghost && sources.length === 1 && sources[0]!.kind !== "tile" && !this.into
         ? this.landingSpot(commit ? drop : { type: "none" })
         : null;
-    const undoBefore = useBrowser.getState().folderMoveUndo;
     if (commit && !splitDrop && this.measured && sources.length) {
-      const s = useBrowser.getState();
       const ids = sources.flatMap((i) => i.tabIds);
-      if (drop.type === "tabs") s.placeTabs(ids, drop.placement);
-      else if (drop.type === "group" && sources[0]!.groupId) s.moveGroup(sources[0]!.groupId, drop.placement);
-      else if (drop.type === "folder") s.movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId);
+      const groupId = sources[0]!.groupId;
+      // A local command commits before it returns, so the gaps below still close in the same frame.
+      if (drop.type === "tabs") withFolderMoveUndo(this.windowId, () => placeTabs(ids, drop.placement));
+      else if (drop.type === "group" && groupId) withFolderMoveUndo(this.windowId, () => moveGroup(groupId, drop.placement));
+      else if (drop.type === "folder") withFolderMoveUndo(this.windowId, () => movePinnedFolder(drop.folderId, drop.beforeId, drop.parentId));
     }
     // The gaps close as the store moves the items into them, in the same commit: nothing moves on screen.
     for (const i of this.items.values()) {
@@ -256,7 +257,6 @@ class DragController {
     this.setSources(new Set());
     this.setDropInto(null);
     this.marks.setState({ pins: false });
-    if (useBrowser.getState().folderMoveUndo !== undoBefore) armSidebarMoveUndo(this.windowId);
     if (!spot || !ghost) {
       this.token = null;
       this.setLanding(null);
@@ -560,7 +560,7 @@ export const useDragSource = (key: string) => useStore(useContext(DragContext)?.
 /** The drop would pin the dragged tabs. */
 export const useDropPins = () => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.pins);
 
-export function useDragItem(key: string, spec: ItemSpec, selection: () => string[] = () => []) {
+export function useDragItem(key: string, spec: ItemSpec, selection: () => readonly string[] = () => []) {
   const controller = useContext(DragContext) ?? undefined;
   const marks = controller?.marks ?? noMarks;
   const item = useMemo(() => controller?.create(key), [controller, key]);
@@ -577,7 +577,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
   }, [controller, item, key]);
 
   // One responder for the item's life: a new one mid-gesture would drop the gesture.
-  const begin = useEffectEvent((x: number, y: number) => void controller?.begin(key, x, y, selection()));
+  const begin = useEffectEvent((x: number, y: number) => void controller?.begin(key, x, y, [...selection()]));
   const movable = useEffectEvent(() => spec.kind !== "tail");
   const responder = useMemo(
     () =>

@@ -21,7 +21,7 @@ export type ShortcutStroke = {
 };
 
 /** The native modifier `mod` stands for, as the menus spell it (Menus.swift, Windows' ACCEL tables). */
-export const modNativeName = (os: PlatformOS): "command" | "control" => (os === "windows" ? "control" : "command");
+export const modNativeName = (os: PlatformOS): "command" | "control" => (os === "macos" ? "command" : "control");
 
 // The glyphs macOS hints are written with, and the modifier each stands for.
 const GLYPHS: Record<string, Modifier> = { "⌃": "ctrl", "⌥": "alt", "⇧": "shift", "⌘": "mod" };
@@ -182,7 +182,7 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   keyboardShortcuts: { key: "/", mod: true },
   openFile: { key: "O", mod: true },
   newLittleBay: { key: "N", mod: true, alt: true },
-  openProfileMenu: { key: "P", mod: true, shift: true },
+  openSpaceMenu: { key: "P", mod: true, shift: true },
   moveTabUp: { key: "Up", mod: true, shift: true },
   moveTabDown: { key: "Down", mod: true, shift: true },
   moveTabToWindow: { key: "N", mod: true, shift: true },

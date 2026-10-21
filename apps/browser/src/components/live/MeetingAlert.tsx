@@ -18,7 +18,9 @@ import {
   timeRange,
   type CalendarEvent,
 } from "../../live/meetings";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { activate } from "../../runtime/tabActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { viewTabIds } from "../../store/model";
 import { IconButton } from "../primitives";
 import { measureRow, type Anchor } from "../sidebar/state";
@@ -127,7 +129,7 @@ function AlertCard({ event, windowId, windowWidth }: { event: CalendarEvent; win
               icon="calendar"
               height={30}
               onPress={() => {
-                useBrowser.getState().activate(calendarTab);
+                reportBrowserCommand(activate(calendarTab));
                 dismiss(event);
               }}
             />

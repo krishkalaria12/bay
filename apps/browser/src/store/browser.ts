@@ -1,3 +1,4 @@
+import type { ServiceState } from "../runtime/serviceState";
 import { create, type StateCreator } from "zustand";
 import { createBookmarksSlice, EMPTY_BOOKMARKS, engineRoots, rootIdsFor, type BookmarksSlice } from "./bookmarks";
 import { createFoldersSlice, prunePinnedFolders, type FoldersSlice } from "./folders";
@@ -9,9 +10,9 @@ import { createPeeksSlice, type PeeksSlice } from "./peeks";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, withSpaceEmoji, type SpacesSlice } from "./spaces";
 import { normalizeAwakeSites } from "../lib/awakeSites";
 import { normalizeExternalLinkRules } from "../lib/externalLinkRules";
-import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
+import { createSettingsSlice, DEFAULT_SETTINGS, restoreSettings, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
-import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
+import { activated, apply, createTabsSlice, registeredAppUrlOpener, withNewTab, type AppUrlOpener, type TabsSlice } from "./tabs";
 import type { BrowserWindow, PinnedFolder, Tab, TabGroup } from "./types";
 import { createUiSlice, type UiSlice } from "./ui";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
@@ -28,6 +29,7 @@ export type BrowserState = SpacesSlice &
   BookmarksSlice &
   SettingsSlice &
   UiSlice & {
+    services: Partial<ServiceState>;
     hydrate(data: HydrateData): void;
   };
 
@@ -86,11 +88,13 @@ const batched =
     return creator(batchedSet, get, api);
   };
 
-export const useBrowser = create<BrowserState>()(
+// A store per runtime owner: the app's own (useBrowser), or an isolated one (runtime/authority.ts, tests) that doesn't
+// publish engine profiles or open app URLs on the app's behalf.
+const browserState = (publishEngineProfiles: boolean, openAppUrl: AppUrlOpener): StateCreator<BrowserState> =>
   batched((...a) => ({
-    ...createSpacesSlice(...a),
+    ...createSpacesSlice(publishEngineProfiles)(...a),
     ...createWindowsSlice(...a),
-    ...createTabsSlice(...a),
+    ...createTabsSlice(openAppUrl)(...a),
     ...createGroupsSlice(...a),
     ...createFoldersSlice(...a),
     ...createOrganizeSlice(...a),
@@ -101,6 +105,7 @@ export const useBrowser = create<BrowserState>()(
     ...createSettingsSlice(...a),
     ...createUiSlice(...a),
 
+    services: {},
     hydrate(data) {
       const [set, get] = a;
       const s = get();
@@ -109,7 +114,7 @@ export const useBrowser = create<BrowserState>()(
       const isolated = isolateSavedSpaces(savedSpaces, spaceOrder, data.orphanedProfileData ?? []);
       const { detached, owners } = isolated;
       const spaces = withSpaceEmoji(isolated.spaces, spaceOrder);
-      const settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      const settings = restoreSettings(data.settings);
       settings.externalLinkRules = normalizeExternalLinkRules(settings.externalLinkRules);
       settings.density = settings.density === "compact" ? "compact" : "comfortable";
       settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
@@ -224,6 +229,7 @@ export const useBrowser = create<BrowserState>()(
             .map((saved: PinnedFolder & { windowId?: string }) => [saved.id, withoutWindowId(saved)]),
         ),
         folderMoveUndo: [],
+        bookmarkUndo: [],
         splits,
         closedTabs: data.closedTabs ?? [],
         closedWindows: data.closedWindows ?? [],
@@ -262,12 +268,19 @@ export const useBrowser = create<BrowserState>()(
       }
       set(next);
     },
-  })),
-);
+  }));
 
-useBrowser.subscribe((s, prev) => {
-  const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
-  if (patch) useBrowser.setState(patch);
-});
+export function createBrowserStore(options: { publishEngineProfiles?: boolean; openAppUrl?: AppUrlOpener } = {}) {
+  const store = create<BrowserState>()(browserState(options.publishEngineProfiles ?? false, options.openAppUrl ?? (() => false)));
+  store.subscribe((s, prev) => {
+    const patch = s.windows !== prev.windows && forgetClosedPrivateWindows(s);
+    if (patch) store.setState(patch);
+  });
+  return store;
+}
+
+// Native integrations on macOS still use model.engineProfile without an explicit registry.
+export const useBrowser = createBrowserStore({ publishEngineProfiles: true, openAppUrl: registeredAppUrlOpener });
+export type BrowserStore = ReturnType<typeof createBrowserStore>;
 
 export type { CreateWindowOptions } from "./windows";

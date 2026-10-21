@@ -1,10 +1,12 @@
 #include "ImportCore.h"
 #include "SQLite.h"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <map>
 #include <mutex>
 #include <set>
+#include <sstream>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -112,42 +114,54 @@ Json chromiumLogins(const Path &profile, const Bytes &key,
                     const std::atomic_bool &cancelled, int &blocked) {
   blocked = 0;
   Json out = Json::array();
-  Snapshot db(profile / "Login Data");
-  db.query("SELECT * FROM logins", [&](sqlite3_stmt *s) {
-    checkCancelled(cancelled);
-    if (integer(s, "blacklisted_by_user") || integer(s, "blocked_by_user"))
+  std::set<std::string> seen;
+  bool found = false;
+  for (auto filename : {"Login Data", "Login Data For Account"}) {
+    if (!std::filesystem::exists(profile / filename))
+      continue;
+    found = true;
+    Snapshot db(profile / filename);
+    db.query("SELECT * FROM logins", [&](sqlite3_stmt *s) {
+      checkCancelled(cancelled);
+      if (integer(s, "blacklisted_by_user") || integer(s, "blocked_by_user"))
+        return true;
+      auto encrypted = blob(s, column(s, "password_value"));
+      if (encrypted.empty())
+        return true;
+      Bytes password;
+      try {
+        password = decrypt(encrypted, key);
+      } catch (const Failure &) {
+        ++blocked;
+        return true;
+      }
+      if (password.empty())
+        return true;
+      auto url = text(s, "origin_url");
+      if (url.empty())
+        url = text(s, "signon_realm");
+      Json credential = {
+          {"url", url},
+          {"username", text(s, "username_value")},
+          {"password", std::string(password.begin(), password.end())},
+          {"realm", text(s, "signon_realm")}};
+      bay::sync::erase(password);
+      auto created = chromiumTime(integer(s, "date_created")),
+           last = chromiumTime(integer(s, "date_last_used"));
+      if (created)
+        credential["created"] = created;
+      if (last)
+        credential["lastUsed"] = last;
+      credential["timesUsed"] = integer(s, "times_used");
+      auto identity = credential.value("realm", credential.value("url", "")) +
+                      std::string(1, '\0') + credential.value("username", "");
+      if (seen.insert(identity).second)
+        out.push_back(credential);
       return true;
-    auto encrypted = blob(s, column(s, "password_value"));
-    if (encrypted.empty())
-      return true;
-    Bytes password;
-    try {
-      password = decrypt(encrypted, key);
-    } catch (const Failure &) {
-      ++blocked;
-      return true;
-    }
-    if (password.empty())
-      return true;
-    auto url = text(s, "origin_url");
-    if (url.empty())
-      url = text(s, "signon_realm");
-    Json credential = {
-        {"url", url},
-        {"username", text(s, "username_value")},
-        {"password", std::string(password.begin(), password.end())},
-        {"realm", text(s, "signon_realm")}};
-    bay::sync::erase(password);
-    auto created = chromiumTime(integer(s, "date_created")),
-         last = chromiumTime(integer(s, "date_last_used"));
-    if (created)
-      credential["created"] = created;
-    if (last)
-      credential["lastUsed"] = last;
-    credential["timesUsed"] = integer(s, "times_used");
-    out.push_back(credential);
-    return true;
-  });
+    });
+  }
+  if (!found)
+    throw Failure("notFound", "No saved passwords in this profile");
   return out;
 }
 Json readEnginePasswords(const Path &root, const Path &profile) {
@@ -316,6 +330,9 @@ SensitiveImport chromiumAutofill(const Path &profile, const Bytes &key,
         bay::sync::erase(number);
         return true;
       }
+      number.erase(std::remove_if(number.begin(), number.end(),
+                                  [](auto c) { return c == ' ' || c == '-'; }),
+                   number.end());
       Json card = {{"number", std::string(number.begin(), number.end())}};
       bay::sync::erase(number);
       for (auto field :
@@ -333,6 +350,93 @@ SensitiveImport chromiumAutofill(const Path &profile, const Bytes &key,
     });
   return out;
 }
+namespace {
+std::string percentDecode(const std::string &value) {
+  std::string out;
+  for (std::size_t i = 0; i < value.size(); ++i) {
+    if (value[i] == '%' && i + 2 < value.size()) {
+      auto hex = value.substr(i + 1, 2);
+      if (hex.find_first_not_of("0123456789abcdefABCDEF") ==
+          std::string::npos) {
+        out += static_cast<char>(std::stoul(hex, nullptr, 16));
+        i += 2;
+        continue;
+      }
+    }
+    out += value[i];
+  }
+  return out;
+}
+Json cookiePartition(const std::string &attributes, bool &isolated) {
+  isolated = false;
+  Json partition;
+  auto suffix = attributes;
+  if (!suffix.empty() && suffix.front() == '^')
+    suffix.erase(suffix.begin());
+  std::istringstream stream(suffix);
+  std::string pair;
+  while (std::getline(stream, pair, '&')) {
+    if (pair.empty())
+      continue;
+    auto equal = pair.find('=');
+    auto key = pair.substr(0, equal),
+         value = equal == std::string::npos
+                     ? ""
+                     : percentDecode(pair.substr(equal + 1));
+    if (key.empty()) {
+      isolated = true;
+      continue;
+    }
+    if (key == "userContextId" || key == "privateBrowsingId") {
+      if (!value.empty() && value != "0")
+        isolated = true;
+    } else if (key == "firstPartyDomain" ||
+               key == "geckoViewSessionContextId") {
+      if (!value.empty())
+        isolated = true;
+    } else if (key == "partitionKey") {
+      if (value.size() < 3 || value.front() != '(' || value.back() != ')') {
+        isolated = true;
+        continue;
+      }
+      std::vector<std::string> fields;
+      std::istringstream parts(value.substr(1, value.size() - 2));
+      std::string field;
+      while (std::getline(parts, field, ','))
+        fields.push_back(field);
+      if (fields.size() < 2 || fields.size() > 3 ||
+          (fields[0] != "https" && fields[0] != "http")) {
+        isolated = true;
+        continue;
+      }
+      auto host = fields[1];
+      for (auto &c : host)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      bool valid =
+          !host.empty() && host.front() != '.' && host.back() != '.' &&
+          host.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789.-_") ==
+              std::string::npos;
+      if (fields.size() == 3) {
+        try {
+          std::size_t used = 0;
+          auto port = std::stoul(fields[2], &used);
+          valid =
+              valid && used == fields[2].size() && port >= 1 && port <= 65535;
+        } catch (...) {
+          valid = false;
+        }
+      }
+      if (!valid) {
+        isolated = true;
+        continue;
+      }
+      partition = {{"topLevelSite", fields[0] + "://" + host},
+                   {"crossSite", false}};
+    }
+  }
+  return partition;
+}
+} // namespace
 SensitiveImport firefoxCookies(const Path &profile,
                                const std::atomic_bool &cancelled) {
   Snapshot db(profile / "cookies.sqlite");
@@ -342,7 +446,9 @@ SensitiveImport firefoxCookies(const Path &profile,
                  .count();
   db.query("SELECT * FROM moz_cookies", [&](sqlite3_stmt *s) {
     checkCancelled(cancelled);
-    if (!text(s, "originAttributes").empty())
+    bool isolated = false;
+    auto partition = cookiePartition(text(s, "originAttributes"), isolated);
+    if (isolated)
       return true;
     auto expiry = integer(s, "expiry");
     double expires =
@@ -372,6 +478,8 @@ SensitiveImport firefoxCookies(const Path &profile,
                                         ? "nonSecure"
                                         : "unset"},
                    {"sourcePort", -1}};
+    if (!partition.is_null())
+      cookie["partitionKey"] = partition;
     if (expires > 0)
       cookie["expires"] = expires;
     auto created = integer(s, "creationTime"),
@@ -396,7 +504,8 @@ struct SECItem {
 class NSS {
 public:
   HMODULE library = nullptr;
-  int (*init)(const char *) = nullptr;
+  int (*init)(const char *, const char *, const char *, const char *,
+              std::uint32_t) = nullptr;
   int (*shutdown)() = nullptr;
   void *(*slot)() = nullptr;
   void (*freeSlot)(void *) = nullptr;
@@ -430,7 +539,7 @@ public:
                     "Install Firefox to import encrypted Firefox passwords, or "
                     "import its password CSV export");
     try {
-      init = function<decltype(init)>("NSS_Init");
+      init = function<decltype(init)>("NSS_Initialize");
       shutdown = function<decltype(shutdown)>("NSS_Shutdown");
       slot = function<decltype(slot)>("PK11_GetInternalKeySlot");
       freeSlot = function<decltype(freeSlot)>("PK11_FreeSlot");
@@ -466,9 +575,27 @@ public:
 Json firefoxLogins(const Path &profile, const std::string &password,
                    const std::atomic_bool &cancelled) {
   std::lock_guard<std::mutex> lock(nssMutex);
+  auto temporary =
+      std::filesystem::temp_directory_path() /
+      std::filesystem::u8path("bay-firefox-" +
+                              bay::sync::base32(bay::sync::randomBytes(16)));
+  bay::sync::createPrivateDirectory(temporary);
+  struct RemoveCopy {
+    Path path;
+    ~RemoveCopy() {
+      std::error_code ignored;
+      std::filesystem::remove_all(path, ignored);
+    }
+  } remove{temporary};
+  Snapshot(profile / "key4.db").writeTo(temporary / "key4.db");
+  if (std::filesystem::exists(profile / "cert9.db"))
+    Snapshot(profile / "cert9.db").writeTo(temporary / "cert9.db");
   NSS nss;
-  auto path = "sql:" + profile.u8string();
-  if (nss.init(path.c_str()) != 0)
+  auto path = "sql:" + temporary.u8string();
+  // NSS public nss.h flags: read-only, no profile modules, no root certificate
+  // modules.
+  constexpr std::uint32_t flags = 0x1 | 0x4 | 0x10;
+  if (nss.init(path.c_str(), "", "", "secmod.db", flags) != 0)
     throw Failure("unreadable",
                   "Firefox could not open this profile's key4.db");
   nss.initialized = true;
@@ -487,13 +614,16 @@ Json firefoxLogins(const Path &profile, const std::string &password,
     if (pass.empty())
       continue;
     auto host = row.value("hostname", "");
-    auto url = row.value("formSubmitURL", "");
-    Json item = {{"url", url.empty() ? host : url},
-                 {"username", nss.field(row.value("encryptedUsername", ""))},
-                 {"password", pass},
-                 {"realm", row.value("httpRealm", Json(host)).is_null()
-                               ? Json(host)
-                               : row["httpRealm"]}};
+    auto url = row.contains("formSubmitURL") && row["formSubmitURL"].is_string()
+                   ? row["formSubmitURL"].get<std::string>()
+                   : "";
+    Json item = {
+        {"url", url.empty() ? host : url},
+        {"username", nss.field(row.value("encryptedUsername", ""))},
+        {"password", pass},
+        {"realm", row.contains("httpRealm") && row["httpRealm"].is_string()
+                      ? row["httpRealm"]
+                      : Json(host)}};
     for (auto field : {std::pair{"timeCreated", "created"},
                        {"timeLastUsed", "lastUsed"},
                        {"timesUsed", "timesUsed"}})

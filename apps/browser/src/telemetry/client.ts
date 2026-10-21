@@ -1,6 +1,7 @@
+import { sendService } from "../runtime/serviceClient";
 import { isMac } from "@bay/platform";
 import { engineInfo } from "@bay/nncore";
-import { launchEnvironment, readDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
+import { launchEnvironment, readDocument, saveDocument, systemInfo, writeDocument, type SystemInfo } from "@bay/shell";
 import { create } from "zustand";
 import {
   BATCH_SIZE,
@@ -55,9 +56,19 @@ function readJson<T>(name: string): T | null {
 }
 
 let saved: Saved = { ...DEFAULT };
+let documentRevision = 0;
+let quitGeneration = 0;
+let suspended = false;
+let quitCheckpoint: Promise<void> | null = null;
+let quitCheckpointPending = false;
+let acknowledgedRevision = -1;
+// Serialize acknowledged checkpoints and cancellation repairs, even if the
+// previous attempt failed or was cancelled while its disk writes were pending.
+let checkpointWrites: Promise<void> = Promise.resolve();
 
 function save(patch: Partial<Saved>) {
   saved = { ...saved, ...patch };
+  documentRevision++;
   try {
     writeDocument(TELEMETRY_STATE_DOC, JSON.stringify(saved));
   } catch {}
@@ -110,8 +121,10 @@ let generation = 0;
 
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 function persistQueue(now = false) {
+  documentRevision++;
   clearTimeout(persistTimer);
   persistTimer = undefined;
+  if (suspended && !now) return;
   const write = () => {
     try {
       writeDocument(TELEMETRY_QUEUE_DOC, JSON.stringify(queue));
@@ -174,7 +187,7 @@ let failures = 0;
 let retryAt = 0;
 
 function scheduleFlush(delay: number) {
-  if (!saved.sharing) return;
+  if (!saved.sharing || suspended) return;
   const due = Math.max(Date.now() + delay, retryAt);
   if (flushTimer && flushDueAt <= due) return;
   clearTimeout(flushTimer);
@@ -211,7 +224,7 @@ function logRequest(entry: RequestLogEntry, body: string) {
 // Uploads in flight, so turning sharing off can stop them mid-request.
 const inflight = new Set<AbortController>();
 
-async function post(kind: RequestLogEntry["kind"], url: string, body: string, count: number) {
+async function post(kind: RequestLogEntry["kind"], url: string, body: string, count: number, gen: number) {
   const entry: RequestLogEntry = { at: new Date().toISOString(), kind, url, count, bytes: body.length, status: null };
   if (!canSend()) {
     logRequest({ ...entry, dryRun: true }, body);
@@ -227,7 +240,7 @@ async function post(kind: RequestLogEntry["kind"], url: string, body: string, co
   } finally {
     inflight.delete(abort);
   }
-  logRequest(entry, body);
+  if (gen === generation) logRequest(entry, body);
   return entry.status;
 }
 
@@ -267,12 +280,13 @@ async function drain<T>(
 ): Promise<DrainResult> {
   let size = BATCH_SIZE;
   for (let batch = take().slice(0, size); batch.length; batch = take().slice(0, size)) {
+    if (gen !== generation || suspended) return "stale";
     const body = encode(batch);
     if (body.length > MAX_BODY_BYTES && batch.length > 1) {
       size = Math.ceil(batch.length / 2);
       continue;
     }
-    const status = await post(kind, LOGS_URL, body, batch.length);
+    const status = await post(kind, LOGS_URL, body, batch.length, gen);
     if (gen !== generation) return "stale";
     const result = outcome(status, batch.length);
     if (result === "retry") return "failed";
@@ -284,7 +298,7 @@ async function drain<T>(
 
 export async function flush() {
   flushTimer = undefined;
-  if (!saved.sharing || flushing) return;
+  if (!saved.sharing || flushing || suspended) return;
   flushing = true;
   const gen = generation;
   let result: DrainResult;
@@ -305,9 +319,9 @@ export async function flush() {
         gen,
       );
   } finally {
-    flushing = false;
+    if (gen === generation) flushing = false;
   }
-  if (result === "stale") return;
+  if (result === "stale" || gen !== generation) return;
   persistQueue(true);
   if (result === "failed") {
     failures++;
@@ -324,9 +338,11 @@ export async function flush() {
 export type SharingSource = "settings" | "onboarding" | "ask";
 
 export function setSharing(on: boolean, source: SharingSource) {
+  if (sendService("telemetrySetSharing", [on, source])) return;
   const now = Date.now();
   if (on === saved.sharing) return save({ decidedAt: now, askDoneAt: saved.askDoneAt ?? now });
   generation++;
+  flushing = false;
   failures = 0;
   retryAt = 0;
   if (!on) {
@@ -341,14 +357,16 @@ export function setSharing(on: boolean, source: SharingSource) {
     installId: uuidv4(),
     crashCursor: now,
     lastVersion: appInfo().appVersion,
-    sessionOpen: true,
+    sessionOpen: !suspended,
     decidedAt: now,
     askDoneAt: saved.askDoneAt ?? now,
   });
   capture("sharing_turned_on", { source });
 }
 
-export const dismissAsk = () => save({ askDoneAt: Date.now() });
+export const dismissAsk = () => {
+  if (!sendService("telemetryDismissAsk")) save({ askDoneAt: Date.now() });
+};
 
 // MARK: Lifecycle
 
@@ -383,10 +401,77 @@ export function startClient(): { previous: PreviousSession; updatedFrom: string 
   return { previous, updatedFrom };
 }
 
-export function endSession() {
-  if (!saved.sharing) return;
-  save({ sessionOpen: false });
+/** Stop a retired coordinator without marking a crashed session as clean. */
+export function stopClient() {
+  suspended = true;
+  generation++;
+  quitGeneration++;
+  clearTimeout(flushTimer);
+  clearTimeout(persistTimer);
+  flushTimer = persistTimer = undefined;
+  for (const abort of inflight) abort.abort();
+}
+
+function checkpointDocuments(attempt: number): Promise<void> {
+  const writing = checkpointWrites.then(async () => {
+    while (attempt === quitGeneration) {
+      const revision = documentRevision;
+      // Wait for both writes even on failure, so a later attempt cannot race
+      // the successful half of an older checkpoint.
+      const results = await Promise.allSettled(
+        [TELEMETRY_STATE_DOC, TELEMETRY_QUEUE_DOC].map(async (name) => {
+          await saveDocument(name, JSON.stringify(name === TELEMETRY_STATE_DOC ? saved : queue));
+        }),
+      );
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      if (attempt === quitGeneration && revision === documentRevision) {
+        acknowledgedRevision = revision;
+        return;
+      }
+    }
+  });
+  checkpointWrites = writing.catch(() => {});
+  return writing;
+}
+
+export function endSession(): Promise<void> {
+  if (quitCheckpoint && (quitCheckpointPending || acknowledgedRevision === documentRevision)) return quitCheckpoint;
+  if (!suspended) {
+    suspended = true;
+    generation++;
+    quitGeneration++;
+    flushing = false;
+    for (const abort of inflight) abort.abort();
+    inflight.clear();
+    clearTimeout(flushTimer);
+    flushTimer = undefined;
+    clearTimeout(persistTimer);
+    persistTimer = undefined;
+    if (saved.sharing) save({ sessionOpen: false });
+  }
+  const checkpoint = checkpointDocuments(quitGeneration);
+  quitCheckpoint = checkpoint;
+  quitCheckpointPending = true;
+  const settled = () => {
+    if (quitCheckpoint === checkpoint) quitCheckpointPending = false;
+  };
+  void checkpoint.then(settled, settled);
+  return quitCheckpoint;
+}
+
+export function resumeClientAfterQuit(): Promise<void> {
+  if (!suspended) return checkpointWrites;
+  suspended = false;
+  quitCheckpoint = null;
+  quitCheckpointPending = false;
+  const attempt = ++quitGeneration;
+  if (saved.sharing) save({ sessionOpen: true });
   persistQueue(true);
+  scheduleFlush(FLUSH_DELAY_MS);
+  // Re-save the current choice and queue after any old checkpoint settles.
+  // Never restore a snapshot: opting out meanwhile must keep its empty queue.
+  return checkpointDocuments(attempt);
 }
 
 export const crashCursor = () => saved.crashCursor;

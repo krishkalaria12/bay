@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version,
-    [Parameter(Mandatory)][string]$AppDirectory,
+    [string]$AppDirectory,
     [string]$OutputDirectory,
     [ValidateSet('stable', 'beta')][string]$Channel = 'beta',
     [string]$FeedUrl = $env:BAY_WINDOWS_UPDATE_FEED,
@@ -11,10 +11,12 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+if (-not $AppDirectory) { $AppDirectory = Join-Path $repo 'dist/windows-app' }
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repo 'dist/windows' }
 $AppDirectory = (Resolve-Path $AppDirectory).Path
 if (-not (Test-Path (Join-Path $AppDirectory 'Bay.exe'))) { throw "Missing Bay.exe in $AppDirectory" }
-if (-not (Test-Path (Join-Path $AppDirectory 'nncore.dll'))) { throw 'Stage the verified engine artifact before packaging' }
+if (-not (Test-Path (Join-Path $AppDirectory 'chrome.dll'))) { throw 'Stage the verified Chrome engine artifact before packaging' }
+if (-not (Test-Path (Join-Path $AppDirectory 'bay-ui/index.html'))) { throw 'Build and stage the Bay web UI before packaging' }
 if ($env:BAY_SIGNING_CERT_SHA1 -and $env:BAY_SIGNING_CERT_SHA1 -notmatch '^[a-fA-F0-9]{40}$') { throw 'BAY_SIGNING_CERT_SHA1 must be a certificate thumbprint' }
 if (-not $Unsigned -and -not $env:BAY_SIGNING_CERT_SHA1 -and -not $env:BAY_SIGNING_DLIB) {
     throw 'Configure BAY_SIGNING_CERT_SHA1 or BAY_SIGNING_DLIB and BAY_SIGNING_METADATA, or pass -Unsigned for local testing'
@@ -33,6 +35,11 @@ New-Item $OutputDirectory -ItemType Directory -Force | Out-Null
 $OutputDirectory = (Resolve-Path $OutputDirectory).Path
 try {
     Copy-Item (Join-Path $AppDirectory '*') $stage -Recurse
+    # Verify the exact copied runtime and WebUI before adding release files or
+    # changing PE resources/signatures. The build manifest covers unsigned input.
+    & python (Join-Path $PSScriptRoot 'build-app.py') --verify $stage
+    if ($LASTEXITCODE -ne 0) { throw 'Staged application manifest validation failed' }
+    Remove-Item (Join-Path $stage 'app-manifest.json')
     Copy-Item (Join-Path $repo 'LICENSE'), (Join-Path $repo 'NOTICE') $stage
     Copy-Item (Join-Path $repo 'packaging/windows/licenses') $stage -Recurse
     # Keep debugging symbols separate from the downloadable application.
@@ -45,14 +52,39 @@ try {
             if (-not $env:BAY_SIGNING_METADATA) { throw 'BAY_SIGNING_METADATA is required with BAY_SIGNING_DLIB' }
             $signArgs += @('/dlib', $env:BAY_SIGNING_DLIB, '/dmdf', $env:BAY_SIGNING_METADATA)
         } else { $signArgs += @('/sha1', $env:BAY_SIGNING_CERT_SHA1) }
+        # Discover the publisher from an actual signature, including Azure's
+        # short-lived signing certificate, before embedding the trusted policy.
+        & $signtool sign @signArgs (Join-Path $stage 'Bay.exe')
+        if ($LASTEXITCODE -ne 0) { throw 'Could not determine the signing publisher' }
+    }
+    $publisher = if ($Unsigned) { @() } else { @((Get-AuthenticodeSignature (Join-Path $stage 'Bay.exe')).SignerCertificate.Thumbprint) }
+    $publisherSubject = if ($Unsigned) { '' } else { (Get-AuthenticodeSignature (Join-Path $stage 'Bay.exe')).SignerCertificate.Subject }
+    $origins = @(@($FeedUrl, $DownloadBaseUrl) | Where-Object { $_ } | ForEach-Object {
+        ([uri]$_).GetLeftPart([UriPartial]::Authority).TrimEnd('/').ToLowerInvariant()
+    } | Select-Object -Unique)
+    $parts = $Version.Split('.')
+    $buildNumber = if ($parts.Count -eq 4) { $parts[3] } else { '0' }
+    $policy = @{ enabled = (-not $Unsigned -and [bool]$FeedUrl -and [bool]$DownloadBaseUrl);
+        version = $Version; appVersion = $Version; buildNumber = $buildNumber; channel = $Channel;
+        feedUrl = $FeedUrl; publisherThumbprints = $publisher; allowedOrigins = $origins;
+        publisherSubject = $publisherSubject; allowPublisherRenewal = [bool]$env:BAY_SIGNING_DLIB;
+        scriptSha256 = (Get-FileHash (Join-Path $stage 'update.ps1') -Algorithm SHA256).Hash.ToLowerInvariant() }
+    $policyPath = Join-Path $stage 'update-config.json'
+    $policy | ConvertTo-Json -Depth 6 | Set-Content $policyPath -Encoding utf8
+    & python (Join-Path $PSScriptRoot 'embed-update-config.py') --executable (Join-Path $stage 'Bay.exe') --config $policyPath
+    if ($LASTEXITCODE -ne 0) { throw 'Embedding the signed update policy failed' }
+    if (-not $Unsigned) {
+        # Resource editing invalidates the preliminary signature. Sign every PE
+        # afterwards, with one publisher for Chrome's executable/chrome_elf checks.
         foreach ($file in Get-ChildItem $stage -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' }) {
             & $signtool sign @signArgs $file.FullName
             if ($LASTEXITCODE -ne 0) { throw "Signing failed: $($file.FullName)" }
+            $signature = Get-AuthenticodeSignature $file.FullName
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -notin $publisher) {
+                throw "The signing publisher changed while packaging: $($file.FullName)"
+            }
         }
     }
-    $publisher = if ($Unsigned) { @() } else { @((Get-AuthenticodeSignature (Join-Path $stage 'Bay.exe')).SignerCertificate.Thumbprint) }
-    @{ enabled = (-not $Unsigned -and [bool]$FeedUrl); version = $Version; channel = $Channel;
-       feedUrl = $FeedUrl; publisherThumbprints = $publisher } | ConvertTo-Json | Set-Content (Join-Path $stage 'update-config.json') -Encoding utf8
     # Inno signs its generated uninstaller at compile time, then the setup binary.
     $arguments = @("/DAppVersion=$Version", "/DStageDir=$stage", "/DOutputDir=$OutputDirectory")
     if (-not $Unsigned) {

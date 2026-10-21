@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../../runtime/commands";
+import * as tabCommands from "../../../runtime/tabActions";
 import { View } from "@bay/platform";
 import { copyText, focusWindow } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
@@ -19,7 +21,7 @@ import {
 } from "../../../live/sources";
 import { live, updateConfig, useLive } from "../../../live/store";
 import type { LiveAccount, LiveSourceId } from "../../../live/types";
-import { useBrowser } from "../../../store/browser";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { Favicon } from "../../primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
@@ -49,7 +51,7 @@ export function LiveFoldersPane() {
             <Row
               key={f.id}
               title={f.name}
-              description={`${profiles[f.spaceId]?.name ?? "Profile"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
+              description={`${profiles[f.spaceId]?.name ?? "Space"} · ${f.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(f.id)}`}
             >
               <View style={{ flexDirection: "row", gap: 6 }}>
                 <Button title="Refresh" onPress={() => void refreshFolder(f.id)} />
@@ -108,7 +110,7 @@ function browserWindow(): string | null {
 function openInBrowser(url: string) {
   const windowId = browserWindow();
   if (!windowId) return;
-  useBrowser.getState().newTab(windowId, { url });
+  reportBrowserCommand(tabCommands.newTab(windowId, { url }));
   void focusWindow(windowId);
 }
 

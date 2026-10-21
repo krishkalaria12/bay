@@ -21,6 +21,8 @@ export type Capabilities = {
   menuBar: boolean;
   /** The window's buttons are the app's own views (BayShell traffic lights). */
   trafficLights: boolean;
+  /** The app draws the window's caption buttons (minimize, maximize, close) at its top right (Windows). */
+  captionButtons: boolean;
   /** BaySwipe: trackpad two-finger back/forward, the app's own. Windows: Chrome's overscroll. */
   swipe: boolean;
   /** BayCalendar (EventKit). Windows: none yet. */
@@ -63,27 +65,29 @@ export type Capabilities = {
 export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boolean): Capabilities {
   const mac = os === "macos";
   const windows = os === "windows";
+  const webDesktop = windows || os === "linux";
   return {
     liquidGlass: mac && hasModule("BayGlassEffect"),
     vibrancy: mac && hasModule("BayVisualEffect"),
     shaders: mac && hasModule("BayAreaLight") && hasModule("BayEdgeLight") && hasModule("BayPowerUp") && hasModule("BayWindowBackdrop"),
-    windowBackdrop: mac || windows,
+    windowBackdrop: mac || webDesktop,
     dock: mac && hasModule("BayApp"),
     dockSelection: mac && hasModule("BayDockSelection"),
     menuBar: mac,
     trafficLights: mac,
+    captionButtons: windows,
     swipe: mac && hasModule("BaySwipe"),
     calendar: mac && hasModule("BayCalendar"),
     translation: mac && hasModule("BayTranslate"),
     appleScript: mac && hasModule("BayApp"),
     handoff: mac,
     introMusic: mac && hasModule("BayApp"),
-    notifications: mac ? hasModule("BayApp") : windows && hasModule("BayNotifications"),
-    keychain: mac ? hasModule("BayKeychain") : windows && hasModule("BayKeychain"),
+    notifications: hasModule("BayApp") && (mac || hasModule("BayNotifications")),
+    keychain: hasModule("BayKeychain"),
     inlineCompletion: mac && hasModule("BayInlineCompletion"),
     windowProfiles: mac && hasModule("BayWindowProfile"),
     tooltips: mac,
-    hover: mac || windows,
+    hover: mac || webDesktop,
     focusRing: mac,
     keyDownEvents: mac,
     nativeDrag: mac,

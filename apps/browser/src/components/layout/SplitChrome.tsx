@@ -6,9 +6,10 @@ import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedSt
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { withAlpha } from "../sidebar/tokens";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { viewTabIds } from "../../store/model";
-import type { SplitView } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type SplitView = DeepReadonly<import("../../store/types").SplitView>;
 import { resize, type Divider, type Rect } from "./geometry";
 import { useHover } from "../primitives";
 import { hideToast, useToasts } from "./splitActions";
@@ -16,6 +17,8 @@ import { useWindowId } from "../../store/hooks";
 import { zoneHit, zoneRect, type ZoneStage } from "./splitDrop";
 import { setDropTarget, setOnPage, setTargetResolver, useTabDrag } from "./tabDrag";
 import { SPLIT_TOAST_SPRING, ZONE_SLIDE_MS, ZONE_SPRING } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSplit } from "../../runtime/splitActions";
 
 export function SplitDividers({ split, dividers, width, height }: { split: SplitView; dividers: Divider[]; width: number; height: number }) {
   return (
@@ -32,7 +35,7 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
   // The sizes the drag started from.
-  const start = useRef<{ sizes: number[]; stack?: [number, number] }>({ sizes: split.sizes });
+  const start = useRef<{ sizes: readonly number[]; stack?: readonly [number, number] }>({ sizes: split.sizes });
   const grant = useEffectEvent(() => {
     start.current = { sizes: split.sizes, stack: split.stack?.sizes };
     setDragging(true);
@@ -41,10 +44,10 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
     const delta = divider.vertical ? dx : dy;
     const room = divider.vertical ? width : height;
     if (divider.kind === "root") {
-      useBrowser.getState().updateSplit(split.id, { sizes: resize(start.current.sizes, divider.index, delta, room) });
+      reportBrowserCommand(updateSplit(split.id, { sizes: resize(start.current.sizes, divider.index, delta, room) }));
     } else if (start.current.stack) {
       const next = resize(start.current.stack, 0, delta, room) as [number, number];
-      useBrowser.getState().updateSplit(split.id, { stackSizes: next });
+      reportBrowserCommand(updateSplit(split.id, { stackSizes: next }));
     }
   });
 

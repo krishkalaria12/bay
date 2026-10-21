@@ -45,6 +45,7 @@ private:
 std::vector<std::string> recoveryWords(const Bytes &entropy);
 Bytes recoveryEntropy(const std::string &phrase);
 void erase(Bytes &bytes) noexcept;
+void createPrivateDirectory(const std::filesystem::path &path);
 // DPAPI is user-bound and intentionally never uses CRYPTPROTECT_LOCAL_MACHINE.
 Bytes protect(const Bytes &plain);
 Bytes unprotect(const Bytes &sealed);

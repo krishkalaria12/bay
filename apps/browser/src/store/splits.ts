@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { leaveGroups, syncGroupOrder } from "./groups";
 import { listOfTab, newId, tabListKey, withList } from "./model";
@@ -36,7 +37,7 @@ export type OpenPaneResult = { ok: true; tabId: string; splitId: string } | { ok
 
 export type SplitSlot = string[];
 
-export function slotsOf(split: Pick<SplitView, "tabIds" | "stack">): SplitSlot[] {
+export function slotsOf(split: Pick<BrowserProjection["splits"][string], "tabIds" | "stack">): SplitSlot[] {
   const slots: SplitSlot[] = [];
   for (let i = 0; i < split.tabIds.length; i++) {
     if (split.stack?.index === i) slots.push([split.tabIds[i]!, split.tabIds[++i]!]);
@@ -57,9 +58,12 @@ function fromSlots(split: SplitView, slots: SplitSlot[], sizes?: number[]): Spli
   return next;
 }
 
-export function splitOf(s: Pick<BrowserState, "splits">, tabId: string | undefined): SplitView | undefined {
+export function splitOf<S extends Pick<BrowserState, "splits"> | Pick<BrowserProjection, "splits">>(
+  s: S,
+  tabId: string | undefined,
+): S["splits"][string] | undefined {
   if (!tabId) return undefined;
-  for (const v of Object.values(s.splits)) if (v.tabIds.includes(tabId)) return v;
+  for (const v of Object.values(s.splits) as S["splits"][string][]) if (v.tabIds.includes(tabId)) return v;
   return undefined;
 }
 

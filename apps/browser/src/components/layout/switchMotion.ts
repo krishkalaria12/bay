@@ -2,7 +2,8 @@ import { useLayoutEffect, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { reduceMotion } from "../../lib/reduceMotion";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId } from "../../store/model";
 import { splitOf } from "../../store/splits";
 import { sidebarTabOrder } from "../sidebar/entries";
@@ -18,7 +19,7 @@ export const SWITCH_EASING = Easing.bezier(0.2, 0.8, 0.2, 1);
 type Axis = "x" | "y";
 // +1: the tab switched to is after the one left (below it, or right of it); -1 before it; 0 not known (a live
 // folder's row, say): a dissolve. `closed`: the tab left was closed (its row fades out on its own, RowMotion).
-type Switch = { from: string[]; to: string[]; direction: -1 | 0 | 1; axis: Axis; at: number; closed: boolean };
+type Switch = { from: readonly string[]; to: readonly string[]; direction: -1 | 0 | 1; axis: Axis; at: number; closed: boolean };
 
 const switches = new Map<string, Switch>();
 

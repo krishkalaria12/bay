@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle, type SharedValue } from "@bay/platform/moti
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { groupLabel } from "../../store/organize";
 import { MeetingTimeLabel, useMeetingCountdown } from "../live/MeetingCountdown";
@@ -24,6 +24,8 @@ import { registerRow, useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, SplitRowItem, TabRowItem } from "./TabRow";
 import { GROUP_COLORS, useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { closeGroup, updateGroup } from "../../runtime/organizeActions";
 
 export const GroupBlock = memo(function GroupBlock({ groupId, section }: { groupId: string; section: "list" | "pinnedGroups" }) {
   const metrics = useSidebarMetrics();
@@ -121,7 +123,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
         <Pressable
           onPress={() => {
             dismissHover();
-            if (!renaming) useBrowser.getState().updateGroup(groupId, { collapsed: !collapsed });
+            if (!renaming) reportBrowserCommand(updateGroup(groupId, { collapsed: !collapsed }));
           }}
         >
           {({ pressed }) => (
@@ -175,7 +177,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                     weight="semibold"
                     box={22}
                     radius={6}
-                    onPress={() => useBrowser.getState().closeGroup(groupId)}
+                    onPress={() => reportBrowserCommand(closeGroup(groupId))}
                     tooltip="Close Group"
                   />
                 }

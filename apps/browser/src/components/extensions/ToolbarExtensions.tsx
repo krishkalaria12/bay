@@ -4,7 +4,7 @@ import { ContextMenuArea, showMenu, Symbol } from "@bay/shell";
 import { memo, useRef, useState } from "react";
 import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { toggleCastPicker, useCastRoutes } from "../media/cast";
 import type { ToolbarPalette } from "../layout/toolbarColors";
 import { usePages } from "../layout/pageState";

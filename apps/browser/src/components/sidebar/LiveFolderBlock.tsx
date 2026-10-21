@@ -22,9 +22,9 @@ import { COMPLETION_MS } from "../../live/constants";
 import { prBadge } from "../../live/github";
 import { folderRows, type FolderRow } from "../../live/rows";
 import { SOURCES } from "../../live/sources";
-import { setLive, updateFolder, useLive, profileFolders } from "../../live/store";
+import { setLiveView, updateFolder, useLive, profileFolders } from "../../live/store";
 import type { CompletedItem, LiveItem } from "../../live/types";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePageSpaceId } from "../../store/hooks";
 import { activeTabId, viewTabIds } from "../../store/model";
 import { openSettings } from "../settings/windows";
@@ -283,7 +283,7 @@ function MoreRow({ folderId, section, count }: { folderId: string; section: stri
   const key = `${folderId}:${section}`;
   return (
     <View {...hoverProps}>
-      <Pressable onPress={() => setLive((s) => ({ showAll: { ...s.showAll, [key]: true } }))}>
+      <Pressable onPress={() => setLiveView("showAll", key, true)}>
         <View
           style={{
             height: 26,
@@ -314,7 +314,7 @@ function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: s
     <View>
       <View {...hoverProps}>
         <Pressable
-          onPress={() => setLive((s) => ({ expandedStacks: { ...s.expandedStacks, [stack.id]: collapsed } }))}
+          onPress={() => setLiveView("expandedStacks", stack.id, collapsed)}
           accessibilityLabel={collapsed ? "Expand pull request stack" : "Collapse pull request stack"}
         >
           <View

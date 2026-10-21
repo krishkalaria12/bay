@@ -24,8 +24,23 @@ jobs:
         with:
           arch: x64
       - run: pnpm typecheck
+      - run: pnpm typecheck:web
+      - run: pnpm build:web
       - run: pnpm test
       - run: python -m unittest discover -s scripts/windows -p 'test_*.py' -v
+      - name: Compile installer template
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $stage = Join-Path $env:RUNNER_TEMP 'bay-installer-template'
+          New-Item $stage -ItemType Directory -Force | Out-Null
+          Set-Content (Join-Path $stage 'Bay.exe') 'installer template fixture'
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+          & $compiler /DAppVersion=0.0.0 "/DStageDir=$stage" "/DOutputDir=$env:RUNNER_TEMP/bay-installer-result" packaging/windows/Bay.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Verify updater security and version handling
+        run: pwsh -File scripts/windows/test-updater.ps1
       - name: Validate Windows patch selection
         run: python engine/patches/series.py files --platform win
       - name: Parse PowerShell scripts
@@ -36,3 +51,31 @@ jobs:
             [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
             if ($errors.Count) { throw ($errors | Out-String) }
           }
+  app:
+    # Configure these repository variables after publishing the first engine.
+    if: ${{ vars.BAY_WINDOWS_ENGINE_URL != '' && vars.BAY_WINDOWS_ENGINE_SHA256 != '' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pnpm install --frozen-lockfile
+      - name: Fetch verified pinned engine
+        env:
+          BAY_ENGINE_URL: ${{ vars.BAY_WINDOWS_ENGINE_URL }}
+          BAY_ENGINE_SHA256: ${{ vars.BAY_WINDOWS_ENGINE_SHA256 }}
+        run: python scripts/windows/fetch-engine.py --url "$env:BAY_ENGINE_URL" --sha256 "$env:BAY_ENGINE_SHA256" --destination dist/windows-engine
+      - name: Build desktop app
+        run: python scripts/windows/build-app.py --engine dist/windows-engine --output dist/windows-app
+      - name: Archive desktop app
+        uses: actions/upload-artifact@v4
+        with:
+          name: bay-windows-x64
+          path: dist/windows-app/
+          if-no-files-found: error

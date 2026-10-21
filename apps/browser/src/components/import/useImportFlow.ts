@@ -4,7 +4,8 @@ import { closeWindow, confirm } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { APP_NAME } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { browserRead } from "../../store/read";
+import { createSpace } from "../../runtime/spaceActions";
 import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID } from "../settings/windows";
 import {
@@ -56,10 +57,12 @@ export function useImportFlow() {
   const [asking, setAsking] = useState(false);
   const diaLaunched = useRef(0);
   const abort = useRef<AbortController | null>(null);
+  const choice = useRef(0);
+  const checkingUnlock = useRef(false);
 
   const recheckAccess = async () => {
     if (!api) return;
-    if (step === "safari") return setFullDiskAccess(api.safariHasFullDiskAccess());
+    if (step === "safari") return setFullDiskAccess(await api.safariHasFullDiskAccess());
     const list = await api.listBrowsers().catch(() => null);
     if (!list) return;
     setBrowsers(importable(list));
@@ -71,6 +74,7 @@ export function useImportFlow() {
   };
 
   const choose = (b: BrowserSource) => {
+    const selected = ++choice.current;
     setSource(b);
     const defaults = b.profiles.filter((p) => p.isDefault);
     setSourceProfiles((defaults.length ? defaults : b.profiles.slice(0, 1)).map((p) => p.id));
@@ -81,7 +85,15 @@ export function useImportFlow() {
         ? ["tabs", "pinnedTabs"]
         : [...new Set(b.profiles.flatMap((p) => p.available))];
     setKinds(new Set(available));
-    if (b.family === "safari" && api) setFullDiskAccess(api.safariHasFullDiskAccess());
+    if (b.family === "safari" && api)
+      void api.safariHasFullDiskAccess().then(
+        (value) => {
+          if (choice.current === selected) setFullDiskAccess(value);
+        },
+        () => {
+          if (choice.current === selected) setFullDiskAccess(false);
+        },
+      );
     setDia(null);
     setExtensions([]);
     setNotes([]);
@@ -100,24 +112,35 @@ export function useImportFlow() {
   const isArc = source?.family === "arc";
   const isDiaTabs = source?.family === "automation";
 
-  const next = () => {
-    if (!source) return;
-    setError(null);
-    if (step === "choose" && isDiaTabs) {
-      setDiaStatus("checking");
-      setStep("dia");
-      return void refreshDia();
-    }
-    if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
-    if (step === "choose") {
-      if (source.needsFullDiskAccess) return setStep("access");
-      if (source.requiresExport) return setStep("safari");
-      if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
-    }
-    if ((step === "choose" || step === "profiles") && ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && api && !api.isBrowserUnlocked(source.id)) {
-      return setStep("unlock");
-    }
-    void run(kinds);
+  const next = async () => {
+    if (!source || checkingUnlock.current) return;
+    const selected = choice.current;
+    return checkUnlock(
+      checkingUnlock,
+      async () => {
+        setError(null);
+        if (step === "choose" && isDiaTabs) {
+          setDiaStatus("checking");
+          setStep("dia");
+          return void refreshDia();
+        }
+        if (step === "profiles" && isDiaTabs && dia) return void runDia(dia, sourceProfiles, kinds);
+        if (step === "choose") {
+          if (source.needsFullDiskAccess) return setStep("access");
+          if (source.requiresExport) return setStep("safari");
+          if (source.profiles.length > 1 || (isArc && allSpaces.length > 1)) return setStep("profiles");
+        }
+        if ((step === "choose" || step === "profiles") && ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && api) {
+          const unlocked = await api.isBrowserUnlocked(source.id);
+          if (choice.current !== selected) return;
+          if (!unlocked) return setStep("unlock");
+        }
+        void run(kinds);
+      },
+      () => {
+        if (choice.current === selected) setError(`Couldn't check access to ${source.name}. Try again.`);
+      },
+    );
   };
 
   const unlock = async () => {
@@ -148,7 +171,7 @@ export function useImportFlow() {
 
   const destination = async (index: number, name: string, color?: string, emoji?: string, used?: Set<string>): Promise<string> => {
     if (index === 0) return target;
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     const clash = s.spaceOrder.find((id) => !used?.has(id) && s.spaces[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (clash) {
       const { confirmed } = await confirm({
@@ -161,7 +184,7 @@ export function useImportFlow() {
       if (!confirmed) return clash;
     }
     // Without an emoji of its own (Chrome's profiles, an Arc space with a symbol) the space gets a free one (createSpace).
-    return s.createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
+    return createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
   };
 
   const finish = () => setTimeout(() => setStep("done"), DONE_DELAY_MS);
@@ -185,7 +208,7 @@ export function useImportFlow() {
     const extensionFailures: ExtensionFailure[] = [];
     const left: string[] = [];
     // Firefox keeps no keychain key: without a primary password its logins open as they are.
-    if (source.family === "firefox" && requested.includes("passwords") && !api.isBrowserUnlocked(source.id)) {
+    if (source.family === "firefox" && requested.includes("passwords") && !(await api.isBrowserUnlocked(source.id))) {
       await api.unlockBrowser(source.id).catch(() => {});
     }
 
@@ -262,7 +285,7 @@ export function useImportFlow() {
       }
     }
     setExtensions(extensionFailures);
-    left.push(...extensionFailures.map((f) => `${f.extension.name} in ${useBrowser.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));
+    left.push(...extensionFailures.map((f) => `${f.extension.name} in ${browserRead.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));
     setNotes(left);
     setStatus((st) => Object.fromEntries(Object.entries(st).map(([k, v]) => [k, failed.has(k as ImportKind) ? "failed" : v === "failed" ? v : "done"])));
     setFailures([...failed].map(([kind, names]) => ({ kind, profiles: selected.length > 1 ? names : [] })));
@@ -339,7 +362,7 @@ export function useImportFlow() {
     const total = emptyCounts();
     for (const [i, p] of selected.entries()) {
       const dest = await destination(i, p.name);
-      total.tabs += importDiaProfile(dest, p, { pinned: wanted.has("pinnedTabs"), open: wanted.has("tabs") });
+      total.tabs += await importDiaProfile(dest, p, { pinned: wanted.has("pinnedTabs"), open: wanted.has("tabs") });
     }
     setStatus(Object.fromEntries(order.map((k) => [k, "done"])));
     setFailures([]);
@@ -389,7 +412,7 @@ export function useImportFlow() {
           ? `${APP_NAME} still doesn't have Full Disk Access. Grant it above, or use the export file below.`
           : "Couldn't read Safari's data. Try the export file below.",
       );
-      setFullDiskAccess(api.safariHasFullDiskAccess());
+      setFullDiskAccess(await api.safariHasFullDiskAccess());
       return;
     }
     setStatus({
@@ -411,7 +434,7 @@ export function useImportFlow() {
     if (!path) return;
     try {
       const root = await api.importBookmarksHTML(path);
-      const n = importBookmarks(target, root, "HTML File");
+      const n = await importBookmarks(target, root, "HTML File");
       setCounts({ ...emptyCounts(), bookmarks: n });
       setFailures([]);
       setStatus({ bookmarks: "done" });
@@ -422,14 +445,14 @@ export function useImportFlow() {
     }
   };
 
-  const openExtensions = () => {
+  const openExtensions = async () => {
     const bySpace = new Map<string, Set<string>>();
     for (const { spaceId, extension } of extensions) {
       if (!extension.webStoreUrl) continue;
       if (!bySpace.has(spaceId)) bySpace.set(spaceId, new Set());
       bySpace.get(spaceId)!.add(extension.webStoreUrl);
     }
-    for (const [spaceId, urls] of bySpace) openInWebStore(spaceId, [...urls]);
+    for (const [spaceId, urls] of bySpace) await openInWebStore(spaceId, [...urls]);
     setExtensions([]);
   };
 
@@ -560,6 +583,17 @@ export function useImportFlow() {
 
 const errorCode = (e: unknown) => (e as { code?: string }).code;
 
+async function checkUnlock(checking: { current: boolean }, action: () => Promise<void>, onError: () => void): Promise<void> {
+  checking.current = true;
+  try {
+    await action();
+  } catch {
+    onError();
+  } finally {
+    checking.current = false;
+  }
+}
+
 type ImportApi = NonNullable<ReturnType<typeof importModule>>;
 type ImportOptions = Parameters<ImportApi["importData"]>[3];
 
@@ -574,7 +608,7 @@ async function readDiaTabs(api: ImportApi, launchedAt: number): Promise<DiaTabsR
 }
 
 function defaultTarget(): string {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const w = s.windows[s.ui.focusedWindowId ?? ""];
   return w && !w.incognito ? w.spaceId : s.settings.defaultSpaceId;
 }

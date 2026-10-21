@@ -13,7 +13,7 @@ import { useState, type ReactNode } from "react";
 import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";
 import { useHover } from "../primitives";
 import { Popover, PopoverRow, PopoverSeparator, PromptButton } from "../layout/controls";

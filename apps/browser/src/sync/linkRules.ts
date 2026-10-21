@@ -1,6 +1,6 @@
 import type { Adapter } from "@bay/sync";
 import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
-import { useBrowser } from "../store/browser";
+import { syncStore } from "./store";
 
 type ProfileLinks = Record<string, { syncId: string }>;
 type SyncedRule = Omit<ExternalLinkRule, "destination"> & {
@@ -14,19 +14,19 @@ function profileIdFor(rule: ExternalLinkRule, links: ProfileLinks): string | und
   const destination = rule.destination;
   if (destination.kind !== "space") return;
   // A new sync chain assigns fresh profile IDs to existing local spaces.
-  if (useBrowser.getState().spaces[destination.spaceId]) return links[destination.spaceId]?.syncId;
+  if (syncStore().getState().spaces[destination.spaceId]) return links[destination.spaceId]?.syncId;
   // A deleted space that never synced cannot be linked elsewhere. Preserve its unavailable rule.
   return destination.syncProfileId ?? links[destination.spaceId]?.syncId ?? `unlinked-rule:${rule.id}`;
 }
 
 function localSpace(syncId: string, links: ProfileLinks): string {
-  const spaces = useBrowser.getState().spaces;
+  const spaces = syncStore().getState().spaces;
   return Object.entries(links).find(([id, link]) => link.syncId === syncId && spaces[id])?.[0] ?? missingSpace(syncId);
 }
 
 // Profile links can arrive after the rules, without any new rule record to apply.
 export function resolveLinkRuleSpaces(links: ProfileLinks): void {
-  const store = useBrowser.getState();
+  const store = syncStore().getState();
   let changed = false;
   const rules = store.settings.externalLinkRules.map((rule) => {
     const destination = rule.destination;
@@ -47,7 +47,7 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
     adoptRemoteOnJoin: true,
     extract: () => {
       const rules: SyncedRule[] = [];
-      for (const rule of useBrowser.getState().settings.externalLinkRules) {
+      for (const rule of syncStore().getState().settings.externalLinkRules) {
         const { destination } = rule;
         if (destination.kind !== "space") {
           rules.push({ ...rule, destination });
@@ -80,7 +80,7 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
       const normalized = normalizeExternalLinkRules(rules);
       // Ignore a malformed list as a whole, so corruption cannot silently remove a rule.
       if (normalized.length !== rules.length) return;
-      useBrowser.getState().updateSettings({ externalLinkRules: normalized });
+      syncStore().getState().updateSettings({ externalLinkRules: normalized });
     },
   };
 }

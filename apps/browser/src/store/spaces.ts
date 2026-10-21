@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "../runtime/projection";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { bookmarkRoots, engineRoots, removeBookmarkTree } from "./bookmarks";
@@ -42,7 +43,8 @@ export const DEFAULT_SPACE: Space = {
 
 const COLORS: SpaceColor[] = ["blue", "green", "orange", "purple", "red", "yellow", "pink"];
 
-export const unusedSpaceColor = (spaces: Record<string, Space>): SpaceColor => COLORS.find((c) => !Object.values(spaces).some((p) => p.color === c)) ?? "blue";
+export const unusedSpaceColor = (spaces: Readonly<Record<string, Pick<Space, "color">>>): SpaceColor =>
+  COLORS.find((c) => !Object.values(spaces).some((p) => p.color === c)) ?? "blue";
 
 // The gradients a new space takes in turn, each with the preset colour nearest it (what shows where one colour does).
 const LOOKS: [string, SpaceColor][] = [
@@ -59,7 +61,7 @@ export const SPACE_LOOKS: { name: string; color: SpaceColor; theme: SpaceTheme }
  * A new space's look, so that no two spaces look alike: the first gradient no space wears, then a theme of a colour
  * no space has. Always a theme, so the space shows as itself over any page.
  */
-export function unusedSpaceLook(spaces: Record<string, Space>): { color: SpaceColor; theme: SpaceTheme } {
+export function unusedSpaceLook(spaces: DeepReadonly<Record<string, Space>>): { color: SpaceColor; theme: SpaceTheme } {
   const worn = new Set(Object.values(spaces).map((p) => p.theme?.colors.join()));
   const look = LOOKS.find(([name]) => !worn.has(presetTheme(name).colors.join()));
   if (look) return { color: look[1], theme: presetTheme(look[0]) };
@@ -129,8 +131,8 @@ export function withSpaceEmoji(spaces: Record<string, Space>, order: string[]): 
 }
 
 // Each space owns a native profile. profileId preserves existing native directories after upgrades.
-export const profileIdOf = (space: Space) => space.profileId || space.id;
-export const engineIdOf = (space: Space) => (profileIdOf(space) === DEFAULT_SPACE_ID ? "" : profileIdOf(space));
+export const profileIdOf = (space: Pick<Space, "id" | "profileId">) => space.profileId || space.id;
+export const engineIdOf = (space: Pick<Space, "id" | "profileId">) => (profileIdOf(space) === DEFAULT_SPACE_ID ? "" : profileIdOf(space));
 
 /**
  * The space that syncs its profile's data (bookmarks, history, passwords): with shared sign-ins several spaces use one
@@ -179,114 +181,117 @@ export function isolateSavedSpaces(spaces: Record<string, Space>, order: string[
   return { spaces: next, detached, owners };
 }
 
-export const createSpacesSlice: StateCreator<BrowserState, [], [], SpacesSlice> = (set, get, api) => {
-  api.subscribe((s, prev) => {
-    if (s.spaces !== prev.spaces) {
-      setSpaceProfiles(Object.fromEntries(Object.values(s.spaces).map((space) => [space.id, profileIdOf(space)])));
-    }
-  });
-
-  return {
-    spaces: { [DEFAULT_SPACE.id]: DEFAULT_SPACE },
-    spaceOrder: [DEFAULT_SPACE.id],
-    orphanedProfileData: [],
-
-    createSpace({ name, color, theme, icon, shareWith }) {
-      const s = get();
-      const source = shareWith ? s.spaces[shareWith] : undefined;
-      const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
-      const profile: Space = {
-        id: newId("p"),
-        name: name.trim() || `Profile ${s.spaceOrder.length + 1}`,
-        color: look.color,
-        ...(look.theme ? { theme: look.theme } : {}),
-        icon: icon || unusedSpaceIcon(s.spaces),
-        createdAt: Date.now(),
-        ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : {}),
-      };
-      const bookmarks = engineRoots(s.bookmarks, profile.id, engineIdOf(profile))[0];
-      set({ spaces: { ...s.spaces, [profile.id]: profile }, spaceOrder: [...s.spaceOrder, profile.id], bookmarks });
-      return profile.id;
-    },
-
-    updateSpace(id, patch) {
-      // A space keeps an icon: clearing it (a synced change without one) leaves the one it has.
-      const { icon, ...rest } = patch;
-      const change = icon ? { ...rest, icon } : rest;
-      set((s) => (s.spaces[id] ? { spaces: { ...s.spaces, [id]: { ...s.spaces[id]!, ...change } } } : {}));
-    },
-
-    deleteSpace(id) {
-      let s = get();
-      if (!s.spaces[id] || s.spaceOrder.length <= 1) return;
-      const spaceOrder = s.spaceOrder.filter((p) => p !== id);
-      const fallback = s.settings.defaultSpaceId === id ? spaceOrder[0]! : s.settings.defaultSpaceId;
-      const settings = {
-        ...s.settings,
-        defaultSpaceId: s.settings.defaultSpaceId === id ? fallback : s.settings.defaultSpaceId,
-        neverTranslateSites: without(s.settings.neverTranslateSites ?? {}, [id]),
-      };
-      const engine = engineIdOf(s.spaces[id]!);
-      // Another space shares its sign-ins: the profile, and its bookmarks, stay theirs.
-      const shared = spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine);
-      const orphaned = shared || s.orphanedProfileData.includes(engine) ? s.orphanedProfileData : [...s.orphanedProfileData, engine];
-
-      // Its windows show the fallback space: the tab each showed there, else its most recent one, else a new one.
-      for (const w of Object.values(s.windows)) {
-        if (w.spaceId !== id || w.kind === "small") continue;
-        let tab = tabToShow(s, w.id, fallback);
-        if (!tab) [s, tab] = withNewTab(s, w.id, { spaceId: fallback, background: true });
-        s = { ...s, windows: { ...s.windows, [w.id]: { ...s.windows[w.id]!, spaceId: fallback } } };
-        s = apply(s, activated(s, tab, w.id));
+// Only the app's own store publishes engine profiles; an isolated store (runtime/authority.ts, tests) keeps its own.
+export const createSpacesSlice =
+  (publishEngineProfiles: boolean): StateCreator<BrowserState, [], [], SpacesSlice> =>
+  (set, get, api) => {
+    api.subscribe((s, prev) => {
+      if (publishEngineProfiles && s.spaces !== prev.spaces) {
+        setSpaceProfiles(Object.fromEntries(Object.values(s.spaces).map((space) => [space.id, profileIdOf(space)])));
       }
-      s = removeTabs(
-        s,
-        Object.values(s.tabs)
-          .filter((t) => t.spaceId === id)
-          .map((t) => t.id),
-        false,
-      );
-      const windows = { ...s.windows };
-      for (const w of Object.values(windows)) {
-        if (w.activeTabIds[id]) windows[w.id] = { ...w, activeTabIds: without(w.activeTabIds, [id]) };
-      }
-      const roots = bookmarkRoots(s.bookmarks, id);
-      set({
-        ...s,
-        windows,
-        spaces: without(s.spaces, [id]),
-        spaceOrder,
-        orphanedProfileData: orphaned,
-        settings,
-        history: without(s.history, [id]),
-        bookmarks:
-          roots && !shared ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
-        groups: Object.fromEntries(Object.entries(s.groups).filter(([, g]) => g.spaceId !== id)),
-        closedTabs: s.closedTabs.filter((c) => c.tab.spaceId !== id),
-        cleanedTabs: s.cleanedTabs.filter((c) => c.tab.spaceId !== id),
-        closedGroups: s.closedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
-        deletedGroups: s.deletedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
-        closedWindows: s.closedWindows.filter((c) => c.window.spaceId !== id).map((c) => ({ ...c, tabs: c.tabs.filter((t) => t.spaceId !== id) })),
-        pinnedFolders: Object.fromEntries(Object.entries(s.pinnedFolders).filter(([, f]) => f.spaceId !== id)),
-      });
-      for (const w of Object.values(get().windows)) {
-        if (!viewTabIds(get(), w.id).length) get().newTab(w.id);
-      }
-    },
+    });
 
-    reorderSpaces(ids) {
-      set((s) => {
-        const known = ids.filter((id) => s.spaces[id]);
-        return { spaceOrder: [...known, ...s.spaceOrder.filter((id) => !known.includes(id))] };
-      });
-    },
+    return {
+      spaces: { [DEFAULT_SPACE.id]: DEFAULT_SPACE },
+      spaceOrder: [DEFAULT_SPACE.id],
+      orphanedProfileData: [],
 
-    setDefaultSpace(id) {
-      set((s) => (s.spaces[id] ? { settings: { ...s.settings, defaultSpaceId: id } } : {}));
-    },
+      createSpace({ name, color, theme, icon, shareWith }) {
+        const s = get();
+        const source = shareWith ? s.spaces[shareWith] : undefined;
+        const look = color || theme !== undefined ? { color: color ?? unusedSpaceColor(s.spaces), theme: theme ?? null } : unusedSpaceLook(s.spaces);
+        const profile: Space = {
+          id: newId("p"),
+          name: name.trim() || `Space ${s.spaceOrder.length + 1}`,
+          color: look.color,
+          ...(look.theme ? { theme: look.theme } : {}),
+          icon: icon || unusedSpaceIcon(s.spaces),
+          createdAt: Date.now(),
+          ...(source ? { profileId: profileIdOf(source), sharesSignIns: true } : {}),
+        };
+        const bookmarks = engineRoots(s.bookmarks, profile.id, engineIdOf(profile))[0];
+        set({ spaces: { ...s.spaces, [profile.id]: profile }, spaceOrder: [...s.spaceOrder, profile.id], bookmarks });
+        return profile.id;
+      },
 
-    profileDataDeleted(engineId) {
-      set((s) => (s.orphanedProfileData.includes(engineId) ? { orphanedProfileData: s.orphanedProfileData.filter((e) => e !== engineId) } : {}));
-    },
+      updateSpace(id, patch) {
+        // A space keeps an icon: clearing it (a synced change without one) leaves the one it has.
+        const { icon, ...rest } = patch;
+        const change = icon ? { ...rest, icon } : rest;
+        set((s) => (s.spaces[id] ? { spaces: { ...s.spaces, [id]: { ...s.spaces[id]!, ...change } } } : {}));
+      },
+
+      deleteSpace(id) {
+        let s = get();
+        if (!s.spaces[id] || s.spaceOrder.length <= 1) return;
+        const spaceOrder = s.spaceOrder.filter((p) => p !== id);
+        const fallback = s.settings.defaultSpaceId === id ? spaceOrder[0]! : s.settings.defaultSpaceId;
+        const settings = {
+          ...s.settings,
+          defaultSpaceId: s.settings.defaultSpaceId === id ? fallback : s.settings.defaultSpaceId,
+          neverTranslateSites: without(s.settings.neverTranslateSites ?? {}, [id]),
+        };
+        const engine = engineIdOf(s.spaces[id]!);
+        // Another space shares its sign-ins: the profile, and its bookmarks, stay theirs.
+        const shared = spaceOrder.some((p) => engineIdOf(s.spaces[p]!) === engine);
+        const orphaned = shared || s.orphanedProfileData.includes(engine) ? s.orphanedProfileData : [...s.orphanedProfileData, engine];
+
+        // Its windows show the fallback space: the tab each showed there, else its most recent one, else a new one.
+        for (const w of Object.values(s.windows)) {
+          if (w.spaceId !== id || w.kind === "small") continue;
+          let tab = tabToShow(s, w.id, fallback);
+          if (!tab) [s, tab] = withNewTab(s, w.id, { spaceId: fallback, background: true });
+          s = { ...s, windows: { ...s.windows, [w.id]: { ...s.windows[w.id]!, spaceId: fallback } } };
+          s = apply(s, activated(s, tab, w.id));
+        }
+        s = removeTabs(
+          s,
+          Object.values(s.tabs)
+            .filter((t) => t.spaceId === id)
+            .map((t) => t.id),
+          false,
+        );
+        const windows = { ...s.windows };
+        for (const w of Object.values(windows)) {
+          if (w.activeTabIds[id]) windows[w.id] = { ...w, activeTabIds: without(w.activeTabIds, [id]) };
+        }
+        const roots = bookmarkRoots(s.bookmarks, id);
+        set({
+          ...s,
+          windows,
+          spaces: without(s.spaces, [id]),
+          spaceOrder,
+          orphanedProfileData: orphaned,
+          settings,
+          history: without(s.history, [id]),
+          bookmarks:
+            roots && !shared ? removeBookmarkTree(s.bookmarks, [roots.bar, roots.other], id) : { ...s.bookmarks, roots: without(s.bookmarks.roots, [id]) },
+          groups: Object.fromEntries(Object.entries(s.groups).filter(([, g]) => g.spaceId !== id)),
+          closedTabs: s.closedTabs.filter((c) => c.tab.spaceId !== id),
+          cleanedTabs: s.cleanedTabs.filter((c) => c.tab.spaceId !== id),
+          closedGroups: s.closedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
+          deletedGroups: s.deletedGroups.filter((c) => c.tabs.every((t) => t.spaceId !== id)),
+          closedWindows: s.closedWindows.filter((c) => c.window.spaceId !== id).map((c) => ({ ...c, tabs: c.tabs.filter((t) => t.spaceId !== id) })),
+          pinnedFolders: Object.fromEntries(Object.entries(s.pinnedFolders).filter(([, f]) => f.spaceId !== id)),
+        });
+        for (const w of Object.values(get().windows)) {
+          if (!viewTabIds(get(), w.id).length) get().newTab(w.id);
+        }
+      },
+
+      reorderSpaces(ids) {
+        set((s) => {
+          const known = ids.filter((id) => s.spaces[id]);
+          return { spaceOrder: [...known, ...s.spaceOrder.filter((id) => !known.includes(id))] };
+        });
+      },
+
+      setDefaultSpace(id) {
+        set((s) => (s.spaces[id] ? { settings: { ...s.settings, defaultSpaceId: id } } : {}));
+      },
+
+      profileDataDeleted(engineId) {
+        set((s) => (s.orphanedProfileData.includes(engineId) ? { orphanedProfileData: s.orphanedProfileData.filter((e) => e !== engineId) } : {}));
+      },
+    };
   };
-};

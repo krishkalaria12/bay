@@ -9,5 +9,6 @@ Bay builds on and ships third-party software under its own licenses, including:
 - ungoogled-chromium (BSD-3-Clause)
 - uBlock Origin Lite (GPL-3.0), bundled unmodified as a separate extension
 - Sparkle (MIT)
-- React Native, React Native macOS and React Native Windows (MIT)
+- React Native, React Native macOS and React Native Web (MIT)
 - nlohmann/json (MIT; Windows native import/sync and test tools)
+- Project Nayuki QR Code generator (MIT; recovery kit QR codes)

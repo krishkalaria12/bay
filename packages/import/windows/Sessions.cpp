@@ -296,13 +296,19 @@ Json chromiumTabs(const Path &profile, const std::atomic_bool &cancelled) {
 }
 Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled) {
   Path file;
+  std::filesystem::file_time_type newest =
+      std::filesystem::file_time_type::min();
   for (auto name :
        {"sessionstore-backups/recovery.jsonlz4", "sessionstore.jsonlz4",
-        "sessionstore-backups/previous.jsonlz4", "sessionstore.js"})
-    if (std::filesystem::exists(profile / name)) {
-      file = profile / name;
-      break;
+        "sessionstore-backups/previous.jsonlz4", "sessionstore.js"}) {
+    auto candidate = profile / name;
+    std::error_code error;
+    auto modified = std::filesystem::last_write_time(candidate, error);
+    if (!error && (file.empty() || modified > newest)) {
+      file = candidate;
+      newest = modified;
     }
+  }
   if (file.empty())
     throw Failure("notFound", "No Firefox session in this profile");
   auto bytes = readBytes(file);
@@ -315,6 +321,10 @@ Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled) {
     int position = 0;
     for (auto &tab : window.value("tabs", Json::array())) {
       checkCancelled(cancelled);
+      if (tab.value("hidden", false)) {
+        ++position;
+        continue;
+      }
       auto entries = tab.value("entries", Json::array());
       if (entries.empty()) {
         ++position;
@@ -334,9 +344,19 @@ Json firefoxTabs(const Path &profile, const std::atomic_bool &cancelled) {
                    {"pinned", tab.value("pinned", false)},
                    {"active", position++ == window.value("selected", 1) - 1},
                    {"windowIndex", windowIndex}};
+      if (tab.contains("groupId") && tab["groupId"].is_string())
+        item["groupId"] = tab["groupId"];
       if (tab.contains("lastAccessed"))
         item["lastActive"] = tab["lastAccessed"];
       out["tabs"].push_back(item);
+    }
+    for (auto &group : window.value("groups", Json::array())) {
+      if (!group.contains("id") || !group["id"].is_string())
+        continue;
+      out["groups"].push_back({{"id", group["id"]},
+                               {"title", group.value("name", "")},
+                               {"color", group.value("color", "grey")},
+                               {"collapsed", group.value("collapsed", false)}});
     }
     ++windowIndex;
   }

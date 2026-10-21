@@ -127,3 +127,27 @@ test("a page's colour never overrides the user's light or dark", async () => {
   page("#FFFFFF");
   assert.match(themeKey(S(), w, null), /:light@#FFFFFF$/, "a light page shows as it is");
 });
+
+test("theme previews stay local and clearing one window keeps another preview", async () => {
+  const { useBrowser } = await import("../store/browser.ts");
+  const { setPreviewLook, themeKey } = await import("./theme.ts");
+  const S = () => useBrowser.getState();
+  S().hydrate({});
+  const a = S().createWindow({ url: "https://example.com" });
+  const b = S().createWindow({ url: "https://example.org" });
+  const original = S();
+  const before = themeKey(original, a, null);
+  try {
+    setPreviewLook(a, { color: "plum", theme: { colors: ["#123456"], intensity: 0.5, grain: 0.3 } });
+    setPreviewLook(b, { color: "plum", theme: { colors: ["#654321"], intensity: 0.5, grain: 0.3 } });
+    assert.equal(S(), original);
+    assert.match(themeKey(S(), a, null), /^custom\|#123456\|/);
+    assert.match(themeKey(S(), b, null), /^custom\|#654321\|/);
+    setPreviewLook(a, null);
+    assert.equal(themeKey(S(), a, null), before);
+    assert.match(themeKey(S(), b, null), /^custom\|#654321\|/);
+  } finally {
+    setPreviewLook(a, null);
+    setPreviewLook(b, null);
+  }
+});

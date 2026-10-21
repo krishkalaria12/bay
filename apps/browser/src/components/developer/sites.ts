@@ -1,4 +1,5 @@
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId } from "../../store/model";
 
 // Which sites are in Developer Mode (devMode.ts), without the app's UI: the window's layout asks.
