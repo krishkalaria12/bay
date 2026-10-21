@@ -32,6 +32,8 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/bay/pip/nn_pip_platform.h"
+#include "chrome/browser/bay/webui/frame_linux.h"
+#include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #endif
 #if BUILDFLAG(IS_WIN)
 #include "base/base_paths_win.h"
@@ -49,6 +51,8 @@ class BayRuntimeMainExtraParts final : public ChromeBrowserMainExtraParts {
   void PreProfileInit() override {
 #if BUILDFLAG(IS_LINUX)
     InitializeBayPictureInPictureBounds();
+    WebUIBrowserWindow::SetBayNativeWidgetFactory(
+        &bay::FrameLinux::CreateNativeWidget);
 #endif
 #if BUILDFLAG(IS_WIN)
     NotificationDisplayServiceFactory::SetBayHandlerInitializer(

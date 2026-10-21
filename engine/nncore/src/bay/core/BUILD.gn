@@ -241,5 +241,11 @@ if (is_mac) {
         "//chrome/browser/ui/webui_browser",
       ]
     }
+    if (is_linux) {
+      deps += [
+        "//chrome/browser/bay/webui:frame_linux",
+        "//chrome/browser/ui/webui_browser",
+      ]
+    }
   }
 }

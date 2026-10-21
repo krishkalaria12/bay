@@ -31,13 +31,35 @@ class FrameHookTests(unittest.TestCase):
         self.assertNotIn('#include "chrome/browser/bay/', patch)
         delegate = (REPO / "engine/nncore/src/bay/core/nn_main_delegate_desktop.cc").read_text()
         hook = delegate[delegate.index("void PreProfileInit() override"):]
-        self.assertIn("SetBayNativeWidgetFactory(\n        &bay::FrameWin::CreateNativeWidget)", hook[:hook.index("}")])
+        hook = hook[:hook.index("}")]
+        for platform, frame in (("IS_WIN", "FrameWin"), ("IS_LINUX", "FrameLinux")):
+            branch = hook[hook.index(f"#if BUILDFLAG({platform})"):]
+            branch = branch[:branch.index("#endif")]
+            self.assertIn(f"SetBayNativeWidgetFactory(\n        &bay::{frame}::CreateNativeWidget)", branch)
 
     def test_frame_builds_into_the_windows_services(self):
         build = (WEBUI / "BUILD.gn").read_text()
         windows = build[build.index('source_set("platform_services_win")'):]
         self.assertIn('"frame_win.cc"', windows)
         self.assertIn('"dwmapi.lib"', windows)
+
+    def test_linux_frame_builds_alone_and_links_into_nncore(self):
+        build = (WEBUI / "BUILD.gn").read_text()
+        linux = build[build.index('source_set("frame_linux")'):]
+        self.assertIn('"frame_linux.cc"', linux[:linux.index("}")])
+        self.assertNotIn('"frame_linux.cc"', build[build.index('source_set("platform_services_win")'):build.index('source_set("frame_linux")')])
+        nncore = (REPO / "engine/nncore/src/bay/core/BUILD.gn").read_text()
+        branch = nncore[nncore.rindex("if (is_linux) {"):]
+        self.assertIn('"//chrome/browser/bay/webui:frame_linux"', branch)
+
+    def test_linux_frame_replaces_the_system_and_views_captions(self):
+        frame = (WEBUI / "frame_linux.cc").read_text()
+        self.assertIn("params.remove_standard_frame = true;", frame)
+        self.assertIn("std::unique_ptr<views::FrameView> CreateFrameView() override", frame)
+        # Resize edges are tested before the client's CSS drag regions.
+        hit = frame[frame.index("int NonClientHitTest("):]
+        self.assertLess(hit.index("GetHTComponentForFrame("), hit.index("NativeFrameView::NonClientHitTest(point)"))
+        self.assertNotIn("windows.h", frame)
 
 
 if __name__ == "__main__":

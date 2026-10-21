@@ -170,6 +170,20 @@ if (is_win) {
   }
 }
 
+if (is_linux) {
+  source_set("frame_linux") {
+    sources = [
+      "frame_linux.cc",
+      "frame_linux.h",
+    ]
+    deps = [
+      "//ui/base",
+      "//ui/gfx/geometry",
+      "//ui/views",
+    ]
+  }
+}
+
 # Pure browser-side privacy/command checks can run without a browser window.
 test("runtime_unittests") {
   sources = [
@@ -222,6 +236,24 @@ if (is_win) {
       "//base",
       "//base/test:run_all_unittests",
       "//testing/gtest",
+    ]
+  }
+}
+
+if (is_linux) {
+  test("frame_linux_unittests") {
+    sources = [
+      "//ui/views/run_all_unittests_main.cc",
+      "frame_linux_unittest.cc",
+    ]
+    deps = [
+      ":frame_linux",
+      "//mojo/core/embedder",
+      "//testing/gtest",
+      "//ui/base",
+      "//ui/gfx/geometry",
+      "//ui/views",
+      "//ui/views:test_support",
     ]
   }
 }
