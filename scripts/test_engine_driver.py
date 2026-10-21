@@ -243,7 +243,9 @@ class LinuxArchiveTests(unittest.TestCase):
                 manifest = json.load(archive.extractfile("manifest.json"))
                 self.assertEqual(manifest["lock"], engine.platform_lock("linux"))
                 self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", manifest["files"])
-                self.assertEqual(archive.getmember("runtime/chrome_sandbox").mode, 0o755)
+                if os.name != "nt":
+                    # Windows chmod/stat cannot model POSIX execute/setuid bits.
+                    self.assertEqual(archive.getmember("runtime/chrome_sandbox").mode, 0o755)
                 for name, checksum in manifest["files"].items():
                     self.assertEqual(hashlib.sha256(archive.extractfile(name).read()).hexdigest(), checksum)
                 self.assertFalse(any(name.endswith(".debug") for name in archive.getnames()))

@@ -27,6 +27,7 @@ jobs:
       - run: pnpm typecheck:web
       - run: pnpm build:web
       - run: pnpm test
+      - run: python -m unittest scripts/test_engine_driver.py -v
       - run: python -m unittest discover -s scripts/windows -p 'test_*.py' -v
       - name: Compile installer template
         shell: pwsh
