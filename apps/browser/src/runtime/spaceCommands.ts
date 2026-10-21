@@ -5,6 +5,7 @@ import {
   commandBoolean,
   commandFields,
   commandIds,
+  commandNullableText,
   commandObject,
   commandText,
   invalidCommand,
@@ -27,7 +28,7 @@ export const SPACE_COMMAND_METHODS = ["createSpace", "updateSpace", "deleteSpace
 
 const MAX_CLEAN_UP_HOURS = 24 * 365;
 const name = (value: unknown) => commandText(value, 1024, true);
-const icon = (value: unknown) => (value === null ? null : commandText(value, 1024, true));
+const icon = commandNullableText;
 const color = (value: unknown): SpaceColor =>
   typeof value === "string" && Object.hasOwn(SPACE_SWATCHES, value) ? (value as SpaceColor) : invalidCommand("invalid space color");
 const fraction = (value: unknown) =>

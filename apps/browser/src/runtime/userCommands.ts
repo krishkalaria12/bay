@@ -8,6 +8,7 @@ import { executeSplitCommand, parseSplitCommand, SPLIT_COMMAND_METHODS, type Spl
 import { executeSpaceCommand, parseSpaceCommand, SPACE_COMMAND_METHODS, type SpaceCommand } from "./spaceCommands";
 import { BOOKMARK_COMMAND_METHODS, executeBookmarkCommand, parseBookmarkCommand, type BookmarkCommand } from "./bookmarkCommands";
 import { executeHistoryCommand, HISTORY_COMMAND_METHODS, parseHistoryCommand, type HistoryCommand } from "./historyCommands";
+import { executeWindowUiCommand, parseWindowUiCommand, WINDOW_UI_COMMAND_METHODS, type WindowUiCommand } from "./windowUiCommands";
 
 export type BrowserCommand =
   | LocationCommand
@@ -18,7 +19,8 @@ export type BrowserCommand =
   | SplitCommand
   | SpaceCommand
   | BookmarkCommand
-  | HistoryCommand;
+  | HistoryCommand
+  | WindowUiCommand;
 
 // Keep in sync with RuntimeCommandResultKind in runtime_state.cc.
 const ID_METHODS = [
@@ -59,6 +61,7 @@ export function parseBrowserCommand(value: unknown): BrowserCommand {
     if ((SPACE_COMMAND_METHODS as readonly string[]).includes(method)) return parseSpaceCommand(value);
     if ((BOOKMARK_COMMAND_METHODS as readonly string[]).includes(method)) return parseBookmarkCommand(value);
     if ((HISTORY_COMMAND_METHODS as readonly string[]).includes(method)) return parseHistoryCommand(value);
+    if ((WINDOW_UI_COMMAND_METHODS as readonly string[]).includes(method)) return parseWindowUiCommand(value);
   }
   return parseLocationCommand(value);
 }
@@ -72,5 +75,6 @@ export function executeBrowserCommand(store: BrowserStore, command: BrowserComma
   if ((SPACE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeSpaceCommand(store, command as SpaceCommand);
   if ((BOOKMARK_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeBookmarkCommand(store, command as BookmarkCommand);
   if ((HISTORY_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeHistoryCommand(store, command as HistoryCommand);
+  if ((WINDOW_UI_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeWindowUiCommand(store, command as WindowUiCommand);
   return executeLocationCommand(store, command as LocationCommand, effects);
 }

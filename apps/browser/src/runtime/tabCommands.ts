@@ -2,10 +2,13 @@ import type { LocationCommandEffects } from "./locationCommands";
 import type { BrowserStore } from "../store/browser";
 import { isIncognitoSpace } from "../store/model";
 import type { NewTabOptions } from "../store/tabs";
+import type { Tab } from "../store/types";
 import {
   commandBoolean,
+  commandFields,
   commandIds,
   commandIndex,
+  commandNullableText,
   commandObject,
   commandText,
   commandUrl,
@@ -16,6 +19,8 @@ import {
 } from "./commandValidation";
 
 export type UserNewTabOptions = Pick<NewTabOptions, "url" | "background" | "openerId" | "spaceId" | "pinned" | "index">;
+// What the user names and keeps; the page's own facts (address, title, zoom) come from the engine.
+export type TabDetailsPatch = Partial<Pick<Tab, "customTitle" | "customIcon" | "kept">>;
 export type TabCommand =
   | { method: "newTab"; windowId: string; options?: UserNewTabOptions }
   | { method: "activate" | "showTab"; tabId: string; windowId?: string | null }
@@ -24,7 +29,8 @@ export type TabCommand =
   | { method: "navigate"; tabId: string; url: string; options?: { userInitiated?: boolean } }
   | { method: "moveTab"; tabId: string; toIndex: number }
   | { method: "activateIndex"; windowId: string; index: number }
-  | { method: "cycle"; windowId: string; delta: 1 | -1 };
+  | { method: "cycle"; windowId: string; delta: 1 | -1 }
+  | { method: "updateTabDetails"; tabId: string; patch: TabDetailsPatch };
 
 export const TAB_COMMAND_METHODS = [
   "newTab",
@@ -39,6 +45,7 @@ export const TAB_COMMAND_METHODS = [
   "moveTab",
   "activateIndex",
   "cycle",
+  "updateTabDetails",
 ] as const;
 
 function newTabOptions(value: unknown): UserNewTabOptions {
@@ -94,6 +101,15 @@ export function parseTabCommand(value: unknown): TabCommand {
       fields("windowId", "delta");
       if (c.delta !== 1 && c.delta !== -1) return invalidCommand("invalid cycle direction");
       return { method: c.method, windowId: windowId(), delta: c.delta };
+    case "updateTabDetails": {
+      fields("tabId", "patch");
+      const p = commandObject(c.patch, ["customTitle", "customIcon", "kept"]);
+      return {
+        method: c.method,
+        tabId: tabId(),
+        patch: commandFields<TabDetailsPatch>(p, { customTitle: commandNullableText, customIcon: commandNullableText, kept: commandBoolean }),
+      };
+    }
     default:
       return invalidCommand("unknown tab command");
   }
@@ -164,6 +180,9 @@ export function executeTabCommand(store: BrowserStore, command: TabCommand, effe
           break;
         case "moveTab":
           s.moveTab(tab.id, command.toIndex);
+          break;
+        case "updateTabDetails":
+          s.updateTab(tab.id, command.patch);
           break;
       }
     }

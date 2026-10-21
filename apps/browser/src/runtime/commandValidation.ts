@@ -67,6 +67,8 @@ export function commandFields<T>(o: Record<string, unknown>, readers: CommandRea
   for (const key of Object.keys(readers) as (keyof T & string)[]) if (o[key] !== undefined) out[key] = readers[key](o[key]);
   return out as T;
 }
+/** A name or icon the user may clear (null) or leave empty. */
+export const commandNullableText = (value: unknown): string | null => (value === null ? null : commandText(value, 1024, true));
 export function commandOptionalText(value: unknown): string | null {
   return value === null ? null : commandText(value);
 }

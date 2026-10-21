@@ -6,6 +6,7 @@ import {
   commandBoolean,
   commandFields,
   commandIds,
+  commandNullableText,
   commandObject,
   commandOptionalText,
   commandText,
@@ -81,7 +82,7 @@ const GROUP_COLORS: readonly string[] = ["grey", "blue", "red", "yellow", "green
 const color = (value: unknown): GroupColor | null =>
   value === null || (typeof value === "string" && GROUP_COLORS.includes(value)) ? (value as GroupColor | null) : invalidCommand("invalid group color");
 const name = (value: unknown) => commandText(value, 1024, true);
-const icon = (value: unknown) => (value === null ? null : commandText(value, 1024, true));
+const icon = commandNullableText;
 
 export function parseOrganizeCommand(value: unknown): OrganizeCommand {
   const c = commandObject(value);

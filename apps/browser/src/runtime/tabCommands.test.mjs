@@ -27,6 +27,7 @@ test("tab parser closes user command fields and copies options and ID arrays", (
     { method: "moveTab", tabId: "t", toIndex: 0 },
     { method: "activateIndex", windowId: "w", index: -1 },
     { method: "cycle", windowId: "w", delta: -1 },
+    { method: "updateTabDetails", tabId: "t", patch: { customTitle: "n", customIcon: null, kept: false } },
   ];
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(TAB_COMMAND_METHODS));
   for (const command of commands) {

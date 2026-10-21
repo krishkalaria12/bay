@@ -1,5 +1,5 @@
 import { dispatchBrowserCommand } from "./commands";
-import type { UserNewTabOptions } from "./tabCommands";
+import type { TabDetailsPatch, UserNewTabOptions } from "./tabCommands";
 
 export const newTab = (windowId: string, options?: UserNewTabOptions) => dispatchBrowserCommand({ method: "newTab", windowId, options });
 export const activate = (tabId: string, windowId?: string | null) => dispatchBrowserCommand({ method: "activate", tabId, windowId });
@@ -13,3 +13,4 @@ export const togglePin = (tabId: string) => dispatchBrowserCommand({ method: "to
 export const moveTab = (tabId: string, toIndex: number) => dispatchBrowserCommand({ method: "moveTab", tabId, toIndex });
 export const activateIndex = (windowId: string, index: number) => dispatchBrowserCommand({ method: "activateIndex", windowId, index });
 export const cycle = (windowId: string, delta: 1 | -1) => dispatchBrowserCommand({ method: "cycle", windowId, delta });
+export const updateTabDetails = (tabId: string, patch: TabDetailsPatch) => dispatchBrowserCommand({ method: "updateTabDetails", tabId, patch });
