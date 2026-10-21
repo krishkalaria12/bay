@@ -24,7 +24,7 @@ std::optional<gfx::Rect> LoadBayPictureInPictureBounds() {
   const auto path = BoundsFile();
   std::string json;
   if (!path || !base::ReadFileToString(*path, &json)) return std::nullopt;
-  auto values = base::JSONReader::ReadDict(json);
+  auto values = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
   if (!values) return std::nullopt;
   auto x = values->FindInt("x");
   auto y = values->FindInt("y");

@@ -9,6 +9,8 @@
 # One source_set: add your nn_<domain>.{h,cc} to `sources` (sorted) and the
 # deps it needs. Nothing in //chrome depends on this target.
 
+import("//testing/test.gni")
+
 assert(is_mac || is_win || is_linux)
 
 source_set("bay") {
@@ -142,7 +144,7 @@ source_set("bay") {
     sources += [
       "nn_downloads_win.cc",
       "nn_external_apps_win.cc",
-      "pip/nn_pip_win.cc",
+      "pip/nn_pip_aura.cc",
     ]
     deps += [
       "//ui/aura",
@@ -166,4 +168,24 @@ config("exports_config") {
 group("exports") {
   all_dependent_configs = [ ":exports_config" ]
   public_deps = [ ":bay" ]
+}
+
+if (is_win || is_linux) {
+  test("pip_platform_unittests") {
+    sources = [
+      "pip/nn_pip_aura.cc",
+      "pip/nn_pip_aura_unittest.cc",
+      "pip/nn_pip_platform.h",
+    ]
+    deps = [
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//chrome/common",
+      "//testing/gtest",
+      "//ui/aura",
+      "//ui/compositor",
+      "//ui/gfx",
+    ]
+  }
 }
