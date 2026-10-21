@@ -1041,14 +1041,17 @@ export CHROME_DEVEL_SANDBOX="$OUT/chrome_sandbox"</pre>
             </li>
 
             <li>
-              <h3>Bay-patched engine, once Phase&nbsp;1 lands <span class="where">container · planned interface</span></h3>
+              <h3>Bay-patched engine, once Phase&nbsp;1 lands <span class="where">container · preparation gated</span></h3>
               <p>
-                This command shape is planned and doesn't work yet: Phase&nbsp;0 generalises <code>scripts/windows/engine.py</code> into one script with a
-                platform profile, and Phase&nbsp;1 adds the <code>linux</code> series lines. It reuses the checkout from Step&nbsp;6 and keeps the Windows
-                script's safety rules: pinned revisions, no resets, and a <code>series.py check</code> before every build.
+                <code>scripts/engine.py --platform win|linux</code> now shares the pinned checkout and build flow with a lock section for each platform.
+                <code>pin</code> works on the Mac; <code>download</code> requires the target host. Linux <code>prepare</code> and <code>build</code> refuse to
+                proceed until the Linux linking and branding patches are listed in the series. Those patches and the native host sources remain Phase&nbsp;1
+                and Phase&nbsp;3 work. The driver keeps pinned revisions, never resets checkouts, and runs <code>series.py check</code> before every build.
+                See <a href="engine-cli.md">Engine CLI</a> for prerequisites and archive details. These build commands are for use once those sources land.
               </p>
               <div class="code">
                 <pre>cd "$HOME/code/bay"
+python3 scripts/engine.py --platform linux pin       <span class="c"># available now, on any host</span>
 python3 scripts/engine.py --platform linux prepare   <span class="c"># checkout → ungoogled → domain subst. → chromium series → Bay layers → gn gen</span>
 python3 scripts/engine.py --platform linux build     <span class="c"># chrome (as bay) with Bay's layer, chrome_sandbox</span>
 python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engine-154.0.8037.58-linux-x64-&lt;digest&gt;.tar.zst + symbols</span></pre>
@@ -1553,12 +1556,27 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             </div>
             <p class="goal">
               The Windows plan's Phase&nbsp;0, with Linux added wherever the code asks "which platform?". The shared half is done in
-              <code>feat/windows</code>; the Linux half is next. The Mac app behaves exactly as before.
+              <code>feat/windows</code>; Linux groundwork is in progress. Preserve the Mac app's behavior.
             </p>
             <dl class="facts">
               <dt>Depends on</dt>
               <dd>Nothing; it is the same work as <a href="windows-port-plan.html#p0">Windows Phase&nbsp;0</a></dd>
             </dl>
+            <div class="callout">
+              <p>
+                <strong>Implementation progress, 21 Oct 2026.</strong> Linux caption buttons and shared-runtime defaults are implemented. Web page-fact
+                ownership reads the host's <code>sharedRuntime</code> constant; the native Mac app keeps local ownership. The series accepts Linux and comma
+                lists, selects the three shared host patches, and installs NNCore without the Mac hooks. Windows DLL dependencies stay in the Windows layer
+                patch. The engine driver now shares platform profiles and keeps the Windows entry point. Linux archives have separate runtime and debug
+                symbol files with checksums; packaging is tested with fixtures, not a built Bay engine. An Ubuntu&nbsp;24.04 workflow covers portable
+                JavaScript and Python tests, typechecks, web export and Linux patch selection. The shared driver tests also run in the Windows workflow.
+              </p>
+              <p>
+                <strong>Still open.</strong> Linux crypto and secrets backends, native host sources and GN gates, Linux engine linking and branding, and the
+                shared-runtime window gaps. Native runtime policy tests are added and syntax-checked; their binaries have not run. The Ubuntu workflow, full
+                engine build and Wayland/X11 hosting gate still need to run. Phase&nbsp;0 is not complete.
+              </p>
+            </div>
             <div class="cols">
               <div>
                 <h4>Shared with Windows <span class="chip ok">Done in feat/windows</span></h4>
