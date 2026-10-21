@@ -1,12 +1,22 @@
 import { onWindowEvent } from "@bay/shell";
-import { useBrowser } from "../store/browser";
+import { useBrowser, type BrowserStore } from "../store/browser";
 import { activeTabId, pinnedPage, viewTabIds } from "../store/model";
 import { SOURCES } from "./sources";
 import { applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./store";
 import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
 import { COMPLETION_MS, REFRESH_INTERVAL_MS, STALE_ON_FOCUS_MS } from "./constants";
 
-const inflight = new Map<string, Promise<void>>();
+type RefreshScope = { active: boolean; timers: Set<ReturnType<typeof setTimeout>> };
+const inflight = new Map<string, { promise: Promise<void>; scope?: RefreshScope }>();
+let engine: { scope: RefreshScope; stop: () => void } | undefined;
+
+function later(scope: RefreshScope | undefined, callback: () => void, delay: number) {
+  const timer = setTimeout(() => {
+    scope?.timers.delete(timer);
+    if (!scope || scope.active) callback();
+  }, delay);
+  scope?.timers.add(timer);
+}
 const fetchedSources = new Map<string, Set<LiveSourceId>>();
 
 const SECTION_ORDER: Record<PullRequestSection, number> = { authored: 0, review: 1, team: 2 };
@@ -17,13 +27,20 @@ function order(items: LiveItem[]): LiveItem[] {
 
 export function refreshFolder(folderId: string): Promise<void> {
   const running = inflight.get(folderId);
-  if (running) return running;
-  const task = run(folderId).finally(() => inflight.delete(folderId));
+  if (running) return running.promise;
+  const scope = engine?.scope;
+  const task = {
+    scope,
+    promise: run(folderId, scope).finally(() => {
+      if (inflight.get(folderId) === task) inflight.delete(folderId);
+    }),
+  };
   inflight.set(folderId, task);
-  return task;
+  return task.promise;
 }
 
-async function run(folderId: string) {
+async function run(folderId: string, scope?: RefreshScope) {
+  const active = () => (!scope || scope.active) && !!live().folders[folderId];
   const folder = live().folders[folderId];
   if (!folder) return;
   const before = live();
@@ -42,7 +59,7 @@ async function run(folderId: string) {
       next.push(...prev.filter((it) => it.source === source && !animating.has(it.id)));
     }
   });
-  if (!live().folders[folderId]) return;
+  if (!active()) return;
 
   const ids = new Set(next.map((it) => it.id));
   const missing = prev.filter((it) => !ids.has(it.id) && !animating.has(it.id) && !failed.some((f) => f.source === it.source));
@@ -51,6 +68,7 @@ async function run(folderId: string) {
     const resolve = SOURCES[source].resolveGone;
     if (!resolve) continue;
     Object.assign(gone, await resolve(missing.filter((it) => it.source === source)).catch(() => ({})));
+    if (!active()) return;
   }
 
   const firstFailure = failed[0];
@@ -64,7 +82,14 @@ async function run(folderId: string) {
   applyFetch(folderId, order(next), gone, Date.now(), quiet);
   if (firstFailure) setStatus(folderId, { state: "error", error: describe(firstFailure.source, firstFailure.error) });
   const leaving = Object.keys(gone);
-  if (leaving.length) setTimeout(() => finishCompleting(folderId, leaving), COMPLETION_MS);
+  if (leaving.length)
+    later(
+      scope,
+      () => {
+        if (live().folders[folderId]) finishCompleting(folderId, leaving);
+      },
+      COMPLETION_MS,
+    );
 }
 
 function describe(source: LiveSourceId, error: unknown) {
@@ -139,59 +164,102 @@ export function deleteLiveFolder(folderId: string) {
 
 // MARK: Background refresh
 
-let started = false;
-const lastNudge = new Map<string, number>();
-
-export function startLiveEngine() {
-  if (started) return;
-  started = true;
-
-  const orphans = () => {
-    const s = useBrowser.getState();
-    const folders = live().folders;
-    for (const t of Object.values(s.tabs)) if (t.liveItem && !folders[t.liveItem.folderId]) s.updateTab(t.id, { liveItem: undefined });
-  };
-  orphans();
-  useLive.subscribe((s, prev) => {
-    if (s.folders !== prev.folders) orphans();
-  });
-
-  useBrowser.subscribe((s, prev) => {
-    if (s.spaces === prev.spaces) return;
-    for (const f of Object.values(live().folders)) if (!s.spaces[f.spaceId]) removeFolder(f.id);
-  });
-
-  const due = (id: string, maxAge: number) => {
-    const f = live().folders[id];
-    const st = live().status[id];
-    return !!f && (!st?.lastFetch || Date.now() - st.lastFetch >= maxAge);
-  };
-  setTimeout(() => live().folderOrder.forEach((id) => void refreshFolder(id)), 2500);
-  setInterval(() => {
-    for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
-  }, 30_000);
-  onWindowEvent((e) => {
-    if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);
-  });
-
-  useBrowser.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs) return;
-    for (const id in s.tabs) {
-      const t = s.tabs[id]!;
-      // Pinned (a tile or a row), it leaves its live folder.
-      if (t.liveItem && pinnedPage(t) && !(prev.tabs[id] && pinnedPage(prev.tabs[id]!))) useBrowser.getState().updateTab(id, { liveItem: undefined });
+export function startLiveEngine(browser: BrowserStore = useBrowser): () => void {
+  if (engine) return engine.stop;
+  const scope: RefreshScope = { active: true, timers: new Set() };
+  const disposers: (() => void)[] = [];
+  const lastNudge = new Map<string, number>();
+  const stop = () => {
+    if (!scope.active) return;
+    scope.active = false;
+    scope.timers.forEach(clearTimeout);
+    scope.timers.clear();
+    for (const [id, task] of inflight) if (task.scope === scope) inflight.delete(id);
+    if (engine?.scope === scope) engine = undefined;
+    for (const dispose of disposers) {
+      try {
+        dispose();
+      } catch (error) {
+        console.warn("Couldn't stop live folder watcher", error);
+      }
     }
-  });
+  };
+  engine = { scope, stop };
 
-  useBrowser.subscribe((s, prev) => {
-    if (s.windows === prev.windows) return;
-    for (const windowId of s.windowOrder) {
-      const before = activeTabId(prev, windowId);
-      if (!before || before === activeTabId(s, windowId)) continue;
-      const folderId = s.tabs[before]?.liveItem?.folderId;
-      if (!folderId || Date.now() - (lastNudge.get(folderId) ?? 0) < 20_000) continue;
-      lastNudge.set(folderId, Date.now());
-      setTimeout(() => void refreshFolder(folderId), 3000);
+  try {
+    // A stopped service cancels completion timers; resume those animations here.
+    for (const [folderId, ids] of Object.entries(live().completing)) {
+      if (ids.length)
+        later(
+          scope,
+          () => {
+            if (live().folders[folderId]) finishCompleting(folderId, ids);
+          },
+          COMPLETION_MS,
+        );
     }
-  });
+
+    const orphans = () => {
+      const s = browser.getState();
+      const folders = live().folders;
+      for (const t of Object.values(s.tabs)) if (t.liveItem && !folders[t.liveItem.folderId]) s.updateTab(t.id, { liveItem: undefined });
+    };
+    orphans();
+    disposers.push(
+      useLive.subscribe((s, prev) => {
+        if (s.folders !== prev.folders) orphans();
+      }),
+    );
+
+    disposers.push(
+      browser.subscribe((s, prev) => {
+        if (s.spaces === prev.spaces) return;
+        for (const f of Object.values(live().folders)) if (!s.spaces[f.spaceId]) removeFolder(f.id);
+      }),
+    );
+
+    const due = (id: string, maxAge: number) => {
+      const f = live().folders[id];
+      const st = live().status[id];
+      return !!f && (!st?.lastFetch || Date.now() - st.lastFetch >= maxAge);
+    };
+    later(scope, () => live().folderOrder.forEach((id) => void refreshFolder(id)), 2500);
+    const interval = setInterval(() => {
+      for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
+    }, 30_000);
+    disposers.push(() => clearInterval(interval));
+    const focus = onWindowEvent((e) => {
+      if (scope.active && e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);
+    });
+    disposers.push(() => focus.remove());
+
+    disposers.push(
+      browser.subscribe((s, prev) => {
+        if (s.tabs === prev.tabs) return;
+        for (const id in s.tabs) {
+          const t = s.tabs[id]!;
+          // Pinned (a tile or a row), it leaves its live folder.
+          if (t.liveItem && pinnedPage(t) && !(prev.tabs[id] && pinnedPage(prev.tabs[id]!))) browser.getState().updateTab(id, { liveItem: undefined });
+        }
+      }),
+    );
+
+    disposers.push(
+      browser.subscribe((s, prev) => {
+        if (s.windows === prev.windows) return;
+        for (const windowId of s.windowOrder) {
+          const before = activeTabId(prev, windowId);
+          if (!before || before === activeTabId(s, windowId)) continue;
+          const folderId = s.tabs[before]?.liveItem?.folderId;
+          if (!folderId || Date.now() - (lastNudge.get(folderId) ?? 0) < 20_000) continue;
+          lastNudge.set(folderId, Date.now());
+          later(scope, () => void refreshFolder(folderId), 3000);
+        }
+      }),
+    );
+  } catch (error) {
+    stop();
+    throw error;
+  }
+  return stop;
 }
