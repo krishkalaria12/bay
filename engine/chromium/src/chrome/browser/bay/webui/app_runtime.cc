@@ -12,7 +12,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "base/uuid.h"
-#include "build/build_config.h"
+#include "chrome/browser/bay/webui/app_runtime_options.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/native_host.mojom.h"
@@ -334,15 +334,7 @@ void RuntimeConnection::Resolve(const std::string& token,
 }
 
 bool AppRuntime::Enabled() {
-  const auto* command = base::CommandLine::ForCurrentProcess();
-  if (command->HasSwitch("bay-legacy-runtime") ||
-      command->HasSwitch("bay-hosting-spike"))
-    return false;
-#if BUILDFLAG(IS_WIN)
-  return true;
-#else
-  return command->HasSwitch("bay-shared-runtime");
-#endif
+  return IsAppRuntimeEnabled(*base::CommandLine::ForCurrentProcess());
 }
 AppRuntime* AppRuntime::GetIfStarted() {
   return Instance().get();

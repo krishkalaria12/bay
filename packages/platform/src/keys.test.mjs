@@ -58,7 +58,21 @@ test("Linux desktop uses the web host without Apple services", () => {
     "handoff",
     "introMusic",
     "trafficLights",
+    "menuBar",
   ])
     assert.equal(linux[key], false, key);
   assert.equal(linux.keychain, true);
+});
+
+test("web desktops draw caption buttons without native modules while macOS keeps traffic lights", () => {
+  for (const os of ["windows", "linux"]) {
+    const desktop = capabilitiesFor(os, () => false);
+    assert.equal(desktop.captionButtons, true, os);
+    assert.equal(desktop.trafficLights, false, os);
+    assert.equal(desktop.menuBar, false, os);
+  }
+  const mac = capabilitiesFor("macos", () => true);
+  assert.equal(mac.captionButtons, false);
+  assert.equal(mac.trafficLights, true);
+  assert.equal(mac.menuBar, true);
 });
