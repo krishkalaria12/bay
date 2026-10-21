@@ -119,13 +119,35 @@ its existing callback behavior. Eight native page-fact authorization and replay
 tests pass alongside the 38 command/privacy tests. These checks and native
 source syntax checks ran on macOS; Windows runtime behavior remains unverified.
 
+Pages Chrome already opened now have a separate coordinator-only handoff route.
+Chrome offers the live WebContents with a browser-generated token, and the
+coordinator assigns it to a tab, split pane, peek or window through the ordered
+authority queue. Native publication binds the token to its accepted tab and
+exact Chrome profile before windows receive the state. Mounting moves that page
+instead of loading its URL again, preserving POST requests and opener state.
+Pending offers replay after coordinator replacement; rejected offers close, and
+accepted offers remain owned until mount or tab removal. New private windows
+can claim Chrome's exact offered private profile. A page from an existing private
+window instead opens a fresh private session when a separate private window is
+requested. Legacy callbacks keep their existing routing.
+
+The coordinator exposes an accepted-publication hook for native window
+reconciliation. Shared startup must use that hook so new native windows open
+after their page and profile claims are accepted. Offer routing, duplicate
+delivery, recovery, publication failures and two-client convergence have
+JavaScript coverage. Native handoff helpers have C++ coverage; actual transfer
+between Windows windows still needs runtime acceptance. All 51 native runtime
+tests pass against pinned Chromium libraries on macOS, including five handoff
+tests. The changed native sources also pass syntax checks with generated Mojo
+bindings. These checks do not establish Windows runtime behavior.
+
 This experimental mode still stops before the legacy UI entry. The coordinator
 and visible UI entries are not wired together yet.
 Additional application windows remain gated pending the remaining command
 migration and service ownership. Bulk import, sync, live-folder UI actions,
-virtual new-tab history and pages Chrome already opened (`adoptId`) still access
-the writable singleton. Remaining global integrations and cross-renderer page
-handoff must move to the coordinator before enabling the shared UI entry.
+and virtual new-tab history still access the writable singleton. Remaining
+global integrations and the accepted-publication window reconciler must be
+wired to the coordinator before enabling the shared UI entry.
 Live, calendar and meeting-alert UI stores still need a cross-renderer feed
 when that entry is wired. In-process two-client tests do not replace native
 two-window acceptance. Live document IO now starts explicitly instead of
@@ -135,8 +157,8 @@ Native updater and close-button shutdown preparation now participate in the
 acknowledged final session save. Native page controls cover printing, saving,
 screenshots, certificate details and media operations. Windows browser and
 installer identities, executable names, associations and taskbar IDs now agree.
-Remaining work includes page handoff, remaining global integrations, complete
-native event/OS coverage and the Windows acceptance runs. The diagnostic page
+Remaining work includes shared startup wiring, remaining global integrations,
+complete native event/OS coverage and the Windows acceptance runs. The diagnostic page
 does not establish a complete browser host.
 
 ## Frame, notifications and menus
