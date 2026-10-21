@@ -223,6 +223,7 @@ if (is_mac) {
       "//base",
       "//chrome/app:generated_resources",
       "//chrome/browser",
+      "//chrome/browser/bay",
       "//chrome/browser/bay/webui:impl",
       "//chrome/common",
       "//chrome/common/profiler",

@@ -147,11 +147,6 @@ source_set("bay") {
     sources += [
       "nn_downloads_win.cc",
       "nn_external_apps_win.cc",
-      "pip/nn_pip_aura.cc",
-    ]
-    deps += [
-      "//ui/aura",
-      "//ui/compositor",
     ]
     libs = [ "shlwapi.lib" ]
   } else if (is_linux) {
@@ -160,7 +155,17 @@ source_set("bay") {
       "nn_downloads_linux.cc",
       "nn_external_apps_linux.cc",
     ]
-    deps += [ "//ui/base/glib" ]
+    deps += [
+      "//ui/base/glib",
+      "//ui/ozone",
+    ]
+  }
+  if (is_win || is_linux) {
+    sources += [ "pip/nn_pip_aura.cc" ]
+    deps += [
+      "//ui/aura",
+      "//ui/compositor",
+    ]
   }
 }
 
@@ -197,6 +202,9 @@ if (is_win || is_linux) {
       "//ui/compositor",
       "//ui/gfx",
     ]
+    if (is_linux) {
+      deps += [ "//ui/ozone" ]
+    }
   }
 }
 

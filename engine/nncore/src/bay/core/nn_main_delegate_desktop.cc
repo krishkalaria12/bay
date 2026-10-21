@@ -30,6 +30,9 @@
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/pip/nn_pip_platform.h"
+#endif
 #if BUILDFLAG(IS_WIN)
 #include "base/base_paths_win.h"
 #include "chrome/browser/bay/webui/frame_win.h"
@@ -43,14 +46,17 @@ namespace {
 
 class BayRuntimeMainExtraParts final : public ChromeBrowserMainExtraParts {
  public:
-#if BUILDFLAG(IS_WIN)
   void PreProfileInit() override {
+#if BUILDFLAG(IS_LINUX)
+    InitializeBayPictureInPictureBounds();
+#endif
+#if BUILDFLAG(IS_WIN)
     NotificationDisplayServiceFactory::SetBayHandlerInitializer(
         &bay::NotificationsWin::InstallHandler);
     WebUIBrowserWindow::SetBayNativeWidgetFactory(
         &bay::FrameWin::CreateNativeWidget);
-  }
 #endif
+  }
   void PostMainMessageLoopRun() override { bay::ShutdownAppRuntimeIfStarted(); }
 };
 
