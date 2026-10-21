@@ -35,7 +35,7 @@ constexpr const char* kRecords[] = {"spaces",
 constexpr const char* kLists[] = {
     "spaceOrder",    "folderMoveUndo", "orphanedProfileData", "windowOrder",
     "closedWindows", "closedTabs",     "cleanedTabs",         "closedGroups",
-    "deletedGroups", "downloads"};
+    "deletedGroups", "downloads",      "bookmarkUndo"};
 bool PrivateSpace(std::string_view id) {
   return base::StartsWith(id, "incognito:");
 }
@@ -126,6 +126,26 @@ bool CommandText(const base::DictValue& command,
          (allow_empty ||
           !base::TrimWhitespaceASCII(*text, base::TRIM_ALL).empty());
 }
+// A bookmark tree to add: pages and folders, bounded in depth and count.
+bool BookmarkDrafts(const base::ListValue& drafts, int depth, size_t& count) {
+  if (depth > 16)
+    return false;
+  for (const auto& draft : drafts) {
+    if (!draft.is_dict() || ++count > 10000)
+      return false;
+    const auto& d = draft.GetDict();
+    const auto* children = d.FindList("children");
+    if (!CommandFields(d, {"title"}, {"url", "addedAt", "children"}) ||
+        !CommandText(d, "title", 16 * 1024, true) ||
+        (d.contains("url") && (d.contains("children") ||
+                               !CommandText(d, "url", 1024 * 1024, true))) ||
+        (d.contains("addedAt") && !d.FindDouble("addedAt")) ||
+        (d.contains("children") &&
+         (!children || !BookmarkDrafts(*children, depth + 1, count))))
+      return false;
+  }
+  return true;
+}
 }  // namespace
 
 std::optional<double> RuntimeInteger(const base::DictValue& value,
@@ -167,11 +187,11 @@ RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command) {
   for (const char* name :
        {"newTab", "createWindow", "addCustomEngine", "createGroup", "groupTabs",
         "duplicateGroup", "newTabInGroup", "newPinnedFolder", "createSplit",
-        "createSpace"})
+        "createSpace", "addBookmark", "addBookmarkFolder"})
     if (*method == name)
       return RuntimeResultKind::kRequiredId;
   for (const char* name : {"duplicateTab", "moveTabsToWindow", "restoreCleaned",
-                           "openSplitPane", "openPeek"})
+                           "openSplitPane", "openPeek", "removeBookmarks"})
     if (*method == name)
       return RuntimeResultKind::kOptionalId;
   return RuntimeResultKind::kNone;
@@ -501,6 +521,12 @@ std::optional<base::DictValue> ProjectRuntimeState(
                           "closedGroups", "deletedGroups"})
     result.FindList(key)->EraseIf(
         [](const base::Value& value) { return HasPrivateData(value); });
+  // Undo entries hold removed pages: only regular spaces ever have one.
+  result.FindList("bookmarkUndo")->EraseIf([](const base::Value& value) {
+    const auto* space =
+        value.is_dict() ? value.GetDict().FindString("spaceId") : nullptr;
+    return !space || PrivateSpace(*space) || HasPrivateData(value);
+  });
   result.FindList("downloads")->EraseIf([&](const base::Value& value) {
     if (!value.is_dict())
       return true;
@@ -1295,6 +1321,160 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
         return false;
     return true;
   }
+  // Bookmarks are regular spaces' trees, which every window may edit (a
+  // private window bookmarks into the default space). A move stays in one
+  // profile's tree; Chrome's top folders are never edited themselves.
+  const auto* bookmarks = state.FindDict("bookmarks");
+  const auto* bookmark_nodes = bookmarks->FindDict("nodes");
+  const auto* bookmark_roots = bookmarks->FindDict("roots");
+  const auto space_bar = [&](std::string_view space) -> const std::string* {
+    const auto* roots = !PrivateSpace(space) &&
+                                state.FindDict("spaces")->FindDict(space)
+                            ? bookmark_roots->FindDict(space)
+                            : nullptr;
+    return roots ? roots->FindString("bar") : nullptr;
+  };
+  // The bar folder of the regular tree holding `id`, or null.
+  const auto tree_of = [&](const std::string& id,
+                           bool top = false) -> const std::string* {
+    const auto* node = bookmark_nodes->FindDict(id);
+    if (!node || (!top && !node->FindString("parentId")))
+      return nullptr;
+    std::string current = id;
+    for (int depth = 0; depth < 64; ++depth) {
+      const auto* parent = node->FindString("parentId");
+      if (!parent)
+        break;
+      current = *parent;
+      node = bookmark_nodes->FindDict(current);
+      if (!node)
+        return nullptr;
+    }
+    if (node->FindString("parentId"))
+      return nullptr;
+    for (const auto [space, roots] : *bookmark_roots) {
+      const auto* bar = space_bar(space);
+      const auto* other =
+          roots.is_dict() ? roots.GetDict().FindString("other") : nullptr;
+      if (bar && (*bar == current || (other && *other == current)))
+        return bar;
+    }
+    return nullptr;
+  };
+  const auto folder_in = [&](const base::DictValue& input,
+                             std::string_view field, const std::string* bar) {
+    const auto* id = input.FindString(field);
+    const auto* node = id ? bookmark_nodes->FindDict(*id) : nullptr;
+    const auto* tree = node && node->FindList("children") ? tree_of(*id, true)
+                                                          : nullptr;
+    return bar && tree && *tree == *bar;
+  };
+  const auto bookmark_place = [&](const base::DictValue& input,
+                                  const std::string* bar) {
+    const auto position = input.FindDouble("index");
+    return (!input.contains("parentId") || folder_in(input, "parentId", bar)) &&
+           (!input.contains("index") ||
+            (position && std::isfinite(*position) &&
+             std::floor(*position) == *position && *position >= 0 &&
+             *position <= 1000000));
+  };
+  const auto bookmark_space = [&](const base::DictValue& input) {
+    const auto* space = input.FindString("spaceId");
+    return space ? space_bar(*space) : nullptr;
+  };
+  if (*method == "addBookmark" || *method == "addBookmarkFolder") {
+    const auto* options = command.FindDict("options");
+    if (!CommandFields(command, {"method", "options"}) || !options ||
+        !public_space(*options, "spaceId"))
+      return false;
+    const bool page = *method == "addBookmark";
+    return (page ? CommandFields(*options, {"spaceId", "url", "title"},
+                                 {"favicon", "parentId", "index"})
+                 : CommandFields(*options, {"spaceId", "title"},
+                                 {"parentId", "index"})) &&
+           bookmark_place(*options, bookmark_space(*options));
+  }
+  if (*method == "addBookmarkTree") {
+    const auto* drafts = command.FindList("drafts");
+    size_t count = 0;
+    return CommandFields(command, {"method", "spaceId", "drafts"},
+                         {"parentId", "index"}) &&
+           public_space(command, "spaceId") && drafts &&
+           BookmarkDrafts(*drafts, 1, count) &&
+           bookmark_place(command, bookmark_space(command));
+  }
+  if (*method == "updateBookmark") {
+    const auto* id = command.FindString("bookmarkId");
+    const auto* patch = command.FindDict("patch");
+    return CommandFields(command, {"method", "bookmarkId", "patch"}) && id &&
+           tree_of(*id) && patch &&
+           CommandFields(*patch, {}, {"title", "url", "favicon"});
+  }
+  if (*method == "moveBookmark") {
+    const auto* id = command.FindString("bookmarkId");
+    const auto* tree = id ? tree_of(*id) : nullptr;
+    return CommandFields(command, {"method", "bookmarkId", "parentId"},
+                         {"index"}) &&
+           tree && bookmark_place(command, tree);
+  }
+  if (*method == "removeBookmark") {
+    const auto* id = command.FindString("bookmarkId");
+    return CommandFields(command, {"method", "bookmarkId"}) && id &&
+           tree_of(*id);
+  }
+  if (*method == "toggleBookmark") {
+    const auto* page = command.FindDict("page");
+    return CommandFields(command, {"method", "spaceId", "page"}) &&
+           public_space(command, "spaceId") && page &&
+           CommandFields(*page, {"url", "title"}, {"favicon"});
+  }
+  if (*method == "removeBookmarks") {
+    const auto* bar = bookmark_space(command);
+    const auto* ids = command.FindList("bookmarkIds");
+    if (!CommandFields(command, {"method", "spaceId", "bookmarkIds"}) ||
+        !public_space(command, "spaceId") || !bar || !ids ||
+        ids->size() > 10000)
+      return false;
+    std::set<std::string> seen;
+    for (const auto& id : *ids) {
+      const auto* tree =
+          id.is_string() ? tree_of(id.GetString()) : nullptr;
+      if (!tree || *tree != *bar || !seen.insert(id.GetString()).second)
+        return false;
+    }
+    return true;
+  }
+  if (*method == "restoreBookmarks") {
+    const auto* id = command.FindString("undoId");
+    if (!CommandFields(command, {"method", "undoId"}) || !id)
+      return false;
+    for (const auto& entry : *state.FindList("bookmarkUndo")) {
+      const auto* entry_id =
+          entry.is_dict() ? entry.GetDict().FindString("id") : nullptr;
+      const auto* space =
+          entry.is_dict() ? entry.GetDict().FindString("spaceId") : nullptr;
+      if (entry_id && *entry_id == *id)
+        return space && !PrivateSpace(*space);
+    }
+    return false;
+  }
+  // History is a regular space's, cleared like a setting is changed.
+  if (*method == "removeHistory") {
+    const auto* urls = command.FindList("urls");
+    if (is_private || !CommandFields(command, {"method", "spaceId", "urls"}) ||
+        !public_space(command, "spaceId") || !urls || urls->empty() ||
+        urls->size() > 10000)
+      return false;
+    for (const auto& url : *urls)
+      if (!url.is_string() || url.GetString().size() > kMaximumInput)
+        return false;
+    return true;
+  }
+  if (*method == "clearHistory")
+    return !is_private &&
+           CommandFields(command, {"method", "spaceId"}, {"since"}) &&
+           public_space(command, "spaceId") &&
+           (!command.contains("since") || command.FindDouble("since"));
   return false;
 }
 }  // namespace bay

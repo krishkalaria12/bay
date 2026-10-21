@@ -15,6 +15,7 @@ base::DictValue State() {
     "tabs":{},"live":{},"closedTabs":[],"groups":{},"selection":{},
     "cleanedTabs":[],"privateCleanedTabs":{},"privateSiteMutes":{},
     "closedGroups":[],"deletedGroups":[],"splits":{},"history":{},
+    "bookmarkUndo":[],
     "historyReady":{},"historyFloor":{},"bookmarks":{"nodes":{},"roots":{}},
     "bookmarksReady":{},"settings":{},
     "ui":{"focusedWindowId":null,"focusOrder":[],"appDark":true},
@@ -767,6 +768,179 @@ TEST(RuntimeStateTest, SpaceCommandsNamePublicSpacesFromRegularWindowsOnly) {
     order.Set("spaceIds", base::ListValue().Append("default").Append(id));
     EXPECT_FALSE(allowed("normal", order.Clone()));
   }
+}
+void AddBookmarkTree(base::DictValue& state,
+                     const char* space,
+                     const std::string& page) {
+  const std::string bar = std::string("bar@") + space;
+  const std::string other = std::string("other@") + space;
+  auto* nodes = state.FindDict("bookmarks")->FindDict("nodes");
+  state.FindDict("bookmarks")
+      ->FindDict("roots")
+      ->Set(space, base::DictValue().Set("bar", bar).Set("other", other));
+  nodes->Set(bar, base::DictValue()
+                      .Set("id", bar)
+                      .Set("parentId", base::Value())
+                      .Set("children", base::ListValue().Append(page)));
+  nodes->Set(other, base::DictValue()
+                        .Set("id", other)
+                        .Set("parentId", base::Value())
+                        .Set("children", base::ListValue()));
+  nodes->Set(page, base::DictValue()
+                       .Set("id", page)
+                       .Set("parentId", bar)
+                       .Set("url", "https://" + page));
+}
+TEST(RuntimeStateTest, BookmarkCommandsStayInOneRegularSpaceTree) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  state.FindDict("spaces")->Set("work", base::DictValue().Set("id", "work"));
+  AddBookmarkTree(state, "default", "page");
+  AddBookmarkTree(state, "work", "work-page");
+  AddBookmarkTree(state, "incognito:private", "secret");
+  const auto allowed = [&](const char* window, const base::DictValue& c) {
+    return CanDispatchRuntimeCommand(state, window, c);
+  };
+  auto add = base::DictValue()
+                 .Set("method", "addBookmark")
+                 .Set("options", base::DictValue()
+                                     .Set("spaceId", "default")
+                                     .Set("url", "https://a.example/")
+                                     .Set("title", "A")
+                                     .Set("parentId", "other@default"));
+  EXPECT_TRUE(allowed("normal", add));
+  EXPECT_TRUE(allowed("private", add)) << "a private window bookmarks too";
+  EXPECT_EQ(RuntimeCommandResultKind(add), RuntimeResultKind::kRequiredId);
+  for (const char* parent : {"bar@work", "bar@incognito:private", "page"}) {
+    add.FindDict("options")->Set("parentId", parent);
+    EXPECT_FALSE(allowed("normal", add)) << parent;
+  }
+  add.FindDict("options")->Remove("parentId");
+  add.FindDict("options")->Set("spaceId", "incognito:private");
+  EXPECT_FALSE(allowed("private", add));
+  add.FindDict("options")->Set("spaceId", "default");
+  add.FindDict("options")->Set("syncKey", "x");
+  EXPECT_FALSE(allowed("normal", add));
+
+  auto update = base::DictValue()
+                    .Set("method", "updateBookmark")
+                    .Set("bookmarkId", "page")
+                    .Set("patch", base::DictValue().Set("title", "B"));
+  EXPECT_TRUE(allowed("normal", update));
+  for (const char* id : {"bar@default", "secret", "missing"}) {
+    update.Set("bookmarkId", id);
+    EXPECT_FALSE(allowed("normal", update)) << id;
+  }
+  auto move = base::DictValue()
+                  .Set("method", "moveBookmark")
+                  .Set("bookmarkId", "page")
+                  .Set("parentId", "other@default")
+                  .Set("index", 0);
+  EXPECT_TRUE(allowed("normal", move));
+  move.Set("parentId", "bar@work");
+  EXPECT_FALSE(allowed("normal", move)) << "a move stays in one profile";
+  move.Set("bookmarkId", "other@default");
+  move.Set("parentId", "bar@default");
+  EXPECT_FALSE(allowed("normal", move));
+  for (const char* id : {"page", "secret"}) {
+    auto remove = base::DictValue()
+                      .Set("method", "removeBookmark")
+                      .Set("bookmarkId", id);
+    EXPECT_EQ(allowed("normal", remove), std::string_view(id) == "page");
+  }
+
+  auto toggle =
+      base::DictValue()
+          .Set("method", "toggleBookmark")
+          .Set("spaceId", "default")
+          .Set("page", base::DictValue().Set("url", "u").Set("title", "t"));
+  EXPECT_TRUE(allowed("private", toggle));
+  toggle.FindDict("page")->Set("pinned", true);
+  EXPECT_FALSE(allowed("normal", toggle));
+
+  auto removing =
+      base::DictValue()
+          .Set("method", "removeBookmarks")
+          .Set("spaceId", "default")
+          .Set("bookmarkIds", base::ListValue().Append("page"));
+  EXPECT_TRUE(allowed("normal", removing));
+  EXPECT_EQ(RuntimeCommandResultKind(removing),
+            RuntimeResultKind::kOptionalId);
+  removing.Set("bookmarkIds",
+               base::ListValue().Append("page").Append("work-page"));
+  EXPECT_FALSE(allowed("normal", removing));
+  removing.Set("bookmarkIds", base::ListValue().Append("page").Append("page"));
+  EXPECT_FALSE(allowed("normal", removing));
+
+  state.FindList("bookmarkUndo")
+      ->Append(base::DictValue().Set("id", "undo").Set("spaceId", "default"));
+  auto restore = base::DictValue()
+                     .Set("method", "restoreBookmarks")
+                     .Set("undoId", "undo");
+  EXPECT_TRUE(allowed("normal", restore));
+  restore.Set("undoId", "missing");
+  EXPECT_FALSE(allowed("normal", restore));
+
+  auto tree = base::DictValue()
+                  .Set("method", "addBookmarkTree")
+                  .Set("spaceId", "default")
+                  .Set("parentId", "bar@default")
+                  .Set("drafts",
+                       base::ListValue().Append(
+                           base::DictValue()
+                               .Set("title", "Tabs")
+                               .Set("children", base::ListValue().Append(
+                                                    base::DictValue()
+                                                        .Set("title", "A")
+                                                        .Set("url", "u")))));
+  EXPECT_TRUE(allowed("normal", tree));
+  auto deep = base::ListValue().Append(
+      base::DictValue().Set("title", "leaf").Set("url", "u"));
+  for (int i = 0; i < 20; ++i)
+    deep = base::ListValue().Append(
+        base::DictValue().Set("title", "f").Set("children", std::move(deep)));
+  tree.Set("drafts", std::move(deep));
+  EXPECT_FALSE(allowed("normal", tree));
+  tree.Set("drafts", base::ListValue().Append(
+                         base::DictValue()
+                             .Set("title", "both")
+                             .Set("url", "u")
+                             .Set("children", base::ListValue())));
+  EXPECT_FALSE(allowed("normal", tree));
+}
+TEST(RuntimeStateTest, HistoryEditsAndBookmarkUndoStayRegular) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  auto remove = base::DictValue()
+                    .Set("method", "removeHistory")
+                    .Set("spaceId", "default")
+                    .Set("urls", base::ListValue().Append("https://a/"));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", remove));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", remove));
+  remove.Set("urls", base::ListValue());
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", remove));
+  auto clear = base::DictValue()
+                   .Set("method", "clearHistory")
+                   .Set("spaceId", "default")
+                   .Set("since", 1700000000000.0);
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", clear));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", clear));
+  clear.Set("spaceId", "incognito:private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", clear));
+
+  auto* undo = state.FindList("bookmarkUndo");
+  undo->Append(base::DictValue().Set("id", "public").Set("spaceId", "default"));
+  undo->Append(base::DictValue()
+                   .Set("id", "forged")
+                   .Set("spaceId", "incognito:private"));
+  auto projected = ProjectRuntimeState(state, "normal");
+  ASSERT_TRUE(projected);
+  ASSERT_EQ(projected->FindList("bookmarkUndo")->size(), 1u);
+  EXPECT_EQ(*(*projected->FindList("bookmarkUndo"))[0].GetDict().FindString(
+                "id"),
+            "public");
 }
 TEST(RuntimeStateTest, OptionalResultsAcceptNoIdWithoutWeakeningRequiredIds) {
   auto reply = base::DictValue()
