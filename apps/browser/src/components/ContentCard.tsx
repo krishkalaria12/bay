@@ -7,6 +7,7 @@ import { useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { focus, switchToTab } from "../lib/actions";
 import { noteFavicon } from "../lib/favicons";
+import { pageFactsInCoordinator } from "../lib/pageFactOwnership";
 import { isQuitting } from "../lib/native";
 import { useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
@@ -77,7 +78,7 @@ import { useIsDeveloperTab } from "./developer/sites";
 import { reportBrowserCommand } from "../runtime/commands";
 import { closePeek, openPeek } from "../runtime/splitActions";
 import { activate, closeTab, navigate } from "../runtime/tabActions";
-import { browserRead } from "../store/read";
+import { browserRead, useBrowserRead } from "../store/read";
 
 // Where the card's panes are: the active tab's (or its split's), or the full-screen tab's over everything.
 function cardPanes(split: SplitView | undefined, activeId: string | undefined, fullscreenTab: string | null | undefined, width: number, height: number) {
@@ -450,16 +451,16 @@ const pageKey = (url: string) => url.replace(/#.*$/, "");
 const hostOf = (url: string) => url.match(/^[a-z][\w+.-]*:\/\/([^/?#]*)/i)?.[1]?.toLowerCase() ?? "";
 
 function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean; warm: boolean }) {
-  const navigation = useBrowser((s) => s.tabs[tabId]?.navigation);
-  const adoptId = useBrowser((s) => s.tabs[tabId]?.adoptId);
-  const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
-  const tab = () => useBrowser.getState().tabs[tabId];
+  const navigation = useBrowserRead((s) => s.tabs[tabId]?.navigation);
+  const adoptId = useBrowserRead((s) => s.tabs[tabId]?.adoptId);
+  const spaceId = useBrowserRead((s) => s.tabs[tabId]?.spaceId ?? "");
+  const tab = () => browserRead.getState().tabs[tabId];
   const store = () => useBrowser.getState();
   // One for the view's life (its tab never changes): it keeps the handle it registered, to unregister only that.
   const [ref] = useState(() => webviewRef(tabId));
   const autoPictureInPicture = useAutoPictureInPicture(tabId, visible);
   // A pinned tab's or a favourite's: a link the user clicks to another site comes back as onPeekLink (store/peeks.ts).
-  const peekLinks = useBrowser((s) => peeksLinks(s, tabId));
+  const peekLinks = useBrowserRead((s) => peeksLinks(s, tabId));
 
   const lastPage = useRef<string | null>(null);
   const pending = useRef<string | null>(navigation?.url ?? (adoptId ? (tab()?.url ?? null) : null));
@@ -514,7 +515,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         const target = pending.current;
         // A fresh browser reports about:blank before the requested navigation commits.
         if (target !== null && isBlank(url) && !target.startsWith("about:")) {
-          store().updateLive(tabId, { isLoading: true });
+          if (!pageFactsInCoordinator()) store().updateLive(tabId, { isLoading: true });
           return;
         }
         pending.current = null;
@@ -522,13 +523,13 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         if (kept) {
           if (url === kept.url) {
             patchPage(tabId, { newTabShown: { ...kept, title } });
-            store().updateLive(tabId, { isLoading, canGoBack, canGoForward, themeColor });
+            if (!pageFactsInCoordinator()) store().updateLive(tabId, { isLoading, canGoBack, canGoForward, themeColor });
             return;
           }
           patchPage(tabId, { newTabShown: null });
         }
         if (fromNewTab.current && url && !isBlank(url)) patchPage(tabId, { backToNewTab: true });
-        store().navigated(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor });
+        if (!pageFactsInCoordinator()) store().navigated(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor });
         if (lastPage.current !== null && pageKey(url) !== lastPage.current) {
           // Like Chrome's tab-modal dialogs, the open-app prompt stays within a site.
           if (pageOf(tabId).externalApp && hostOf(url) !== hostOf(lastPage.current)) answerExternalApp(tabId, false);
@@ -548,28 +549,38 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         pending.current = null;
         const t = tab();
         if (!t) return;
-        const s = store();
-        s.updateLive(tabId, { isLoading: false });
+        const coordinated = pageFactsInCoordinator();
+        const s = browserRead.getState();
+        if (!coordinated) store().updateLive(tabId, { isLoading: false });
         if (committedUrl) {
-          if (t.url !== committedUrl) s.updateTab(tabId, { url: committedUrl });
+          if (!coordinated && t.url !== committedUrl) store().updateTab(tabId, { url: committedUrl });
           return;
         }
         const others = viewTabIds(s, t.windowId, t.spaceId).some((id) => id !== tabId);
         const opened = !!(t.openerId || t.adoptId) && !pageOf(tabId).wasNewTab;
-        if (!skipped && opened && !s.live[tabId]?.canGoBack && others) return s.closeTab(tabId);
+        if (!skipped && opened && !s.live[tabId]?.canGoBack && others) {
+          if (!coordinated) store().closeTab(tabId);
+          return;
+        }
         patchPage(tabId, { backToNewTab: false, newTabShown: null });
-        s.updateTab(tabId, { url: "", title: "", favicon: null });
+        if (!coordinated) store().updateTab(tabId, { url: "", title: "", favicon: null });
       }}
-      onProgress={(progress) => store().updateLive(tabId, { progress })}
-      onZoom={({ zoom }) => store().updateTab(tabId, { zoom })}
-      onFindResult={({ count, active }) => store().setFind(tabId, { count, active })}
+      onProgress={(progress) => {
+        if (!pageFactsInCoordinator()) store().updateLive(tabId, { progress });
+      }}
+      onZoom={({ zoom }) => {
+        if (!pageFactsInCoordinator()) store().updateTab(tabId, { zoom });
+      }}
+      onFindResult={({ count, active }) => {
+        if (!pageFactsInCoordinator()) store().setFind(tabId, { count, active });
+      }}
       onFavicon={(favicon) => {
         if (!favicon || !tab()) return;
-        store().faviconChanged(tabId, favicon);
+        if (!pageFactsInCoordinator()) store().faviconChanged(tabId, favicon);
         noteFavicon(tabId, favicon);
       }}
       onMedia={({ playing, muted }) => {
-        store().updateLive(tabId, { playingAudio: playing });
+        if (!pageFactsInCoordinator()) store().updateLive(tabId, { playingAudio: playing });
         // A new browser can drop mute state before its first page load.
         if (tab()?.muted && !muted) void webviews.get(tabId)?.setMuted(true);
       }}
@@ -633,7 +644,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         pending.current = url;
         fromNewTab.current = false;
         patchPage(tabId, { backToNewTab: false, status: "" });
-        store().updateLive(tabId, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false, playingAudio: false });
+        if (!pageFactsInCoordinator()) store().updateLive(tabId, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false, playingAudio: false });
         noteDiscarded(tabId);
       }}
       onActivateRequest={() => {
