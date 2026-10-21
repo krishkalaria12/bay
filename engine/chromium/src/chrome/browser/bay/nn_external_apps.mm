@@ -1,6 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 
-#include "chrome/browser/bay/nn_external_apps.h"
+#include "chrome/browser/bay/nn_external_apps_platform.h"
 
 #import <AppKit/AppKit.h>
 

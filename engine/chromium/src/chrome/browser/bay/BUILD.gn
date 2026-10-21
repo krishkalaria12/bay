@@ -9,6 +9,8 @@
 # One source_set: add your nn_<domain>.{h,cc} to `sources` (sorted) and the
 # deps it needs. Nothing in //chrome depends on this target.
 
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
 import("//testing/test.gni")
 
 assert(is_mac || is_win || is_linux)
@@ -34,6 +36,7 @@ source_set("bay") {
     "nn_extensions.h",
     "nn_external_apps.cc",
     "nn_external_apps.h",
+    "nn_external_apps_platform.h",
     "nn_favicons.cc",
     "nn_history.cc",
     "nn_passwords.cc",
@@ -151,6 +154,13 @@ source_set("bay") {
       "//ui/compositor",
     ]
     libs = [ "shlwapi.lib" ]
+  } else if (is_linux) {
+    assert(use_gio && use_glib, "Bay Linux external app names require GIO")
+    sources += [
+      "nn_downloads_linux.cc",
+      "nn_external_apps_linux.cc",
+    ]
+    deps += [ "//ui/base/glib" ]
   }
 }
 
@@ -186,6 +196,24 @@ if (is_win || is_linux) {
       "//ui/aura",
       "//ui/compositor",
       "//ui/gfx",
+    ]
+  }
+}
+
+if (is_linux) {
+  test("external_apps_linux_unittests") {
+    sources = [
+      "nn_external_apps_linux.cc",
+      "nn_external_apps_linux_unittest.cc",
+      "nn_external_apps_platform.h",
+    ]
+    deps = [
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//testing/gtest",
+      "//ui/base/glib",
+      "//url",
     ]
   }
 }
