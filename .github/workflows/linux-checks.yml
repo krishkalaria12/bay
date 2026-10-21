@@ -1,0 +1,39 @@
+name: Linux desktop checks
+on:
+  pull_request:
+  push:
+    branches: [main, feat/linux]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shared:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm typecheck:web
+      - run: pnpm build:web
+      # Native import/sync suites currently require macOS Swift or Windows CNG.
+      # Run their Linux backends here once those backends are implemented.
+      - name: Run portable JavaScript tests
+        run: |
+          pnpm --filter @bay/core --filter @bay/platform --filter @bay/browser test
+          pnpm --filter @bay/sync exec node --test 'src/**/*.test.ts'
+      - name: Test patch routing and layer installation
+        run: |
+          python -m unittest discover -s engine/patches -p 'test_*.py' -v
+          python -m unittest engine/chromium/test_apply.py -v
+      - name: Test engine tooling
+        run: python -m unittest discover -s scripts/windows -p 'test_*.py' -v
+      - name: Validate Linux patch selection
+        run: python engine/patches/series.py files --platform linux
