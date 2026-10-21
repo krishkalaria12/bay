@@ -1,6 +1,7 @@
 import { onAppEvent, onWindowEvent, postNotification, removeNotifications } from "@bay/shell";
 import { create } from "zustand";
-import { useBrowser } from "../store/browser";
+import { useBrowser, type BrowserStore } from "../store/browser";
+import { browserRead } from "../store/read";
 import { reportBrowserCommand } from "../runtime/commands";
 import { useCalendar } from "./calendar";
 import { joinMeeting } from "./meetingGroups";
@@ -49,23 +50,47 @@ export function dismiss(event: CalendarEvent) {
 }
 
 const frontWindow = () => {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const id = s.ui.focusedWindowId;
   return id && s.windows[id] && !s.windows[id]!.incognito ? id : s.windowOrder.find((w) => !s.windows[w]!.incognito);
 };
 
-let started = false;
+const running = new WeakMap<BrowserStore, () => void>();
 
-export function startMeetingAlerts() {
-  if (started) return;
-  started = true;
-  onAppEvent((e) => {
-    if (e.type === "resignActive") appActive = false;
-  });
-  onWindowEvent((e) => {
-    if (e.type === "focus") appActive = true;
-  });
-  useCalendar.subscribe((s, prev) => s.events !== prev.events && check());
-  setInterval(check, 10_000);
-  check();
+export function startMeetingAlerts(browser: BrowserStore = useBrowser): () => void {
+  const existing = running.get(browser);
+  if (existing) return existing;
+  let stopped = false;
+  const cleanups: (() => void)[] = [];
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    running.delete(browser);
+    for (const cleanup of cleanups.reverse()) {
+      try {
+        cleanup();
+      } catch (error) {
+        console.warn("Couldn't stop meeting alert watcher", error);
+      }
+    }
+  };
+  running.set(browser, stop);
+  try {
+    const appEvents = onAppEvent((e) => {
+      if (e.type === "resignActive") appActive = false;
+    });
+    cleanups.push(() => appEvents.remove());
+    const windowEvents = onWindowEvent((e) => {
+      if (e.type === "focus") appActive = true;
+    });
+    cleanups.push(() => windowEvents.remove());
+    cleanups.push(useCalendar.subscribe((s, prev) => s.events !== prev.events && check()));
+    const timer = setInterval(check, 10_000);
+    cleanups.push(() => clearInterval(timer));
+    check();
+  } catch (error) {
+    stop();
+    throw error;
+  }
+  return stop;
 }
