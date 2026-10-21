@@ -7,6 +7,7 @@
 #include <set>
 #include <string_view>
 #include <vector>
+#include "base/functional/function_ref.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 
@@ -363,7 +364,8 @@ bool ImportCommand(const base::DictValue& c) {
   }
   return false;
 }
-bool ServiceCommand(const base::DictValue& state, const std::string& window_id, const base::DictValue& c) {
+bool ServiceCommand(const base::DictValue& state, base::FunctionRef<bool(const std::string&)> acts_for,
+                    const base::DictValue& c) {
   const auto* a = c.FindString("action");
   const auto* args = c.FindList("args");
   if (!CommandFields(c, {"method", "action", "args"}) || !a || !args || args->size() > 4) return false;
@@ -374,7 +376,7 @@ bool ServiceCommand(const base::DictValue& state, const std::string& window_id, 
   };
   const auto boolean = [&](size_t i) { return i < v.size() && v[i].is_bool(); };
   const auto source = [&](size_t i) { return i < v.size() && Choice(v[i], {"github", "bitbucket", "notion", "confluence", "gdrive"}); };
-  const auto own_window = [&](size_t i) { return text(i) && v[i].GetString() == window_id; };
+  const auto own_window = [&](size_t i) { return text(i) && acts_for(v[i].GetString()); };
   const auto public_space = [&](const std::string& id) { return !PrivateSpace(id) && state.FindDict("spaces")->contains(id); };
   const auto* services = state.FindDict("services");
   const auto* live = services ? services->FindDict("live") : nullptr;
@@ -446,7 +448,7 @@ bool ServiceCommand(const base::DictValue& state, const std::string& window_id, 
   if (action == "alertJoin") return v.size() == 3 && own_window(0) && text(1) && boolean(2);
   if (action == "meetingGroup") {
     const auto* tab = text(0) ? state.FindDict("tabs")->FindDict(v[0].GetString()) : nullptr;
-    return v.size() == 2 && tab && tab->FindString("windowId") && *tab->FindString("windowId") == window_id &&
+    return v.size() == 2 && tab && tab->FindString("windowId") && acts_for(*tab->FindString("windowId")) &&
            public_space(*tab->FindString("spaceId")) && text(1, 4096, true);
   }
   if (action == "enterRecoveryPhrase") return v.size() == 2 && text(0) && text(1);
@@ -709,14 +711,16 @@ bool IsRuntimeState(const base::DictValue& state) {
 
 std::optional<base::DictValue> ProjectRuntimeState(
     const base::DictValue& state,
-    const std::string& window_id) {
+    const std::string& window_id,
+    bool utility) {
   if (!IsRuntimeState(state))
     return std::nullopt;
-  const auto* own = state.FindDict("windows")->FindDict(window_id);
-  if (!own)
+  const auto* own =
+      utility ? nullptr : state.FindDict("windows")->FindDict(window_id);
+  if (!own && !utility)
     return std::nullopt;
-  const bool is_private = own->FindBool("incognito").value();
-  const std::string own_space = *own->FindString("spaceId");
+  const bool is_private = own && own->FindBool("incognito").value();
+  const std::string own_space = own ? *own->FindString("spaceId") : "";
   std::set<std::string> windows, tabs, private_windows;
   for (const auto [id, value] : *state.FindDict("windows")) {
     if (!value.GetDict().FindBool("incognito").value() || id == window_id)
@@ -964,11 +968,18 @@ std::optional<base::DictValue> ProjectRuntimeState(
 
 bool CanDispatchRuntimeCommand(const base::DictValue& state,
                                const std::string& window_id,
-                               const base::DictValue& command) {
+                               const base::DictValue& command,
+                               bool utility) {
   const auto* windows = state.FindDict("windows");
-  const auto* own_window = windows ? windows->FindDict(window_id) : nullptr;
   const auto* tabs = state.FindDict("tabs");
-  if (!own_window || !tabs)
+  if (!windows || !tabs)
+    return false;
+  // A utility window is a public window that shows no pages and owns no tabs.
+  const base::DictValue utility_window =
+      base::DictValue().Set("incognito", false).Set("spaceId", "");
+  const auto* own_window =
+      utility ? &utility_window : windows->FindDict(window_id);
+  if (!own_window)
     return false;
   const auto* method = command.FindString("method");
   if (!method)
@@ -984,9 +995,19 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     const auto* id = command.FindString(field);
     return id ? tab_owned(*id) : nullptr;
   };
+  // The window a command may name as its own: itself, or for a utility window
+  // any public main window.
+  const auto acts_for = [&](const std::string& id) {
+    if (!utility)
+      return id == window_id;
+    const auto* window = windows->FindDict(id);
+    const auto* kind = window ? window->FindString("kind") : nullptr;
+    return window && !window->FindBool("incognito").value_or(false) &&
+           !(kind && *kind == "small");
+  };
   const auto own_target = [&] {
     const auto* id = command.FindString("windowId");
-    return id && *id == window_id;
+    return id && acts_for(*id);
   };
   const auto visible_window = [&](const std::string& id) {
     const auto* window = windows->FindDict(id);
@@ -1110,7 +1131,7 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     return value && (*value == -1 || *value == 1);
   };
   if (*method == "serviceAction")
-    return !is_private && ServiceCommand(state, window_id, command);
+    return !is_private && ServiceCommand(state, acts_for, command);
   if (base::StartsWith(*method, "import")) {
     if (is_private || harbor || !public_space(command, "spaceId") || !ImportCommand(command)) return false;
     if (const auto* id = command.Find("afterId")) {

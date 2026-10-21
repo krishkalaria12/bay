@@ -63,7 +63,8 @@ export const useSettingsNav = create<Nav>((set, get) => ({
 
 export function openSettings(pane?: SettingsPane, spaceId?: string | null) {
   if (pane) useSettingsNav.getState().go(pane, spaceId ?? null);
-  void openWindow(SETTINGS_WINDOW_ID, { kind: "settings", title: "Settings" });
+  // Where Settings is its own document (Windows), it reads the pane from its options.
+  void openWindow(SETTINGS_WINDOW_ID, { kind: "settings", title: "Settings", ...(pane && { pane, ...(spaceId && { spaceId }) }) });
 }
 
 export function openImport() {

@@ -9,6 +9,7 @@ import { installServiceState } from "./serviceState";
 import { setSpaceProfiles } from "../store/model";
 import { profileIdOf } from "../store/spaces";
 import { parseServiceCommand } from "./serviceCommands";
+import { isUtilityWindowId } from "../components/settings/windows";
 
 export async function startWindowRuntimeEntry(transport: WindowRuntimeTransport<BrowserProjection, BrowserCommand, unknown>, onError: (error: Error) => void) {
   const client = createBrowserClient({ clientId: transport.bootstrap.clientId, transport });
@@ -23,7 +24,9 @@ export async function startWindowRuntimeEntry(transport: WindowRuntimeTransport<
   }
   try {
     await client.ready;
-    if (!client.getSnapshot()?.state.windows[transport.bootstrap.windowId]) throw new Error("The assigned browser window is unavailable");
+    // A utility window (Settings, Import, Task Manager) has no browser window record.
+    const { windowId } = transport.bootstrap;
+    if (!isUtilityWindowId(windowId) && !client.getSnapshot()?.state.windows[windowId]) throw new Error("The assigned browser window is unavailable");
     installBrowserReadSource(createClientBrowserReadSource(client));
     installBrowserCommands(createClientBrowserCommands(client));
     installServiceClient((action, args) => client.dispatch(parseServiceCommand({ method: "serviceAction", action, args })));
@@ -45,7 +48,7 @@ export async function startWindowRuntimeEntry(transport: WindowRuntimeTransport<
     const { AppRegistry } = await import("react-native");
     const rootTag = document.getElementById("root");
     if (!rootTag) throw new Error("The WebUI root element is missing");
-    AppRegistry.runApplication("main", { rootTag, initialProps: { windowId: transport.bootstrap.windowId } });
+    AppRegistry.runApplication("main", { rootTag, initialProps: { windowId } });
     return { dispose };
   } catch (error) {
     dispose();

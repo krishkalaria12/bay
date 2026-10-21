@@ -26,6 +26,10 @@ class NativeHost;
 // UI-thread registry. A Chrome window is not a Bay application window until its
 // persisted JS id has been adopted or assigned by Open(). Document replacement
 // disconnects a host without discarding the native window's identity.
+// Settings, Import and Task Manager: windows the shared state has no record
+// of (runtime_state.h).
+bool IsUtilityWindowKind(const std::string& kind);
+
 class WindowRegistry final : public BrowserCollectionObserver {
  public:
   struct Result {
@@ -40,6 +44,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   void UnregisterHost(NativeHost* host);
   std::string IdFor(BrowserWindowInterface* browser) const;
   base::DictValue OptionsFor(BrowserWindowInterface* browser) const;
+  bool IsUtility(BrowserWindowInterface* browser) const;
   BrowserWindowInterface* Find(const std::string& id) const;
   base::ListValue Ids() const;
 
@@ -58,10 +63,11 @@ class WindowRegistry final : public BrowserCollectionObserver {
   // {maximized, fullscreen}, or nullopt for an unknown window.
   std::optional<base::DictValue> State(const std::string& id) const;
 
-  // Until the shared runtime owns every window, one full UI document runs per
-  // process. A normal window Chrome opens on its own (a relaunch, the taskbar,
-  // an extension) is absorbed: its document refuses to start, and on Show its
-  // tabs join the most recently active Bay window before it closes unshown.
+  // A normal window Chrome opens on its own (a relaunch, the taskbar, an
+  // extension) has no Bay window id and is absorbed: its document refuses to
+  // start, and on Show its tabs join the most recently active Bay window
+  // before it closes unshown. With the shared runtime its pages are offered to
+  // the coordinator (AppRuntime::AdoptPage).
   bool IsAbsorbed(BrowserWindowInterface* browser) const;
   // Returns true when `browser` is absorbed and must not be shown.
   bool AbsorbOnShow(BrowserWindowInterface* browser);
@@ -77,6 +83,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   Entry& EnsureEntry(BrowserWindowInterface* browser);
   void PublishHostInfo();
   void Broadcast(base::DictValue event);
+  void EmitToWindow(const std::string& id, base::DictValue event);
   void BoundsChanged(BrowserWindowInterface* browser, const gfx::Rect& bounds);
   void ShowStateChanged(BrowserWindowInterface* browser);
   void MoveIntoBayWindow(base::WeakPtr<BrowserWindowInterface> source);

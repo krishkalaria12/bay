@@ -1841,5 +1841,53 @@ TEST(RuntimeStateTest, ServiceAndImportRepliesCarryOnlyTheirResultShapes) {
   // A service with no result cannot smuggle an object into a window.
   EXPECT_FALSE(reply(base::Value(Json(R"({"ok":true})")), RuntimeResultKind::kNone));
 }
+TEST(RuntimeStateTest, UtilityWindowsReadPublicStateAndActForPublicMainWindows) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddLittleBay(state, "harbor");
+  AddWindow(state, "private", true);
+  AddServices(state);
+  ASSERT_TRUE(IsRuntimeState(state));
+  // A utility window has no record: it reads what a public window reads.
+  EXPECT_FALSE(ProjectRuntimeState(state, "settings"));
+  auto projected = ProjectRuntimeState(state, "settings", /*utility=*/true);
+  ASSERT_TRUE(projected);
+  ASSERT_TRUE(IsRuntimeState(*projected));
+  const auto json = base::WriteJson(*projected).value();
+  EXPECT_NE(json.find("normal-secret"), std::string::npos);
+  EXPECT_EQ(json.find("private-secret"), std::string::npos);
+  EXPECT_EQ(json.find("incognito:private"), std::string::npos);
+  EXPECT_TRUE(projected->FindDict("ui")->Find("focusedWindowId")->is_none());
+
+  const auto can = [&](base::DictValue command) {
+    return CanDispatchRuntimeCommand(state, "settings", command, /*utility=*/true);
+  };
+  EXPECT_FALSE(CanDispatchRuntimeCommand(
+      state, "settings", base::DictValue().Set("method", "updateSettings").Set("patch", base::DictValue())));
+  EXPECT_TRUE(can(base::DictValue().Set("method", "updateSettings").Set("patch", base::DictValue())));
+  // Commands that name a window name a public main window, never a Little Bay or a private one.
+  const auto new_tab = [](const char* window) {
+    return base::DictValue().Set("method", "newTab").Set("windowId", window).Set(
+        "options", base::DictValue().Set("url", "https://example.com/"));
+  };
+  EXPECT_TRUE(can(new_tab("normal")));
+  EXPECT_FALSE(can(new_tab("harbor")));
+  EXPECT_FALSE(can(new_tab("private")));
+  EXPECT_FALSE(can(new_tab("settings")));
+  EXPECT_TRUE(can(base::DictValue().Set("method", "showTab").Set("tabId", "normal-tab")));
+  EXPECT_FALSE(can(base::DictValue().Set("method", "showTab").Set("tabId", "private-tab")));
+  const auto action = [](const char* name, base::ListValue args) {
+    return base::DictValue().Set("method", "serviceAction").Set("action", name).Set("args", std::move(args));
+  };
+  EXPECT_TRUE(can(action("googleConnect", base::ListValue().Append("normal").Append("id").Append("secret"))));
+  EXPECT_FALSE(can(action("googleConnect", base::ListValue().Append("private").Append("id").Append("secret"))));
+  auto imported = base::DictValue().Set("method", "importTabs").Set("spaceId", "default").Set("group", base::Value())
+      .Set("tabs", base::ListValue().Append(base::DictValue().Set("url", "https://a.example/").Set("title", "A").Set("pinned", false)));
+  EXPECT_TRUE(can(imported.Clone()));
+  imported.Set("spaceId", "incognito:private");
+  EXPECT_FALSE(can(std::move(imported)));
+  // It shows no page, so commands about a shown page have nothing to name.
+  EXPECT_FALSE(can(base::DictValue().Set("method", "setFind").Set("tabId", "normal-tab").Set("patch", base::DictValue())));
+}
 }  // namespace
 }  // namespace bay

@@ -120,6 +120,21 @@ test("extension pages map their native profile to a public space and reject miss
   }
 });
 
+test("pages from a window Chrome opened join the named window, its active one in front", () => {
+  const { store, windowId, tabId, event } = setup();
+  const behind = event({ sourceTabId: undefined, url: "https://behind.example/", disposition: "background" });
+  const front = event({ sourceTabId: undefined, url: "https://front.example/" });
+  const behindId = applyPageOpen(store, behind);
+  assert.equal(activeTabId(store.getState(), windowId), tabId);
+  const frontId = applyPageOpen(store, front);
+  for (const [id, input] of [
+    [behindId, behind],
+    [frontId, front],
+  ])
+    assert.equal(adopted(store, id, input).windowId, windowId);
+  assert.equal(activeTabId(store.getState(), windowId), frontId);
+});
+
 test("Little Bay links and splits transfer their offered pages behind a main window", () => {
   const { store, windowId, tabId, event } = setup({ small: true });
   const main = store.getState().createWindow();

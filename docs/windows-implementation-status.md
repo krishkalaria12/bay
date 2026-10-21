@@ -249,25 +249,39 @@ into the most recently active Bay window. Pages in another regular profile
 reopen there; private pages are dropped rather than copied into a regular
 profile. Bay's own additional windows stay unavailable in that mode.
 
-With the shared runtime only the coordinator opens additional windows, from
-accepted state; window documents cannot open them directly.
+With the shared runtime such a window is absorbed the same way, but its pages
+go to the coordinator: each regular page is offered as a new tab of the most
+recently active regular Bay window (`AppRuntime::AdoptPage`), the active one in
+front. New tab and blank pages, and private pages, close with the window. Only
+the coordinator opens browser windows, from accepted state.
+
+## Utility windows in the shared runtime
+
+Settings, Import and Task Manager have no record in the shared state. Any
+window may open one. The broker gives it the projection a regular window gets,
+and lets it send what a regular window may send, naming any regular main window
+where a command names a window (`ProjectRuntimeState` and
+`CanDispatchRuntimeCommand` with `utility`). A Settings pane requested from
+another window comes with the window's options, or with an `opened` window event
+when Settings is already open. Window documents also receive their own window
+events now, so the caption buttons follow maximize and restore.
 
 ## Not yet working in the shared runtime
 
-- Windows Chrome opens itself are not absorbed and get no Bay window id, so
-  their document cannot connect. Their tabs need a native page offer without a
-  source tab, which the coordinator places in a regular window.
-- The Settings, Import and Task Manager utility windows are not in the shared
-  state. Their documents fail the assigned-window check and the broker rejects
-  their commands. They need a utility-window client that reads the projection
-  and dispatches settings, import and task commands on behalf of the app.
-- The taskbar jump list waits for both.
+- Task Manager cannot match processes to tabs, because pages are mounted in
+  other documents. Rows show Chrome's task titles, without favicons, and
+  double-clicking does not switch to the tab.
+- A window Chrome opens while no Bay window has an id (before the coordinator
+  adopts the startup window) is closed with its pages.
+- The taskbar jump list is still to do.
 
 ## Validation still required on Windows
 
 Absorbed windows: with Bay open, run `Bay.exe --new-window https://example.com`
 and check the page opens as a tab in the existing window with no second window
-flashing. Frame: drag from the caption, double-click to maximize, resize from every edge
+flashing. Utility windows: open Settings, Import and Task Manager from a browser
+window, change a setting, open Settings again on another pane, and end a
+process. Frame: drag from the caption, double-click to maximize, resize from every edge
 including the top, Snap Layouts on hovering maximize, Aero Snap, multi-monitor
 DPI changes, maximized windows staying on their monitor, the caption buttons'
 hover and click, and Mica with readable text in light and dark themes (then
