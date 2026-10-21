@@ -1801,7 +1801,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <p>
                 <strong>Verification.</strong> Helper and unit-test sources pass Linux x64 syntax checks with the pinned Debian sysroot. These checks reuse
                 generated Mac headers and do not establish a Linux GN build. Native unit-test binaries, desktop startup integration and X11/Wayland behavior
-                remain unverified. The Linux frame, host platform services, notifications, linking and branding are still open.
+                remain unverified. Host platform services, notifications, linking and branding are still open.
+              </p>
+              <p>
+                <strong>Frame, 21 Oct 2026.</strong> <code>frame_linux.cc</code> installs through the shared native-widget hook. It asks X11 for an
+                undecorated window and Wayland for client-side decorations, and replaces the GTK frame so no second title bar appears. A 4&nbsp;DIP band
+                inside each edge resizes restored windows, with 16&nbsp;DIP diagonal corners; maximized and full-screen windows don't resize. Every other
+                point goes to the WebUI client view's CSS drag regions, and Chromium's Linux event filter handles moves, resizes and the desktop's
+                double-click action. <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. The
+                desktop's button layout, edge tiling and client shadows come later.
               </p>
             </div>
             <ul>
@@ -2247,8 +2255,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <ul>
                 <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
                 <li>
-                  <code>chromium-bay-branding-linux</code> (binary name, desktop file, AppArmor-friendly paths) and
-                  <code>chromium-bay-frame-linux</code> (client-side decorations and hit tests)
+                  <code>chromium-bay-branding-linux</code> (binary name, desktop file, AppArmor-friendly paths). The client-side frame needs no patch of its
+                  own: it installs through <code>chromium-bay-native-widget</code>
                 </li>
                 <li>SurfaceEmbed backports from trunk, only if the Linux gate needs them</li>
                 <li>Fallback only (L‑A): <code>cef-overlay-hit-mask</code> and <code>cef-overlay-backdrop-blur</code></li>
