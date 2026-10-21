@@ -155,8 +155,9 @@ class RuntimeConnection final
     const auto* command = request->FindDict("command");
     const std::string window_id =
         window_ ? WindowRegistry::Get().IdFor(window_.get()) : "";
-    if (!CanDispatchRuntimeCommand(*runtime_->accepted_->FindDict("state"),
-                                   window_id, *command)) {
+    if (!CanDispatchRuntimeCommand(
+            *runtime_->accepted_->FindDict("state"), window_id, *command,
+            WindowRegistry::Get().IsUtility(window_.get()))) {
       std::move(callback).Run(
           Failure("forbidden", "Command does not belong to this window"));
       return;
@@ -729,7 +730,9 @@ std::optional<base::DictValue> AppRuntime::Snapshot(
   const auto id = connection.window_
                       ? WindowRegistry::Get().IdFor(connection.window_.get())
                       : "";
-  auto projection = ProjectRuntimeState(*accepted_->FindDict("state"), id);
+  auto projection = ProjectRuntimeState(
+      *accepted_->FindDict("state"), id,
+      WindowRegistry::Get().IsUtility(connection.window_.get()));
   if (!projection)
     return std::nullopt;
   auto snapshot = accepted_->Clone();

@@ -43,6 +43,9 @@
 #endif
 
 namespace bay {
+bool IsUtilityWindowKind(const std::string& kind) {
+  return kind == "settings" || kind == "import" || kind == "taskManager";
+}
 namespace {
 WindowRegistry::Result Success() {
   return {true, {}};
@@ -57,8 +60,7 @@ bool ValidName(const std::string& name) {
              "-") == std::string::npos;
 }
 bool KnownKind(const std::string& kind) {
-  return kind == "browser" || kind == "small" || kind == "settings" ||
-         kind == "import" || kind == "taskManager";
+  return kind == "browser" || kind == "small" || IsUtilityWindowKind(kind);
 }
 std::optional<gfx::Rect> ReadFrame(const base::Value* value) {
   if (!value || !value->is_list() || value->GetList().size() != 4)
@@ -174,6 +176,12 @@ base::DictValue WindowRegistry::OptionsFor(
     BrowserWindowInterface* browser) const {
   auto it = entries_.find(browser);
   return it == entries_.end() ? base::DictValue() : it->second->options.Clone();
+}
+bool WindowRegistry::IsUtility(BrowserWindowInterface* browser) const {
+  auto it = entries_.find(browser);
+  const auto* kind =
+      it == entries_.end() ? nullptr : it->second->options.FindString("kind");
+  return kind && IsUtilityWindowKind(*kind);
 }
 BrowserWindowInterface* WindowRegistry::Find(const std::string& id) const {
   if (id.empty())

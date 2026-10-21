@@ -26,6 +26,10 @@ class NativeHost;
 // UI-thread registry. A Chrome window is not a Bay application window until its
 // persisted JS id has been adopted or assigned by Open(). Document replacement
 // disconnects a host without discarding the native window's identity.
+// Settings, Import and Task Manager: windows the shared state has no record
+// of (runtime_state.h).
+bool IsUtilityWindowKind(const std::string& kind);
+
 class WindowRegistry final : public BrowserCollectionObserver {
  public:
   struct Result {
@@ -40,6 +44,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   void UnregisterHost(NativeHost* host);
   std::string IdFor(BrowserWindowInterface* browser) const;
   base::DictValue OptionsFor(BrowserWindowInterface* browser) const;
+  bool IsUtility(BrowserWindowInterface* browser) const;
   BrowserWindowInterface* Find(const std::string& id) const;
   base::ListValue Ids() const;
 

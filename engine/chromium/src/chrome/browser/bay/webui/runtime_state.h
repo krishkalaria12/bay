@@ -28,14 +28,19 @@ bool IsRuntimeReply(const base::DictValue& reply,
                     double minimum_revision,
                     double accepted_revision,
                     RuntimeResultKind result_kind);
+// A utility window (Settings, Import, Task Manager) has no record in the
+// state. It reads what a public window reads and acts for any public main
+// window, so commands that name a window may name one of those.
 std::optional<base::DictValue> ProjectRuntimeState(
     const base::DictValue& state,
-    const std::string& window_id);
+    const std::string& window_id,
+    bool utility = false);
 // Checks an authenticated window's command against the accepted full state.
 // Reducer-level validation still runs inside the coordinator.
 bool CanDispatchRuntimeCommand(const base::DictValue& state,
                                const std::string& window_id,
-                               const base::DictValue& command);
+                               const base::DictValue& command,
+                               bool utility = false);
 // Native page identity is checked against accepted state independently of a
 // renderer mount lease or the tab's current public-window owner.
 bool CanAcceptRuntimePageEvent(const base::DictValue& state,

@@ -897,17 +897,21 @@ void NativeHost::Invoke(const std::string& module,
       }
       const auto id = Text(args, 0);
       // Without the shared runtime each full UI owns one Zustand runtime, and
-      // a second independent one could overwrite session state. With it, only
-      // the coordinator opens windows, from accepted state. The diagnostic has
-      // no app store and can exercise native window behavior either way.
+      // a second independent one could overwrite session state. With it, the
+      // coordinator opens browser windows from accepted state, and any window
+      // opens a utility window, which has no record in that state. The
+      // diagnostic has no app store and can exercise native window behavior
+      // either way.
       const bool spike = base::CommandLine::ForCurrentProcess()->HasSwitch(
           "bay-hosting-spike");
+      const auto* kind = options->GetDict().FindString("kind");
+      const bool utility = kind && IsUtilityWindowKind(*kind);
       if (!windows.Find(id) && !windows.Ids().empty() && !spike &&
-          !(AppRuntime::Enabled() && is_coordinator())) {
+          !(AppRuntime::Enabled() && (is_coordinator() || utility))) {
         std::move(callback).Run(Failure(
             "unavailable",
             AppRuntime::Enabled()
-                ? "Only the application coordinator opens additional windows"
+                ? "Only the application coordinator opens browser windows"
                 : "Additional windows require the shared application runtime"));
         return;
       }
