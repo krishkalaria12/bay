@@ -106,23 +106,36 @@ disconnect or publication failure. Pending live/calendar results cannot write
 after disposal. Final saves acknowledge session, downloads and Live documents;
 cancelling quit resumes their writers. The gated single-runtime entry reuses
 this service bundle. Window/sidebar mounting starts none of these services.
+
+Page facts now follow a separate coordinator-only native route. Broker-owned
+observers retain the app tab ID and continue reporting URL, title, loading,
+favicon, audio, zoom and find results while pages are parked between views.
+Chrome checks the tab's profile against accepted state and authorizes each
+mount against its window owner. Sequenced, bounded replay restores current
+facts after coordinator replacement; stale page identities are rejected.
+Window callbacks retain local prompts and presentation effects, with shared
+store fact writes disabled in experimental shared mode. Legacy startup keeps
+its existing callback behavior. Eight native page-fact authorization and replay
+tests pass alongside the 38 command/privacy tests. These checks and native
+source syntax checks ran on macOS; Windows runtime behavior remains unverified.
+
 This experimental mode still stops before the legacy UI entry. The coordinator
 and visible UI entries are not wired together yet.
 Additional application windows remain gated pending the remaining command
-migration and service ownership. Bulk import, sync, native page facts (address,
-zoom, find results, live items) and pages Chrome already opened (`adoptId`)
-still access the writable singleton. Native page-fact routing, remaining global
-integrations and cross-renderer page handoff must move to the coordinator before
-enabling the shared UI entry. Live, calendar and meeting-alert UI stores still
-need a cross-renderer feed when that entry is wired. In-process two-client tests do not replace
-native two-window acceptance. Live document IO now starts
-explicitly instead of running when window UI imports its store.
+migration and service ownership. Bulk import, sync, live-folder UI actions,
+virtual new-tab history and pages Chrome already opened (`adoptId`) still access
+the writable singleton. Remaining global integrations and cross-renderer page
+handoff must move to the coordinator before enabling the shared UI entry.
+Live, calendar and meeting-alert UI stores still need a cross-renderer feed
+when that entry is wired. In-process two-client tests do not replace native
+two-window acceptance. Live document IO now starts explicitly instead of
+running when window UI imports its store.
 
 Native updater and close-button shutdown preparation now participate in the
 acknowledged final session save. Native page controls cover printing, saving,
 screenshots, certificate details and media operations. Windows browser and
 installer identities, executable names, associations and taskbar IDs now agree.
-Remaining work includes page fact routing, remaining global integrations, complete
+Remaining work includes page handoff, remaining global integrations, complete
 native event/OS coverage and the Windows acceptance runs. The diagnostic page
 does not establish a complete browser host.
 
