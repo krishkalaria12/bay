@@ -1,4 +1,4 @@
-"""Bay's Windows frame replaces the WebUI window's native widget through one hook."""
+"""Desktop frames replace the WebUI window native widget through one shared hook."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -15,16 +15,17 @@ def added(patch):
 
 
 class FrameHookTests(unittest.TestCase):
-    def test_frame_patch_is_windows_only_and_follows_the_window_patches(self):
+    def test_frame_hook_is_shared_by_web_desktops_and_follows_window_patches(self):
         names = [step.name for step in series.read_series("win")]
-        self.assertIn("chromium-bay-frame-win.patch", names)
-        self.assertNotIn("chromium-bay-frame-win.patch", {step.name for step in series.read_series("mac")})
+        self.assertIn("chromium-bay-native-widget.patch", names)
+        self.assertNotIn("chromium-bay-native-widget.patch", {step.name for step in series.read_series("mac")})
+        self.assertIn("chromium-bay-native-widget.patch", {step.name for step in series.read_series("linux")})
         # Its context is the WebUI window as the window and lifecycle patches leave it.
         for earlier in ("chromium-bay-webui-window.patch", "chromium-bay-lifecycle.patch"):
-            self.assertLess(names.index(earlier), names.index("chromium-bay-frame-win.patch"))
+            self.assertLess(names.index(earlier), names.index("chromium-bay-native-widget.patch"))
 
     def test_hook_is_installed_before_profiles_create_windows(self):
-        patch = added((REPO / "engine/patches/chromium-bay-frame-win.patch").read_text())
+        patch = added((REPO / "engine/patches/chromium-bay-native-widget.patch").read_text())
         self.assertIn("static void SetBayNativeWidgetFactory(", patch)
         self.assertIn("g_bay_native_widget_factory(widget_.get())", patch)
         self.assertNotIn('#include "chrome/browser/bay/', patch)

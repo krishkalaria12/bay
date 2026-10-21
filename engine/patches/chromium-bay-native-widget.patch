@@ -36,7 +36,7 @@ diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.h b/chrome/bro
    static void SetBayCloseRequestHandler(
        bool (*handler)(BrowserWindowInterface*));
  
-+  // Bay supplies its own native widget (and so its Windows frame) on desktop
++  // Bay supplies its own native widget and custom frame on desktop
 +  // platforms without a Mac implementation of CreateNativeWidget().
 +  static void SetBayNativeWidgetFactory(
 +      views::NativeWidget* (*factory)(views::Widget*));
