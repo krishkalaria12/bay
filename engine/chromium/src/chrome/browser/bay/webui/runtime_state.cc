@@ -1475,6 +1475,43 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
            CommandFields(command, {"method", "spaceId"}, {"since"}) &&
            public_space(command, "spaceId") &&
            (!command.contains("since") || command.FindDouble("since"));
+  // A window's own panels and find bar, and the downloads its list shows.
+  if (*method == "setDownloadsOpen")
+    return CommandFields(command, {"method", "windowId", "open"}) &&
+           own_target() && command.FindBool("open");
+  if (*method == "clearDownloads")
+    return CommandFields(command, {"method", "windowId"}) && own_target();
+  if (*method == "removeDownload") {
+    const auto* id = command.FindString("downloadId");
+    if (!CommandFields(command, {"method", "windowId", "downloadId"}) ||
+        !own_target() || !id)
+      return false;
+    const std::string& own_space = *own_window->FindString("spaceId");
+    for (const auto& value : *state.FindList("downloads")) {
+      const auto* download = value.is_dict() ? &value.GetDict() : nullptr;
+      const auto* download_id = download ? download->FindString("id") : nullptr;
+      if (!download_id || *download_id != *id)
+        continue;
+      const auto* profile = download->FindString("profile");
+      return is_private ? profile && *profile == own_space
+                        : !(profile && PrivateSpace(*profile));
+    }
+    return false;
+  }
+  if (*method == "setFind") {
+    const auto* patch = command.FindDict("patch");
+    return CommandFields(command, {"method", "tabId", "patch"}) &&
+           own_tab("tabId") && patch &&
+           CommandFields(*patch, {},
+                         {"open", "query", "count", "active", "focusRequest",
+                          "replace"});
+  }
+  if (*method == "updateTabDetails") {
+    const auto* patch = command.FindDict("patch");
+    return CommandFields(command, {"method", "tabId", "patch"}) &&
+           visible_field(command, "tabId") && patch &&
+           CommandFields(*patch, {}, {"customTitle", "customIcon", "kept"});
+  }
   return false;
 }
 }  // namespace bay

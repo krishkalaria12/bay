@@ -942,6 +942,72 @@ TEST(RuntimeStateTest, HistoryEditsAndBookmarkUndoStayRegular) {
                 "id"),
             "public");
 }
+TEST(RuntimeStateTest, WindowUiCommandsStayWithTheirWindowTabsAndDownloads) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  auto* downloads = state.FindList("downloads");
+  downloads->clear();
+  downloads->Append(
+      base::DictValue().Set("id", "public").Set("profile", "default"));
+  downloads->Append(base::DictValue()
+                        .Set("id", "secret")
+                        .Set("profile", "incognito:private"));
+  const auto allowed = [&](const char* window, const base::DictValue& c) {
+    return CanDispatchRuntimeCommand(state, window, c);
+  };
+  auto open = base::DictValue()
+                  .Set("method", "setDownloadsOpen")
+                  .Set("windowId", "normal")
+                  .Set("open", true);
+  EXPECT_TRUE(allowed("normal", open));
+  EXPECT_FALSE(allowed("other", open));
+  open.Set("open", "yes");
+  EXPECT_FALSE(allowed("normal", open));
+  auto clear = base::DictValue()
+                   .Set("method", "clearDownloads")
+                   .Set("windowId", "private");
+  EXPECT_TRUE(allowed("private", clear));
+  EXPECT_FALSE(allowed("normal", clear));
+
+  auto remove = base::DictValue()
+                    .Set("method", "removeDownload")
+                    .Set("windowId", "normal")
+                    .Set("downloadId", "public");
+  EXPECT_TRUE(allowed("normal", remove));
+  remove.Set("downloadId", "secret");
+  EXPECT_FALSE(allowed("normal", remove));
+  remove.Set("windowId", "private");
+  EXPECT_TRUE(allowed("private", remove));
+  remove.Set("downloadId", "public");
+  EXPECT_FALSE(allowed("private", remove));
+
+  auto find = base::DictValue()
+                  .Set("method", "setFind")
+                  .Set("tabId", "normal-tab")
+                  .Set("patch", base::DictValue()
+                                    .Set("open", true)
+                                    .Set("query", "needle"));
+  EXPECT_TRUE(allowed("normal", find));
+  EXPECT_FALSE(allowed("other", find));
+  find.FindDict("patch")->Set("sessionId", "forged");
+  EXPECT_FALSE(allowed("normal", find));
+
+  auto details =
+      base::DictValue()
+          .Set("method", "updateTabDetails")
+          .Set("tabId", "normal-tab")
+          .Set("patch", base::DictValue().Set("customTitle", "Mine"));
+  EXPECT_TRUE(allowed("normal", details));
+  EXPECT_TRUE(allowed("other", details)) << "a shared public row";
+  EXPECT_FALSE(allowed("private", details));
+  details.Set("tabId", "private-tab");
+  EXPECT_FALSE(allowed("normal", details));
+  EXPECT_TRUE(allowed("private", details));
+  details.FindDict("patch")->Set("url", "https://forged/");
+  EXPECT_FALSE(allowed("private", details));
+}
 TEST(RuntimeStateTest, OptionalResultsAcceptNoIdWithoutWeakeningRequiredIds) {
   auto reply = base::DictValue()
                    .Set("epoch", "epoch")
