@@ -1791,6 +1791,19 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <dt>Runs alongside</dt>
               <dd>Phase&nbsp;4</dd>
             </dl>
+            <div class="callout">
+              <p>
+                <strong>Host helper sources, 21 Oct 2026.</strong> Linux now has the download completion hook and GIO protocol-handler display names.
+                Protocol lookups copy prefs on the UI sequence and resolve names on a worker. The shared Aura PiP implementation provides the window fade;
+                Linux preloads bounds asynchronously and queues writes. Ozone backends without global screen coordinates skip rectangle persistence, so
+                Wayland cannot overwrite saved X11 positions. A PiP window opened before preload finishes uses Chromium's default placement.
+              </p>
+              <p>
+                <strong>Verification.</strong> Helper and unit-test sources pass Linux x64 syntax checks with the pinned Debian sysroot. These checks reuse
+                generated Mac headers and do not establish a Linux GN build. Native unit-test binaries, desktop startup integration and X11/Wayland behavior
+                remain unverified. The Linux frame, host platform services, notifications, linking and branding are still open.
+              </p>
+            </div>
             <ul>
               <li>
                 Written in <code>feat/windows</code>: the Bay window over upstream's WebUI browser window, <code>chrome://bay</code> with its CSP and Mojo
@@ -1807,9 +1820,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 with Chromium's, pin it as the macOS series comment does, and warn the user when only <code>basic</code> is available.
               </li>
               <li>
-                Platform services: <code>nn_downloads_linux.cc</code> (Chrome already writes <code>user.xdg.origin.url</code>),
-                <code>nn_external_apps_linux.cc</code> (GIO or the OpenURI portal), <code>pip/nn_pip_linux.cc</code>, desktop capture through PipeWire and the
-                ScreenCast portal.
+                Platform services: <code>nn_downloads_linux.cc</code> (the current patched engine adds no Linux quarantine metadata),
+                <code>nn_external_apps_linux.cc</code> (GIO handler names), shared <code>pip/nn_pip_aura.cc</code>, external URL launching through GIO or the
+                OpenURI portal, and desktop capture through PipeWire and the ScreenCast portal.
               </li>
               <li>Prompts and menus keep their JSON events; only the anchoring geometry is per platform.</li>
             </ul>

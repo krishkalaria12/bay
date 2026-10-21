@@ -58,3 +58,16 @@ python -m unittest discover -s scripts/windows -p 'test_*.py' -v
 python -m unittest discover -s scripts -p 'test_engine_driver.py' -v
 python -m unittest discover -s engine/chromium -p 'test_*.py' -v
 ```
+
+Once the Linux engine tree is prepared and GN-generated, build and run the
+native helper tests on Linux:
+
+```sh
+autoninja -C out/Release_GN_x64 chrome/browser/bay:pip_platform_unittests chrome/browser/bay:external_apps_linux_unittests
+out/Release_GN_x64/pip_platform_unittests
+out/Release_GN_x64/external_apps_linux_unittests
+```
+
+These test targets are added but have not run. Current source checks use the
+pinned Linux sysroot and generated Mac configuration headers. They do not prove
+the Linux GN dependency graph, startup integration, or desktop behavior.
