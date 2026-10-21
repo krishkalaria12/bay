@@ -204,7 +204,7 @@ does not establish a complete browser host.
 ## Frame, notifications and menus
 
 Bay windows use their own Win32 frame (`frame_win.cc`, installed through
-`chromium-bay-frame-win.patch`). DWM keeps the borders, shadow and Aero Snap;
+`chromium-bay-native-widget.patch`). DWM keeps the borders, shadow and Aero Snap;
 the client area reaches the window's top, the top edge stays a resize border,
 and the UI's caption buttons are drawn at the top right. The host reports the
 UI's maximize button as `HTMAXBUTTON` so Windows 11 offers Snap Layouts over

@@ -1566,7 +1566,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <p>
                 <strong>Implementation progress, 21 Oct 2026.</strong> Linux caption buttons and shared-runtime defaults are implemented. Web page-fact
                 ownership reads the host's <code>sharedRuntime</code> constant; the native Mac app keeps local ownership. The series accepts Linux and comma
-                lists, selects the three shared host patches, and installs NNCore without the Mac hooks. Windows DLL dependencies stay in the Windows layer
+                lists, selects the shared host patches, and installs NNCore without the Mac hooks. Windows DLL dependencies stay in the Windows layer
                 patch. The engine driver now shares platform profiles and keeps the Windows entry point. Linux archives have separate runtime and debug
                 symbol files with checksums; packaging is tested with fixtures, not a built Bay engine. An Ubuntu&nbsp;24.04 workflow covers portable
                 JavaScript and Python tests, typechecks, web export and Linux patch selection. The shared driver tests also run in the Windows workflow.
@@ -2229,7 +2229,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </li>
                 <li>
                   Windows-only: <code>chromium-bay-layer-win</code> (chrome.dll), <code>chromium-bay-branding-win</code>,
-                  <code>chromium-bay-notifications-win</code>, <code>chromium-bay-frame-win</code>
+                  <code>chromium-bay-notifications-win</code>
                 </li>
               </ul>
             </div>
@@ -2238,6 +2238,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <ul>
                 <li><code>chromium-bay-webui-window</code>: Bay's window factory, <code>chrome://bay</code> and the SurfaceEmbed registration</li>
                 <li><code>chromium-bay-lifecycle</code>, <code>chromium-bay-extension-hooks</code></li>
+                <li><code>chromium-bay-native-widget</code>: the native widget and custom frame factory for both web desktops</li>
                 <li>
                   <code>chromium-safe-storage-name</code> is <code>mac</code> today: <strong>add a Linux version</strong> (Secret Service / KWallet naming)
                 </li>
