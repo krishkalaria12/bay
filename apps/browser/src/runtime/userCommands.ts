@@ -5,8 +5,9 @@ import { executeWindowCommand, parseWindowCommand, WINDOW_COMMAND_METHODS, type 
 import { executeSettingsCommand, parseSettingsCommand, SETTINGS_COMMAND_METHODS, type SettingsCommand } from "./settingsCommands";
 import { executeOrganizeCommand, ORGANIZE_COMMAND_METHODS, parseOrganizeCommand, type OrganizeCommand } from "./organizeCommands";
 import { executeSplitCommand, parseSplitCommand, SPLIT_COMMAND_METHODS, type SplitCommand } from "./splitCommands";
+import { executeSpaceCommand, parseSpaceCommand, SPACE_COMMAND_METHODS, type SpaceCommand } from "./spaceCommands";
 
-export type BrowserCommand = LocationCommand | TabCommand | WindowCommand | SettingsCommand | OrganizeCommand | SplitCommand;
+export type BrowserCommand = LocationCommand | TabCommand | WindowCommand | SettingsCommand | OrganizeCommand | SplitCommand | SpaceCommand;
 
 // Keep in sync with RuntimeCommandResultKind in runtime_state.cc.
 const ID_METHODS = [
@@ -19,6 +20,7 @@ const ID_METHODS = [
   "newTabInGroup",
   "newPinnedFolder",
   "createSplit",
+  "createSpace",
 ] as const;
 const OPTIONAL_ID_METHODS = ["duplicateTab", "moveTabsToWindow", "restoreCleaned", "openSplitPane", "openPeek"] as const;
 export type BrowserCommandValue<C extends BrowserCommand> = C extends { method: (typeof ID_METHODS)[number] }
@@ -41,6 +43,7 @@ export function parseBrowserCommand(value: unknown): BrowserCommand {
     if (SETTINGS_COMMAND_METHODS.includes(method)) return parseSettingsCommand(value);
     if ((ORGANIZE_COMMAND_METHODS as readonly string[]).includes(method)) return parseOrganizeCommand(value);
     if ((SPLIT_COMMAND_METHODS as readonly string[]).includes(method)) return parseSplitCommand(value);
+    if ((SPACE_COMMAND_METHODS as readonly string[]).includes(method)) return parseSpaceCommand(value);
   }
   return parseLocationCommand(value);
 }
@@ -51,5 +54,6 @@ export function executeBrowserCommand(store: BrowserStore, command: BrowserComma
   if (SETTINGS_COMMAND_METHODS.includes(command.method)) return executeSettingsCommand(store, command as SettingsCommand);
   if ((ORGANIZE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeOrganizeCommand(store, command as OrganizeCommand);
   if ((SPLIT_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeSplitCommand(store, command as SplitCommand);
+  if ((SPACE_COMMAND_METHODS as readonly string[]).includes(command.method)) return executeSpaceCommand(store, command as SpaceCommand);
   return executeLocationCommand(store, command as LocationCommand, effects);
 }
