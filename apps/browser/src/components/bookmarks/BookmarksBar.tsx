@@ -1,3 +1,4 @@
+import * as settingsCommands from "../../runtime/settingsActions";
 import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/shell";
@@ -8,10 +9,11 @@ import { useTheme } from "../../lib/theme";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { bookmarkSpaceId, isIncognitoSpace } from "../../store/model";
-import type { BookmarkNode } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type BookmarkNode = DeepReadonly<import("../../store/types").BookmarkNode>;
 import { openInternalPage } from "../pages/urls";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
@@ -295,7 +297,7 @@ function ImportButton() {
     <ContextMenuArea
       onContextMenu={async () => {
         const choice = await showMenu([{ id: "hide", title: "Hide Import Bookmarks Button" }]);
-        if (choice === "hide") useBrowser.getState().updateSettings({ hideBookmarksBarImport: true });
+        if (choice === "hide") reportBrowserCommand(settingsCommands.updateSettings({ hideBookmarksBarImport: true }));
       }}
     >
       <BarButton icon="rectangle.portrait.and.arrow.right" title="Import bookmarks" tooltip="Add bookmarks from another browser" onPress={() => openImport()} />
@@ -303,9 +305,9 @@ function ImportButton() {
   );
 }
 
-async function openFolderMenu(windowId: string, ids: string[], _e?: ClickMods, folderId?: string) {
+async function openFolderMenu(windowId: string, ids: readonly string[], _e?: ClickMods, folderId?: string) {
   const b = useBrowser.getState().bookmarks;
-  const build = (list: string[], parent?: string, depth = 0): MenuItem[] => {
+  const build = (list: readonly string[], parent?: string, depth = 0): MenuItem[] => {
     const items: MenuItem[] = list
       .map((id) => b.nodes[id])
       .filter((n): n is BookmarkNode => !!n)

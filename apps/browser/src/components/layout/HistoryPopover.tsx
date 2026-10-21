@@ -3,7 +3,7 @@ import { MouseArea, Symbol } from "@bay/shell";
 import { useEffect } from "react";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { openModeFor, openUrl } from "../bookmarks/actions";
 import { openInternalPage } from "../pages/urls";
 import { Favicon, NewTabIcon, useHover } from "../primitives";

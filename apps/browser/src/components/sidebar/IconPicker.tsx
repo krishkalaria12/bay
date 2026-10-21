@@ -7,7 +7,7 @@ import { layout } from "../../lib/constants";
 import { hex, useTheme } from "../../lib/theme";
 import { useSidebarOnRight } from "../layout/windowLayout";
 import { useLive } from "../../live/store";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { IconGrid, type IconChoice } from "../IconGrid";
 import { useHover } from "../primitives";
 import { SPACE_EMOJI } from "../spaces/icons";

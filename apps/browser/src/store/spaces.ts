@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "../runtime/projection";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { bookmarkRoots, engineRoots, removeBookmarkTree } from "./bookmarks";
@@ -42,7 +43,8 @@ export const DEFAULT_SPACE: Space = {
 
 const COLORS: SpaceColor[] = ["blue", "green", "orange", "purple", "red", "yellow", "pink"];
 
-export const unusedSpaceColor = (spaces: Record<string, Space>): SpaceColor => COLORS.find((c) => !Object.values(spaces).some((p) => p.color === c)) ?? "blue";
+export const unusedSpaceColor = (spaces: Readonly<Record<string, Pick<Space, "color">>>): SpaceColor =>
+  COLORS.find((c) => !Object.values(spaces).some((p) => p.color === c)) ?? "blue";
 
 // The gradients a new space takes in turn, each with the preset colour nearest it (what shows where one colour does).
 const LOOKS: [string, SpaceColor][] = [
@@ -59,7 +61,7 @@ export const SPACE_LOOKS: { name: string; color: SpaceColor; theme: SpaceTheme }
  * A new space's look, so that no two spaces look alike: the first gradient no space wears, then a theme of a colour
  * no space has. Always a theme, so the space shows as itself over any page.
  */
-export function unusedSpaceLook(spaces: Record<string, Space>): { color: SpaceColor; theme: SpaceTheme } {
+export function unusedSpaceLook(spaces: DeepReadonly<Record<string, Space>>): { color: SpaceColor; theme: SpaceTheme } {
   const worn = new Set(Object.values(spaces).map((p) => p.theme?.colors.join()));
   const look = LOOKS.find(([name]) => !worn.has(presetTheme(name).colors.join()));
   if (look) return { color: look[1], theme: presetTheme(look[0]) };

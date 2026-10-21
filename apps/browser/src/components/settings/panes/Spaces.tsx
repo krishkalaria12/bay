@@ -6,7 +6,8 @@ import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type Share
 import { browserRead, useBrowserRead } from "../../../store/read";
 import { createSpace, deleteSpace } from "../../../lib/actions";
 import { hex, SPACE_COLORS, useTheme } from "../../../lib/theme";
-import { useBrowser, type BrowserState } from "../../../store/browser";
+import { useBrowserRead as useBrowser } from "../../../store/read";
+import type { BrowserProjection as BrowserState } from "../../../runtime/projection";
 import { useSpaces } from "../../../store/hooks";
 import { plural, resolveWindowId } from "../../../store/model";
 import type { SpaceColor } from "../../../store/types";

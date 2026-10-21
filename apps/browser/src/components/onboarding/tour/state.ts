@@ -2,7 +2,7 @@ import { shortcutForCommand, shortcutLabel, capabilities } from "@bay/platform";
 import { systemInfo } from "@bay/shell";
 import { create } from "zustand";
 import { openUrls } from "../../../lib/actions";
-import { useBrowser } from "../../../store/browser";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { resolveWindowId } from "../../../store/model";
 import { closeReleaseNotes } from "../../ntp/releaseNotes";
 import { locateAnchor, type TourAnchor } from "./anchors";

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile } from "../../store/model";
 import { browserIdOf } from "../extensions/state";
 import { PromptButton } from "../layout/controls";

@@ -3,7 +3,7 @@ import { listExtensions } from "@bay/nncore";
 import { confirm } from "@bay/shell";
 import { pageToSpace } from "../components/layout/spacePager";
 import { requestCreateSpace, type CreateSpacePreset } from "../components/spaces/CreateSpace";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { browserRead } from "../store/read";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
 import * as windowActions from "../runtime/windowActions";

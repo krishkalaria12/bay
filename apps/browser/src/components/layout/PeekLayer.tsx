@@ -1,3 +1,4 @@
+import * as splitCommands from "../../runtime/splitActions";
 import { Pressable, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useEffect, type ReactNode } from "react";
@@ -6,7 +7,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "
 import { layout } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Peek } from "../../store/peeks";
 import { useHover } from "../primitives";
 import type { Rect } from "./geometry";
@@ -32,7 +33,7 @@ export function startPeeks() {
     if (s.peeks === prev.peeks && s.tabs === prev.tabs && s.windows === prev.windows) return;
     for (const [windowId, peek] of Object.entries(s.peeks)) {
       const from = s.tabs[peek.fromId];
-      if (!s.windows[windowId] || !from || from.windowId !== windowId) useBrowser.getState().closePeek(windowId);
+      if (!s.windows[windowId] || !from || from.windowId !== windowId) reportBrowserCommand(splitCommands.closePeek(windowId));
     }
   });
 }

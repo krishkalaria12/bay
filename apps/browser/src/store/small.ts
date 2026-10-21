@@ -6,7 +6,7 @@ import type { BrowserWindow } from "./types";
 // (settings.openLinksInLittleBay), ⌘O moves the page into a main window, and closing it throws the page away
 // (it stays in history, and ⇧⌘T brings it back in Little Bay).
 
-export const isSmallWindow = (w: BrowserWindow | undefined): boolean => w?.kind === "small";
+export const isSmallWindow = (w: Pick<BrowserWindow, "kind"> | undefined): boolean => w?.kind === "small";
 
 type ReadonlyWindows = Pick<BrowserState, "windows"> | Pick<DeepReadonly<Pick<BrowserState, "windows">>, "windows">;
 

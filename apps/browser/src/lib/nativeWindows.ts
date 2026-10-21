@@ -28,6 +28,13 @@ export function createNativeWindowReconciler<Options>({
     nativeClosed: boolean;
     released: boolean;
   };
+  let disposed = false;
+  const pending = new Set<Promise<unknown>>();
+  const track = (promise: Promise<unknown>) => {
+    pending.add(promise);
+    void promise.finally(() => pending.delete(promise)).catch(() => {});
+    return promise;
+  };
   const entries = new Map<string, Entry>();
   const failed = new Set<string>();
   let wanted = new Map<string, Wanted>();
@@ -45,9 +52,9 @@ export function createNativeWindowReconciler<Options>({
   // Dispatch immediately, preserving macOS call order and void-returning hosts.
   const invoke = (run: () => void | Promise<void>) => {
     try {
-      return Promise.resolve(run());
+      return track(Promise.resolve(run()));
     } catch (error) {
-      return Promise.reject(error);
+      return track(Promise.reject(error));
     }
   };
   const finishClose = (id: string, entry: Entry) => {
@@ -79,6 +86,7 @@ export function createNativeWindowReconciler<Options>({
   };
 
   function reconcile() {
+    if (disposed) return;
     for (const window of wanted.values()) {
       const { id } = window;
       if (!wanted.has(id) || failed.has(id)) continue;
@@ -132,7 +140,14 @@ export function createNativeWindowReconciler<Options>({
   }
 
   return {
+    async flush() {
+      while (pending.size) await Promise.allSettled(pending);
+    },
+    dispose() {
+      disposed = true;
+    },
     sync(windows: Wanted[], focused: string | null) {
+      if (disposed) return;
       wanted = new Map(windows.map((window) => [window.id, window]));
       focusedId = focused;
       for (const id of failed) if (!wanted.has(id)) failed.delete(id);

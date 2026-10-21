@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { focus } from "../../lib/actions";
 import { lastPicture, startTabPictures } from "../../lib/tabPictures";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import type { Frame } from "../../store/types";
 import { splitOf, type SplitSide } from "../../store/splits";
 import { dropTabIntoSplit } from "./splitActions";

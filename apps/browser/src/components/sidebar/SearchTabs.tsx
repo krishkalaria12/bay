@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as windowCommands from "../../runtime/windowActions";
 import { ScrollView } from "@bay/platform";
 import { Pressable, TextInput, View } from "@bay/platform";
 import { displayUrl, fuzzyScore } from "@bay/core";
@@ -6,7 +8,8 @@ import { useRef, useState } from "react";
 import { Text } from "react-native";
 import { switchToTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { tabLabel } from "../../store/model";
 import { tabTitle } from "./actions";
 import { setSidebarUi, useSidebarUi } from "./state";
@@ -117,7 +120,7 @@ function Panel({ windowId, windowWidth }: { windowId: string; windowWidth: numbe
     if (!row) return;
     close();
     if (row.kind === "tab") switchToTab(row.id);
-    else useBrowser.getState().restoreClosed(row.id, windowId);
+    else reportBrowserCommand(windowCommands.restoreClosed(row.id, windowId));
   };
   const move = (delta: number) => {
     const next = Math.max(0, Math.min(rows.length - 1, selected + delta));

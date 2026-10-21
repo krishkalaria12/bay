@@ -5,8 +5,9 @@ import { LegendList } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
-import type { HistoryEntry } from "../../store/types";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { DeepReadonly } from "../../runtime/projection";
+type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 import { openModeFor, openUrl } from "../bookmarks/actions";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { Button, Checkbox, useFormColors } from "../settings/controls";
@@ -25,7 +26,7 @@ const itemType = (item: Item) => item.type;
 const itemSize = (item: Item) => (item.type === "day" ? HISTORY_HEADER : HISTORY_ROW);
 
 // Each day's header followed by its pages.
-function listItems(history: HistoryEntry[], query: string): Item[] {
+function listItems(history: readonly HistoryEntry[], query: string): Item[] {
   const out: Item[] = [];
   let day = -1;
   const matches = history.filter((h) => matchesQuery(query, h.title, h.url));

@@ -20,14 +20,15 @@ import {
 import { maybeStartOnboarding, openVideoTour, startOnboarding, startToolTour } from "../components/onboarding";
 import { trackAppVersion } from "../components/ntp/releaseNotes";
 import { openTaskManager } from "../components/taskManager/window";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
+import type { BrowserProjection as BrowserState } from "../runtime/projection";
 import { activeTabId, listIds, resolveWindowId, viewTabIds, windowListKey, windowTitle } from "../store/model";
 import { focus, openUrls, openWindow, switchSpace, switchToTab } from "./actions";
 import { openReleaseNotesAfterUpdate, openReleaseNotesPage } from "./releaseNotesPage";
 import { webviews } from "./webviews";
 import { handleWebNotificationResponse } from "./webNotifications";
 
-export function startAppIntegration() {
+export function startAppIntegration({ sharedWindow = false } = {}) {
   onCommand(runAppCommand);
   onNotificationResponse((response) => {
     if (handleWebNotificationResponse(response) || response.action !== "click") return;
@@ -38,6 +39,10 @@ export function startAppIntegration() {
   });
   if (capabilities.handoff) startHandoff();
   if (capabilities.appleScript) startScripting();
+  if (!sharedWindow) startApplicationLifecycle();
+}
+
+export function startApplicationLifecycle() {
   const updated = trackAppVersion();
   maybeStartOnboarding();
   if (updated) openReleaseNotesAfterUpdate();
@@ -231,23 +236,24 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
         const list = listIds(s, windowListKey(s, w));
         index = at < view.length ? list.indexOf(view[at]!) : list.length;
       }
-      const tabId = s.newTab(windowId, { url: request.url, index });
+      const { newTab } = await import("../runtime/tabActions");
+      const tabId = await newTab(windowId, { url: request.url, index });
       return { windowId, tabId };
     }
     case "setURL":
       tabOf(request.tabId);
-      return s.navigate(request.tabId, request.url);
+      return void (await (await import("../runtime/tabActions")).navigate(request.tabId, request.url));
     case "closeTab":
       tabOf(request.tabId);
-      return s.closeTab(request.tabId);
+      return void (await (await import("../runtime/tabActions")).closeTab(request.tabId));
     case "closeWindow":
       if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
-      return s.closeWindow(request.windowId);
+      return void (await (await import("../runtime/windowActions")).closeWindow(request.windowId));
     case "reload": {
       const tab = tabOf(request.tabId);
       const web = webviews.get(request.tabId);
       if (web) return void (await web.reload());
-      if (tab.url) s.navigate(tab.id, tab.url);
+      if (tab.url) await (await import("../runtime/tabActions")).navigate(tab.id, tab.url);
       return;
     }
     case "back":
@@ -262,7 +268,7 @@ async function runScriptCommand(request: ScriptCommand): Promise<Record<string, 
     case "setActiveTabIndex": {
       if (!s.windows[request.windowId]) throw new Error("That window no longer exists.");
       if (request.index < 1 || request.index > viewTabIds(s, request.windowId).length) throw new Error("There's no tab at that index.");
-      return s.activateIndex(request.windowId, request.index - 1);
+      return void (await (await import("../runtime/tabActions")).activateIndex(request.windowId, request.index - 1));
     }
     case "focusProfile": {
       const windowId = resolveWindowId(s, null);

@@ -1,7 +1,8 @@
 import { capabilities } from "@bay/platform";
 import { layout } from "../../lib/constants";
 import { slotsOf } from "../../store/splits";
-import type { SplitView } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type SplitView = DeepReadonly<import("../../store/types").SplitView>;
 import { MIN_PANE, PANE_GAP, SIDEBAR_BUTTON_END_ROOM, TRAFFIC_LIGHTS_OFFSET } from "./constants";
 import { CAPTION_BUTTONS_WIDTH } from "./windowButtons";
 
@@ -11,7 +12,7 @@ export type Divider = { kind: "root"; index: number; rect: Rect; vertical: boole
 
 export type SplitGeometry = { panes: Record<string, Rect>; dividers: Divider[] };
 
-function cut(total: number, sizes: number[], gap: number): { start: number; size: number }[] {
+function cut(total: number, sizes: readonly number[], gap: number): { start: number; size: number }[] {
   const free = Math.max(0, total - gap * (sizes.length - 1));
   let at = 0;
   return sizes.map((f) => {
@@ -58,7 +59,7 @@ export function splitGeometry(split: SplitView, width: number, height: number, g
   return { panes, dividers };
 }
 
-export function resize(sizes: number[], a: number, delta: number, total: number, gap = PANE_GAP): number[] {
+export function resize(sizes: readonly number[], a: number, delta: number, total: number, gap = PANE_GAP): number[] {
   const free = Math.max(1, total - gap * (sizes.length - 1));
   const px = sizes.map((f) => f * free);
   const pair = px[a]! + px[a + 1]!;

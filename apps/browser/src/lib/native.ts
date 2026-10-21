@@ -20,7 +20,7 @@ import {
 } from "@bay/shell";
 import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
-import { useBrowser, type BrowserState } from "../store/browser";
+import { useBrowser, type BrowserStore, type BrowserState } from "../store/browser";
 import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
 import { splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/layout/history";
@@ -46,22 +46,40 @@ let quitting = false;
 let quitAttempt = 0;
 export const isQuitting = () => quitting;
 
-export function startNativeSync({ persistence }: { persistence: Pick<PersistenceOwner, "flush" | "resume"> }) {
-  const store = useBrowser;
+export function startNativeSync({
+  persistence,
+  store = useBrowser,
+  shared = false,
+}: {
+  persistence: Pick<PersistenceOwner, "flush" | "resume">;
+  store?: BrowserStore;
+  shared?: boolean;
+}) {
+  const stops: (() => void)[] = [];
+  let disposed = false;
   if (!store.getState().windowOrder.length) store.getState().createWindow();
 
-  onCommand(runCommand);
-  startSidebarMoveUndoSync();
-  startWindowCloseGuard();
-  startExtensionsBridge();
-  onOpenURLs(openExternalUrls);
-  onDownload((d) => store.getState().upsertDownload(d));
+  if (!shared) {
+    const commands = onCommand(runCommand);
+    stops.push(() => commands.remove());
+    stops.push(startSidebarMoveUndoSync());
+    stops.push(startWindowCloseGuard());
+    startExtensionsBridge();
+  }
+  const urls = onOpenURLs(openExternalUrls);
+  const downloads = onDownload((d) => store.getState().upsertDownload(d));
+  stops.push(
+    () => urls.remove(),
+    () => downloads.remove(),
+  );
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   void setAppearance(store.getState().settings.appearance);
-  void isDarkAppearance().then((dark) => store.getState().setAppDark(dark));
+  void isDarkAppearance().then((dark) => {
+    if (!disposed) store.getState().setAppDark(dark);
+  });
 
-  onAppEvent((e) => {
+  const appEvents = onAppEvent((e) => {
     const s = store.getState();
     if (e.type === "appearance") s.setAppDark(e.dark);
     if (e.type === "reopen") createWindow();
@@ -98,7 +116,7 @@ export function startNativeSync({ persistence }: { persistence: Pick<Persistence
     }
   });
 
-  onWindowEvent((e) => {
+  const windowEvents = onWindowEvent((e) => {
     const s = store.getState();
     if (e.type === "focus") s.setFocusedWindow(e.id);
     if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
@@ -108,6 +126,11 @@ export function startNativeSync({ persistence }: { persistence: Pick<Persistence
       s.closeWindow(e.id);
     }
   });
+
+  stops.push(
+    () => appEvents.remove(),
+    () => windowEvents.remove(),
+  );
 
   const windows = createNativeWindowReconciler<OpenWindowOptions>({
     open: openWindow,
@@ -169,30 +192,51 @@ export function startNativeSync({ persistence }: { persistence: Pick<Persistence
   // The windows open now, without first asking which exist: that answer comes from the main thread, which Chrome's
   // startup holds, and waiting for it put 20–100 ms before the first frame. Opening one that exists (after a JS reload)
   // only brings it forward; the ones the store doesn't have close when the answer comes.
-  syncWindows(store.getState());
+  if (!shared) syncWindows(store.getState());
   syncMenu();
-  store.subscribe((s, prev) => {
-    syncWindows(s, prev);
-    if (capabilities.menuBar) menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  store.subscribe((s, prev) => {
-    if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
-  });
-  useExtensions.subscribe((e, prev) => {
-    if (capabilities.menuBar && e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
-  });
-  void windowIds().then((ids) => {
-    const s = store.getState();
-    for (const id of ids) {
-      if (!s.windows[id]) {
-        if (!isUtilityWindowId(id)) void closeWindow(id);
-        continue;
+  stops.push(
+    store.subscribe((s, prev) => {
+      if (!shared) syncWindows(s, prev);
+      if (capabilities.menuBar) menuTimer ??= setTimeout(syncMenu, 120);
+    }),
+  );
+  stops.push(
+    store.subscribe((s, prev) => {
+      if (s.settings.appearance !== prev.settings.appearance) void setAppearance(s.settings.appearance);
+    }),
+  );
+  stops.push(
+    useExtensions.subscribe((e, prev) => {
+      if (capabilities.menuBar && e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
+    }),
+  );
+  if (!shared)
+    void windowIds().then((ids) => {
+      if (disposed) return;
+      const s = store.getState();
+      for (const id of ids) {
+        if (!s.windows[id]) {
+          if (!isUtilityWindowId(id)) void closeWindow(id);
+          continue;
+        }
+        // One that already existed kept the title it had (openWindow leaves it be): send the current one.
+        const title = windowTitle(s, id);
+        void setWindowTitle(id, title);
       }
-      // One that already existed kept the title it had (openWindow leaves it be): send the current one.
-      const title = windowTitle(s, id);
-      void setWindowTitle(id, title);
-    }
-  });
+    });
+  return {
+    async reconcile(state: BrowserState) {
+      if (disposed) return;
+      syncWindows(state);
+      await windows.flush();
+    },
+    dispose() {
+      disposed = true;
+      clearTimeout(menuTimer);
+      windows.dispose();
+      for (const stop of stops.reverse()) stop();
+    },
+  };
 }
 
 const PAGE_COMMANDS = [

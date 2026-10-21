@@ -307,12 +307,18 @@ export type PersistenceOwner = {
   dispose(): void;
 };
 
+/** Restore disk state before creating the shared authority. Recovery skips this. */
+export function restoreBrowserSession(store: BrowserStore) {
+  const session = loadSession();
+  store.getState().hydrate(session ?? {});
+  return session;
+}
+
 /** Owns session/download persistence for one authority store. Global history,
  * bookmark, favicon and profile services are started separately by its caller.
  */
 export function createPersistence({ store, restoreSession = true }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
-  const session = restoreSession ? loadSession() : null;
-  if (restoreSession) store.getState().hydrate(session ?? {});
+  const session = restoreSession ? restoreBrowserSession(store) : null;
   const lastSources = new Map<string, unknown[]>();
   const lastJson = new Map<string, string>();
   const dirty = new Set<Doc>();

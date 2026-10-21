@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import type { BrowserProjection } from "../../runtime/projection";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
 import { activeTabId, favoriteTabIds, pinnedPage, viewTabIds } from "../../store/model";
 import { splitIndex, stableList } from "../../store/structure";

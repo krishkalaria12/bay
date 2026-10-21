@@ -1,10 +1,12 @@
+import { reportBrowserCommand } from "../../../runtime/commands";
+import * as tabCommands from "../../../runtime/tabActions";
 import { View } from "@bay/platform";
 import { reloadExtension, type InstalledExtension } from "@bay/nncore";
 import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
 import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile, resolveWindowId } from "../../../store/model";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";
@@ -86,7 +88,7 @@ export function ExtensionsPane() {
             title="Open Web Store"
             onPress={() => {
               const windowId = resolveWindowId(useBrowser.getState());
-              if (windowId) useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
+              if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" }));
             }}
           />
         </Row>
@@ -114,7 +116,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
   const theme = useTheme();
   const openTab = (url: string) => {
     const windowId = resolveWindowId(useBrowser.getState());
-    if (windowId) useBrowser.getState().newTab(windowId, { url });
+    if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url }));
   };
   return (
     <View>

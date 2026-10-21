@@ -1,6 +1,6 @@
 import { onAppEvent } from "@bay/shell";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { changedIds } from "../../store/changes";
 import { cancelSwitcher, commitSwitcher, moveSwitcher } from "./switcher";
 import { startCleanupNotifications } from "./cleanupNotifications";

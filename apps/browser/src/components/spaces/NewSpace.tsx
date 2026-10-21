@@ -6,7 +6,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
 import { layout } from "../../lib/constants";
 import { onEscapeKey } from "../../lib/escapeKey";
 import { hex, setPreviewLook, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, pinnedPage } from "../../store/model";
 import { unusedSpaceLook } from "../../store/spaces";
 import { useSidebarOnRight } from "../layout/windowLayout";

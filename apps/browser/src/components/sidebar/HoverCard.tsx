@@ -6,7 +6,7 @@ import { Image, Text } from "react-native";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, isIncognitoSpace } from "../../store/model";
 import { splitOf } from "../../store/splits";
 import { lastPicture } from "../../lib/tabPictures";
@@ -154,7 +154,7 @@ function FolderPeek({ folderId, windowId, anchor }: { folderId: string; windowId
   return <Peek label={name || "New Folder"} tabIds={tabIds} windowId={windowId} anchor={anchor} />;
 }
 
-function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: string[]; windowId: string; anchor: Anchor }) {
+function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: readonly string[]; windowId: string; anchor: Anchor }) {
   const theme = useTheme();
   const more = tabIds.length - HOVER_CARD_PEEK_ROWS;
   return (

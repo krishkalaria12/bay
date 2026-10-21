@@ -1,6 +1,6 @@
 import { setSidebarMoveUndo } from "@bay/shell";
 import { reportBrowserCommand } from "../runtime/commands";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { browserRead } from "../store/read";
 
 /** Call after a successful sidebar move, once the drag/menu has finished. */

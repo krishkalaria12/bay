@@ -1,4 +1,4 @@
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { NO_HISTORY } from "../../store/constants";
 import { paletteStart } from "./paletteStart";
 

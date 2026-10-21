@@ -3,7 +3,7 @@ import { Symbol, WindowDragRegion } from "@bay/shell";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { trackSettingsSection } from "../../telemetry/track";
 import { useHover } from "../primitives";
 import { Button, SettingsScroll } from "./controls";

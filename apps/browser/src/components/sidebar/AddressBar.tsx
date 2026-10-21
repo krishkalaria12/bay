@@ -1,10 +1,11 @@
+import * as windowCommands from "../../runtime/windowActions";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { useRef } from "react";
 import { FadeLabel } from "@bay/shell";
 import { StyleSheet } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useActiveTab, useTabLive, useWindowId } from "../../store/hooks";
 import { splitOf } from "../../store/splits";
 import type { Tab } from "../../store/types";
@@ -42,7 +43,7 @@ export function SidebarHeaderTools({ width }: { width: number }) {
           style={{ position: "absolute", top, left: toggleX - ADDRESS_BUTTON / 2 }}
           palette={palette}
           icon={sidebarSymbol}
-          onPress={() => useBrowser.getState().toggleSidebar(windowId)}
+          onPress={() => reportBrowserCommand(windowCommands.toggleSidebar(windowId))}
           tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}

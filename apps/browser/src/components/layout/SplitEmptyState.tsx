@@ -1,10 +1,11 @@
+import * as tabCommands from "../../runtime/tabActions";
 import { Pressable, TextInput, View } from "@bay/platform";
 import { Surface, Symbol } from "@bay/shell";
 import { useState } from "react";
 import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { spaceTabIds, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
@@ -29,7 +30,7 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
     }),
   );
   const go = () => {
-    if (text.trim()) useBrowser.getState().navigate(tabId, text.trim());
+    if (text.trim()) reportBrowserCommand(tabCommands.navigate(tabId, text.trim()));
   };
 
   return (

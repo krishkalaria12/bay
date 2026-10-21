@@ -8,7 +8,9 @@ import { joinEvent } from "../../live/alerts";
 import { connectCalendar, refreshCalendar, useCalendar, useNow } from "../../live/calendar";
 import { isCalendarUrl, isMeeting, joinLink, joinTitle, relativeTime, timeRange, type CalendarEvent } from "../../live/meetings";
 import { useLive } from "../../live/store";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import { activate } from "../../runtime/tabActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { IconButton, useHover } from "../primitives";
 import { dismissHover } from "../sidebar/hover";
 import type { Anchor } from "../sidebar/state";
@@ -137,7 +139,7 @@ function EventRow({ event, now, windowId, tabId }: { event: CalendarEvent; now: 
       <Pressable
         onPress={() => {
           dismissHover();
-          useBrowser.getState().activate(tabId);
+          reportBrowserCommand(activate(tabId));
         }}
       >
         <View

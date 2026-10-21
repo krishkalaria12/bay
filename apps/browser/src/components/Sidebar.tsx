@@ -7,7 +7,7 @@ import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler
 import { ThemeScope, useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
 import { useEffectEvent } from "../lib/useEffectEvent";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
 import { activeTabId, listIds, windowListKey } from "../store/model";
 import { cleanUpCandidates } from "../store/organize";

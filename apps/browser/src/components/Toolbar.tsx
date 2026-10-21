@@ -1,3 +1,5 @@
+import * as windowCommands from "../runtime/windowActions";
+import * as tabCommands from "../runtime/tabActions";
 import { Pressable, View, shortcutForCommand, modKey } from "@bay/platform";
 import { useSidebarMetrics } from "./sidebar/tokens";
 import { breadcrumb, urlForDisplay } from "@bay/core";
@@ -9,7 +11,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "
 import { useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
 import { webviews } from "../lib/webviews";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { useIsBookmarked, useSettings, useTabLive } from "../store/hooks";
 import { bookmarkSpaceId } from "../store/model";
 import type { Tab } from "../store/types";
@@ -84,7 +86,7 @@ export function Toolbar({
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
   // Kept stable by the compiler, as are the buttons' elements: a loading or history change re-renders only theirs.
   const focus = () => {
-    if (!focused) useBrowser.getState().activate(tabId);
+    if (!focused) reportBrowserCommand(tabCommands.activate(tabId));
   };
   const at = buttonPlaces(geometry);
   // A toggle at the end (the sidebar on the right) is outermost but for the caption buttons: the split buttons,
@@ -132,7 +134,7 @@ function SidebarToggle({ style, palette, windowId }: { style: ViewStyle; palette
       style={style}
       palette={palette}
       icon={icon}
-      onPress={() => useBrowser.getState().toggleSidebar(windowId)}
+      onPress={() => reportBrowserCommand(windowCommands.toggleSidebar(windowId))}
       tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
     />
   );
@@ -162,7 +164,7 @@ export function ReloadButton({
       onPress={(m) => {
         onFocus();
         if (loading) return void web()?.stopLoading();
-        if (modKey(m)) return void useBrowser.getState().newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id });
+        if (modKey(m)) return void reportBrowserCommand(tabCommands.newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id }));
         void (m.shiftKey ? web()?.forceReload() : web()?.reload());
       }}
       tooltip={loading ? "Stop Loading This Page" : "Refresh (⌘R)"}

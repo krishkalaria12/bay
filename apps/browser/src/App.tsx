@@ -35,7 +35,7 @@ import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme } from "./lib/theme";
 import { layout } from "./lib/constants";
-import { useBrowser } from "./store/browser";
+import { useBrowserRead as useBrowser } from "./store/read";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
 export function WindowRoot({ windowId }: { windowId?: string }) {

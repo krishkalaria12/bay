@@ -3,7 +3,7 @@ import Animated from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { switchSpace } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
 import { useHover } from "../primitives";
 import { DOT_HOVERED_OPACITY, DOT_IDLE_OPACITY, DOT_SELECTED_OPACITY, DOTS_BAND, DOTS_CELL, DOTS_DOT, PROFILE_DOTS_HEIGHT } from "./constants";

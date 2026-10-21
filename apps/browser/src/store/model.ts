@@ -117,7 +117,7 @@ export const windowListKey = (s: Pick<BrowserState, "spaces"> | Pick<ReadonlyMod
   w.kind === "small" ? w.id : spaceListKey(s, w.spaceId);
 
 /** The list the tab is in. */
-export const tabListKey = (s: Pick<BrowserState, "spaces" | "windows">, t: Tab) =>
+export const tabListKey = (s: Pick<ReadonlyModelState, "spaces" | "windows">, t: DeepReadonly<Tab>) =>
   s.windows[t.windowId]?.kind === "small" ? t.windowId : spaceListKey(s, t.spaceId);
 
 const NO_TABS: string[] = [];
@@ -128,7 +128,9 @@ export function listIds(s: Pick<BrowserState, "tabLists"> | Pick<ReadonlyModelSt
 }
 
 /** The list the tab is in, by key and ids. */
-export function listOfTab(s: Pick<BrowserState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): TabList | undefined {
+export function listOfTab(s: Pick<BrowserState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): TabList | undefined;
+export function listOfTab(s: Pick<ReadonlyModelState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): DeepReadonly<TabList> | undefined;
+export function listOfTab(s: Pick<ReadonlyModelState, "spaces" | "windows" | "tabs" | "tabLists">, id: string): DeepReadonly<TabList> | undefined {
   const t = s.tabs[id];
   if (!t) return undefined;
   const key = tabListKey(s, t);
@@ -153,7 +155,7 @@ export function viewTabIds(s: ReadonlyModelState, windowId: string, spaceId?: st
 }
 
 /** A space's tabs, in their list's order. */
-export const spaceTabIds = (s: Pick<BrowserState, "spaces" | "tabs" | "tabLists">, spaceId: string): string[] =>
+export const spaceTabIds = (s: Pick<ReadonlyModelState, "spaces" | "tabs" | "tabLists">, spaceId: string): string[] =>
   listIds(s, spaceListKey(s, spaceId)).filter((id) => s.tabs[id]?.spaceId === spaceId);
 
 /** Whether another window shows the tab now. */
@@ -177,7 +179,7 @@ export function blankTabToShow(s: ReadonlyModelState, windowId: string, spaceId:
 }
 
 /** The tabs whose page is in the window, in their lists' order. */
-export function windowTabIds(s: Pick<BrowserState, "tabs" | "tabLists">, windowId: string): string[] {
+export function windowTabIds(s: Pick<ReadonlyModelState, "tabs" | "tabLists">, windowId: string): string[] {
   const out: string[] = [];
   for (const ids of Object.values(s.tabLists)) for (const id of ids) if (s.tabs[id]?.windowId === windowId) out.push(id);
   return out;

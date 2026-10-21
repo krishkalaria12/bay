@@ -8,13 +8,14 @@ import { CLOSE_WARNING_MIN_TABS } from "./constants";
 
 export function startWindowCloseGuard() {
   const pending = new Set<string>();
-  onWindowEvent((e) => {
+  const events = onWindowEvent((e) => {
     if (e.type !== "closeRequest" || pending.has(e.id)) return;
     pending.add(e.id);
     void requestClose(e.id)
       .catch((error) => console.error("Couldn't close the window", error))
       .finally(() => pending.delete(e.id));
   });
+  return () => events.remove();
 }
 
 async function requestClose(windowId: string) {

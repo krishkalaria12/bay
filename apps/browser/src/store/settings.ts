@@ -213,11 +213,11 @@ export function defaultSearchEngine(settings: SearchSettings): SearchEngine {
   return engineById(searchEngines(settings), controlling ? extensionEngineId(controlling.extensionId) : settings.searchEngine);
 }
 
-export function searchUrlPrefix(settings: Settings): string {
+export function searchUrlPrefix(settings: SearchSettings): string {
   return defaultSearchEngine(settings).url;
 }
 
-export function validateCustomEngine(settings: Settings, input: EngineInput, ignoreId?: string): string | null {
+export function validateCustomEngine(settings: SearchSettings, input: EngineInput, ignoreId?: string): string | null {
   return validateEngine(input, searchEngines(settings), ignoreId);
 }
 

@@ -6,7 +6,7 @@ import { Text } from "react-native";
 import Animated, { useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { layout, SYMBOL_PREFIX } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { commitRename, endRename, startRename } from "./actions";
 import { useDragItem, useDropInto } from "./dnd";

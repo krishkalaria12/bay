@@ -4,7 +4,7 @@ import { memo } from "react";
 import { Text } from "react-native";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { Favicon } from "../primitives";
 import { SYMBOL_PREFIX } from "../../lib/constants";
 import { iconColor } from "../symbolColors";

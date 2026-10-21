@@ -1,13 +1,14 @@
 import type { Suggestion } from "@bay/core";
-import { useBrowser } from "../../store/browser";
-import type { HistoryEntry } from "../../store/types";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { DeepReadonly } from "../../runtime/projection";
+type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 import { NO_HISTORY } from "../../store/constants";
 import { DROPDOWN_RECENT_PAGES } from "./constants";
 
 const pageKey = (url: string) => url.replace(/#.*$/, "");
 
 // The pages visited last, other than the current one.
-function recentPages(history: HistoryEntry[], url: string): Suggestion[] {
+function recentPages(history: readonly HistoryEntry[], url: string): Suggestion[] {
   const seen = new Set(url ? [pageKey(url)] : []);
   const out: Suggestion[] = [];
   for (const h of [...history].sort((a, b) => b.lastVisit - a.lastVisit)) {

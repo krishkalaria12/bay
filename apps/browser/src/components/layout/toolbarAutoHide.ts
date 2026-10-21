@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { DEFAULT_WINDOW_UI } from "../../store/ui";
 
 // The toolbar that tucks away while you read, with tabs across the top: scrolling the page down collapses it to a thin

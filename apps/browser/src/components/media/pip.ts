@@ -1,6 +1,6 @@
 import { setAutoPictureInPicture, setDisplayMediaPicker } from "@bay/nncore";
 import { useState } from "react";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePage } from "../layout/pageState";
 import { startCast } from "./cast";
 import { startTabShareCleanup } from "./ShareBar";

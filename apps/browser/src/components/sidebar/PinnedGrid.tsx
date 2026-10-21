@@ -9,7 +9,7 @@ import { layout } from "../../lib/constants";
 import { useTileTheme, type TileTheme } from "../../lib/tileTheme";
 import { GlassFill, useLiquidGlass } from "../glass";
 import { listTopGap, useSidebarFieldShown } from "../layout/windowLayout";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
 import { awayFromPin } from "../../store/organize";
 import { NextMeetingBadge } from "../live/NextMeetingBadge";

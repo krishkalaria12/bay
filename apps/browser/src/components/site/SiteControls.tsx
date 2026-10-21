@@ -1,3 +1,4 @@
+import * as settingsCommands from "../../runtime/settingsActions";
 import { ScrollView } from "@bay/platform";
 import { Pressable, View } from "@bay/platform";
 import {
@@ -19,7 +20,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
 import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
@@ -381,7 +382,7 @@ export function SiteControls({
             <PopoverRow
               icon="text.alignleft"
               title="Show Full URL"
-              accessory={<Toggle value={showFullUrl} onChange={(v) => useBrowser.getState().updateSettings({ showFullUrl: v })} />}
+              accessory={<Toggle value={showFullUrl} onChange={(v) => reportBrowserCommand(settingsCommands.updateSettings({ showFullUrl: v }))} />}
             />
           </>
         ) : null}

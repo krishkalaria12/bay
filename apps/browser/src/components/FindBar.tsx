@@ -5,7 +5,7 @@ import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../lib/theme";
 import { webviews } from "../lib/webviews";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { useFind } from "../store/hooks";
 import type { FindState } from "../store/types";
 import { IconButton, useHover } from "./primitives";

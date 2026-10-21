@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as windowCommands from "../../runtime/windowActions";
 import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect } from "react";
@@ -5,12 +7,12 @@ import { batchedUpdates } from "@bay/platform";
 import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { WHEEL_BURST_MS, WHEEL_COOLDOWN_MS, WHEEL_THRESHOLD } from "./constants";
 
 export type PagerPage = { id: string; slot: number; resting?: boolean };
 
-function restPages(current: string | null, order: string[]): PagerPage[] {
+function restPages(current: string | null, order: readonly string[]): PagerPage[] {
   if (!current) return [];
   const i = order.indexOf(current);
   const before = i > 0 ? order[i - 1] : undefined;
@@ -25,7 +27,7 @@ class SpacePager {
   // pages: the current profile's neighbours to keep warm; ack: the newest native sequence JS has handled.
   readonly state = create<{ pages: PagerPage[] | null; ack: number }>(() => ({ pages: null, ack: 0 }));
   private surfaces = 0;
-  private switching = false;
+  private switching = 0;
   private unsubscribe: () => void;
   private lastEvent: object | null = null;
   private wheelState = { sum: 0, last: 0, trigger: 0 };
@@ -63,7 +65,7 @@ class SpacePager {
 
   // A profile chosen outside the pager: native jumps to it, and no older native event may move the
   // store until that has landed.
-  private selectExternal(spaceId: string, order: string[]) {
+  private selectExternal(spaceId: string, order: readonly string[]) {
     const generation = ++this.externalGeneration;
     this.external = generation;
     const done = (ok: boolean) => {
@@ -85,12 +87,8 @@ class SpacePager {
     const id = snapshot.profileId !== undefined ? snapshot.profileId : s.spaceOrder[snapshot.selected];
     batchedUpdates(() => {
       if (w && !w.incognito && id && s.spaces[id] && id !== w.spaceId) {
-        this.switching = true;
-        try {
-          s.switchSpace(this.windowId, id);
-        } finally {
-          this.switching = false;
-        }
+        this.switching++;
+        reportBrowserCommand(windowCommands.switchSpace(this.windowId, id).finally(() => this.switching--));
       }
       this.state.setState({ ack: snapshot.sequence });
     });
@@ -132,7 +130,7 @@ class SpacePager {
     void cef.stepPager(this.windowId, delta, false, useBrowser.getState().spaceOrder.join("\n")).then((ok) => {
       if (ok) return;
       const next = useBrowser.getState().spaceOrder[this.index() + delta];
-      if (this.index() >= 0 && next) useBrowser.getState().switchSpace(this.windowId, next);
+      if (this.index() >= 0 && next) reportBrowserCommand(windowCommands.switchSpace(this.windowId, next));
     });
   }
 
@@ -140,9 +138,9 @@ class SpacePager {
     const s = useBrowser.getState();
     const index = s.spaceOrder.indexOf(spaceId);
     if (!s.spaces[spaceId] || !this.current() || index < 0) return;
-    if (!this.active) return s.switchSpace(this.windowId, spaceId);
+    if (!this.active) return reportBrowserCommand(windowCommands.switchSpace(this.windowId, spaceId));
     void cef.switchPager(this.windowId, index, s.spaceOrder.join("\n")).then((ok) => {
-      if (!ok) useBrowser.getState().switchSpace(this.windowId, spaceId);
+      if (!ok) reportBrowserCommand(windowCommands.switchSpace(this.windowId, spaceId));
     });
   }
 

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkDialog, type BookmarkDialogState } from "./actions";

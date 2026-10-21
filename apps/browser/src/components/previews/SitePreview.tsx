@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Symbol } from "@bay/shell";
 import { useEffect, useState } from "react";
@@ -6,7 +8,7 @@ import { useTheme } from "../../lib/theme";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { ago } from "../../live/meetings";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { HoverSurface, SmallButton } from "../live/LiveItemCard";
 import { useHover } from "../primitives";
 import { dismissHover } from "../sidebar/hover";
@@ -103,9 +105,8 @@ function usePreviewData<T>(tabId: string, site: PreviewSite): State<T> {
 // An item opens in its pinned tab, as Arc's previews do.
 function openInTab(tabId: string, url: string) {
   dismissHover();
-  const s = useBrowser.getState();
-  s.activate(tabId);
-  if (url) s.navigate(tabId, url);
+  reportBrowserCommand(tabCommands.activate(tabId));
+  if (url) reportBrowserCommand(tabCommands.navigate(tabId, url));
 }
 
 export function SitePreview({ tabId, site, anchor }: { tabId: string; site: PreviewSite; anchor: Anchor }) {

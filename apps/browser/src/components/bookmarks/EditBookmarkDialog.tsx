@@ -5,7 +5,7 @@ import { Surface } from "@bay/shell";
 import { useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { searchUrlPrefix } from "../../store/settings";
 import { Button, TextField, useFormColors } from "../settings/controls";

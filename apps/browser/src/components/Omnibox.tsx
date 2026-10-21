@@ -5,7 +5,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { useBrowserRead } from "../store/read";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
 import { showToast } from "./layout/splitActions";
@@ -252,9 +252,9 @@ export function Omnibox({
   };
 
   const forget = (s: PaletteSuggestion) => {
-    const { history, removeHistory } = useBrowser.getState();
+    const { history } = useBrowser.getState();
     const urls = s.host ? (history[spaceId] ?? []).filter((h) => hostOf(h.url) === s.host).map((h) => h.url) : "url" in s ? [s.url] : [];
-    removeHistory(spaceId, urls);
+    if (urls.length) reportBrowserCommand(removeHistory(spaceId, urls));
   };
 
   const openRowMenu = (target = current) => {

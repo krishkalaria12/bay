@@ -2,7 +2,7 @@ import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, Surface, Symbol } from "@bay/shell";
 import { Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useHover } from "../primitives";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { openSpaceMenu } from "../spaces/SpaceSwitcher";

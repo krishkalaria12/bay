@@ -5,7 +5,7 @@ import { useState } from "react";
 import { FlatList, StyleSheet, Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { downloadsIn } from "../../store/ui";
 import { openUrl } from "../bookmarks/actions";
 import { downloadMenu, downloadStatus, FileIcon } from "../Downloads";

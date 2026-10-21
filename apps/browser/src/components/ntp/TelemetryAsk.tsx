@@ -5,7 +5,7 @@ import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "@bay/platform/motion";
 import { useDefaultBrowserCheckIn } from "../../lib/defaultBrowserCheckIn";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { dismissAsk, setSharing, useTelemetry } from "../../telemetry/client";
 import { SHARING_COPY } from "../../telemetry/copy";
 import { onboardingCompletedAt, useOnboarding } from "../onboarding/state";

@@ -2,7 +2,7 @@ import type { BrowserCommand, MenuEntry } from "@bay/shell";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { cleanUpTabs, returnToPinnedUrl } from "../../runtime/organizeActions";
 import { closeTabs, updateTabDetails } from "../../runtime/tabActions";
-import type { BrowserState } from "../../store/browser";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { browserRead } from "../../store/read";
 import { activeTabId, pinnedPage, plural } from "../../store/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../../store/organize";

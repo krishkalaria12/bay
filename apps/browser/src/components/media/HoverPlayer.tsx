@@ -2,7 +2,7 @@ import { Surface } from "@bay/shell";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { clickTab } from "../sidebar/actions";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
 import { measureRow, setSidebarUi, type Anchor } from "../sidebar/state";

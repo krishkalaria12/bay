@@ -1,3 +1,4 @@
+import * as tabCommands from "../../runtime/tabActions";
 import { ScrollView } from "@bay/platform";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
@@ -6,7 +7,8 @@ import { findNodeHandle, PanResponder, StyleSheet, Text } from "react-native";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { PageSpaceContext, useIsActiveTab, usePageSpaceId, useSettings, useTab, useTabLive, useWindowId, useWindowSpaceId } from "../../store/hooks";
 import { SpaceIndicator, useSpaceIndicatorWidth } from "../SpaceIndicator";
 import { HoverSlot } from "../HoverSlot";
@@ -619,7 +621,7 @@ function reorder(ids: string[], { geometry, from, pinned, groupId }: StripDrag, 
     const section = w.tabIds.filter((id) => s.tabs[id]?.spaceId === tab.spaceId && !!s.tabs[id]?.pinned === pinned);
     const index = moveIndex(section, tab.id, geometry.slots, from, to);
     if (index === null) return false;
-    s.moveTab(tab.id, index);
+    reportBrowserCommand(tabCommands.moveTab(tab.id, index));
     return true;
   }
   if (to === from) return false;
@@ -1089,7 +1091,7 @@ function StripGroup({
     style: dragStyle,
   } = useStripDrag({
     tabId: null,
-    ids: () => useBrowser.getState().groups[entry.id]?.tabIds ?? [],
+    ids: () => [...(useBrowser.getState().groups[entry.id]?.tabIds ?? [])],
     pinned: false,
     groupId: null,
     geometry,
@@ -1113,7 +1115,7 @@ function StripGroup({
   const tuck = () => {
     const s = useBrowser.getState();
     const target = tuckTarget(s, windowId, spaceId, entry.id);
-    if (target) s.activate(target, windowId);
+    if (target) reportBrowserCommand(tabCommands.activate(target, windowId));
   };
   return (
     <Animated.View
@@ -1321,7 +1323,7 @@ function SplitPart({ tabId, first, ink }: { tabId: string; first: boolean; ink: 
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)} style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
         {!first && <View style={{ width: StyleSheet.hairlineWidth, height: 16, marginHorizontal: 6, backgroundColor: ink?.divider ?? theme.textTertiary }} />}
         <Pressable
-          onPress={() => useBrowser.getState().activate(tab.id, windowId)}
+          onPress={() => reportBrowserCommand(tabCommands.activate(tab.id, windowId))}
           style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
           tooltip={tab.title || tab.url}
         >

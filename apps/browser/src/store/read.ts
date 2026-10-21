@@ -3,6 +3,8 @@ import { useBrowser, type BrowserStore } from "./browser";
 import { createBrowserProjector, type BrowserProjection } from "../runtime/projection";
 import type { createBrowserClient } from "../runtime/client";
 
+export type BrowserReadState = BrowserProjection;
+
 export type BrowserReadSource = {
   getState(): BrowserProjection;
   subscribe(listener: () => void): () => void;
@@ -91,10 +93,25 @@ export function createBrowserReader(initial: BrowserReadSource) {
 
 export const browserRead = createBrowserReader(createLocalBrowserReadSource(useBrowser));
 export const installBrowserReadSource = browserRead.install;
-export function useBrowserRead<T>(select: (state: BrowserProjection) => T): T {
+function useRead<T>(select: (state: BrowserProjection) => T): T {
   return useSyncExternalStore(
     browserRead.subscribe,
     () => select(browserRead.getState()),
     () => select(browserRead.getState()),
   );
 }
+
+/** Window code gets data and subscriptions, never reducer methods. */
+export const useBrowserRead = Object.assign(useRead, {
+  getState: browserRead.getState,
+  subscribe(listener: (state: BrowserProjection, previous: BrowserProjection) => void) {
+    let previous = browserRead.getState();
+    return browserRead.subscribe(() => {
+      const state = browserRead.getState();
+      if (state === previous) return;
+      const before = previous;
+      previous = state;
+      listener(state, before);
+    });
+  },
+});

@@ -6,7 +6,7 @@ import { useTheme } from "../../lib/theme";
 import { useCalendar, useNow } from "../../live/calendar";
 import { badgeText, isCalendarUrl } from "../../live/meetings";
 import { useLive } from "../../live/store";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useLiveColors } from "./colors";
 import { MEETING_BADGE_IN, MEETING_BADGE_OUT } from "./constants";

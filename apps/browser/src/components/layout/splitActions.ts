@@ -5,7 +5,7 @@ import { reportBrowserCommand } from "../../runtime/commands";
 import * as commands from "../../runtime/splitActions";
 import type { UserPaneOptions } from "../../runtime/splitCommands";
 import { navigate } from "../../runtime/tabActions";
-import { useBrowser } from "../../store/browser";
+import { useBrowser as legacyBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
 import { browserRead } from "../../store/read";
 import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
@@ -51,7 +51,7 @@ export async function openSplitPane(windowId: string, options: UserPaneOptions =
 // `adoptId`: the tab Chrome already made for the link, adopted by this window's store until page handoff moves
 // to the coordinator.
 function openAdoptedPane(windowId: string, options: OpenPaneOptions) {
-  const result = useBrowser.getState().openSplitPane(windowId, options);
+  const result = legacyBrowser.getState().openSplitPane(windowId, options);
   if (!result.ok && result.reason === "max") maxedOut(windowId);
 }
 
@@ -86,10 +86,10 @@ export function openLinkInSplit(sourceTabId: string, url: string, adoptId?: stri
     if (target !== sourceTabId) {
       if (!adoptId) return reportBrowserCommand(navigate(target, url));
       const before = activeTabId(s, source.windowId);
-      const owner = useBrowser.getState();
+      const owner = legacyBrowser.getState();
       const id = owner.newTab(source.windowId, { url, adoptId, spaceId: source.spaceId, openerId: sourceTabId, background: true });
-      useBrowser.getState().replaceSplitPane(target, id);
-      if (before && before !== target) useBrowser.getState().activate(before);
+      legacyBrowser.getState().replaceSplitPane(target, id);
+      if (before && before !== target) legacyBrowser.getState().activate(before);
       return;
     }
   }

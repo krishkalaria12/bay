@@ -81,7 +81,7 @@ export function bookmarkUuidFor(id: string): string {
 /** An engine profile's permanent folders, as store ids. */
 export const rootIdsFor = (engine: string) => ({ bar: `bar@${engine || "default"}`, other: `other@${engine || "default"}` });
 
-export function bookmarkRoots(b: Bookmarks, spaceId: string) {
+export function bookmarkRoots(b: DeepReadonly<Bookmarks>, spaceId: string) {
   return b.roots[spaceId];
 }
 
@@ -100,7 +100,7 @@ export function engineRoots(b: Bookmarks, spaceId: string, engine: string): [Boo
   return [{ nodes, roots: { ...b.roots, [spaceId]: roots } }, roots];
 }
 
-function subtree(b: Bookmarks, ids: string[]): string[] {
+function subtree(b: DeepReadonly<Bookmarks>, ids: string[]): string[] {
   const out: string[] = [];
   const walk = (id: string) => {
     const node = b.nodes[id];
@@ -123,9 +123,9 @@ export function removeBookmarkTree(b: Bookmarks, ids: string[], spaceId?: string
   return { nodes, roots: spaceId ? without(b.roots, [spaceId]) : b.roots };
 }
 
-const urlIndex = new WeakMap<Bookmarks, Map<string, Map<string, string[]>>>();
+const urlIndex = new WeakMap<DeepReadonly<Bookmarks>, Map<string, Map<string, string[]>>>();
 
-export function bookmarksByUrl(b: Bookmarks, spaceId: string): Map<string, string[]> {
+export function bookmarksByUrl(b: DeepReadonly<Bookmarks>, spaceId: string): Map<string, string[]> {
   let perProfile = urlIndex.get(b);
   if (!perProfile) urlIndex.set(b, (perProfile = new Map()));
   let index = perProfile.get(spaceId);
@@ -140,7 +140,7 @@ export function bookmarksByUrl(b: Bookmarks, spaceId: string): Map<string, strin
   return index;
 }
 
-export const isBookmarked = (b: Bookmarks, spaceId: string, url: string) => !!url && bookmarksByUrl(b, spaceId).has(url);
+export const isBookmarked = (b: DeepReadonly<Bookmarks>, spaceId: string, url: string) => !!url && bookmarksByUrl(b, spaceId).has(url);
 
 export function folderChildren(b: Bookmarks, folderId: string): BookmarkNode[];
 export function folderChildren(b: DeepReadonly<Bookmarks>, folderId: string): DeepReadonly<BookmarkNode>[];
@@ -157,8 +157,10 @@ function insertChild(b: Bookmarks, node: BookmarkNode, parentId: string, index?:
   return { ...b, nodes: { ...b.nodes, [node.id]: { ...node, parentId } as BookmarkNode, [parentId]: { ...parent, children } } };
 }
 
-export function bookmarkAncestors(b: Bookmarks, id: string): BookmarkFolder[] {
-  const out: BookmarkFolder[] = [];
+export function bookmarkAncestors(b: Bookmarks, id: string): BookmarkFolder[];
+export function bookmarkAncestors(b: DeepReadonly<Bookmarks>, id: string): DeepReadonly<BookmarkFolder>[];
+export function bookmarkAncestors(b: DeepReadonly<Bookmarks>, id: string): DeepReadonly<BookmarkFolder>[] {
+  const out: DeepReadonly<BookmarkFolder>[] = [];
   let node = b.nodes[id];
   for (let i = 0; node?.parentId && i < 64; i++) {
     const parent = b.nodes[node.parentId];

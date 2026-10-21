@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle, type SharedValue } from "@bay/platform/moti
 import { useShallow } from "zustand/react/shallow";
 import { hex, useTheme } from "../../lib/theme";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { groupLabel } from "../../store/organize";
 import { MeetingTimeLabel, useMeetingCountdown } from "../live/MeetingCountdown";

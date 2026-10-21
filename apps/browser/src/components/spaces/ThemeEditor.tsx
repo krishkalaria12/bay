@@ -1,3 +1,5 @@
+import * as settingsCommands from "../../runtime/settingsActions";
+import * as windowCommands from "../../runtime/windowActions";
 import { Pressable, View } from "@bay/platform";
 import { hapticTick, Surface, Symbol } from "@bay/shell";
 import { WindowBackdrop } from "@bay/shaders";
@@ -18,7 +20,7 @@ import {
 import { MAX_THEME_COLORS } from "../../lib/constants";
 import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
@@ -71,8 +73,11 @@ const useEditor = create<{ request: Request | null }>(() => ({ request: null }))
 export function openThemeEditor(windowId: string, spaceId: string) {
   const s = useBrowser.getState();
   if (!s.spaces[spaceId] || !s.windows[windowId]) return;
-  s.switchSpace(windowId, spaceId);
-  useEditor.setState({ request: { windowId, spaceId } });
+  reportBrowserCommand(
+    windowCommands.switchSpace(windowId, spaceId).then(() => {
+      if (useBrowser.getState().windows[windowId]) useEditor.setState({ request: { windowId, spaceId } });
+    }),
+  );
 }
 
 const close = () => useEditor.setState({ request: null });
@@ -122,7 +127,7 @@ function ThemeEditor({ request }: { request: Request }) {
       >
         <View ref={keys} focusable enableFocusRing={false} keyDownEvents={[{ key: "Escape" }]} onKeyDown={close} style={{ padding: THEME_EDITOR_PAD }}>
           <ThemeControls
-            look={{ color: space.color, theme: space.theme ?? null, followSite: space.followSite }}
+            look={{ color: space.color, theme: space.theme ? { ...space.theme, colors: [...space.theme.colors] } : null, followSite: space.followSite }}
             onChange={(next) => reportBrowserCommand(updateSpace(request.spaceId, next))}
           />
         </View>
@@ -202,7 +207,7 @@ export function ThemeControls({ look, width = THEME_FIELD_WIDTH, onChange }: { l
               icon={s.icon}
               tooltip={s.tooltip}
               on={appearance === s.mode}
-              onPress={() => useBrowser.getState().updateSettings({ appearance: s.mode })}
+              onPress={() => reportBrowserCommand(settingsCommands.updateSettings({ appearance: s.mode }))}
             />
           ))}
         </View>

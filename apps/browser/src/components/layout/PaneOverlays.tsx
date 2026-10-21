@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import { View } from "@bay/platform";
 import { toAppUrl, urlForDisplay } from "@bay/core";
 import { Surface, Symbol } from "@bay/shell";
@@ -8,7 +10,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { PromptButton } from "./controls";
 import { patchPage, usePage } from "./pageState";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 
 export function StatusBubble({ tabId, maxWidth }: { tabId: string; maxWidth: number }) {
   const theme = useTheme();
@@ -79,7 +81,7 @@ export function OpenElsewhere({ tabId, windowId }: { tabId: string; windowId: st
       <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: "center", maxWidth: 340, marginBottom: 18 }}>
         This tab is showing in another window. Show it here to move it, as it is.
       </Text>
-      <PromptButton title="Show Here" primary onPress={() => useBrowser.getState().activate(tabId, windowId)} />
+      <PromptButton title="Show Here" primary onPress={() => reportBrowserCommand(tabCommands.activate(tabId, windowId))} />
     </View>
   );
 }

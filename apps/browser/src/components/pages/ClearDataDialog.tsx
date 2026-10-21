@@ -6,7 +6,7 @@ import { StyleSheet, Text } from "react-native";
 import { create } from "zustand";
 import { pruneProfileFavicons } from "../../lib/favicons";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { engineProfile, isIncognitoSpace, spaceFor } from "../../store/model";
 import { Button, Checkbox, PopUp } from "../settings/controls";
 import { clearHistory } from "../../runtime/bookmarkActions";

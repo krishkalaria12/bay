@@ -8,9 +8,10 @@ import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion
 import { useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { bookmarkAncestors, folderChildren, folderLinks } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { plural } from "../../store/model";
-import type { BookmarkNode } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type BookmarkNode = DeepReadonly<import("../../store/types").BookmarkNode>;
 import { openFolder, openUrl } from "../bookmarks/actions";
 import { editBookmark } from "../bookmarks/edit";
 import { FolderTree } from "../bookmarks/FolderTree";

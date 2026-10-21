@@ -6,9 +6,10 @@ import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedSt
 import { hex, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { withAlpha } from "../sidebar/tokens";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { viewTabIds } from "../../store/model";
-import type { SplitView } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type SplitView = DeepReadonly<import("../../store/types").SplitView>;
 import { resize, type Divider, type Rect } from "./geometry";
 import { useHover } from "../primitives";
 import { hideToast, useToasts } from "./splitActions";
@@ -34,7 +35,7 @@ function DividerHandle({ split, divider, width, height }: { split: SplitView; di
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
   // The sizes the drag started from.
-  const start = useRef<{ sizes: number[]; stack?: [number, number] }>({ sizes: split.sizes });
+  const start = useRef<{ sizes: readonly number[]; stack?: readonly [number, number] }>({ sizes: split.sizes });
   const grant = useEffectEvent(() => {
     start.current = { sizes: split.sizes, stack: split.stack?.sizes };
     setDragging(true);

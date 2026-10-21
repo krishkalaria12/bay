@@ -396,7 +396,7 @@ export function abandonedNewTabs(s: BrowserState, windowId: string): string[] {
 }
 
 /** As Arc's ⌃Tab: the most recent tabs of every space the window can show (not one another window shows now). */
-export function recentTabIds(s: BrowserState, windowId: string): string[] {
+export function recentTabIds(s: BrowserProjection, windowId: string): string[] {
   const w = s.windows[windowId];
   if (!w) return [];
   const spaces = w.incognito || w.kind === "small" ? [w.spaceId] : s.spaceOrder;

@@ -19,7 +19,7 @@ import { moveGroup, movePinnedFolder, placeTabs } from "../../runtime/organizeAc
 import { useTheme } from "../../lib/theme";
 import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { canMoveFolder, folderDepth } from "../../store/folders";
@@ -560,7 +560,7 @@ export const useDragSource = (key: string) => useStore(useContext(DragContext)?.
 /** The drop would pin the dragged tabs. */
 export const useDropPins = () => useStore(useContext(DragContext)?.marks ?? noMarks, (m) => m.pins);
 
-export function useDragItem(key: string, spec: ItemSpec, selection: () => string[] = () => []) {
+export function useDragItem(key: string, spec: ItemSpec, selection: () => readonly string[] = () => []) {
   const controller = useContext(DragContext) ?? undefined;
   const marks = controller?.marks ?? noMarks;
   const item = useMemo(() => controller?.create(key), [controller, key]);
@@ -577,7 +577,7 @@ export function useDragItem(key: string, spec: ItemSpec, selection: () => string
   }, [controller, item, key]);
 
   // One responder for the item's life: a new one mid-gesture would drop the gesture.
-  const begin = useEffectEvent((x: number, y: number) => void controller?.begin(key, x, y, selection()));
+  const begin = useEffectEvent((x: number, y: number) => void controller?.begin(key, x, y, [...selection()]));
   const movable = useEffectEvent(() => spec.kind !== "tail");
   const responder = useMemo(
     () =>

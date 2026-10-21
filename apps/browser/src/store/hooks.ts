@@ -1,9 +1,10 @@
 import { createContext, useContext } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { isBookmarked } from "./bookmarks";
-import { useBrowser } from "./browser";
+import { useBrowserRead as useBrowser } from "./read";
 import { activeTabId, bookmarkSpaceId, IDLE_LIVE, spaceFor } from "./model";
 import type { Settings } from "./settings";
+import type { DeepReadonly } from "../runtime/projection";
 import type { BrowserWindow, FindState, Space, Tab, TabLive } from "./types";
 import { CLOSED_FIND, DEFAULT_WINDOW_UI } from "./ui";
 
@@ -16,7 +17,7 @@ export function useWindowId(): string {
   return useContext(WindowContext) ?? focusedWindowId();
 }
 
-export function useWindowField<T>(select: (w: BrowserWindow) => T, fallback: T): T {
+export function useWindowField<T>(select: (w: DeepReadonly<BrowserWindow>) => T, fallback: T): T {
   const id = useWindowId();
   return useBrowser((s) => {
     const w = s.windows[id];
@@ -36,12 +37,12 @@ export const useIsIncognito = () => useWindowField((w) => w.incognito, false);
 export const useSidebarOpen = () => useWindowField((w) => w.sidebarOpen, true);
 export const useWindowSpaceId = () => useWindowField((w) => w.spaceId, "");
 
-export function useWindowSpace(): Space {
+export function useWindowSpace(): DeepReadonly<Space> {
   const spaceId = useWindowSpaceId();
   return useBrowser((s) => spaceFor(s, spaceId));
 }
 
-export const useSpaces = (): Space[] => useBrowser(useShallow((s) => s.spaceOrder.map((id) => s.spaces[id]!)));
+export const useSpaces = (): DeepReadonly<Space>[] => useBrowser(useShallow((s) => s.spaceOrder.map((id) => s.spaces[id]!)));
 
 export function useActiveTabId(): string | undefined {
   const id = useWindowId();
@@ -83,7 +84,7 @@ export function useWindowUi() {
   return useBrowser((s) => s.windowUi[id] ?? DEFAULT_WINDOW_UI);
 }
 
-export const useSettings = <T>(select: (settings: Settings) => T): T => useBrowser((s) => select(s.settings));
+export const useSettings = <T>(select: (settings: DeepReadonly<Settings>) => T): T => useBrowser((s) => select(s.settings));
 
 export function useIsBookmarked(url: string): boolean {
   const id = useWindowId();

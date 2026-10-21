@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { SPACE_COLORS } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { DEFAULT_SPACE } from "../../store/spaces";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
@@ -22,7 +22,8 @@ const COLORS = Object.keys(SPACE_COLORS) as SpaceColor[];
 
 // The first space starts on Twilight (store/spaces.ts DEFAULT_SPACE): it leads the choices, and a plain color replaces it.
 const TWILIGHT = DEFAULT_SPACE.theme!;
-const isTwilight = (theme: SpaceTheme | null | undefined) => !!theme && theme.colors.join() === TWILIGHT.colors.join();
+const isTwilight = (theme: (Readonly<Omit<SpaceTheme, "colors">> & { readonly colors: readonly string[] }) | null | undefined) =>
+  !!theme && theme.colors.join() === TWILIGHT.colors.join();
 
 export function ThemeColorPicker({ windowId, size = 30 }: { windowId: string; size?: number }) {
   const spaceId = useBrowser((s) => s.windows[windowId]?.spaceId);

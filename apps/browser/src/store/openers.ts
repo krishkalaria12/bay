@@ -1,3 +1,4 @@
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { inPinnedContainer, listIds } from "./model";
 import { groupOf, pinnedChildGroup } from "./organize";
@@ -86,7 +87,7 @@ export function switchKeepsOpeners(s: BrowserState, from: string, to: string): b
 // What to show when the shown tab `closed` goes: a tab it opened, then another tab its opener opened, then the
 // opener (TabStripModel::DetermineNewSelectedIndex). `order` is the profile's tabs before the close, `left` the
 // ones that stay.
-export function openerSuccessor(s: BrowserState, closed: string, order: string[], left: string[]): string | undefined {
+export function openerSuccessor(s: Pick<BrowserProjection, "tabs" | "groups">, closed: string, order: string[], left: string[]): string | undefined {
   const at = order.indexOf(closed);
   const candidates = [...left.filter((id) => order.indexOf(id) > at), ...left.filter((id) => order.indexOf(id) < at).reverse()].filter(
     (id) => !s.tabs[id]!.unloaded && !groupOf(s, id)?.collapsed,
