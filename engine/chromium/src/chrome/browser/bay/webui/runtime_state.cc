@@ -33,7 +33,8 @@ constexpr const char* kRecords[] = {"spaces",
                                     "settings",
                                     "ui",
                                     "windowUi",
-                                    "find"};
+                                    "find",
+                                    "services"};
 constexpr const char* kLists[] = {
     "spaceOrder",    "folderMoveUndo", "orphanedProfileData", "windowOrder",
     "closedWindows", "closedTabs",     "cleanedTabs",         "closedGroups",
@@ -128,6 +129,333 @@ bool CommandText(const base::DictValue& command,
          (allow_empty ||
           !base::TrimWhitespaceASCII(*text, base::TRIM_ALL).empty());
 }
+// Service snapshots contain UI data only. Every record shape is allowlisted so
+// adding a credential or recovery field cannot silently publish it to windows.
+bool ServiceFields(const base::DictValue& value,
+                   std::initializer_list<std::string_view> fields) {
+  return CommandFields(value, {}, fields);
+}
+bool SafeServiceRecord(const base::Value& value, const char* shape);
+bool ServiceChildren(const base::DictValue& value, const char* key,
+                     const char* shape, bool map = false) {
+  const auto* child = value.Find(key);
+  if (!child || child->is_none())
+    return true;
+  if (map) {
+    if (!child->is_dict())
+      return false;
+    for (const auto [id, item] : child->GetDict())
+      if (!SafeServiceRecord(item, shape))
+        return false;
+  } else {
+    if (!child->is_list())
+      return false;
+    for (const auto& item : child->GetList())
+      if (!SafeServiceRecord(item, shape))
+        return false;
+  }
+  return true;
+}
+bool SafeServiceRecord(const base::Value& value, const char* shape) {
+  if (!value.is_dict())
+    return false;
+  const auto& d = value.GetDict();
+  const std::string_view kind(shape);
+  if (kind == "folder") {
+    const auto* filters = d.FindDict("filters");
+    return ServiceFields(d, {"id", "spaceId", "kind", "name", "icon",
+                             "collapsed", "sources", "filters", "createdAt"}) &&
+           (!d.contains("filters") ||
+            (filters && ServiceFields(*filters, {"authored", "reviewRequests"})));
+  }
+  if (kind == "item")
+    return ServiceFields(d, {"id", "source", "url", "title", "subtitle", "icon",
+                             "updatedAt", "section", "pr", "doc"}) &&
+           (!d.contains("pr") || SafeServiceRecord(*d.Find("pr"), "pr")) &&
+           (!d.contains("doc") || SafeServiceRecord(*d.Find("doc"), "doc"));
+  if (kind == "pr")
+    return ServiceFields(d, {"number", "repo", "author", "authorAvatar", "draft",
+                             "headRef", "baseRef", "review", "mergeable", "checks",
+                             "comments", "unresolvedThreads", "additions",
+                             "deletions", "changedFiles", "stack"}) &&
+           ServiceChildren(d, "checks", "check") &&
+           (!d.contains("stack") || SafeServiceRecord(*d.Find("stack"), "stack"));
+  if (kind == "check") return ServiceFields(d, {"name", "state", "url"});
+  if (kind == "stack") return ServiceFields(d, {"id", "position", "size"});
+  if (kind == "doc") return ServiceFields(d, {"kind", "editedBy", "place"});
+  if (kind == "completed")
+    return ServiceFields(d, {"item", "state", "at"}) && d.Find("item") &&
+           SafeServiceRecord(*d.Find("item"), "item");
+  if (kind == "status")
+    return ServiceFields(d, {"state", "lastFetch", "error"}) &&
+           (!d.Find("error") || d.Find("error")->is_none() ||
+            SafeServiceRecord(*d.Find("error"), "error"));
+  if (kind == "error") return ServiceFields(d, {"kind", "message", "source"});
+  if (kind == "account") return ServiceFields(d, {"login", "name", "avatar", "connectedAt"});
+  if (kind == "meeting")
+    return ServiceFields(d, {"groupId", "callTabId", "occurrence", "title",
+                             "start", "end", "endedAt"});
+  if (kind == "calendar")
+    return ServiceFields(d, {"id", "title", "color", "account", "accountType", "owned"});
+  if (kind == "participant") return ServiceFields(d, {"name", "email", "status", "me"});
+  if (kind == "event")
+    return ServiceFields(d, {"id", "occurrence", "calendarId", "color", "title",
+                             "start", "end", "allDay", "location", "notes", "url",
+                             "cancelled", "declined", "organizer", "attendees"}) &&
+           ServiceChildren(d, "attendees", "participant") &&
+           (!d.Find("organizer") || d.Find("organizer")->is_none() ||
+            SafeServiceRecord(*d.Find("organizer"), "participant"));
+  if (kind == "profile") return ServiceFields(d, {"syncId", "enabled", "retire"});
+  if (kind == "device") return ServiceFields(d, {"id", "name", "lastSeen", "current"});
+  if (kind == "remoteProfile") return ServiceFields(d, {"syncId", "name", "color", "icon"});
+  if (kind == "remoteTabs")
+    return ServiceFields(d, {"deviceId", "name", "tabs"}) && ServiceChildren(d, "tabs", "tab");
+  if (kind == "tab") return ServiceFields(d, {"url", "title"});
+  return false;
+}
+bool SafeServices(const base::DictValue& services) {
+  if (!ServiceFields(services, {"live", "calendar", "alerts", "sync", "telemetry"}))
+    return false;
+  for (const auto [name, value] : services) {
+    if (!value.is_dict())
+      return false;
+    const auto& d = value.GetDict();
+    if (name == "telemetry") {
+      if (!ServiceFields(d, {"sharing", "decided", "askDone"})) return false;
+      for (const auto [key, value] : d) if (!value.is_bool()) return false;
+    } else if (name == "live") {
+      if (!ServiceFields(d, {"folders", "folderOrder", "items", "known", "unread",
+                              "completed", "completing", "status", "expandedStacks",
+                              "showAll", "accounts", "config", "calendar",
+                              "meetingGroups", "dismissedAlerts"}) ||
+          !ServiceChildren(d, "folders", "folder", true) ||
+          !ServiceChildren(d, "accounts", "account", true) ||
+          !ServiceChildren(d, "status", "status", true) ||
+          !ServiceChildren(d, "meetingGroups", "meeting", true))
+        return false;
+      for (const auto* key : {"items", "completed"}) {
+        const auto* records = d.FindDict(key);
+        if (d.contains(key) && !records) return false;
+        if (records)
+          for (const auto [id, list] : *records) {
+            if (!list.is_list()) return false;
+            for (const auto& item : list.GetList())
+              if (!SafeServiceRecord(item, std::string_view(key) == "items" ? "item" : "completed"))
+                return false;
+          }
+      }
+      const auto* config = d.FindDict("config");
+      if (d.contains("config") && (!config || !ServiceFields(*config, {"githubClientId", "bitbucketUser", "confluenceSite", "confluenceEmail", "googleClientId"})))
+        return false;
+      const auto* calendar = d.FindDict("calendar");
+      if (d.contains("calendar") && (!calendar || !ServiceFields(*calendar, {"alertLead", "alertCondition", "showPreview", "showTimeToNext", "hiddenCalendarIds", "prompted"})))
+        return false;
+    } else if (name == "calendar") {
+      if (!ServiceFields(d, {"access", "calendars", "events", "loading", "error", "lastFetch"}) ||
+          !ServiceChildren(d, "calendars", "calendar") || !ServiceChildren(d, "events", "event"))
+        return false;
+    } else if (name == "alerts") {
+      if (!ServiceFields(d, {"event"}) ||
+          (d.Find("event") && !d.Find("event")->is_none() && !SafeServiceRecord(*d.Find("event"), "event")))
+        return false;
+    } else if (name == "sync") {
+      if (!ServiceFields(d, {"status", "enabled", "folder", "types", "profiles", "lastSyncedAt",
+                              "error", "pending", "devices", "remoteTabs", "remoteProfiles"}) ||
+          !ServiceChildren(d, "profiles", "profile", true) ||
+          !ServiceChildren(d, "devices", "device") ||
+          !ServiceChildren(d, "remoteProfiles", "remoteProfile"))
+        return false;
+      const auto* types = d.FindDict("types");
+      if (d.contains("types") && (!types || !ServiceFields(*types, {"bookmarks", "history", "tabs", "pinned", "passwords", "settings"})))
+        return false;
+      const auto* remote = d.FindDict("remoteTabs");
+      if (d.contains("remoteTabs") && !remote) return false;
+      if (remote)
+        for (const auto [id, list] : *remote) {
+          if (!list.is_list()) return false;
+          for (const auto& item : list.GetList())
+            if (!SafeServiceRecord(item, "remoteTabs")) return false;
+        }
+    }
+  }
+  return true;
+}
+bool BoundedJson(const base::Value& value, int depth = 0) {
+  if (depth > 128) return false;
+  if (value.is_double() && !std::isfinite(value.GetDouble())) return false;
+  if (value.is_dict())
+    for (const auto [key, child] : value.GetDict())
+      if (!BoundedJson(child, depth + 1)) return false;
+  if (value.is_list())
+    for (const auto& child : value.GetList())
+      if (!BoundedJson(child, depth + 1)) return false;
+  return true;
+}
+bool Choice(const base::Value& value, std::initializer_list<std::string_view> choices) {
+  if (!value.is_string()) return false;
+  for (auto choice : choices) if (value.GetString() == choice) return true;
+  return false;
+}
+bool ImportTabs(const base::Value* value) {
+  if (!value || !value->is_list() || value->GetList().size() > 10000) return false;
+  for (const auto& tab : value->GetList()) {
+    if (!tab.is_dict()) return false;
+    const auto& d = tab.GetDict();
+    if (!CommandFields(d, {"url", "title", "pinned"}, {"customTitle"}) ||
+        !CommandText(d, "url", 1024 * 1024, true) ||
+        !CommandText(d, "title", 16384, true) || !d.FindBool("pinned").has_value() ||
+        (d.contains("customTitle") && !CommandText(d, "customTitle", 16384, true))) return false;
+  }
+  return true;
+}
+bool ImportTree(const base::Value& value, int depth, size_t& count) {
+  if (depth > 256 || ++count > 10000 || !value.is_dict()) return false;
+  const auto& d = value.GetDict();
+  const auto* type = d.Find("type");
+  if (!CommandFields(d, {"type", "title"}, {"url", "dateAdded", "children", "role", "pageTitle"}) ||
+      !type || !Choice(*type, {"url", "folder"}) || !CommandText(d, "title", 16384, true) ||
+      (d.contains("url") && !CommandText(d, "url", 1024 * 1024, true)) ||
+      (d.contains("pageTitle") && !CommandText(d, "pageTitle", 16384, true)) ||
+      (d.contains("dateAdded") && !RuntimeInteger(d, "dateAdded")) ||
+      (d.contains("role") && !Choice(*d.Find("role"), {"toolbar", "other", "mobile", "menu", "readingList"}))) return false;
+  if (type->GetString() == "url" && (!d.contains("url") || d.contains("children"))) return false;
+  if (const auto* children = d.Find("children")) {
+    if (!children->is_list()) return false;
+    for (const auto& child : children->GetList())
+      if (!ImportTree(child, depth + 1, count)) return false;
+  }
+  return true;
+}
+bool ImportCommand(const base::DictValue& c) {
+  const auto& method = *c.FindString("method");
+  const auto encoded = base::WriteJson(c);
+  if (!encoded || encoded->size() > 960000) return false;
+  size_t count = 0;
+  if (method == "importBookmarks")
+    return CommandFields(c, {"method", "spaceId", "root", "browserName"}, {"parentId"}) &&
+           CommandText(c, "browserName", 16384, true) && ImportTree(*c.Find("root"), 1, count);
+  if (method == "importTabs")
+    return CommandFields(c, {"method", "spaceId", "tabs", "group"}, {"afterId"}) && ImportTabs(c.Find("tabs")) &&
+           (c.Find("group")->is_none() || CommandText(c, "group", 16384, true));
+  if (method == "importHistory") {
+    if (!CommandFields(c, {"method", "spaceId", "entries"}) || !c.FindList("entries") || c.FindList("entries")->size() > 10000) return false;
+    for (const auto& entry : *c.FindList("entries")) {
+      if (!entry.is_dict()) return false;
+      const auto& e = entry.GetDict();
+      if (!CommandFields(e, {"url", "title", "visits", "lastVisit"}) || !CommandText(e, "url", 1024 * 1024, true) ||
+          !CommandText(e, "title", 16384, true) || !RuntimeInteger(e, "visits") || !RuntimeInteger(e, "lastVisit")) return false;
+    }
+    return true;
+  }
+  if (method == "importArcSpace") {
+    const auto* space = c.FindDict("space");
+    if (!CommandFields(c, {"method", "spaceId", "space"}) || !space ||
+        !CommandFields(*space, {"pinned", "tabs"}) || !ImportTabs(space->Find("tabs")) || !space->FindList("pinned")) return false;
+    for (const auto& node : *space->FindList("pinned")) if (!ImportTree(node, 1, count)) return false;
+    return true;
+  }
+  if (method == "importDiaProfile") {
+    const auto* profile = c.FindDict("profile");
+    const auto* what = c.FindDict("what");
+    return CommandFields(c, {"method", "spaceId", "profile", "what"}) && profile && what &&
+           CommandFields(*profile, {"pinned", "tabs"}) && ImportTabs(profile->Find("pinned")) && ImportTabs(profile->Find("tabs")) &&
+           CommandFields(*what, {"pinned", "open"}) && what->FindBool("pinned").has_value() && what->FindBool("open").has_value();
+  }
+  return false;
+}
+bool ServiceCommand(const base::DictValue& state, const std::string& window_id, const base::DictValue& c) {
+  const auto* a = c.FindString("action");
+  const auto* args = c.FindList("args");
+  if (!CommandFields(c, {"method", "action", "args"}) || !a || !args || args->size() > 4) return false;
+  const auto& action = *a;
+  const auto& v = *args;
+  const auto text = [&](size_t i, size_t max = 4096, bool nullable = false) {
+    return i < v.size() && ((nullable && v[i].is_none()) || (v[i].is_string() && !v[i].GetString().empty() && v[i].GetString().size() <= max));
+  };
+  const auto boolean = [&](size_t i) { return i < v.size() && v[i].is_bool(); };
+  const auto source = [&](size_t i) { return i < v.size() && Choice(v[i], {"github", "bitbucket", "notion", "confluence", "gdrive"}); };
+  const auto own_window = [&](size_t i) { return text(i) && v[i].GetString() == window_id; };
+  const auto public_space = [&](const std::string& id) { return !PrivateSpace(id) && state.FindDict("spaces")->contains(id); };
+  const auto* services = state.FindDict("services");
+  const auto* live = services ? services->FindDict("live") : nullptr;
+  const auto* folders = live ? live->FindDict("folders") : nullptr;
+  const auto folder = [&](size_t i) {
+    const auto* d = text(i) && folders ? folders->FindDict(v[i].GetString()) : nullptr;
+    const auto* space = d ? d->FindString("spaceId") : nullptr;
+    return space && public_space(*space);
+  };
+  const auto strings = [&](const base::Value& value, size_t max = 4096) {
+    if (!value.is_list() || value.GetList().size() > 10000) return false;
+    for (const auto& item : value.GetList()) if (!item.is_string() || item.GetString().empty() || item.GetString().size() > max) return false;
+    return true;
+  };
+  const auto patch = [&](size_t i, std::initializer_list<std::string_view> fields) {
+    return i < v.size() && v[i].is_dict() && ServiceFields(v[i].GetDict(), fields);
+  };
+  if (action == "liveCreate") return v.size() == 2 && own_window(0) && Choice(v[1], {"pullRequests", "documents"});
+  if (action == "liveRemove" || action == "liveRefresh") return v.size() == 1 && folder(0);
+  if (action == "liveUpdate") {
+    if (v.size() != 2 || !folder(0) || !patch(1, {"name", "icon", "collapsed", "sources", "filters"})) return false;
+    const auto& p = v[1].GetDict();
+    if ((p.contains("name") && !CommandText(p, "name", 1024, true)) ||
+        (p.contains("icon") && !p.Find("icon")->is_none() && !CommandText(p, "icon", 1024, true)) ||
+        (p.contains("collapsed") && !p.FindBool("collapsed").has_value())) return false;
+    if (const auto* sources = p.Find("sources")) {
+      if (!strings(*sources)) return false;
+      for (const auto& s : sources->GetList()) if (!Choice(s, {"github", "bitbucket", "notion", "confluence", "gdrive"})) return false;
+    }
+    if (const auto* filters = p.Find("filters"))
+      return filters->is_dict() && CommandFields(filters->GetDict(), {"authored", "reviewRequests"}) &&
+             filters->GetDict().FindBool("authored").has_value() && filters->GetDict().FindBool("reviewRequests").has_value();
+    return true;
+  }
+  if (action == "liveMove") return v.size() == 2 && folder(0) && v[1].is_int() && (v[1].GetInt() == -1 || v[1].GetInt() == 1);
+  if (action == "liveRead") return v.size() == 2 && folder(0) && (v[1].is_none() || strings(v[1]));
+  if (action == "liveUnread") return v.size() == 2 && folder(0) && text(1);
+  if (action == "liveOpen") return v.size() == 4 && own_window(0) && folder(1) && text(2) && boolean(3);
+  if (action == "liveView") return v.size() == 3 && Choice(v[0], {"expandedStacks", "showAll"}) && text(1) && boolean(2);
+  if (action == "liveConfig") {
+    if (v.size() != 1 || !patch(0, {"githubClientId", "bitbucketUser", "confluenceSite", "confluenceEmail", "googleClientId"})) return false;
+    for (const auto [key, value] : v[0].GetDict()) if (!value.is_string() || value.GetString().size() > 4096) return false;
+    return true;
+  }
+  if (action == "liveConnect") {
+    if (v.size() != 2 || !source(0) || !strings(v[1], 65536)) return false;
+    const auto& id = v[0].GetString();
+    return v[1].GetList().size() == (id == "github" || id == "notion" ? 1u : id == "bitbucket" ? 2u : id == "confluence" ? 3u : 99u);
+  }
+  if (action == "liveDisconnect") return v.size() == 1 && source(0);
+  if (action == "githubStart" || action == "githubWait" || action == "githubCancel" || action == "alertDismiss" ||
+      action == "setSyncFolder" || action == "turnOnSync" || action == "addRemoteProfile") return v.size() == 1 && text(0);
+  if (action == "folderInfo") return v.size() == 1 && text(0, 4096, true);
+  if (action == "googleConnect") return v.size() == 3 && own_window(0) && text(1) && text(2, 65536);
+  if (action == "calendarSettings") {
+    if (v.size() != 1 || !patch(0, {"alertLead", "alertCondition", "showPreview", "showTimeToNext", "hiddenCalendarIds", "prompted"})) return false;
+    for (const auto [key, value] : v[0].GetDict()) {
+      if (key == "alertLead") { if (!Choice(value, {"never", "start", "1", "2", "3", "5", "10"})) return false; }
+      else if (key == "alertCondition") { if (!Choice(value, {"always", "activeOnly"})) return false; }
+      else if (key == "hiddenCalendarIds") { if (!strings(value)) return false; }
+      else if (!value.is_bool()) return false;
+    }
+    return true;
+  }
+  if (action == "telemetrySetSharing") return v.size() == 2 && boolean(0) && Choice(v[1], {"settings", "onboarding", "ask"});
+  if (action == "telemetryDismissAsk") return v.empty();
+  if (action == "calendarRefresh" || action == "calendarConnect" || action == "syncNow") return v.empty();
+  if (action == "calendarHidden") return v.size() == 2 && text(0) && boolean(1);
+  if (action == "alertJoin") return v.size() == 3 && own_window(0) && text(1) && boolean(2);
+  if (action == "meetingGroup") {
+    const auto* tab = text(0) ? state.FindDict("tabs")->FindDict(v[0].GetString()) : nullptr;
+    return v.size() == 2 && tab && tab->FindString("windowId") && *tab->FindString("windowId") == window_id &&
+           public_space(*tab->FindString("spaceId")) && text(1, 4096, true);
+  }
+  if (action == "enterRecoveryPhrase") return v.size() == 2 && text(0) && text(1);
+  if (action == "stopSync") return v.size() == 1 && patch(0, {"deleteData"}) &&
+      (!v[0].GetDict().contains("deleteData") || v[0].GetDict().FindBool("deleteData").has_value());
+  if (action == "setTypeSynced") return v.size() == 2 && Choice(v[0], {"bookmarks", "history", "tabs", "pinned", "passwords", "settings"}) && boolean(1);
+  if (action == "setProfileSynced") return v.size() == 2 && text(0) && public_space(v[0].GetString()) && boolean(1);
+  return false;
+}
 // A bookmark tree to add: pages and folders, bounded in depth and count.
 bool BookmarkDrafts(const base::ListValue& drafts, int depth, size_t& count) {
   if (depth > 16)
@@ -196,6 +524,17 @@ RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command) {
                            "openSplitPane", "openPeek", "removeBookmarks"})
     if (*method == name)
       return RuntimeResultKind::kOptionalId;
+  if (base::StartsWith(*method, "import"))
+    return RuntimeResultKind::kImport;
+  if (*method == "serviceAction") {
+    const auto* action = command.FindString("action");
+    if (!action) return RuntimeResultKind::kNone;
+    if (*action == "liveCreate" || *action == "liveOpen" || *action == "meetingGroup" || *action == "addRemoteProfile") return RuntimeResultKind::kOptionalId;
+    if (*action == "calendarConnect") return RuntimeResultKind::kBoolean;
+    if (*action == "githubStart") return RuntimeResultKind::kGithub;
+    if (*action == "turnOnSync" || *action == "enterRecoveryPhrase") return RuntimeResultKind::kSync;
+    if (*action == "folderInfo") return RuntimeResultKind::kFolder;
+  }
   return RuntimeResultKind::kNone;
 }
 bool IsRuntimeReply(const base::DictValue& reply,
@@ -211,10 +550,48 @@ bool IsRuntimeReply(const base::DictValue& reply,
            error->FindString("code") && error->FindString("message");
   const auto revision = RuntimeInteger(reply, "revision");
   const auto* value = reply.Find("value");
+  if (result_kind == RuntimeResultKind::kImport && value) {
+    const auto* result = value->is_dict() ? &value->GetDict() : nullptr;
+    const auto count = result ? RuntimeInteger(*result, "count") : std::nullopt;
+    if (!result || !CommandFields(*result, {"count"}, {"tabIds", "bookmarkIds"}) || !count)
+      return false;
+    for (const char* key : {"tabIds", "bookmarkIds"}) {
+      const auto* ids = result->Find(key);
+      if (!ids) continue;
+      if (!ids->is_list() || ids->GetList().size() > 10000) return false;
+      for (const auto& id : ids->GetList())
+        if (!id.is_string() || id.GetString().empty() || id.GetString().size() > 1024) return false;
+    }
+  }
+  bool service_result = false;
+  const auto* object = value && value->is_dict() ? &value->GetDict() : nullptr;
+  if (result_kind == RuntimeResultKind::kBoolean)
+    service_result = value && value->is_bool();
+  if (result_kind == RuntimeResultKind::kGithub)
+    service_result = object && CommandFields(*object, {"id", "userCode", "verificationUri", "expiresAt"}) &&
+                     CommandText(*object, "id", 4096) && CommandText(*object, "userCode", 4096) &&
+                     CommandText(*object, "verificationUri", 4096) && object->FindDouble("expiresAt").has_value();
+  if (result_kind == RuntimeResultKind::kSync && object) {
+    service_result = CommandFields(*object, {"ok"}) && object->FindBool("ok").value_or(false);
+    if (CommandFields(*object, {"error"}, {"count", "word"}) && CommandText(*object, "error", 4096))
+      service_result = (!object->contains("count") || (RuntimeInteger(*object, "count") && *RuntimeInteger(*object, "count") <= 10000)) &&
+                       (!object->contains("word") || CommandText(*object, "word", 4096));
+  }
+  if (result_kind == RuntimeResultKind::kFolder)
+    service_result = value && value->is_none();
+  if (result_kind == RuntimeResultKind::kFolder && object) {
+    service_result = CommandFields(*object, {"path", "defaultPath", "iCloudAvailable", "inICloud", "exists", "writable", "hasSyncData"}) &&
+                     CommandText(*object, "path", 4096) && CommandText(*object, "defaultPath", 4096);
+    for (const auto* key : {"iCloudAvailable", "inICloud", "exists", "writable", "hasSyncData"})
+      service_result &= object->FindBool(key).has_value();
+  }
+  const auto encoded = value ? base::WriteJson(*value) : std::nullopt;
+  const bool json_result = (service_result || result_kind == RuntimeResultKind::kImport) && value &&
+      BoundedJson(*value) && encoded && encoded->size() <= 1024 * 1024;
   return reply.size() == 3 && revision && *revision >= minimum_revision &&
          *revision <= accepted_revision && value &&
-         ((value->is_none() && result_kind != RuntimeResultKind::kRequiredId) ||
-          (result_kind != RuntimeResultKind::kNone && value->is_string() &&
+         (json_result || (value->is_none() && (result_kind == RuntimeResultKind::kNone || result_kind == RuntimeResultKind::kOptionalId)) ||
+          ((result_kind == RuntimeResultKind::kRequiredId || result_kind == RuntimeResultKind::kOptionalId) && value->is_string() &&
            value->GetString().size() <= 1024));
 }
 
@@ -227,6 +604,8 @@ bool IsRuntimeState(const base::DictValue& state) {
   for (const auto* key : kLists)
     if (!state.FindList(key))
       return false;
+  if (!SafeServices(*state.FindDict("services")))
+    return false;
   for (const auto [id, value] : *state.FindDict("spaces")) {
     if (!value.is_dict() || !Text(value.GetDict(), "id") ||
         *Text(value.GetDict(), "id") != id || PrivateSpace(id) ||
@@ -540,6 +919,46 @@ std::optional<base::DictValue> ProjectRuntimeState(
       return !profile || *profile != own_space;
     return profile && PrivateSpace(*profile);
   });
+  // Service records share the same visibility rules as browser records.
+  auto* services = result.FindDict("services");
+  if (auto* live = services->FindDict("live")) {
+    std::set<std::string> live_folders;
+    if (auto* records = live->FindDict("folders")) {
+      for (const auto [id, value] : *records) {
+        const auto* space = value.GetDict().FindString("spaceId");
+        if (space && !PrivateSpace(*space) && result.FindDict("spaces")->contains(*space))
+          live_folders.emplace(id);
+      }
+      FilterRecord(*live, "folders", live_folders);
+    }
+    for (const auto* key : {"items", "known", "unread", "completed", "completing",
+                             "status"})
+      if (live->FindDict(key)) FilterRecord(*live, key, live_folders);
+    if (auto* order = live->FindList("folderOrder")) FilterList(*order, live_folders);
+    if (auto* shown = live->FindDict("showAll")) {
+      std::set<std::string> allowed;
+      for (const auto [key, value] : *shown)
+        for (const auto& id : live_folders)
+          if (key == id || base::StartsWith(key, id + ":")) allowed.emplace(key);
+      FilterRecord(*live, "showAll", allowed);
+    }
+    if (auto* groups = live->FindDict("meetingGroups")) {
+      std::set<std::string> allowed;
+      for (const auto [id, value] : *groups) {
+        const auto* group = value.GetDict().FindString("groupId");
+        const auto* call = value.GetDict().FindString("callTabId");
+        if (group && call && result.FindDict("groups")->contains(*group) && tabs.contains(*call))
+          allowed.emplace(id);
+      }
+      FilterRecord(*live, "meetingGroups", allowed);
+    }
+  }
+  if (auto* sync = services->FindDict("sync")) {
+    std::set<std::string> spaces;
+    for (const auto [id, value] : *result.FindDict("spaces")) spaces.emplace(id);
+    for (const auto* key : {"profiles", "remoteTabs"})
+      if (sync->FindDict(key)) FilterRecord(*sync, key, spaces);
+  }
   return result;
 }
 
@@ -699,6 +1118,51 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     const auto value = command.FindDouble("delta");
     return value && (*value == -1 || *value == 1);
   };
+  if (*method == "serviceAction")
+    return !is_private && ServiceCommand(state, window_id, command);
+  if (base::StartsWith(*method, "import")) {
+    if (is_private || harbor || !public_space(command, "spaceId") || !ImportCommand(command)) return false;
+    if (const auto* id = command.Find("afterId")) {
+      const auto* tab = id->is_string() ? tabs->FindDict(id->GetString()) : nullptr;
+      if (!tab || !visible_tab(id->GetString()) || *tab->FindString("spaceId") != *command.FindString("spaceId")) return false;
+    }
+    if (const auto* id = command.Find("parentId")) {
+      const auto* nodes = state.FindDict("bookmarks")->FindDict("nodes");
+      const auto* node = id->is_string() ? nodes->FindDict(id->GetString()) : nullptr;
+      const auto* kind = node ? node->FindString("kind") : nullptr;
+      if (!kind || *kind != "folder") return false;
+      const auto* roots = state.FindDict("bookmarks")->FindDict("roots")->FindDict(*command.FindString("spaceId"));
+      if (!roots) return false;
+      std::set<std::string> seen;
+      std::string current = id->GetString();
+      bool found = false;
+      while (seen.insert(current).second) {
+        for (const auto [key, root] : *roots)
+          if (root.is_string() && root.GetString() == current) found = true;
+        if (found) break;
+        const auto* item = nodes->FindDict(current);
+        const auto* parent = item ? item->FindString("parentId") : nullptr;
+        if (!parent) break;
+        current = *parent;
+      }
+      if (!found) return false;
+    }
+    return true;
+  }
+  if (*method == "wakeTab" || *method == "syncInternalPage" ||
+      *method == "hideNewTab" || *method == "showNewTab") {
+    if (!own_tab("tabId") ||
+        !CommandFields(command, {"method", "tabId"},
+                       *method == "showNewTab"
+                           ? std::initializer_list<std::string_view>{"first"}
+                           : std::initializer_list<std::string_view>{}))
+      return false;
+    const auto* first = command.FindDict("first");
+    return !command.contains("first") ||
+           (first && CommandFields(*first, {"url", "title"}) &&
+            CommandText(*first, "url", kMaximumInput, true) &&
+            CommandText(*first, "title", 4096, true));
+  }
   if (*method == "newTab") {
     if (!CommandFields(command, {"method", "windowId"}, {"options"}) ||
         !own_target())

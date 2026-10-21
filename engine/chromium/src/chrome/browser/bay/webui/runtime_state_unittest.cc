@@ -19,7 +19,7 @@ base::DictValue State() {
     "historyReady":{},"historyFloor":{},"bookmarks":{"nodes":{},"roots":{}},
     "bookmarksReady":{},"settings":{},
     "ui":{"focusedWindowId":null,"focusOrder":[],"appDark":true},
-    "windowUi":{},"find":{},"downloads":[]
+    "windowUi":{},"find":{},"downloads":[],"services":{}
   })",
                                           base::JSON_PARSE_RFC);
   CHECK(state);
@@ -1619,6 +1619,163 @@ TEST(RuntimeStateTest, SplitAndPeekCommandsValidateTargetsAndResults) {
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", focus));
   focus.Set("delta", -1);
   EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", focus));
+}
+base::DictValue Json(const char* json) {
+  auto value = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+  CHECK(value);
+  return std::move(*value);
+}
+void AddServices(base::DictValue& state) {
+  state.Set("services", Json(R"({
+    "live":{
+      "folders":{
+        "public-folder":{"id":"public-folder","spaceId":"default","kind":"pullRequests","name":"Reviews",
+          "icon":null,"collapsed":false,"sources":["github"],"filters":{"authored":true,"reviewRequests":true},"createdAt":1},
+        "private-folder":{"id":"private-folder","spaceId":"incognito:private","kind":"documents","name":"private-secret",
+          "icon":null,"collapsed":false,"sources":[],"filters":{"authored":false,"reviewRequests":false},"createdAt":1}},
+      "folderOrder":["public-folder","private-folder"],
+      "items":{"public-folder":[{"id":"i","source":"github","url":"https://example.com/pr","title":"PR","subtitle":"",
+        "icon":null,"updatedAt":1,"pr":{"number":1,"repo":"r","author":"a","authorAvatar":null,"draft":false,
+        "headRef":"h","baseRef":"b","review":null,"mergeable":"unknown","checks":[{"name":"c","state":"success","url":null}],
+        "comments":0,"unresolvedThreads":0,"additions":0,"deletions":0,"changedFiles":0}}],
+        "private-folder":[{"id":"p","source":"notion","url":"https://example.com/private-secret","title":"private-secret",
+        "subtitle":"","icon":null,"updatedAt":1}]},
+      "unread":{"public-folder":["i"],"private-folder":["p"]},
+      "status":{"public-folder":{"state":"idle","lastFetch":null,"error":null}},
+      "accounts":{"github":{"login":"me","name":null,"avatar":null,"connectedAt":1}},
+      "meetingGroups":{
+        "public-meeting":{"groupId":"normal-group","callTabId":"normal-tab","occurrence":null,"title":"Standup",
+          "start":null,"end":null,"endedAt":null},
+        "private-meeting":{"groupId":"private-group","callTabId":"private-tab","occurrence":null,"title":"private-secret",
+          "start":null,"end":null,"endedAt":null}},
+      "dismissedAlerts":[]},
+    "calendar":{"access":"authorized","calendars":[],"events":[],"loading":false,"error":null,"lastFetch":null},
+    "alerts":{"event":null},
+    "sync":{"status":"off","enabled":false,"folder":null,"profiles":{"default":{"syncId":"s","enabled":true}},
+      "lastSyncedAt":null,"error":null,"pending":0,"devices":[],"remoteTabs":{},"remoteProfiles":[]},
+    "telemetry":{"sharing":false,"decided":true,"askDone":true}
+  })"));
+}
+TEST(RuntimeStateTest, ServicesAllowlistUiFieldsAndProjectWithBrowserPrivacy) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  AddServices(state);
+  ASSERT_TRUE(IsRuntimeState(state));
+  auto projected = ProjectRuntimeState(state, "normal");
+  ASSERT_TRUE(projected);
+  ASSERT_TRUE(IsRuntimeState(*projected));
+  const auto* live = projected->FindDict("services")->FindDict("live");
+  EXPECT_TRUE(live->FindDict("folders")->contains("public-folder"));
+  EXPECT_TRUE(live->FindDict("meetingGroups")->contains("public-meeting"));
+  const auto json = base::WriteJson(*projected).value();
+  EXPECT_EQ(json.find("private-folder"), std::string::npos);
+  EXPECT_EQ(json.find("private-meeting"), std::string::npos);
+  EXPECT_EQ(json.find("private-secret"), std::string::npos);
+  // Live folders belong to public spaces only; a private window also gets its own meeting group.
+  auto own = ProjectRuntimeState(state, "private");
+  ASSERT_TRUE(own);
+  EXPECT_FALSE(own->FindDict("services")->FindDict("live")->FindDict("folders")->contains("private-folder"));
+  EXPECT_TRUE(own->FindDict("services")->FindDict("live")->FindDict("meetingGroups")->contains("private-meeting"));
+
+  // A credential or recovery field added to any record fails closed.
+  for (const char* path : {"live.accounts.github", "sync", "telemetry", "live.folders.public-folder", "calendar"}) {
+    auto leaked = state.Clone();
+    leaked.FindDictByDottedPath(std::string("services.") + path)->Set("token", "secret");
+    EXPECT_FALSE(IsRuntimeState(leaked)) << path;
+  }
+  auto unknown = state.Clone();
+  unknown.FindDict("services")->Set("vault", base::DictValue());
+  EXPECT_FALSE(IsRuntimeState(unknown));
+  auto item = state.Clone();
+  item.FindDictByDottedPath("services.live.items")->FindList("public-folder")->front().GetDict().Set("authToken", "x");
+  EXPECT_FALSE(IsRuntimeState(item));
+}
+TEST(RuntimeStateTest, ServiceActionsNameTheirWindowAndVisibleRecords) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  AddServices(state);
+  const auto action = [](const char* name, base::ListValue args) {
+    return base::DictValue().Set("method", "serviceAction").Set("action", name).Set("args", std::move(args));
+  };
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("liveCreate", base::ListValue().Append("normal").Append("pullRequests"))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("liveCreate", base::ListValue().Append("other").Append("pullRequests"))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("liveCreate", base::ListValue().Append("normal").Append("secrets"))));
+  // Private windows reach no shared service.
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", action("calendarRefresh", base::ListValue())));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("calendarRefresh", base::ListValue())));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("liveRemove", base::ListValue().Append("public-folder"))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("liveRemove", base::ListValue().Append("private-folder"))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("liveRemove", base::ListValue().Append("missing"))));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("liveOpen", base::ListValue().Append("normal").Append("public-folder").Append("i").Append(false))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", action("liveOpen", base::ListValue().Append("normal").Append("public-folder").Append("i").Append(false))));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("meetingGroup", base::ListValue().Append("normal-tab").Append(base::Value()))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", action("meetingGroup", base::ListValue().Append("normal-tab").Append(base::Value()))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("meetingGroup", base::ListValue().Append("private-tab").Append(base::Value()))));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", action("calendarSettings", base::ListValue().Append(base::DictValue().Set("alertLead", "5")))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("calendarSettings", base::ListValue().Append(base::DictValue().Set("alertLead", "6")))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("calendarSettings", base::ListValue().Append(base::DictValue().Set("token", true)))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("setProfileSynced", base::ListValue().Append("incognito:private").Append(true))));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", action("readTokens", base::ListValue())));
+  auto extra = action("syncNow", base::ListValue());
+  extra.Set("windowId", "normal");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", extra));
+}
+TEST(RuntimeStateTest, ImportsStayInRegularPublicSpacesWithBoundedRecords) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  const auto tabs = [] {
+    return base::DictValue().Set("method", "importTabs").Set("spaceId", "default").Set("group", base::Value())
+        .Set("tabs", base::ListValue().Append(base::DictValue().Set("url", "https://a.example/").Set("title", "A").Set("pinned", false)));
+  };
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", tabs()));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", tabs()));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", tabs().Set("spaceId", "incognito:private")));
+  auto field = tabs();
+  field.FindList("tabs")->front().GetDict().Set("adoptId", "tab:1");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", field));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", tabs().Set("afterId", "private-tab")));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", tabs().Set("afterId", "normal-tab")));
+  auto bookmarks = base::DictValue().Set("method", "importBookmarks").Set("spaceId", "default").Set("browserName", "Chrome")
+      .Set("root", base::DictValue().Set("type", "folder").Set("title", "Imported").Set("children", base::ListValue()));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", bookmarks.Clone()));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", bookmarks.Clone().Set("parentId", "missing")));
+  bookmarks.FindDict("root")->Set("type", "script");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", bookmarks));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", base::DictValue().Set("method", "importPasswords").Set("spaceId", "default")));
+}
+TEST(RuntimeStateTest, ServiceAndImportRepliesCarryOnlyTheirResultShapes) {
+  const auto kind = [](const char* method, const char* action = nullptr) {
+    auto command = base::DictValue().Set("method", method);
+    if (action) command.Set("action", action);
+    return RuntimeCommandResultKind(command);
+  };
+  EXPECT_EQ(kind("importTabs"), RuntimeResultKind::kImport);
+  EXPECT_EQ(kind("serviceAction", "githubStart"), RuntimeResultKind::kGithub);
+  EXPECT_EQ(kind("serviceAction", "turnOnSync"), RuntimeResultKind::kSync);
+  EXPECT_EQ(kind("serviceAction", "folderInfo"), RuntimeResultKind::kFolder);
+  EXPECT_EQ(kind("serviceAction", "calendarConnect"), RuntimeResultKind::kBoolean);
+  EXPECT_EQ(kind("serviceAction", "syncNow"), RuntimeResultKind::kNone);
+  const auto reply = [](base::Value value, RuntimeResultKind kind) {
+    auto r = base::DictValue().Set("epoch", "epoch").Set("revision", 3).Set("value", std::move(value));
+    return IsRuntimeReply(r, "epoch", 2, 3, kind);
+  };
+  EXPECT_TRUE(reply(base::Value(Json(R"({"count":2,"tabIds":["a","b"]})")), RuntimeResultKind::kImport));
+  EXPECT_FALSE(reply(base::Value(Json(R"({"count":2,"cookies":[]})")), RuntimeResultKind::kImport));
+  EXPECT_FALSE(reply(base::Value("id"), RuntimeResultKind::kImport));
+  EXPECT_TRUE(reply(base::Value(Json(R"({"id":"d","userCode":"ABCD","verificationUri":"https://github.com/login/device","expiresAt":1})")), RuntimeResultKind::kGithub));
+  EXPECT_FALSE(reply(base::Value(Json(R"({"id":"d","userCode":"ABCD","verificationUri":"u","expiresAt":1,"token":"t"})")), RuntimeResultKind::kGithub));
+  EXPECT_TRUE(reply(base::Value(Json(R"({"ok":true})")), RuntimeResultKind::kSync));
+  EXPECT_TRUE(reply(base::Value(Json(R"({"error":"Wrong word","count":3})")), RuntimeResultKind::kSync));
+  EXPECT_FALSE(reply(base::Value(Json(R"({"ok":true,"words":["a"]})")), RuntimeResultKind::kSync));
+  EXPECT_TRUE(reply(base::Value(), RuntimeResultKind::kFolder));
+  EXPECT_TRUE(reply(base::Value(true), RuntimeResultKind::kBoolean));
+  EXPECT_FALSE(reply(base::Value(), RuntimeResultKind::kBoolean));
+  // A service with no result cannot smuggle an object into a window.
+  EXPECT_FALSE(reply(base::Value(Json(R"({"ok":true})")), RuntimeResultKind::kNone));
 }
 }  // namespace
 }  // namespace bay
