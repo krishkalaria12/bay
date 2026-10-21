@@ -11,6 +11,7 @@ import { browserRead } from "../../store/read";
 import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
 import { MAX_SPLIT_PANES } from "../../store/constants";
 import { openNewTabPanel } from "../../lib/newTab";
+import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 
 const store = () => browserRead.getState();
 
@@ -74,6 +75,7 @@ export function openInSplit(tabId: string, side: SplitSide = "right") {
 }
 
 export function openLinkInSplit(sourceTabId: string, url: string, adoptId?: string) {
+  if (adoptId && pageFactsInCoordinator()) return;
   const s = store();
   const source = s.tabs[sourceTabId];
   if (!source) return;
@@ -81,7 +83,15 @@ export function openLinkInSplit(sourceTabId: string, url: string, adoptId?: stri
   const next = split?.tabIds[split.tabIds.indexOf(sourceTabId) + 1];
   if (split && (next || split.tabIds.length >= MAX_SPLIT_PANES)) {
     const target = next ?? split.tabIds.at(-1)!;
-    if (target !== sourceTabId) return reportBrowserCommand(navigate(target, url));
+    if (target !== sourceTabId) {
+      if (!adoptId) return reportBrowserCommand(navigate(target, url));
+      const before = activeTabId(s, source.windowId);
+      const owner = useBrowser.getState();
+      const id = owner.newTab(source.windowId, { url, adoptId, spaceId: source.spaceId, openerId: sourceTabId, background: true });
+      useBrowser.getState().replaceSplitPane(target, id);
+      if (before && before !== target) useBrowser.getState().activate(before);
+      return;
+    }
   }
   const options = { anchorTabId: sourceTabId, url, side: "right", background: true } as const;
   if (adoptId) openAdoptedPane(source.windowId, { ...options, adoptId });
@@ -89,6 +99,7 @@ export function openLinkInSplit(sourceTabId: string, url: string, adoptId?: stri
 }
 
 export function openPageInSplit(windowId: string, url: string, adoptId?: string) {
+  if (adoptId && pageFactsInCoordinator()) return;
   if (adoptId) openAdoptedPane(windowId, { url, adoptId });
   else reportBrowserCommand(openSplitPane(windowId, { url }));
 }
