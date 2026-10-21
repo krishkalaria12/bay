@@ -190,6 +190,7 @@ class RuntimeConnection final
       return;
     }
     runtime_->accepted_ = std::move(*commit);
+    runtime_->page_events_.Prune(*runtime_->accepted_->FindDict("state"));
     if (runtime_->ready_) {
       for (const auto& [id, connection] : runtime_->connections_) {
         if (!connection || connection->is_coordinator_)
@@ -404,10 +405,51 @@ bool AppRuntime::IsRetiringStartupWindow(BrowserWindowInterface* window) const {
   return window && retiring_startup_window_.get() == window;
 }
 void AppRuntime::SetCoordinatorHost(base::WeakPtr<NativeHost> host) {
+  page_events_started_ = false;
   coordinator_host_ = std::move(host);
 }
 base::WeakPtr<NativeHost> AppRuntime::coordinator_host() const {
   return coordinator_host_;
+}
+bool AppRuntime::CanMountPage(const std::string& window_id,
+                              const std::string& tab_id,
+                              const std::string& profile) const {
+  return !shutdown_ && accepted_ &&
+         CanMountRuntimePage(*accepted_->FindDict("state"), window_id, tab_id,
+                             profile);
+}
+bool AppRuntime::StartPageEvents(NativeHost* host) {
+  if (shutdown_ || !host || coordinator_host_.get() != host || !coordinator_ ||
+      !coordinator_->Authorized() || !accepted_)
+    return false;
+  if (std::exchange(page_events_started_, true))
+    return true;
+  for (auto& event : page_events_.Replay(*accepted_->FindDict("state")))
+    host->Emit("BayCEF", "onPageEvent", base::Value(std::move(event)));
+  return true;
+}
+bool AppRuntime::StopPageEvents(NativeHost* host) {
+  if (!host || coordinator_host_.get() != host)
+    return false;
+  page_events_started_ = false;
+  return true;
+}
+void AppRuntime::PageEvent(const std::string& tab_id,
+                           const std::string& profile,
+                           int browser_id,
+                           const char* event,
+                           base::DictValue payload) {
+  if (shutdown_ || !accepted_)
+    return;
+  auto fact =
+      page_events_.Record(*accepted_->FindDict("state"), tab_id, profile,
+                          browser_id, event, std::move(payload));
+  if (fact && page_events_started_ && coordinator_host_)
+    coordinator_host_->Emit("BayCEF", "onPageEvent",
+                            base::Value(std::move(*fact)));
+}
+void AppRuntime::ForgetPage(const std::string& tab_id) {
+  page_events_.Remove(tab_id);
 }
 void AppRuntime::Bind(content::WebUI* web_ui,
                       mojo::PendingReceiver<mojom::AppRuntime> receiver) {
@@ -492,6 +534,7 @@ void AppRuntime::CoordinatorClosed() {
   ready_ = false;
   coordinator_.reset();
   coordinator_host_.reset();
+  page_events_started_ = false;
   FailPending("new_epoch");
   epoch_ = ID();
   for (const auto& [id, connection] : connections_)
@@ -541,6 +584,7 @@ void AppRuntime::Shutdown() {
   connections_.clear();
   coordinator_.reset();
   coordinator_host_.reset();
+  page_events_started_ = false;
   Observe(nullptr);
   contents_.reset();
   profile_keep_alive_.reset();

@@ -83,6 +83,161 @@ void AddWindow(base::DictValue& state, const char* id, bool incognito) {
                    .Set("profile", profile)
                    .Set("url", std::string(id) + "-secret"));
 }
+TEST(RuntimePageEventsTest, AuthorizesProfileWithoutRequiringWindowOwnership) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  EXPECT_TRUE(CanAcceptRuntimePageEvent(state, "normal-tab", ""));
+  EXPECT_FALSE(CanAcceptRuntimePageEvent(state, "normal-tab", "default"));
+  EXPECT_FALSE(CanAcceptRuntimePageEvent(state, "missing", ""));
+  EXPECT_FALSE(CanAcceptRuntimePageEvent(state, "", ""));
+  EXPECT_FALSE(CanAcceptRuntimePageEvent(state, "private-tab", ""));
+  EXPECT_TRUE(
+      CanAcceptRuntimePageEvent(state, "private-tab", "incognito:private"));
+  EXPECT_FALSE(
+      CanAcceptRuntimePageEvent(state, "private-tab", "incognito:other"));
+  state.FindDict("tabs")->FindDict("normal-tab")->Set("windowId", "");
+  EXPECT_TRUE(CanAcceptRuntimePageEvent(state, "normal-tab", ""));
+  state.FindDict("spaces")->FindDict("default")->Set("profileId", "Profile 2");
+  EXPECT_FALSE(CanAcceptRuntimePageEvent(state, "normal-tab", ""));
+  EXPECT_TRUE(CanAcceptRuntimePageEvent(state, "normal-tab", "Profile 2"));
+  state.FindDict("windows")->Remove("private");
+  EXPECT_FALSE(
+      CanAcceptRuntimePageEvent(state, "private-tab", "incognito:private"));
+}
+TEST(RuntimePageEventsTest, MountRequiresTrustedOwnerAndProfile) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  EXPECT_TRUE(CanMountRuntimePage(state, "normal", "normal-tab", ""));
+  EXPECT_FALSE(CanMountRuntimePage(state, "other", "normal-tab", ""));
+  EXPECT_FALSE(CanMountRuntimePage(state, "normal", "normal-tab", "Profile 2"));
+  EXPECT_FALSE(CanMountRuntimePage(state, "normal", "missing", ""));
+  EXPECT_FALSE(CanMountRuntimePage(state, "", "normal-tab", ""));
+}
+TEST(RuntimePageEventsTest, ReplaysLatestFactsInNativeSequenceOrder) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  RuntimePageEventCache cache;
+  auto first = cache.Record(state, "normal-tab", "", 42, "onNavigationChange",
+                            base::DictValue().Set("url", "https://one.test"));
+  ASSERT_TRUE(first);
+  auto second = cache.Record(state, "normal-tab", "", 42, "onProgress",
+                             base::DictValue().Set("progress", 0.5));
+  ASSERT_TRUE(second);
+  auto third = cache.Record(state, "normal-tab", "", 42, "onNavigationChange",
+                            base::DictValue().Set("url", "https://two.test"));
+  ASSERT_TRUE(third);
+  auto replay = cache.Replay(state);
+  ASSERT_EQ(replay.size(), 2u);
+  EXPECT_EQ(replay[0], *second);
+  EXPECT_EQ(replay[1], *third);
+  EXPECT_EQ(*first->FindDouble("sequence"), 1);
+  EXPECT_EQ(*third->FindDouble("sequence"), 3);
+  EXPECT_EQ(cache.Replay(state), replay);
+  auto next = cache.Record(state, "normal-tab", "", 42, "onMedia",
+                           base::DictValue().Set("playing", true));
+  ASSERT_TRUE(next);
+  EXPECT_EQ(*next->FindDouble("sequence"), 4);
+}
+TEST(RuntimePageEventsTest, RejectsUnknownProfilesEventsAndInvalidPages) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  RuntimePageEventCache cache;
+  EXPECT_FALSE(cache.Record(state, "normal-tab", "other", 1, "onProgress",
+                            base::DictValue()));
+  EXPECT_FALSE(
+      cache.Record(state, "missing", "", 1, "onProgress", base::DictValue()));
+  EXPECT_FALSE(cache.Record(state, "normal-tab", "", 0, "onProgress",
+                            base::DictValue()));
+  EXPECT_FALSE(cache.Record(state, "normal-tab", "", 1, "onPageFocus",
+                            base::DictValue()));
+  EXPECT_FALSE(
+      cache.Record(state, "normal-tab", "", 1, "onFavicon",
+                   base::DictValue().Set("url", std::string(262145, 'x'))));
+  auto fact =
+      cache.Record(state, "normal-tab", "", 1, "onProgress", base::DictValue());
+  ASSERT_TRUE(fact);
+  EXPECT_EQ(*fact->FindDouble("sequence"), 1);
+}
+TEST(RuntimePageEventsTest, DropsClosedAndReprofiledTabsBeforeReplay) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  RuntimePageEventCache cache;
+  ASSERT_TRUE(cache.Record(state, "normal-tab", "", 1, "onProgress",
+                           base::DictValue()));
+  ASSERT_TRUE(
+      cache.Record(state, "other-tab", "", 2, "onMedia", base::DictValue()));
+  state.FindDict("tabs")->Remove("normal-tab");
+  EXPECT_EQ(cache.Replay(state).size(), 1u);
+  state.FindDict("spaces")->FindDict("default")->Set("profileId", "Profile 2");
+  EXPECT_TRUE(cache.Replay(state).empty());
+}
+TEST(RuntimePageEventsTest, ClearsOldTerminalFactsOnNewNavigationAndPage) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  RuntimePageEventCache cache;
+  ASSERT_TRUE(cache.Record(state, "normal-tab", "", 1, "onNavigationChange",
+                           base::DictValue().Set("url", "https://one.test")));
+  for (const char* event :
+       {"onDownloadNavigation", "onDiscarded", "onLoadError"})
+    ASSERT_TRUE(
+        cache.Record(state, "normal-tab", "", 1, event, base::DictValue()));
+  ASSERT_TRUE(cache.Record(
+      state, "normal-tab", "", 1, "onNavigationChange",
+      base::DictValue().Set("url", "https://one.test").Set("isLoading", true)));
+  EXPECT_EQ(cache.Replay(state).size(), 1u);
+  ASSERT_TRUE(
+      cache.Record(state, "normal-tab", "", 1, "onFavicon",
+                   base::DictValue().Set("url", "https://one.test/icon")));
+  ASSERT_TRUE(
+      cache.Record(state, "normal-tab", "", 2, "onNavigationChange",
+                   base::DictValue().Set("url", "https://new-page.test")));
+  auto replay = cache.Replay(state);
+  ASSERT_EQ(replay.size(), 1u);
+  EXPECT_EQ(replay[0].FindInt("browserId"), 2);
+  cache.Remove("normal-tab");
+  EXPECT_TRUE(cache.Replay(state).empty());
+}
+TEST(RuntimePageEventsTest, BoundsPayloadBytesAcrossTabs) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  RuntimePageEventCache cache;
+  for (int index = 0; index < 80; ++index) {
+    const auto id = "tab-" + std::to_string(index);
+    state.FindDict("tabs")->Set(id, base::DictValue()
+                                        .Set("id", id)
+                                        .Set("spaceId", "default")
+                                        .Set("windowId", "normal"));
+    ASSERT_TRUE(cache.Record(
+        state, id, "", index + 1, "onFavicon",
+        base::DictValue().Set("url", std::string(240 * 1024, 'x'))));
+  }
+  auto replay = cache.Replay(state);
+  ASSERT_FALSE(replay.empty());
+  EXPECT_LT(replay.size(), 80u);
+  EXPECT_NE(*replay.front().FindString("tabId"), "tab-0");
+  EXPECT_EQ(*replay.back().FindString("tabId"), "tab-79");
+}
+TEST(RuntimePageEventsTest, BoundsTabsWhileKeepingNewFacts) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  RuntimePageEventCache cache;
+  for (size_t index = 0; index <= RuntimePageEventCache::kMaximumTabs;
+       ++index) {
+    const auto id = "tab-" + std::to_string(index);
+    state.FindDict("tabs")->Set(id, base::DictValue()
+                                        .Set("id", id)
+                                        .Set("spaceId", "default")
+                                        .Set("windowId", "normal"));
+    ASSERT_TRUE(cache.Record(state, id, "", static_cast<int>(index + 1),
+                             "onProgress", base::DictValue()));
+  }
+  const auto replay = cache.Replay(state);
+  ASSERT_EQ(replay.size(), RuntimePageEventCache::kMaximumTabs);
+  EXPECT_EQ(*replay.front().FindString("tabId"), "tab-1");
+}
 TEST(RuntimeStateTest, FiltersAllPrivateSlicesForNormalWindow) {
   auto state = State();
   AddWindow(state, "normal", false);

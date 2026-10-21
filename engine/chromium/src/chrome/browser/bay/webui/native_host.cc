@@ -527,6 +527,11 @@ base::DictValue NativeHost::Info() const {
       methods.Append(module + "." + method);
   info.Set("optionalMethods", std::move(methods));
 #endif
+  if (AppRuntime::Enabled() && is_coordinator()) {
+    auto* methods = info.FindList("optionalMethods");
+    methods->Append("BayCEF.startPageEvents");
+    methods->Append("BayCEF.stopPageEvents");
+  }
   return info;
 }
 void NativeHost::GetHostInfo(GetHostInfoCallback callback) {
@@ -684,6 +689,19 @@ void NativeHost::Invoke(const std::string& module,
        args.size() > static_cast<size_t>(contract->max_args))) {
     std::move(callback).Run(
         Failure("invalid_args", "Invalid native argument count"));
+    return;
+  }
+  if (module == "BayCEF" &&
+      (method == "startPageEvents" || method == "stopPageEvents")) {
+    auto* runtime = AppRuntime::GetIfStarted();
+    const bool accepted =
+        AppRuntime::Enabled() && is_coordinator() && runtime &&
+        (method == "startPageEvents" ? runtime->StartPageEvents(this)
+                                     : runtime->StopPageEvents(this));
+    std::move(callback).Run(accepted ? Success()
+                                     : Failure("forbidden",
+                                               "Only the connected coordinator "
+                                               "may subscribe to page facts"));
     return;
   }
   if (module == "BayWebView") {

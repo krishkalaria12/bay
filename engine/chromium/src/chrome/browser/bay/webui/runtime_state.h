@@ -2,8 +2,10 @@
 #ifndef CHROME_BROWSER_BAY_WEBUI_RUNTIME_STATE_H_
 #define CHROME_BROWSER_BAY_WEBUI_RUNTIME_STATE_H_
 
+#include <map>
 #include <optional>
 #include <string>
+#include <vector>
 #include "base/values.h"
 
 namespace bay {
@@ -34,5 +36,40 @@ std::optional<base::DictValue> ProjectRuntimeState(
 bool CanDispatchRuntimeCommand(const base::DictValue& state,
                                const std::string& window_id,
                                const base::DictValue& command);
+// Native page identity is checked against accepted state independently of a
+// renderer mount lease or the tab's current public-window owner.
+bool CanAcceptRuntimePageEvent(const base::DictValue& state,
+                               const std::string& tab_id,
+                               const std::string& profile);
+
+bool CanMountRuntimePage(const base::DictValue& state,
+                         const std::string& window_id,
+                         const std::string& tab_id,
+                         const std::string& profile);
+
+// Bounded latest facts survive coordinator replacement. Sequence numbers are
+// browser-owned and remain monotonic across epochs and page remounts.
+class RuntimePageEventCache {
+ public:
+  static constexpr size_t kMaximumTabs = 2048;
+  std::optional<base::DictValue> Record(const base::DictValue& state,
+                                        const std::string& tab_id,
+                                        const std::string& profile,
+                                        int browser_id,
+                                        const char* event,
+                                        base::DictValue payload);
+  std::vector<base::DictValue> Replay(const base::DictValue& state);
+  void Prune(const base::DictValue& state);
+  void Remove(const std::string& tab_id);
+
+ private:
+  struct Fact {
+    base::DictValue envelope;
+    size_t bytes = 0;
+  };
+  std::map<std::string, std::map<std::string, Fact>> facts_;
+  size_t bytes_ = 0;
+  double sequence_ = 0;
+};
 }  // namespace bay
 #endif

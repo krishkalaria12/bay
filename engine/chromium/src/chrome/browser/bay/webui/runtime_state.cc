@@ -1,11 +1,13 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/runtime_state.h"
 
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
 #include <set>
 #include <string_view>
 #include <vector>
+#include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 
 namespace bay {
@@ -1514,4 +1516,164 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   }
   return false;
 }
+
+bool CanAcceptRuntimePageEvent(const base::DictValue& state,
+                               const std::string& tab_id,
+                               const std::string& profile) {
+  const auto* tabs = state.FindDict("tabs");
+  const auto* tab = tabs && !tab_id.empty() ? tabs->FindDict(tab_id) : nullptr;
+  const auto* space_id = tab ? tab->FindString("spaceId") : nullptr;
+  if (!space_id)
+    return false;
+  if (PrivateSpace(*space_id)) {
+    const auto* windows = state.FindDict("windows");
+    const auto* owner = tab->FindString("windowId");
+    const auto* window = windows && owner ? windows->FindDict(*owner) : nullptr;
+    return profile == *space_id && owner && profile == "incognito:" + *owner &&
+           window && window->FindBool("incognito").value_or(false) &&
+           window->FindString("spaceId") &&
+           *window->FindString("spaceId") == profile;
+  }
+  const auto* spaces = state.FindDict("spaces");
+  const auto* space = spaces ? spaces->FindDict(*space_id) : nullptr;
+  if (!space || PrivateSpace(profile))
+    return false;
+  const auto* native_profile = space->FindString("profileId");
+  const auto& expected =
+      native_profile && !native_profile->empty() ? *native_profile : *space_id;
+  return profile == (expected == "default" ? "" : expected);
+}
+bool CanMountRuntimePage(const base::DictValue& state,
+                         const std::string& window_id,
+                         const std::string& tab_id,
+                         const std::string& profile) {
+  if (window_id.empty() || !CanAcceptRuntimePageEvent(state, tab_id, profile))
+    return false;
+  const auto* tab = state.FindDict("tabs")->FindDict(tab_id);
+  const auto* owner = tab->FindString("windowId");
+  return owner && *owner == window_id;
+}
+std::optional<base::DictValue> RuntimePageEventCache::Record(
+    const base::DictValue& state,
+    const std::string& tab_id,
+    const std::string& profile,
+    int browser_id,
+    const char* event,
+    base::DictValue payload) {
+  static constexpr const char* kEvents[] = {"onNavigationChange",
+                                            "onProgress",
+                                            "onFavicon",
+                                            "onMedia",
+                                            "onZoom",
+                                            "onFindResult",
+                                            "onDownloadNavigation",
+                                            "onDiscarded",
+                                            "onLoadError"};
+  if (browser_id <= 0 || !CanAcceptRuntimePageEvent(state, tab_id, profile) ||
+      std::ranges::find(kEvents, std::string_view(event)) ==
+          std::end(kEvents) ||
+      sequence_ >= 9007199254740991.0)
+    return std::nullopt;
+  // Native URLs can be large. Bound the cached transport payload as well as
+  // the number of pages so a disconnected coordinator cannot grow memory.
+  const auto encoded = base::WriteJson(payload);
+  if (!encoded || encoded->size() > 256 * 1024)
+    return std::nullopt;
+  auto existing = facts_.find(tab_id);
+  if (existing != facts_.end() && !existing->second.empty() &&
+      existing->second.begin()->second.envelope.FindInt("browserId") !=
+          browser_id)
+    Remove(tab_id);
+  const auto erase_fact = [&](const char* name) {
+    auto page = facts_.find(tab_id);
+    if (page == facts_.end())
+      return;
+    auto fact = page->second.find(name);
+    if (fact != page->second.end()) {
+      bytes_ -= fact->second.bytes;
+      page->second.erase(fact);
+    }
+  };
+  if (std::string_view(event) == "onNavigationChange") {
+    auto page = facts_.find(tab_id);
+    const base::DictValue* previous = nullptr;
+    if (page != facts_.end()) {
+      auto navigation = page->second.find("onNavigationChange");
+      if (navigation != page->second.end())
+        previous = navigation->second.envelope.FindDict("payload");
+    }
+    const auto* old_url = previous ? previous->FindString("url") : nullptr;
+    const auto* url = payload.FindString("url");
+    // Terminal facts from an earlier navigation must not affect the new page
+    // when a replacement coordinator consumes the replay.
+    if (payload.FindBool("isLoading").value_or(false) ||
+        (old_url && url && *old_url != *url)) {
+      erase_fact("onDownloadNavigation");
+      erase_fact("onDiscarded");
+      erase_fact("onLoadError");
+    }
+  }
+  erase_fact(event);
+  const size_t bytes = encoded->size() + tab_id.size() + profile.size() +
+                       std::string_view(event).size() + 256;
+  constexpr size_t kMaximumBytes = 16 * 1024 * 1024;
+  while ((!facts_.contains(tab_id) && facts_.size() >= kMaximumTabs) ||
+         bytes_ + bytes > kMaximumBytes) {
+    auto oldest = facts_.begin();
+    double oldest_sequence = sequence_;
+    for (auto it = facts_.begin(); it != facts_.end(); ++it) {
+      double newest = 0;
+      for (const auto& [name, fact] : it->second)
+        newest = std::max(newest, *fact.envelope.FindDouble("sequence"));
+      if (newest < oldest_sequence) {
+        oldest_sequence = newest;
+        oldest = it;
+      }
+    }
+    Remove(oldest->first);
+  }
+  auto envelope = base::DictValue()
+                      .Set("tabId", tab_id)
+                      .Set("profile", profile)
+                      .Set("browserId", browser_id)
+                      .Set("sequence", ++sequence_)
+                      .Set("event", event)
+                      .Set("payload", std::move(payload));
+  facts_[tab_id].insert_or_assign(event, Fact{envelope.Clone(), bytes});
+  bytes_ += bytes;
+  return envelope;
+}
+void RuntimePageEventCache::Prune(const base::DictValue& state) {
+  std::vector<std::string> remove;
+  for (const auto& [id, facts] : facts_) {
+    const auto* profile =
+        facts.empty() ? nullptr
+                      : facts.begin()->second.envelope.FindString("profile");
+    if (!profile || !CanAcceptRuntimePageEvent(state, id, *profile))
+      remove.push_back(id);
+  }
+  for (const auto& id : remove)
+    Remove(id);
+}
+std::vector<base::DictValue> RuntimePageEventCache::Replay(
+    const base::DictValue& state) {
+  Prune(state);
+  std::vector<base::DictValue> result;
+  for (const auto& [id, facts] : facts_)
+    for (const auto& [event, fact] : facts)
+      result.push_back(fact.envelope.Clone());
+  std::ranges::sort(result, [](const auto& first, const auto& second) {
+    return *first.FindDouble("sequence") < *second.FindDouble("sequence");
+  });
+  return result;
+}
+void RuntimePageEventCache::Remove(const std::string& tab_id) {
+  auto page = facts_.find(tab_id);
+  if (page == facts_.end())
+    return;
+  for (const auto& [event, fact] : page->second)
+    bytes_ -= fact.bytes;
+  facts_.erase(page);
+}
+
 }  // namespace bay

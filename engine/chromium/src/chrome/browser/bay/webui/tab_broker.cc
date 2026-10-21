@@ -5,11 +5,14 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
+#include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
@@ -70,13 +73,47 @@ class TabBroker::Entry final : public content::WebContentsObserver {
         profile(Profile::FromBrowserContext(contents->GetBrowserContext())
                     ->GetWeakPtr()) {}
   ~Entry() override {
+    facts.reset();
+    ForgetPage();
     Observe(nullptr);
     parked.reset();
   }
-  void WebContentsDestroyed() override { contents = nullptr; }
+  void ForgetPage() {
+    if (auto* runtime = AppRuntime::GetIfStarted(); runtime && !key.empty())
+      runtime->ForgetPage(key);
+  }
+  void WebContentsDestroyed() override {
+    ForgetPage();
+    contents = nullptr;
+  }
+  void EmitFact(const char* event, base::DictValue payload) {
+    if (!contents || !profile || key.empty() ||
+        Profile::FromBrowserContext(contents->GetBrowserContext()) !=
+            profile.get())
+      return;
+    if (auto* runtime = AppRuntime::GetIfStarted())
+      runtime->PageEvent(key, native_profile,
+                         sessions::SessionTabHelper::IdForTab(contents).id(),
+                         event, std::move(payload));
+  }
+  void ObserveFacts(const std::string& profile_id) {
+    if (!AppRuntime::Enabled() || key.empty()) {
+      facts.reset();
+      return;
+    }
+    native_profile = profile_id;
+    if (!facts)
+      facts = std::make_unique<TabObserver>(
+          contents,
+          base::BindRepeating(&Entry::EmitFact, base::Unretained(this)));
+    facts->State();
+    facts->Media();
+  }
   raw_ptr<content::WebContents> contents;
   base::WeakPtr<Profile> profile;
   std::string key;
+  std::string native_profile;
+  std::unique_ptr<TabObserver> facts;
   std::string offer;
   std::string adopted_from;
   uint64_t lease = 0;
@@ -210,6 +247,23 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* browser,
   const std::string adopt_id = adopt_value ? adopt_value->GetString() : "";
   if (key.size() > 256 || adopt_id.size() > 256)
     return {.error = "Transfer key or adoption id is too long"};
+  const auto profile_name = browser->GetProfile()
+                                ->GetOriginalProfile()
+                                ->GetPath()
+                                .BaseName()
+                                .AsUTF8Unsafe();
+  const std::string native_profile =
+      browser->GetProfile()->IsOffTheRecord()
+          ? "incognito:" + WindowRegistry::Get().IdFor(browser)
+      : profile_name == "Default" ? ""
+                                  : profile_name;
+  if (AppRuntime::Enabled() && !key.empty()) {
+    auto* runtime = AppRuntime::GetIfStarted();
+    if (!runtime || !runtime->CanMountPage(WindowRegistry::Get().IdFor(browser),
+                                           key, native_profile))
+      return {.error =
+                  "The tab key does not belong to this window and profile"};
+  }
   Entry* entry = ByKey(key);
   if (entry && !adopt_id.empty() && adopt_id != entry->adopted_from &&
       adopt_id != entry->offer) {
@@ -261,6 +315,10 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* browser,
       Attach(*entry, browser);
     }
   }
+  if (entry->key != key) {
+    entry->ForgetPage();
+    entry->facts.reset();
+  }
   entry->key = key;
   if (!adopt_id.empty())
     entry->adopted_from = adopt_id;
@@ -268,6 +326,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* browser,
   entry->prepared = false;
   entry->lease = ++next_lease_;
   CHECK_NE(entry->lease, 0u);
+  entry->ObserveFacts(native_profile);
   return {entry->contents.get(), entry->lease, reused, {}};
 }
 std::optional<std::string> TabBroker::PrepareTransfer(const std::string& key) {

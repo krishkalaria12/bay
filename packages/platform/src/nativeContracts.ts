@@ -853,6 +853,20 @@ export const nativeContracts = {
     "BayCEF": {
       "source": "nncore/src/native.ts",
       "methods": {
+        "startPageEvents": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "startPageEvents?(): Promise<void>;"
+        },
+        "stopPageEvents": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "stopPageEvents?(): Promise<void>;"
+        },
         "engineInfo": {
           "async": true,
           "optional": false,
@@ -1295,6 +1309,7 @@ export const nativeContracts = {
         "onContentBlocker",
         "onSystemState",
         "onEngineEvent",
+        "onPageEvent",
         "onTabStrip"
       ],
       "constants": {}

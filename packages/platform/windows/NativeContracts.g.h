@@ -122,6 +122,8 @@ inline constexpr Method methods[] = {
   {"BayKeychain", "get", true, 1, 1},
   {"BayKeychain", "set", true, 2, 2},
   {"BayKeychain", "delete", true, 1, 1},
+  {"BayCEF", "startPageEvents", true, 0, 0},
+  {"BayCEF", "stopPageEvents", true, 0, 0},
   {"BayCEF", "engineInfo", true, 0, 0},
   {"BayCEF", "chromeWindows", true, 0, 0},
   {"BayCEF", "prepareTransfer", true, 1, 1},

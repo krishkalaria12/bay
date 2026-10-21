@@ -45,6 +45,17 @@ class AppRuntime final : public ProfileManagerObserver,
   bool IsRetiringStartupWindow(BrowserWindowInterface* window) const;
   void SetCoordinatorHost(base::WeakPtr<NativeHost> host);
   base::WeakPtr<NativeHost> coordinator_host() const;
+  bool CanMountPage(const std::string& window_id,
+                    const std::string& tab_id,
+                    const std::string& profile) const;
+  bool StartPageEvents(NativeHost* host);
+  bool StopPageEvents(NativeHost* host);
+  void PageEvent(const std::string& tab_id,
+                 const std::string& profile,
+                 int browser_id,
+                 const char* event,
+                 base::DictValue payload);
+  void ForgetPage(const std::string& tab_id);
   void Bind(content::WebUI* web_ui,
             mojo::PendingReceiver<mojom::AppRuntime> receiver);
 
@@ -84,6 +95,8 @@ class AppRuntime final : public ProfileManagerObserver,
   base::WeakPtr<NativeHost> coordinator_host_;
   std::map<std::string, std::unique_ptr<Pending>> pending_;
   std::optional<base::DictValue> accepted_;
+  RuntimePageEventCache page_events_;
+  bool page_events_started_ = false;
   std::string epoch_;
   base::OneShotTimer restart_;
   std::deque<base::TimeTicks> restart_times_;

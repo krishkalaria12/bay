@@ -62,6 +62,10 @@ TabObserver::TabObserver(content::WebContents* contents,
       host_(std::move(host)) {
   EnsureObservers();
 }
+TabObserver::TabObserver(content::WebContents* contents, FactCallback facts)
+    : WebContentsObserver(contents), facts_(std::move(facts)) {
+  EnsureObservers();
+}
 TabObserver::~TabObserver() = default;
 content::WebContents* TabObserver::contents() const {
   return web_contents();
@@ -79,10 +83,14 @@ bool TabObserver::current() const {
   return TabBroker::Get().IsCurrent(web_contents(), lease_);
 }
 bool TabObserver::CanEmit() const {
-  return host_ && web_contents() && current();
+  return web_contents() && (facts_ || (host_ && current()));
 }
 void TabObserver::Emit(const char* event, base::DictValue payload) {
-  if (CanEmit())
+  if (!CanEmit())
+    return;
+  if (facts_)
+    facts_.Run(event, std::move(payload));
+  else
     host_->ViewEvent(tag_, event, std::move(payload));
 }
 void TabObserver::EnsureObservers() {

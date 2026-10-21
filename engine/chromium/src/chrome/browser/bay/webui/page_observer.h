@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
@@ -19,8 +20,8 @@
 namespace bay {
 class NativeHost;
 
-// A page belongs to one renderer view only while its broker lease is current.
-// Transfer keeps the WebContents alive, but invalidates its previous observer.
+// View observers follow a mount lease. Broker-owned fact observers follow the
+// WebContents through parking and transfers without retaining a renderer host.
 class TabObserver final : public content::WebContentsObserver,
                           public favicon::FaviconDriverObserver,
                           public find_in_page::FindResultObserver,
@@ -31,6 +32,9 @@ class TabObserver final : public content::WebContentsObserver,
               uint64_t lease,
               std::optional<std::string> requested_url,
               base::WeakPtr<NativeHost> host);
+  using FactCallback =
+      base::RepeatingCallback<void(const char*, base::DictValue)>;
+  TabObserver(content::WebContents* contents, FactCallback facts);
   ~TabObserver() override;
   content::WebContents* contents() const;
   uint64_t lease() const;
@@ -89,8 +93,9 @@ class TabObserver final : public content::WebContentsObserver,
   void DidUpdateAudioMutingState(bool) override;
   void WebContentsDestroyed() override;
 
-  int tag_;
-  uint64_t lease_;
+  int tag_ = 0;
+  uint64_t lease_ = 0;
+  FactCallback facts_;
   std::optional<std::string> requested_url_;
   base::WeakPtr<NativeHost> host_;
   base::ScopedObservation<favicon::FaviconDriver,
