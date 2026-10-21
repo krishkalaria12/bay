@@ -19,13 +19,14 @@ import {
 
 // A link Chrome already opened (`adoptId`) is a native page handoff, not a user command.
 export type UserPaneOptions = Omit<OpenPaneOptions, "adoptId">;
+export type SplitPatch = { sizes?: number[]; stackSizes?: [number, number] };
 export type SplitCommand =
   | { method: "createSplit"; tabIds: string[]; orientation?: SplitView["orientation"] }
   | { method: "openSplitPane"; windowId: string; options?: UserPaneOptions }
   | { method: "replaceSplitPane"; paneTabId: string; tabId: string }
   | { method: "removeTabFromSplit"; tabId: string }
   | { method: "separateSplit" | "flipSplit" | "toggleSplitOrientation"; splitId: string }
-  | { method: "updateSplit"; splitId: string; patch: { sizes?: number[]; stackSizes?: [number, number] } }
+  | { method: "updateSplit"; splitId: string; patch: SplitPatch }
   | { method: "movePane"; tabId: string; delta: 1 | -1 }
   | { method: "focusPane"; windowId: string; delta: 1 | -1 }
   | { method: "toggleTabLayout" | "closePeek" | "keepPeek" | "splitPeek" | "reopenPeekOrClosed"; windowId: string }
@@ -102,7 +103,7 @@ export function parseSplitCommand(value: unknown): SplitCommand {
       return {
         method: c.method,
         splitId: splitId(),
-        patch: commandFields<{ sizes?: number[]; stackSizes?: [number, number] }>(p, {
+        patch: commandFields<SplitPatch>(p, {
           sizes: (v) => fractions(v),
           stackSizes: (v) => fractions(v, 2) as [number, number],
         }),

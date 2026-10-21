@@ -20,8 +20,8 @@ import {
   type CommandReaders,
 } from "./commandValidation";
 
-type GroupPatch = Partial<Pick<TabGroup, "name" | "icon" | "color" | "collapsed" | "pinned">>;
-type FolderPatch = Partial<Pick<PinnedFolder, "name" | "icon" | "collapsed">>;
+export type GroupPatch = Partial<Pick<TabGroup, "name" | "icon" | "color" | "collapsed" | "pinned">>;
+export type FolderPatch = Partial<Pick<PinnedFolder, "name" | "icon" | "collapsed">>;
 export type NewFolderOptions = { tabIds?: string[]; name?: string; parentId?: string; spaceId?: string; beforeId?: string };
 export type OrganizeCommand =
   | { method: "createGroup"; tabIds: string[]; options?: { name?: string; icon?: string | null; color?: GroupColor | null } }
