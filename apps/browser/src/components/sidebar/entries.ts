@@ -1,5 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import type { BrowserProjection } from "../../runtime/projection";
+import { useBrowser } from "../../store/browser";
 import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
 import { activeTabId, favoriteTabIds, pinnedPage, viewTabIds } from "../../store/model";
 import { splitIndex, stableList } from "../../store/structure";
@@ -10,7 +11,7 @@ export type SidebarEntries = { tiles: string[]; pinned: string[]; pinnedGroups: 
 
 const memo = new Map<string, { inputs: unknown[]; result: SidebarEntries }>();
 
-export function sidebarEntries(s: BrowserState, windowId: string, spaceId?: string): SidebarEntries {
+export function sidebarEntries(s: BrowserProjection, windowId: string, spaceId?: string): SidebarEntries {
   const inputs = [s.tabs, s.tabLists, s.windows, s.groups, s.splits, s.pinnedFolders];
   const key = spaceId ? `${windowId}|${spaceId}` : windowId;
   const cached = memo.get(key);
@@ -33,7 +34,7 @@ export function sidebarEntries(s: BrowserState, windowId: string, spaceId?: stri
   return result;
 }
 
-function computeEntries(s: BrowserState, windowId: string, spaceId?: string): SidebarEntries {
+function computeEntries(s: BrowserProjection, windowId: string, spaceId?: string): SidebarEntries {
   // Favourites are shared by the spaces with this space's profile: theirs show here too.
   const tiles = favoriteTabIds(s, windowId, spaceId);
   const pinned: string[] = [];
@@ -74,7 +75,7 @@ function computeEntries(s: BrowserState, windowId: string, spaceId?: string): Si
   return { tiles, pinned, pinnedGroups, list };
 }
 
-export function numberedTabs(s: BrowserState, windowId: string): string[] {
+export function numberedTabs(s: BrowserProjection, windowId: string): string[] {
   const { tiles, pinned, pinnedGroups, list } = sidebarEntries(s, windowId);
   const active = activeTabId(s, windowId);
   const rowTab = (entry: string): string[] => {
@@ -94,20 +95,20 @@ export function numberedTabs(s: BrowserState, windowId: string): string[] {
  * Every tab the sidebar lists, top to bottom: the favourites, then each row's (a folder's or a group's members, a
  * split's panes).
  */
-export function sidebarTabOrder(s: BrowserState, windowId: string): string[] {
+export function sidebarTabOrder(s: BrowserProjection, windowId: string): string[] {
   const { tiles, pinned, pinnedGroups, list } = sidebarEntries(s, windowId);
   const rowTabs = (entry: string): string[] => {
     const id = entry.slice(2);
     if (entry.startsWith("g:")) return groupEntries(s, id).flatMap(rowTabs);
     if (entry.startsWith("f:")) return folderEntries(s, id).flatMap(rowTabs);
-    return entry.startsWith("s:") ? (s.splits[id]?.tabIds ?? []) : [id];
+    return entry.startsWith("s:") ? [...(s.splits[id]?.tabIds ?? [])] : [id];
   };
   return [...tiles, ...pinned.flatMap(rowTabs), ...pinnedGroups.flatMap((id) => rowTabs(`g:${id}`)), ...list.flatMap(rowTabs)];
 }
 
-const groupMemo = new WeakMap<object, { tabs: BrowserState["tabs"]; splits: BrowserState["splits"]; result: string[] }>();
+const groupMemo = new WeakMap<object, { tabs: BrowserProjection["tabs"]; splits: BrowserProjection["splits"]; result: string[] }>();
 
-export function groupEntries(s: BrowserState, groupId: string): string[] {
+export function groupEntries(s: BrowserProjection, groupId: string): string[] {
   const g = s.groups[groupId];
   if (!g) return [];
   const cached = groupMemo.get(g);
@@ -127,7 +128,7 @@ export function groupEntries(s: BrowserState, groupId: string): string[] {
   return result;
 }
 
-function splitEntry(s: BrowserState, tabId: string, splits = splitIndex(s.splits)): string {
+function splitEntry(s: BrowserProjection, tabId: string, splits = splitIndex(s.splits)): string {
   for (const v of splits.get(tabId) ?? []) {
     if (v.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!)).length >= 2) return `s:${v.id}`;
   }
@@ -140,10 +141,13 @@ export function useSidebarEntries(windowId: string, spaceId?: string): SidebarEn
 
 export const useGroupEntries = (groupId: string) => useBrowser(useShallow((s) => groupEntries(s, groupId)));
 
-const folderMemo = new Map<string, { tabs: BrowserState["tabs"]; lists: BrowserState["tabLists"]; folders: BrowserState["pinnedFolders"]; result: string[] }>();
+const folderMemo = new Map<
+  string,
+  { tabs: BrowserProjection["tabs"]; lists: BrowserProjection["tabLists"]; folders: BrowserProjection["pinnedFolders"]; result: string[] }
+>();
 
 /** A folder's immediate tabs and child folders in sidebar order. */
-export function folderEntries(s: BrowserState, folderId: string): string[] {
+export function folderEntries(s: BrowserProjection, folderId: string): string[] {
   const cached = folderMemo.get(folderId);
   const folder = s.pinnedFolders[folderId];
   if (cached && cached.tabs === s.tabs && cached.lists === s.tabLists && cached.folders === s.pinnedFolders) return cached.result;
@@ -174,7 +178,7 @@ export function folderEntries(s: BrowserState, folderId: string): string[] {
 export const useFolderEntries = (folderId: string) => useBrowser((s) => folderEntries(s, folderId));
 
 /** Resolve an empty folder's stored anchor to an immediate entry in its parent. */
-function insertEmptyFolders(s: BrowserState, entries: string[], emptyIds: string[]) {
+function insertEmptyFolders(s: BrowserProjection, entries: string[], emptyIds: string[]) {
   const pending = new Set(emptyIds);
   const keys = new Set([...entries, ...emptyIds.map((id) => `f:${id}`)]);
   const anchorOf = (id: string): string | null => {

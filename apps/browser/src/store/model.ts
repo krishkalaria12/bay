@@ -287,7 +287,7 @@ export function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-export function windowTitle(s: BrowserState, windowId: string): string {
+export function windowTitle(s: ReadonlyModelState, windowId: string): string {
   const w = s.windows[windowId];
   if (!w) return "";
   const tab = activeTab(s, windowId);
