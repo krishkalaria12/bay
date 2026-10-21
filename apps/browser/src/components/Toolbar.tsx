@@ -33,6 +33,7 @@ import { copyPageUrl } from "./site/selection";
 import { reportBrowserCommand } from "../runtime/commands";
 import { toggleBookmark as togglePageBookmark } from "../runtime/bookmarkActions";
 import { browserRead } from "../store/read";
+import { openCommandPanel } from "../runtime/windowUiActions";
 
 // What the toolbar shows of its tab: the page's favicon and the tab's bookkeeping (last active, …) don't re-render it.
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
@@ -265,7 +266,7 @@ export function UrlField({
   const controlsOpen = usePages((s) => s.popover[tab.id] === "siteControls");
   const openPanel = (text: string) => {
     onFocus();
-    useBrowser.getState().openPanel(windowId, text);
+    reportBrowserCommand(openCommandPanel(windowId, text));
   };
   const toggleBookmark = () => {
     const s = browserRead.getState();

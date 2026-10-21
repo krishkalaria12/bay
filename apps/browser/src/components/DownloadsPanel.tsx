@@ -23,6 +23,8 @@ import { hostLabel, matchesQuery } from "./pages/PageLayout";
 import { IconButton, useHover } from "./primitives";
 import { useFileExists } from "./useFileExists";
 import { DOWNLOADS_LIST_TOP, DOWNLOADS_ROW_HEIGHT, PALETTE_FIELD_HEIGHT, PALETTE_FOOTER_HEIGHT } from "./omnibox/constants";
+import { reportBrowserCommand } from "../runtime/commands";
+import { clearDownloads, removeDownload, setDownloadsOpen } from "../runtime/windowUiActions";
 
 // The downloads, as a palette: search, a file-type filter, ↩ for the selected file and ⌘K for the rest.
 
@@ -115,7 +117,7 @@ function runPrimary(primary: Primary, d: Download | undefined, windowId: string)
   if (primary === "open") return openFile(d.path);
   if (primary === "pause") return pauseDownload(d.id);
   if (primary === "resume") return resumeDownload(d.id);
-  useBrowser.getState().removeDownload(d.id);
+  reportBrowserCommand(removeDownload(windowId, d.id));
 }
 
 // MARK: Panel
@@ -198,7 +200,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
 
   const dismiss = () => {
     actionRequest.current += 1;
-    useBrowser.getState().setDownloadsOpen(windowId, false);
+    reportBrowserCommand(setDownloadsOpen(windowId, false));
     const active = activeTabId(useBrowser.getState(), windowId);
     if (active) void webviews.get(active)?.focus();
   };
@@ -238,7 +240,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
       if (!latest || latest.path !== d.path || latest.state !== d.state) return;
       d = latest;
     }
-    const actions = d ? downloadActions(d, exists) : [];
+    const actions = d ? downloadActions(windowId, d, exists) : [];
     const clearable = downloadsIn(useBrowser.getState(), windowId).some((x) => x.state !== "downloading");
     actions.push(
       { id: "folder", title: "Open Downloads Folder", icon: "folder", hint: d ? undefined : "↩", separator: !!d, run: () => openDownloadsFolder(windowId) },
@@ -256,7 +258,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
               },
             },
           ]),
-      ...(clearable ? [{ id: "clear", title: "Clear Downloads", icon: "clear", run: () => useBrowser.getState().clearDownloads(windowId) }] : []),
+      ...(clearable ? [{ id: "clear", title: "Clear Downloads", icon: "clear", run: () => reportBrowserCommand(clearDownloads(windowId)) }] : []),
     );
     setMenu({ kind: "actions", title: d?.filename || "Downloads", actions });
   };
@@ -283,7 +285,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
       return;
     }
     if (metaKey && shiftKey && key.toLowerCase() === "c" && d) return copyText(d.url);
-    if (shiftKey && key === "Backspace" && !query && d && d.state !== "downloading") return useBrowser.getState().removeDownload(d.id);
+    if (shiftKey && key === "Backspace" && !query && d && d.state !== "downloading") return reportBrowserCommand(removeDownload(windowId, d.id));
   };
 
   const filterInfo = FILTERS.find((f) => f.id === filter)!;
@@ -453,7 +455,7 @@ const FIELD_KEYS = [
 // ⇧⌫ removes the selected download only while the search field is empty, so it still deletes text.
 const EMPTY_FIELD_KEYS = [...FIELD_KEYS, { key: "Backspace", shiftKey: true }];
 
-function downloadActions(d: Download, exists: boolean): PaletteMenuAction[] {
+function downloadActions(windowId: string, d: Download, exists: boolean): PaletteMenuAction[] {
   const copy = { id: "copy", title: "Copy Download Link", icon: "link", hint: "⇧⌘C", run: () => copyText(d.url) };
   if (d.state === "downloading") {
     return [
@@ -475,14 +477,14 @@ function downloadActions(d: Download, exists: boolean): PaletteMenuAction[] {
       : []),
     ...(d.state === "finished" && d.path ? [{ id: "copyPath", title: "Copy Path", icon: "text.alignleft", run: () => copyText(d.path) }] : []),
     copy,
-    ...(exists ? [{ id: "trash", title: "Move to Trash", icon: "trash", separator: true, run: () => trashDownload(d) }] : []),
+    ...(exists ? [{ id: "trash", title: "Move to Trash", icon: "trash", separator: true, run: () => reportBrowserCommand(trashDownload(windowId, d)) }] : []),
     {
       id: "remove",
       title: "Remove from List",
       icon: "minus.circle",
       hint: exists ? "⇧⌫" : "↩",
       separator: !exists,
-      run: () => useBrowser.getState().removeDownload(d.id),
+      run: () => reportBrowserCommand(removeDownload(windowId, d.id)),
     },
   ];
 }

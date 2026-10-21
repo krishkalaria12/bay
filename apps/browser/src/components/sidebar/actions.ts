@@ -13,8 +13,7 @@ import {
   updateGroup,
   updatePinnedFolder,
 } from "../../runtime/organizeActions";
-import { activate } from "../../runtime/tabActions";
-import { useBrowser } from "../../store/browser";
+import { activate, updateTabDetails } from "../../runtime/tabActions";
 import { browserRead } from "../../store/read";
 import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
@@ -81,7 +80,7 @@ export async function startRename(windowId: string, target: Target) {
         confirmTitle: "Update",
         windowId,
       });
-      if (name !== null) useBrowser.getState().updateTab(tab.id, { customTitle: name });
+      if (name !== null) await updateTabDetails(tab.id, { customTitle: name });
       return;
     }
     const group = groupOf(s, tab.id);
@@ -100,7 +99,7 @@ export function commitRename(target: Target, text: string) {
   const name = text.trim();
   if (target.kind === "tab") {
     const tab = store().tabs[target.id];
-    if (tab) useBrowser.getState().updateTab(tab.id, { customTitle: name && name !== tab.title ? name : null });
+    if (tab) reportBrowserCommand(updateTabDetails(tab.id, { customTitle: name && name !== tab.title ? name : null }));
   } else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { name }));
   else reportBrowserCommand(updateGroup(target.id, { name }));
   endRename(target);
@@ -117,7 +116,7 @@ export async function openIconPicker(windowId: string, target: Target) {
 }
 
 export function setIcon(target: Target, icon: string | null) {
-  if (target.kind === "tab") useBrowser.getState().updateTab(target.id, { customIcon: icon });
+  if (target.kind === "tab") reportBrowserCommand(updateTabDetails(target.id, { customIcon: icon }));
   // A live folder's header row ("livefolder|<id>").
   else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
   else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { icon }));

@@ -24,6 +24,8 @@ import { toggleInspecting, useIsInspecting } from "./devMode";
 import { isLocalDevSite } from "./sites";
 import { DEV_BAR_HEIGHT, STRIPE_GAP } from "./constants";
 import { TOOLBAR_BUTTON_MID } from "../layout/constants";
+import { openCommandPanel } from "../../runtime/windowUiActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 
 /**
  * A page in Developer Mode's bar, as yab has it: its whole address on a hatched band, with the inspector, DevTools, its
@@ -155,7 +157,7 @@ function Address({ url, tabId, windowId, onFocus }: { url: string; tabId: string
         <Pressable
           onPress={() => {
             onFocus();
-            useBrowser.getState().openPanel(windowId, url);
+            reportBrowserCommand(openCommandPanel(windowId, url));
           }}
           style={{
             flex: 1,

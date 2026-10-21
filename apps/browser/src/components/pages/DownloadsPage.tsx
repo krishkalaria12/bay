@@ -14,6 +14,8 @@ import { Button, useFormColors } from "../settings/controls";
 import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
 import { PAGE_WIDTH } from "./constants";
 import { useFileExists } from "../useFileExists";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { clearDownloads, removeDownload } from "../../runtime/windowUiActions";
 
 export function DownloadsPage({ tabId }: { tabId: string }) {
   const theme = useTheme();
@@ -30,7 +32,7 @@ export function DownloadsPage({ tabId }: { tabId: string }) {
         onQuery={setQuery}
         placeholder="Search downloads"
         actions={
-          downloads.some((d) => d.state !== "downloading") ? <Button title="Clear All" onPress={() => useBrowser.getState().clearDownloads(windowId)} /> : null
+          downloads.some((d) => d.state !== "downloading") ? <Button title="Clear All" onPress={() => reportBrowserCommand(clearDownloads(windowId))} /> : null
         }
       />
       {shown.length === 0 ? (
@@ -122,7 +124,14 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
             ) : null}
             <IconButton icon="ellipsis" size={13} box={26} radius={6} onPress={() => void downloadMenu(d, windowId)} tooltip="More actions" />
             {d.state !== "downloading" && (
-              <IconButton icon="xmark" size={11} box={26} radius={6} onPress={() => useBrowser.getState().removeDownload(d.id)} tooltip="Remove from List" />
+              <IconButton
+                icon="xmark"
+                size={11}
+                box={26}
+                radius={6}
+                onPress={() => reportBrowserCommand(removeDownload(windowId, d.id))}
+                tooltip="Remove from List"
+              />
             )}
           </View>
         </ContextMenuArea>

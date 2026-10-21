@@ -87,6 +87,8 @@ import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "./windowButtons";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { closeGroup, moveGroup, placeTabs, updateGroup } from "../../runtime/organizeActions";
 import { browserRead } from "../../store/read";
+import { openNewTabPanel } from "../../lib/newTab";
+import { toggleDownloads } from "../../runtime/windowUiActions";
 
 // The drop-down strip (full screen, auto-hidden tabs) has no card to attach the selected tab to.
 const FloatingStrip = createContext(false);
@@ -151,10 +153,7 @@ export function TopTabStrip({
             box={STRIP_DOWNLOADS_BOX}
             radius={10}
             tooltip={`Downloads (${shortcutForCommand("downloads", "⇧⌘J")})`}
-            onPress={() => {
-              const s = useBrowser.getState();
-              s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);
-            }}
+            onPress={() => reportBrowserCommand(toggleDownloads(windowId))}
           />
         </View>
         {swipe && <SpaceSwipeArea surface="strip" style={StyleSheet.absoluteFill} pageWidth={pageWidth + flare * 2} />}
@@ -1354,7 +1353,7 @@ function NewTabButton({ windowId }: { windowId: string }) {
       <Pressable
         onPress={(e) => {
           if (modifiersOf(e).altKey) openNewTabInSplit(windowId);
-          else useBrowser.getState().openNewTabPanel(windowId);
+          else reportBrowserCommand(openNewTabPanel(windowId));
         }}
       >
         {({ pressed }) => (

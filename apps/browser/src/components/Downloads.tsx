@@ -14,6 +14,8 @@ import { SIDEBAR_FOOTER_DOWNLOADS } from "./layout/constants";
 import { openInternalPage } from "./pages/urls";
 import { useSidebarWidth } from "./sidebar/tokens";
 import { showToast } from "./layout/splitActions";
+import { reportBrowserCommand } from "../runtime/commands";
+import { removeDownload } from "../runtime/windowUiActions";
 
 // MARK: Formatting
 
@@ -107,16 +109,16 @@ export async function downloadMenu(d: Download, windowId: string) {
   if (choice === "copyPath") copyText(d.path);
   if (choice === "copy") copyText(d.url);
   if (choice === "page") openInternalPage("downloads", windowId);
-  if (choice === "trash") void trashDownload(d);
-  if (choice === "remove") useBrowser.getState().removeDownload(d.id);
+  if (choice === "trash") reportBrowserCommand(trashDownload(windowId, d));
+  if (choice === "remove") reportBrowserCommand(removeDownload(windowId, d.id));
 }
 
 export async function copyDownloadFile(d: Download) {
   if (!(await copyFile(d.path))) throw new Error("The file may have been moved or deleted.");
 }
 
-export async function trashDownload(d: Download) {
-  if (await moveToTrash(d.path)) useBrowser.getState().removeDownload(d.id);
+export async function trashDownload(windowId: string, d: Download) {
+  if (await moveToTrash(d.path)) await removeDownload(windowId, d.id);
 }
 
 const iconCache = new Map<string, string | null>();

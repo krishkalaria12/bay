@@ -30,9 +30,8 @@ import {
 } from "../../runtime/organizeActions";
 import { updateSettings } from "../../runtime/settingsActions";
 import { removeTabFromSplit } from "../../runtime/splitActions";
-import { closeTabs, duplicateTab, togglePin } from "../../runtime/tabActions";
+import { closeTabs, duplicateTab, togglePin, updateTabDetails } from "../../runtime/tabActions";
 import { moveTabsToWindow, restoreClosed } from "../../runtime/windowActions";
-import { useBrowser } from "../../store/browser";
 import { browserRead } from "../../store/read";
 import {
   activeTabId,
@@ -71,6 +70,7 @@ import { openSyncedTab, syncedDevicesMenuItem } from "../../sync/menu";
 import { setSidebarUi } from "./state";
 import { GROUP_COLORS, nearestGroupColor } from "./tokens";
 import { canMoveFolder, childFolderIds, folderDepth, folderTabIds, MAX_FOLDER_DEPTH } from "../../store/folders";
+import { openNewTabPanel } from "../../lib/newTab";
 
 const store = () => browserRead.getState();
 const sep = { separator: true } as const;
@@ -252,9 +252,9 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     withFolderMoveUndo(windowId, () =>
       placeTabs([tab.id], { pinned: false, row: true, folderId: folder?.parentId ?? null, beforeId: firstAfterFolder(tab.folderId!) }),
     );
-  else if (choice === "keep") useBrowser.getState().updateTab(tab.id, { kept: !tab.kept });
+  else if (choice === "keep") reportBrowserCommand(updateTabDetails(tab.id, { kept: !tab.kept }));
   else if (choice === "rename") void startRename(windowId, t);
-  else if (choice === "resetName") useBrowser.getState().updateTab(tab.id, { customTitle: null });
+  else if (choice === "resetName") reportBrowserCommand(updateTabDetails(tab.id, { customTitle: null }));
   else if (choice === "duplicate") reportBrowserCommand(duplicateTab(tab.id));
   else if (choice === "copyToWindow") reportBrowserCommand(openWindow(incognito ? { incognito: true, url: tab.url } : { spaceId: tab.spaceId, url: tab.url }));
   else if (choice === "siteControls") {
@@ -271,7 +271,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     );
   } else if (choice === "sleep") void sleepTab(tab.id);
   else if (choice === "icon") void openIconPicker(windowId, t);
-  else if (choice === "resetIcon") useBrowser.getState().updateTab(tab.id, { customIcon: null });
+  else if (choice === "resetIcon") reportBrowserCommand(updateTabDetails(tab.id, { customIcon: null }));
   else if (choice === "mute") toggleMute(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.
   else if (choice === "bookmark") reportBrowserCommand(bookmarkTab(windowId, tab.id));
@@ -382,7 +382,7 @@ export async function openGroupMenu(windowId: string, groupId: string) {
   else if (choice === "icon") void openIconPicker(windowId, target);
   else if (choice.startsWith("color:")) reportBrowserCommand(updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null }));
   else if (choice === "newTab") {
-    useBrowser.getState().openNewTabPanel(windowId, groupId);
+    reportBrowserCommand(openNewTabPanel(windowId, groupId));
   } else if (choice === "pin") reportBrowserCommand(moveGroup(groupId, { pinned: !g.pinned }));
   else if (choice === "duplicate") reportBrowserCommand(duplicateGroup(groupId));
   else if (choice === "collapse") reportBrowserCommand(updateGroup(groupId, { collapsed: !g.collapsed }));
@@ -454,7 +454,7 @@ export async function openSidebarMenu(windowId: string) {
     newLiveFolderMenuItem(),
   ]);
   if (choice && runNewLiveFolder(windowId, choice)) return;
-  if (choice === "newTab") useBrowser.getState().openNewTabPanel(windowId);
+  if (choice === "newTab") reportBrowserCommand(openNewTabPanel(windowId));
   else if (choice === "newFolder") reportBrowserCommand(newPinnedFolderWith(windowId));
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") reportBrowserCommand(cleanUpTabs(windowId));

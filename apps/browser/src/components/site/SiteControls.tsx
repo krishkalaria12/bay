@@ -37,6 +37,7 @@ import { defaultTarget, languageName, toggleTranslation, useTranslateState } fro
 import { reportBrowserCommand } from "../../runtime/commands";
 import { toggleBookmark } from "../../runtime/bookmarkActions";
 import { browserRead } from "../../store/read";
+import { setMuted } from "../../runtime/organizeActions";
 
 const PERMISSIONS: { type: SiteSettingType; title: string; icon: string; choices: SiteSettingValue[] }[] = [
   { type: "popups", title: "Pop-ups and Redirects", icon: "macwindow.on.rectangle", choices: ["allow", "block"] },
@@ -130,7 +131,7 @@ export function SiteControls({
     await setSiteSetting(profile, origin, type, value);
     setSettings(await getSiteSettings(profile, origin));
     if (type === "sound") {
-      useBrowser.getState().updateTab(tabId, { muted: value === "block" });
+      await setMuted([tabId], value === "block");
       void webviews.get(tabId)?.setMuted(value === "block");
     }
   };

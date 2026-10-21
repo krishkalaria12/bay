@@ -19,6 +19,8 @@ import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
 import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { openCommandPanel } from "../../runtime/windowUiActions";
 
 // `end`: the navigation buttons' room from the sidebar's right edge.
 const toggleMinWidth = (x: number, end: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + end;
@@ -99,7 +101,7 @@ function EmptyField({ windowId }: { windowId: string }) {
   const glass = useLiquidGlass();
   const { hovered, hoverProps } = useHover();
   const open = () => {
-    useBrowser.getState().openPanel(windowId, "");
+    reportBrowserCommand(openCommandPanel(windowId, ""));
   };
   return (
     <View {...hoverProps}>

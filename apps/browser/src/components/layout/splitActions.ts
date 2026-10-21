@@ -10,6 +10,7 @@ import { activeTabId } from "../../store/model";
 import { browserRead } from "../../store/read";
 import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
 import { MAX_SPLIT_PANES } from "../../store/constants";
+import { openNewTabPanel } from "../../lib/newTab";
 
 const store = () => browserRead.getState();
 
@@ -59,7 +60,7 @@ export const openNewTabInSplit = (windowId: string) => reportBrowserCommand(open
 export function splitWithCurrentTab(windowId: string) {
   reportBrowserCommand(
     openPane(windowId, {}).then(({ tabId, full }) => {
-      if (!tabId && !full) useBrowser.getState().openNewTabPanel(windowId);
+      if (!tabId && !full) return openNewTabPanel(windowId);
     }),
   );
 }

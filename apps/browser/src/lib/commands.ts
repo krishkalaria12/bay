@@ -1,7 +1,6 @@
 import { reportBrowserCommand } from "../runtime/commands";
 import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/shell";
 import { markdownLink } from "@bay/core";
-import { useBrowser } from "../store/browser";
 import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
 import { closeTab, createSpace, cycleSpace, focus, moveTabToSpace, moveTabToWindow, openWindow, switchSpace, toggleMute } from "./actions";
 import { bookmarkActivePage, bookmarkAllTabs } from "../components/bookmarks/actions";
@@ -32,6 +31,7 @@ import { activate, cycle, duplicateTab, moveTab, navigate, newTab, togglePin } f
 import { mergeAllWindows, reopenClosed, reopenClosedWindow, restoreClosed, toggleSidebar } from "../runtime/windowActions";
 import { browserRead } from "../store/read";
 import { addBookmark, addBookmarkFolder } from "../runtime/bookmarkActions";
+import { dismissCommandPanel, openCommandPanel, setFind, toggleDownloads } from "../runtime/windowUiActions";
 
 export function runCommand({ command, arg, windowId: requested }: CommandEvent) {
   const s = browserRead.getState();
@@ -126,9 +126,9 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "restoreClosed":
       return arg ? reportBrowserCommand(restoreClosed(arg, windowId)) : undefined;
     case "focusCommandBar":
-      return useBrowser.getState().openPanel(windowId, page?.url ?? "");
+      return reportBrowserCommand(openCommandPanel(windowId, page?.url ?? ""));
     case "closeTab":
-      if (ui?.panel.open) return useBrowser.getState().closePanel(windowId);
+      if (ui?.panel.open) return reportBrowserCommand(dismissCommandPanel(windowId));
       if (tabId && find?.open) return closeFind(tabId);
       return tabId ? void closeTab(tabId) : undefined;
     case "print":
@@ -151,20 +151,22 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "copyUrlAsMarkdown":
       return page ? copyText(markdownLink(page.customTitle || page.title, page.url)) : undefined;
     case "findInPage":
-      return page ? useBrowser.getState().setFind(page.id, { open: true, replace: false, focusRequest: Date.now() }) : undefined;
+      return page ? reportBrowserCommand(setFind(page.id, { open: true, replace: false, focusRequest: Date.now() })) : undefined;
     case "findAndReplace":
-      return page ? useBrowser.getState().setFind(page.id, { open: true, replace: true, focusRequest: Date.now() }) : undefined;
+      return page ? reportBrowserCommand(setFind(page.id, { open: true, replace: true, focusRequest: Date.now() })) : undefined;
     case "jumpToSelection":
       return page ? void jumpToSelection(page.id) : undefined;
     case "useSelectionForFind":
       if (!page || !web) return;
-      return void web.evaluate<string>("post('result', JSON.stringify(String(getSelection() || '').trim().slice(0, 500)))").then((query) => {
-        if (query) useBrowser.getState().setFind(page.id, { open: true, query, focusRequest: Date.now() });
-      });
+      return reportBrowserCommand(
+        web.evaluate<string>("post('result', JSON.stringify(String(getSelection() || '').trim().slice(0, 500)))").then((query) => {
+          if (query) return setFind(page.id, { open: true, query, focusRequest: Date.now() });
+        }),
+      );
     case "findNext":
     case "findPrevious":
       if (!page) return;
-      if (!find?.query) return useBrowser.getState().setFind(page.id, { open: true });
+      if (!find?.query) return reportBrowserCommand(setFind(page.id, { open: true }));
       return void web?.find(find.query, command === "findNext", true);
     case "reload":
       return void web?.reload();
@@ -249,7 +251,7 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     case "toggleMute":
       return page ? toggleMute(page.id) : undefined;
     case "downloads":
-      return useBrowser.getState().setDownloadsOpen(windowId, !ui?.downloadsOpen);
+      return reportBrowserCommand(toggleDownloads(windowId));
     case "cast":
       return void toggleCastPicker(windowId);
     case "showHistory":
@@ -332,12 +334,12 @@ function runLittleBayCommand(command: string, windowId: string): boolean {
   switch (command) {
     case "closeTab":
       // A blank Little Bay (⌘⌥N, nothing typed yet) closes with its field open.
-      if (s.windowUi[windowId]?.panel.open && tab?.url) useBrowser.getState().closePanel(windowId);
+      if (s.windowUi[windowId]?.panel.open && tab?.url) reportBrowserCommand(dismissCommandPanel(windowId));
       else if (tabId && s.find[tabId]?.open) closeFind(tabId);
       else closeLittleBay(windowId);
       return true;
     case "focusCommandBar":
-      useBrowser.getState().openPanel(windowId, tab?.url ?? "");
+      reportBrowserCommand(openCommandPanel(windowId, tab?.url ?? ""));
       return true;
     case "openFile":
       reportBrowserCommand(openInMainWindow(windowId));
@@ -361,7 +363,7 @@ function runPeekCommand(command: string, windowId: string): boolean {
 }
 
 function closeFind(tabId: string) {
-  useBrowser.getState().setFind(tabId, { open: false, count: null, active: 0 });
+  reportBrowserCommand(setFind(tabId, { open: false, count: null, active: 0 }));
   void webviews.get(tabId)?.stopFinding(false);
   void webviews.get(tabId)?.focus();
 }

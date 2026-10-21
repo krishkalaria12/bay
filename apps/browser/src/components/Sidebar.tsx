@@ -56,6 +56,8 @@ import {
 import { reportBrowserCommand } from "../runtime/commands";
 import { cleanUpTabs } from "../runtime/organizeActions";
 import { updateSettings } from "../runtime/settingsActions";
+import { openNewTabPanel } from "../lib/newTab";
+import { toggleDownloads } from "../runtime/windowUiActions";
 
 // The list's room and its height: with new tabs at the bottom, the New Tab row docks below the list once the list
 // leaves no room for it (at the top it stays the list's first row).
@@ -402,7 +404,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                         {current ? <CleanUpUpsell windowId={windowId} /> : null}
                       </View>
                       <ContextMenuArea style={{ flexGrow: 1, minHeight: inlineNewTab ? 24 : 0 }} onContextMenu={() => void openSidebarMenu(windowId)}>
-                        <View style={{ flex: 1 }} onDoubleClick={() => useBrowser.getState().openNewTabPanel(windowId)} />
+                        <View style={{ flex: 1 }} onDoubleClick={() => reportBrowserCommand(openNewTabPanel(windowId))} />
                       </ContextMenuArea>
                     </Animated.ScrollView>
                   </Animated.View>
@@ -544,10 +546,7 @@ function DownloadsButton({ windowId }: { windowId: string }) {
       box={SIDEBAR_FOOTER_DOWNLOADS.size}
       radius={8}
       tooltip={`Downloads (${shortcutForCommand("downloads", "⇧⌘J")})`}
-      onPress={() => {
-        const s = useBrowser.getState();
-        s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);
-      }}
+      onPress={() => reportBrowserCommand(toggleDownloads(windowId))}
     />
   );
 }
@@ -563,7 +562,7 @@ function NewTabRow({ windowId }: { windowId: string }) {
         style={{ flex: 1 }}
         onPress={(e) => {
           if ((e.nativeEvent as unknown as { altKey?: boolean }).altKey) openNewTabInSplit(windowId);
-          else useBrowser.getState().openNewTabPanel(windowId);
+          else reportBrowserCommand(openNewTabPanel(windowId));
         }}
       >
         {({ pressed }) => (

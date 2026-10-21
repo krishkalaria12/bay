@@ -7,7 +7,6 @@ import { StyleSheet, Text } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
 import { reportBrowserCommand } from "../../runtime/commands";
-import { useBrowser } from "../../store/browser";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
 import type { Tab } from "../../store/types";
 import { CommandPanel } from "../CommandPanel";
@@ -22,6 +21,7 @@ import { Favicon, IconButton, useHover } from "../primitives";
 import { copyPageUrl } from "../site/selection";
 import { openInMainWindow } from "./actions";
 import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_FIELD_HEIGHT, SMALL_FIELD_LEFT, SMALL_LIGHTS_CENTER } from "./constants";
+import { openCommandPanel } from "../../runtime/windowUiActions";
 
 // Arc's Little Arc as a Bay window: a thin bar in the profile's colour (window buttons, the page's favicon, host
 // and title, Copy Link, Open in Bay) over one page card. Dia's card styling, the top strip's 6 pt inset.
@@ -132,7 +132,7 @@ function PageField({ tab, windowId, hidden }: { tab: Tab; windowId: string; hidd
     <View ref={field} onLayout={anchor} {...hoverProps} style={{ flex: 1, opacity: hidden ? 0 : 1 }}>
       <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => tab.url && void showUrlBarMenu(tab)}>
         <Pressable
-          onPress={() => useBrowser.getState().openPanel(windowId, tab.url)}
+          onPress={() => reportBrowserCommand(openCommandPanel(windowId, tab.url))}
           style={{
             flex: 1,
             flexDirection: "row",
