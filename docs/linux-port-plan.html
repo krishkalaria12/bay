@@ -1276,9 +1276,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   </td>
                 </tr>
                 <tr>
-                  <td>Known shared-runtime gaps: windows Chrome opens itself, and the Settings, Import and Task Manager utility windows</td>
+                  <td>Shared-runtime gaps: windows Chrome opens itself, and the Settings, Import and Task Manager utility windows</td>
                   <td><code>docs/windows-implementation-status.md</code></td>
-                  <td><span class="chip Shared fix">warn</span> Fixed once for both platforms</td>
+                  <td><span class="chip ok">Done in feat/windows</span> Linux gets the same behavior through the merge</td>
                 </tr>
                 <tr>
                   <td>Capability table and OS seam</td>
@@ -1361,7 +1361,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <strong>Host sources</strong> (<a href="#p3">Phase&nbsp;3</a>): the CSD frame view, Linux platform services, notifications, the
                   <code>_linux.cc</code> engine siblings, and the <code>is_win</code> gates opened where the code is shared.
                 </li>
-                <li><strong>Shared-runtime gaps</strong>: Chrome-opened windows and the utility windows, fixed once for Windows and Linux.</li>
+                <li><strong>Shared-runtime gaps</strong>: Chrome-opened windows and the utility windows, fixed on <code>feat/windows</code> and merged.</li>
                 <li>
                   <strong>UI</strong> (<a href="#p4">Phase&nbsp;4</a>, <a href="#p5">5</a>): SVG icons, caption buttons in the desktop's layout, Wayland window
                   rules, edge peek without a global pointer.
@@ -2270,8 +2270,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>Shared-runtime gaps inherited from Windows: windows Chrome opens itself, and the Settings, Import and Task Manager utility windows</td>
-                  <td><span class="chip warn">Medium</span></td>
-                  <td>Fix once on <code>feat/windows</code> and merge; Linux gets the same behavior</td>
+                  <td><span class="chip ok">Fixed</span></td>
+                  <td>Fixed on <code>feat/windows</code> and merged; Task Manager still cannot match processes to tabs</td>
                 </tr>
                 <tr>
                   <td>
