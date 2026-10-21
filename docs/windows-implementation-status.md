@@ -1,6 +1,6 @@
 # Windows implementation checkpoint
 
-Updated 20 October 2026. Windows 10 and Windows 11 x64 are supported targets.
+Updated 21 October 2026. Windows 10 and Windows 11 x64 are supported targets.
 Mica requires Windows 11 build 22621 or later. macOS keeps its existing native
 host. The `ios` directories contain macOS sources, not mobile application targets.
 
@@ -98,15 +98,23 @@ and disconnects without falling back to the local writable store.
 Behind `--bay-shared-runtime`, a browser-owned detached WebContents holds the
 coordinator, authenticates document connections and retains accepted state for
 bounded crash recovery. Native projections remove other windows' private data;
-global engine, data and window events go to the coordinator. This experimental
-mode deliberately stops before the legacy UI entry, which still owns global
-services. The coordinator and visible UI entries are not wired together yet.
+global engine, data and window events go to the coordinator. The coordinator
+runner now owns cleanup timers, abandoned new-tab cleanup, session/download and
+Live persistence, native history/bookmark/favicon/profile-data services, and
+live/calendar/meeting watchers. They use the authority store and stop on
+disconnect or publication failure. Pending live/calendar results cannot write
+after disposal. Final saves acknowledge session, downloads and Live documents;
+cancelling quit resumes their writers. The gated single-runtime entry reuses
+this service bundle. Window/sidebar mounting starts none of these services.
+This experimental mode still stops before the legacy UI entry. The coordinator
+and visible UI entries are not wired together yet.
 Additional application windows remain gated pending the remaining command
 migration and service ownership. Bulk import, sync, native page facts (address,
 zoom, find results, live items) and pages Chrome already opened (`adoptId`)
-still access the writable singleton. Global
-service startup and cross-renderer page handoff must move to the coordinator
-before enabling the shared UI entry. In-process two-client tests do not replace
+still access the writable singleton. Native page-fact routing, remaining global
+integrations and cross-renderer page handoff must move to the coordinator before
+enabling the shared UI entry. Live, calendar and meeting-alert UI stores still
+need a cross-renderer feed when that entry is wired. In-process two-client tests do not replace
 native two-window acceptance. Live document IO now starts
 explicitly instead of running when window UI imports its store.
 
@@ -114,7 +122,7 @@ Native updater and close-button shutdown preparation now participate in the
 acknowledged final session save. Native page controls cover printing, saving,
 screenshots, certificate details and media operations. Windows browser and
 installer identities, executable names, associations and taskbar IDs now agree.
-Remaining work includes shared service ownership, page fact routing, complete
+Remaining work includes page fact routing, remaining global integrations, complete
 native event/OS coverage and the Windows acceptance runs. The diagnostic page
 does not establish a complete browser host.
 
