@@ -33,6 +33,7 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/base/base_window.h"
 #include "url/gurl.h"
 
@@ -85,6 +86,19 @@ class TabBroker::Entry final : public content::WebContentsObserver {
   void WebContentsDestroyed() override {
     ForgetPage();
     contents = nullptr;
+  }
+  void DidOpenRequestedURL(content::WebContents* opened,
+                           content::RenderFrameHost*,
+                           const GURL& url,
+                           const content::Referrer&,
+                           WindowOpenDisposition disposition,
+                           ui::PageTransition,
+                           bool,
+                           bool) override {
+    if (key.empty() || !contents || !profile || !AppRuntime::Enabled())
+      return;
+    if (auto* runtime = AppRuntime::GetIfStarted())
+      runtime->OpenPage(contents, opened, key, {}, url, disposition);
   }
   void EmitFact(const char* event, base::DictValue payload) {
     if (!contents || !profile || key.empty() ||
@@ -247,6 +261,8 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* browser,
   const std::string adopt_id = adopt_value ? adopt_value->GetString() : "";
   if (key.size() > 256 || adopt_id.size() > 256)
     return {.error = "Transfer key or adoption id is too long"};
+  if (AppRuntime::Enabled() && !adopt_id.empty() && key.empty())
+    return {.error = "An adopted page requires its accepted application tab key"};
   const auto profile_name = browser->GetProfile()
                                 ->GetOriginalProfile()
                                 ->GetPath()
@@ -260,7 +276,7 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* browser,
   if (AppRuntime::Enabled() && !key.empty()) {
     auto* runtime = AppRuntime::GetIfStarted();
     if (!runtime || !runtime->CanMountPage(WindowRegistry::Get().IdFor(browser),
-                                           key, native_profile))
+                                           key, native_profile, adopt_id))
       return {.error =
                   "The tab key does not belong to this window and profile"};
   }
@@ -327,6 +343,10 @@ TabBroker::Result TabBroker::Mount(BrowserWindowInterface* browser,
   entry->lease = ++next_lease_;
   CHECK_NE(entry->lease, 0u);
   entry->ObserveFacts(native_profile);
+  if (!adopt_id.empty() && AppRuntime::Enabled()) {
+    if (auto* runtime = AppRuntime::GetIfStarted())
+      runtime->PageOpenMounted(adopt_id, key);
+  }
   return {entry->contents.get(), entry->lease, reused, {}};
 }
 std::optional<std::string> TabBroker::PrepareTransfer(const std::string& key) {
@@ -417,7 +437,7 @@ bool TabBroker::PrepareForQuit() {
   }
   return true;
 }
-TabBroker::OfferResult TabBroker::Offer(content::WebContents* contents) {
+TabBroker::OfferResult TabBroker::Offer(content::WebContents* contents, bool park) {
   PruneDestroyed();
   if (!contents)
     return {.error = "A real Chrome tab is required"};
@@ -425,14 +445,20 @@ TabBroker::OfferResult TabBroker::Offer(content::WebContents* contents) {
   if (it == entries_.end())
     it = entries_.emplace(contents, std::make_unique<Entry>(contents)).first;
   auto& entry = *it->second;
-  if (entry.lease)
+  if (entry.lease || !entry.key.empty())
     return {.error = "The offered Chrome tab already has a mounted owner"};
-  if (auto error = Park(entry))
-    return {.error = *error};
+  if (park) {
+    if (auto error = Park(entry))
+      return {.error = *error};
+  }
   if (entry.offer.empty())
     entry.offer =
         "bay-tab:" + base::Uuid::GenerateRandomV4().AsLowercaseString();
   return {entry.offer, {}};
+}
+bool TabBroker::HasPageKey(content::WebContents* contents) const {
+  const auto it = entries_.find(contents);
+  return it != entries_.end() && !it->second->key.empty();
 }
 void TabBroker::ReleaseOffer(const std::string& adopt_id) {
   PruneDestroyed();

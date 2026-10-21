@@ -531,6 +531,7 @@ base::DictValue NativeHost::Info() const {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
     methods->Append("BayCEF.stopPageEvents");
+    methods->Append("BayCEF.finishPageOpen");
   }
   return info;
 }
@@ -689,6 +690,26 @@ void NativeHost::Invoke(const std::string& module,
        args.size() > static_cast<size_t>(contract->max_args))) {
     std::move(callback).Run(
         Failure("invalid_args", "Invalid native argument count"));
+    return;
+  }
+  if (module == "BayCEF" && method == "finishPageOpen") {
+    const auto* offer = At(args, 0);
+    const auto* target = At(args, 1);
+    if (!offer || !offer->is_string() || offer->GetString().empty() ||
+        offer->GetString().size() > 256 || !target ||
+        (!target->is_none() &&
+         (!target->is_string() || target->GetString().empty() ||
+          target->GetString().size() > 256))) {
+      std::move(callback).Run(Failure("invalid_args", "Invalid page offer result"));
+      return;
+    }
+    auto* runtime = AppRuntime::GetIfStarted();
+    const bool accepted = AppRuntime::Enabled() && is_coordinator() && runtime &&
+                          runtime->FinishPageOpen(
+                              this, offer->GetString(), target->GetIfString());
+    std::move(callback).Run(
+        accepted ? Success()
+                 : Failure("forbidden", "The page offer has no accepted target"));
     return;
   }
   if (module == "BayCEF" &&

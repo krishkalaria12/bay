@@ -47,6 +47,22 @@ bool CanMountRuntimePage(const base::DictValue& state,
                          const std::string& tab_id,
                          const std::string& profile);
 
+// A native offer can name one accepted, owned destination only. Public profile
+// names are Chrome profile ids; private profiles receive the target window id.
+struct RuntimePageOpenTarget {
+  std::string tab_id;
+  std::string window_id;
+  std::string profile;
+};
+std::optional<RuntimePageOpenTarget> FindRuntimePageOpenTarget(
+    const base::DictValue& state,
+    const std::string& offer_id,
+    const std::string& profile,
+    bool incognito);
+bool CanMountRuntimePageOffer(const base::DictValue& state,
+                              const std::string& tab_id,
+                              const std::string& adopt_id);
+
 // Bounded latest facts survive coordinator replacement. Sequence numbers are
 // browser-owned and remain monotonic across epochs and page remounts.
 class RuntimePageEventCache {

@@ -8,9 +8,11 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_registry.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/find_in_page/find_notification_details.h"
 #include "components/find_in_page/find_tab_helper.h"
@@ -67,6 +69,20 @@ TabObserver::TabObserver(content::WebContents* contents, FactCallback facts)
   EnsureObservers();
 }
 TabObserver::~TabObserver() = default;
+void TabObserver::DidOpenRequestedURL(
+    content::WebContents* opened, content::RenderFrameHost*, const GURL& url,
+    const content::Referrer&, WindowOpenDisposition disposition,
+    ui::PageTransition, bool, bool) {
+  // App tabs have one broker-owned observer. Standalone extension views only
+  // have this lease-scoped observer, so use their trusted host window instead.
+  if (!AppRuntime::Enabled() || facts_ || !host_ || !current() ||
+      TabBroker::Get().HasPageKey(web_contents()) || !host_->browser())
+    return;
+  if (auto* runtime = AppRuntime::GetIfStarted())
+    runtime->OpenPage(web_contents(), opened, {},
+                      WindowRegistry::Get().IdFor(host_->browser()), url,
+                      disposition);
+}
 content::WebContents* TabObserver::contents() const {
   return web_contents();
 }

@@ -266,16 +266,26 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
   }
   if (incognito && !profile_name.empty() && profile_name != "incognito:" + id)
     return Failure("Incognito profile id must match its window id");
-  base::FilePath root;
-  if (!base::PathService::Get(chrome::DIR_USER_DATA, &root))
-    return Failure("The user data directory is unavailable");
-  const auto profile_path = root.AppendASCII(
-      profile_name.empty() || incognito ? "Default" : profile_name);
-  auto* manager = g_browser_process->profile_manager();
-  auto* profile = manager ? manager->GetProfileByPath(profile_path) : nullptr;
-  if (!profile)
-    return Failure("The requested profile has not been loaded");
-  if (incognito) {
+  Profile* profile = nullptr;
+  if (!context.is_window() && AppRuntime::Enabled()) {
+    if (auto* runtime = AppRuntime::GetIfStarted())
+      profile = runtime->PageOpenProfileForWindow(id);
+    if (profile && !incognito)
+      return Failure("The offered page requires a private window");
+  }
+  const bool offered_profile = !!profile;
+  if (!profile) {
+    base::FilePath root;
+    if (!base::PathService::Get(chrome::DIR_USER_DATA, &root))
+      return Failure("The user data directory is unavailable");
+    const auto profile_path = root.AppendASCII(
+        profile_name.empty() || incognito ? "Default" : profile_name);
+    auto* manager = g_browser_process->profile_manager();
+    profile = manager ? manager->GetProfileByPath(profile_path) : nullptr;
+    if (!profile)
+      return Failure("The requested profile has not been loaded");
+  }
+  if (incognito && !offered_profile) {
     // Each Bay private window has its own cookie/storage context. Non-primary
     // Chrome OTR profiles intentionally do not expose installed extensions.
     const auto otr = Profile::OTRProfileID::CreateUniqueForBay();

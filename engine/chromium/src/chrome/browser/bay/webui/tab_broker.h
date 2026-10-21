@@ -48,8 +48,9 @@ class TabBroker final {
 
   // Chrome-created popup/new-tab pages can be offered without re-navigation.
   // Tokens have no expiry; the producer must explicitly release rejected ones.
-  OfferResult Offer(content::WebContents* contents);
+  OfferResult Offer(content::WebContents* contents, bool park = true);
   void ReleaseOffer(const std::string& adopt_id);
+  bool HasPageKey(content::WebContents* contents) const;
   void SetProfileReleasedCallback(
       base::RepeatingCallback<void(base::WeakPtr<Profile>)> callback);
   // Must run before explicit app quit starts destroying browser profiles.

@@ -9,12 +9,14 @@
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "base/uuid.h"
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/native_host.mojom.h"
 #include "chrome/browser/bay/webui/runtime_state.h"
+#include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
@@ -22,6 +24,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/navigation_controller.h"
@@ -189,7 +192,13 @@ class RuntimeConnection final
           "invalid_commit", "Expected the next complete application state"));
       return;
     }
+    if (!runtime_->ValidatePageOpens(*commit->FindDict("state"))) {
+      std::move(callback).Run(Failure(
+          "invalid_commit", "Page adoption does not match its native offer"));
+      return;
+    }
     runtime_->accepted_ = std::move(*commit);
+    runtime_->ReconcilePageOpens();
     runtime_->page_events_.Prune(*runtime_->accepted_->FindDict("state"));
     if (runtime_->ready_) {
       for (const auto& [id, connection] : runtime_->connections_) {
@@ -259,6 +268,13 @@ struct AppRuntime::Pending {
   RuntimeResultKind result_kind = RuntimeResultKind::kNone;
   mojom::AppRuntime::DispatchCallback callback;
   base::OneShotTimer deadline;
+};
+
+struct AppRuntime::PageOpen {
+  base::WeakPtr<content::WebContents> contents;
+  base::WeakPtr<Profile> profile;
+  base::DictValue event;
+  std::optional<RuntimePageOpenTarget> target;
 };
 
 void RuntimeConnection::Resolve(const std::string& token,
@@ -413,10 +429,13 @@ base::WeakPtr<NativeHost> AppRuntime::coordinator_host() const {
 }
 bool AppRuntime::CanMountPage(const std::string& window_id,
                               const std::string& tab_id,
-                              const std::string& profile) const {
+                              const std::string& profile,
+                              const std::string& adopt_id) const {
   return !shutdown_ && accepted_ &&
          CanMountRuntimePage(*accepted_->FindDict("state"), window_id, tab_id,
-                             profile);
+                             profile) &&
+         CanMountRuntimePageOffer(*accepted_->FindDict("state"), tab_id,
+                                  adopt_id);
 }
 bool AppRuntime::StartPageEvents(NativeHost* host) {
   if (shutdown_ || !host || coordinator_host_.get() != host || !coordinator_ ||
@@ -424,8 +443,11 @@ bool AppRuntime::StartPageEvents(NativeHost* host) {
     return false;
   if (std::exchange(page_events_started_, true))
     return true;
+  ReconcilePageOpens();
   for (auto& event : page_events_.Replay(*accepted_->FindDict("state")))
     host->Emit("BayCEF", "onPageEvent", base::Value(std::move(event)));
+  for (const auto& [id, opened] : page_opens_)
+    host->Emit("BayCEF", "onPageOpen", base::Value(opened->event.Clone()));
   return true;
 }
 bool AppRuntime::StopPageEvents(NativeHost* host) {
@@ -450,6 +472,200 @@ void AppRuntime::PageEvent(const std::string& tab_id,
 }
 void AppRuntime::ForgetPage(const std::string& tab_id) {
   page_events_.Remove(tab_id);
+}
+void AppRuntime::OpenPage(content::WebContents* source,
+                          content::WebContents* opened,
+                          const std::string& source_tab_id,
+                          const std::string& source_window_id,
+                          const GURL& url,
+                          WindowOpenDisposition disposition) {
+  if (shutdown_ || !accepted_ || !source || !opened || source == opened ||
+      !url.is_valid() || url.SchemeIs("javascript") || url.SchemeIs("bay") ||
+      url.spec().size() > kMaximumRequestBytes)
+    return;
+  ReconcilePageOpens();
+  if (page_opens_.size() >= kMaximumPending)
+    return;
+  auto* source_profile = Profile::FromBrowserContext(source->GetBrowserContext());
+  auto* opened_profile = Profile::FromBrowserContext(opened->GetBrowserContext());
+  if (opened_profile->GetOriginalProfile() != source_profile->GetOriginalProfile())
+    return;
+  std::string window_id = source_window_id;
+  if (auto* browser = GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(source))
+    window_id = WindowRegistry::Get().IdFor(browser);
+  const auto& state = *accepted_->FindDict("state");
+  const auto* tab = state.FindDict("tabs")->FindDict(source_tab_id);
+  if (!source_tab_id.empty()) {
+    const auto* owner = tab ? tab->FindString("windowId") : nullptr;
+    if (window_id.empty() && owner)
+      window_id = *owner;
+  }
+  const auto name = source_profile->GetOriginalProfile()->GetPath().BaseName().AsUTF8Unsafe();
+  const std::string regular_profile = name == "Default" ? "" : name;
+  const std::string profile = source_profile->IsOffTheRecord()
+                                  ? "incognito:" + window_id
+                                  : regular_profile;
+  const auto* window = state.FindDict("windows")->FindDict(window_id);
+  if (!window || window_id.empty() ||
+      window->FindBool("incognito").value_or(false) != source_profile->IsOffTheRecord() ||
+      (!source_tab_id.empty() && !CanAcceptRuntimePageEvent(state, source_tab_id, profile)))
+    return;
+  const char* intent = nullptr;
+  switch (disposition) {
+    // Current-tab navigation already belongs to the source WebContents. A
+    // separate offered page cannot replace that tab's broker identity.
+    case WindowOpenDisposition::CURRENT_TAB: return;
+    case WindowOpenDisposition::NEW_BACKGROUND_TAB: intent = "background"; break;
+    case WindowOpenDisposition::NEW_WINDOW:
+    case WindowOpenDisposition::NEW_POPUP: intent = "window"; break;
+    case WindowOpenDisposition::OFF_THE_RECORD: intent = "incognito"; break;
+    case WindowOpenDisposition::NEW_SPLIT_VIEW: intent = "split"; break;
+    case WindowOpenDisposition::NEW_FOREGROUND_TAB:
+    case WindowOpenDisposition::SINGLETON_TAB:
+    case WindowOpenDisposition::SWITCH_TO_TAB: intent = "foreground"; break;
+    default: return;
+  }
+  base::DictValue event;
+  event.Set("sourceWindowId", window_id);
+  if (!source_tab_id.empty())
+    event.Set("sourceTabId", source_tab_id);
+  event.Set("sourceProfile", profile);
+  event.Set("profile", source_profile->IsOffTheRecord() &&
+                               source_profile == opened_profile
+                           ? profile : regular_profile);
+  event.Set("incognito", opened_profile->IsOffTheRecord());
+  event.Set("url", url.spec());
+  event.Set("disposition", intent);
+  // Chrome is still attaching the newly created TabModel during this callback.
+  // Detach only after its open/navigation stack has completely unwound.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&AppRuntime::OfferPage,
+                               weak_factory_.GetWeakPtr(), opened->GetWeakPtr(),
+                               opened_profile->GetWeakPtr(), std::move(event)));
+}
+void AppRuntime::OfferPage(base::WeakPtr<content::WebContents> contents,
+                           base::WeakPtr<Profile> profile,
+                           base::DictValue event) {
+  if (shutdown_ || !contents || !profile ||
+      page_opens_.size() >= kMaximumPending ||
+      contents->GetBrowserContext() != profile.get())
+    return;
+  // Chrome destroys a primary OTR profile when its last browser closes. Keep
+  // this page attached until its destination browser exists; Mount then moves
+  // it without leaving that exact profile temporarily without a browser.
+  auto offered = TabBroker::Get().Offer(contents.get(), !profile->IsIncognitoProfile());
+  if (!offered.error.empty() || page_opens_.contains(offered.adopt_id))
+    return;
+  event.Set("offerId", offered.adopt_id);
+  auto opened = std::make_unique<PageOpen>();
+  opened->contents = contents;
+  opened->profile = profile;
+  opened->event = std::move(event);
+  auto* pending = opened.get();
+  page_opens_[offered.adopt_id] = std::move(opened);
+  if (page_events_started_ && coordinator_host_)
+    coordinator_host_->Emit("BayCEF", "onPageOpen", base::Value(pending->event.Clone()));
+}
+bool AppRuntime::ValidatePageOpens(const base::DictValue& state) const {
+  std::map<std::string, Profile*> profiles;
+  for (const auto& [id, opened] : page_opens_) {
+    bool named = false;
+    for (const auto [tab_id, value] : *state.FindDict("tabs")) {
+      const auto& tab = value.GetDict();
+      for (const char* field : {"adoptId", "wakeAdoptId"}) {
+        const auto* token = tab.FindString(field);
+        named |= token && *token == id;
+      }
+    }
+    if (!named)
+      continue;
+    if (!opened->profile || !opened->contents)
+      return false;
+    const auto* profile = opened->event.FindString("profile");
+    auto target = FindRuntimePageOpenTarget(state, id, *profile,
+                                            opened->profile->IsOffTheRecord());
+    if (!target)
+      return false;
+    if (opened->target &&
+        (opened->target->tab_id != target->tab_id ||
+         opened->target->profile != target->profile))
+      return false;
+    if (const auto* source = opened->event.FindString("sourceProfile");
+        source && source->starts_with("incognito:") &&
+        target->profile != *source)
+      return false;
+    if (auto* window = WindowRegistry::Get().Find(target->window_id);
+        window && window->GetProfile() != opened->profile.get())
+      return false;
+    const auto [existing, inserted] =
+        profiles.emplace(target->window_id, opened->profile.get());
+    if (!inserted && existing->second != opened->profile.get())
+      return false;
+  }
+  return true;
+}
+void AppRuntime::ReconcilePageOpens() {
+  std::vector<std::string> release;
+  const auto& state = *accepted_->FindDict("state");
+  for (const auto& [id, opened] : page_opens_) {
+    if (!opened->contents || !opened->profile) {
+      release.push_back(id);
+      continue;
+    }
+    auto target = FindRuntimePageOpenTarget(
+        state, id, *opened->event.FindString("profile"),
+        opened->profile->IsOffTheRecord());
+    if (target) {
+      opened->target = std::move(target);
+    } else {
+      const auto* source_tab = opened->event.FindString("sourceTabId");
+      const bool source_exists = source_tab
+          ? CanAcceptRuntimePageEvent(state, *source_tab,
+                                      *opened->event.FindString("sourceProfile"))
+          : state.FindDict("windows")->contains(
+                *opened->event.FindString("sourceWindowId"));
+      if (opened->target || !source_exists)
+        release.push_back(id);
+    }
+  }
+  for (const auto& id : release)
+    ReleasePageOpen(id);
+}
+bool AppRuntime::FinishPageOpen(NativeHost* host,
+                                const std::string& offer_id,
+                                const std::string* target_tab_id) {
+  if (shutdown_ || coordinator_host_.get() != host || !coordinator_ ||
+      !coordinator_->Authorized())
+    return false;
+  const auto found = page_opens_.find(offer_id);
+  if (found == page_opens_.end())
+    return true;  // A mounted or already rejected offer is complete.
+  const auto& target = found->second->target;
+  if (target_tab_id)
+    return target && target->tab_id == *target_tab_id;
+  if (target)
+    return false;  // An accepted page remains owned until mount or tab close.
+  ReleasePageOpen(offer_id);
+  return true;
+}
+void AppRuntime::ReleasePageOpen(std::string offer_id) {
+  page_opens_.erase(offer_id);
+  TabBroker::Get().ReleaseOffer(offer_id);
+}
+void AppRuntime::PageOpenMounted(const std::string& offer_id,
+                                const std::string& tab_id) {
+  const auto found = page_opens_.find(offer_id);
+  if (found != page_opens_.end() && found->second->target &&
+      found->second->target->tab_id == tab_id)
+    page_opens_.erase(found);
+}
+Profile* AppRuntime::PageOpenProfileForWindow(const std::string& window_id) const {
+  for (const auto& [id, opened] : page_opens_) {
+    if (opened->target && opened->target->window_id == window_id &&
+        opened->profile && opened->profile->IsOffTheRecord())
+      return opened->profile.get();
+  }
+  return nullptr;
 }
 void AppRuntime::Bind(content::WebUI* web_ui,
                       mojo::PendingReceiver<mojom::AppRuntime> receiver) {
@@ -585,6 +801,8 @@ void AppRuntime::Shutdown() {
   coordinator_.reset();
   coordinator_host_.reset();
   page_events_started_ = false;
+  while (!page_opens_.empty())
+    ReleasePageOpen(page_opens_.begin()->first);
   Observe(nullptr);
   contents_.reset();
   profile_keep_alive_.reset();

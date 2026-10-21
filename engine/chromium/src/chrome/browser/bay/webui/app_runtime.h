@@ -17,7 +17,9 @@
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "ui/base/window_open_disposition.h"
 
+class GURL;
 class BrowserWindowInterface;
 class Profile;
 class ProfileManager;
@@ -47,7 +49,20 @@ class AppRuntime final : public ProfileManagerObserver,
   base::WeakPtr<NativeHost> coordinator_host() const;
   bool CanMountPage(const std::string& window_id,
                     const std::string& tab_id,
-                    const std::string& profile) const;
+                    const std::string& profile,
+                    const std::string& adopt_id) const;
+  void OpenPage(content::WebContents* source,
+                content::WebContents* opened,
+                const std::string& source_tab_id,
+                const std::string& source_window_id,
+                const GURL& url,
+                WindowOpenDisposition disposition);
+  bool FinishPageOpen(NativeHost* host,
+                      const std::string& offer_id,
+                      const std::string* target_tab_id);
+  void PageOpenMounted(const std::string& offer_id,
+                       const std::string& tab_id);
+  Profile* PageOpenProfileForWindow(const std::string& window_id) const;
   bool StartPageEvents(NativeHost* host);
   bool StopPageEvents(NativeHost* host);
   void PageEvent(const std::string& tab_id,
@@ -65,6 +80,13 @@ class AppRuntime final : public ProfileManagerObserver,
   ~AppRuntime() override;
   friend struct std::default_delete<AppRuntime>;
   struct Pending;
+  struct PageOpen;
+  void OfferPage(base::WeakPtr<content::WebContents> opened,
+                 base::WeakPtr<Profile> profile,
+                 base::DictValue event);
+  bool ValidatePageOpens(const base::DictValue& state) const;
+  void ReconcilePageOpens();
+  void ReleasePageOpen(std::string offer_id);
   void Start();
   void RetireUnusedStartupWindow();
   void ProfileLoaded(Profile* profile);
@@ -96,6 +118,7 @@ class AppRuntime final : public ProfileManagerObserver,
   std::map<std::string, std::unique_ptr<Pending>> pending_;
   std::optional<base::DictValue> accepted_;
   RuntimePageEventCache page_events_;
+  std::map<std::string, std::unique_ptr<PageOpen>> page_opens_;
   bool page_events_started_ = false;
   std::string epoch_;
   base::OneShotTimer restart_;

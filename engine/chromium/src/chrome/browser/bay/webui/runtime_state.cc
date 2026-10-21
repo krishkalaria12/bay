@@ -1553,6 +1553,53 @@ bool CanMountRuntimePage(const base::DictValue& state,
   const auto* owner = tab->FindString("windowId");
   return owner && *owner == window_id;
 }
+bool CanMountRuntimePageOffer(const base::DictValue& state,
+                              const std::string& tab_id,
+                              const std::string& adopt_id) {
+  const auto* tabs = state.FindDict("tabs");
+  const auto* tab = tabs ? tabs->FindDict(tab_id) : nullptr;
+  if (!tab)
+    return false;
+  const auto* adopted = tab->FindString("adoptId");
+  const auto* wake = tab->FindString("wakeAdoptId");
+  if (adopt_id.empty())
+    return (!adopted || adopted->empty()) && (!wake || wake->empty());
+  return (adopted && *adopted == adopt_id) || (wake && *wake == adopt_id);
+}
+std::optional<RuntimePageOpenTarget> FindRuntimePageOpenTarget(
+    const base::DictValue& state,
+    const std::string& offer_id,
+    const std::string& profile,
+    bool incognito) {
+  if (offer_id.empty())
+    return std::nullopt;
+  const auto* tabs = state.FindDict("tabs");
+  if (!tabs)
+    return std::nullopt;
+  std::optional<RuntimePageOpenTarget> target;
+  for (const auto [id, value] : *tabs) {
+    if (!value.is_dict())
+      continue;
+    const auto& tab = value.GetDict();
+    const auto* adopted = tab.FindString("adoptId");
+    const auto* wake = tab.FindString("wakeAdoptId");
+    if ((!adopted || *adopted != offer_id) && (!wake || *wake != offer_id))
+      continue;
+    if (target || tab.FindBool("unloaded").value_or(false))
+      return std::nullopt;
+    const auto* owner = tab.FindString("windowId");
+    const std::string expected = incognito && owner ? "incognito:" + *owner
+                                                    : profile;
+    if (!owner || !CanMountRuntimePage(state, *owner, std::string(id), expected))
+      return std::nullopt;
+    const auto* windows = state.FindDict("windows");
+    const auto* window = windows ? windows->FindDict(*owner) : nullptr;
+    if (!window || window->FindBool("incognito").value_or(false) != incognito)
+      return std::nullopt;
+    target = RuntimePageOpenTarget{std::string(id), *owner, expected};
+  }
+  return target;
+}
 std::optional<base::DictValue> RuntimePageEventCache::Record(
     const base::DictValue& state,
     const std::string& tab_id,

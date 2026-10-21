@@ -867,6 +867,13 @@ export const nativeContracts = {
           "maxArgs": 0,
           "signature": "stopPageEvents?(): Promise<void>;"
         },
+        "finishPageOpen": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "finishPageOpen?(offerId: string, tabId: string | null): Promise<void>;"
+        },
         "engineInfo": {
           "async": true,
           "optional": false,
@@ -1310,6 +1317,7 @@ export const nativeContracts = {
         "onSystemState",
         "onEngineEvent",
         "onPageEvent",
+        "onPageOpen",
         "onTabStrip"
       ],
       "constants": {}

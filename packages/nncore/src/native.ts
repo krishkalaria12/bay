@@ -37,8 +37,10 @@ export const Cef = requireNativeModule<{
   addListener(name: "onSystemState", listener: (s: SystemState) => void): EventSubscription;
   addListener(name: "onEngineEvent", listener: (e: { topic: string; payload: string }) => void): EventSubscription;
   addListener(name: "onPageEvent", listener: (event: unknown) => void): EventSubscription;
+  addListener(name: "onPageOpen", listener: (event: unknown) => void): EventSubscription;
   startPageEvents?(): Promise<void>;
   stopPageEvents?(): Promise<void>;
+  finishPageOpen?(offerId: string, tabId: string | null): Promise<void>;
 
   engineInfo(): Promise<EngineInfo>;
   chromeWindows(): Promise<ChromeWindowState[]>;

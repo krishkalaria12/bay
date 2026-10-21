@@ -115,6 +115,83 @@ TEST(RuntimePageEventsTest, MountRequiresTrustedOwnerAndProfile) {
   EXPECT_FALSE(CanMountRuntimePage(state, "normal", "missing", ""));
   EXPECT_FALSE(CanMountRuntimePage(state, "", "normal-tab", ""));
 }
+TEST(RuntimePageOpenTest, RequiresTheAcceptedMountToken) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  auto* tab = state.FindDict("tabs")->FindDict("normal-tab");
+  EXPECT_TRUE(CanMountRuntimePageOffer(state, "normal-tab", ""));
+  EXPECT_FALSE(CanMountRuntimePageOffer(state, "missing", ""));
+  EXPECT_FALSE(CanMountRuntimePageOffer(state, "normal-tab", "offer"));
+  tab->Set("adoptId", "offer");
+  EXPECT_TRUE(CanMountRuntimePageOffer(state, "normal-tab", "offer"));
+  EXPECT_FALSE(CanMountRuntimePageOffer(state, "normal-tab", ""));
+  EXPECT_FALSE(CanMountRuntimePageOffer(state, "normal-tab", "other"));
+  tab->Remove("adoptId");
+  tab->Set("wakeAdoptId", "offer");
+  EXPECT_TRUE(CanMountRuntimePageOffer(state, "normal-tab", "offer"));
+  EXPECT_FALSE(CanMountRuntimePageOffer(state, "normal-tab", ""));
+}
+TEST(RuntimePageOpenTest, FindsOneOwnedPublicDestinationWithTheExactProfile) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  auto* tab = state.FindDict("tabs")->FindDict("normal-tab");
+  tab->Set("adoptId", "offer");
+  auto target = FindRuntimePageOpenTarget(state, "offer", "", false);
+  ASSERT_TRUE(target);
+  EXPECT_EQ(target->tab_id, "normal-tab");
+  EXPECT_EQ(target->window_id, "normal");
+  EXPECT_EQ(target->profile, "");
+  tab->Set("windowId", "other");
+  target = FindRuntimePageOpenTarget(state, "offer", "", false);
+  ASSERT_TRUE(target);
+  EXPECT_EQ(target->tab_id, "normal-tab");
+  EXPECT_EQ(target->window_id, "other");
+  EXPECT_EQ(target->profile, "");
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "", "", false));
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "other", "", false));
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "Profile 2", false));
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", true));
+  state.FindDict("spaces")->FindDict("default")->Set("profileId", "Profile 2");
+  EXPECT_TRUE(FindRuntimePageOpenTarget(state, "offer", "Profile 2", false));
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", false));
+}
+TEST(RuntimePageOpenTest, RejectsDuplicateClaimsAcrossAdoptAndWakeFields) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  state.FindDict("tabs")->FindDict("normal-tab")->Set("adoptId", "offer");
+  state.FindDict("tabs")->FindDict("other-tab")->Set("wakeAdoptId", "offer");
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", false));
+  state.FindDict("tabs")->FindDict("other-tab")->Remove("wakeAdoptId");
+  EXPECT_TRUE(FindRuntimePageOpenTarget(state, "offer", "", false));
+}
+TEST(RuntimePageOpenTest, RejectsUnownedUnloadedAndDeletedDestinations) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  auto* tab = state.FindDict("tabs")->FindDict("normal-tab");
+  tab->Set("wakeAdoptId", "offer");
+  tab->Set("windowId", "");
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", false));
+  tab->Set("windowId", "normal");
+  tab->Set("unloaded", true);
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", false));
+  tab->Set("unloaded", false);
+  state.FindDict("windows")->Remove("normal");
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", false));
+}
+TEST(RuntimePageOpenTest, PrivateClaimsRequireTheDestinationPrivateNamespace) {
+  auto state = State();
+  AddWindow(state, "private", true);
+  auto* tab = state.FindDict("tabs")->FindDict("private-tab");
+  tab->Set("adoptId", "offer");
+  auto target = FindRuntimePageOpenTarget(state, "offer", "", true);
+  ASSERT_TRUE(target);
+  EXPECT_EQ(target->profile, "incognito:private");
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", false));
+  tab->Set("spaceId", "incognito:other");
+  EXPECT_FALSE(FindRuntimePageOpenTarget(state, "offer", "", true));
+}
 TEST(RuntimePageEventsTest, ReplaysLatestFactsInNativeSequenceOrder) {
   auto state = State();
   AddWindow(state, "normal", false);

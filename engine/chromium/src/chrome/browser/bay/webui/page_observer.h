@@ -54,6 +54,14 @@ class TabObserver final : public content::WebContentsObserver,
   void Security();
   void LoadError(const GURL& url, int code);
 
+  void DidOpenRequestedURL(content::WebContents* opened,
+                           content::RenderFrameHost* source_frame,
+                           const GURL& url,
+                           const content::Referrer& referrer,
+                           WindowOpenDisposition disposition,
+                           ui::PageTransition transition,
+                           bool from_context_menu,
+                           bool renderer_initiated) override;
   void TitleWasSet(content::NavigationEntry*) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
