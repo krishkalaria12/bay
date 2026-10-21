@@ -1,6 +1,7 @@
 # The order Bay's changes go into the CEF/Chromium tree.
 #
-# Every step has an explicit platform: all, mac or win. Select with series.py --platform after the command.
+# Every step has an explicit platform: all, mac, win, linux, or a comma list (win,linux).
+# Select with series.py --platform after the command.
 #   cef <patch>       a patch to CEF's own tree (chromium/src/cef), step 2, before CEF's gclient hook
 #   chromium <patch>  a patch to chromium/src, after ungoogled-chromium and domain substitution (step 4)
 #   layer <dir>       our own files, copied in by <dir>/apply.sh (engine/<layer>/src mirrors chromium/src)
@@ -60,9 +61,9 @@ chromium all chromium-tab-sharing-capturer.patch
 chromium all chromium-file-chooser-all-accepted-types.patch
 chromium mac chromium-bay-layer.patch
 chromium win chromium-bay-layer-win.patch
-chromium win chromium-bay-webui-window.patch
-chromium win chromium-bay-lifecycle.patch
-chromium win chromium-bay-extension-hooks.patch
+chromium win,linux chromium-bay-webui-window.patch
+chromium win,linux chromium-bay-lifecycle.patch
+chromium win,linux chromium-bay-extension-hooks.patch
 chromium win chromium-bay-notifications-win.patch
 chromium win chromium-bay-frame-win.patch
 

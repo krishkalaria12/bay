@@ -21,7 +21,7 @@ export type Capabilities = {
   menuBar: boolean;
   /** The window's buttons are the app's own views (BayShell traffic lights). */
   trafficLights: boolean;
-  /** The app draws the window's caption buttons (minimize, maximize, close) at its top right (Windows). */
+  /** The app draws the window's caption buttons (minimize, maximize, close) on Windows and Linux. */
   captionButtons: boolean;
   /** BaySwipe: trackpad two-finger back/forward, the app's own. Windows: Chrome's overscroll. */
   swipe: boolean;
@@ -75,7 +75,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     dockSelection: mac && hasModule("BayDockSelection"),
     menuBar: mac,
     trafficLights: mac,
-    captionButtons: windows,
+    captionButtons: webDesktop,
     swipe: mac && hasModule("BaySwipe"),
     calendar: mac && hasModule("BayCalendar"),
     translation: mac && hasModule("BayTranslate"),

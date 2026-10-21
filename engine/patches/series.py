@@ -112,6 +112,9 @@ def host_platform():
 
 
 def read_series(target=None):
+    supported = {"mac", "win", "linux"}
+    if target is not None and target not in supported:
+        sys.exit(f"unknown series platform: {target}")
     steps = []
     for n, raw in enumerate(Path(HERE, "series").read_text(encoding="utf-8").splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
@@ -119,9 +122,12 @@ def read_series(target=None):
             continue
         fields = line.split()
         if len(fields) != 3:
-            sys.exit(f"series:{n}: expected `cef|chromium|layer all|mac|win <name>`: {raw.rstrip()}")
+            sys.exit(f"series:{n}: expected `cef|chromium|layer all|mac|win|linux[,platform...] <name>`: {raw.rstrip()}")
         kind, platforms, name = fields
-        if kind not in ("cef", "chromium", "layer") or platforms not in ("all", "mac", "win"):
+        selected = platforms.split(",")
+        if (kind not in ("cef", "chromium", "layer") or
+                (platforms != "all" and not set(selected) <= supported) or
+                len(selected) != len(set(selected))):
             sys.exit(f"series:{n}: invalid kind or platform: {raw.rstrip()}")
         step = Step(kind, name, n, platforms)
         step.target = target or host_platform()
@@ -134,7 +140,7 @@ def read_series(target=None):
     unlisted = sorted(set(f for f in os.listdir(HERE) if f.endswith(".patch")) - set(names))
     if unlisted:
         sys.exit("patches missing from series: " + ", ".join(unlisted))
-    return [step for step in steps if target is None or step.platforms in ("all", target)]
+    return [step for step in steps if target is None or step.platforms == "all" or target in step.platforms.split(",")]
 
 
 def layer_command(step):

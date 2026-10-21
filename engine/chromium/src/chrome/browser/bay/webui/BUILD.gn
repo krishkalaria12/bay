@@ -26,6 +26,8 @@ source_set("impl") {
   sources = [
     "app_runtime.cc",
     "app_runtime.h",
+    "app_runtime_options.cc",
+    "app_runtime_options.h",
     "bay_webui.cc",
     "browser_services.cc",
     "browser_services.h",
@@ -171,6 +173,9 @@ if (is_win) {
 # Pure browser-side privacy/command checks can run without a browser window.
 test("runtime_unittests") {
   sources = [
+    "app_runtime_options.cc",
+    "app_runtime_options.h",
+    "app_runtime_options_unittest.cc",
     "runtime_state.cc",
     "runtime_state.h",
     "runtime_state_unittest.cc",

@@ -5,9 +5,24 @@
   "depotToolsCommit": "ccecefb58648ac0a416756b0a4591ec8905a7f55",
   "ungoogledCommit": "800d0bb5078472e4442c1fd73373172754a60939",
   "ungoogledVersion": "154.0.8037.57-1",
-  "platform": "windows",
-  "architecture": "x64",
-  "minimumWindowsBuild": 22621,
-  "outputDirectory": "out/Release_GN_x64",
-  "runtime": "chrome-webui"
+  "platforms": {
+    "win": {
+      "platform": "windows",
+      "architecture": "x64",
+      "minimumWindowsBuild": 22621,
+      "outputDirectory": "out/Release_GN_x64",
+      "runtime": "chrome-webui"
+    },
+    "linux": {
+      "platform": "linux",
+      "architecture": "x64",
+      "outputDirectory": "out/Release_GN_x64",
+      "runtime": "chrome-webui",
+      "sysroot": {
+        "useSysroot": true,
+        "revision": null
+      },
+      "minimumGlibc": null
+    }
+  }
 }

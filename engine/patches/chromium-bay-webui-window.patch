@@ -265,18 +265,6 @@ diff --git a/chrome/browser/ui/webui_browser/BUILD.gn b/chrome/browser/ui/webui_
      ":browser_mojo_bindings",
      ":webui_browser",
      "//base",
-diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
---- a/chrome/BUILD.gn
-+++ b/chrome/BUILD.gn
-@@ -441,6 +441,8 @@
-       "//chrome/browser:chrome_process_singleton",
-       "//chrome/browser:process_singleton",
-       "//chrome/browser/bay:exports",  # Bay: engine/chromium (Windows DLL)
-+      "//chrome/browser/bay/webui:impl",
-+      "//bay/core",
-       "//chrome/browser:startup_data",
-       "//chrome/browser/lifetime",
-       "//chrome/browser/win/isolated_browser:isolated_browser_support",
 diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
 --- a/chrome/browser/ui/browser.cc
 +++ b/chrome/browser/ui/browser.cc
