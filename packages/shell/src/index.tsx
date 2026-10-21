@@ -134,6 +134,8 @@ export type WindowEvent =
   | { type: "close"; id: string }
   | { type: "frame"; id: string; frame: [number, number, number, number] }
   | { type: "closeRequest"; id: string }
+  // Windows' shared runtime: openWindow named this open utility window again, with these options.
+  | { type: "opened"; id: string; options: OpenWindowOptions }
   | ({ type: "state"; id: string } & WindowState);
 
 /** A window's placement, as its caption buttons show it (Windows). */
@@ -184,6 +186,9 @@ export type OpenWindowOptions = {
   profile?: string;
   // Little Bay: its remembered size; the window opens centred on the active screen.
   size?: [number, number];
+  // Settings: the pane to show, and the space it is about.
+  pane?: string;
+  spaceId?: string;
 };
 
 export type MenuEntry = { id: string; title: string; current?: boolean };

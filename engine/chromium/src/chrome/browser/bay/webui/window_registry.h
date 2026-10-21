@@ -82,6 +82,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   Entry& EnsureEntry(BrowserWindowInterface* browser);
   void PublishHostInfo();
   void Broadcast(base::DictValue event);
+  void EmitToWindow(const std::string& id, base::DictValue event);
   void BoundsChanged(BrowserWindowInterface* browser, const gfx::Rect& bounds);
   void ShowStateChanged(BrowserWindowInterface* browser);
   void MoveIntoBayWindow(base::WeakPtr<BrowserWindowInterface> source);

@@ -211,8 +211,9 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
     return Failure("The requesting window is no longer available");
   if (!ValidName(id))
     return Failure("Invalid window id");
-  for (const char* field : {"kind", "profile", "title"}) {
-    if (const auto* value = options.Find(field); value && !value->is_string())
+  for (const char* field : {"kind", "profile", "title", "pane", "spaceId"}) {
+    if (const auto* value = options.Find(field);
+        value && (!value->is_string() || value->GetString().size() > 1024))
       return Failure("Window text options must be strings");
   }
   for (const char* field : {"focus", "incognito"}) {
@@ -227,6 +228,21 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
     return Failure("Unknown window kind");
   const bool focus = options.FindBool("focus").value_or(true);
   if (auto* existing = Find(id)) {
+    // A utility window named again takes the request's place (Settings: its
+    // pane), and its document hears it.
+    if (IsUtility(existing)) {
+      auto& current = *entries_.at(existing);
+      for (const char* field : {"pane", "spaceId"}) {
+        if (const auto* value = options.FindString(field))
+          current.options.Set(field, *value);
+        else
+          current.options.Remove(field);
+      }
+      EmitToWindow(id, base::DictValue()
+                           .Set("type", "opened")
+                           .Set("id", id)
+                           .Set("options", current.options.Clone()));
+    }
     if (focus)
       existing->GetWindow()->Activate();
     return Success();
@@ -470,6 +486,10 @@ void WindowRegistry::PublishHostInfo() {
 }
 void WindowRegistry::Broadcast(base::DictValue event) {
   if (AppRuntime::Enabled()) {
+    // The coordinator hears every window; a window document its own events,
+    // for its caption and its focus.
+    if (const auto* id = event.FindString("id"))
+      EmitToWindow(*id, event.Clone());
     auto* runtime = AppRuntime::GetIfStarted();
     if (auto host =
             runtime ? runtime->coordinator_host() : base::WeakPtr<NativeHost>())
@@ -479,6 +499,18 @@ void WindowRegistry::Broadcast(base::DictValue event) {
   std::vector<base::WeakPtr<NativeHost>> hosts;
   for (const auto& [host, state] : hosts_)
     hosts.push_back(state->host);
+  for (const auto& host : hosts) {
+    if (host)
+      host->Emit("BayShell", "onWindowEvent", base::Value(event.Clone()));
+  }
+}
+void WindowRegistry::EmitToWindow(const std::string& id,
+                                  base::DictValue event) {
+  std::vector<base::WeakPtr<NativeHost>> hosts;
+  for (const auto& [host, state] : hosts_)
+    if (state->host && state->host->browser() &&
+        IdFor(state->host->browser()) == id)
+      hosts.push_back(state->host);
   for (const auto& host : hosts) {
     if (host)
       host->Emit("BayShell", "onWindowEvent", base::Value(event.Clone()));
