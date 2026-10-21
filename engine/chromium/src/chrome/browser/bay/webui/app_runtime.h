@@ -57,6 +57,12 @@ class AppRuntime final : public ProfileManagerObserver,
                 const std::string& source_window_id,
                 const GURL& url,
                 WindowOpenDisposition disposition);
+  // A page from a window Chrome opened on its own (a relaunch, the taskbar, an
+  // extension) is offered as a new tab of `window_id`, a regular Bay window.
+  // Private pages and new tab pages stay behind and close with their window.
+  void AdoptPage(content::WebContents* contents,
+                 const std::string& window_id,
+                 bool foreground);
   bool FinishPageOpen(NativeHost* host,
                       const std::string& offer_id,
                       const std::string* target_tab_id);

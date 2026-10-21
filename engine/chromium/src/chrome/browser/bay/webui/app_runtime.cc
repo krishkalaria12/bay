@@ -27,11 +27,13 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/webui_url_constants.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "ui/base/base_window.h"
 #include "ui/base/page_transition_types.h"
@@ -41,6 +43,13 @@ namespace {
 constexpr size_t kMaximumCommitBytes = 16 * 1024 * 1024;
 constexpr size_t kMaximumRequestBytes = 1024 * 1024;
 constexpr size_t kMaximumPending = 64;
+// The coordinator names a regular Chrome profile by its directory, the default
+// one by "".
+std::string RegularProfileId(Profile* profile) {
+  const auto name =
+      profile->GetOriginalProfile()->GetPath().BaseName().AsUTF8Unsafe();
+  return name == "Default" ? "" : name;
+}
 std::unique_ptr<AppRuntime>& Instance() {
   static base::NoDestructor<std::unique_ptr<AppRuntime>> instance;
   return *instance;
@@ -513,8 +522,7 @@ void AppRuntime::OpenPage(content::WebContents* source,
     if (window_id.empty() && owner)
       window_id = *owner;
   }
-  const auto name = source_profile->GetOriginalProfile()->GetPath().BaseName().AsUTF8Unsafe();
-  const std::string regular_profile = name == "Default" ? "" : name;
+  const std::string regular_profile = RegularProfileId(source_profile);
   const std::string profile = source_profile->IsOffTheRecord()
                                   ? "incognito:" + window_id
                                   : regular_profile;
@@ -555,6 +563,36 @@ void AppRuntime::OpenPage(content::WebContents* source,
       FROM_HERE, base::BindOnce(&AppRuntime::OfferPage,
                                weak_factory_.GetWeakPtr(), opened->GetWeakPtr(),
                                opened_profile->GetWeakPtr(), std::move(event)));
+}
+void AppRuntime::AdoptPage(content::WebContents* contents,
+                           const std::string& window_id,
+                           bool foreground) {
+  if (shutdown_ || !accepted_ || !contents)
+    return;
+  auto* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  const GURL& url = contents->GetVisibleURL();
+  const auto* window =
+      accepted_->FindDict("state")->FindDict("windows")->FindDict(window_id);
+  if (profile->IsOffTheRecord() || !window ||
+      window->FindBool("incognito").value_or(false) || !url.is_valid() ||
+      url.IsAboutBlank() || url.SchemeIs("javascript") || url.SchemeIs("bay") ||
+      (url.SchemeIs(content::kChromeUIScheme) &&
+       url.host() == chrome::kChromeUINewTabHost) ||
+      url.spec().size() > kMaximumRequestBytes)
+    return;
+  ReconcilePageOpens();
+  if (page_opens_.size() >= kMaximumPending)
+    return;
+  const std::string regular_profile = RegularProfileId(profile);
+  base::DictValue event;
+  event.Set("sourceWindowId", window_id);
+  event.Set("sourceProfile", regular_profile);
+  event.Set("profile", regular_profile);
+  event.Set("incognito", false);
+  event.Set("url", url.spec());
+  event.Set("disposition", foreground ? "foreground" : "background");
+  // The caller's stack has unwound: park the page now, before its window closes.
+  OfferPage(contents->GetWeakPtr(), profile->GetWeakPtr(), std::move(event));
 }
 void AppRuntime::OfferPage(base::WeakPtr<content::WebContents> contents,
                            base::WeakPtr<Profile> profile,

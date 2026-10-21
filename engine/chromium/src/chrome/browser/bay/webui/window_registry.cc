@@ -541,7 +541,7 @@ void WindowRegistry::OnBrowserCreated(BrowserWindowInterface* browser) {
     entry.options = pending_open_->options.Clone();
   }
   // Decided once, before the window's document can ask for host info.
-  if (!known && entry.id.empty() && !AppRuntime::Enabled() &&
+  if (!known && entry.id.empty() &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike")) {
     entry.absorbed =
         std::ranges::any_of(entries_, [browser](const auto& other) {
@@ -567,6 +567,9 @@ void WindowRegistry::MoveIntoBayWindow(
     base::WeakPtr<BrowserWindowInterface> source) {
   if (!source)
     return;
+  // With the shared runtime the coordinator owns every tab: the pages go to it,
+  // for a regular browser window.
+  const bool shared = AppRuntime::Enabled();
   BrowserWindowInterface* target = nullptr;
   GlobalBrowserCollection::GetInstance()->ForEach(
       [&](BrowserWindowInterface* browser) {
@@ -574,11 +577,28 @@ void WindowRegistry::MoveIntoBayWindow(
         if (browser == source.get() || it == entries_.end() ||
             it->second->absorbed || browser->IsDeleteScheduled())
           return true;
+        const auto* kind = it->second->options.FindString("kind");
+        if (shared && (it->second->id.empty() || !kind || *kind != "browser" ||
+                       browser->GetProfile()->IsOffTheRecord()))
+          return true;
         target = browser;
         return false;
       },
       BrowserCollection::Order::kActivation);
-  if (target) {
+  auto* runtime = shared ? AppRuntime::GetIfStarted() : nullptr;
+  if (target && runtime) {
+    // Offering a page parks it, out of this tab strip.
+    TabStripModel* from = source->GetTabStripModel();
+    const auto* active = from->GetActiveWebContents();
+    std::vector<base::WeakPtr<content::WebContents>> pages;
+    for (int i = 0; i < from->count(); ++i)
+      pages.push_back(from->GetWebContentsAt(i)->GetWeakPtr());
+    for (const auto& page : pages) {
+      if (page)
+        runtime->AdoptPage(page.get(), IdFor(target), page.get() == active);
+    }
+    target->GetWindow()->Activate();
+  } else if (target && !shared) {
     TabStripModel* from = source->GetTabStripModel();
     TabStripModel* to = target->GetTabStripModel();
     if (source->GetProfile() == target->GetProfile()) {
@@ -597,7 +617,8 @@ void WindowRegistry::MoveIntoBayWindow(
     }
     target->GetWindow()->Activate();
   }
-  source->GetWindow()->Close();
+  if (source)
+    source->GetWindow()->Close();
 }
 void WindowRegistry::OnBrowserClosed(BrowserWindowInterface* browser) {
   const auto id = IdFor(browser);
