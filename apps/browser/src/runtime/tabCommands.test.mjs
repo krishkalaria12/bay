@@ -28,6 +28,8 @@ test("tab parser closes user command fields and copies options and ID arrays", (
     { method: "activateIndex", windowId: "w", index: -1 },
     { method: "cycle", windowId: "w", delta: -1 },
     { method: "updateTabDetails", tabId: "t", patch: { customTitle: "n", customIcon: null, kept: false } },
+    ...["wakeTab", "syncInternalPage", "hideNewTab"].map((method) => ({ method, tabId: "t" })),
+    { method: "showNewTab", tabId: "t", first: { url: "https://a.example/", title: "A" } },
   ];
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(TAB_COMMAND_METHODS));
   for (const command of commands) {
@@ -173,4 +175,33 @@ test("showTab without a destination focuses the live owner instead of stealing i
   assert.equal(store.getState().tabs[tabId].windowId, windowId);
   assert.equal(store.getState().ui.focusedWindowId, windowId);
   assert.deepEqual(focused, [windowId]);
+});
+
+test("a New Tab page shown by Back keeps its page in the tab until the page goes elsewhere", () => {
+  const { store, tabId } = setup({ url: "https://a.example/" });
+  store.getState().navigated(tabId, { url: "https://a.example/", title: "A" }, {});
+  store.getState().faviconChanged(tabId, "https://a.example/icon.png");
+  run(store, { method: "showNewTab", tabId });
+  let tab = store.getState().tabs[tabId];
+  assert.equal(tab.url, "");
+  assert.deepEqual(tab.newTabHistory, { url: "https://a.example/", title: "A", favicon: "https://a.example/icon.png" });
+  // The kept page's own reports refresh what Forward returns to, not the New Tab page.
+  store.getState().navigated(tabId, { url: "https://a.example/", title: "A2" }, {});
+  store.getState().faviconChanged(tabId, "https://a.example/2.png");
+  tab = store.getState().tabs[tabId];
+  assert.equal(tab.url, "");
+  assert.deepEqual(tab.newTabHistory, { url: "https://a.example/", title: "A2", favicon: "https://a.example/2.png" });
+  run(store, { method: "hideNewTab", tabId });
+  tab = store.getState().tabs[tabId];
+  assert.equal(tab.url, "https://a.example/");
+  assert.equal(tab.title, "A2");
+  assert.equal(tab.newTabHistory, undefined);
+  run(store, { method: "showNewTab", tabId });
+  store.getState().navigated(tabId, { url: "https://b.example/", title: "B" }, {});
+  tab = store.getState().tabs[tabId];
+  assert.equal(tab.url, "https://b.example/");
+  assert.equal(tab.newTabHistory, undefined);
+  run(store, { method: "showNewTab", tabId });
+  store.getState().navigate(tabId, "https://c.example/");
+  assert.equal(store.getState().tabs[tabId].newTabHistory, undefined);
 });

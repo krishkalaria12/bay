@@ -1,6 +1,7 @@
 import type { LocationCommandEffects } from "./locationCommands";
 import type { BrowserStore } from "../store/browser";
-import { isIncognitoSpace } from "../store/model";
+import { isIncognitoSpace, wake } from "../store/model";
+import { INTERNAL_PAGES, internalPageOf, tabDestination } from "../store/internalPages";
 import type { NewTabOptions } from "../store/tabs";
 import type { Tab } from "../store/types";
 import {
@@ -30,7 +31,9 @@ export type TabCommand =
   | { method: "moveTab"; tabId: string; toIndex: number }
   | { method: "activateIndex"; windowId: string; index: number }
   | { method: "cycle"; windowId: string; delta: 1 | -1 }
-  | { method: "updateTabDetails"; tabId: string; patch: TabDetailsPatch };
+  | { method: "updateTabDetails"; tabId: string; patch: TabDetailsPatch }
+  | { method: "wakeTab" | "syncInternalPage" | "hideNewTab"; tabId: string }
+  | { method: "showNewTab"; tabId: string; first?: { url: string; title: string } };
 
 export const TAB_COMMAND_METHODS = [
   "newTab",
@@ -46,6 +49,10 @@ export const TAB_COMMAND_METHODS = [
   "activateIndex",
   "cycle",
   "updateTabDetails",
+  "wakeTab",
+  "syncInternalPage",
+  "showNewTab",
+  "hideNewTab",
 ] as const;
 
 function newTabOptions(value: unknown): UserNewTabOptions {
@@ -72,6 +79,9 @@ export function parseTabCommand(value: unknown): TabCommand {
     case "showTab":
       fields("tabId", "windowId");
       return { method: c.method, tabId: tabId(), ...(c.windowId !== undefined ? { windowId: c.windowId === null ? null : windowId() } : {}) };
+    case "wakeTab":
+    case "syncInternalPage":
+    case "hideNewTab":
     case "closeTab":
     case "removeTab":
     case "duplicateTab":
@@ -90,6 +100,11 @@ export function parseTabCommand(value: unknown): TabCommand {
         url: commandUrl(c.url),
         ...(o ? { options: o.userInitiated !== undefined ? { userInitiated: commandBoolean(o.userInitiated) } : {} } : {}),
       };
+    }
+    case "showNewTab": {
+      fields("tabId", "first");
+      const first = c.first === undefined ? undefined : commandObject(c.first, ["url", "title"]);
+      return { method: c.method, tabId: tabId(), ...(first ? { first: { url: commandUrl(first.url), title: commandText(first.title, 4096, true) } } : {}) };
     }
     case "moveTab":
       fields("tabId", "toIndex");
@@ -119,6 +134,38 @@ export function parseTabCommand(value: unknown): TabCommand {
 export function executeTabCommand(store: BrowserStore, command: TabCommand, effects?: LocationCommandEffects): string | null {
   const s = store.getState();
   switch (command.method) {
+    case "wakeTab": {
+      const tab = requireCommandTab(s, command.tabId);
+      if (tab.url && !tab.navigation && !tab.adoptId) s.updateTab(tab.id, wake(tab));
+      break;
+    }
+    case "syncInternalPage": {
+      const tab = requireCommandTab(s, command.tabId);
+      const url = tabDestination(tab);
+      const page = internalPageOf(url);
+      if (page) {
+        s.updateTab(tab.id, { url, title: INTERNAL_PAGES[page].title, favicon: null });
+        s.updateLive(tab.id, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false });
+      }
+      break;
+    }
+    case "showNewTab": {
+      const tab = requireCommandTab(s, command.tabId);
+      if (tab.url && !tab.newTabHistory)
+        s.updateTab(tab.id, {
+          newTabHistory: { url: command.first?.url ?? tab.url, title: command.first?.title ?? tab.title, favicon: tab.favicon },
+          url: "",
+          title: "",
+          favicon: null,
+          ...(internalPageOf(tabDestination(tab)) ? { navigation: null } : {}),
+        });
+      break;
+    }
+    case "hideNewTab": {
+      const tab = requireCommandTab(s, command.tabId);
+      if (tab.newTabHistory) s.updateTab(tab.id, { ...tab.newTabHistory, newTabHistory: undefined });
+      break;
+    }
     case "newTab": {
       const window = requireCommandWindow(s, command.windowId);
       const spaceId = command.options?.spaceId ?? window.spaceId;

@@ -1,5 +1,6 @@
 import { resolveInput } from "@bay/core";
 import type { StateCreator } from "zustand";
+import type { BrowserProjection } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import {
@@ -208,7 +209,7 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
 
 /** The window's shown tab for each space, with each of `gone` replaced by the tab it shows next: one its
  *  opener opened, else the next one (awake first), else the one before. */
-export function successors(s: BrowserState, w: BrowserWindow, gone: Set<string>): Record<string, string> {
+export function successors(s: BrowserProjection, w: BrowserProjection["windows"][string], gone: Set<string>): Record<string, string> {
   const activeTabIds = { ...w.activeTabIds };
   for (const [spaceId, activeId] of Object.entries(w.activeTabIds)) {
     if (!gone.has(activeId)) continue;
@@ -448,7 +449,7 @@ export const createTabsSlice =
         return;
       }
       // A new address supersedes a link the tab kept to load when shown (the engine drops it: lib/chromeTabs.ts).
-      const { unloaded: _, wakeAdoptId: _kept, ...rest } = tab;
+      const { unloaded: _, wakeAdoptId: _kept, newTabHistory: _shown, ...rest } = tab;
       // Typing an address starts a new task (a New Tab page gets one lookup first, as in Chrome).
       const base = userInitiated && tab.url ? forgetOpeners(s, tabListKey(s, tab)) : s;
       set(
@@ -486,11 +487,15 @@ export const createTabsSlice =
     },
 
     navigated(id, page, live) {
-      get().updateTab(id, page, live);
+      const kept = get().tabs[id]?.newTabHistory;
+      // Behind a New Tab page shown by Back, the kept page only refreshes its title; going anywhere else drops it.
+      if (kept && page.url === kept.url) get().updateTab(id, { newTabHistory: { ...kept, title: page.title } }, live);
+      else get().updateTab(id, kept ? { ...page, newTabHistory: undefined } : page, live);
     },
 
     faviconChanged(id, favicon) {
-      get().updateTab(id, { favicon });
+      const kept = get().tabs[id]?.newTabHistory;
+      get().updateTab(id, kept ? { newTabHistory: { ...kept, favicon } } : { favicon });
     },
 
     duplicateTab(id) {

@@ -10,7 +10,7 @@ import type {
   SecurityInfo,
 } from "@bay/nncore";
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { splitOf } from "../../store/splits";
 
@@ -31,7 +31,6 @@ export type PageState = {
   mediaAccess: MediaAccess | null;
   wasNewTab: boolean;
   backToNewTab: boolean;
-  newTabShown: { url: string; title: string; favicon: string | null } | null;
 };
 
 export const IDLE_PAGE: PageState = {
@@ -50,7 +49,6 @@ export const IDLE_PAGE: PageState = {
   mediaAccess: null,
   wasNewTab: false,
   backToNewTab: false,
-  newTabShown: null,
 };
 
 type Store = {

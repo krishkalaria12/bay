@@ -215,7 +215,7 @@ export function createPageFactConsumer(store: BrowserStore) {
             viewTabIds(s, tab.windowId, tab.spaceId).some((id) => id !== tabId)
           )
             s.closeTab(tabId);
-          else s.updateTab(tabId, { url: "", title: "", favicon: null });
+          else s.updateTab(tabId, { url: "", title: "", favicon: null, newTabHistory: undefined });
           break;
         }
         case "onDiscarded":
