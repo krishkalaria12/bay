@@ -4,7 +4,8 @@ import { closeWindow, confirm } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { APP_NAME } from "../../lib/constants";
-import { useBrowser } from "../../store/browser";
+import { browserRead } from "../../store/read";
+import { createSpace } from "../../runtime/spaceActions";
 import type { SpaceColor } from "../../store/types";
 import { IMPORT_WINDOW_ID } from "../settings/windows";
 import {
@@ -170,7 +171,7 @@ export function useImportFlow() {
 
   const destination = async (index: number, name: string, color?: string, emoji?: string, used?: Set<string>): Promise<string> => {
     if (index === 0) return target;
-    const s = useBrowser.getState();
+    const s = browserRead.getState();
     const clash = s.spaceOrder.find((id) => !used?.has(id) && s.spaces[id]!.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (clash) {
       const { confirmed } = await confirm({
@@ -183,7 +184,7 @@ export function useImportFlow() {
       if (!confirmed) return clash;
     }
     // Without an emoji of its own (Chrome's profiles, an Arc space with a symbol) the space gets a free one (createSpace).
-    return s.createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
+    return createSpace({ name, color: profileColorFor(color) as SpaceColor | undefined, icon: emoji });
   };
 
   const finish = () => setTimeout(() => setStep("done"), DONE_DELAY_MS);
@@ -284,7 +285,7 @@ export function useImportFlow() {
       }
     }
     setExtensions(extensionFailures);
-    left.push(...extensionFailures.map((f) => `${f.extension.name} in ${useBrowser.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));
+    left.push(...extensionFailures.map((f) => `${f.extension.name} in ${browserRead.getState().spaces[f.spaceId]?.name ?? "Space"}: ${f.message}.`));
     setNotes(left);
     setStatus((st) => Object.fromEntries(Object.entries(st).map(([k, v]) => [k, failed.has(k as ImportKind) ? "failed" : v === "failed" ? v : "done"])));
     setFailures([...failed].map(([kind, names]) => ({ kind, profiles: selected.length > 1 ? names : [] })));
@@ -361,7 +362,7 @@ export function useImportFlow() {
     const total = emptyCounts();
     for (const [i, p] of selected.entries()) {
       const dest = await destination(i, p.name);
-      total.tabs += importDiaProfile(dest, p, { pinned: wanted.has("pinnedTabs"), open: wanted.has("tabs") });
+      total.tabs += await importDiaProfile(dest, p, { pinned: wanted.has("pinnedTabs"), open: wanted.has("tabs") });
     }
     setStatus(Object.fromEntries(order.map((k) => [k, "done"])));
     setFailures([]);
@@ -433,7 +434,7 @@ export function useImportFlow() {
     if (!path) return;
     try {
       const root = await api.importBookmarksHTML(path);
-      const n = importBookmarks(target, root, "HTML File");
+      const n = await importBookmarks(target, root, "HTML File");
       setCounts({ ...emptyCounts(), bookmarks: n });
       setFailures([]);
       setStatus({ bookmarks: "done" });
@@ -444,14 +445,14 @@ export function useImportFlow() {
     }
   };
 
-  const openExtensions = () => {
+  const openExtensions = async () => {
     const bySpace = new Map<string, Set<string>>();
     for (const { spaceId, extension } of extensions) {
       if (!extension.webStoreUrl) continue;
       if (!bySpace.has(spaceId)) bySpace.set(spaceId, new Set());
       bySpace.get(spaceId)!.add(extension.webStoreUrl);
     }
-    for (const [spaceId, urls] of bySpace) openInWebStore(spaceId, [...urls]);
+    for (const [spaceId, urls] of bySpace) await openInWebStore(spaceId, [...urls]);
     setExtensions([]);
   };
 
@@ -607,7 +608,7 @@ async function readDiaTabs(api: ImportApi, launchedAt: number): Promise<DiaTabsR
 }
 
 function defaultTarget(): string {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const w = s.windows[s.ui.focusedWindowId ?? ""];
   return w && !w.incognito ? w.spaceId : s.settings.defaultSpaceId;
 }
