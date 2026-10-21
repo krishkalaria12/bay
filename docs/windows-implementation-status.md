@@ -95,7 +95,9 @@ Two-client integration tests exercise concurrent commands, publication before
 acknowledgement, duplicate requests, one native reconciliation/persistence owner,
 and disconnects without falling back to the local writable store.
 
-Behind `--bay-shared-runtime`, a browser-owned detached WebContents holds the
+The shared runtime is now the Windows default; `--bay-legacy-runtime` restores
+the single-renderer entry for comparison. macOS still requires
+`--bay-shared-runtime`. A browser-owned detached WebContents holds the
 coordinator, authenticates document connections and retains accepted state for
 bounded crash recovery. Native projections remove other windows' private data;
 global engine, data and window events go to the coordinator. The coordinator
@@ -104,8 +106,8 @@ Live persistence, native history/bookmark/favicon/profile-data services, and
 live/calendar/meeting watchers. They use the authority store and stop on
 disconnect or publication failure. Pending live/calendar results cannot write
 after disposal. Final saves acknowledge session, downloads and Live documents;
-cancelling quit resumes their writers. The gated single-runtime entry reuses
-this service bundle. Window/sidebar mounting starts none of these services.
+cancelling quit resumes their writers. Window/sidebar mounting starts none of
+these services.
 
 Page facts now follow a separate coordinator-only native route. Broker-owned
 observers retain the app tab ID and continue reporting URL, title, loading,
@@ -141,24 +143,54 @@ tests pass against pinned Chromium libraries on macOS, including five handoff
 tests. The changed native sources also pass syntax checks with generated Mojo
 bindings. These checks do not establish Windows runtime behavior.
 
-This experimental mode still stops before the legacy UI entry. The coordinator
-and visible UI entries are not wired together yet.
-Additional application windows remain gated pending the remaining command
-migration and service ownership. Bulk import, sync, live-folder UI actions,
-and virtual new-tab history still access the writable singleton. Remaining
-global integrations and the accepted-publication window reconciler must be
-wired to the coordinator before enabling the shared UI entry.
-Live, calendar and meeting-alert UI stores still need a cross-renderer feed
-when that entry is wired. In-process two-client tests do not replace native
-two-window acceptance. Live document IO now starts explicitly instead of
-running when window UI imports its store.
+Startup now branches on the role Chrome assigns. A new coordinator epoch
+restores the session from disk before revision zero; a replacement coordinator
+uses its recovery state instead. The coordinator then starts its services, sync,
+extension search engines, telemetry and application lifecycle once, and opens
+or closes native windows from the accepted-publication hook. A window document
+waits for a projection containing its assigned window, installs the read,
+command and service clients, and starts only local view, focus, translation and
+presentation behavior. A failed or closed connection shows an error instead of
+falling back to a local writer.
+
+Live, calendar, meeting-alert, sync and telemetry UI state reaches windows
+through a `services` slice of the published state. Chrome allowlists every field
+of every record, so a token, sync document or recovery word added later fails
+publication rather than reaching a window. Live folders are filtered to public
+spaces, meeting groups to the window's visible groups and tabs, and sync
+profiles to visible spaces. Service operations and imports are named commands
+with bounded arguments, validated in TypeScript and again natively against the
+dispatching window, its visible records and regular public spaces; private
+windows cannot invoke them. Network and import work runs outside the ordered
+reducer queue with request deduplication, and each operation's reply has its own
+checked result shape. Window hosts may call only the local dialog and
+recovery-kit presentation parts of `BaySync`.
+
+The page a New Tab page shown by Back keeps for Forward now lives in the tab, so
+every window agrees on it. When a tab's accepted window changes, Chrome parks
+its page before either window sees the change; a page that cannot be parked
+loads its URL afresh in the destination. A source audit test fails if window
+code imports the writable store outside the coordinator services and the
+legacy-only paths.
+
+Verification on macOS: 584 browser, 52 platform and 55 native runtime tests,
+TypeScript, lint, contract checks, the production web and macOS JavaScript
+bundles and the Windows pipeline tests pass. The changed native sources pass macOS-target syntax checks
+with generated Mojo bindings; the Windows-only `BaySync` restriction has not
+been compiled. Two-window behavior on Windows, including page transfer between
+windows, startup, quit and coordinator recovery, still needs runtime acceptance.
+
+Known limits in shared mode: extension tab requests open their URL afresh
+rather than adopting Chrome's live tab, the Chrome tab-strip mirror stays off
+(the Windows host does not implement it), and Live folders are not available in
+private windows.
 
 Native updater and close-button shutdown preparation now participate in the
 acknowledged final session save. Native page controls cover printing, saving,
 screenshots, certificate details and media operations. Windows browser and
 installer identities, executable names, associations and taskbar IDs now agree.
-Remaining work includes shared startup wiring, remaining global integrations,
-complete native event/OS coverage and the Windows acceptance runs. The diagnostic page
+Remaining work includes complete native event/OS coverage and the Windows
+acceptance runs. The diagnostic page
 does not establish a complete browser host.
 
 ## Frame, notifications and menus
