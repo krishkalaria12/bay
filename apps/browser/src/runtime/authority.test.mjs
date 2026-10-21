@@ -271,3 +271,34 @@ test("createWindow commands select a space and reject the removed profile option
   assert.equal(reply.commit.state.windows[reply.value].spaceId, spaceId);
   authority.close();
 });
+
+test("native handoff mutations share command order and publish one final commit", async () => {
+  const store = createBrowserStore();
+  const windowId = store.getState().createWindow();
+  const authority = createBrowserAuthority({ store, epoch: "native-open" });
+  const commits = [];
+  authority.subscribe((commit) => commits.push(commit));
+  const before = authority.dispatch({
+    epoch: "native-open",
+    clientId: "one",
+    requestId: 1,
+    command: { method: "newTab", windowId, options: { url: "https://first.example/" } },
+  });
+  const native = authority.dispatchNative((owner) => {
+    const a = owner.getState().newTab(windowId, { url: "https://posted.example/", adoptId: "trusted-native-offer" });
+    owner.getState().openPeek(a, "https://peek.example/", "trusted-peek-offer");
+    return a;
+  });
+  const after = authority.dispatch({
+    epoch: "native-open",
+    clientId: "one",
+    requestId: 2,
+    command: { method: "newTab", windowId, options: { url: "https://last.example/" } },
+  });
+  const [a, b, c] = await Promise.all([before, native, after]);
+  assert.deepEqual([a.commit.revision, b.commit.revision, c.commit.revision], [1, 2, 3]);
+  assert.equal(commits.length, 3);
+  assert.equal(b.commit.state.tabs[b.value].adoptId, "trusted-native-offer");
+  assert.ok(b.commit.state.peeks[windowId]);
+  authority.close();
+});

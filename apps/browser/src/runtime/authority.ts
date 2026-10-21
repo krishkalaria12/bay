@@ -86,6 +86,26 @@ export function createBrowserAuthority({
     if (!executing) publish();
   });
 
+  function enqueue(apply: () => string | null) {
+    const reply = queue.then(() => {
+      if (closed) throw new AuthorityError("closed", "authority is closed");
+      executing = true;
+      let value: string | null;
+      try {
+        value = apply();
+      } finally {
+        executing = false;
+        publish();
+      }
+      return Object.freeze({ commit, value });
+    });
+    queue = reply.then(
+      () => {},
+      () => {},
+    );
+    return reply;
+  }
+
   function dispatch(input: unknown): Promise<CommandReply> {
     try {
       if (closed) throw new AuthorityError("closed", "authority is closed");
@@ -109,22 +129,8 @@ export function createBrowserAuthority({
       }
       if (requestId <= client.lastRequestId) throw new AuthorityError("request_expired", "request is too old to replay");
       client.lastRequestId = requestId;
-      const reply = queue.then(() => {
-        if (closed) throw new AuthorityError("closed", "authority is closed");
-        executing = true;
-        let value: string | null;
-        try {
-          value = executeBrowserCommand(store, command, effects);
-        } finally {
-          executing = false;
-          publish();
-        }
-        // This exact immutable commit exists before the result is exposed.
-        return Object.freeze({ clientId, requestId, commit, value });
-      });
-      queue = reply.then(
-        () => {},
-        () => {},
+      const reply = enqueue(() => executeBrowserCommand(store, command, effects)).then(({ commit, value }) =>
+        Object.freeze({ clientId, requestId, commit, value }),
       );
       client.replies.set(requestId, { fingerprint, reply });
       // Retain recent replies, but never re-execute an evicted request. Sequence
@@ -151,6 +157,11 @@ export function createBrowserAuthority({
       };
     },
     dispatch,
+    // Browser-authenticated events share command ordering, without extending
+    // the renderer's command vocabulary or allowing user-supplied adoption IDs.
+    dispatchNative(apply: (store: BrowserStore) => string | null) {
+      return enqueue(() => apply(store));
+    },
     close() {
       closed = true;
       unsubscribe();
