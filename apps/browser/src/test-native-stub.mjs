@@ -39,10 +39,16 @@ export const emitAppEvent = (event) => appEventListeners.forEach((listener) => l
 export const pageEventListeners = new Set();
 export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
 export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
-export const pageEventSource = { replay: [], error: null, starts: 0, stops: 0 };
+export const pageOpenListeners = new Set();
+export const onPageOpen = (listener) => (pageOpenListeners.add(listener), { remove: () => pageOpenListeners.delete(listener) });
+export const emitPageOpen = (event) => pageOpenListeners.forEach((listener) => listener(event));
+export const finishedPageOpens = [];
+export const finishPageOpen = (offerId, tabId) => (finishedPageOpens.push({ offerId, tabId }), Promise.resolve());
+export const pageEventSource = { replay: [], openReplay: [], error: null, starts: 0, stops: 0 };
 export const startPageEvents = () => {
   pageEventSource.starts++;
   pageEventSource.replay.forEach(emitPageEvent);
+  pageEventSource.openReplay.forEach(emitPageOpen);
   return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
 };
 export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());

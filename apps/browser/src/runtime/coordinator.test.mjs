@@ -4,7 +4,7 @@ import { viewTabIds } from "../store/model.ts";
 import { createBrowserStore } from "../store/browser.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserCoordinator as createCoordinator } from "./coordinator.ts";
-import { emitPageEvent, pageEventListeners, pageEventSource } from "../test-native-stub.mjs";
+import { emitPageEvent, emitPageOpen, finishedPageOpens, pageOpenListeners, pageEventListeners, pageEventSource } from "../test-native-stub.mjs";
 const createBrowserCoordinator = (options) =>
   createCoordinator({
     startServices: () => ({ flush: async () => {}, resume() {}, dispose() {} }),
@@ -398,4 +398,119 @@ test("native page startup rejection unwinds services and native subscriptions", 
   assert.equal(stopped, 1);
   assert.equal(native.disposed, 1);
   assert.equal(errors.length, 1);
+});
+
+const offeredPage = (store, windowId, patch = {}) => ({
+  offerId: "bay-tab:00000000-0000-4000-8000-000000000001",
+  sourceWindowId: windowId,
+  sourceTabId: viewTabIds(store.getState(), windowId)[0],
+  sourceProfile: "",
+  profile: "",
+  incognito: false,
+  url: "https://posted.example/result",
+  disposition: "foreground",
+  ...patch,
+});
+
+test("page offers publish before native reconciliation and acknowledge only afterward", async (t) => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport({ manualPublish: true });
+  const windowId = store.getState().createWindow({ url: "https://opener.example/" });
+  const input = offeredPage(store, windowId),
+    reconciling = deferred();
+  const before = finishedPageOpens.length;
+  const starting = createBrowserCoordinator({
+    store,
+    transport: native.transport,
+    async onAcceptedCommit(commit) {
+      if (commit.revision === 1) await reconciling.promise;
+    },
+  });
+  await tick();
+  native.publicationAcks[0].resolve();
+  const runtime = await starting;
+  t.after(() => runtime.dispose());
+  emitPageOpen(input);
+  await tick();
+  const target = Object.values(store.getState().tabs).find((tab) => tab.adoptId === input.offerId);
+  assert.ok(target);
+  assert.equal(target.navigation, null);
+  assert.equal(finishedPageOpens.length, before);
+  native.publicationAcks[1].resolve();
+  await tick();
+  assert.equal(finishedPageOpens.length, before, "native window reconciliation still waits");
+  reconciling.resolve();
+  await runtime.flushPublications();
+  assert.deepEqual(finishedPageOpens.at(-1), { offerId: input.offerId, tabId: target.id });
+  const count = Object.keys(store.getState().tabs).length;
+  emitPageOpen(input);
+  await runtime.flushPublications();
+  assert.equal(Object.keys(store.getState().tabs).length, count);
+  assert.equal(finishedPageOpens.length, before + 1, "duplicate native delivery is acknowledged once");
+});
+
+test("rejected offers and deliberate fresh private sessions release their native pages", async (t) => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport();
+  const windowId = store.getState().createWindow({ url: "https://opener.example/" });
+  const runtime = await createBrowserCoordinator({ store, transport: native.transport });
+  t.after(() => runtime.dispose());
+  const before = Object.keys(store.getState().tabs).length;
+  const rejected = offeredPage(store, windowId, { sourceTabId: "closed-source" });
+  emitPageOpen(rejected);
+  await runtime.flushPublications();
+  assert.deepEqual(finishedPageOpens.at(-1), { offerId: rejected.offerId, tabId: null });
+  assert.equal(Object.keys(store.getState().tabs).length, before);
+  const fresh = offeredPage(store, windowId, { offerId: "bay-tab:00000000-0000-4000-8000-000000000002", disposition: "incognito" });
+  emitPageOpen(fresh);
+  await runtime.flushPublications();
+  assert.deepEqual(finishedPageOpens.at(-1), { offerId: fresh.offerId, tabId: null });
+  const privateWindow = Object.values(store.getState().windows).find((window) => window.incognito);
+  assert.ok(privateWindow);
+  const tab = store.getState().tabs[viewTabIds(store.getState(), privateWindow.id)[0]];
+  assert.equal(tab.adoptId, undefined);
+  assert.equal(tab.navigation.url, fresh.url);
+});
+
+test("accepted page offers recover without creating duplicate tabs or requiring a live opener", async (t) => {
+  const old = createBrowserStore();
+  const windowId = old.getState().createWindow({ url: "https://opener.example/" });
+  const input = offeredPage(old, windowId);
+  const target = old.getState().newTab(windowId, { url: input.url, adoptId: input.offerId });
+  old.getState().closeTab(input.sourceTabId);
+  const previous = createBrowserAuthority({ store: old, epoch: "before-crash" });
+  const native = coordinatorTransport({ bootstrap: { recoveryState: previous.getSnapshot().state } });
+  pageEventSource.openReplay = [input];
+  t.after(() => {
+    pageEventSource.openReplay = [];
+    previous.close();
+  });
+  const store = createBrowserStore();
+  const runtime = await createBrowserCoordinator({ store, transport: native.transport });
+  t.after(() => runtime.dispose());
+  await runtime.announceReady();
+  assert.deepEqual(Object.keys(store.getState().tabs), [target]);
+  assert.deepEqual(finishedPageOpens.at(-1), { offerId: input.offerId, tabId: target });
+});
+
+test("failed handoff publication leaves the native offer unacknowledged for recovery", async () => {
+  const store = createBrowserStore(),
+    native = coordinatorTransport({ manualPublish: true }),
+    errors = [];
+  const windowId = store.getState().createWindow({ url: "https://opener.example/" });
+  const input = offeredPage(store, windowId),
+    before = finishedPageOpens.length;
+  const listeners = pageOpenListeners.size;
+  const starting = createBrowserCoordinator({ store, transport: native.transport, onError: (error) => errors.push(error) });
+  await tick();
+  native.publicationAcks[0].resolve();
+  const runtime = await starting;
+  emitPageOpen(input);
+  await tick();
+  native.publicationAcks[1].reject(new Error("handoff publication refused"));
+  await tick();
+  assert.equal(errors.length, 1);
+  assert.equal(finishedPageOpens.length, before);
+  assert.equal(pageOpenListeners.size, listeners);
+  await assert.rejects(runtime.flushPublications(), /handoff publication refused/);
 });

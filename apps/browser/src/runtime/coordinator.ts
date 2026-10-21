@@ -6,8 +6,9 @@ import type { BrowserProjection } from "./projection";
 import type { LocationCommandEffects } from "./locationCommands";
 import type { PersistenceOwner } from "../lib/persist";
 import { startCoordinatorServices } from "./services";
-import { onPageEvent, startPageEvents, stopPageEvents } from "@bay/nncore";
+import { finishPageOpen, onPageEvent, onPageOpen, startPageEvents, stopPageEvents } from "@bay/nncore";
 import { createPageFactConsumer } from "./pageFacts";
+import { applyPageOpen, parsePageOpen } from "./pageOpen";
 
 export type BrowserCoordinatorTransport = CoordinatorRuntimeTransport<BrowserProjection, BrowserCommand, string | null>;
 
@@ -38,12 +39,18 @@ export async function createBrowserCoordinator({
   transport,
   effects,
   startServices = startCoordinatorServices,
+  onAcceptedCommit,
   onError = (error) => console.error("[runtime] coordinator failed", error),
 }: {
   store: BrowserStore;
   transport: BrowserCoordinatorTransport;
   effects?: LocationCommandEffects;
   startServices?: (options: { store: BrowserStore }) => PersistenceOwner;
+  /** Shared native window reconciliation runs after browser acceptance, so
+   * offered private profiles are reserved before creating their windows.
+   * Reconcile native state here; do not await further browser commands.
+   */
+  onAcceptedCommit?: (commit: BrowserCommit) => void | Promise<void>;
   onError?: (error: Error) => void;
 }) {
   const identity = transport.bootstrap;
@@ -77,6 +84,7 @@ export async function createBrowserCoordinator({
   let services: PersistenceOwner | undefined;
   const pageFacts = createPageFactConsumer(store);
   let unsubscribePages = () => {};
+  const pageOpens = new Map<string, { fingerprint: string; promise: Promise<void>; complete: boolean }>();
 
   function active() {
     if (failure) throw failure;
@@ -87,6 +95,7 @@ export async function createBrowserCoordinator({
     disposed = true;
     failure = error === undefined ? null : error instanceof Error ? error : new Error(String(error));
     pageFacts.dispose();
+    pageOpens.clear();
     for (const remove of [unsubscribePages, unsubscribeAuthority, unsubscribeCommands, unsubscribeClose, () => services?.dispose()]) {
       try {
         remove();
@@ -113,6 +122,8 @@ export async function createBrowserCoordinator({
       await transport.publish(commit);
       active();
       publishedRevision = commit.revision;
+      await onAcceptedCommit?.(commit);
+      active();
     });
     publications = task;
     void task.catch(stop);
@@ -146,6 +157,46 @@ export async function createBrowserCoordinator({
     }
   }
 
+  function handlePageOpen(input: unknown, initial: Promise<void>) {
+    let event: ReturnType<typeof parsePageOpen>;
+    try {
+      event = parsePageOpen(input);
+    } catch (error) {
+      stop(error);
+      return;
+    }
+    const fingerprint = JSON.stringify(event);
+    const existing = pageOpens.get(event.offerId);
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) stop(new Error("Native page offer changed identity"));
+      return;
+    }
+    const request = { fingerprint, complete: false, promise: Promise.resolve() };
+    pageOpens.set(event.offerId, request);
+    request.promise = (async () => {
+      await initial;
+      active();
+      const reply = await authority.dispatchNative((owner) => applyPageOpen(owner, event));
+      await publications;
+      active();
+      if (publishedRevision < reply.commit.revision) throw new Error("Native page handoff was not published");
+      const target = reply.value ? reply.commit.state.tabs[reply.value] : undefined;
+      const adopted = target?.adoptId === event.offerId || target?.wakeAdoptId === event.offerId;
+      await finishPageOpen(event.offerId, adopted ? reply.value : null);
+      active();
+      request.complete = true;
+      // Native bounds pending offers. Retain recent completed identities too,
+      // so duplicate deliveries never repeat a reducer after its tab moved.
+      for (const [id, saved] of pageOpens) {
+        if (pageOpens.size <= 1024) break;
+        if (saved.complete) pageOpens.delete(id);
+      }
+    })();
+    void request.promise.catch((error) => {
+      if (!disposed) stop(error);
+    });
+  }
+
   try {
     // Queue revision zero before subscribing, so synchronous service mutations
     // and commands can never overtake the initial publication.
@@ -170,8 +221,12 @@ export async function createBrowserCoordinator({
     const pages = onPageEvent((event) => {
       if (!disposed) pageFacts.apply(event);
     });
+    const openings = onPageOpen((event) => {
+      if (!disposed) handlePageOpen(event, initial);
+    });
     unsubscribePages = () => {
       pages.remove();
+      openings.remove();
       void stopPageEvents().catch((error) => console.error("[runtime] page event cleanup failed", error));
     };
     await initial;
@@ -192,12 +247,14 @@ export async function createBrowserCoordinator({
       },
       async flushPublications() {
         active();
+        await Promise.all([...pageOpens.values()].map((request) => request.promise));
         await publications;
         active();
       },
       async announceReady() {
         active();
         ready ??= (async () => {
+          await Promise.all([...pageOpens.values()].map((request) => request.promise));
           await publications;
           active();
           await transport.announceReady();

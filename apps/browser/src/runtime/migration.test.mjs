@@ -380,3 +380,38 @@ test("Chrome page facts converge in both mirrors while commands run without rend
   assert.equal(store.getState().live[tabId].playingAudio, true, "stale page reports do not overwrite a later fact");
   assert.equal(useBrowser.getState(), legacy);
 });
+
+test("Chrome page offers converge in both mirrors and retain the native page exactly once", async (t) => {
+  const legacy = useBrowser.getState();
+  const {
+    store,
+    first,
+    coordinator,
+    clients: [one, two],
+  } = await start(t);
+  const { emitPageOpen, finishedPageOpens } = await import("../test-native-stub.mjs");
+  const offer = {
+    offerId: "bay-tab:12345678-1234-4234-8234-123456789abc",
+    sourceTabId: activeTabId(store.getState(), first),
+    sourceWindowId: first,
+    sourceProfile: "",
+    profile: "",
+    incognito: false,
+    url: "https://opened-by-chrome.example/",
+    disposition: "foreground",
+  };
+  const acknowledgements = finishedPageOpens.length;
+  emitPageOpen(offer);
+  await coordinator.flushPublications();
+  const target = Object.values(store.getState().tabs).find((tab) => tab.adoptId === offer.offerId);
+  assert.ok(target);
+  assert.equal(target.url, offer.url);
+  assert.deepEqual(finishedPageOpens.slice(acknowledgements), [{ offerId: offer.offerId, tabId: target.id }]);
+  assertConverged(coordinator, [one, two]);
+  const revision = one.getSnapshot().revision;
+  emitPageOpen(offer);
+  await coordinator.flushPublications();
+  assert.equal(one.getSnapshot().revision, revision);
+  assert.equal(finishedPageOpens.length, acknowledgements + 1);
+  assert.equal(useBrowser.getState(), legacy);
+});
