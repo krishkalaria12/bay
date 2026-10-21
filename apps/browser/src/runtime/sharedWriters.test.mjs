@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -48,7 +48,7 @@ const writable = /import\s*\{[^}]*\buseBrowser\b[^}]*\}\s*from\s*"(?:\.{1,2}\/)+
 test("only coordinator services and legacy-guarded modules import the writable browser store", () => {
   const found = [];
   for (const path of sources(root)) {
-    const file = relative(root, path);
+    const file = relative(root, path).split(sep).join("/"); // Windows paths use backslashes
     if (file.startsWith("store/") && file !== "store/read.ts" && file !== "store/hooks.ts") continue; // the store itself
     if (writable.test(readFileSync(path, "utf8"))) found.push(file);
   }
