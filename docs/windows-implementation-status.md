@@ -166,6 +166,14 @@ reducer queue with request deduplication, and each operation's reply has its own
 checked result shape. Window hosts may call only the local dialog and
 recovery-kit presentation parts of `BaySync`.
 
+Tab commands from a public main window now use the same access check as its
+projection rather than requiring the window to own the tab. A space's list is
+shared, so its sidebar can select, close, pin, duplicate, reorder, move or
+navigate a public tab that another main window last showed or none has loaded
+yet. Private windows and Little Bay still reach only their own tabs, and
+commands about the page a window shows (find, page history, source tabs) still
+require that window to own it.
+
 The page a New Tab page shown by Back keeps for Forward now lives in the tab, so
 every window agrees on it. When a tab's accepted window changes, Chrome parks
 its page before either window sees the change; a page that cannot be parked
@@ -173,7 +181,7 @@ loads its URL afresh in the destination. A source audit test fails if window
 code imports the writable store outside the coordinator services and the
 legacy-only paths.
 
-Verification on macOS: 584 browser, 52 platform and 55 native runtime tests,
+Verification on macOS: 584 browser, 52 platform and 56 native runtime tests,
 TypeScript, lint, contract checks, the production web and macOS JavaScript
 bundles and the Windows pipeline tests pass. The changed native sources pass macOS-target syntax checks
 with generated Mojo bindings; the Windows-only `BaySync` restriction has not
