@@ -72,9 +72,11 @@ without session hydration.
 
 The command migration now covers tab creation, selection, navigation, closing,
 duplication, pinning and reordering; window creation, movement, restoration,
-focus and space switching; and user settings/search-engine changes. The native
-broker validates source ownership, public destinations and private isolation,
-with 31 executed C++ tests against the pinned Chromium libraries. Creation can
+focus and space switching; user settings/search-engine changes; groups, pinned
+folders, tab placement, muting and clean up; and split view and peeks. The
+native broker validates source ownership, public destinations, shared space
+references and private isolation, with 34 executed C++ tests against the
+pinned Chromium libraries. Creation can
 open its initial command panel in the same commit. Little Bay moves its page
 or creates and focuses a main window within one command, before its source
 connection closes. Settings layout changes also
@@ -82,7 +84,9 @@ commit once across all windows, and extension-reported engines remain native
 facts rather than renderer preferences.
 
 Migrated UI paths include settings controls, bookmark opening, Little Bay,
-internal-page opening, tab window drops, Google sign-in and meeting tab opens.
+internal-page opening, tab window drops, Google sign-in, meeting tab opens, the
+sidebar's menus, drags and folder Undo, the top tab strip, split and peek
+chrome, and the app command handler.
 They use read-only projections and await returned IDs before follow-up work.
 Two-client integration tests exercise concurrent commands, publication before
 acknowledgement, duplicate requests, one native reconciliation/persistence owner,
@@ -95,8 +99,9 @@ global engine, data and window events go to the coordinator. This experimental
 mode deliberately stops before the legacy UI entry, which still owns global
 services. The coordinator and visible UI entries are not wired together yet.
 Additional application windows remain gated pending the remaining command
-migration and service ownership. Group, split, peek, bookmark mutation, native
-page-fact and other legacy UI paths still access the writable singleton. Global
+migration and service ownership. Space, bookmark, history, download and window
+panel mutations, bulk import, native page facts and pages Chrome already opened
+(`adoptId`) still access the writable singleton. Global
 service startup and cross-renderer page handoff must move to the coordinator
 before enabling the shared UI entry. In-process two-client tests do not replace
 native two-window acceptance. Live document IO now starts
