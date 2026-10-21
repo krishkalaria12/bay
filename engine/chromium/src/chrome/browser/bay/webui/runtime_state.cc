@@ -999,17 +999,6 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     const auto* id = input.FindString(field);
     return id && !PrivateSpace(*id) && state.FindDict("spaces")->FindDict(*id);
   };
-  const auto owned_tabs = [&](const base::DictValue& input) {
-    const auto* ids = input.FindList("tabIds");
-    if (!ids || ids->size() > 10000)
-      return false;
-    std::set<std::string> seen;
-    for (const auto& id : *ids)
-      if (!id.is_string() || !seen.insert(id.GetString()).second ||
-          !tab_owned(id.GetString()))
-        return false;
-    return true;
-  };
   const auto index = [&](const char* field, double minimum = 0) {
     const auto value = command.FindDouble(field);
     return value && std::isfinite(*value) && std::floor(*value) == *value &&
@@ -1018,9 +1007,11 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
   const auto* kind = own_window->FindString("kind");
   const bool harbor = kind && *kind == "small";
   constexpr size_t kMaximumInput = 1024 * 1024;
-  // Organize commands act on a space's shared list. A public main window may
-  // name public tabs that another main window shows; a private window or a
-  // Little Bay only names its own.
+  // The read-only access check: what the window's projection lists. Tab and
+  // organize commands act on a space's shared list, so a public main window
+  // may name public tabs another main window shows or none has loaded yet; a
+  // private window or a Little Bay only names its own. Commands about the page
+  // a window shows (find, page history, source tabs) still use own_tab.
   const auto visible_tab = [&](const std::string& id) {
     const auto* tab = tabs->FindDict(id);
     if (!tab || !StoredTab(state, *tab))
@@ -1149,8 +1140,13 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     }
     return true;
   }
-  if (*method == "wakeTab" || *method == "syncInternalPage" ||
-      *method == "hideNewTab" || *method == "showNewTab") {
+  // Waking warms any tab the window can list; the others act on the page this
+  // window shows, which it owns.
+  if (*method == "wakeTab")
+    return CommandFields(command, {"method", "tabId"}) &&
+           visible_field(command, "tabId");
+  if (*method == "syncInternalPage" || *method == "hideNewTab" ||
+      *method == "showNewTab") {
     if (!own_tab("tabId") ||
         !CommandFields(command, {"method", "tabId"},
                        *method == "showNewTab"
@@ -1205,7 +1201,9 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
       if (!tab || !StoredTab(state, *tab) || !space ||
           (is_private ? !own_tab("tabId") : PrivateSpace(*space)))
         return false;
-    } else if (!own_tab("tabId")) {
+    } else if (!visible_field(command, "tabId")) {
+      // A space's list is shared by its public windows, so a sidebar may act
+      // on a tab another one last showed, or none has loaded yet.
       return false;
     }
     if (*method == "activate" || *method == "showTab") {
@@ -1231,7 +1229,7 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     return CommandFields(command, {"method", "tabId"});
   }
   if (*method == "closeTabs")
-    return CommandFields(command, {"method", "tabIds"}) && owned_tabs(command);
+    return CommandFields(command, {"method", "tabIds"}) && visible_tabs(command);
   if (*method == "activateIndex" || *method == "cycle") {
     if (!CommandFields(command, {"method", "windowId",
                                  *method == "cycle" ? "delta" : "index"}) ||
@@ -1259,10 +1257,11 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
            public_space(command, "spaceId");
   if (*method == "moveTabToSpace")
     return CommandFields(command, {"method", "tabId", "spaceId"}) &&
-           own_tab("tabId") && !is_private && public_space(command, "spaceId");
+           visible_field(command, "tabId") && !is_private &&
+           public_space(command, "spaceId");
   if (*method == "moveTabsToWindow") {
     if (!CommandFields(command, {"method", "tabIds", "windowId"}) ||
-        !owned_tabs(command))
+        !visible_tabs(command))
       return false;
     const auto* target = command.Find("windowId");
     if (target->is_none())
@@ -1294,7 +1293,7 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
         (options->contains("spaceId") && !public_space(*options, "spaceId")) ||
         (options->contains("url") &&
          !CommandText(*options, "url", kMaximumInput, true)) ||
-        (options->contains("tabIds") && !owned_tabs(*options)))
+        (options->contains("tabIds") && !visible_tabs(*options)))
       return false;
     const auto* ids = options->FindList("tabIds");
     if ((private_target && (options->contains("spaceId") || small_target ||

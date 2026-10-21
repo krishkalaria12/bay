@@ -83,6 +83,14 @@ void AddWindow(base::DictValue& state, const char* id, bool incognito) {
                    .Set("profile", profile)
                    .Set("url", std::string(id) + "-secret"));
 }
+// A Little Bay window lists its tab under its own id, not its space's.
+void AddLittleBay(base::DictValue& state, const char* id) {
+  AddWindow(state, id, false);
+  state.FindDict("windows")->FindDict(id)->Set("kind", "small");
+  const std::string tab_id = std::string(id) + "-tab";
+  state.FindDict("tabLists")->FindList("default")->EraseValue(base::Value(tab_id));
+  state.FindDict("tabLists")->Set(id, base::ListValue().Append(tab_id));
+}
 TEST(RuntimePageEventsTest, AuthorizesProfileWithoutRequiringWindowOwnership) {
   auto state = State();
   AddWindow(state, "normal", false);
@@ -821,7 +829,9 @@ TEST(RuntimeStateTest, MigratedTabListsValidateEverySourceBeforeDispatch) {
   auto state = State();
   AddWindow(state, "normal", false);
   AddWindow(state, "other", false);
+  AddLittleBay(state, "harbor");
   AddWindow(state, "private", true);
+  ASSERT_TRUE(IsRuntimeState(state));
   for (const auto* method : {"closeTabs", "moveTabsToWindow"}) {
     auto command = base::DictValue()
                        .Set("method", method)
@@ -829,7 +839,10 @@ TEST(RuntimeStateTest, MigratedTabListsValidateEverySourceBeforeDispatch) {
     if (std::string_view(method) == "moveTabsToWindow")
       command.Set("windowId", "other");
     EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    // The space's list is shared: another public window's tab can be named.
     command.FindList("tabIds")->Append("other-tab");
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+    command.FindList("tabIds")->Append("harbor-tab");
     EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
     command.Set("tabIds",
                 base::ListValue().Append("normal-tab").Append("private-tab"));
@@ -877,11 +890,13 @@ TEST(RuntimeStateTest, MigratedWindowTargetsCannotCrossPrivateBoundaries) {
   move.Set("spaceId", "default");
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", move));
 }
-TEST(RuntimeStateTest, WindowCreationCannotImportForeignOrPrivateTabs) {
+TEST(RuntimeStateTest, WindowCreationCannotImportPrivateOrLittleBayTabs) {
   auto state = State();
   AddWindow(state, "normal", false);
   AddWindow(state, "other", false);
+  AddLittleBay(state, "harbor");
   AddWindow(state, "private", true);
+  ASSERT_TRUE(IsRuntimeState(state));
   auto command =
       base::DictValue()
           .Set("method", "createWindow")
@@ -895,6 +910,8 @@ TEST(RuntimeStateTest, WindowCreationCannotImportForeignOrPrivateTabs) {
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
   command.Remove("openPanel");
   command.FindDict("options")->FindList("tabIds")->Append("other-tab");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command));
+  command.FindDict("options")->FindList("tabIds")->Append("harbor-tab");
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command));
   command.FindDict("options")->Set("tabIds",
                                    base::ListValue().Append("private-tab"));
@@ -1619,6 +1636,53 @@ TEST(RuntimeStateTest, SplitAndPeekCommandsValidateTargetsAndResults) {
   EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", focus));
   focus.Set("delta", -1);
   EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", focus));
+}
+TEST(RuntimeStateTest, SidebarTabCommandsReachSharedPublicTabsOnly) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddLittleBay(state, "harbor");
+  AddWindow(state, "private", true);
+  // A public tab no window has loaded since launch.
+  state.FindDict("tabs")->Set("detached-tab", base::DictValue()
+                                                  .Set("id", "detached-tab")
+                                                  .Set("windowId", "")
+                                                  .Set("spaceId", "default")
+                                                  .Set("url", "https://a.example/"));
+  state.FindDict("tabLists")->FindList("default")->Append("detached-tab");
+  ASSERT_TRUE(IsRuntimeState(state));
+  const auto command = [](const char* method, const char* tab) {
+    auto c = base::DictValue().Set("method", method).Set("tabId", tab);
+    const std::string_view m(method);
+    if (m == "navigate") c.Set("url", "https://example.com/");
+    if (m == "moveTab") c.Set("toIndex", 0);
+    if (m == "moveTabToSpace") c.Set("spaceId", "default");
+    if (m == "activate") c.Set("windowId", "normal");
+    return c;
+  };
+  for (const auto* method : {"activate", "closeTab", "removeTab", "duplicateTab", "togglePin", "navigate", "moveTab",
+                             "wakeTab", "moveTabToSpace"}) {
+    for (const auto* tab : {"normal-tab", "other-tab", "detached-tab"})
+      EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command(method, tab))) << method << " " << tab;
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command(method, "harbor-tab"))) << method;
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command(method, "private-tab"))) << method;
+    // Private windows and Little Bay still name only their own tabs.
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", command(method, "normal-tab"))) << method;
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "harbor", command(method, "normal-tab"))) << method;
+  }
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "harbor", command("closeTab", "harbor-tab")));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "private", command("closeTab", "private-tab")));
+  // Commands about the page a window shows stay with the window showing it.
+  for (const auto* method : {"syncInternalPage", "showNewTab", "hideNewTab"}) {
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", command(method, "normal-tab"))) << method;
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", command(method, "other-tab"))) << method;
+  }
+  EXPECT_FALSE(CanDispatchRuntimeCommand(
+      state, "normal",
+      base::DictValue().Set("method", "setFind").Set("tabId", "other-tab").Set("patch", base::DictValue())));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(
+      state, "normal",
+      base::DictValue().Set("method", "openPeek").Set("fromTabId", "other-tab").Set("url", "https://b.example/")));
 }
 base::DictValue Json(const char* json) {
   auto value = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
