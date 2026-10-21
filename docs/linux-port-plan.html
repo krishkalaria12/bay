@@ -1045,9 +1045,9 @@ export CHROME_DEVEL_SANDBOX="$OUT/chrome_sandbox"</pre>
               <p>
                 <code>scripts/engine.py --platform win|linux</code> now shares the pinned checkout and build flow with a lock section for each platform.
                 <code>pin</code> works on the Mac; <code>download</code> requires the target host. Linux <code>prepare</code> and <code>build</code> refuse to
-                proceed until the Linux linking and branding patches are listed in the series. Those patches and the native host sources remain Phase&nbsp;1
-                and Phase&nbsp;3 work. The driver keeps pinned revisions, never resets checkouts, and runs <code>series.py check</code> before every build.
-                See <a href="engine-cli.md">Engine CLI</a> for prerequisites and archive details. These build commands are for use once those sources land.
+                proceed until the Linux linking and branding patches are listed in the series. Those patches and the native host sources remain Phase&nbsp;1 and
+                Phase&nbsp;3 work. The driver keeps pinned revisions, never resets checkouts, and runs <code>series.py check</code> before every build. See
+                <a href="engine-cli.md">Engine CLI</a> for prerequisites and archive details. These build commands are for use once those sources land.
               </p>
               <div class="code">
                 <pre>cd "$HOME/code/bay"
@@ -1566,15 +1566,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <p>
                 <strong>Implementation progress, 21 Oct 2026.</strong> Linux caption buttons and shared-runtime defaults are implemented. Web page-fact
                 ownership reads the host's <code>sharedRuntime</code> constant; the native Mac app keeps local ownership. The series accepts Linux and comma
-                lists, selects the shared host patches, and installs NNCore without the Mac hooks. Windows DLL dependencies stay in the Windows layer
-                patch. The engine driver now shares platform profiles and keeps the Windows entry point. Linux archives have separate runtime and debug
-                symbol files with checksums; packaging is tested with fixtures, not a built Bay engine. An Ubuntu&nbsp;24.04 workflow covers portable
-                JavaScript and Python tests, typechecks, web export and Linux patch selection. The shared driver tests also run in the Windows workflow.
+                lists, selects the shared host patches, and installs NNCore without the Mac hooks. Windows DLL dependencies stay in the Windows layer patch. The
+                engine driver now shares platform profiles and keeps the Windows entry point. Linux archives have separate runtime and debug symbol files with
+                checksums; packaging is tested with fixtures, not a built Bay engine. An Ubuntu&nbsp;24.04 workflow covers portable JavaScript and Python tests,
+                typechecks, web export and Linux patch selection. The shared driver tests also run in the Windows workflow.
               </p>
               <p>
-                <strong>Still open.</strong> Linux crypto and secrets backends, native host sources and GN gates, and Linux engine linking and branding.
-                Native runtime policy tests are added and syntax-checked; their binaries have not run. The Ubuntu workflow, full
-                engine build and Wayland/X11 hosting gate still need to run. Phase&nbsp;0 is not complete.
+                <strong>Still open.</strong> Linux crypto and secrets backends, native host sources and GN gates, and Linux engine linking and branding. Native
+                runtime policy tests are added and syntax-checked; their binaries have not run. The Ubuntu workflow, full engine build and Wayland/X11 hosting
+                gate still need to run. Phase&nbsp;0 is not complete.
               </p>
             </div>
             <div class="cols">
@@ -1793,10 +1793,10 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             </dl>
             <div class="callout">
               <p>
-                <strong>Host helper sources, 21 Oct 2026.</strong> Linux now has the download completion hook and GIO protocol-handler display names.
-                Protocol lookups copy prefs on the UI sequence and resolve names on a worker. The shared Aura PiP implementation provides the window fade;
-                Linux preloads bounds asynchronously and queues writes. Ozone backends without global screen coordinates skip rectangle persistence, so
-                Wayland cannot overwrite saved X11 positions. A PiP window opened before preload finishes uses Chromium's default placement.
+                <strong>Host helper sources, 21 Oct 2026.</strong> Linux now has the download completion hook and GIO protocol-handler display names. Protocol
+                lookups copy prefs on the UI sequence and resolve names on a worker. The shared Aura PiP implementation provides the window fade; Linux preloads
+                bounds asynchronously and queues writes. Ozone backends without global screen coordinates skip rectangle persistence, so Wayland cannot
+                overwrite saved X11 positions. A PiP window opened before preload finishes uses Chromium's default placement.
               </p>
               <p>
                 <strong>Verification.</strong> Helper and unit-test sources pass Linux x64 syntax checks with the pinned Debian sysroot. These checks reuse
@@ -1804,12 +1804,12 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 remain unverified. Host platform services, notifications, linking and branding are still open.
               </p>
               <p>
-                <strong>Frame, 21 Oct 2026.</strong> <code>frame_linux.cc</code> installs through the shared native-widget hook. It asks X11 for an
-                undecorated window and Wayland for client-side decorations, and replaces the GTK frame so no second title bar appears. A 4&nbsp;DIP band
-                inside each edge resizes restored windows, with 16&nbsp;DIP diagonal corners; maximized and full-screen windows don't resize. Every other
-                point goes to the WebUI client view's CSS drag regions, and Chromium's Linux event filter handles moves, resizes and the desktop's
-                double-click action. <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. The
-                desktop's button layout, edge tiling and client shadows come later.
+                <strong>Frame, 21 Oct 2026.</strong> <code>frame_linux.cc</code> installs through the shared native-widget hook. It asks X11 for an undecorated
+                window and Wayland for client-side decorations, and replaces the GTK frame so no second title bar appears. A 4&nbsp;DIP band inside each edge
+                resizes restored windows, with 16&nbsp;DIP diagonal corners; maximized and full-screen windows don't resize. Every other point goes to the WebUI
+                client view's CSS drag regions, and Chromium's Linux event filter handles moves, resizes and the desktop's double-click action.
+                <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. The desktop's button layout, edge
+                tiling and client shadows come later.
               </p>
             </div>
             <ul>
