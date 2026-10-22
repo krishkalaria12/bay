@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/bay/webui/shell_appearance.h"
 #include "chrome/browser/bay/webui/shell_clipboard.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 
@@ -34,13 +35,10 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/version_info/version_info.h"
 #include "ui/base/base_window.h"
-#include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
 
 namespace bay {
@@ -290,8 +288,6 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayShell.pickFiles",
                      "BayShell.confirm",
                      "BayShell.prompt",
-                     "BayShell.setAppearance",
-                     "BayShell.isDarkAppearance",
                      "BaySystem.isDefaultBrowser",
                      "BaySystem.setAsDefaultBrowser",
                      "BaySystem.fileExists",
@@ -310,6 +306,8 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayKeychain.set",
                      "BayKeychain.delete"})
     methods.Append(name);
+  for (auto& method : ShellAppearance::SupportedMethods())
+    methods.Append(std::move(method));
   for (auto& method : ShellClipboard::SupportedMethods())
     methods.Append(std::move(method));
   for (auto& method : Notifications::SupportedMethods())
@@ -375,26 +373,8 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
     return true;
   if (ShellClipboard::Dispatch(module, method, args, callback))
     return true;
-  if (module == "BayShell" && method == "isDarkAppearance") {
-    std::move(callback).Run(Success(base::Value(
-        ui::NativeTheme::GetInstanceForNativeUi()->preferred_color_scheme() ==
-        ui::NativeTheme::PreferredColorScheme::kDark)));
+  if (ShellAppearance::Dispatch(context_, module, method, args, callback))
     return true;
-  }
-  if (module == "BayShell" && method == "setAppearance") {
-    const auto* mode = Text(args, 0);
-    if (!mode || (*mode != "auto" && *mode != "light" && *mode != "dark")) {
-      invalid();
-      return true;
-    }
-    ThemeServiceFactory::GetForProfile(context_.profile())
-        ->SetBrowserColorScheme(
-            *mode == "dark"    ? ThemeService::BrowserColorScheme::kDark
-            : *mode == "light" ? ThemeService::BrowserColorScheme::kLight
-                               : ThemeService::BrowserColorScheme::kSystem);
-    std::move(callback).Run(Success());
-    return true;
-  }
   if (module == "BaySystem" &&
       (method == "isDefaultBrowser" || method == "setAsDefaultBrowser")) {
     auto worker =
