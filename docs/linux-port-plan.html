@@ -1840,8 +1840,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <p>
                 Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
                 lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
-                <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. Confirmation dialogs,
-                menus and the remaining system methods are still open.
+                <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. Menus and the
+                remaining system methods are still open; confirmation dialogs are recorded below.
               </p>
               <p>
                 <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
@@ -1886,6 +1886,19 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 v12 providers, including a decrypt-only keyring. Native host tests cover the advertised method, dispatch ahead of the engine facade, joined
                 requests, argument errors and teardown. They pass release and DCHECK Linux x64 syntax checks but have not run. Browser, platform and copy tests,
                 the generated contracts, typechecks, lint and formatting pass. A real fallback to the fixed key on a Linux desktop has not been observed.
+              </p>
+              <p>
+                <strong>Confirmation dialogs, 22 Oct 2026.</strong> <code>BayShell.confirm</code> now lives in the shared <code>ShellUI</code> next to
+                <code>prompt</code>, and Linux advertises it. Both use one dialog path: the same window targeting (a coordinator names a live window, and a
+                window host confirms only in its own), one open dialog per window, and a cancelled answer if the document goes away. Confirm honors
+                <code>confirmTitle</code>, <code>cancelTitle</code> and <code>suppression</code>, which shows a checkbox reported with either button, as on
+                macOS. Views has no destructive button style, so a <code>destructive</code> confirm makes Cancel the default button, as GNOME does. Windows
+                drops its Yes/No message box, which ignored these options and outlived its document, and gets the shared dialog.
+              </p>
+              <p>
+                <strong>Verification.</strong> Parser tests cover every option, the defaults and malformed input. Native host tests cover advertisement,
+                coordinator targeting and argument errors. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run, and the
+                dialog's buttons, checkbox and Return behavior have not been seen on X11, Wayland or Windows.
               </p>
             </div>
             <ul>
