@@ -38,6 +38,7 @@
 #include "chrome/browser/bay/webui/notifications.h"
 #endif
 #if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/secret_storage_linux.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #endif
@@ -384,6 +385,10 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
 #if BUILDFLAG(IS_LINUX)
   shell_ui_ = std::make_unique<ShellUI>();
   secret_storage_ = std::make_unique<SecretStorage>();
+  documents_ = std::make_unique<DocumentStore>(
+      DocumentStore::DefaultDirectory(),
+      base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  documents_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
   if (context_.window()) {
     WindowRegistry::Get().RegisterHost(
@@ -477,6 +482,9 @@ base::DictValue NativeHost::Info() const {
                                 "bay-hosting-spike"));
 #if BUILDFLAG(IS_WIN)
   shell.Set("initializationError", platform_services_->initialization_error());
+#elif BUILDFLAG(IS_LINUX)
+  if (!documents_->error().empty())
+    shell.Set("initializationError", documents_->error());
 #endif
   if (context_.window() && WindowRegistry::Get().IsAbsorbed(context_.window()))
     shell.Set("initializationError",
@@ -499,6 +507,12 @@ base::DictValue NativeHost::Info() const {
   engine_methods.Append("BaySystem.fileIcon");
   for (auto& method : SecretStorage::SupportedMethods())
     engine_methods.Append(std::move(method));
+  for (auto& method : DocumentStore::SupportedMethods())
+    engine_methods.Append(std::move(method));
+#endif
+  base::DictValue documents;
+#if BUILDFLAG(IS_LINUX)
+  documents = documents_->documents();
 #endif
   auto info =
       base::DictValue()
@@ -521,8 +535,8 @@ base::DictValue NativeHost::Info() const {
                    .Set("BayApp", base::DictValue()
                                       .Set("systemInfo", std::move(system))
                                       .Set("environment", base::DictValue()))
-                   .Set("BayShell",
-                        base::DictValue().Set("documents", base::DictValue()))
+                   .Set("BayShell", base::DictValue().Set("documents",
+                                                          std::move(documents)))
                    .Set("BaySystem",
                         base::DictValue()
                             .Set("files", base::DictValue())
@@ -573,7 +587,7 @@ base::DictValue NativeHost::Info() const {
   return info;
 }
 void NativeHost::GetHostInfo(GetHostInfoCallback callback) {
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (!platform_ready_) {
     host_info_callbacks_.push_back(std::move(callback));
     return;
@@ -582,14 +596,14 @@ void NativeHost::GetHostInfo(GetHostInfoCallback callback) {
   std::move(callback).Run(JSON(Info()));
 }
 void NativeHost::PublishHostInfo() {
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (!platform_ready_)
     return;
 #endif
   if (client_)
     client_->OnHostInfoChanged(JSON(Info()));
 }
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void NativeHost::PlatformReady() {
   platform_ready_ = true;
   const std::string json = JSON(Info());
@@ -780,6 +794,8 @@ void NativeHost::Invoke(const std::string& module,
   // These services do not depend on Windows platform initialization. The
   // common profile check above and browser-assigned context own authority.
   if (shell_ui_->Dispatch(context_, module, method, args, callback))
+    return;
+  if (documents_->Dispatch(module, method, args, callback))
     return;
   if (module == "BayApp" &&
       Notifications::Get().Dispatch(context_, method, args, callback))

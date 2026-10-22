@@ -26,6 +26,7 @@ class TabObserver;
 class PlatformServices;
 class BrowserServices;
 class EngineServices;
+class DocumentStore;
 class SecretStorage;
 class ShellUI;
 
@@ -64,11 +65,14 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
                            InvokeCallback callback);
   content::WebContents* ContentsForTag(int tag) const;
   base::DictValue Info() const;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  // Host info waits for the platform's saved documents.
   void PlatformReady();
-  std::unique_ptr<PlatformServices> platform_services_;
   bool platform_ready_ = false;
   std::vector<GetHostInfoCallback> host_info_callbacks_;
+#endif
+#if BUILDFLAG(IS_WIN)
+  std::unique_ptr<PlatformServices> platform_services_;
 #endif
 
   const HostContext context_;
@@ -76,6 +80,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   // Document-scoped ownership dismisses prompts and settles pending icons.
   std::unique_ptr<ShellUI> shell_ui_;
   std::unique_ptr<SecretStorage> secret_storage_;
+  std::unique_ptr<DocumentStore> documents_;
 #endif
   std::unique_ptr<BrowserServices> browser_services_;
   std::unique_ptr<EngineServices> engine_services_;

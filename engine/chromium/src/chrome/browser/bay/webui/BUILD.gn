@@ -121,7 +121,10 @@ source_set("impl") {
     ]
   }
   if (is_linux) {
-    deps += [ ":secret_storage_linux" ]
+    deps += [
+      ":document_store",
+      ":secret_storage_linux",
+    ]
   }
   if (is_win) {
     sources += [
@@ -356,6 +359,7 @@ if (is_linux) {
       "//base/test:test_support",
       "//bay/core:engine_api",
       "//chrome/browser/ui:test_support",
+      "//chrome/common:constants",
       "//chrome/test:test_support_unit",
       "//content/test:test_support",
       "//net",

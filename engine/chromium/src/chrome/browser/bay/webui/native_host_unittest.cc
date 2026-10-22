@@ -6,14 +6,18 @@
 #include <utility>
 #include <vector>
 
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_path_override.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -37,6 +41,9 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
  protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+    // Documents live under a temporary user data folder.
+    user_data_ =
+        std::make_unique<base::ScopedPathOverride>(chrome::DIR_USER_DATA);
     auto* host =
         new NativeHost(*main_rfh(), HostContext::ForCoordinator(*profile()),
                        remote_.BindNewPipeAndPassReceiver());
@@ -64,17 +71,38 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
     EXPECT_EQ(*error, code);
   }
 
+  // A fresh coordinator, once its saved documents are read.
+  void ReplaceHost() {
+    host_->ResetAndDeleteThis();
+    remote_.reset();
+    auto* host =
+        new NativeHost(*main_rfh(), HostContext::ForCoordinator(*profile()),
+                       remote_.BindNewPipeAndPassReceiver());
+    host_ = host->GetWeakPtr();
+    task_environment()->RunUntilIdle();
+  }
+  base::DictValue HostInfo() {
+    // Host info waits for the document read, which QUEUED holds until here.
+    task_environment()->RunUntilIdle();
+    base::test::TestFuture<const std::string&> result;
+    host_->GetHostInfo(result.GetCallback());
+    auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+    return info ? std::move(*info) : base::DictValue();
+  }
+  base::FilePath Documents() const {
+    return base::PathService::CheckedGet(chrome::DIR_USER_DATA)
+        .AppendASCII("BayDocuments");
+  }
+
+  std::unique_ptr<base::ScopedPathOverride> user_data_;
   mojo::Remote<mojom::NativeHost> remote_;
   base::WeakPtr<NativeHost> host_;
 };
 
 TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
-  base::test::TestFuture<const std::string&> result;
-  host_->GetHostInfo(result.GetCallback());
-  auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
-  ASSERT_TRUE(info);
-  const auto* modules = info->FindList("modules");
-  const auto* methods = info->FindList("optionalMethods");
+  auto info = HostInfo();
+  const auto* modules = info.FindList("modules");
+  const auto* methods = info.FindList("optionalMethods");
   ASSERT_TRUE(modules);
   ASSERT_TRUE(methods);
   EXPECT_TRUE(modules->contains("BaySystem"));
@@ -89,12 +117,50 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
       EXPECT_EQ(name, "BaySystem.fileIcon");
   }
   EXPECT_TRUE(methods->contains("BayShell.confirm"));
-  EXPECT_FALSE(methods->contains("BayShell.readDocument"));
-  EXPECT_TRUE(info->FindDictByDottedPath("snapshots.BaySystem.files"));
+  EXPECT_TRUE(methods->contains("BayShell.readDocument"));
+  EXPECT_TRUE(methods->contains("BayShell.saveDocument"));
+  EXPECT_TRUE(info.FindDictByDottedPath("snapshots.BaySystem.files"));
   const auto* downloads =
-      info->FindByDottedPath("snapshots.BaySystem.downloadsFolder");
+      info.FindByDottedPath("snapshots.BaySystem.downloadsFolder");
   ASSERT_TRUE(downloads);
   EXPECT_TRUE(downloads->is_none());
+}
+
+TEST_F(NativeHostTest, SavedDocumentsArriveInHostInfoAndPersist) {
+  ASSERT_TRUE(base::CreateDirectory(Documents()));
+  ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("session.json"), "{}"));
+  ReplaceHost();
+  auto info = HostInfo();
+  const auto* session =
+      info.FindStringByDottedPath("snapshots.BayShell.documents.session.json");
+  ASSERT_TRUE(session);
+  EXPECT_EQ(*session, "{}");
+  EXPECT_FALSE(
+      info.FindStringByDottedPath("constants.BayShell.initializationError"));
+
+  auto saved = base::JSONReader::ReadDict(
+      Invoke("BayShell", "saveDocument", R"(["notes.json","[1]"])"),
+      base::JSON_PARSE_RFC);
+  ASSERT_TRUE(saved);
+  EXPECT_FALSE(saved->Find("error"));
+  std::string contents;
+  ASSERT_TRUE(
+      base::ReadFileToString(Documents().AppendASCII("notes.json"), &contents));
+  EXPECT_EQ(contents, "[1]");
+  EXPECT_TRUE(HostInfo().FindStringByDottedPath(
+      "snapshots.BayShell.documents.notes.json"));
+}
+
+TEST_F(NativeHostTest, AnUnreadableDocumentBecomesTheInitializationError) {
+  ASSERT_TRUE(base::CreateDirectory(Documents()));
+  ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("bad.json"), "\xff"));
+  ReplaceHost();
+  const auto* error = HostInfo().FindStringByDottedPath(
+      "constants.BayShell.initializationError");
+  ASSERT_TRUE(error);
+  EXPECT_NE(error->find("bad.json"), std::string::npos);
+  ExpectError(Invoke("BayShell", "saveDocument", R"(["bad.json","{}"])"),
+              "initialization_failed");
 }
 
 // The testing browser process encrypts with a test key, not the fixed v10
@@ -380,14 +446,11 @@ TEST_F(FilePickerTest, WindowHostAdvertisesFilePicking) {
   auto* host = new NativeHost(*main_rfh(), HostContext::ForWindow(window_),
                               remote_.BindNewPipeAndPassReceiver());
   host_ = host->GetWeakPtr();
-  base::test::TestFuture<const std::string&> result;
-  host_->GetHostInfo(result.GetCallback());
-  auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
-  ASSERT_TRUE(info);
-  const auto* role = info->FindString("role");
+  auto info = HostInfo();
+  const auto* role = info.FindString("role");
   ASSERT_TRUE(role);
   EXPECT_EQ(*role, "window");
-  const auto* methods = info->FindList("optionalMethods");
+  const auto* methods = info.FindList("optionalMethods");
   ASSERT_TRUE(methods);
   EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
   EXPECT_TRUE(methods->contains("BayShell.showMenu"));
