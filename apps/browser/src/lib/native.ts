@@ -3,7 +3,6 @@ import { capabilities } from "@bay/platform";
 import {
   closeWindow,
   focusWindow,
-  isDarkAppearance,
   onAppEvent,
   onCommand,
   onOpenURLs,
@@ -41,6 +40,7 @@ import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
 import { createNativeWindowReconciler } from "./nativeWindows";
+import { startAppearanceSync } from "./appearanceSync";
 
 let quitting = false;
 let quitAttempt = 0;
@@ -75,13 +75,10 @@ export function startNativeSync({
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   void setAppearance(store.getState().settings.appearance);
-  void isDarkAppearance().then((dark) => {
-    if (!disposed) store.getState().setAppDark(dark);
-  });
+  stops.push(startAppearanceSync((dark) => store.getState().setAppDark(dark)));
 
   const appEvents = onAppEvent((e) => {
     const s = store.getState();
-    if (e.type === "appearance") s.setAppDark(e.dark);
     if (e.type === "reopen") createWindow();
     if (e.type === "quitWarningSuppressed") s.updateSettings({ warnBeforeQuitting: false });
     if (e.type === "willQuit") {

@@ -36,6 +36,8 @@ export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise
 export const appEventListeners = new Set();
 export const onAppEvent = (listener) => (appEventListeners.add(listener), { remove: () => appEventListeners.delete(listener) });
 export const emitAppEvent = (event) => appEventListeners.forEach((listener) => listener(event));
+export const appearanceState = { query: () => Promise.resolve(false) };
+export const isDarkAppearance = () => appearanceState.query();
 export const pageEventListeners = new Set();
 export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
 export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
