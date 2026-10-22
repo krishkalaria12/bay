@@ -40,7 +40,6 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/version_info/version_info.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -571,8 +570,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
                                     "The host profile is no longer available"));
     return true;
   }
-  if (module == "BayShell" &&
-      (method == "showMenu" || method == "pickFiles" || method == "confirm") &&
+  if (module == "BayShell" && (method == "showMenu" || method == "pickFiles") &&
       !context_.window()) {
     std::move(callback).Run(
         Failure("window_required", "This operation requires a window host"));
@@ -696,31 +694,6 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
       writer.WriteImage(bitmap);
     }
     std::move(callback).Run(Success(base::Value(!bitmap.isNull())));
-    return true;
-  }
-  if (module == "BayShell" && method == "confirm") {
-    const auto* options = Object(args, 0);
-    if (!options) {
-      invalid();
-      return true;
-    }
-    chrome::ShowQuestionMessageBoxAsync(
-        context_.window()->GetWindow()->GetNativeWindow(),
-        base::UTF8ToUTF16(options->FindString("title")
-                              ? *options->FindString("title")
-                              : "Bay"),
-        base::UTF8ToUTF16(options->FindString("message")
-                              ? *options->FindString("message")
-                              : ""),
-        base::BindOnce(
-            [](Response callback, chrome::MessageBoxResult result) {
-              std::move(callback).Run(Success(
-                  base::Value(base::DictValue()
-                                  .Set("confirmed",
-                                       result == chrome::MESSAGE_BOX_RESULT_YES)
-                                  .Set("suppressed", false))));
-            },
-            std::move(callback)));
     return true;
   }
   if (module == "BayShell" && method == "isDarkAppearance") {

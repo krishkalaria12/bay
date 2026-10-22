@@ -53,6 +53,13 @@ std::string Failure(const char* code, const char* message) {
                  base::DictValue().Set("code", code).Set("message", message)))
       .value_or("{}");
 }
+std::string ConfirmResult(bool confirmed, bool suppressed) {
+  return base::WriteJson(
+             base::DictValue().Set("value", base::DictValue()
+                                                .Set("confirmed", confirmed)
+                                                .Set("suppressed", suppressed)))
+      .value_or("{}");
+}
 std::string SelectedFiles(base::ListValue files) {
   return base::WriteJson(base::DictValue().Set("value", std::move(files)))
       .value_or("{\"value\":[]}");
@@ -71,9 +78,10 @@ std::optional<std::string> EncodeIcon(SkBitmap bitmap, int pixels) {
              : std::nullopt;
 }
 
+using Completion = base::OnceCallback<void(std::string)>;
+
 class PromptDialog final : public views::DialogDelegate {
  public:
-  using Completion = base::OnceCallback<void(std::optional<std::string>)>;
   PromptDialog(const ShellPromptOptions& options, Completion completion)
       : completion_(std::move(completion)) {
     SetTitle(options.title);
@@ -115,10 +123,69 @@ class PromptDialog final : public views::DialogDelegate {
                           static_cast<views::MessageBoxView*>(GetContentsView())
                               ->GetInputText())
                     : std::nullopt;
-    std::move(completion_).Run(std::move(text));
+    std::move(completion_).Run(Success(std::move(text)));
   }
   Completion completion_;
 };
+
+class ConfirmDialog final : public views::DialogDelegate {
+ public:
+  ConfirmDialog(const ShellConfirmOptions& options, Completion completion)
+      : completion_(std::move(completion)) {
+    SetTitle(options.title);
+    SetModalType(ui::mojom::ModalType::kWindow);
+    SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
+               static_cast<int>(ui::mojom::DialogButton::kCancel));
+    if (!options.confirm_title.empty())
+      SetButtonLabel(ui::mojom::DialogButton::kOk, options.confirm_title);
+    if (!options.cancel_title.empty())
+      SetButtonLabel(ui::mojom::DialogButton::kCancel, options.cancel_title);
+    // Views has no destructive button style. As in GNOME, Return keeps the
+    // safe choice.
+    if (options.destructive)
+      SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kCancel));
+    set_margins(
+        views::LayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG));
+    auto message =
+        std::make_unique<views::MessageBoxView>(options.message, true);
+    message->SetMessageWidth(360);
+    if (options.suppression)
+      message->SetCheckBoxLabel(*options.suppression);
+    SetContentsView(std::move(message));
+    SetAcceptCallback(
+        base::BindOnce(&ConfirmDialog::Finish, base::Unretained(this), true));
+    SetCancelCallback(
+        base::BindOnce(&ConfirmDialog::Finish, base::Unretained(this), false));
+    SetCloseCallback(
+        base::BindOnce(&ConfirmDialog::Finish, base::Unretained(this), false));
+  }
+  // The contents may already be gone; report the checkbox as clear.
+  ~ConfirmDialog() override { Complete(false, false); }
+
+ private:
+  // Like macOS, the checkbox reports its state with either button.
+  void Finish(bool confirmed) {
+    Complete(confirmed, static_cast<views::MessageBoxView*>(GetContentsView())
+                            ->IsCheckBoxSelected());
+  }
+  void Complete(bool confirmed, bool suppressed) {
+    if (completion_)
+      std::move(completion_).Run(ConfirmResult(confirmed, suppressed));
+  }
+  Completion completion_;
+};
+
+// Builds `Dialog` from a copy of its options once ShellUI has its token.
+template <typename Dialog, typename Options>
+base::OnceCallback<std::unique_ptr<views::DialogDelegate>(Completion)>
+MakeDialog(const Options& options) {
+  return base::BindOnce(
+      [](const Options& options,
+         Completion done) -> std::unique_ptr<views::DialogDelegate> {
+        return std::make_unique<Dialog>(options, std::move(done));
+      },
+      options);
+}
 }  // namespace
 
 // SelectFile may run a nested loop or complete synchronously. Keep the listener
@@ -197,9 +264,10 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
   base::OnceCallback<void(FilePicker*)> done_;
 };
 
-struct ShellUI::PendingPrompt {
+struct ShellUI::PendingDialog {
   base::WeakPtr<BrowserWindowInterface> window;
   base::WeakPtr<views::Widget> widget;
+  std::string cancelled;
   Response callback;
 };
 struct ShellUI::PendingIcon {
@@ -215,12 +283,12 @@ ShellUI::~ShellUI() {
     picker->FileSelectionCanceled();
   // Close() is asynchronous. Dialog callbacks carry only a weak owner and
   // cannot re-enter a destroyed service when the widget later goes away.
-  auto prompts = std::exchange(prompts_, {});
-  for (auto& [token, prompt] : prompts) {
-    if (prompt->widget && !prompt->widget->IsClosed())
-      prompt->widget->CloseWithReason(
+  auto dialogs = std::exchange(dialogs_, {});
+  for (auto& [token, dialog] : dialogs) {
+    if (dialog->widget && !dialog->widget->IsClosed())
+      dialog->widget->CloseWithReason(
           views::Widget::ClosedReason::kUnspecified);
-    std::move(prompt->callback).Run(Success(std::nullopt));
+    std::move(dialog->callback).Run(dialog->cancelled);
   }
   auto icons = std::exchange(icons_, {});
   for (auto& [token, icon] : icons)
@@ -270,56 +338,21 @@ bool ShellUI::Dispatch(const HostContext& context,
           Failure("invalid_args", "Invalid prompt options"));
       return true;
     }
-    auto* window = options->window_id
-                       ? WindowRegistry::Get().Find(*options->window_id)
-                       : context.window();
-    if (!window || !window->GetWindow() ||
-        !window->GetWindow()->GetNativeWindow()) {
+    ShowDialog(context, options->window_id, Success(std::nullopt), callback,
+               MakeDialog<PromptDialog>(*options));
+    return true;
+  }
+  if (module == "BayShell" && method == "confirm") {
+    auto options = args.size() == 1 && args[0].is_dict()
+                       ? ParseShellConfirmOptions(args[0].GetDict())
+                       : std::nullopt;
+    if (!options) {
       std::move(callback).Run(
-          Failure("window_required", "The prompt window is unavailable"));
+          Failure("invalid_args", "Invalid confirmation options"));
       return true;
     }
-    if (context.is_window() && window != context.window()) {
-      std::move(callback).Run(
-          Failure("forbidden", "A window cannot prompt in another window"));
-      return true;
-    }
-    for (const auto& [token, prompt] : prompts_) {
-      if (prompt->window.get() == window) {
-        std::move(callback).Run(
-            Failure("busy", "This window already has an open prompt"));
-        return true;
-      }
-    }
-    if (prompts_.size() >= 16) {
-      std::move(callback).Run(Failure("busy", "Too many open prompts"));
-      return true;
-    }
-    const auto token = next_token_++;
-    auto pending = std::make_unique<PendingPrompt>();
-    pending->window = window->GetWeakPtr();
-    pending->callback = std::move(callback);
-    prompts_.emplace(token, std::move(pending));
-    auto dialog = std::make_unique<PromptDialog>(
-        *options, base::BindOnce(&ShellUI::PromptFinished,
-                                 weak_factory_.GetWeakPtr(), token));
-    auto alive = weak_factory_.GetWeakPtr();
-    auto* widget = constrained_window::CreateBrowserModalDialogViews(
-        std::move(dialog), window->GetWindow()->GetNativeWindow());
-    if (!alive) {
-      if (widget && !widget->IsClosed())
-        widget->Close();
-      return true;
-    }
-    const auto found = prompts_.find(token);
-    if (!widget || found == prompts_.end()) {
-      if (widget && !widget->IsClosed())
-        widget->Close();
-      PromptFinished(token, std::nullopt);
-      return true;
-    }
-    found->second->widget = widget->GetWeakPtr();
-    widget->Show();
+    ShowDialog(context, options->window_id, ConfirmResult(false, false),
+               callback, MakeDialog<ConfirmDialog>(*options));
     return true;
   }
   if (module == "BaySystem" && method == "fileIcon") {
@@ -359,19 +392,74 @@ bool ShellUI::Dispatch(const HostContext& context,
   }
   return false;
 }
+void ShellUI::ShowDialog(const HostContext& context,
+                         const std::optional<std::string>& window_id,
+                         std::string cancelled,
+                         Response& callback,
+                         DialogFactory create) {
+  auto* window =
+      window_id ? WindowRegistry::Get().Find(*window_id) : context.window();
+  if (!window || !window->GetWindow() ||
+      !window->GetWindow()->GetNativeWindow()) {
+    std::move(callback).Run(
+        Failure("window_required", "The dialog's window is unavailable"));
+    return;
+  }
+  if (context.is_window() && window != context.window()) {
+    std::move(callback).Run(Failure(
+        "forbidden", "A window cannot open a dialog in another window"));
+    return;
+  }
+  for (const auto& [token, dialog] : dialogs_) {
+    if (dialog->window.get() == window) {
+      std::move(callback).Run(
+          Failure("busy", "This window already has an open dialog"));
+      return;
+    }
+  }
+  if (dialogs_.size() >= 16) {
+    std::move(callback).Run(Failure("busy", "Too many open dialogs"));
+    return;
+  }
+  const auto token = next_token_++;
+  auto pending = std::make_unique<PendingDialog>();
+  pending->window = window->GetWeakPtr();
+  pending->cancelled = cancelled;
+  pending->callback = std::move(callback);
+  dialogs_.emplace(token, std::move(pending));
+  auto dialog = std::move(create).Run(base::BindOnce(
+      &ShellUI::DialogFinished, weak_factory_.GetWeakPtr(), token));
+  auto alive = weak_factory_.GetWeakPtr();
+  auto* widget = constrained_window::CreateBrowserModalDialogViews(
+      std::move(dialog), window->GetWindow()->GetNativeWindow());
+  if (!alive) {
+    if (widget && !widget->IsClosed())
+      widget->Close();
+    return;
+  }
+  const auto found = dialogs_.find(token);
+  if (!widget || found == dialogs_.end()) {
+    if (widget && !widget->IsClosed())
+      widget->Close();
+    DialogFinished(token, std::move(cancelled));
+    return;
+  }
+  found->second->widget = widget->GetWeakPtr();
+  widget->Show();
+}
 void ShellUI::FilePickerFinished(FilePicker* picker) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (file_picker_.get() == picker)
     file_picker_.reset();
 }
-void ShellUI::PromptFinished(uint64_t token, std::optional<std::string> text) {
+void ShellUI::DialogFinished(uint64_t token, std::string response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  const auto found = prompts_.find(token);
-  if (found == prompts_.end())
+  const auto found = dialogs_.find(token);
+  if (found == dialogs_.end())
     return;
   auto pending = std::move(found->second);
-  prompts_.erase(found);
-  std::move(pending->callback).Run(Success(std::move(text)));
+  dialogs_.erase(found);
+  std::move(pending->callback).Run(response);
 }
 void ShellUI::IconLoaded(uint64_t token, int pixels, const gfx::Image& image) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

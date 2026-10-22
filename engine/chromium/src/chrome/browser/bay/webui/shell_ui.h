@@ -18,6 +18,9 @@
 namespace gfx {
 class Image;
 }
+namespace views {
+class DialogDelegate;
+}
 namespace bay {
 class HostContext;
 
@@ -32,8 +35,8 @@ class ShellUI {
   ShellUI(const ShellUI&) = delete;
   ShellUI& operator=(const ShellUI&) = delete;
   // False leaves callback untouched. The only handled methods are
-  // BayShell.prompt, BayShell.pickFiles and BaySystem.fileIcon, with normal
-  // native wire envelopes.
+  // BayShell.prompt, BayShell.confirm, BayShell.pickFiles and
+  // BaySystem.fileIcon, with normal native wire envelopes.
   bool Dispatch(const HostContext& context,
                 const std::string& module,
                 const std::string& method,
@@ -42,16 +45,28 @@ class ShellUI {
 
  private:
   class FilePicker;
-  struct PendingPrompt;
+  struct PendingDialog;
   struct PendingIcon;
+  // A dialog answers once with its wire response.
+  using DialogCompletion = base::OnceCallback<void(std::string)>;
+  using DialogFactory =
+      base::OnceCallback<std::unique_ptr<views::DialogDelegate>(
+          DialogCompletion)>;
+  // Shows a window-modal dialog in `window_id`, or the caller's own window.
+  // `cancelled` answers if the document goes away first.
+  void ShowDialog(const HostContext& context,
+                  const std::optional<std::string>& window_id,
+                  std::string cancelled,
+                  Response& callback,
+                  DialogFactory create);
   void FilePickerFinished(FilePicker* picker);
-  void PromptFinished(uint64_t token, std::optional<std::string> text);
+  void DialogFinished(uint64_t token, std::string response);
   void IconLoaded(uint64_t token, int pixels, const gfx::Image& image);
   void IconFinished(uint64_t token, std::optional<std::string> image);
 
   uint64_t next_token_ = 1;
   scoped_refptr<FilePicker> file_picker_;
-  std::map<uint64_t, std::unique_ptr<PendingPrompt>> prompts_;
+  std::map<uint64_t, std::unique_ptr<PendingDialog>> dialogs_;
   std::map<uint64_t, std::unique_ptr<PendingIcon>> icons_;
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<ShellUI> weak_factory_{this};
