@@ -87,7 +87,7 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
     if (name.starts_with("BaySystem."))
       EXPECT_EQ(name, "BaySystem.fileIcon");
   }
-  EXPECT_FALSE(methods->contains("BayShell.confirm"));
+  EXPECT_TRUE(methods->contains("BayShell.confirm"));
   EXPECT_FALSE(methods->contains("BayShell.readDocument"));
   EXPECT_TRUE(info->FindDictByDottedPath("snapshots.BaySystem.files"));
   const auto* downloads =
@@ -133,6 +133,14 @@ TEST_F(NativeHostTest, CoordinatorPromptRequiresAnExplicitLiveWindow) {
               "window_required");
 }
 
+TEST_F(NativeHostTest, CoordinatorConfirmRequiresAnExplicitLiveWindow) {
+  ExpectError(Invoke("BayShell", "confirm", R"([{"title":"Quit?"}])"),
+              "window_required");
+  ExpectError(Invoke("BayShell", "confirm",
+                     R"([{"title":"Quit?","windowId":"missing"}])"),
+              "window_required");
+}
+
 TEST_F(NativeHostTest, CoordinatorCannotPickFiles) {
   ExpectError(Invoke("BayShell", "pickFiles", "[]"), "window_required");
   ExpectError(Invoke("BayShell", "pickFiles", R"([{"windowId":"other"}])"),
@@ -144,6 +152,11 @@ TEST_F(NativeHostTest, ValidatesArgumentsBeforeStartingShellWork) {
   ExpectError(Invoke("BayShell", "pickFiles", "{}"), "invalid_args");
   ExpectError(Invoke("BayShell", "prompt", "[]"), "invalid_args");
   ExpectError(Invoke("BayShell", "prompt", "[{}]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "confirm", "[]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "confirm", "[{}]"), "invalid_args");
+  ExpectError(
+      Invoke("BayShell", "confirm", R"([{"title":"Quit?","destructive":1}])"),
+      "invalid_args");
   ExpectError(Invoke("BaySystem", "fileIcon", R"(["../file.txt",16])"),
               "invalid_args");
   ExpectError(Invoke("BaySystem", "notAMethod", "[]"), "unknown_method");
@@ -155,7 +168,7 @@ TEST_F(NativeHostTest, UnhandledShellDispatchLeavesTheCallbackUntouched) {
   ShellUI::Response callback = base::BindOnce(
       [](bool* called, const std::string&) { *called = true; }, &called);
   EXPECT_FALSE(shell.Dispatch(HostContext::ForCoordinator(*profile()),
-                              "BayShell", "confirm", {}, callback));
+                              "BayShell", "showMenu", {}, callback));
   EXPECT_FALSE(called);
   ASSERT_TRUE(callback);
   std::move(callback).Run("unused");
