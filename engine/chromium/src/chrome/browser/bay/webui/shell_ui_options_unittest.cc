@@ -81,16 +81,22 @@ TEST(ShellUIOptionsTest, AcceptsAbsoluteFileAndBoundsImageResolution) {
             33);
 }
 TEST(ShellUIOptionsTest, RejectsAmbiguousOrInvalidIconPaths) {
-  for (const auto* path : {"", ".", "..", "../file.pdf", "relative/file.pdf",
-                           "*.pdf", "file?.pdf"})
+  for (const auto* path : {"", ".", "..", "../file.pdf", "relative/file.pdf"})
     EXPECT_FALSE(
         ParseShellFileIconArgs(base::ListValue().Append(path).Append(32)))
         << path;
   EXPECT_FALSE(ParseShellFileIconArgs(
       base::ListValue().Append(std::string("file\0.pdf", 9)).Append(32)));
   EXPECT_FALSE(ParseShellFileIconArgs(
-      base::ListValue().Append(std::string(32768, 'x')).Append(32)));
+      base::ListValue().Append(std::string("bad\xff.pdf")).Append(32)));
+  EXPECT_FALSE(ParseShellFileIconArgs(
+      base::ListValue().Append(std::string(131069, 'x')).Append(32)));
 #if BUILDFLAG(IS_WIN)
+  EXPECT_FALSE(ParseShellFileIconArgs(
+      base::ListValue().Append(std::string(32768, 'x')).Append(32)));
+  for (const char* path : {"*.pdf", "file?.pdf"})
+    EXPECT_FALSE(ParseShellFileIconArgs(
+        base::ListValue().Append(path).Append(32)));
   EXPECT_FALSE(ParseShellFileIconArgs(
       base::ListValue().Append("C:relative.pdf").Append(32)));
   EXPECT_FALSE(ParseShellFileIconArgs(
@@ -106,7 +112,8 @@ TEST(ShellUIOptionsTest, HandlesLiteralFilenamePunctuationPerPlatform) {
         << path;
 #else
   for (const char* path : {"/tmp/report?.pdf", "/tmp/report*.pdf",
-                           "/tmp/report:notes\\draft.pdf"}) {
+                           "/tmp/report:notes\\draft.pdf", "report?.pdf",
+                           "report*.pdf", "report:notes\\draft.pdf"}) {
     auto parsed =
         ParseShellFileIconArgs(base::ListValue().Append(path).Append(32));
     ASSERT_TRUE(parsed) << path;

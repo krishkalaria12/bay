@@ -65,16 +65,16 @@ std::optional<ShellIconRequest> ParseShellFileIconArgs(
     return std::nullopt;
   auto path = base::FilePath::FromUTF8Unsafe(value);
 #if BUILDFLAG(IS_WIN)
-  if (value.find_first_of("*?") != std::string::npos)
+  if (path.value().size() > 32767 ||
+      value.find_first_of("*?") != std::string::npos ||
+      (!path.IsAbsolute() && value.find_first_of("/\\:") != std::string::npos))
     return std::nullopt;
 #endif
   // A missing file name deliberately asks for its file-type icon. Relative
   // directory paths would instead depend on the browser's working directory.
-  // Absolute POSIX paths can contain literal '*' and '?' characters.
-  if (path.value().size() > 32767 || path.ReferencesParent() ||
-      (!path.IsAbsolute() &&
-       (path != path.BaseName() ||
-        value.find_first_of("/\\:*?") != std::string::npos)))
+  // POSIX names treat backslashes, colons, '*' and '?' as literal characters.
+  if (path.ReferencesParent() ||
+      (!path.IsAbsolute() && path != path.BaseName()))
     return std::nullopt;
   return ShellIconRequest{std::move(path),
                           static_cast<int>(std::round(*points * 2))};
