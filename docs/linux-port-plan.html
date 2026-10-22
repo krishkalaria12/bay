@@ -1840,8 +1840,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <p>
                 Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
                 lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
-                <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. Menus and the
-                remaining system methods are still open; confirmation dialogs are recorded below.
+                <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. The remaining system
+                methods are still open; confirmation dialogs and context menus are recorded below.
               </p>
               <p>
                 <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
@@ -1899,6 +1899,23 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Verification.</strong> Parser tests cover every option, the defaults and malformed input. Native host tests cover advertisement,
                 coordinator targeting and argument errors. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run, and the
                 dialog's buttons, checkbox and Return behavior have not been seen on X11, Wayland or Windows.
+              </p>
+              <p>
+                <strong>Context menus, 22 Oct 2026.</strong> <code>BayShell.showMenu</code> moved from the Windows platform services into the shared
+                <code>ShellUI</code>, and Linux window hosts advertise it; coordinators have no window and get <code>window_required</code>. The menu keeps the
+                Windows rules (separators, submenus, disabled and check items, 16 levels, 1000 items) and adds two things macOS already drew: color swatches,
+                read as macOS reads them (<code>#RRGGBB</code> or <code>#RRGGBBAA</code>), and shortcut hints. On web hosts the shell's
+                <code>showMenu</code> turns each item's <code>key</code> and <code>modifiers</code> into a <code>shortcut</code> label with
+                <code>formatShortcut</code>, so a hint reads "Ctrl+Shift+C" as in the rest of Bay's keyboard tables; the host shows it as trailing text. SF
+                Symbols remain macOS only. Closing the document while a menu is open now answers <code>null</code>; the Windows version left that request
+                unanswered. The menu opens at the pointer; on Wayland Chromium reports it relative to the window, which is how Chrome places its own context
+                menus there.
+              </p>
+              <p>
+                <strong>Verification.</strong> Parser tests cover items, separators, submenus, check and disabled items, malformed input, the depth and size
+                limits and swatch formats. Native host tests cover window-only advertisement, coordinator rejection and argument errors; platform tests cover
+                the hint labels. Sources pass release and DCHECK Linux x64 syntax checks. Native tests have not run, and menu placement, swatches and hints have
+                not been seen on X11, Wayland or Windows.
               </p>
             </div>
             <ul>
