@@ -471,6 +471,7 @@ if (is_linux) {
       "//base",
       "//base/test:test_support",
       "//bay/core:engine_api",
+      "//chrome/browser:platform_util_internal",
       "//chrome/browser/ui:test_support",
       "//chrome/common:constants",
       "//chrome/test:test_support_unit",

@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -17,6 +18,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/platform_util_internal.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -44,9 +46,14 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
  protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+    platform_util::internal::DisableShellOperationsForTesting();
     // Documents live under a temporary user data folder.
     user_data_ =
         std::make_unique<base::ScopedPathOverride>(chrome::DIR_USER_DATA);
+    downloads_ = std::make_unique<base::ScopedPathOverride>(
+        chrome::DIR_DEFAULT_DOWNLOADS,
+        base::PathService::CheckedGet(chrome::DIR_USER_DATA).Append("downloads café"),
+        true, false);
     auto* host =
         new NativeHost(*main_rfh(), HostContext::ForCoordinator(*profile()),
                        remote_.BindNewPipeAndPassReceiver());
@@ -98,6 +105,7 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
   }
 
   std::unique_ptr<base::ScopedPathOverride> user_data_;
+  std::unique_ptr<base::ScopedPathOverride> downloads_;
   mojo::Remote<mojom::NativeHost> remote_;
   base::WeakPtr<NativeHost> host_;
 };
@@ -202,7 +210,12 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   for (const auto& method : *methods) {
     const auto& name = method.GetString();
     if (name.starts_with("BaySystem."))
-      EXPECT_EQ(name, "BaySystem.fileIcon");
+      EXPECT_TRUE(name == "BaySystem.fileIcon" ||
+                  name == "BaySystem.fileExists" ||
+                  name == "BaySystem.downloadsFolder" ||
+                  name == "BaySystem.openFile" ||
+                  name == "BaySystem.revealFile" ||
+                  name == "BaySystem.moveToTrash");
   }
   EXPECT_TRUE(methods->contains("BayShell.confirm"));
   EXPECT_TRUE(methods->contains("BayShell.readDocument"));
@@ -211,7 +224,110 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   const auto* downloads =
       info.FindByDottedPath("snapshots.BaySystem.downloadsFolder");
   ASSERT_TRUE(downloads);
-  EXPECT_TRUE(downloads->is_none());
+  EXPECT_TRUE(downloads->is_string() || downloads->is_none());
+  EXPECT_EQ(Invoke("BaySystem", "downloadsFolder", "[]"),
+            base::WriteJson(base::DictValue().Set("value", downloads->Clone()))
+                .value());
+}
+
+TEST_F(NativeHostTest,
+       FileSnapshotWaitsForPreparationAndIsTheNativeUserDirectory) {
+  base::test::TestFuture<const std::string&> first;
+  base::test::TestFuture<const std::string&> second;
+  host_->GetHostInfo(first.GetCallback());
+  host_->GetHostInfo(second.GetCallback());
+  EXPECT_FALSE(first.IsReady());
+  EXPECT_FALSE(second.IsReady());
+  ExpectError(Invoke("BaySystem", "fileExists", "[null]"),
+              "initialization_failed");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(first.Get(), second.Get());
+  auto info = base::JSONReader::ReadDict(first.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(info);
+  const auto* path =
+      info->FindStringByDottedPath("snapshots.BaySystem.downloadsFolder");
+  ASSERT_TRUE(path);
+  EXPECT_EQ(
+      *path,
+      base::PathService::CheckedGet(chrome::DIR_DEFAULT_DOWNLOADS).value());
+  EXPECT_FALSE(base::PathExists(base::FilePath(*path)));
+}
+
+TEST_F(NativeHostTest,
+       FileContractsRejectArityBeforeReadinessAndTypesAfterReadiness) {
+  for (const char* method :
+       {"fileExists", "openFile", "revealFile", "moveToTrash"}) {
+    for (const char* args : {"{}", "[]", R"(["/tmp/a",1])"})
+      ExpectError(Invoke("BaySystem", method, args), "invalid_args");
+  }
+  HostInfo();
+  for (const char* method :
+       {"fileExists", "openFile", "revealFile", "moveToTrash"}) {
+    for (const char* args :
+         {"[null]", "[1]", R"(["relative"])", R"(["/tmp/a\u0000b"])"})
+      ExpectError(Invoke("BaySystem", method, args), "invalid_args");
+  }
+  ExpectError(Invoke("BaySystem", "downloadsFolder", "[1]"), "invalid_args");
+  ExpectError(Invoke("BaySystem", "isDefaultBrowser", "[]"), "unsupported_method");
+}
+
+TEST_F(NativeHostTest,
+       CoordinatorFileOperationsStayIndependentOfDocumentReadErrors) {
+  ASSERT_TRUE(base::CreateDirectory(Documents()));
+  ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("bad.json"), "\xff"));
+  ReplaceHost();
+  const auto file = Documents().Append("café ?*.txt");
+  ASSERT_TRUE(base::WriteFile(file, "safe"));
+  const auto args =
+      base::WriteJson(base::ListValue().Append(file.value())).value();
+  EXPECT_EQ(Invoke("BaySystem", "fileExists", args), R"({"value":true})");
+  EXPECT_EQ(Invoke("BaySystem", "openFile", args), R"({"value":true})");
+  EXPECT_EQ(Invoke("BaySystem", "revealFile", args), R"({"value":true})");
+  EXPECT_EQ(
+      Invoke("BaySystem", "openFile",
+             base::WriteJson(base::ListValue().Append(Documents().value()))
+                 .value()),
+      R"({"value":true})");
+  const auto missing =
+      base::WriteJson(
+          base::ListValue().Append(Documents().AppendASCII("missing").value()))
+          .value();
+  EXPECT_EQ(Invoke("BaySystem", "fileExists", missing), R"({"value":false})");
+  EXPECT_EQ(Invoke("BaySystem", "openFile", missing), R"({"value":false})");
+  EXPECT_EQ(Invoke("BaySystem", "revealFile", missing), R"({"value":false})");
+  // GIO receives only a nonexistent entry under the temporary test directory.
+  EXPECT_EQ(Invoke("BaySystem", "moveToTrash", missing), R"({"value":false})");
+  EXPECT_TRUE(base::PathExists(file));
+}
+
+TEST_F(NativeHostTest, HostInfoReplyCanDeleteOwnerAfterAllPreparation) {
+  int calls = 0;
+  host_->GetHostInfo(
+      base::BindLambdaForTesting([this, &calls](const std::string& json) {
+        ++calls;
+        EXPECT_TRUE(base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC));
+        host_->ResetAndDeleteThis();
+      }));
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(host_);
+  EXPECT_EQ(calls, 1);
+}
+
+TEST_F(NativeHostTest, FileWorkerReplyAfterHostTeardownIsSettledOnce) {
+  HostInfo();
+  int calls = 0;
+  host_->Invoke(
+      "BaySystem", "fileExists",
+      base::WriteJson(base::ListValue().Append(Documents().value())).value(),
+      base::BindLambdaForTesting([this, &calls](const std::string& response) {
+        ++calls;
+        ExpectError(response, "host_closed");
+      }));
+  EXPECT_EQ(calls, 0);
+  host_->ResetAndDeleteThis();
+  EXPECT_EQ(calls, 1);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
 }
 
 TEST_F(NativeHostTest, SavedDocumentsArriveInHostInfoAndPersist) {
@@ -243,7 +359,8 @@ TEST_F(NativeHostTest, AnUnreadableDocumentBecomesTheInitializationError) {
   ASSERT_TRUE(base::CreateDirectory(Documents()));
   ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("bad.json"), "\xff"));
   ReplaceHost();
-  const auto* error = HostInfo().FindStringByDottedPath(
+  const auto info = HostInfo();
+  const auto* error = info.FindStringByDottedPath(
       "constants.BayShell.initializationError");
   ASSERT_TRUE(error);
   EXPECT_NE(error->find("bad.json"), std::string::npos);
@@ -487,7 +604,7 @@ TEST_F(ClipboardHostTest, CoordinatorAdvertisesBothClipboardMethods) {
   ASSERT_TRUE(methods);
   EXPECT_TRUE(methods->contains("BayShell.copyText"));
   EXPECT_TRUE(methods->contains("BayShell.copyImage"));
-  EXPECT_FALSE(methods->contains("BaySystem.openFile"));
+  EXPECT_TRUE(methods->contains("BaySystem.openFile"));
 }
 
 TEST_F(ClipboardHostTest, CoordinatorCopiesBeforeSavedDocumentsAreReady) {
@@ -556,6 +673,26 @@ class WindowClipboardHostTest : public ClipboardHostTest {
   testing::NiceMock<PickerWindow> window_;
   base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
 };
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BaySystem.fileExists", "BaySystem.downloadsFolder",
+        "BaySystem.openFile", "BaySystem.revealFile", "BaySystem.moveToTrash"})
+    EXPECT_TRUE(methods->contains(method));
+  EXPECT_EQ(
+      Invoke("BaySystem", "fileExists",
+             base::WriteJson(base::ListValue().Append(Documents().value()))
+                 .value()),
+      R"({"value":true})");
+  EXPECT_EQ(
+      Invoke("BaySystem", "openFile",
+             base::WriteJson(base::ListValue().Append(Documents().value()))
+                 .value()),
+      R"({"value":true})");
+}
 
 TEST_F(WindowClipboardHostTest,
        WindowAdvertisesAppearanceAndReceivesAppEvents) {

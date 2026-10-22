@@ -42,6 +42,7 @@
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/secret_storage_linux.h"
 #include "chrome/browser/bay/webui/shell_clipboard.h"
+#include "chrome/browser/bay/webui/shell_files.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #endif
 #if BUILDFLAG(IS_WIN)
@@ -385,12 +386,21 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
 #if BUILDFLAG(IS_LINUX)
+  files_ = std::make_unique<ShellFiles>(context_);
+  files_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
   shell_ui_ = std::make_unique<ShellUI>();
   secret_storage_ = std::make_unique<SecretStorage>();
   documents_ = std::make_unique<DocumentStore>(
       DocumentStore::DefaultDirectory(),
       base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
-  documents_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
+  documents_->Prepare(base::BindOnce(
+      [](base::WeakPtr<NativeHost> host) {
+        if (!host)
+          return;
+        host->documents_ready_ = true;
+        host->PlatformReady();
+      },
+      GetWeakPtr()));
 #endif
   if (context_.window()) {
     WindowRegistry::Get().RegisterHost(
@@ -518,6 +528,8 @@ base::DictValue NativeHost::Info() const {
     engine_methods.Append(std::move(method));
   for (auto& method : ShellClipboard::SupportedMethods())
     engine_methods.Append(std::move(method));
+  for (auto& method : ShellFiles::SupportedMethods())
+    engine_methods.Append(std::move(method));
 #endif
   base::DictValue documents;
 #if BUILDFLAG(IS_LINUX)
@@ -587,6 +599,10 @@ base::DictValue NativeHost::Info() const {
       methods.Append(module + "." + method);
   info.Set("optionalMethods", std::move(methods));
 #endif
+#if BUILDFLAG(IS_LINUX)
+  info.SetByDottedPath("snapshots.BaySystem.downloadsFolder",
+                      files_->downloads_folder());
+#endif
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
@@ -614,12 +630,17 @@ void NativeHost::PublishHostInfo() {
 }
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void NativeHost::PlatformReady() {
+#if BUILDFLAG(IS_LINUX)
+  if (!documents_ready_ || !files_->ready())
+    return;
+#endif
   platform_ready_ = true;
   const std::string json = JSON(Info());
   auto callbacks = std::move(host_info_callbacks_);
+  PublishHostInfo();
+  // A reply may destroy this document. No member access follows.
   for (auto& callback : callbacks)
     std::move(callback).Run(json);
-  PublishHostInfo();
 }
 #endif
 void NativeHost::SetClient(
@@ -824,6 +845,8 @@ void NativeHost::Invoke(const std::string& module,
   if (ShellAppearance::Dispatch(context_, module, method, args, callback))
     return;
   if (ShellClipboard::Dispatch(module, method, args, callback))
+    return;
+  if (files_->Dispatch(module, method, args, callback))
     return;
   if (documents_->Dispatch(module, method, args, callback))
     return;
