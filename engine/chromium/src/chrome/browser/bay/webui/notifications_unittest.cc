@@ -1,9 +1,19 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/notifications.h"
 
+#include <vector>
+
 #include "base/base64url.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
+#include "build/build_config.h"
+#if BUILDFLAG(IS_LINUX)
+#include "base/test/scoped_feature_list.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/testing_pref_service.h"
+#endif
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace bay::notifications {
@@ -21,7 +31,7 @@ std::string UncheckedId(base::DictValue payload) {
                         base::Base64UrlEncodePolicy::OMIT_PADDING, &encoded);
   return "bay-v1:" + encoded;
 }
-TEST(BayNotificationPayload, RoundTripPreservesTargetsAndDataAfterRestart) {
+TEST(BayNotificationPayload, RoundTripPreservesTargetsAndData) {
   auto encoded = EncodeResponse(Response(), true);
   ASSERT_TRUE(encoded);
   auto decoded = DecodeResponse(*encoded, "click");
@@ -110,6 +120,117 @@ TEST(BayNotificationPayload, BuffersActivationUntilAnEventSinkIsReady) {
   EXPECT_EQ(*received[0].FindString("action"), "click");
   owner.Respond(*encoded, "close");
   ASSERT_EQ(received.size(), 2u);
+  owner.SetEventSink({});
+}
+TEST(BayNotifications, AdvertisesOnlyImplementedMethods) {
+  EXPECT_TRUE(Notifications::SupportsMethod("postNotification"));
+  EXPECT_TRUE(Notifications::SupportsMethod("removeNotifications"));
+  EXPECT_FALSE(Notifications::SupportsMethod("notAMethod"));
+#if BUILDFLAG(IS_WIN)
+  constexpr bool permission_api = true;
+  EXPECT_EQ(Notifications::SupportedMethods().size(), 5u);
+#else
+  constexpr bool permission_api = false;
+  EXPECT_EQ(Notifications::SupportedMethods().size(), 2u);
+#endif
+  for (const char* method :
+       {"notificationPermission", "requestNotificationPermission",
+        "openNotificationSettings"})
+    EXPECT_EQ(Notifications::SupportsMethod(method), permission_api) << method;
+}
+
+#if BUILDFLAG(IS_LINUX)
+TEST(BayNotifications, NativeRouteRespectsPreferenceAndFeaturePolicy) {
+  TestingPrefServiceSimple prefs;
+  prefs.registry()->RegisterBooleanPref(prefs::kAllowSystemNotifications, true);
+  base::test::ScopedFeatureList enabled;
+  enabled.InitWithFeatures(
+      {features::kNativeNotifications, features::kSystemNotifications}, {});
+  EXPECT_TRUE(NativeRouteEnabled(prefs));
+  prefs.SetBoolean(prefs::kAllowSystemNotifications, false);
+  EXPECT_FALSE(NativeRouteEnabled(prefs));
+  prefs.SetBoolean(prefs::kAllowSystemNotifications, true);
+  for (const auto* feature :
+       {&features::kNativeNotifications, &features::kSystemNotifications}) {
+    base::test::ScopedFeatureList disabled;
+    disabled.InitAndDisableFeature(*feature);
+    EXPECT_FALSE(NativeRouteEnabled(prefs)) << feature->name;
+  }
+}
+#endif
+
+TEST(BayNotifications,
+     RetainsUndeliveredResponsesWhenSinkDisconnectsInCallback) {
+  auto& owner = Notifications::Get();
+  owner.SetEventSink({});
+  const auto encoded = EncodeResponse(Response(), true);
+  ASSERT_TRUE(encoded);
+  owner.Respond(*encoded, "click");
+  owner.Respond(*encoded, "close");
+  std::vector<std::string> actions;
+  owner.SetEventSink(base::BindRepeating(
+      [](std::vector<std::string>* actions, base::DictValue response) {
+        actions->push_back(*response.FindString("action"));
+        Notifications::Get().SetEventSink({});
+      },
+      &actions));
+  ASSERT_EQ(actions.size(), 1u);
+  owner.SetEventSink(base::BindRepeating(
+      [](std::vector<std::string>* actions, base::DictValue response) {
+        actions->push_back(*response.FindString("action"));
+      },
+      &actions));
+  EXPECT_EQ(actions, (std::vector<std::string>{"click", "close"}));
+  owner.SetEventSink({});
+}
+
+TEST(BayNotifications, ReentrantResponsesKeepOrderAndUseReplacementSink) {
+  auto& owner = Notifications::Get();
+  owner.SetEventSink({});
+  const auto encoded = EncodeResponse(Response(), true);
+  ASSERT_TRUE(encoded);
+  owner.Respond(*encoded, "click");
+  owner.Respond(*encoded, "close");
+  std::vector<std::string> actions;
+  owner.SetEventSink(base::BindRepeating(
+      [](std::vector<std::string>* actions, std::string encoded,
+         base::DictValue response) {
+        actions->push_back("first:" + *response.FindString("action"));
+        auto& owner = Notifications::Get();
+        owner.Respond(encoded, "click");
+        owner.SetEventSink(base::BindRepeating(
+            [](std::vector<std::string>* actions, base::DictValue response) {
+              actions->push_back("next:" + *response.FindString("action"));
+            },
+            actions));
+      },
+      &actions, *encoded));
+  EXPECT_EQ(actions, (std::vector<std::string>{"first:click", "next:close",
+                                               "next:click"}));
+  owner.SetEventSink({});
+}
+
+TEST(BayNotifications, ReconnectBufferDropsOldestAndDrainsOnlyOnce) {
+  auto& owner = Notifications::Get();
+  owner.SetEventSink({});
+  for (int i = 0; i < 130; ++i) {
+    auto response = Response();
+    response.Set("id", std::to_string(i));
+    owner.Respond(*EncodeResponse(response, true), "click");
+  }
+  std::vector<std::string> ids;
+  auto sink = base::BindRepeating(
+      [](std::vector<std::string>* ids, base::DictValue response) {
+        ids->push_back(*response.FindString("id"));
+      },
+      &ids);
+  owner.SetEventSink(sink);
+  ASSERT_EQ(ids.size(), 128u);
+  EXPECT_EQ(ids.front(), "2");
+  EXPECT_EQ(ids.back(), "129");
+  owner.SetEventSink({});
+  owner.SetEventSink(sink);
+  EXPECT_EQ(ids.size(), 128u);
   owner.SetEventSink({});
 }
 }  // namespace

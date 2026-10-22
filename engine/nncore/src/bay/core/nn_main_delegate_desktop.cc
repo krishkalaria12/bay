@@ -35,11 +35,13 @@
 #include "chrome/browser/bay/webui/frame_linux.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
+#endif
 #if BUILDFLAG(IS_WIN)
 #include "base/base_paths_win.h"
 #include "chrome/browser/bay/webui/frame_win.h"
-#include "chrome/browser/bay/webui/notifications.h"
-#include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #endif
 
@@ -55,10 +57,12 @@ class BayRuntimeMainExtraParts final : public ChromeBrowserMainExtraParts {
         &bay::FrameLinux::CreateNativeWidget);
 #endif
 #if BUILDFLAG(IS_WIN)
-    NotificationDisplayServiceFactory::SetBayHandlerInitializer(
-        &bay::Notifications::InstallHandler);
     WebUIBrowserWindow::SetBayNativeWidgetFactory(
         &bay::FrameWin::CreateNativeWidget);
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+    NotificationDisplayServiceFactory::SetBayHandlerInitializer(
+        &bay::Notifications::InstallHandler);
 #endif
   }
   void PostMainMessageLoopRun() override { bay::ShutdownAppRuntimeIfStarted(); }

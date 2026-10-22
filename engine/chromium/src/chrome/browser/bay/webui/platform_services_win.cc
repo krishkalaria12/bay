@@ -560,15 +560,12 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayApp.launchEnvironment",
                      "BayApp.openExternalURL",
                      "BayApp.updaterState",
-                     "BayApp.notificationPermission",
-                     "BayApp.requestNotificationPermission",
-                     "BayApp.postNotification",
-                     "BayApp.removeNotifications",
-                     "BayApp.openNotificationSettings",
                      "BayKeychain.get",
                      "BayKeychain.set",
                      "BayKeychain.delete"})
     methods.Append(name);
+  for (auto& method : Notifications::SupportedMethods())
+    methods.Append(std::move(method));
   return methods;
 }
 void PlatformServices::ApplyDocument(

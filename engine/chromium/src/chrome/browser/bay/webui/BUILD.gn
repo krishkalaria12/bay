@@ -100,6 +100,9 @@ source_set("impl") {
     "//ui/webui",
     "//url",
   ]
+  if (is_win || is_linux) {
+    deps += [ ":notifications" ]
+  }
   if (is_win) {
     sources += [
       "data_bridge.cc",
@@ -112,13 +115,45 @@ source_set("impl") {
   }
 }
 
+if (is_win || is_linux) {
+  source_set("notifications") {
+    sources = [
+      "notifications.cc",
+      "notifications.h",
+    ]
+    deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser:browser_process",
+      "//chrome/browser/notifications",
+      "//chrome/browser/profiles:profile",
+      "//skia",
+      "//ui/base",
+      "//ui/gfx/codec",
+      "//ui/message_center/public/cpp",
+      "//url",
+    ]
+    if (is_win) {
+      deps += [
+        "//chrome/install_static:install_static_util",
+        "//chrome/installer/util:with_no_strings",
+      ]
+      libs = [ "shell32.lib" ]
+    }
+    if (is_linux) {
+      deps += [
+        "//chrome/common",
+        "//components/prefs",
+      ]
+    }
+  }
+}
+
 if (is_win) {
   source_set("platform_services_win") {
     sources = [
       "frame_win.cc",
       "frame_win.h",
-      "notifications.cc",
-      "notifications.h",
       "platform_services_win.cc",
       "platform_services_win.h",
       "shell_ui.cc",
@@ -129,6 +164,7 @@ if (is_win) {
       "updater_service_win.h",
     ]
     deps = [
+      ":notifications",
       ":webui",
       "//base",
       "//chrome/browser:browser_process",
@@ -228,15 +264,22 @@ test("shell_ui_options_unittests") {
   ]
 }
 
-if (is_win) {
+if (is_win || is_linux) {
   test("notifications_unittests") {
     sources = [ "notifications_unittest.cc" ]
     deps = [
-      ":platform_services_win",
+      ":notifications",
       "//base",
       "//base/test:run_all_unittests",
+      "//base/test:test_support",
       "//testing/gtest",
     ]
+    if (is_linux) {
+      deps += [
+        "//chrome/common",
+        "//components/prefs:test_support",
+      ]
+    }
   }
 }
 

@@ -34,11 +34,13 @@
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_registry.h"
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/notifications.h"
+#endif
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
 #include "chrome/browser/bay/webui/frame_win.h"
-#include "chrome/browser/bay/webui/notifications.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/updater_service_win.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -316,6 +318,18 @@ void EngineEvent(void*, const char* topic, const char* json) {
 int TabId(content::WebContents* contents) {
   return sessions::SessionTabHelper::IdForTab(contents).id();
 }
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+void HostEvent(const std::string& module,
+               const std::string& event,
+               const base::Value& payload) {
+  std::vector<base::WeakPtr<NativeHost>> hosts;
+  for (const auto& entry : Hosts())
+    hosts.push_back(entry.second);
+  for (const auto& host : hosts)
+    if (host && (!AppRuntime::Enabled() || host->is_coordinator()))
+      host->Emit(module.c_str(), event.c_str(), payload.Clone());
+}
+#endif
 #if BUILDFLAG(IS_WIN)
 void DataEvent(const std::string& module,
                const std::string& event,
@@ -323,12 +337,7 @@ void DataEvent(const std::string& module,
   auto payload = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
   if (!payload)
     return;
-  std::vector<base::WeakPtr<NativeHost>> hosts;
-  for (const auto& entry : Hosts())
-    hosts.push_back(entry.second);
-  for (const auto& host : hosts)
-    if (host && (!AppRuntime::Enabled() || host->is_coordinator()))
-      host->Emit(module.c_str(), event.c_str(), payload->Clone());
+  HostEvent(module, event, *payload);
 }
 #endif
 }  // namespace
@@ -383,7 +392,7 @@ NativeHost::~NativeHost() {
   for (const auto& entry : pending_)
     PendingOwners().erase(entry.first);
   Hosts().erase(this);
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   bool notification_client = false;
   for (const auto& [owner, host] : Hosts()) {
     if (host && host->client_ &&
@@ -414,6 +423,11 @@ base::DictValue NativeHost::Info() const {
     if (!found)
       modules.Append(module.Clone());
   }
+#endif
+#if BUILDFLAG(IS_LINUX)
+  // Post/remove capability only. Desktop permission and settings APIs are not
+  // available, and bridge readiness is checked when each operation runs.
+  modules.Append("BayNotifications");
 #endif
   base::DictValue system;
   system.Set("platform",
@@ -464,6 +478,10 @@ base::DictValue NativeHost::Info() const {
   auto engine_methods = browser_services_->SupportedMethods();
   for (const auto& method : engine_services_->SupportedMethods())
     engine_methods.Append(method.Clone());
+#if BUILDFLAG(IS_LINUX)
+  for (auto& method : Notifications::SupportedMethods())
+    engine_methods.Append(std::move(method));
+#endif
   auto info =
       base::DictValue()
           .Set("contractVersion", 2)
@@ -567,14 +585,15 @@ void NativeHost::SetClient(
     mojo::PendingRemote<mojom::NativeHostClient> client) {
   client_.reset();
   client_.Bind(std::move(client));
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (!AppRuntime::Enabled() || is_coordinator()) {
     // Activation can arrive before the trusted document connects. Drain only
     // after its Mojo client is bound; the renderer retains startup responses
     // until app integration subscribes.
     Notifications::Get().SetEventSink(base::BindRepeating(
         [](base::DictValue response) {
-          DataEvent("BayApp", "onNotificationResponse", JSON(response));
+          HostEvent("BayApp", "onNotificationResponse",
+                    base::Value(std::move(response)));
         }));
   }
 #endif
@@ -734,6 +753,13 @@ void NativeHost::Invoke(const std::string& module,
     return;
   if (engine_services_->DispatchEngineModule(module, method, args, callback))
     return;
+#if BUILDFLAG(IS_LINUX)
+  // Notifications do not depend on the Windows data/platform services or their
+  // initialization gate. The browser-assigned HostContext still owns authority.
+  if (module == "BayApp" &&
+      Notifications::Get().Dispatch(context_, method, args, callback))
+    return;
+#endif
 #if BUILDFLAG(IS_WIN)
   if (module == "BayShell" && method == "replyToTerminate") {
     if (!args[0].is_bool()) {

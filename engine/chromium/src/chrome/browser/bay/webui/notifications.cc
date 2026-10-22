@@ -10,6 +10,7 @@
 #include "base/base64.h"
 #include "base/base64url.h"
 #include "base/containers/span.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
@@ -23,11 +24,15 @@
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_impl.h"
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/profiles/profile.h"
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
+#endif
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -84,13 +89,7 @@ bool ValidResponse(const base::DictValue& response) {
   return data && (data->is_none() || data->is_dict());
 }
 
-#if BUILDFLAG(IS_WIN)
 constexpr auto kNotificationType = NotificationHandler::Type::BAY;
-#else
-// Allows the portable codec and service API to be checked on the Mac host.
-// The notification enum addition is applied only to Windows Chromium builds.
-constexpr auto kNotificationType = static_cast<NotificationHandler::Type>(13);
-#endif
 
 struct Request {
   std::string id;
@@ -194,8 +193,8 @@ class Handler final : public NotificationHandler {
   }
 };
 
-std::optional<bool> ReadPermission() {
 #if BUILDFLAG(IS_WIN)
+std::optional<bool> ReadPermission() {
   // Chrome's ThreadPool workers initialize WinRT for their thread lifetime.
   // Match the exact notifier identity used by NotificationPlatformBridgeWin.
   if (!InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled())
@@ -220,10 +219,8 @@ std::optional<bool> ReadPermission() {
     return std::nullopt;
   return setting ==
          ABI::Windows::UI::Notifications::NotificationSetting_Enabled;
-#else
-  return std::nullopt;
-#endif
 }
+#endif
 
 void WithNativeService(
     base::WeakPtr<Profile> profile,
@@ -234,6 +231,12 @@ void WithNativeService(
                      : nullptr;
 #if BUILDFLAG(IS_WIN)
   if (!NotificationPlatformBridgeWin::SystemNotificationEnabled())
+    bridge = nullptr;
+#endif
+#if BUILDFLAG(IS_LINUX)
+  // Match the delegator's route policy. Global bridge readiness alone would
+  // allow the display service to silently fall back to message center.
+  if (!profile || !notifications::NativeRouteEnabled(*profile->GetPrefs()))
     bridge = nullptr;
 #endif
   if (!profile || profile->IsOffTheRecord() || !bridge) {
@@ -248,7 +251,7 @@ void WithNativeService(
          Response callback, bool available) {
         if (!profile || !available) {
           std::move(callback).Run(Failure(
-              "unavailable", "Install Bay to enable native notifications"));
+              "unavailable", "Native notification bridge is unavailable"));
           return;
         }
         std::move(ready).Run(
@@ -260,6 +263,13 @@ void WithNativeService(
 }  // namespace
 
 namespace notifications {
+#if BUILDFLAG(IS_LINUX)
+bool NativeRouteEnabled(const PrefService& prefs) {
+  return prefs.GetBoolean(prefs::kAllowSystemNotifications) &&
+         base::FeatureList::IsEnabled(features::kNativeNotifications) &&
+         base::FeatureList::IsEnabled(features::kSystemNotifications);
+}
+#endif
 std::optional<std::string> EncodeResponse(const base::DictValue& response,
                                           bool dismissible) {
   if (!ValidResponse(response))
@@ -312,38 +322,62 @@ void Notifications::InstallHandler(NotificationDisplayServiceImpl* service) {
     service->AddNotificationHandler(kNotificationType,
                                     std::make_unique<Handler>());
 }
+base::ListValue Notifications::SupportedMethods() {
+  base::ListValue methods;
+  for (const char* method : {"postNotification", "removeNotifications"})
+    methods.Append(std::string("BayApp.") + method);
+#if BUILDFLAG(IS_WIN)
+  for (const char* method :
+       {"notificationPermission", "requestNotificationPermission",
+        "openNotificationSettings"})
+    methods.Append(std::string("BayApp.") + method);
+#endif
+  return methods;
+}
+bool Notifications::SupportsMethod(std::string_view method) {
+  for (const auto& supported : SupportedMethods())
+    if (supported.GetString() == std::string("BayApp.") + std::string(method))
+      return true;
+  return false;
+}
 void Notifications::SetEventSink(EventSink sink) {
   event_sink_ = std::move(sink);
-  if (!event_sink_)
+  DrainResponses();
+}
+void Notifications::DrainResponses() {
+  if (draining_responses_)
     return;
-  auto pending = std::move(pending_);
-  pending_.clear();
-  for (auto& response : pending)
-    event_sink_.Run(std::move(response));
+  draining_responses_ = true;
+  while (event_sink_ && !pending_.empty()) {
+    // The sink can disconnect, replace itself, or enqueue another response.
+    // Retain the currently executing callback and preserve FIFO across reloads.
+    auto sink = event_sink_;
+    auto response = std::move(pending_.front());
+    pending_.pop_front();
+    sink.Run(std::move(response));
+  }
+  draining_responses_ = false;
 }
 void Notifications::Respond(std::string_view native_id,
-                               std::string_view action) {
+                            std::string_view action) {
   auto response = notifications::DecodeResponse(native_id, action);
   if (!response)
     return;
-  if (event_sink_)
-    event_sink_.Run(std::move(*response));
-  else {
-    if (pending_.size() == kMaxPendingResponses)
-      pending_.erase(pending_.begin());
-    pending_.push_back(std::move(*response));
-  }
+  if (pending_.size() == kMaxPendingResponses)
+    pending_.pop_front();
+  pending_.push_back(std::move(*response));
+  DrainResponses();
 }
 
 bool Notifications::Dispatch(const HostContext& context,
-                                const std::string& method,
-                                const base::ListValue& args,
-                                Response& callback) {
+                             const std::string& method,
+                             const base::ListValue& args,
+                             Response& callback) {
   if (method != "postNotification" && method != "removeNotifications")
     return DispatchNow(context, method, args, callback);
   // Replacement IDs carry fresh response metadata. Serialize history/display
-  // transactions so two simultaneous updates of one logical ID cannot leave
-  // two native toasts, or race an explicit removal.
+  // transactions. On Linux these complete at local tracking, before daemon
+  // acknowledgment; rapid replacement/removal remains best effort.
   if (operations_.size() >= 128) {
     std::move(callback).Run(Failure("busy", "Too many notification requests"));
     return true;
@@ -353,9 +387,9 @@ bool Notifications::Dispatch(const HostContext& context,
          base::ListValue args, Response response) {
         // Also advance if Chrome destroys the callback with its profile. The
         // completion always posts back to this UI sequence.
-        base::ScopedClosureRunner done(base::BindPostTaskToCurrentDefault(
-            base::BindOnce(&Notifications::OperationFinished,
-                           base::Unretained(owner))));
+        base::ScopedClosureRunner done(
+            base::BindPostTaskToCurrentDefault(base::BindOnce(
+                &Notifications::OperationFinished, base::Unretained(owner))));
         Response completed = base::BindOnce(
             [](Response response, base::ScopedClosureRunner done,
                const std::string& result) { std::move(response).Run(result); },
@@ -382,13 +416,10 @@ void Notifications::OperationFinished() {
 }
 
 bool Notifications::DispatchNow(const HostContext& context,
-                                   const std::string& method,
-                                   const base::ListValue& args,
-                                   Response& callback) {
-  if (method != "notificationPermission" &&
-      method != "requestNotificationPermission" &&
-      method != "postNotification" && method != "removeNotifications" &&
-      method != "openNotificationSettings")
+                                const std::string& method,
+                                const base::ListValue& args,
+                                Response& callback) {
+  if (!SupportsMethod(method))
     return false;
   auto fail = [&](std::string_view message) {
     std::move(callback).Run(Failure("invalid_argument", message));
@@ -399,12 +430,12 @@ bool Notifications::DispatchNow(const HostContext& context,
         Failure("unavailable", "Notification profile is unavailable"));
     return true;
   }
+#if BUILDFLAG(IS_WIN)
   if (method == "openNotificationSettings") {
     if (!args.empty()) {
       fail("Expected no notification settings arguments");
       return true;
     }
-#if BUILDFLAG(IS_WIN)
     const auto result = reinterpret_cast<intptr_t>(
         ShellExecuteW(nullptr, L"open", L"ms-settings:notifications", nullptr,
                       nullptr, SW_SHOWNORMAL));
@@ -412,10 +443,6 @@ bool Notifications::DispatchNow(const HostContext& context,
         result > 32
             ? Success()
             : Failure("unavailable", "Couldn't open notification settings"));
-#else
-    std::move(callback).Run(Failure(
-        "unavailable", "Windows notification settings are unavailable"));
-#endif
     return true;
   }
   if (method == "notificationPermission" ||
@@ -440,6 +467,7 @@ bool Notifications::DispatchNow(const HostContext& context,
             method == "requestNotificationPermission", std::move(callback)));
     return true;
   }
+#endif
   if (method == "postNotification") {
     if (args.size() != 1 || !args[0].is_dict()) {
       fail("Expected notification options");
@@ -488,6 +516,8 @@ bool Notifications::DispatchNow(const HostContext& context,
                             "Bay.Browser"),
                         fields, nullptr);
                     service->Display(kNotificationType, notification, nullptr);
+                    // Linux enumerates local entries before Notify completes.
+                    // The ID acknowledges submission, never daemon visibility.
                     service->GetDisplayed(base::BindOnce(
                         [](Response response, std::string native_id,
                            std::string id, std::set<std::string> displayed,
@@ -542,6 +572,9 @@ bool Notifications::DispatchNow(const HostContext& context,
                       service->Close(kNotificationType, id);
                     }
                   }
+                  // Linux forgets local entries before CloseNotification
+                  // replies. Success here only acknowledges a local close
+                  // request.
                   service->GetDisplayed(base::BindOnce(
                       [](Response response, std::set<std::string> closing,
                          std::set<std::string> displayed, bool supported) {
