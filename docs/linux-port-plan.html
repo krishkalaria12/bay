@@ -1841,7 +1841,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
                 lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
                 <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. The remaining system
-                methods are still open; confirmation dialogs, context menus and documents are recorded below.
+                methods are still open; confirmation dialogs, context menus, documents and clipboard writes are recorded below.
               </p>
               <p>
                 <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
@@ -1933,6 +1933,26 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 folders. Native host tests cover documents arriving in host info, a save landing on disk and the initialization error. Linux sources pass
                 release and DCHECK syntax checks; the native tests have not run, and the Windows services, which now delegate to the store, have not been
                 compiled.
+              </p>
+              <p>
+                <strong>Clipboard, 22 Oct 2026.</strong> Linux hosts now advertise <code>BayShell.copyText</code> and <code>copyImage</code>. A shared
+                <code>ShellClipboard</code> keeps the Windows implementation: text is written to the ordinary copy/paste clipboard, and base64 images are
+                decoded as PNG or JPEG before writing. Invalid base64 rejects with <code>invalid_args</code>; valid base64 that is not a supported image returns
+                <code>false</code> without replacing the clipboard. Both window and coordinator hosts can copy. Windows retains its profile and initialization
+                checks, and macOS keeps its existing implementation.
+              </p>
+              <p>
+                Writes run on the UI sequence and finish their call to Chromium before answering. The answer does not confirm that another app can paste the
+                content. Chromium handles X11 and Wayland; Wayland needs an input-event serial to offer the selection. Image decoding retains the Windows
+                UI-sequence behavior; Chromium also PNG-encodes Linux clipboard images on that sequence. Cross-app paste, compositor behavior and clipboard
+                retention after exit remain unverified.
+              </p>
+              <p>
+                <strong>Clipboard verification.</strong> Seventeen native tests cover both host roles, text and image readback through Chromium's
+                <code>TestClipboard</code>, PNG transparency, JPEG fallback, malformed inputs leaving the clipboard unchanged, codec dimension limits, argument
+                checks and response reentrancy. The helper, host and test sources pass release and DCHECK Linux x64 syntax checks with the pinned sysroot and
+                existing generated Mac configuration headers. Native tests have not been linked or run, and the Windows caller has not been compiled. Full Linux
+                GN and link validation remain pending.
               </p>
             </div>
             <ul>
@@ -2243,7 +2263,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td><code>BayShell</code> (32)</td>
                   <td>
                     Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), text prompts and file picking through shared
-                    <code>ShellUI</code> (implemented), other dialogs, clipboard (Chrome's <code>ui::Clipboard</code>), documents in <code>BAY_DATA_DIR</code>
+                    <code>ShellUI</code> (implemented), clipboard through Chromium's <code>ui::Clipboard</code>, documents through the shared
+                    <code>DocumentStore</code> in <code>&lt;user data&gt;/BayDocuments</code>
                   </td>
                   <td>
                     <code>copyText</code>, <code>copyImage</code>, <code>readDocument</code>, <code>writeDocument</code>, <code>removeDocument</code>;
