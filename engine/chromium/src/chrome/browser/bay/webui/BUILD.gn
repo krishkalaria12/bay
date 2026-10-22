@@ -311,3 +311,20 @@ if (is_linux) {
     ]
   }
 }
+
+if (is_linux) {
+  # Reuse Chrome's unit-test runner and platform IconLoader implementation.
+  test("native_host_unittests") {
+    sources = [ "native_host_unittest.cc" ]
+    deps = [
+      ":impl",
+      ":webui",
+      "//base",
+      "//base/test:test_support",
+      "//bay/core:engine_api",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+}

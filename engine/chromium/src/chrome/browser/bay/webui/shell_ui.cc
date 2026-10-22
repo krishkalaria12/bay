@@ -224,8 +224,8 @@ bool ShellUI::Dispatch(const HostContext& context,
         base::BindOnce(&ShellUI::IconFinished, weak_factory_.GetWeakPtr(),
                        token, std::nullopt));
     icons_.emplace(token, std::move(pending));
-    // IconLoader does filesystem/association work on its own worker sequence;
-    // Windows executable icons are parsed in Chrome's sandboxed icon service.
+    // IconLoader resolves the file group off-UI. Linux theme lookup returns
+    // to UI; Windows embedded icons use Chrome's sandboxed icon service.
     IconLoader::LoadIcon(
         request->path,
         request->pixels <= 32 ? IconLoader::SMALL : IconLoader::LARGE,
