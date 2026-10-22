@@ -79,7 +79,7 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   ASSERT_TRUE(methods);
   EXPECT_TRUE(modules->contains("BaySystem"));
   EXPECT_TRUE(methods->contains("BayShell.prompt"));
-  EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
+  EXPECT_FALSE(methods->contains("BayShell.pickFiles"));
   EXPECT_TRUE(methods->contains("BaySystem.fileIcon"));
   for (const auto& method : *methods) {
     const auto& name = method.GetString();
@@ -318,6 +318,24 @@ TEST_F(FilePickerTest, SingleSelectionReturnsAnEscapedNativeFileUrl) {
   ExpectFiles(result.Get(), {path});
   task_environment()->RunUntilIdle();
   EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, WindowHostAdvertisesFilePicking) {
+  host_->ResetAndDeleteThis();
+  remote_.reset();
+  auto* host = new NativeHost(*main_rfh(), HostContext::ForWindow(window_),
+                              remote_.BindNewPipeAndPassReceiver());
+  host_ = host->GetWeakPtr();
+  base::test::TestFuture<const std::string&> result;
+  host_->GetHostInfo(result.GetCallback());
+  auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(info);
+  const auto* role = info->FindString("role");
+  ASSERT_TRUE(role);
+  EXPECT_EQ(*role, "window");
+  const auto* methods = info->FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
 }
 
 TEST_F(FilePickerTest, MultipleSelectionPreservesOrderAndReservedCharacters) {
