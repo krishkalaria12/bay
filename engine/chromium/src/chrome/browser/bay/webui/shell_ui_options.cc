@@ -1,9 +1,11 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/shell_ui_options.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -41,7 +43,77 @@ bool WindowId(const base::DictValue& options,
   output = window->GetString();
   return true;
 }
+// The limits Windows' menu builder enforced: 16 levels and 1000 items.
+bool MenuItems(const base::ListValue& items,
+               unsigned depth,
+               size_t& count,
+               std::vector<ShellMenuItem>& output) {
+  if (depth > 16)
+    return false;
+  for (const auto& value : items) {
+    if (++count > 1000)
+      return false;
+    const auto* item = value.GetIfDict();
+    if (!item)
+      return false;
+    ShellMenuItem parsed;
+    if (item->FindBool("separator").value_or(false)) {
+      parsed.separator = true;
+      output.push_back(std::move(parsed));
+      continue;
+    }
+    const auto* id = item->FindString("id");
+    if (!id || id->size() > 4096 ||
+        !Text(*item, "title", 4096, parsed.title, true) ||
+        !Text(*item, "shortcut", 64, parsed.shortcut))
+      return false;
+    parsed.id = *id;
+    if (const auto* swatch = item->FindString("swatch"))
+      parsed.swatch = ParseShellSwatch(*swatch);
+    if (const auto* enabled = item->Find("enabled")) {
+      if (!enabled->is_bool())
+        return false;
+      parsed.enabled = enabled->GetBool();
+    }
+    if (const auto* checked = item->Find("checked")) {
+      if (!checked->is_bool())
+        return false;
+      parsed.checked = checked->GetBool();
+    }
+    if (const auto* children = item->Find("children")) {
+      if (!children->is_list())
+        return false;
+      parsed.children.emplace();
+      if (!MenuItems(children->GetList(), depth + 1, count, *parsed.children))
+        return false;
+    }
+    output.push_back(std::move(parsed));
+  }
+  return true;
+}
 }  // namespace
+std::optional<std::vector<ShellMenuItem>> ParseShellMenuArgs(
+    const base::ListValue& args) {
+  if (args.size() != 1 || !args[0].is_list())
+    return std::nullopt;
+  std::vector<ShellMenuItem> items;
+  size_t count = 0;
+  if (!MenuItems(args[0].GetList(), 0, count, items))
+    return std::nullopt;
+  return items;
+}
+std::optional<uint32_t> ParseShellSwatch(std::string_view hex) {
+  if (hex.starts_with('#'))
+    hex.remove_prefix(1);
+  uint32_t value = 0;
+  // HexStringToUInt alone would also take "0x" and a sign.
+  if ((hex.size() != 6 && hex.size() != 8) ||
+      !std::ranges::all_of(hex, base::IsHexDigit<char>) ||
+      !base::HexStringToUInt(hex, &value))
+    return std::nullopt;
+  // RRGGBB is opaque; RRGGBBAA moves its alpha to the top byte.
+  return hex.size() == 6 ? 0xFF000000u | value : (value >> 8) | (value << 24);
+}
 std::optional<ShellPromptOptions> ParseShellPromptOptions(
     const base::DictValue& options) {
   for (const auto [key, value] : options) {
