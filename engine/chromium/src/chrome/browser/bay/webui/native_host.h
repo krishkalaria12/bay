@@ -26,6 +26,7 @@ class TabObserver;
 class PlatformServices;
 class BrowserServices;
 class EngineServices;
+class SecretStorage;
 class ShellUI;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
@@ -74,6 +75,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 #if BUILDFLAG(IS_LINUX)
   // Document-scoped ownership dismisses prompts and settles pending icons.
   std::unique_ptr<ShellUI> shell_ui_;
+  std::unique_ptr<SecretStorage> secret_storage_;
 #endif
   std::unique_ptr<BrowserServices> browser_services_;
   std::unique_ptr<EngineServices> engine_services_;

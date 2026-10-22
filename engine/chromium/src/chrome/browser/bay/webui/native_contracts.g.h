@@ -175,6 +175,7 @@ inline constexpr Method methods[] = {
   {"BayCEF", "updatePassword", true, 5, 5},
   {"BayCEF", "deletePassword", true, 3, 3},
   {"BayCEF", "getNeverSavePasswordOrigins", true, 1, 1},
+  {"BayCEF", "secretStorage", true, 0, 0},
   {"BayCEF", "allowSavingPasswords", true, 2, 2},
   {"BayCEF", "exportPasswords", true, 1, 1},
   {"BayCEF", "getPasswordAutofill", true, 1, 1},

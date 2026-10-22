@@ -1224,6 +1224,13 @@ export const nativeContracts = {
           "maxArgs": 1,
           "signature": "getNeverSavePasswordOrigins(profile: string): Promise<Result<{ origins: string[] }>>;"
         },
+        "secretStorage": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "secretStorage?(): Promise<SecretStorageKind>;"
+        },
         "allowSavingPasswords": {
           "async": true,
           "optional": false,

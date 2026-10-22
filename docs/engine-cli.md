@@ -63,10 +63,11 @@ Once the Linux engine tree is prepared and GN-generated, build and run the
 native helper tests on Linux:
 
 ```sh
-autoninja -C out/Release_GN_x64 chrome/browser/bay:pip_platform_unittests chrome/browser/bay:external_apps_linux_unittests chrome/browser/bay/webui:frame_linux_unittests
+autoninja -C out/Release_GN_x64 chrome/browser/bay:pip_platform_unittests chrome/browser/bay:external_apps_linux_unittests chrome/browser/bay/webui:frame_linux_unittests chrome/browser/bay/webui:secret_storage_linux_unittests
 out/Release_GN_x64/pip_platform_unittests
 out/Release_GN_x64/external_apps_linux_unittests
 out/Release_GN_x64/frame_linux_unittests
+out/Release_GN_x64/secret_storage_linux_unittests
 ```
 
 These test targets are added but have not run. Current source checks use the

@@ -81,6 +81,7 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   EXPECT_TRUE(methods->contains("BayShell.prompt"));
   EXPECT_FALSE(methods->contains("BayShell.pickFiles"));
   EXPECT_TRUE(methods->contains("BaySystem.fileIcon"));
+  EXPECT_TRUE(methods->contains("BayCEF.secretStorage"));
   for (const auto& method : *methods) {
     const auto& name = method.GetString();
     if (name.starts_with("BaySystem."))
@@ -93,6 +94,35 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
       info->FindByDottedPath("snapshots.BaySystem.downloadsFolder");
   ASSERT_TRUE(downloads);
   EXPECT_TRUE(downloads->is_none());
+}
+
+// The testing browser process encrypts with a test key, not the fixed v10
+// one. The engine facade would otherwise answer every BayCEF method.
+TEST_F(NativeHostTest, SecretStorageAnswersAheadOfTheEngineFacade) {
+  base::test::TestFuture<const std::string&> first;
+  base::test::TestFuture<const std::string&> second;
+  host_->Invoke("BayCEF", "secretStorage", "[]", first.GetCallback());
+  host_->Invoke("BayCEF", "secretStorage", "[]", second.GetCallback());
+  for (auto* result : {&first, &second}) {
+    auto parsed =
+        base::JSONReader::ReadDict(result->Get(), base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    const auto* value = parsed->FindString("value");
+    ASSERT_TRUE(value);
+    EXPECT_EQ(*value, "keyring");
+  }
+  ExpectError(Invoke("BayCEF", "secretStorage", "[1]"), "invalid_args");
+}
+
+TEST_F(NativeHostTest, SecretStorageSettlesWhenTheHostCloses) {
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayCEF", "secretStorage", "[]", result.GetCallback());
+  ASSERT_FALSE(result.IsReady());
+  host_->ResetAndDeleteThis();
+  ASSERT_TRUE(result.IsReady());
+  ExpectError(result.Get(), "host_closed");
+  // The encryptor's late answer finds no owner.
+  task_environment()->RunUntilIdle();
 }
 
 TEST_F(NativeHostTest, CoordinatorPromptRequiresAnExplicitLiveWindow) {

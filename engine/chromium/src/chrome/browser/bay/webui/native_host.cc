@@ -38,6 +38,7 @@
 #include "chrome/browser/bay/webui/notifications.h"
 #endif
 #if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/secret_storage_linux.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 #endif
 #if BUILDFLAG(IS_WIN)
@@ -382,6 +383,7 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
 #endif
 #if BUILDFLAG(IS_LINUX)
   shell_ui_ = std::make_unique<ShellUI>();
+  secret_storage_ = std::make_unique<SecretStorage>();
 #endif
   if (context_.window()) {
     WindowRegistry::Get().RegisterHost(
@@ -492,6 +494,8 @@ base::DictValue NativeHost::Info() const {
   if (context_.is_window())
     engine_methods.Append("BayShell.pickFiles");
   engine_methods.Append("BaySystem.fileIcon");
+  for (auto& method : SecretStorage::SupportedMethods())
+    engine_methods.Append(std::move(method));
 #endif
   auto info =
       base::DictValue()
@@ -762,6 +766,11 @@ void NativeHost::Invoke(const std::string& module,
   }
   if (browser_services_->DispatchBrowserModule(module, method, args, callback))
     return;
+#if BUILDFLAG(IS_LINUX)
+  // Ahead of the engine facade, which answers every other BayCEF method.
+  if (secret_storage_->Dispatch(module, method, args, callback))
+    return;
+#endif
   if (engine_services_->DispatchEngineModule(module, method, args, callback))
     return;
 #if BUILDFLAG(IS_LINUX)
