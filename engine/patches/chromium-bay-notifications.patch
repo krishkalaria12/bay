@@ -31,7 +31,7 @@ diff --git a/chrome/browser/notifications/notification_display_service_factory.h
    static NotificationDisplayService* GetForProfile(Profile* profile);
    static NotificationDisplayServiceFactory* GetInstance();
 +
-+#if BUILDFLAG(IS_WIN)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +  // Installed before profile creation; avoids a dependency on Bay host code.
 +  static void SetBayHandlerInitializer(
 +      void (*initializer)(NotificationDisplayServiceImpl*));
@@ -42,11 +42,13 @@ diff --git a/chrome/browser/notifications/notification_display_service_factory.h
 diff --git a/chrome/browser/notifications/notification_display_service_factory.cc b/chrome/browser/notifications/notification_display_service_factory.cc
 --- a/chrome/browser/notifications/notification_display_service_factory.cc
 +++ b/chrome/browser/notifications/notification_display_service_factory.cc
-@@ -15,6 +15,16 @@
+@@ -15,6 +15,18 @@
  
  #if BUILDFLAG(IS_WIN)
  #include "base/win/windows_version.h"
++#endif
 +
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +namespace {
 +void (*g_bay_handler_initializer)(NotificationDisplayServiceImpl*) = nullptr;
 +}  // namespace
@@ -59,14 +61,14 @@ diff --git a/chrome/browser/notifications/notification_display_service_factory.c
  #endif
  
  // static
-@@ -50,6 +60,11 @@
+@@ -50,6 +62,11 @@
  NotificationDisplayServiceFactory::BuildServiceInstanceForBrowserContext(
      content::BrowserContext* context) const {
    // TODO(peter): Register the notification handlers here.
 -  return std::make_unique<NotificationDisplayServiceImpl>(
 +  auto service = std::make_unique<NotificationDisplayServiceImpl>(
        Profile::FromBrowserContext(context));
-+#if BUILDFLAG(IS_WIN)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +  if (g_bay_handler_initializer)
 +    g_bay_handler_initializer(service.get());
 +#endif

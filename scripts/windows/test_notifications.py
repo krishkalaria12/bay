@@ -11,9 +11,10 @@ spec.loader.exec_module(series)
 
 
 class NotificationRegistrationTests(unittest.TestCase):
-    def test_notification_handler_patch_is_windows_only(self):
-        name = "chromium-bay-notifications-win.patch"
+    def test_notification_handler_patch_is_shared_by_web_desktops(self):
+        name = "chromium-bay-notifications.patch"
         self.assertIn(name, {step.name for step in series.read_series("win")})
+        self.assertIn(name, {step.name for step in series.read_series("linux")})
         self.assertNotIn(name, {step.name for step in series.read_series("mac")})
         patch = (REPO / "engine/patches" / name).read_text()
         added = "\n".join(line[1:] for line in patch.splitlines()
@@ -21,6 +22,7 @@ class NotificationRegistrationTests(unittest.TestCase):
         self.assertIn("BAY = 13", added)
         self.assertIn("MAX = BAY", added)
         self.assertIn("g_bay_handler_initializer(service.get())", added)
+        self.assertIn("BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)", added)
         self.assertNotIn('#include "chrome/browser/bay/', added)
 
     def test_installer_shortcut_and_com_server_match_compiled_toast_clsid(self):

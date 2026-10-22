@@ -64,7 +64,7 @@ chromium win chromium-bay-layer-win.patch
 chromium win,linux chromium-bay-webui-window.patch
 chromium win,linux chromium-bay-lifecycle.patch
 chromium win,linux chromium-bay-extension-hooks.patch
-chromium win chromium-bay-notifications-win.patch
+chromium win,linux chromium-bay-notifications.patch
 chromium win,linux chromium-bay-native-widget.patch
 
 layer all engine/chromium
