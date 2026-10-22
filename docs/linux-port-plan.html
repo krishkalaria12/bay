@@ -1841,7 +1841,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
                 lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
                 <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. The remaining system
-                methods are still open; confirmation dialogs, context menus, documents, clipboard writes and appearance are recorded below.
+                methods are still open; confirmation dialogs, context menus, documents, clipboard writes, appearance and file operations are recorded below.
               </p>
               <p>
                 <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
@@ -1974,6 +1974,38 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 headers. Native tests have not been linked or run; Windows compilation, full Linux GN/link validation and live X11/Wayland theme switching
                 remain unverified. Four frontend tests cover startup query/event ordering and disposal; the browser and platform suites, native and web
                 TypeScript checks, contracts, lint and formatting pass.
+              </p>
+              <p>
+                <strong>File operations, 22 Oct 2026.</strong> Linux hosts now advertise <code>BaySystem.fileExists</code>, <code>downloadsFolder</code>,
+                <code>openFile</code>, <code>revealFile</code> and <code>moveToTrash</code> through shared <code>ShellFiles</code>. Both window and coordinator
+                hosts can call them. Paths are absolute native UTF-8 paths, not file URLs, and Linux keeps their bytes as sent whatever the process locale;
+                Linux treats spaces, <code>?</code>, <code>*</code>, <code>#</code> and <code>%</code> literally. Relative paths, embedded NUL and invalid UTF-8
+                reject with <code>invalid_args</code>. Windows retains its path rules, profile and initialization checks, and existing shell backends.
+              </p>
+              <p>
+                Existence checks and the initial Downloads-folder lookup run on a worker. <code>fileExists</code> follows symlinks and accepts folders; missing
+                or inaccessible paths return <code>false</code>. The Downloads snapshot uses Chromium's default user Downloads directory, which can differ from
+                the profile's chosen download destination and need not exist. Host info waits for that lookup and saved documents; lookup failure publishes
+                <code>null</code> without blocking startup.
+              </p>
+              <p>
+                Linux checks the path on a worker first, so <code>openFile</code> opens a folder as a folder (the Downloads panel opens its folder this way) and
+                both open and reveal return <code>false</code> for a missing path or a special file such as a FIFO, which could block Chromium's read. It then
+                opens through Chromium's <code>platform_util</code> helpers and reveals through the portal, desktop file manager or parent-folder fallback. The
+                path can still change between that check and Chromium's own open. A successful answer confirms dispatch, not that another application opened a
+                window or selected the item. Trash uses GIO on a worker and returns <code>false</code> on failure, with no permanent-delete fallback. Linux
+                Trash rejects <code>.</code> and <code>..</code> components and a trailing slash with <code>invalid_args</code>. GIO simplifies paths as text,
+                so <code>/a/link/../file</code> could trash a different file than the kernel resolves, and <code>/a/file/</code> could trash a regular file the
+                kernel would refuse. A symlink is trashed as the link, never its target. Names such as <code>.hidden</code> and <code>..file</code> are
+                unaffected. Closing the document settles pending calls with <code>host_closed</code>; work already submitted to the desktop or worker may finish
+                afterward.
+              </p>
+              <p>
+                <strong>Verification.</strong> Service tests cover argument and path rules, locale-independent filename bytes under the C locale, folder
+                opening, FIFO rejection, the trash guards before the backend, trash failure leaving the file, and replies when the owner closes or re-enters.
+                Host tests cover the readiness gate on documents and Downloads, both host roles, contract errors and teardown. External effects go through
+                fakes; nothing opened an app or trashed a real file. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run, and
+                the Windows services, which now share this code, have not been compiled.
               </p>
             </div>
             <ul>
@@ -2302,7 +2334,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td><code>BaySystem</code> (15)</td>
                   <td>
-                    File-icon sources use Chromium's MIME/theme lookup; GIO/portal open and reveal, Trash spec and <code>xdg-user-dir DOWNLOAD</code> remain
+                    File icons use Chromium's MIME/theme lookup; file operations use shared <code>ShellFiles</code>, Chromium's desktop helpers and GIO Trash
                   </td>
                   <td><code>fileExists</code> → async; <code>downloadsFolder</code> → snapshot; <code>hapticTick</code> → none</td>
                   <td class="num">4</td>

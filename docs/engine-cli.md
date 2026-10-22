@@ -63,12 +63,23 @@ Once the Linux engine tree is prepared and GN-generated, build and run the
 native helper tests on Linux:
 
 ```sh
-autoninja -C out/Release_GN_x64 chrome/browser/bay:pip_platform_unittests chrome/browser/bay:external_apps_linux_unittests chrome/browser/bay/webui:frame_linux_unittests chrome/browser/bay/webui:secret_storage_linux_unittests chrome/browser/bay/webui:document_store_unittests
-out/Release_GN_x64/pip_platform_unittests
-out/Release_GN_x64/external_apps_linux_unittests
-out/Release_GN_x64/frame_linux_unittests
-out/Release_GN_x64/secret_storage_linux_unittests
-out/Release_GN_x64/document_store_unittests
+autoninja -C out/Release_GN_x64 \
+  chrome/browser/bay:pip_platform_unittests \
+  chrome/browser/bay:external_apps_linux_unittests \
+  chrome/browser/bay/webui:runtime_unittests \
+  chrome/browser/bay/webui:page_security_unittests \
+  chrome/browser/bay/webui:shell_ui_options_unittests \
+  chrome/browser/bay/webui:notifications_unittests \
+  chrome/browser/bay/webui:native_host_unittests \
+  chrome/browser/bay/webui:frame_linux_unittests \
+  chrome/browser/bay/webui:secret_storage_linux_unittests \
+  chrome/browser/bay/webui:document_store_unittests \
+  chrome/browser/bay/webui:shell_files_unittests \
+  chrome/browser/bay/webui:shell_appearance_unittests \
+  chrome/browser/bay/webui:shell_clipboard_unittests
+for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests secret_storage_linux_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests; do
+  out/Release_GN_x64/$test || break
+done
 ```
 
 These test targets are added but have not run. Current source checks use the
