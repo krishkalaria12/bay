@@ -1,6 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
-#ifndef CHROME_BROWSER_BAY_WEBUI_NOTIFICATIONS_WIN_H_
-#define CHROME_BROWSER_BAY_WEBUI_NOTIFICATIONS_WIN_H_
+#ifndef CHROME_BROWSER_BAY_WEBUI_NOTIFICATIONS_H_
+#define CHROME_BROWSER_BAY_WEBUI_NOTIFICATIONS_H_
 
 #include <deque>
 #include <optional>
@@ -31,11 +31,11 @@ std::optional<base::DictValue> DecodeResponse(std::string_view native_id,
 // App-lifetime notification routing survives the coordinator renderer's reload.
 // Chrome owns the native toast, activation COM server, history and close
 // events.
-class NotificationsWin {
+class Notifications {
  public:
   using Response = base::OnceCallback<void(const std::string&)>;
   using EventSink = base::RepeatingCallback<void(base::DictValue)>;
-  static NotificationsWin& Get();
+  static Notifications& Get();
   static void InstallHandler(NotificationDisplayServiceImpl* service);
 
   void SetEventSink(EventSink sink);
@@ -46,9 +46,9 @@ class NotificationsWin {
   void Respond(std::string_view native_id, std::string_view action);
 
  private:
-  friend class base::NoDestructor<NotificationsWin>;
-  NotificationsWin() = default;
-  ~NotificationsWin() = default;
+  friend class base::NoDestructor<Notifications>;
+  Notifications() = default;
+  ~Notifications() = default;
   bool DispatchNow(const HostContext& context,
                    const std::string& method,
                    const base::ListValue& args,

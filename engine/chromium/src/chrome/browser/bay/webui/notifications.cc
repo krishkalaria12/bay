@@ -1,5 +1,5 @@
 // Copyright 2026 Bay. Apache-2.0.
-#include "chrome/browser/bay/webui/notifications_win.h"
+#include "chrome/browser/bay/webui/notifications.h"
 
 #include <algorithm>
 #include <memory>
@@ -55,7 +55,7 @@ constexpr std::string_view kPrefix = "bay-v1:";
 constexpr size_t kMaxResponseBytes = 4096;
 constexpr size_t kMaxNativeIdBytes = 5500;
 constexpr size_t kMaxPendingResponses = 128;
-using Response = NotificationsWin::Response;
+using Response = Notifications::Response;
 
 std::string Success(base::Value value = base::Value()) {
   return base::WriteJson(base::DictValue().Set("value", std::move(value)))
@@ -180,7 +180,7 @@ class Handler final : public NotificationHandler {
                const std::optional<int>&,
                const std::optional<std::u16string>&,
                base::OnceClosure completed) override {
-    NotificationsWin::Get().Respond(id, "click");
+    Notifications::Get().Respond(id, "click");
     std::move(completed).Run();
   }
   void OnClose(Profile*,
@@ -189,7 +189,7 @@ class Handler final : public NotificationHandler {
                bool by_user,
                base::OnceClosure completed) override {
     if (by_user)
-      NotificationsWin::Get().Respond(id, "close");
+      Notifications::Get().Respond(id, "close");
     std::move(completed).Run();
   }
 };
@@ -303,16 +303,16 @@ std::optional<base::DictValue> DecodeResponse(std::string_view native_id,
 }
 }  // namespace notifications
 
-NotificationsWin& NotificationsWin::Get() {
-  static base::NoDestructor<NotificationsWin> instance;
+Notifications& Notifications::Get() {
+  static base::NoDestructor<Notifications> instance;
   return *instance;
 }
-void NotificationsWin::InstallHandler(NotificationDisplayServiceImpl* service) {
+void Notifications::InstallHandler(NotificationDisplayServiceImpl* service) {
   if (!service->GetNotificationHandler(kNotificationType))
     service->AddNotificationHandler(kNotificationType,
                                     std::make_unique<Handler>());
 }
-void NotificationsWin::SetEventSink(EventSink sink) {
+void Notifications::SetEventSink(EventSink sink) {
   event_sink_ = std::move(sink);
   if (!event_sink_)
     return;
@@ -321,7 +321,7 @@ void NotificationsWin::SetEventSink(EventSink sink) {
   for (auto& response : pending)
     event_sink_.Run(std::move(response));
 }
-void NotificationsWin::Respond(std::string_view native_id,
+void Notifications::Respond(std::string_view native_id,
                                std::string_view action) {
   auto response = notifications::DecodeResponse(native_id, action);
   if (!response)
@@ -335,7 +335,7 @@ void NotificationsWin::Respond(std::string_view native_id,
   }
 }
 
-bool NotificationsWin::Dispatch(const HostContext& context,
+bool Notifications::Dispatch(const HostContext& context,
                                 const std::string& method,
                                 const base::ListValue& args,
                                 Response& callback) {
@@ -349,12 +349,12 @@ bool NotificationsWin::Dispatch(const HostContext& context,
     return true;
   }
   operations_.push_back(base::BindOnce(
-      [](NotificationsWin* owner, HostContext context, std::string method,
+      [](Notifications* owner, HostContext context, std::string method,
          base::ListValue args, Response response) {
         // Also advance if Chrome destroys the callback with its profile. The
         // completion always posts back to this UI sequence.
         base::ScopedClosureRunner done(base::BindPostTaskToCurrentDefault(
-            base::BindOnce(&NotificationsWin::OperationFinished,
+            base::BindOnce(&Notifications::OperationFinished,
                            base::Unretained(owner))));
         Response completed = base::BindOnce(
             [](Response response, base::ScopedClosureRunner done,
@@ -368,7 +368,7 @@ bool NotificationsWin::Dispatch(const HostContext& context,
   return true;
 }
 
-void NotificationsWin::StartNextOperation() {
+void Notifications::StartNextOperation() {
   if (operation_active_ || operations_.empty())
     return;
   operation_active_ = true;
@@ -376,12 +376,12 @@ void NotificationsWin::StartNextOperation() {
   operations_.pop_front();
   std::move(next).Run();
 }
-void NotificationsWin::OperationFinished() {
+void Notifications::OperationFinished() {
   operation_active_ = false;
   StartNextOperation();
 }
 
-bool NotificationsWin::DispatchNow(const HostContext& context,
+bool Notifications::DispatchNow(const HostContext& context,
                                    const std::string& method,
                                    const base::ListValue& args,
                                    Response& callback) {

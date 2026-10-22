@@ -1,5 +1,5 @@
 // Copyright 2026 Bay. Apache-2.0.
-#include "chrome/browser/bay/webui/notifications_win.h"
+#include "chrome/browser/bay/webui/notifications.h"
 
 #include "base/base64url.h"
 #include "base/functional/bind.h"
@@ -93,7 +93,7 @@ TEST(BayNotificationPayload, RequiresCompleteFieldsAndBoundsIds) {
   EXPECT_FALSE(EncodeResponse(response, true));
 }
 TEST(BayNotificationPayload, BuffersActivationUntilAnEventSinkIsReady) {
-  auto& owner = NotificationsWin::Get();
+  auto& owner = Notifications::Get();
   owner.SetEventSink({});
   auto encoded = EncodeResponse(Response(), true);
   ASSERT_TRUE(encoded);

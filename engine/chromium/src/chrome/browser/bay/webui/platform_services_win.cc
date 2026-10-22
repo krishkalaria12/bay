@@ -1,6 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/platform_services_win.h"
-#include "chrome/browser/bay/webui/notifications_win.h"
+#include "chrome/browser/bay/webui/notifications.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 
 #include <windows.h>
@@ -642,7 +642,7 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
   if (shell_ui_->Dispatch(context_, module, method, args, callback))
     return true;
   if (module == "BayApp" &&
-      NotificationsWin::Get().Dispatch(context_, method, args, callback))
+      Notifications::Get().Dispatch(context_, method, args, callback))
     return true;
   auto invalid = [&] {
     std::move(callback).Run(

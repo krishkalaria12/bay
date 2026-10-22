@@ -38,7 +38,7 @@
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
 #include "chrome/browser/bay/webui/frame_win.h"
-#include "chrome/browser/bay/webui/notifications_win.h"
+#include "chrome/browser/bay/webui/notifications.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/updater_service_win.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -393,7 +393,7 @@ NativeHost::~NativeHost() {
     }
   }
   if (!notification_client)
-    NotificationsWin::Get().SetEventSink({});
+    Notifications::Get().SetEventSink({});
 #endif
   if (Hosts().empty())
     nn_engine_set_event_sink(nullptr, nullptr);
@@ -572,7 +572,7 @@ void NativeHost::SetClient(
     // Activation can arrive before the trusted document connects. Drain only
     // after its Mojo client is bound; the renderer retains startup responses
     // until app integration subscribes.
-    NotificationsWin::Get().SetEventSink(base::BindRepeating(
+    Notifications::Get().SetEventSink(base::BindRepeating(
         [](base::DictValue response) {
           DataEvent("BayApp", "onNotificationResponse", JSON(response));
         }));

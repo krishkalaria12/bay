@@ -117,8 +117,8 @@ if (is_win) {
     sources = [
       "frame_win.cc",
       "frame_win.h",
-      "notifications_win.cc",
-      "notifications_win.h",
+      "notifications.cc",
+      "notifications.h",
       "platform_services_win.cc",
       "platform_services_win.h",
       "shell_ui.cc",
@@ -229,8 +229,8 @@ test("shell_ui_options_unittests") {
 }
 
 if (is_win) {
-  test("notifications_win_unittests") {
-    sources = [ "notifications_win_unittest.cc" ]
+  test("notifications_unittests") {
+    sources = [ "notifications_unittest.cc" ]
     deps = [
       ":platform_services_win",
       "//base",
