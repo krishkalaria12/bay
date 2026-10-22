@@ -124,11 +124,11 @@ type AppModule = {
   appIcons(size: number): Promise<AppIcon[]>;
   appIcon(): Promise<string>;
   setAppIcon(id: string): Promise<void>;
-  notificationPermission(): Promise<NotificationPermission>;
-  requestNotificationPermission(): Promise<boolean>;
+  notificationPermission?(): Promise<NotificationPermission>;
+  requestNotificationPermission?(): Promise<boolean>;
   postNotification(options: NotificationOptions): Promise<string | null>;
   removeNotifications(ids: string[]): Promise<void>;
-  openNotificationSettings(): Promise<void>;
+  openNotificationSettings?(): Promise<void>;
   setScriptState(state: ScriptState): Promise<void>;
   replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;
   systemInfo(): SystemInfo;
@@ -176,14 +176,15 @@ export const setAppIcon = (id: string) => App.setAppIcon(id);
 
 // Some desktop notification services accept submissions without a permission API.
 export const hasNotificationPermissionQuery = () => typeof App.notificationPermission === "function";
-export const notificationPermission = () => App.notificationPermission();
+export const notificationPermission = () => App.notificationPermission?.() ?? Promise.reject(new Error("Notification permission queries are unavailable"));
 
 export const crashReports = (since: number): Promise<CrashReport[]> => App.crashReports(since);
 export const devCrash = (kind?: "exception") => App.devCrash(kind);
-export const requestNotificationPermission = () => App.requestNotificationPermission();
+export const requestNotificationPermission = () =>
+  App.requestNotificationPermission?.() ?? Promise.reject(new Error("Notification permission requests are unavailable"));
 export const postNotification = (options: NotificationOptions) => App.postNotification(options);
 export const removeNotifications = (ids: string[]) => App.removeNotifications(ids);
-export const openNotificationSettings = () => App.openNotificationSettings();
+export const openNotificationSettings = () => App.openNotificationSettings?.() ?? Promise.reject(new Error("Notification settings are unavailable"));
 export const onNotificationResponse = (listener: (e: NotificationResponse) => void) => App.addListener("onNotificationResponse", listener);
 
 export const setScriptState = (state: ScriptState) => App.setScriptState(state);

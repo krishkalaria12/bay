@@ -511,17 +511,17 @@ export const nativeContracts = {
         },
         "notificationPermission": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 0,
           "maxArgs": 0,
-          "signature": "notificationPermission(): Promise<NotificationPermission>;"
+          "signature": "notificationPermission?(): Promise<NotificationPermission>;"
         },
         "requestNotificationPermission": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 0,
           "maxArgs": 0,
-          "signature": "requestNotificationPermission(): Promise<boolean>;"
+          "signature": "requestNotificationPermission?(): Promise<boolean>;"
         },
         "postNotification": {
           "async": true,
@@ -539,10 +539,10 @@ export const nativeContracts = {
         },
         "openNotificationSettings": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 0,
           "maxArgs": 0,
-          "signature": "openNotificationSettings(): Promise<void>;"
+          "signature": "openNotificationSettings?(): Promise<void>;"
         },
         "setScriptState": {
           "async": true,
@@ -2049,7 +2049,7 @@ export const nativeContracts = {
       "NativeFrame": "{ image: string; symbol?: string; offset?: number }",
       "ScriptState": "{\n  windows: {\n    id: string;\n    title: string;\n    profileId: string;\n    incognito: boolean;\n    activeTabId: string | null;\n    tabs: { id: string; title: string; url: string; loading: boolean; pinned: boolean }[];\n  }[];\n  profiles: { id: string; name: string }[];\n}",
       "ScriptCommand": "{ id: string } & (\n  | { command: \"newWindow\"; url?: string; incognito: boolean; profileId?: string }\n  | { command: \"newTab\"; windowId?: string; url?: string; index?: number }\n  | { command: \"setURL\"; tabId: string; url: string }\n  | { command: \"closeTab\" | \"reload\" | \"back\" | \"forward\" | \"focusTab\"; tabId: string }\n  | { command: \"closeWindow\"; windowId: string }\n  | { command: \"setActiveTabIndex\"; windowId: string; index: number }\n  | { command: \"execute\"; tabId: string; code: string }\n  | { command: \"focusProfile\"; profileId: string }\n)",
-      "AppModule": "{\n  readonly apiVersion: number;\n  addListener(name: \"onNotificationResponse\", listener: (e: NotificationResponse) => void): EventSubscription;\n  addListener(name: \"onScriptCommand\", listener: (e: ScriptCommand) => void): EventSubscription;\n  addListener(name: \"onUpdatePending\", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;\n  updaterState(): Promise<UpdaterState>;\n  checkForUpdates(): Promise<void>;\n  installPendingUpdate(): Promise<void>;\n  disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;\n  setAutomaticUpdateChecks(on: boolean): Promise<void>;\n  setAutomaticUpdateDownloads(on: boolean): Promise<void>;\n  setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;\n  share(url: string, title: string | null, windowId: string | null): Promise<void>;\n  isInDock(): Promise<boolean>;\n  addToDock(): Promise<boolean>;\n  appIcons(size: number): Promise<AppIcon[]>;\n  appIcon(): Promise<string>;\n  setAppIcon(id: string): Promise<void>;\n  notificationPermission(): Promise<NotificationPermission>;\n  requestNotificationPermission(): Promise<boolean>;\n  postNotification(options: NotificationOptions): Promise<string | null>;\n  removeNotifications(ids: string[]): Promise<void>;\n  openNotificationSettings(): Promise<void>;\n  setScriptState(state: ScriptState): Promise<void>;\n  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;\n  systemInfo(): SystemInfo;\n  openExternalURL(url: string): Promise<boolean>;\n  launchEnvironment(name: string): string | null;\n  playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;\n  setIntroMusicMuted(muted: boolean): Promise<void>;\n  stopIntroMusic(fade: number): Promise<void>;\n  devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;\n  devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;\n  devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;\n  devMenuCommand(command: string, arg: string | null): Promise<void>;\n  devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;\n  devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;\n  crashReports(since: number): Promise<CrashReport[]>;\n  devCrash(kind?: \"exception\"): Promise<void>;\n}",
+      "AppModule": "{\n  readonly apiVersion: number;\n  addListener(name: \"onNotificationResponse\", listener: (e: NotificationResponse) => void): EventSubscription;\n  addListener(name: \"onScriptCommand\", listener: (e: ScriptCommand) => void): EventSubscription;\n  addListener(name: \"onUpdatePending\", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;\n  updaterState(): Promise<UpdaterState>;\n  checkForUpdates(): Promise<void>;\n  installPendingUpdate(): Promise<void>;\n  disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;\n  setAutomaticUpdateChecks(on: boolean): Promise<void>;\n  setAutomaticUpdateDownloads(on: boolean): Promise<void>;\n  setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;\n  share(url: string, title: string | null, windowId: string | null): Promise<void>;\n  isInDock(): Promise<boolean>;\n  addToDock(): Promise<boolean>;\n  appIcons(size: number): Promise<AppIcon[]>;\n  appIcon(): Promise<string>;\n  setAppIcon(id: string): Promise<void>;\n  notificationPermission?(): Promise<NotificationPermission>;\n  requestNotificationPermission?(): Promise<boolean>;\n  postNotification(options: NotificationOptions): Promise<string | null>;\n  removeNotifications(ids: string[]): Promise<void>;\n  openNotificationSettings?(): Promise<void>;\n  setScriptState(state: ScriptState): Promise<void>;\n  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;\n  systemInfo(): SystemInfo;\n  openExternalURL(url: string): Promise<boolean>;\n  launchEnvironment(name: string): string | null;\n  playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;\n  setIntroMusicMuted(muted: boolean): Promise<void>;\n  stopIntroMusic(fade: number): Promise<void>;\n  devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;\n  devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;\n  devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;\n  devMenuCommand(command: string, arg: string | null): Promise<void>;\n  devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;\n  devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;\n  crashReports(since: number): Promise<CrashReport[]>;\n  devCrash(kind?: \"exception\"): Promise<void>;\n}",
       "IntroMusicCues": "{\n  icon: number;\n  letters: number;\n  letterStep: number;\n  letterCount: number;\n  tagline: number;\n  exit: number;\n  end: number;\n}",
       "KeyTiming": "{ due: number; handled: number; drawn: number }",
       "KeyPress": "{\n  key: string;\n  keyCode: number;\n  modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\" | \"function\")[];\n  characters?: string;\n  focus?: \"window\" | \"page\" | \"devtools\";\n  asKey?: boolean;\n  settle?: number;\n  wait?: number;\n  dry?: boolean;\n}",
