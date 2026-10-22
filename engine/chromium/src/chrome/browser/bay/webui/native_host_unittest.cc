@@ -1,30 +1,43 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/native_host.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "net/base/filename_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/test/mock_base_window.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
+#include "ui/shell_dialogs/select_file_dialog_factory.h"
+#include "ui/shell_dialogs/select_file_policy.h"
+#include "ui/shell_dialogs/selected_file_info.h"
+#include "url/gurl.h"
 
 namespace bay {
 namespace {
 
 class NativeHostTest : public ChromeRenderViewHostTestHarness {
-public:
+ public:
   NativeHostTest()
       : ChromeRenderViewHostTestHarness(
             base::test::TaskEnvironment::ThreadPoolExecutionMode::QUEUED) {}
 
-protected:
+ protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    auto *host =
+    auto* host =
         new NativeHost(*main_rfh(), HostContext::ForCoordinator(*profile()),
                        remote_.BindNewPipeAndPassReceiver());
     host_ = host->GetWeakPtr();
@@ -36,16 +49,17 @@ protected:
     task_environment()->RunUntilIdle();
     ChromeRenderViewHostTestHarness::TearDown();
   }
-  std::string Invoke(const std::string &module, const std::string &method,
-                     const std::string &args) {
-    base::test::TestFuture<const std::string &> result;
+  std::string Invoke(const std::string& module,
+                     const std::string& method,
+                     const std::string& args) {
+    base::test::TestFuture<const std::string&> result;
     host_->Invoke(module, method, args, result.GetCallback());
     return result.Get();
   }
-  void ExpectError(const std::string &response, const char *code) {
+  void ExpectError(const std::string& response, const char* code) {
     auto parsed = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
     ASSERT_TRUE(parsed);
-    const auto *error = parsed->FindStringByDottedPath("error.code");
+    const auto* error = parsed->FindStringByDottedPath("error.code");
     ASSERT_TRUE(error);
     EXPECT_EQ(*error, code);
   }
@@ -55,26 +69,27 @@ protected:
 };
 
 TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
-  base::test::TestFuture<const std::string &> result;
+  base::test::TestFuture<const std::string&> result;
   host_->GetHostInfo(result.GetCallback());
   auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
   ASSERT_TRUE(info);
-  const auto *modules = info->FindList("modules");
-  const auto *methods = info->FindList("optionalMethods");
+  const auto* modules = info->FindList("modules");
+  const auto* methods = info->FindList("optionalMethods");
   ASSERT_TRUE(modules);
   ASSERT_TRUE(methods);
   EXPECT_TRUE(modules->contains("BaySystem"));
   EXPECT_TRUE(methods->contains("BayShell.prompt"));
+  EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
   EXPECT_TRUE(methods->contains("BaySystem.fileIcon"));
-  for (const auto &method : *methods) {
-    const auto &name = method.GetString();
+  for (const auto& method : *methods) {
+    const auto& name = method.GetString();
     if (name.starts_with("BaySystem."))
       EXPECT_EQ(name, "BaySystem.fileIcon");
   }
   EXPECT_FALSE(methods->contains("BayShell.confirm"));
   EXPECT_FALSE(methods->contains("BayShell.readDocument"));
   EXPECT_TRUE(info->FindDictByDottedPath("snapshots.BaySystem.files"));
-  const auto *downloads =
+  const auto* downloads =
       info->FindByDottedPath("snapshots.BaySystem.downloadsFolder");
   ASSERT_TRUE(downloads);
   EXPECT_TRUE(downloads->is_none());
@@ -88,7 +103,15 @@ TEST_F(NativeHostTest, CoordinatorPromptRequiresAnExplicitLiveWindow) {
               "window_required");
 }
 
+TEST_F(NativeHostTest, CoordinatorCannotPickFiles) {
+  ExpectError(Invoke("BayShell", "pickFiles", "[]"), "window_required");
+  ExpectError(Invoke("BayShell", "pickFiles", R"([{"windowId":"other"}])"),
+              "invalid_args");
+}
+
 TEST_F(NativeHostTest, ValidatesArgumentsBeforeStartingShellWork) {
+  ExpectError(Invoke("BayShell", "pickFiles", "[{}]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "pickFiles", "{}"), "invalid_args");
   ExpectError(Invoke("BayShell", "prompt", "[]"), "invalid_args");
   ExpectError(Invoke("BayShell", "prompt", "[{}]"), "invalid_args");
   ExpectError(Invoke("BaySystem", "fileIcon", R"(["../file.txt",16])"),
@@ -100,7 +123,7 @@ TEST_F(NativeHostTest, UnhandledShellDispatchLeavesTheCallbackUntouched) {
   ShellUI shell;
   bool called = false;
   ShellUI::Response callback = base::BindOnce(
-      [](bool *called, const std::string &) { *called = true; }, &called);
+      [](bool* called, const std::string&) { *called = true; }, &called);
   EXPECT_FALSE(shell.Dispatch(HostContext::ForCoordinator(*profile()),
                               "BayShell", "confirm", {}, callback));
   EXPECT_FALSE(called);
@@ -112,12 +135,12 @@ TEST_F(NativeHostTest, UnhandledShellDispatchLeavesTheCallbackUntouched) {
 TEST_F(NativeHostTest,
        HostDestructionSettlesIconsOnceBeforeLateLoadCompletion) {
   std::vector<std::string> responses;
-  for (const char *args : {R"(["missing.txt",16])", R"(["missing.pdf",32])"}) {
+  for (const char* args : {R"(["missing.txt",16])", R"(["missing.pdf",32])"}) {
     host_->Invoke(
         "BaySystem", "fileIcon", args,
         base::BindOnce(
-            [](std::vector<std::string> *responses,
-               const std::string &response) { responses->push_back(response); },
+            [](std::vector<std::string>* responses,
+               const std::string& response) { responses->push_back(response); },
             &responses));
   }
   // QUEUED keeps IconLoader's MIME tasks pending until we drain them below.
@@ -125,10 +148,10 @@ TEST_F(NativeHostTest,
   host_->ResetAndDeleteThis();
   EXPECT_FALSE(host_);
   ASSERT_EQ(responses.size(), 2u);
-  for (const auto &response : responses) {
+  for (const auto& response : responses) {
     auto parsed = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
     ASSERT_TRUE(parsed);
-    const auto *value = parsed->Find("value");
+    const auto* value = parsed->Find("value");
     ASSERT_TRUE(value);
     EXPECT_TRUE(value->is_none());
   }
@@ -137,5 +160,345 @@ TEST_F(NativeHostTest,
   EXPECT_EQ(responses.size(), 2u);
 }
 
-} // namespace
-} // namespace bay
+// Use Chromium's native factory override, without creating a real desktop
+// dialog. The harness root window supplies only the modal parent handle.
+struct FileDialogLifetime {
+  bool destroyed = false;
+  bool detached = false;
+  bool returned_from_listener = false;
+};
+
+class FakeFileDialog : public ui::SelectFileDialog {
+ public:
+  using OnShow = base::RepeatingCallback<void(FakeFileDialog*)>;
+  FakeFileDialog(Listener* listener,
+                 std::unique_ptr<ui::SelectFilePolicy> policy,
+                 OnShow on_show)
+      : SelectFileDialog(listener, std::move(policy)),
+        on_show_(std::move(on_show)) {}
+  bool IsRunning(gfx::NativeWindow) const override { return !!listener_; }
+  void ListenerDestroyed() override {
+    ++detach_count;
+    lifetime->detached = true;
+    listener_ = nullptr;
+  }
+  void Select(const ui::SelectedFileInfo& file) {
+    if (listener_)
+      listener_->FileSelected(file, 0);
+  }
+  void SelectMultiple(const std::vector<ui::SelectedFileInfo>& files) {
+    if (listener_)
+      listener_->MultiFilesSelected(files);
+  }
+  void Cancel() {
+    if (listener_) {
+      listener_->FileSelectionCanceled();
+      // Match the native backends' accesses after listener notification.
+      lifetime->returned_from_listener = true;
+    }
+  }
+  int detach_count = 0;
+  gfx::NativeWindow parent = nullptr;
+  std::shared_ptr<FileDialogLifetime> lifetime =
+      std::make_shared<FileDialogLifetime>();
+
+ protected:
+  ~FakeFileDialog() override { lifetime->destroyed = true; }
+  void SelectFileImpl(Type type,
+                      const std::u16string& title,
+                      const base::FilePath& default_path,
+                      const FileTypeInfo* file_types,
+                      int file_type_index,
+                      const base::FilePath::StringType& default_extension,
+                      gfx::NativeWindow owning_window,
+                      const GURL* caller) override {
+    EXPECT_EQ(type, SELECT_OPEN_MULTI_FILE);
+    EXPECT_EQ(title, u"Open files");
+    EXPECT_TRUE(default_path.empty());
+    EXPECT_FALSE(file_types);
+    EXPECT_EQ(file_type_index, 0);
+    EXPECT_TRUE(default_extension.empty());
+    EXPECT_FALSE(caller);
+    parent = owning_window;
+    if (on_show_)
+      on_show_.Run(this);
+  }
+  bool HasMultipleFileTypeChoicesImpl() override { return false; }
+
+ private:
+  OnShow on_show_;
+};
+
+class FakeFileDialogFactory : public ui::SelectFileDialogFactory {
+ public:
+  ui::SelectFileDialog* Create(
+      ui::SelectFileDialog::Listener* listener,
+      std::unique_ptr<ui::SelectFilePolicy> policy) override {
+    if (unavailable)
+      return nullptr;
+    auto dialog = base::MakeRefCounted<FakeFileDialog>(
+        listener, std::move(policy), on_show);
+    dialogs.push_back(dialog);
+    if (on_create)
+      on_create.Run();
+    return dialog.get();
+  }
+  bool unavailable = false;
+  FakeFileDialog::OnShow on_show;
+  base::RepeatingClosure on_create;
+  std::vector<scoped_refptr<FakeFileDialog>> dialogs;
+};
+
+// The pinned mock predates this BrowserWindowInterface pure virtual method.
+class PickerWindow : public MockBrowserWindowInterface {
+ public:
+  bool IsNormalBrowser() const override { return true; }
+};
+
+class FilePickerTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    ON_CALL(window_, GetProfile()).WillByDefault(testing::Return(profile()));
+    ON_CALL(window_, GetWeakPtr())
+        .WillByDefault(testing::Return(window_weak_factory_.GetWeakPtr()));
+    ON_CALL(window_, GetWindow()).WillByDefault(testing::Return(&base_window_));
+    ON_CALL(base_window_, GetNativeWindow())
+        .WillByDefault(testing::Return(root_window()));
+    auto factory = std::make_unique<FakeFileDialogFactory>();
+    factory_ = factory.get();
+    ui::SelectFileDialog::SetFactory(std::move(factory));
+    shell_ = std::make_unique<ShellUI>();
+  }
+  void TearDown() override {
+    shell_.reset();
+    task_environment()->RunUntilIdle();
+    ui::SelectFileDialog::SetFactory(nullptr);
+    factory_ = nullptr;
+    NativeHostTest::TearDown();
+  }
+  void Pick(ShellUI::Response callback) {
+    EXPECT_TRUE(shell_->Dispatch(HostContext::ForWindow(window_), "BayShell",
+                                 "pickFiles", {}, callback));
+  }
+  void ExpectFiles(const std::string& response,
+                   const std::vector<base::FilePath>& expected) {
+    auto parsed = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    const auto* files = parsed->FindList("value");
+    ASSERT_TRUE(files);
+    ASSERT_EQ(files->size(), expected.size());
+    for (size_t i = 0; i < files->size(); ++i) {
+      ASSERT_TRUE((*files)[i].is_string());
+      const GURL url((*files)[i].GetString());
+      EXPECT_TRUE(url.SchemeIsFile());
+      EXPECT_FALSE(url.has_query());
+      EXPECT_FALSE(url.has_ref());
+      base::FilePath roundtrip;
+      ASSERT_TRUE(net::FileURLToFilePath(url, &roundtrip));
+      EXPECT_EQ(roundtrip, expected[i]);
+    }
+  }
+
+  testing::NiceMock<PickerWindow> window_;
+  testing::NiceMock<ui::MockBaseWindow> base_window_;
+  base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
+  raw_ptr<FakeFileDialogFactory> factory_ = nullptr;
+  std::unique_ptr<ShellUI> shell_;
+};
+
+TEST_F(FilePickerTest, SingleSelectionReturnsAnEscapedNativeFileUrl) {
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->parent, root_window());
+  const base::FilePath path("/tmp/a ?#% café.txt");
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/display/name"), path));
+  ExpectFiles(result.Get(), {path});
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, MultipleSelectionPreservesOrderAndReservedCharacters) {
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  const std::vector<base::FilePath> paths = {
+      base::FilePath("/tmp/z#?.txt"), base::FilePath("/tmp/a%20.txt"),
+      base::FilePath("/tmp/space ü.txt")};
+  auto selected = ui::FilePathListToSelectedFileInfoList(paths);
+  selected[1].local_path.clear();
+  factory_->dialogs.back()->SelectMultiple(selected);
+  ExpectFiles(result.Get(), paths);
+}
+
+TEST_F(FilePickerTest, CancelSettlesOnceAndIgnoresLateResults) {
+  std::vector<std::string> results;
+  Pick(base::BindOnce(
+      [](std::vector<std::string>* results, const std::string& value) {
+        results->push_back(value);
+      },
+      &results));
+  auto dialog = factory_->dialogs.back();
+  dialog->Cancel();
+  ASSERT_EQ(results.size(), 1u);
+  ExpectFiles(results[0], {});
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late")));
+  dialog->Cancel();
+  EXPECT_EQ(results.size(), 1u);
+  task_environment()->RunUntilIdle();
+  dialog->Cancel();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, RequiresTheContextWindowBeforeCheckingBusy) {
+  base::test::TestFuture<const std::string&> first;
+  Pick(first.GetCallback());
+  base::test::TestFuture<const std::string&> busy;
+  Pick(busy.GetCallback());
+  ExpectError(busy.Get(), "dialog_busy");
+  ON_CALL(base_window_, GetNativeWindow())
+      .WillByDefault(testing::Return(nullptr));
+  base::test::TestFuture<const std::string&> no_window;
+  Pick(no_window.GetCallback());
+  ExpectError(no_window.Get(), "window_required");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+  factory_->dialogs.back()->Cancel();
+  ExpectFiles(first.Get(), {});
+}
+
+TEST_F(FilePickerTest, CoordinatorCannotBorrowAWindowEvenWhenPickerIsBusy) {
+  base::test::TestFuture<const std::string&> first;
+  Pick(first.GetCallback());
+  base::test::TestFuture<const std::string&> result;
+  auto callback = result.GetCallback();
+  EXPECT_TRUE(shell_->Dispatch(HostContext::ForCoordinator(*profile()),
+                               "BayShell", "pickFiles", {}, callback));
+  ExpectError(result.Get(), "window_required");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+}
+
+TEST_F(FilePickerTest, NullFactoryResultIsAnErrorAndReleasesBusySlot) {
+  factory_->unavailable = true;
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  ExpectError(result.Get(), "dialog_unavailable");
+  task_environment()->RunUntilIdle();
+  factory_->unavailable = false;
+  base::test::TestFuture<const std::string&> retry;
+  Pick(retry.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  factory_->dialogs.back()->Cancel();
+  ExpectFiles(retry.Get(), {});
+}
+
+TEST_F(FilePickerTest, OwnerTeardownSettlesOnceBeforeALateCallback) {
+  std::vector<std::string> results;
+  Pick(base::BindOnce(
+      [](std::vector<std::string>* results, const std::string& value) {
+        results->push_back(value);
+      },
+      &results));
+  auto dialog = factory_->dialogs.back();
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&FakeFileDialog::Cancel, dialog));
+  shell_.reset();
+  ASSERT_EQ(results.size(), 1u);
+  ExpectFiles(results[0], {});
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, SynchronousCompletionCanDestroyTheOwnerDuringShow) {
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  int calls = 0;
+  Pick(base::BindOnce(
+      [](std::unique_ptr<ShellUI>* shell, int* calls,
+         const std::string& value) {
+        ++*calls;
+        EXPECT_EQ(value, R"({"value":[]})");
+        shell->reset();
+      },
+      &shell_, &calls));
+  EXPECT_FALSE(shell_);
+  EXPECT_EQ(calls, 1);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, NestedOwnerTeardownDuringShowCancelsThePendingResponse) {
+  factory_->on_show = base::BindRepeating(
+      [](std::unique_ptr<ShellUI>* shell, FakeFileDialog*) { shell->reset(); },
+      &shell_);
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  EXPECT_FALSE(shell_);
+  ExpectFiles(result.Get(), {});
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, OwnerTeardownDuringCreateDoesNotShowTheDialog) {
+  factory_->on_create = base::BindLambdaForTesting([this] { shell_.reset(); });
+  base::test::TestFuture<const std::string&> result;
+  Pick(result.GetCallback());
+  ExpectFiles(result.Get(), {});
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  EXPECT_FALSE(factory_->dialogs.back()->parent);
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, DialogSurvivesOwnerDestructionAndNestedLoopInResponse) {
+  std::shared_ptr<FileDialogLifetime> lifetime;
+  Pick(base::BindLambdaForTesting([this, &lifetime](const std::string& value) {
+    ExpectFiles(value, {});
+    lifetime = factory_->dialogs.back()->lifetime;
+    factory_->dialogs.clear();
+    shell_.reset();
+    task_environment()->RunUntilIdle();
+    EXPECT_FALSE(lifetime->destroyed);
+    EXPECT_FALSE(lifetime->detached);
+  }));
+  auto* dialog = factory_->dialogs.back().get();
+  dialog->Cancel();
+  EXPECT_TRUE(lifetime->returned_from_listener);
+  EXPECT_FALSE(lifetime->destroyed);
+  EXPECT_FALSE(lifetime->detached);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(lifetime->destroyed);
+  EXPECT_TRUE(lifetime->detached);
+}
+
+TEST_F(FilePickerTest, StaysBusyUntilNativeCleanupAndCannotResetANewerPicker) {
+  base::test::TestFuture<const std::string&> reentrant;
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  Pick(base::BindLambdaForTesting([this, &reentrant](const std::string& value) {
+    EXPECT_EQ(value, R"({"value":[]})");
+    factory_->on_show.Reset();
+    Pick(reentrant.GetCallback());
+  }));
+  ExpectError(reentrant.Get(), "dialog_busy");
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  base::test::TestFuture<const std::string&> before_cleanup;
+  Pick(before_cleanup.GetCallback());
+  ExpectError(before_cleanup.Get(), "dialog_busy");
+  task_environment()->RunUntilIdle();
+  base::test::TestFuture<const std::string&> second;
+  Pick(second.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 2u);
+  auto old = factory_->dialogs.front();
+  auto current = factory_->dialogs.back();
+  old->Cancel();
+  task_environment()->RunUntilIdle();
+  base::test::TestFuture<const std::string&> busy;
+  Pick(busy.GetCallback());
+  ExpectError(busy.Get(), "dialog_busy");
+  EXPECT_FALSE(second.IsReady());
+  current->Select(ui::SelectedFileInfo(base::FilePath("/tmp/new")));
+  ExpectFiles(second.Get(), {base::FilePath("/tmp/new")});
+}
+
+}  // namespace
+}  // namespace bay

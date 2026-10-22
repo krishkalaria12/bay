@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/shell_ui.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/functional/bind.h"
@@ -10,13 +11,13 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
-#include "build/build_config.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/icon_loader.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "content/public/browser/browser_thread.h"
+#include "net/base/filename_util.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/base_window.h"
@@ -35,6 +36,7 @@
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
+#include "url/gurl.h"
 
 namespace bay {
 namespace {
@@ -146,14 +148,14 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
   }
 
   void FileSelected(const ui::SelectedFileInfo& file, int) override {
-    Complete(
-        SelectedFiles(base::ListValue().Append(file.path().AsUTF8Unsafe())));
+    Complete(SelectedFiles(
+        base::ListValue().Append(net::FilePathToFileURL(file.path()).spec())));
   }
   void MultiFilesSelected(
       const std::vector<ui::SelectedFileInfo>& selected) override {
     base::ListValue files;
     for (const auto& file : selected)
-      files.Append(file.path().AsUTF8Unsafe());
+      files.Append(net::FilePathToFileURL(file.path()).spec());
     Complete(SelectedFiles(std::move(files)));
   }
   void FileSelectionCanceled() override { Complete(SelectedFiles({})); }
@@ -232,7 +234,6 @@ bool ShellUI::Dispatch(const HostContext& context,
                        Response& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-#if BUILDFLAG(IS_WIN)
   if (module == "BayShell" && method == "pickFiles") {
     if (!args.empty()) {
       std::move(callback).Run(
@@ -260,7 +261,6 @@ bool ShellUI::Dispatch(const HostContext& context,
     picker->Show(window->GetWindow()->GetNativeWindow());
     return true;
   }
-#endif
   if (module == "BayShell" && method == "prompt") {
     auto options = args.size() == 1 && args[0].is_dict()
                        ? ParseShellPromptOptions(args[0].GetDict())

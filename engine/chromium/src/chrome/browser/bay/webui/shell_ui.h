@@ -22,7 +22,8 @@ namespace bay {
 class HostContext;
 
 // UI-sequence owner for native shell dialogs and icon requests. Destroying the
-// owning NativeHost dismisses its prompts and settles each callback once.
+// owning NativeHost dismisses prompts and settles each callback once. File
+// picker detachment waits for the native callback stack to unwind.
 class ShellUI {
  public:
   using Response = base::OnceCallback<void(const std::string&)>;

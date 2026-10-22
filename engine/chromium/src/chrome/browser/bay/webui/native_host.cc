@@ -489,6 +489,7 @@ base::DictValue NativeHost::Info() const {
   for (auto& method : Notifications::SupportedMethods())
     engine_methods.Append(std::move(method));
   engine_methods.Append("BayShell.prompt");
+  engine_methods.Append("BayShell.pickFiles");
   engine_methods.Append("BaySystem.fileIcon");
 #endif
   auto info =
