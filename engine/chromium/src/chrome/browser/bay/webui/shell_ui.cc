@@ -6,8 +6,11 @@
 #include "base/base64.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
+#include "base/memory/ref_counted.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/icon_loader.h"
@@ -23,6 +26,9 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
+#include "ui/shell_dialogs/select_file_policy.h"
+#include "ui/shell_dialogs/selected_file_info.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/message_box_view.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -44,6 +50,10 @@ std::string Failure(const char* code, const char* message) {
                  "error",
                  base::DictValue().Set("code", code).Set("message", message)))
       .value_or("{}");
+}
+std::string SelectedFiles(base::ListValue files) {
+  return base::WriteJson(base::DictValue().Set("value", std::move(files)))
+      .value_or("{\"value\":[]}");
 }
 std::optional<std::string> EncodeIcon(SkBitmap bitmap, int pixels) {
   if (bitmap.drawsNothing())
@@ -109,6 +119,82 @@ class PromptDialog final : public views::DialogDelegate {
 };
 }  // namespace
 
+// SelectFile may run a nested loop or complete synchronously. Keep the listener
+// and dialog alive on that stack even if the response destroys its ShellUI.
+class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
+                                  public ui::SelectFileDialog::Listener {
+ public:
+  FilePicker(Response response, base::OnceCallback<void(FilePicker*)> done)
+      : response_(std::move(response)), done_(std::move(done)) {}
+
+  void Show(gfx::NativeWindow parent) {
+    auto dialog = ui::SelectFileDialog::Create(this, nullptr);
+    // A factory can re-enter and destroy the owner before returning.
+    if (!response_) {
+      if (dialog)
+        dialog->ListenerDestroyed();
+      return;
+    }
+    if (!dialog) {
+      Complete(Failure("dialog_unavailable", "The file picker is unavailable"));
+      return;
+    }
+    dialog_ = dialog;
+    dialog->SelectFile(ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE,
+                       u"Open files", base::FilePath(), nullptr, 0,
+                       base::FilePath::StringType(), parent, nullptr);
+  }
+
+  void FileSelected(const ui::SelectedFileInfo& file, int) override {
+    Complete(
+        SelectedFiles(base::ListValue().Append(file.path().AsUTF8Unsafe())));
+  }
+  void MultiFilesSelected(
+      const std::vector<ui::SelectedFileInfo>& selected) override {
+    base::ListValue files;
+    for (const auto& file : selected)
+      files.Append(file.path().AsUTF8Unsafe());
+    Complete(SelectedFiles(std::move(files)));
+  }
+  void FileSelectionCanceled() override { Complete(SelectedFiles({})); }
+
+ private:
+  friend class base::RefCounted<FilePicker>;
+  ~FilePicker() override {
+    if (dialog_)
+      dialog_->ListenerDestroyed();
+  }
+
+  void Complete(std::string result) {
+    if (!response_)
+      return;
+    scoped_refptr<FilePicker> keep_alive(this);
+    auto response = std::move(response_);
+    auto done = std::move(done_);
+    auto runner = base::SequencedTaskRunner::GetCurrentDefault();
+    std::move(response).Run(result);
+    // Windows ends the modal run after listener notification. Portal detachment
+    // also releases its GTK fallback, which still uses its helper on that
+    // stack. Keep both the busy slot and listener alive until the callback
+    // unwinds. Post after responding so a nested loop in the response cannot
+    // detach early.
+    runner->PostTask(FROM_HERE,
+                     base::BindOnce(
+                         [](scoped_refptr<FilePicker> picker,
+                            base::OnceCallback<void(FilePicker*)> done) {
+                           auto dialog = std::move(picker->dialog_);
+                           if (dialog)
+                             dialog->ListenerDestroyed();
+                           std::move(done).Run(picker.get());
+                         },
+                         std::move(keep_alive), std::move(done)));
+  }
+
+  scoped_refptr<ui::SelectFileDialog> dialog_;
+  Response response_;
+  base::OnceCallback<void(FilePicker*)> done_;
+};
+
 struct ShellUI::PendingPrompt {
   base::WeakPtr<BrowserWindowInterface> window;
   base::WeakPtr<views::Widget> widget;
@@ -122,6 +208,9 @@ ShellUI::ShellUI() = default;
 ShellUI::~ShellUI() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   weak_factory_.InvalidateWeakPtrs();
+  auto picker = std::move(file_picker_);
+  if (picker)
+    picker->FileSelectionCanceled();
   // Close() is asynchronous. Dialog callbacks carry only a weak owner and
   // cannot re-enter a destroyed service when the widget later goes away.
   auto prompts = std::exchange(prompts_, {});
@@ -143,6 +232,35 @@ bool ShellUI::Dispatch(const HostContext& context,
                        Response& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+#if BUILDFLAG(IS_WIN)
+  if (module == "BayShell" && method == "pickFiles") {
+    if (!args.empty()) {
+      std::move(callback).Run(
+          Failure("invalid_args", "The file picker takes no arguments"));
+      return true;
+    }
+    // There is no windowId in this contract. In particular, coordinators must
+    // never borrow the last active window to open a file picker.
+    auto* window = context.is_window() ? context.window() : nullptr;
+    if (!window || !window->GetWindow() ||
+        !window->GetWindow()->GetNativeWindow()) {
+      std::move(callback).Run(
+          Failure("window_required", "The file picker requires a window host"));
+      return true;
+    }
+    if (file_picker_) {
+      std::move(callback).Run(
+          Failure("dialog_busy", "A file picker is already open"));
+      return true;
+    }
+    auto picker = base::MakeRefCounted<FilePicker>(
+        std::move(callback), base::BindOnce(&ShellUI::FilePickerFinished,
+                                            weak_factory_.GetWeakPtr()));
+    file_picker_ = picker;
+    picker->Show(window->GetWindow()->GetNativeWindow());
+    return true;
+  }
+#endif
   if (module == "BayShell" && method == "prompt") {
     auto options = args.size() == 1 && args[0].is_dict()
                        ? ParseShellPromptOptions(args[0].GetDict())
@@ -240,6 +358,11 @@ bool ShellUI::Dispatch(const HostContext& context,
     return true;
   }
   return false;
+}
+void ShellUI::FilePickerFinished(FilePicker* picker) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (file_picker_.get() == picker)
+    file_picker_.reset();
 }
 void ShellUI::PromptFinished(uint64_t token, std::optional<std::string> text) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

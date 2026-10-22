@@ -52,9 +52,6 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/shell_dialogs/select_file_dialog.h"
-#include "ui/shell_dialogs/select_file_policy.h"
-#include "ui/shell_dialogs/selected_file_info.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -332,49 +329,6 @@ std::string LoginSetting(std::optional<bool> enabled) {
 }
 }  // namespace
 
-class PlatformServices::FilePicker final
-    : public ui::SelectFileDialog::Listener {
- public:
-  FilePicker(gfx::NativeWindow parent,
-             Response response,
-             base::OnceClosure done)
-      : response_(std::move(response)), done_(std::move(done)) {
-    dialog_ = ui::SelectFileDialog::Create(this, nullptr);
-    parent_ = parent;
-  }
-  ~FilePicker() override { dialog_->ListenerDestroyed(); }
-  void Show() {
-    dialog_->SelectFile(ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE,
-                        u"Open files", base::FilePath(), nullptr, 0,
-                        base::FilePath::StringType(), parent_, nullptr);
-  }
-  void FileSelected(const ui::SelectedFileInfo& file, int) override {
-    base::ListValue files;
-    files.Append(file.path().AsUTF8Unsafe());
-    Complete(std::move(files));
-  }
-  void MultiFilesSelected(
-      const std::vector<ui::SelectedFileInfo>& selected) override {
-    base::ListValue files;
-    for (const auto& file : selected)
-      files.Append(file.path().AsUTF8Unsafe());
-    Complete(std::move(files));
-  }
-  void FileSelectionCanceled() override { Complete(base::ListValue()); }
-
- private:
-  void Complete(base::ListValue files) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
-                                                             std::move(done_));
-    if (response_)
-      std::move(response_).Run(Success(base::Value(std::move(files))));
-  }
-  gfx::NativeWindow parent_;
-  scoped_refptr<ui::SelectFileDialog> dialog_;
-  Response response_;
-  base::OnceClosure done_;
-};
-
 class PlatformServices::ContextMenu final
     : public ui::SimpleMenuModel::Delegate {
  public:
@@ -597,9 +551,6 @@ void PlatformServices::DocumentWritten(std::string name,
       service->ApplyDocument(name, contents);
   std::move(callback).Run(Success());
 }
-void PlatformServices::FilePickerFinished() {
-  file_picker_.reset();
-}
 void PlatformServices::ContextMenuFinished() {
   context_menu_.reset();
 }
@@ -745,19 +696,6 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
       writer.WriteImage(bitmap);
     }
     std::move(callback).Run(Success(base::Value(!bitmap.isNull())));
-    return true;
-  }
-  if (module == "BayShell" && method == "pickFiles") {
-    if (file_picker_) {
-      std::move(callback).Run(
-          Failure("dialog_busy", "A file picker is already open"));
-      return true;
-    }
-    file_picker_ = std::make_unique<FilePicker>(
-        context_.window()->GetWindow()->GetNativeWindow(), std::move(callback),
-        base::BindOnce(&PlatformServices::FilePickerFinished,
-                       weak_factory_.GetWeakPtr()));
-    file_picker_->Show();
     return true;
   }
   if (module == "BayShell" && method == "confirm") {

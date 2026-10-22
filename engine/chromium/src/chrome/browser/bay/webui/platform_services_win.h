@@ -43,7 +43,6 @@ class PlatformServices {
   }
 
  private:
-  class FilePicker;
   class ContextMenu;
   void Prepared(base::DictValue snapshots, std::string error);
   static void DocumentWritten(std::string name,
@@ -52,7 +51,6 @@ class PlatformServices {
                               bool success);
   void ApplyDocument(std::string_view name,
                      const std::optional<std::string>& contents);
-  void FilePickerFinished();
   void ContextMenuFinished();
 
   const HostContext context_;
@@ -64,7 +62,6 @@ class PlatformServices {
   bool preparing_ = false;
   bool ready_ = false;
   std::vector<base::OnceClosure> ready_callbacks_;
-  std::unique_ptr<FilePicker> file_picker_;
   std::unique_ptr<ContextMenu> context_menu_;
   std::unique_ptr<ShellUI> shell_ui_;
   base::WeakPtrFactory<PlatformServices> weak_factory_{this};
