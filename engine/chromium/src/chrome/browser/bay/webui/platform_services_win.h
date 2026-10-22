@@ -43,7 +43,6 @@ class PlatformServices {
   }
 
  private:
-  class ContextMenu;
   void Prepared(base::DictValue snapshots, std::string error);
   static void DocumentWritten(std::string name,
                               std::optional<std::string> contents,
@@ -51,7 +50,6 @@ class PlatformServices {
                               bool success);
   void ApplyDocument(std::string_view name,
                      const std::optional<std::string>& contents);
-  void ContextMenuFinished();
 
   const HostContext context_;
   base::RepeatingClosure snapshots_changed_;
@@ -62,7 +60,6 @@ class PlatformServices {
   bool preparing_ = false;
   bool ready_ = false;
   std::vector<base::OnceClosure> ready_callbacks_;
-  std::unique_ptr<ContextMenu> context_menu_;
   std::unique_ptr<ShellUI> shell_ui_;
   base::WeakPtrFactory<PlatformServices> weak_factory_{this};
 };

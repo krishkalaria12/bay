@@ -24,9 +24,10 @@ class DialogDelegate;
 namespace bay {
 class HostContext;
 
-// UI-sequence owner for native shell dialogs and icon requests. Destroying the
-// owning NativeHost dismisses prompts and settles each callback once. File
-// picker detachment waits for the native callback stack to unwind.
+// UI-sequence owner for native shell dialogs, context menus and icon requests.
+// Destroying the owning NativeHost dismisses dialogs and menus and settles each
+// callback once. File picker detachment waits for the native callback stack to
+// unwind.
 class ShellUI {
  public:
   using Response = base::OnceCallback<void(const std::string&)>;
@@ -35,8 +36,8 @@ class ShellUI {
   ShellUI(const ShellUI&) = delete;
   ShellUI& operator=(const ShellUI&) = delete;
   // False leaves callback untouched. The only handled methods are
-  // BayShell.prompt, BayShell.confirm, BayShell.pickFiles and
-  // BaySystem.fileIcon, with normal native wire envelopes.
+  // BayShell.prompt, BayShell.confirm, BayShell.showMenu, BayShell.pickFiles
+  // and BaySystem.fileIcon, with normal native wire envelopes.
   bool Dispatch(const HostContext& context,
                 const std::string& module,
                 const std::string& method,
@@ -44,6 +45,7 @@ class ShellUI {
                 Response& callback);
 
  private:
+  class ContextMenu;
   class FilePicker;
   struct PendingDialog;
   struct PendingIcon;
@@ -59,12 +61,14 @@ class ShellUI {
                   std::string cancelled,
                   Response& callback,
                   DialogFactory create);
+  void ContextMenuFinished();
   void FilePickerFinished(FilePicker* picker);
   void DialogFinished(uint64_t token, std::string response);
   void IconLoaded(uint64_t token, int pixels, const gfx::Image& image);
   void IconFinished(uint64_t token, std::optional<std::string> image);
 
   uint64_t next_token_ = 1;
+  std::unique_ptr<ContextMenu> context_menu_;
   scoped_refptr<FilePicker> file_picker_;
   std::map<uint64_t, std::unique_ptr<PendingDialog>> dialogs_;
   std::map<uint64_t, std::unique_ptr<PendingIcon>> icons_;

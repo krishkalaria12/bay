@@ -45,14 +45,9 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/base_window.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/base/mojom/menu_source_type.mojom.h"
-#include "ui/display/screen.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
-#include "ui/menus/simple_menu_model.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/views/controls/menu/menu_runner.h"
-#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
 namespace bay {
@@ -328,109 +323,6 @@ std::string LoginSetting(std::optional<bool> enabled) {
 }
 }  // namespace
 
-class PlatformServices::ContextMenu final
-    : public ui::SimpleMenuModel::Delegate {
- public:
-  explicit ContextMenu(base::OnceClosure done)
-      : done_(std::move(done)), model_(this) {}
-
-  bool Build(const base::ListValue& items) {
-    return BuildModel(items, model_, 0);
-  }
-
-  void Show(views::Widget* parent, Response response) {
-    response_ = std::move(response);
-    if (model_.GetItemCount() == 0) {
-      Closed();
-      return;
-    }
-    runner_ = std::make_unique<views::MenuRunner>(
-        &model_, views::MenuRunner::CONTEXT_MENU,
-        base::BindRepeating(&ContextMenu::Closed, base::Unretained(this)));
-    runner_->RunMenuAt(
-        parent, nullptr,
-        gfx::Rect(display::Screen::Get()->GetCursorScreenPoint(), gfx::Size()),
-        views::MenuAnchorPosition::kTopLeft, ui::mojom::MenuSourceType::kMouse);
-  }
-
-  bool IsCommandIdEnabled(int command_id) const override {
-    auto it = commands_.find(command_id);
-    return it != commands_.end() && it->second.enabled;
-  }
-  bool IsCommandIdChecked(int command_id) const override {
-    auto it = commands_.find(command_id);
-    return it != commands_.end() && it->second.checked;
-  }
-  void ExecuteCommand(int command_id, int) override {
-    auto it = commands_.find(command_id);
-    if (it != commands_.end() && it->second.enabled)
-      selected_ = it->second.id;
-  }
-
- private:
-  struct Command {
-    std::string id;
-    bool enabled;
-    bool checked;
-  };
-
-  bool BuildModel(const base::ListValue& items,
-                  ui::SimpleMenuModel& model,
-                  unsigned depth) {
-    if (depth > 16)
-      return false;
-    for (const auto& value : items) {
-      if (++item_count_ > 1000)
-        return false;
-      const auto* item = value.GetIfDict();
-      if (!item)
-        return false;
-      if (item->FindBool("separator").value_or(false)) {
-        model.AddSeparator(ui::NORMAL_SEPARATOR);
-        continue;
-      }
-      const auto* id = item->FindString("id");
-      const auto* title = item->FindString("title");
-      if (!id || !title || commands_.size() >= 1000)
-        return false;
-      const int command_id = static_cast<int>(commands_.size()) + 1;
-      commands_.emplace(command_id,
-                        Command{*id, item->FindBool("enabled").value_or(true),
-                                item->FindBool("checked").value_or(false)});
-      if (const auto* children = item->FindList("children")) {
-        auto submenu = std::make_unique<ui::SimpleMenuModel>(this);
-        if (!BuildModel(*children, *submenu, depth + 1))
-          return false;
-        model.AddSubMenu(command_id, base::UTF8ToUTF16(*title), submenu.get());
-        submenus_.push_back(std::move(submenu));
-      } else if (item->FindBool("checked").has_value()) {
-        model.AddCheckItem(command_id, base::UTF8ToUTF16(*title));
-      } else {
-        model.AddItem(command_id, base::UTF8ToUTF16(*title));
-      }
-    }
-    return true;
-  }
-  void Closed() {
-    if (!response_)
-      return;
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
-                                                             std::move(done_));
-    std::move(response_).Run(
-        Success(selected_ ? base::Value(*selected_) : base::Value()));
-  }
-
-  Response response_;
-  base::OnceClosure done_;
-  std::map<int, Command> commands_;
-  size_t item_count_ = 0;
-  std::optional<std::string> selected_;
-  std::vector<std::unique_ptr<ui::SimpleMenuModel>> submenus_;
-  ui::SimpleMenuModel model_;
-  // Destroy the runner before its model and delegate.
-  std::unique_ptr<views::MenuRunner> runner_;
-};
-
 PlatformServices::PlatformServices(HostContext context,
                                    base::RepeatingClosure changed)
     : context_(std::move(context)),
@@ -550,9 +442,6 @@ void PlatformServices::DocumentWritten(std::string name,
       service->ApplyDocument(name, contents);
   std::move(callback).Run(Success());
 }
-void PlatformServices::ContextMenuFinished() {
-  context_menu_.reset();
-}
 
 bool PlatformServices::DispatchPlatformModule(const std::string& module,
                                               const std::string& method,
@@ -594,34 +483,6 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
     std::move(callback).Run(
         Failure("invalid_args", "Invalid native method arguments"));
   };
-  if (module == "BayShell" && method == "showMenu") {
-    const auto* value = At(args, 0);
-    if (!value || !value->is_list()) {
-      invalid();
-      return true;
-    }
-    if (context_menu_) {
-      std::move(callback).Run(
-          Failure("menu_busy", "A context menu is already open"));
-      return true;
-    }
-    auto* widget = views::Widget::GetWidgetForNativeWindow(
-        context_.window()->GetWindow()->GetNativeWindow());
-    if (!widget) {
-      std::move(callback).Run(
-          Failure("window_unavailable", "Bay's window is unavailable"));
-      return true;
-    }
-    auto menu = std::make_unique<ContextMenu>(base::BindOnce(
-        &PlatformServices::ContextMenuFinished, weak_factory_.GetWeakPtr()));
-    if (!menu->Build(value->GetList())) {
-      invalid();
-      return true;
-    }
-    context_menu_ = std::move(menu);
-    context_menu_->Show(widget, std::move(callback));
-    return true;
-  }
   if (module == "BayKeychain") {
     const auto* account = Text(args, 0);
     const auto* secret = Text(args, 1);

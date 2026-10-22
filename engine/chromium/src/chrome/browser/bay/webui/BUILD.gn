@@ -113,9 +113,11 @@ source_set("impl") {
     ]
     deps += [
       ":notifications",
+      "//cc/paint",
       "//chrome/browser:icon_loader",
       "//components/constrained_window",
       "//ui/base/mojom:ui_base_types",
+      "//ui/menus",
     ]
   }
   if (is_linux) {
@@ -219,7 +221,6 @@ if (is_win) {
       "//ui/base/mojom:ui_base_types",
       "//ui/display",
       "//ui/gfx/codec",
-      "//ui/menus",
       "//ui/message_center/public/cpp",
       "//ui/native_theme",
       "//ui/shell_dialogs",

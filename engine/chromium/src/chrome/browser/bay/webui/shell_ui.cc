@@ -11,6 +11,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
+#include "cc/paint/paint_flags.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/icon_loader.h"
@@ -20,17 +21,27 @@
 #include "net/base/filename_util.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/base_window.h"
+#include "ui/base/models/image_model.h"
+#include "ui/base/models/menu_separator_types.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/mojom/ui_base_types.mojom.h"
+#include "ui/display/screen.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/shell_dialogs/selected_file_info.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/message_box_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/layout_provider.h"
@@ -175,6 +186,29 @@ class ConfirmDialog final : public views::DialogDelegate {
   Completion completion_;
 };
 
+// A menu item's color dot, drawn as macOS draws it: filled, with a 15% black
+// outline.
+class SwatchImage final : public gfx::CanvasImageSource {
+ public:
+  explicit SwatchImage(SkColor color)
+      : CanvasImageSource(gfx::Size(12, 12)), color_(color) {}
+
+  void Draw(gfx::Canvas* canvas) override {
+    const gfx::PointF center(6, 6);
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(color_);
+    canvas->DrawCircle(center, 5.5f, flags);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(1);
+    flags.setColor(SkColorSetA(SK_ColorBLACK, 0x26));
+    canvas->DrawCircle(center, 5.5f, flags);
+  }
+
+ private:
+  const SkColor color_;
+};
+
 // Builds `Dialog` from a copy of its options once ShellUI has its token.
 template <typename Dialog, typename Options>
 base::OnceCallback<std::unique_ptr<views::DialogDelegate>(Completion)>
@@ -264,6 +298,107 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
   base::OnceCallback<void(FilePicker*)> done_;
 };
 
+// Anchored at the pointer. Wayland reports it relative to the window, which
+// is how Chrome's own context menus are placed there.
+class ShellUI::ContextMenu final : public ui::SimpleMenuModel::Delegate {
+ public:
+  ContextMenu(const std::vector<ShellMenuItem>& items,
+              Response response,
+              base::OnceClosure done)
+      : response_(std::move(response)), done_(std::move(done)), model_(this) {
+    Build(items, model_);
+  }
+
+  void Show(views::Widget* parent) {
+    if (model_.GetItemCount() == 0) {
+      Closed();
+      return;
+    }
+    runner_ = std::make_unique<views::MenuRunner>(
+        &model_, views::MenuRunner::CONTEXT_MENU,
+        base::BindRepeating(&ContextMenu::Closed, base::Unretained(this)));
+    runner_->RunMenuAt(
+        parent, nullptr,
+        gfx::Rect(display::Screen::Get()->GetCursorScreenPoint(), gfx::Size()),
+        views::MenuAnchorPosition::kTopLeft, ui::mojom::MenuSourceType::kMouse);
+  }
+  // The owner is going away. Releasing the runner detaches it from this
+  // delegate, so Closed() cannot run afterwards.
+  void Cancel() {
+    if (response_)
+      std::move(response_).Run(Success(std::nullopt));
+  }
+
+  bool IsCommandIdEnabled(int command_id) const override {
+    auto it = commands_.find(command_id);
+    return it != commands_.end() && it->second.enabled;
+  }
+  bool IsCommandIdChecked(int command_id) const override {
+    auto it = commands_.find(command_id);
+    return it != commands_.end() && it->second.checked;
+  }
+  void ExecuteCommand(int command_id, int) override {
+    auto it = commands_.find(command_id);
+    if (it != commands_.end() && it->second.enabled)
+      selected_ = it->second.id;
+  }
+
+ private:
+  struct Command {
+    std::string id;
+    bool enabled;
+    bool checked;
+  };
+
+  void Build(const std::vector<ShellMenuItem>& items,
+             ui::SimpleMenuModel& model) {
+    for (const auto& item : items) {
+      if (item.separator) {
+        model.AddSeparator(ui::NORMAL_SEPARATOR);
+        continue;
+      }
+      const int command_id = static_cast<int>(commands_.size()) + 1;
+      commands_.emplace(command_id, Command{item.id, item.enabled,
+                                            item.checked.value_or(false)});
+      if (item.children) {
+        auto submenu = std::make_unique<ui::SimpleMenuModel>(this);
+        Build(*item.children, *submenu);
+        model.AddSubMenu(command_id, item.title, submenu.get());
+        submenus_.push_back(std::move(submenu));
+      } else if (item.checked) {
+        model.AddCheckItem(command_id, item.title);
+      } else {
+        model.AddItem(command_id, item.title);
+      }
+      const size_t index = model.GetItemCount() - 1;
+      if (!item.shortcut.empty())
+        model.SetMinorText(index, item.shortcut);
+      if (item.swatch)
+        model.SetIcon(index,
+                      ui::ImageModel::FromImageSkia(
+                          gfx::CanvasImageSource::MakeImageSkia<SwatchImage>(
+                              static_cast<SkColor>(*item.swatch))));
+    }
+  }
+  void Closed() {
+    if (!response_)
+      return;
+    // The runner calls this from its own stack; release it afterwards.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                             std::move(done_));
+    std::move(response_).Run(Success(selected_));
+  }
+
+  Response response_;
+  base::OnceClosure done_;
+  std::map<int, Command> commands_;
+  std::optional<std::string> selected_;
+  std::vector<std::unique_ptr<ui::SimpleMenuModel>> submenus_;
+  ui::SimpleMenuModel model_;
+  // Destroy the runner before its model and delegate.
+  std::unique_ptr<views::MenuRunner> runner_;
+};
+
 struct ShellUI::PendingDialog {
   base::WeakPtr<BrowserWindowInterface> window;
   base::WeakPtr<views::Widget> widget;
@@ -278,6 +413,8 @@ ShellUI::ShellUI() = default;
 ShellUI::~ShellUI() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   weak_factory_.InvalidateWeakPtrs();
+  if (auto menu = std::move(context_menu_))
+    menu->Cancel();
   auto picker = std::move(file_picker_);
   if (picker)
     picker->FileSelectionCanceled();
@@ -327,6 +464,35 @@ bool ShellUI::Dispatch(const HostContext& context,
                                             weak_factory_.GetWeakPtr()));
     file_picker_ = picker;
     picker->Show(window->GetWindow()->GetNativeWindow());
+    return true;
+  }
+  if (module == "BayShell" && method == "showMenu") {
+    auto items = ParseShellMenuArgs(args);
+    if (!items) {
+      std::move(callback).Run(Failure("invalid_args", "Invalid menu items"));
+      return true;
+    }
+    // Like the file picker, a menu opens only in its own document's window.
+    auto* window = context.is_window() ? context.window() : nullptr;
+    auto* widget = window && window->GetWindow()
+                       ? views::Widget::GetWidgetForNativeWindow(
+                             window->GetWindow()->GetNativeWindow())
+                       : nullptr;
+    if (!widget) {
+      std::move(callback).Run(
+          Failure("window_required", "A context menu requires a window host"));
+      return true;
+    }
+    if (context_menu_) {
+      std::move(callback).Run(
+          Failure("menu_busy", "A context menu is already open"));
+      return true;
+    }
+    context_menu_ = std::make_unique<ContextMenu>(
+        *items, std::move(callback),
+        base::BindOnce(&ShellUI::ContextMenuFinished,
+                       weak_factory_.GetWeakPtr()));
+    context_menu_->Show(widget);
     return true;
   }
   if (module == "BayShell" && method == "prompt") {
@@ -446,6 +612,10 @@ void ShellUI::ShowDialog(const HostContext& context,
   }
   found->second->widget = widget->GetWeakPtr();
   widget->Show();
+}
+void ShellUI::ContextMenuFinished() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  context_menu_.reset();
 }
 void ShellUI::FilePickerFinished(FilePicker* picker) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
