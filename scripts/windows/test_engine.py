@@ -53,6 +53,8 @@ class PatchPlatformTests(unittest.TestCase):
         win = {step.name for step in series.read_series("win")}
         self.assertIn("chromium-safe-storage-name.patch", mac)
         self.assertNotIn("chromium-safe-storage-name.patch", win)
+        self.assertNotIn("chromium-safe-storage-name-linux.patch", win)
+        self.assertNotIn("chromium-safe-storage-name-linux.patch", mac)
         self.assertIn("chromium-bay-layer-win.patch", win)
         self.assertNotIn("chromium-bay-layer-win.patch", mac)
         self.assertIn("chromium-bay-branding-win.patch", win)

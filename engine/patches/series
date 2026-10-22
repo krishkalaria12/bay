@@ -44,9 +44,11 @@ chromium all chromium-extension-window-hidden.patch
 chromium all chromium-branding.patch
 chromium win chromium-bay-branding-win.patch
 chromium mac chromium-icloud-keychain-window.patch
-# Load-bearing for every user's data: the Safe Storage item ("Bay Safe Storage" / "Bay") holds the key to
-# their saved passwords and cookies. It must survive any re-sync (plain Chromium for NNCore, a version bump), unchanged.
+# Load-bearing for every user's data: the Safe Storage item holds the key to their saved passwords and cookies.
+# macOS: Keychain "Bay Safe Storage" / "Bay". Linux: Secret Service "Bay Safe Storage" (application "bay"), KWallet "Bay Keys".
+# Both must survive any re-sync (plain Chromium for NNCore, a version bump), unchanged.
 chromium mac chromium-safe-storage-name.patch
+chromium linux chromium-safe-storage-name-linux.patch
 chromium all chromium-password-bubble-hook.patch
 chromium all chromium-password-generation-local.patch
 chromium all chromium-tab-strip-notify-before-insert.patch
