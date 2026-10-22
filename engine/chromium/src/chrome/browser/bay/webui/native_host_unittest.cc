@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/native_host.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/test/mock_base_window.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
@@ -374,6 +376,112 @@ class PickerWindow : public MockBrowserWindowInterface {
  public:
   bool IsNormalBrowser() const override { return true; }
 };
+
+class ClipboardHostTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    ui::TestClipboard::CreateForCurrentThread();
+  }
+  void TearDown() override {
+    NativeHostTest::TearDown();
+    ui::Clipboard::DestroyClipboardForCurrentThread();
+  }
+  std::u16string ReadText() {
+    base::test::TestFuture<std::u16string> result;
+    ui::Clipboard::GetForCurrentThread()->ReadText(
+        ui::ClipboardBuffer::kCopyPaste, std::nullopt, result.GetCallback());
+    return result.Get();
+  }
+};
+
+TEST_F(ClipboardHostTest, CoordinatorAdvertisesBothClipboardMethods) {
+  auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.copyText"));
+  EXPECT_TRUE(methods->contains("BayShell.copyImage"));
+  EXPECT_FALSE(methods->contains("BaySystem.openFile"));
+}
+
+TEST_F(ClipboardHostTest, CoordinatorCopiesBeforeSavedDocumentsAreReady) {
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayShell", "copyText", R"(["café 🌊"])", result.GetCallback());
+  ASSERT_TRUE(result.IsReady());
+  EXPECT_EQ(result.Get(), R"({"value":null})");
+  EXPECT_EQ(ReadText(), u"café 🌊");
+}
+
+TEST_F(ClipboardHostTest, GlobalContractRejectsArityAndPayloadErrors) {
+  EXPECT_EQ(Invoke("BayShell", "copyText", R"(["keep"])"), R"({"value":null})");
+  for (const char* method : {"copyText", "copyImage"}) {
+    for (const char* args : {"[]", R"(["a","b"])", "[null]", "[1]", "[{}]"})
+      ExpectError(Invoke("BayShell", method, args), "invalid_args");
+  }
+  ExpectError(Invoke("BayShell", "copyImage", R"(["%%%"])"), "invalid_args");
+  EXPECT_EQ(Invoke("BayShell", "copyImage", R"(["bm90IGFuIGltYWdl"])"),
+            R"({"value":false})");
+  EXPECT_EQ(ReadText(), u"keep");
+}
+
+TEST_F(ClipboardHostTest, CoordinatorCopiesAnImage) {
+  // A complete opaque 1x1 PNG, with valid chunk checksums.
+  EXPECT_EQ(
+      Invoke(
+          "BayShell", "copyImage",
+          R"(["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg=="])"),
+      R"({"value":true})");
+  base::test::TestFuture<const std::vector<uint8_t>&> image;
+  ui::Clipboard::GetForCurrentThread()->ReadPng(
+      ui::ClipboardBuffer::kCopyPaste, std::nullopt, image.GetCallback());
+  EXPECT_FALSE(image.Get().empty());
+}
+
+TEST_F(ClipboardHostTest,
+       CopyResponseCanCloseTheHostWithoutPendingClipboardWork) {
+  int calls = 0;
+  host_->Invoke(
+      "BayShell", "copyText", R"(["copied"])",
+      base::BindLambdaForTesting([this, &calls](const std::string& response) {
+        ++calls;
+        EXPECT_EQ(response, R"({"value":null})");
+        EXPECT_EQ(ReadText(), u"copied");
+        host_->ResetAndDeleteThis();
+      }));
+  EXPECT_FALSE(host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(ReadText(), u"copied");
+}
+
+class WindowClipboardHostTest : public ClipboardHostTest {
+ protected:
+  void SetUp() override {
+    ClipboardHostTest::SetUp();
+    ON_CALL(window_, GetProfile()).WillByDefault(testing::Return(profile()));
+    ON_CALL(window_, GetWeakPtr())
+        .WillByDefault(testing::Return(window_weak_factory_.GetWeakPtr()));
+    host_->ResetAndDeleteThis();
+    remote_.reset();
+    auto* host = new NativeHost(*main_rfh(), HostContext::ForWindow(window_),
+                                remote_.BindNewPipeAndPassReceiver());
+    host_ = host->GetWeakPtr();
+  }
+  testing::NiceMock<PickerWindow> window_;
+  base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
+};
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesBothMethods) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.copyText"));
+  EXPECT_TRUE(methods->contains("BayShell.copyImage"));
+  EXPECT_EQ(Invoke("BayShell", "copyText", R"(["window text"])"),
+            R"({"value":null})");
+  EXPECT_EQ(ReadText(), u"window text");
+  EXPECT_EQ(Invoke("BayShell", "copyImage", R"([""])"), R"({"value":false})");
+}
 
 class FilePickerTest : public NativeHostTest {
  protected:

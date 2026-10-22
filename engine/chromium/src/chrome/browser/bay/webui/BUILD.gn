@@ -124,6 +124,7 @@ source_set("impl") {
     deps += [
       ":document_store",
       ":secret_storage_linux",
+      ":shell_clipboard",
     ]
   }
   if (is_win) {
@@ -395,6 +396,7 @@ if (is_linux) {
       "//testing/gmock",
       "//testing/gtest",
       "//ui/base:test_support",
+      "//ui/base/clipboard:clipboard_test_support",
       "//ui/shell_dialogs",
       "//url",
     ]
