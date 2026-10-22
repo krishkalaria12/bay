@@ -1827,9 +1827,28 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               </p>
               <p>
                 <strong>Notification verification.</strong> The service and Bay unit-test sources pass Linux x64 syntax checks with the pinned sysroot and
-                generated Mac configuration headers. Native unit-test binaries have not run. The host and startup caller checks are blocked by missing generated
-                Mojo headers; full Linux GN dependency checks, linking and desktop behavior remain unverified. Portable checks cover 595 browser, 54 platform
-                and 56 Python tests, the generated contracts, typechecks, web export, lint and formatting.
+                generated Mac configuration headers. Native unit-test binaries have not run. Native-host syntax is covered by the shell UI checks below; startup
+                callers, full Linux GN dependency checks, linking and desktop behavior remain unverified. Portable checks cover 595 browser, 54 platform and 56
+                Python tests, the generated contracts, typechecks, web export, lint and formatting.
+              </p>
+              <p>
+                <strong>Text prompts and file icons, 22 Oct 2026.</strong> Linux now dispatches <code>BayShell.prompt</code> and
+                <code>BaySystem.fileIcon</code> through the shared <code>ShellUI</code> implementation. A coordinator prompt needs an explicit live window ID; a
+                window host can prompt only in its own window. The document owns pending requests, so renderer teardown closes prompts and settles icon
+                callbacks. Windows retains its platform-service owner and initialization gate.
+              </p>
+              <p>
+                Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
+                lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
+                <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. Confirmation dialogs,
+                menus, file pickers and the remaining system methods are still open.
+              </p>
+              <p>
+                <strong>Shell UI verification.</strong> The shared implementation, parser, native host and test sources pass release and DCHECK Linux x64 syntax
+                checks with the pinned sysroot. These use real scratch-generated Mojo bindings and existing generated Mac configuration headers. Five new native
+                test cases cover method advertisement, coordinator prompts without a live target, argument errors, untouched callbacks for unhandled methods,
+                and host teardown before late icon completion. The native binaries have not been linked or executed. Full GN checks, live prompt acceptance and
+                cancellation, cross-window targeting and X11/Wayland behavior remain unverified.
               </p>
             </div>
             <ul>
@@ -2139,8 +2158,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td><code>BayShell</code> (32)</td>
                   <td>
-                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), dialogs, clipboard (Chrome's <code>ui::Clipboard</code>), documents in
-                    <code>BAY_DATA_DIR</code>
+                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), text prompts through shared <code>ShellUI</code> (implemented), other dialogs,
+                    clipboard (Chrome's <code>ui::Clipboard</code>), documents in <code>BAY_DATA_DIR</code>
                   </td>
                   <td>
                     <code>copyText</code>, <code>copyImage</code>, <code>readDocument</code>, <code>writeDocument</code>, <code>removeDocument</code>;
@@ -2156,7 +2175,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td><code>BaySystem</code> (15)</td>
-                  <td>GIO/portal open and reveal, Trash spec, file icons from the icon theme, <code>xdg-user-dir DOWNLOAD</code></td>
+                  <td>
+                    File-icon sources use Chromium's MIME/theme lookup; GIO/portal open and reveal, Trash spec and <code>xdg-user-dir DOWNLOAD</code> remain
+                  </td>
                   <td><code>fileExists</code> → async; <code>downloadsFolder</code> → snapshot; <code>hapticTick</code> → none</td>
                   <td class="num">4</td>
                 </tr>
