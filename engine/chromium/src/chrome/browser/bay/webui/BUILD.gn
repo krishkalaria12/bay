@@ -13,6 +13,12 @@ source_set("webui") {
     "host_context.h",
     "native_host.h",
   ]
+  if (is_win || is_linux) {
+    sources += [
+      "shell_ui.h",
+      "shell_ui_options.h",
+    ]
+  }
   public_deps = [
     ":mojom",
     "//base",
@@ -101,7 +107,16 @@ source_set("impl") {
     "//url",
   ]
   if (is_win || is_linux) {
-    deps += [ ":notifications" ]
+    sources += [
+      "shell_ui.cc",
+      "shell_ui_options.cc",
+    ]
+    deps += [
+      ":notifications",
+      "//chrome/browser:icon_loader",
+      "//components/constrained_window",
+      "//ui/base/mojom:ui_base_types",
+    ]
   }
   if (is_win) {
     sources += [
@@ -156,10 +171,6 @@ if (is_win) {
       "frame_win.h",
       "platform_services_win.cc",
       "platform_services_win.h",
-      "shell_ui.cc",
-      "shell_ui.h",
-      "shell_ui_options.cc",
-      "shell_ui_options.h",
       "updater_service_win.cc",
       "updater_service_win.h",
     ]

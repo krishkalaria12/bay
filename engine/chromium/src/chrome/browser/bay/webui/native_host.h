@@ -26,6 +26,7 @@ class TabObserver;
 class PlatformServices;
 class BrowserServices;
 class EngineServices;
+class ShellUI;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -70,6 +71,10 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 #endif
 
   const HostContext context_;
+#if BUILDFLAG(IS_LINUX)
+  // Document-scoped ownership dismisses prompts and settles pending icons.
+  std::unique_ptr<ShellUI> shell_ui_;
+#endif
   std::unique_ptr<BrowserServices> browser_services_;
   std::unique_ptr<EngineServices> engine_services_;
   mojo::Remote<mojom::NativeHostClient> client_;

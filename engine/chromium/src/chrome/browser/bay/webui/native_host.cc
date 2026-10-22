@@ -37,6 +37,9 @@
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/bay/webui/notifications.h"
 #endif
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/shell_ui.h"
+#endif
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
@@ -377,6 +380,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   platform_services_->Prepare(
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
+#if BUILDFLAG(IS_LINUX)
+  shell_ui_ = std::make_unique<ShellUI>();
+#endif
   if (context_.window()) {
     WindowRegistry::Get().RegisterHost(
         context_.window(), GetWeakPtr(),
@@ -428,6 +434,7 @@ base::DictValue NativeHost::Info() const {
   // Post/remove capability only. Desktop permission and settings APIs are not
   // available, and bridge readiness is checked when each operation runs.
   modules.Append("BayNotifications");
+  modules.Append("BaySystem");
 #endif
   base::DictValue system;
   system.Set("platform",
@@ -481,6 +488,8 @@ base::DictValue NativeHost::Info() const {
 #if BUILDFLAG(IS_LINUX)
   for (auto& method : Notifications::SupportedMethods())
     engine_methods.Append(std::move(method));
+  engine_methods.Append("BayShell.prompt");
+  engine_methods.Append("BaySystem.fileIcon");
 #endif
   auto info =
       base::DictValue()
@@ -754,8 +763,10 @@ void NativeHost::Invoke(const std::string& module,
   if (engine_services_->DispatchEngineModule(module, method, args, callback))
     return;
 #if BUILDFLAG(IS_LINUX)
-  // Notifications do not depend on the Windows data/platform services or their
-  // initialization gate. The browser-assigned HostContext still owns authority.
+  // These services do not depend on Windows platform initialization. The
+  // common profile check above and browser-assigned context own authority.
+  if (shell_ui_->Dispatch(context_, module, method, args, callback))
+    return;
   if (module == "BayApp" &&
       Notifications::Get().Dispatch(context_, method, args, callback))
     return;
