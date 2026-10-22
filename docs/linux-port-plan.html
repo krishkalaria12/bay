@@ -1841,14 +1841,29 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
                 lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
                 <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. Confirmation dialogs,
-                menus, file pickers and the remaining system methods are still open.
+                menus and the remaining system methods are still open.
+              </p>
+              <p>
+                <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
+                <code>ShellUI</code>. The picker requires its document's live window; coordinators cannot borrow another window. Chromium chooses the portal or
+                desktop fallback backend. Multiple selections return encoded <code>file:</code> URLs in selection order, matching macOS and fixing the inherited
+                Windows raw-path mismatch for filenames containing spaces, <code>?</code>, <code>#</code> or <code>%</code>. Cancellation returns an empty list;
+                a null dialog factory returns <code>dialog_unavailable</code>.
+              </p>
+              <p>
+                Each document permits one pending picker. The slot stays busy until native callback cleanup completes, including during a reentrant response.
+                Document teardown settles the pending response once. Listener and dialog references survive synchronous completion and nested response loops;
+                cleanup is posted after the response returns. Listener detachment does not guarantee immediate dismissal of every native chooser backend.
+                Windows retains its existing window and initialization checks.
               </p>
               <p>
                 <strong>Shell UI verification.</strong> The shared implementation, parser, native host and test sources pass release and DCHECK Linux x64 syntax
-                checks with the pinned sysroot. These use real scratch-generated Mojo bindings and existing generated Mac configuration headers. Five new native
-                test cases cover method advertisement, coordinator prompts without a live target, argument errors, untouched callbacks for unhandled methods,
-                and host teardown before late icon completion. The native binaries have not been linked or executed. Full GN checks, live prompt acceptance and
-                cancellation, cross-window targeting and X11/Wayland behavior remain unverified.
+                checks with the pinned sysroot. These use real scratch-generated Mojo bindings and existing generated Mac configuration headers. Native test
+                cases cover method advertisement, coordinator prompts without a live target, argument errors, untouched callbacks for unhandled methods, and
+                host teardown before late icon completion. Picker tests additionally cover encoded URL roundtrips, local-path preference, ordered multiple
+                selection, cancellation, busy and missing-window errors, a null factory, owner teardown, synchronous and reentrant completion, and nested loops.
+                The native binaries have not been linked or executed. Full GN checks, live prompt acceptance and cancellation, cross-window targeting, native
+                chooser behavior and X11/Wayland behavior remain unverified.
               </p>
             </div>
             <ul>
@@ -2158,8 +2173,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td><code>BayShell</code> (32)</td>
                   <td>
-                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), text prompts through shared <code>ShellUI</code> (implemented), other dialogs,
-                    clipboard (Chrome's <code>ui::Clipboard</code>), documents in <code>BAY_DATA_DIR</code>
+                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), text prompts and file picking through shared
+                    <code>ShellUI</code> (implemented), other dialogs, clipboard (Chrome's <code>ui::Clipboard</code>), documents in <code>BAY_DATA_DIR</code>
                   </td>
                   <td>
                     <code>copyText</code>, <code>copyImage</code>, <code>readDocument</code>, <code>writeDocument</code>, <code>removeDocument</code>;
