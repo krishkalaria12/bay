@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
+#include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/host_context.h"
 
 class BrowserWindowInterface;
@@ -43,18 +44,13 @@ class PlatformServices {
   }
 
  private:
-  void Prepared(base::DictValue snapshots, std::string error);
-  static void DocumentWritten(std::string name,
-                              std::optional<std::string> contents,
-                              Response callback,
-                              bool success);
-  void ApplyDocument(std::string_view name,
-                     const std::optional<std::string>& contents);
+  void Prepared(base::DictValue snapshots);
+  void DocumentsReady();
 
   const HostContext context_;
   base::RepeatingClosure snapshots_changed_;
   scoped_refptr<base::SequencedTaskRunner> disk_runner_;
-  base::FilePath document_directory_;
+  DocumentStore documents_;
   base::DictValue snapshots_;
   std::string initialization_error_;
   bool preparing_ = false;

@@ -136,6 +136,19 @@ source_set("impl") {
 }
 
 if (is_win || is_linux) {
+  source_set("document_store") {
+    sources = [
+      "document_store.cc",
+      "document_store.h",
+    ]
+    deps = [
+      "//base",
+      "//chrome/common:constants",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
   source_set("notifications") {
     sources = [
       "notifications.cc",
@@ -195,6 +208,7 @@ if (is_win) {
       "updater_service_win.h",
     ]
     deps = [
+      ":document_store",
       ":notifications",
       ":webui",
       "//base",
@@ -366,6 +380,19 @@ if (is_linux) {
       "//components/os_crypt/async/browser:key_provider_interface",
       "//components/os_crypt/async/browser:posix_key_provider",
       "//components/os_crypt/async/common",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("document_store_unittests") {
+    sources = [ "document_store_unittest.cc" ]
+    deps = [
+      ":document_store",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
       "//testing/gtest",
     ]
   }

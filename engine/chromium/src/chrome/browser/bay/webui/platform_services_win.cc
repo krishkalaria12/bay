@@ -1,5 +1,6 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "chrome/browser/bay/webui/platform_services_win.h"
+#include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/notifications.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 
@@ -8,7 +9,6 @@
 #include <shellapi.h>
 #include <wincred.h>
 
-#include <algorithm>
 #include <map>
 #include <optional>
 #include <string_view>
@@ -17,9 +17,7 @@
 #include "base/base64.h"
 #include "base/containers/span.h"
 #include "base/environment.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/files/important_file_writer.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
@@ -56,7 +54,6 @@ using Response = PlatformServices::Response;
 constexpr wchar_t kRunKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr wchar_t kLoginName[] = L"Bay";
-constexpr size_t kMaxDocumentBytes = 64 * 1024 * 1024;
 
 std::string JSON(const base::DictValue& value) {
   return base::WriteJson(value).value_or("{}");
@@ -100,48 +97,6 @@ scoped_refptr<base::SingleThreadTaskRunner> ShellRunner() {
   return *runner;
 }
 
-bool ValidDocument(std::string_view name) {
-  if (name.empty() || !base::IsStringUTF8(name) || name == "." ||
-      name == ".." ||
-      name.find_first_of("/\\:<>\"|?*") != std::string_view::npos ||
-      name.back() == '.' || name.back() == ' ' ||
-      std::any_of(name.begin(), name.end(),
-                  [](unsigned char c) { return c < 32; }))
-    return false;
-  std::string stem = base::ToUpperASCII(name.substr(0, name.find('.')));
-  if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL")
-    return false;
-  if (stem.size() == 4 &&
-      (stem.starts_with("COM") || stem.starts_with("LPT")) && stem[3] >= '1' &&
-      stem[3] <= '9')
-    return false;
-  return true;
-}
-bool HasReparseAncestor(base::FilePath path) {
-  while (!path.empty()) {
-    DWORD attributes = GetFileAttributesW(path.value().c_str());
-    if (attributes == INVALID_FILE_ATTRIBUTES) {
-      const DWORD error = GetLastError();
-      // Missing targets are expected when creating or removing a document.
-      // Access errors must not make a path appear safe.
-      if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
-        return true;
-    } else if (attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
-      return true;
-    }
-    auto parent = path.DirName();
-    if (parent == path)
-      break;
-    path = std::move(parent);
-  }
-  return false;
-}
-base::FilePath DocumentDirectory() {
-  base::FilePath root;
-  if (!base::PathService::Get(chrome::DIR_USER_DATA, &root))
-    return {};
-  return root.AppendASCII("BayDocuments");
-}
 base::DictValue SystemInfo(const std::string& locale) {
   base::DictValue info;
   info.Set("appName", "Bay");
@@ -176,66 +131,22 @@ base::DictValue EnvironmentSnapshot() {
 #endif
   return values;
 }
-struct PreparedData {
+base::DictValue ReadInitialData(std::string locale,
+                                base::DictValue environment) {
   base::DictValue snapshots;
-  std::string error;
-};
-PreparedData ReadInitialData(base::FilePath directory,
-                             std::string locale,
-                             base::DictValue environment) {
-  PreparedData result;
-  result.snapshots.Set("BayApp",
-                       base::DictValue()
-                           .Set("systemInfo", SystemInfo(locale))
-                           .Set("environment", std::move(environment)));
-  if (directory.empty() || HasReparseAncestor(directory) ||
-      !base::CreateDirectory(directory) || HasReparseAncestor(directory)) {
-    result.error = "Bay's document directory could not be opened";
-    return result;
-  }
-  base::DictValue documents;
-  base::FileEnumerator files(directory, false, base::FileEnumerator::FILES);
-  for (auto file = files.Next(); !file.empty(); file = files.Next()) {
-    const auto name = file.BaseName().AsUTF8Unsafe();
-    if (!ValidDocument(name))
-      continue;
-    std::string contents;
-    if (HasReparseAncestor(file) ||
-        !base::ReadFileToStringWithMaxSize(file, &contents,
-                                           kMaxDocumentBytes) ||
-        !base::IsStringUTF8(contents)) {
-      result.error = "A saved Bay document could not be read: " + name;
-      return result;
-    }
-    documents.Set(name, std::move(contents));
-  }
-  result.snapshots.Set(
-      "BayShell", base::DictValue().Set("documents", std::move(documents)));
+  snapshots.Set("BayApp", base::DictValue()
+                              .Set("systemInfo", SystemInfo(locale))
+                              .Set("environment", std::move(environment)));
   base::FilePath downloads;
   base::PathService::Get(chrome::DIR_DEFAULT_DOWNLOADS, &downloads);
-  result.snapshots.Set(
-      "BaySystem",
-      base::DictValue().Set("downloadsFolder",
-                            downloads.empty()
-                                ? base::Value()
-                                : base::Value(downloads.AsUTF8Unsafe())));
-  return result;
+  snapshots.Set("BaySystem",
+                base::DictValue().Set(
+                    "downloadsFolder",
+                    downloads.empty() ? base::Value()
+                                      : base::Value(downloads.AsUTF8Unsafe())));
+  return snapshots;
 }
 
-bool WriteDocument(base::FilePath path, std::optional<std::string> contents) {
-  if (HasReparseAncestor(path))
-    return false;
-  const DWORD attributes = GetFileAttributesW(path.value().c_str());
-  if (attributes != INVALID_FILE_ATTRIBUTES &&
-      (attributes & FILE_ATTRIBUTE_DIRECTORY))
-    return false;
-  if (contents &&
-      (contents->size() > kMaxDocumentBytes || !base::IsStringUTF8(*contents)))
-    return false;
-  return contents
-             ? base::ImportantFileWriter::WriteFileAtomically(path, *contents)
-             : base::DeleteFile(path);
-}
 std::string Credential(const std::string& method,
                        const std::string& account,
                        std::string secret) {
@@ -328,7 +239,7 @@ PlatformServices::PlatformServices(HostContext context,
     : context_(std::move(context)),
       snapshots_changed_(std::move(changed)),
       disk_runner_(DiskRunner()),
-      document_directory_(DocumentDirectory()) {
+      documents_(DocumentStore::DefaultDirectory(), snapshots_changed_) {
   Services()[this] = weak_factory_.GetWeakPtr();
 }
 PlatformServices::~PlatformServices() {
@@ -345,20 +256,18 @@ void PlatformServices::Prepare(base::OnceClosure ready) {
   preparing_ = true;
   disk_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&ReadInitialData, document_directory_,
+      base::BindOnce(&ReadInitialData,
                      g_browser_process->GetApplicationLocale(),
                      EnvironmentSnapshot()),
-      base::BindOnce(
-          [](base::WeakPtr<PlatformServices> self, PreparedData result) {
-            if (self)
-              self->Prepared(std::move(result.snapshots),
-                             std::move(result.error));
-          },
-          weak_factory_.GetWeakPtr()));
+      base::BindOnce(&PlatformServices::Prepared, weak_factory_.GetWeakPtr()));
 }
-void PlatformServices::Prepared(base::DictValue snapshots, std::string error) {
+void PlatformServices::Prepared(base::DictValue snapshots) {
   snapshots_ = std::move(snapshots);
-  initialization_error_ = std::move(error);
+  documents_.Prepare(base::BindOnce(&PlatformServices::DocumentsReady,
+                                    weak_factory_.GetWeakPtr()));
+}
+void PlatformServices::DocumentsReady() {
+  initialization_error_ = documents_.error();
   ready_ = true;
   preparing_ = false;
   auto callbacks = std::move(ready_callbacks_);
@@ -366,7 +275,10 @@ void PlatformServices::Prepared(base::DictValue snapshots, std::string error) {
     std::move(callback).Run();
 }
 base::DictValue PlatformServices::Snapshots() const {
-  return snapshots_.Clone();
+  auto snapshots = snapshots_.Clone();
+  snapshots.Set("BayShell",
+                base::DictValue().Set("documents", documents_.documents()));
+  return snapshots;
 }
 base::ListValue PlatformServices::Modules() const {
   return base::ListValue()
@@ -380,10 +292,6 @@ base::ListValue PlatformServices::Modules() const {
 base::ListValue PlatformServices::SupportedMethods() const {
   base::ListValue methods;
   for (auto* name : {"BayShell.showMenu",
-                     "BayShell.readDocument",
-                     "BayShell.writeDocument",
-                     "BayShell.saveDocument",
-                     "BayShell.removeDocument",
                      "BayShell.copyText",
                      "BayShell.copyImage",
                      "BayShell.pickFiles",
@@ -411,38 +319,10 @@ base::ListValue PlatformServices::SupportedMethods() const {
     methods.Append(name);
   for (auto& method : Notifications::SupportedMethods())
     methods.Append(std::move(method));
+  for (auto& method : DocumentStore::SupportedMethods())
+    methods.Append(std::move(method));
   return methods;
 }
-void PlatformServices::ApplyDocument(
-    std::string_view name,
-    const std::optional<std::string>& contents) {
-  auto* documents = snapshots_.FindDictByDottedPath("BayShell.documents");
-  if (!documents)
-    return;
-  if (contents)
-    documents->Set(name, *contents);
-  else
-    documents->Remove(name);
-  snapshots_changed_.Run();
-}
-void PlatformServices::DocumentWritten(std::string name,
-                                       std::optional<std::string> contents,
-                                       Response callback,
-                                       bool success) {
-  if (!success) {
-    std::move(callback).Run(
-        Failure("document_write_failed", "Bay could not save this document"));
-    return;
-  }
-  std::vector<base::WeakPtr<PlatformServices>> services;
-  for (const auto& entry : Services())
-    services.push_back(entry.second);
-  for (const auto& service : services)
-    if (service)
-      service->ApplyDocument(name, contents);
-  std::move(callback).Run(Success());
-}
-
 bool PlatformServices::DispatchPlatformModule(const std::string& module,
                                               const std::string& method,
                                               const base::ListValue& args,
@@ -496,37 +376,8 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
         std::move(callback));
     return true;
   }
-  if (module == "BayShell" &&
-      (method == "readDocument" || method == "writeDocument" ||
-       method == "saveDocument" || method == "removeDocument")) {
-    const auto* name = Text(args, 0);
-    const auto* contents = Text(args, 1);
-    if (!name || !ValidDocument(*name) ||
-        ((method == "writeDocument" || method == "saveDocument") &&
-         !contents)) {
-      invalid();
-      return true;
-    }
-    if (method == "readDocument") {
-      const auto* documents =
-          snapshots_.FindDictByDottedPath("BayShell.documents");
-      const auto* value = documents->Find(*name);
-      std::move(callback).Run(Success(value ? value->Clone() : base::Value()));
-    } else {
-      std::optional<std::string> value = method == "removeDocument"
-                                             ? std::nullopt
-                                             : std::make_optional(*contents);
-      disk_runner_->PostTaskAndReplyWithResult(
-          FROM_HERE,
-          base::BindOnce(
-              &WriteDocument,
-              document_directory_.Append(base::FilePath::FromUTF8Unsafe(*name)),
-              value),
-          base::BindOnce(&PlatformServices::DocumentWritten, *name,
-                         std::move(value), std::move(callback)));
-    }
+  if (documents_.Dispatch(module, method, args, callback))
     return true;
-  }
   if (module == "BayShell" && method == "copyText") {
     const auto* text = Text(args, 0);
     if (!text) {
