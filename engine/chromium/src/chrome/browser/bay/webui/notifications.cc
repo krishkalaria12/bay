@@ -254,9 +254,19 @@ void WithNativeService(
               "unavailable", "Native notification bridge is unavailable"));
           return;
         }
-        std::move(ready).Run(
-            NotificationDisplayServiceImpl::GetForProfile(profile.get()),
-            std::move(callback));
+        auto* service =
+            NotificationDisplayServiceImpl::GetForProfile(profile.get());
+#if BUILDFLAG(IS_LINUX)
+        // The delegator chooses its route at construction, so a preference
+        // enabled afterward can pass the current policy but retain fallback.
+        if (!notifications::NativeRouteEnabled(*profile->GetPrefs()) ||
+            !service->UsesSystemNotificationBridge()) {
+          std::move(callback).Run(Failure(
+              "unavailable", "Native notification route is unavailable"));
+          return;
+        }
+#endif
+        std::move(ready).Run(service, std::move(callback));
       },
       profile, std::move(ready), std::move(callback)));
 }

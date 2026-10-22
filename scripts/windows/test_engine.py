@@ -61,7 +61,8 @@ class PatchPlatformTests(unittest.TestCase):
         self.assertNotIn("cef-chrome-tabs.patch", win)
         self.assertFalse(any(step.kind == "cef" for step in series.read_series("win")))
         self.assertIn("chromium-extension-updates.patch", win & mac)
-        self.assertEqual({step.name for step in series.read_series()}, win | mac)
+        self.assertEqual({step.name for step in series.read_series()},
+                         win | mac | {step.name for step in series.read_series("linux")})
 
     def test_windows_nncore_has_no_mac_hooks(self):
         step = next(step for step in series.read_series("win") if step.name == "engine/nncore")
