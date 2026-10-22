@@ -99,6 +99,17 @@ export function formatShortcut(stroke: ShortcutStroke, os: PlatformOS): string {
   return parts.join("+");
 }
 
+/** A context-menu hint as the menus spell it (`key: "c"`, `modifiers: ["shift", "command"]`) as a stroke. */
+export function menuShortcutStroke(key: string, modifiers: readonly ("command" | "shift" | "option" | "control")[] = []): ShortcutStroke {
+  return {
+    key,
+    mod: modifiers.includes("command"),
+    shift: modifiers.includes("shift"),
+    alt: modifiers.includes("option"),
+    ctrl: modifiers.includes("control"),
+  };
+}
+
 /** A macOS hint ("⇧⌘C") as a stroke. Unknown keys pass through as they are. */
 export function parseShortcut(hint: string): ShortcutStroke {
   const stroke: ShortcutStroke = { key: "" };

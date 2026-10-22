@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatShortcut, parseShortcut, relabelShortcuts, strokeMatches, windowsShortcutLabel, WINDOWS_SHORTCUTS } from "./keys.ts";
+import { formatShortcut, menuShortcutStroke, parseShortcut, relabelShortcuts, strokeMatches, windowsShortcutLabel, WINDOWS_SHORTCUTS } from "./keys.ts";
 import { capabilitiesFor } from "./capabilities.ts";
 
 test("desktop shortcut labels preserve Mac glyphs and spell Windows modifiers", () => {
@@ -75,4 +75,13 @@ test("web desktops draw caption buttons without native modules while macOS keeps
   assert.equal(mac.captionButtons, false);
   assert.equal(mac.trafficLights, true);
   assert.equal(mac.menuBar, true);
+});
+
+test("context-menu hints read as strokes on every desktop", () => {
+  const copyLink = menuShortcutStroke("c", ["shift", "command"]);
+  assert.equal(formatShortcut(copyLink, "windows"), "Ctrl+Shift+C");
+  assert.equal(formatShortcut(copyLink, "linux"), "Ctrl+Shift+C");
+  assert.equal(formatShortcut(menuShortcutStroke("2", ["control"]), "linux"), "Ctrl+2");
+  assert.equal(formatShortcut(menuShortcutStroke("w", ["option", "command"]), "windows"), "Ctrl+Alt+W");
+  assert.deepEqual(menuShortcutStroke("x"), { key: "x", mod: false, shift: false, alt: false, ctrl: false });
 });

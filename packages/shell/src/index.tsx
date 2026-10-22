@@ -1,4 +1,5 @@
-import { capabilities } from "@bay/platform";
+import { capabilities, isMac, platformOS } from "@bay/platform";
+import { formatShortcut, menuShortcutStroke } from "@bay/platform/keys";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
 import {
@@ -172,6 +173,8 @@ export type MenuItem =
       swatch?: string;
       key?: string;
       modifiers?: ("command" | "shift" | "option" | "control")[];
+      // Web hosts: the trailing hint, filled in from key and modifiers.
+      shortcut?: string;
       enabled?: boolean;
       checked?: boolean;
       children?: MenuItem[];
@@ -296,8 +299,18 @@ export async function copyImage(base64: string): Promise<boolean> {
   return await Shell.copyImage(base64);
 }
 
+// macOS draws key and modifiers itself; the web hosts show the label Bay's keyboard tables would.
+const withShortcutLabels = (items: MenuItem[]): MenuItem[] =>
+  items.map((item) => {
+    if ("separator" in item) return item;
+    const labeled = { ...item };
+    if (item.children) labeled.children = withShortcutLabels(item.children);
+    if (item.key) labeled.shortcut = formatShortcut(menuShortcutStroke(item.key, item.modifiers), platformOS);
+    return labeled;
+  });
+
 export function showMenu(items: MenuItem[]): Promise<string | null> {
-  return Shell.showMenu(items);
+  return Shell.showMenu(isMac ? items : withShortcutLabels(items));
 }
 
 export const openWindow = (id: string, options: OpenWindowOptions = {}) => Shell.openWindow(id, options);
