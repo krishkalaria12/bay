@@ -1870,8 +1870,22 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Secret Service item is "Bay Safe Storage" with the application attribute <code>bay</code>, and KWallet keeps it in a "Bay Keys" folder.
                 Chromium's shared "Chromium Safe Storage" item is no longer read or written, so another Chromium build can't replace Bay's key. The libsecret
                 schema is unchanged. The series pins the item next to the macOS one. The patch applies cleanly to the pinned checkout, and a fixture test checks
-                the applied names. Bay's own runtime has not yet read or written the item on a Linux keyring. Still open: the warning when only the fixed
-                <code>basic</code> key is available.
+                the applied names. Bay's own runtime has not yet read or written the item on a Linux keyring.
+              </p>
+              <p>
+                <strong>Fixed-key warning, 22 Oct 2026.</strong> Linux hosts advertise <code>BayCEF.secretStorage</code>, which reports <code>keyring</code>,
+                <code>basic</code> or <code>unavailable</code>. Chromium's encryptor doesn't name its provider, so the host encrypts a probe and reads the tag:
+                <code>v10</code> is the fixed key, while <code>v11</code> (Secret Service, KWallet) and <code>v12</code> (Secret portal) are keyring keys.
+                Requests wait together on one encryptor lookup, which can sit behind a keyring unlock prompt, and settle with <code>host_closed</code> if the
+                document goes away first. The Passwords pane shows a warning for <code>basic</code> and <code>unavailable</code>. Its storage description and
+                Autofill's card-number note now name each platform's own store; the Passwords text no longer says "this Mac" on Windows and Linux. macOS and
+                Windows don't advertise the method, so they show no warning.
+              </p>
+              <p>
+                <strong>Verification.</strong> Classification tests use real <code>OSCryptAsync</code> instances with the fixed-key provider and fake v11 and
+                v12 providers, including a decrypt-only keyring. Native host tests cover the advertised method, dispatch ahead of the engine facade, joined
+                requests, argument errors and teardown. They pass release and DCHECK Linux x64 syntax checks but have not run. Browser, platform and copy tests,
+                the generated contracts, typechecks, lint and formatting pass. A real fallback to the fixed key on a Linux desktop has not been observed.
               </p>
             </div>
             <ul>
