@@ -1294,11 +1294,11 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td>Win32 frame, Mica backdrop, toasts, platform services (DPAPI and Credential Manager, shell integration), updater</td>
                   <td>
-                    <code>frame_win.cc</code>, <code>notifications_win.cc</code>, <code>platform_services_win.cc</code>, <code>updater_service_win.cc</code>
+                    <code>frame_win.cc</code>, shared <code>notifications.cc</code>, <code>platform_services_win.cc</code>, <code>updater_service_win.cc</code>
                   </td>
                   <td>
-                    <span class="chip Add">warn</span> Linux siblings: a CSD frame view, Chrome's Linux notification bridge, libsecret/KWallet and XDG
-                    integration. No updater: the package manager owns updates
+                    <span class="chip Extend">warn</span> Linux frame and shared notification sources are implemented; desktop validation remains open. Linux
+                    platform services still need libsecret/KWallet and XDG integration. No updater: the package manager owns updates
                   </td>
                 </tr>
                 <tr>
@@ -1801,7 +1801,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <p>
                 <strong>Verification.</strong> Helper and unit-test sources pass Linux x64 syntax checks with the pinned Debian sysroot. These checks reuse
                 generated Mac headers and do not establish a Linux GN build. Native unit-test binaries, desktop startup integration and X11/Wayland behavior
-                remain unverified. Host platform services, notifications, linking and branding are still open.
+                remain unverified. Host platform services, linking and branding are still open; notification source progress is recorded below.
               </p>
               <p>
                 <strong>Frame, 21 Oct 2026.</strong> <code>frame_linux.cc</code> installs through the shared native-widget hook. It asks X11 for an undecorated
@@ -1810,6 +1810,26 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 client view's CSS drag regions, and Chromium's Linux event filter handles moves, resizes and the desktop's double-click action.
                 <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. The desktop's button layout, edge
                 tiling and client shadows come later.
+              </p>
+              <p>
+                <strong>Notifications, 22 Oct 2026.</strong> The shared <code>notifications.cc</code> service now routes Linux post/remove operations through
+                Chromium's native notification bridge. It checks native-notification policy, bridge readiness and the selected per-profile backend, rejects
+                private profiles, and buffers responses across coordinator renderer reconnects. Linux advertises only post/remove methods. Its desktop API has
+                no permission query, permission request or common settings launcher; the UI skips that preflight without inventing a permission grant. Windows
+                keeps its existing permission flow.
+              </p>
+              <p>
+                <strong>Notification limits.</strong> Portal mode remains unavailable because it cannot provide the history synchronization this service uses. A
+                returned ID means local submission, not confirmed desktop delivery; successful removal means a close was requested. Rapid replacement or removal
+                before the desktop service replies remains best effort. Chromium does not distinguish expiration from user dismissal on this path, and Linux
+                activation after a browser restart is unsupported. Linux desktop delivery, failure cases and these timing interleavings still need runtime
+                validation.
+              </p>
+              <p>
+                <strong>Notification verification.</strong> The service and Bay unit-test sources pass Linux x64 syntax checks with the pinned sysroot and
+                generated Mac configuration headers. Native unit-test binaries have not run. The host and startup caller checks are blocked by missing generated
+                Mojo headers; full Linux GN dependency checks, linking and desktop behavior remain unverified. Portable checks cover 595 browser, 54 platform
+                and 56 Python tests, the generated contracts, typechecks, web export, lint and formatting.
               </p>
             </div>
             <ul>
@@ -2235,10 +2255,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   (<code>chromium-window-hosted</code>, <code>chromium-webview-native-hosted</code>, <code>chromium-window-docked-devtools</code>,
                   <code>chromium-browser-view-hosted-fullscreen</code>) that the web host doesn't need
                 </li>
-                <li>
-                  Windows-only: <code>chromium-bay-layer-win</code> (chrome.dll), <code>chromium-bay-branding-win</code>,
-                  <code>chromium-bay-notifications-win</code>
-                </li>
+                <li>Windows-only: <code>chromium-bay-layer-win</code> (chrome.dll) and <code>chromium-bay-branding-win</code></li>
               </ul>
             </div>
             <div class="card">
@@ -2247,6 +2264,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <li><code>chromium-bay-webui-window</code>: Bay's window factory, <code>chrome://bay</code> and the SurfaceEmbed registration</li>
                 <li><code>chromium-bay-lifecycle</code>, <code>chromium-bay-extension-hooks</code></li>
                 <li><code>chromium-bay-native-widget</code>: the native widget and custom frame factory for both web desktops</li>
+                <li><code>chromium-bay-notifications</code>: the app notification handler type and registration hook</li>
                 <li>
                   <code>chromium-safe-storage-name</code> is <code>mac</code> today: <strong>add a Linux version</strong> (Secret Service / KWallet naming)
                 </li>
@@ -2254,6 +2272,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <h3>New for Linux <span class="chip lnx">add</span></h3>
               <ul>
                 <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
+                <li><code>chromium-bay-notification-native-route-linux</code>: implemented, rejects a retained fallback notification backend</li>
                 <li>
                   <code>chromium-bay-branding-linux</code> (binary name, desktop file, AppArmor-friendly paths). The client-side frame needs no patch of its
                   own: it installs through <code>chromium-bay-native-widget</code>
