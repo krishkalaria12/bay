@@ -113,6 +113,7 @@ source_set("impl") {
     ]
     deps += [
       ":notifications",
+      ":shell_appearance",
       "//cc/paint",
       "//chrome/browser:icon_loader",
       "//components/constrained_window",
@@ -145,11 +146,32 @@ if (is_win || is_linux) {
       "shell_appearance.cc",
       "shell_appearance.h",
     ]
-    deps = [
+    deps = [ "//chrome/common" ]
+    public_deps = [
       ":webui",
       "//base",
+      "//chrome/browser/profiles:profile",
       "//chrome/browser/themes",
+      "//components/prefs",
       "//ui/native_theme",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("shell_appearance_unittests") {
+    sources = [
+      "host_context.cc",
+      "shell_appearance_unittest.cc",
+    ]
+    deps = [
+      ":shell_appearance",
+      "//base/test:test_support",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+      "//ui/native_theme:test_support",
     ]
   }
 }

@@ -29,6 +29,7 @@ class EngineServices;
 class DocumentStore;
 class SecretStorage;
 class ShellUI;
+class ShellAppearance;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -68,6 +69,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   // Host info waits for the platform's saved documents.
   void PlatformReady();
+  std::unique_ptr<ShellAppearance> appearance_;
   bool platform_ready_ = false;
   std::vector<GetHostInfoCallback> host_info_callbacks_;
 #endif

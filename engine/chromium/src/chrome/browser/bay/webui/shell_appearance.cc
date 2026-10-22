@@ -3,9 +3,13 @@
 
 #include <utility>
 
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
+#include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/common/pref_names.h"
 #include "ui/native_theme/native_theme.h"
 
 namespace bay {
@@ -25,6 +29,73 @@ std::string InvalidArguments() {
 }
 }  // namespace
 
+ShellAppearance::ShellAppearance(HostContext context)
+    : context_(std::move(context)) {}
+ShellAppearance::~ShellAppearance() {
+  SetEventSink({});
+}
+
+void ShellAppearance::SetEventSink(EventSink sink) {
+  weak_factory_.InvalidateWeakPtrs();
+  event_pending_ = false;
+  last_dark_.reset();
+  native_observation_.Reset();
+  theme_observation_.Reset();
+  scheme_pref_.Reset();
+  profile_observations_.RemoveAllObservations();
+  event_sink_ = std::move(sink);
+  auto* profile = context_.profile();
+  if (!event_sink_ || !profile || profile_destroyed_)
+    return;
+  // ThemeServiceFactory redirects OTR to its original profile. Observe both
+  // lifetimes so neither a dying document profile nor a dying service can
+  // retain an observation or queued event.
+  profile_observations_.AddObservation(profile);
+  auto* original = profile->GetOriginalProfile();
+  if (original != profile)
+    profile_observations_.AddObservation(original);
+  theme_observation_.Observe(ThemeServiceFactory::GetForProfile(profile));
+  // ThemeService suppresses theme notifications while an extension theme pack
+  // is loading. Its selected scheme can still change during that interval.
+  scheme_pref_.Init(original->GetPrefs());
+  scheme_pref_.Add(prefs::kBrowserColorScheme,
+                   base::BindRepeating(&ShellAppearance::ScheduleEvent,
+                                       weak_factory_.GetWeakPtr()));
+  native_observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
+  ScheduleEvent();
+}
+
+void ShellAppearance::OnProfileWillBeDestroyed(Profile* profile) {
+  profile_destroyed_ = true;
+  SetEventSink({});
+}
+void ShellAppearance::OnThemeChanged() {
+  ScheduleEvent();
+}
+void ShellAppearance::OnNativeThemeUpdated(ui::NativeTheme* theme) {
+  ScheduleEvent();
+}
+void ShellAppearance::ScheduleEvent() {
+  if (event_pending_ || !event_sink_)
+    return;
+  event_pending_ = true;
+  // ThemeService notifications are synchronous and forbid reentrant observer
+  // iteration. Deliver after that stack returns and coalesce redundant changes.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&ShellAppearance::DeliverEvent,
+                                weak_factory_.GetWeakPtr()));
+}
+void ShellAppearance::DeliverEvent() {
+  event_pending_ = false;
+  const bool dark = theme_observation_.GetSource()->BrowserUsesDarkColors();
+  if (last_dark_ == dark)
+    return;
+  last_dark_ = dark;
+  // The sink may replace itself, change appearance, or destroy this owner.
+  auto sink = event_sink_;
+  sink.Run(dark);
+}
+
 // static
 base::ListValue ShellAppearance::SupportedMethods() {
   return base::ListValue()
@@ -42,9 +113,9 @@ bool ShellAppearance::Dispatch(const HostContext& context,
       (method != "setAppearance" && method != "isDarkAppearance"))
     return false;
   if (method == "isDarkAppearance") {
-    std::move(callback).Run(Success(base::Value(
-        ui::NativeTheme::GetInstanceForNativeUi()->preferred_color_scheme() ==
-        ui::NativeTheme::PreferredColorScheme::kDark)));
+    std::move(callback).Run(Success(
+        base::Value(ThemeServiceFactory::GetForProfile(context.profile())
+                        ->BrowserUsesDarkColors())));
     return true;
   }
   const auto* mode = args.empty() ? nullptr : args[0].GetIfString();

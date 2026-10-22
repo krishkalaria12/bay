@@ -36,6 +36,7 @@
 #include "chrome/browser/bay/webui/window_registry.h"
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/bay/webui/document_store.h"
@@ -398,6 +399,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   }
 }
 NativeHost::~NativeHost() {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  appearance_.reset();
+#endif
 #if BUILDFLAG(IS_WIN)
   if (PendingQuit().owner.get() == this)
     CompleteQuitPreparation(false);
@@ -621,6 +625,23 @@ void NativeHost::SetClient(
   client_.reset();
   client_.Bind(std::move(client));
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (!appearance_)
+    appearance_ = std::make_unique<ShellAppearance>(context_);
+  appearance_->SetEventSink(base::BindRepeating(
+      [](base::WeakPtr<NativeHost> host, bool dark) {
+        if (host)
+          host->Emit("BayShell", "onAppEvent",
+                     base::Value(base::DictValue()
+                                     .Set("type", "appearance")
+                                     .Set("dark", dark)));
+      },
+      GetWeakPtr()));
+  client_.set_disconnect_handler(base::BindOnce(
+      [](base::WeakPtr<NativeHost> host) {
+        if (host)
+          host->appearance_->SetEventSink({});
+      },
+      GetWeakPtr()));
   if (!AppRuntime::Enabled() || is_coordinator()) {
     // Activation can arrive before the trusted document connects. Drain only
     // after its Mojo client is bound; the renderer retains startup responses
