@@ -6,6 +6,7 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 
 namespace bay {
 namespace {
@@ -58,17 +59,22 @@ std::optional<ShellIconRequest> ParseShellFileIconArgs(
   const auto& value = args[0].GetString();
   const auto points = args[1].GetIfDouble();
   if (value.empty() || value == "." || value.size() > 131068 ||
-      value.find_first_of(std::string("\0*?", 3)) != std::string::npos ||
+      value.find('\0') != std::string::npos ||
       !base::IsStringUTF8(value) || !points || !std::isfinite(*points) ||
       *points < 1 || *points > 256)
     return std::nullopt;
   auto path = base::FilePath::FromUTF8Unsafe(value);
+#if BUILDFLAG(IS_WIN)
+  if (value.find_first_of("*?") != std::string::npos)
+    return std::nullopt;
+#endif
   // A missing file name deliberately asks for its file-type icon. Relative
   // directory paths would instead depend on the browser's working directory.
+  // Absolute POSIX paths can contain literal '*' and '?' characters.
   if (path.value().size() > 32767 || path.ReferencesParent() ||
       (!path.IsAbsolute() &&
        (path != path.BaseName() ||
-        value.find_first_of("/\\:") != std::string::npos)))
+        value.find_first_of("/\\:*?") != std::string::npos)))
     return std::nullopt;
   return ShellIconRequest{std::move(path),
                           static_cast<int>(std::round(*points * 2))};

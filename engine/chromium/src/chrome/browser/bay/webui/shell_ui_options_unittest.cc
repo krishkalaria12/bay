@@ -97,6 +97,25 @@ TEST(ShellUIOptionsTest, RejectsAmbiguousOrInvalidIconPaths) {
       base::ListValue().Append("relative\\file.pdf").Append(32)));
 #endif
 }
+TEST(ShellUIOptionsTest, HandlesLiteralFilenamePunctuationPerPlatform) {
+#if BUILDFLAG(IS_WIN)
+  for (const char* path : {"C:\\Downloads\\report?.pdf",
+                           "C:\\Downloads\\report*.pdf"})
+    EXPECT_FALSE(ParseShellFileIconArgs(
+        base::ListValue().Append(path).Append(32)))
+        << path;
+#else
+  for (const char* path : {"/tmp/report?.pdf", "/tmp/report*.pdf",
+                           "/tmp/report:notes\\draft.pdf"}) {
+    auto parsed =
+        ParseShellFileIconArgs(base::ListValue().Append(path).Append(32));
+    ASSERT_TRUE(parsed) << path;
+    EXPECT_EQ(parsed->path.AsUTF8Unsafe(), path);
+  }
+#endif
+  EXPECT_FALSE(ParseShellFileIconArgs(
+      base::ListValue().Append("/tmp/../report.pdf").Append(32)));
+}
 TEST(ShellUIOptionsTest, RejectsInvalidIconSizeOrWireShape) {
   EXPECT_FALSE(ParseShellFileIconArgs(base::ListValue()));
   EXPECT_FALSE(ParseShellFileIconArgs(base::ListValue().Append("file.bin")));
