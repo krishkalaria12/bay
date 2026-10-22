@@ -80,6 +80,7 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   EXPECT_TRUE(modules->contains("BaySystem"));
   EXPECT_TRUE(methods->contains("BayShell.prompt"));
   EXPECT_FALSE(methods->contains("BayShell.pickFiles"));
+  EXPECT_FALSE(methods->contains("BayShell.showMenu"));
   EXPECT_TRUE(methods->contains("BaySystem.fileIcon"));
   EXPECT_TRUE(methods->contains("BayCEF.secretStorage"));
   for (const auto& method : *methods) {
@@ -141,6 +142,12 @@ TEST_F(NativeHostTest, CoordinatorConfirmRequiresAnExplicitLiveWindow) {
               "window_required");
 }
 
+TEST_F(NativeHostTest, CoordinatorCannotShowAContextMenu) {
+  ExpectError(
+      Invoke("BayShell", "showMenu", R"([[{"id":"copy","title":"Copy"}]])"),
+      "window_required");
+}
+
 TEST_F(NativeHostTest, CoordinatorCannotPickFiles) {
   ExpectError(Invoke("BayShell", "pickFiles", "[]"), "window_required");
   ExpectError(Invoke("BayShell", "pickFiles", R"([{"windowId":"other"}])"),
@@ -152,6 +159,10 @@ TEST_F(NativeHostTest, ValidatesArgumentsBeforeStartingShellWork) {
   ExpectError(Invoke("BayShell", "pickFiles", "{}"), "invalid_args");
   ExpectError(Invoke("BayShell", "prompt", "[]"), "invalid_args");
   ExpectError(Invoke("BayShell", "prompt", "[{}]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "showMenu", "[]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "showMenu", "[{}]"), "invalid_args");
+  ExpectError(Invoke("BayShell", "showMenu", R"([[{"title":"No id"}]])"),
+              "invalid_args");
   ExpectError(Invoke("BayShell", "confirm", "[]"), "invalid_args");
   ExpectError(Invoke("BayShell", "confirm", "[{}]"), "invalid_args");
   ExpectError(
@@ -168,7 +179,7 @@ TEST_F(NativeHostTest, UnhandledShellDispatchLeavesTheCallbackUntouched) {
   ShellUI::Response callback = base::BindOnce(
       [](bool* called, const std::string&) { *called = true; }, &called);
   EXPECT_FALSE(shell.Dispatch(HostContext::ForCoordinator(*profile()),
-                              "BayShell", "showMenu", {}, callback));
+                              "BayShell", "copyText", {}, callback));
   EXPECT_FALSE(called);
   ASSERT_TRUE(callback);
   std::move(callback).Run("unused");
@@ -379,6 +390,7 @@ TEST_F(FilePickerTest, WindowHostAdvertisesFilePicking) {
   const auto* methods = info->FindList("optionalMethods");
   ASSERT_TRUE(methods);
   EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
+  EXPECT_TRUE(methods->contains("BayShell.showMenu"));
 }
 
 TEST_F(FilePickerTest, MultipleSelectionPreservesOrderAndReservedCharacters) {

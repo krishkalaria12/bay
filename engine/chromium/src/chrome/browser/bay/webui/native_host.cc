@@ -492,8 +492,10 @@ base::DictValue NativeHost::Info() const {
     engine_methods.Append(std::move(method));
   engine_methods.Append("BayShell.prompt");
   engine_methods.Append("BayShell.confirm");
-  if (context_.is_window())
+  if (context_.is_window()) {
     engine_methods.Append("BayShell.pickFiles");
+    engine_methods.Append("BayShell.showMenu");
+  }
   engine_methods.Append("BaySystem.fileIcon");
   for (auto& method : SecretStorage::SupportedMethods())
     engine_methods.Append(std::move(method));
