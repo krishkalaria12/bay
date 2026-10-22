@@ -27,6 +27,20 @@ bool Text(const base::DictValue& options,
   output = base::UTF8ToUTF16(value);
   return true;
 }
+// A dialog targets the caller's own window unless it names one.
+bool WindowId(const base::DictValue& options,
+              std::optional<std::string>& output) {
+  const auto* window = options.Find("windowId");
+  if (!window)
+    return true;
+  if (!window->is_string() || window->GetString().empty() ||
+      window->GetString().size() > 128 ||
+      window->GetString().find('\0') != std::string::npos ||
+      !base::IsStringUTF8(window->GetString()))
+    return false;
+  output = window->GetString();
+  return true;
+}
 }  // namespace
 std::optional<ShellPromptOptions> ParseShellPromptOptions(
     const base::DictValue& options) {
@@ -40,15 +54,36 @@ std::optional<ShellPromptOptions> ParseShellPromptOptions(
       !Text(options, "message", 65536, parsed.message) ||
       !Text(options, "value", 65536, parsed.value) ||
       !Text(options, "placeholder", 4096, parsed.placeholder) ||
-      !Text(options, "confirmTitle", 256, parsed.confirm_title))
+      !Text(options, "confirmTitle", 256, parsed.confirm_title) ||
+      !WindowId(options, parsed.window_id))
     return std::nullopt;
-  if (const auto* window = options.Find("windowId")) {
-    if (!window->is_string() || window->GetString().empty() ||
-        window->GetString().size() > 128 ||
-        window->GetString().find('\0') != std::string::npos ||
-        !base::IsStringUTF8(window->GetString()))
+  return parsed;
+}
+std::optional<ShellConfirmOptions> ParseShellConfirmOptions(
+    const base::DictValue& options) {
+  for (const auto [key, value] : options) {
+    if (key != "title" && key != "message" && key != "confirmTitle" &&
+        key != "cancelTitle" && key != "destructive" && key != "suppression" &&
+        key != "windowId")
       return std::nullopt;
-    parsed.window_id = window->GetString();
+  }
+  ShellConfirmOptions parsed;
+  if (!Text(options, "title", 4096, parsed.title, true) ||
+      !Text(options, "message", 65536, parsed.message) ||
+      !Text(options, "confirmTitle", 256, parsed.confirm_title) ||
+      !Text(options, "cancelTitle", 256, parsed.cancel_title) ||
+      !WindowId(options, parsed.window_id))
+    return std::nullopt;
+  if (const auto* destructive = options.Find("destructive")) {
+    if (!destructive->is_bool())
+      return std::nullopt;
+    parsed.destructive = destructive->GetBool();
+  }
+  if (options.contains("suppression")) {
+    std::u16string label;
+    if (!Text(options, "suppression", 256, label) || label.empty())
+      return std::nullopt;
+    parsed.suppression = std::move(label);
   }
   return parsed;
 }

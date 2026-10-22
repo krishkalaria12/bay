@@ -51,6 +51,49 @@ TEST(ShellUIOptionsTest, RejectsMalformedOrOversizedPromptData) {
   EXPECT_FALSE(ParseShellPromptOptions(
       base::DictValue().Set("title", std::string("bad\0title", 9))));
 }
+TEST(ShellUIOptionsTest, PreservesConfirmFieldsAndExactWindow) {
+  auto options = base::DictValue()
+                     .Set("title", "Close 12 tabs?")
+                     .Set("message", "Pinned tabs stay open")
+                     .Set("confirmTitle", "Close Tabs")
+                     .Set("cancelTitle", "Keep Them")
+                     .Set("destructive", true)
+                     .Set("suppression", "Don't ask again")
+                     .Set("windowId", "window-7");
+  auto parsed = ParseShellConfirmOptions(options);
+  ASSERT_TRUE(parsed);
+  EXPECT_EQ(parsed->title, u"Close 12 tabs?");
+  EXPECT_EQ(parsed->message, u"Pinned tabs stay open");
+  EXPECT_EQ(parsed->confirm_title, u"Close Tabs");
+  EXPECT_EQ(parsed->cancel_title, u"Keep Them");
+  EXPECT_TRUE(parsed->destructive);
+  ASSERT_TRUE(parsed->suppression);
+  EXPECT_EQ(*parsed->suppression, u"Don't ask again");
+  ASSERT_TRUE(parsed->window_id);
+  EXPECT_EQ(*parsed->window_id, "window-7");
+}
+TEST(ShellUIOptionsTest, ConfirmDefaultsToAPlainDialogWithoutSuppression) {
+  auto parsed = ParseShellConfirmOptions(
+      base::DictValue().Set("title", "Clear history?"));
+  ASSERT_TRUE(parsed);
+  EXPECT_TRUE(parsed->confirm_title.empty());
+  EXPECT_TRUE(parsed->cancel_title.empty());
+  EXPECT_FALSE(parsed->destructive);
+  EXPECT_FALSE(parsed->suppression);
+  EXPECT_FALSE(parsed->window_id);
+}
+TEST(ShellUIOptionsTest, RejectsMalformedConfirmData) {
+  const auto base = [] { return base::DictValue().Set("title", "Quit?"); };
+  EXPECT_FALSE(ParseShellConfirmOptions(base::DictValue()));
+  EXPECT_FALSE(ParseShellConfirmOptions(base().Set("destructive", "yes")));
+  EXPECT_FALSE(ParseShellConfirmOptions(base().Set("suppression", "")));
+  EXPECT_FALSE(ParseShellConfirmOptions(base().Set("suppression", true)));
+  EXPECT_FALSE(ParseShellConfirmOptions(base().Set("windowId", "")));
+  EXPECT_FALSE(ParseShellConfirmOptions(
+      base().Set("cancelTitle", std::string(257, 'x'))));
+  // Prompt fields don't belong to a confirmation.
+  EXPECT_FALSE(ParseShellConfirmOptions(base().Set("value", "text")));
+}
 TEST(ShellUIOptionsTest, NormalizesUserResponseLikeMacOS) {
   EXPECT_FALSE(NormalizeShellPromptText(u""));
   EXPECT_FALSE(NormalizeShellPromptText(u" \t\n\r\u2003\u00a0"));

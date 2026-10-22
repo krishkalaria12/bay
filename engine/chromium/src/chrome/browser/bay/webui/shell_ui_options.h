@@ -18,11 +18,23 @@ struct ShellPromptOptions {
   std::u16string confirm_title;
   std::optional<std::string> window_id;
 };
+struct ShellConfirmOptions {
+  std::u16string title;
+  std::u16string message;
+  std::u16string confirm_title;
+  std::u16string cancel_title;
+  bool destructive = false;
+  // The "Don't ask again" checkbox label, when the caller offers one.
+  std::optional<std::u16string> suppression;
+  std::optional<std::string> window_id;
+};
 struct ShellIconRequest {
   base::FilePath path;
   int pixels;
 };
 std::optional<ShellPromptOptions> ParseShellPromptOptions(
+    const base::DictValue& options);
+std::optional<ShellConfirmOptions> ParseShellConfirmOptions(
     const base::DictValue& options);
 std::optional<ShellIconRequest> ParseShellFileIconArgs(
     const base::ListValue& args);
