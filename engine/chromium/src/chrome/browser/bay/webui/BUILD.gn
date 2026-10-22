@@ -139,6 +139,35 @@ source_set("impl") {
 }
 
 if (is_win || is_linux) {
+  source_set("shell_clipboard") {
+    sources = [
+      "shell_clipboard.cc",
+      "shell_clipboard.h",
+    ]
+    deps = [
+      "//base",
+      "//skia",
+      "//ui/base/clipboard",
+      "//ui/gfx/codec",
+    ]
+  }
+
+  test("shell_clipboard_unittests") {
+    sources = [ "shell_clipboard_unittest.cc" ]
+    deps = [
+      ":shell_clipboard",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//skia",
+      "//testing/gtest",
+      "//ui/base/clipboard:clipboard_test_support",
+      "//ui/gfx/codec",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
   source_set("document_store") {
     sources = [
       "document_store.cc",
@@ -213,6 +242,7 @@ if (is_win) {
     deps = [
       ":document_store",
       ":notifications",
+      ":shell_clipboard",
       ":webui",
       "//base",
       "//chrome/browser:browser_process",
@@ -234,7 +264,6 @@ if (is_win) {
       "//crypto",
       "//skia",
       "//ui/base",
-      "//ui/base/clipboard",
       "//ui/base/mojom:ui_base_types",
       "//ui/display",
       "//ui/gfx/codec",

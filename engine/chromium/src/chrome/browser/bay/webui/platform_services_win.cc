@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/bay/webui/shell_clipboard.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
 
 #include <windows.h>
@@ -14,8 +15,6 @@
 #include <string_view>
 #include <utility>
 
-#include "base/base64.h"
-#include "base/containers/span.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -40,11 +39,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/version_info/version_info.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/base_window.h"
-#include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/gfx/codec/jpeg_codec.h"
-#include "ui/gfx/codec/png_codec.h"
 #include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
 
@@ -292,8 +287,6 @@ base::ListValue PlatformServices::Modules() const {
 base::ListValue PlatformServices::SupportedMethods() const {
   base::ListValue methods;
   for (auto* name : {"BayShell.showMenu",
-                     "BayShell.copyText",
-                     "BayShell.copyImage",
                      "BayShell.pickFiles",
                      "BayShell.confirm",
                      "BayShell.prompt",
@@ -317,6 +310,8 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayKeychain.set",
                      "BayKeychain.delete"})
     methods.Append(name);
+  for (auto& method : ShellClipboard::SupportedMethods())
+    methods.Append(std::move(method));
   for (auto& method : Notifications::SupportedMethods())
     methods.Append(std::move(method));
   for (auto& method : DocumentStore::SupportedMethods())
@@ -378,36 +373,8 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
   }
   if (documents_.Dispatch(module, method, args, callback))
     return true;
-  if (module == "BayShell" && method == "copyText") {
-    const auto* text = Text(args, 0);
-    if (!text) {
-      invalid();
-      return true;
-    }
-    {
-      ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
-      writer.WriteText(base::UTF8ToUTF16(*text));
-    }
-    std::move(callback).Run(Success());
+  if (ShellClipboard::Dispatch(module, method, args, callback))
     return true;
-  }
-  if (module == "BayShell" && method == "copyImage") {
-    const auto* encoded = Text(args, 0);
-    std::string bytes;
-    if (!encoded || !base::Base64Decode(*encoded, &bytes)) {
-      invalid();
-      return true;
-    }
-    auto bitmap = gfx::PNGCodec::Decode(base::as_byte_span(bytes));
-    if (bitmap.isNull())
-      bitmap = gfx::JPEGCodec::Decode(base::as_byte_span(bytes));
-    if (!bitmap.isNull()) {
-      ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
-      writer.WriteImage(bitmap);
-    }
-    std::move(callback).Run(Success(base::Value(!bitmap.isNull())));
-    return true;
-  }
   if (module == "BayShell" && method == "isDarkAppearance") {
     std::move(callback).Run(Success(base::Value(
         ui::NativeTheme::GetInstanceForNativeUi()->preferred_color_scheme() ==
