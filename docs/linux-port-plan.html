@@ -1841,7 +1841,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
                 lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
                 <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. The remaining system
-                methods are still open; confirmation dialogs and context menus are recorded below.
+                methods are still open; confirmation dialogs, context menus and documents are recorded below.
               </p>
               <p>
                 <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
@@ -1916,6 +1916,22 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 limits and swatch formats. Native host tests cover window-only advertisement, coordinator rejection and argument errors; platform tests cover
                 the hint labels. Sources pass release and DCHECK Linux x64 syntax checks. Native tests have not run, and menu placement, swatches and hints have
                 not been seen on X11, Wayland or Windows.
+              </p>
+              <p>
+                <strong>Documents, 22 Oct 2026.</strong> The app's saved documents (<code>BayShell.readDocument</code>, <code>writeDocument</code>,
+                <code>saveDocument</code>, <code>removeDocument</code>) moved from the Windows platform services into a shared <code>DocumentStore</code>, and
+                Linux hosts now use it. Before this, a Linux host started with no documents and couldn't save any, so session and settings state didn't survive
+                a restart. Both platforms keep the Windows rules: files in <code>&lt;user data&gt;/BayDocuments</code>, names that are safe on every desktop,
+                UTF-8 up to 64&nbsp;MB, atomic writes on one blocking sequence, and each write applied to every host on the folder. A host's
+                <code>GetHostInfo</code> waits for the folder to be read, and an unreadable document becomes the <code>initializationError</code> rather than
+                being overwritten. Windows still refuses reparse points anywhere on the path. On Linux only the folder and the files themselves are refused if
+                they are symlinks, since symlinked homes (<code>/home</code> to <code>/var/home</code> on Fedora Silverblue) are ordinary.
+              </p>
+              <p>
+                <strong>Verification.</strong> Store tests cover the name rules, loading, writes reaching other stores on the same folder and not on another,
+                removal, argument errors, refusal before the read and after an unreadable document, a folder in a document's place, and symlinked files and
+                folders. Native host tests cover documents arriving in host info, a save landing on disk and the initialization error. Linux sources pass
+                release and DCHECK syntax checks; the native tests have not run, and the Windows file, which only lost code, has not been compiled.
               </p>
             </div>
             <ul>
