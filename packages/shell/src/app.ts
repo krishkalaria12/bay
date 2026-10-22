@@ -174,6 +174,8 @@ export const appIcons = (size = 64) => App.appIcons(size);
 export const currentAppIcon = () => App.appIcon();
 export const setAppIcon = (id: string) => App.setAppIcon(id);
 
+// Some desktop notification services accept submissions without a permission API.
+export const hasNotificationPermissionQuery = () => typeof App.notificationPermission === "function";
 export const notificationPermission = () => App.notificationPermission();
 
 export const crashReports = (since: number): Promise<CrashReport[]> => App.crashReports(since);

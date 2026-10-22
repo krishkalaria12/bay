@@ -52,6 +52,11 @@ export const startPageEvents = () => {
   return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
 };
 export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());
+export const notificationState = { querySupported: true, permission: "granted", requested: false, queries: 0, requests: 0 };
+export const hasNotificationPermissionQuery = () => notificationState.querySupported;
+export const notificationPermission = () => (notificationState.queries++, Promise.resolve(notificationState.permission));
+export const requestNotificationPermission = () => (notificationState.requests++, Promise.resolve(notificationState.requested));
+export const openNotificationSettings = () => Promise.resolve();
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);

@@ -1,17 +1,12 @@
 import type { WebNotification } from "@bay/nncore";
-import {
-  confirm,
-  notificationPermission,
-  openNotificationSettings,
-  postNotification,
-  removeNotifications,
-  requestNotificationPermission,
-  type NotificationResponse,
-} from "@bay/shell";
+import { postNotification, removeNotifications, type NotificationResponse } from "@bay/shell";
 import { useBrowserRead as useBrowser } from "../store/read";
 import { focus, switchToTab } from "./actions";
 import { webviews } from "./webviews";
 import { NOTIFICATION_ICON_PIXELS, NOTIFICATION_ICON_TIMEOUT_MS } from "./constants";
+
+import { ensureNotificationPermission } from "./notificationPermission";
+export { ensureNotificationPermission } from "./notificationPermission";
 
 const shown = new Map<string, string>();
 
@@ -78,26 +73,6 @@ export function handleWebNotificationResponse({ id, action, tabId, data }: Notif
   }
   if (engineId) void webviews.get(tab.id)?.notificationAction(engineId, action);
   return true;
-}
-
-let asked = false;
-
-// Ask once before opening Notification Settings.
-export async function ensureNotificationPermission(windowId?: string): Promise<boolean> {
-  const status = await notificationPermission();
-  if (status === "granted" || status === "provisional") return true;
-  if (status === "notDetermined") return requestNotificationPermission();
-  if (asked) return false;
-  asked = true;
-  const { confirmed } = await confirm({
-    title: "Bay Needs Notifications Permission",
-    message: "You need to open System Settings to give Bay permission to show you Notifications.",
-    confirmTitle: "Open System Settings",
-    cancelTitle: "Not Now",
-    windowId,
-  });
-  if (confirmed) void openNotificationSettings();
-  return false;
 }
 
 if (__DEV__) (globalThis as { nnNotifications?: unknown }).nnNotifications = { shown };
