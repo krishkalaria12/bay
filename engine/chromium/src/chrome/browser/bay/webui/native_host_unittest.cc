@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -100,6 +101,91 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
   mojo::Remote<mojom::NativeHost> remote_;
   base::WeakPtr<NativeHost> host_;
 };
+
+class AppearanceClient : public mojom::NativeHostClient {
+ public:
+  void Connect(NativeHost& host) {
+    receiver.reset();
+    host.SetClient(receiver.BindNewPipeAndPassRemote());
+  }
+  void OnNativeEvent(const std::string& module,
+                     const std::string& event,
+                     const std::string& json) override {
+    if (module != "BayShell" || event != "onAppEvent")
+      return;
+    auto payload = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(payload);
+    const auto* type = payload->FindString("type");
+    ASSERT_TRUE(type);
+    if (*type != "appearance")
+      return;
+    EXPECT_EQ(payload->size(), 2u);
+    const auto dark = payload->FindBool("dark");
+    ASSERT_TRUE(dark);
+    events.push_back(*dark);
+  }
+  void OnHostInfoChanged(const std::string&) override {}
+  mojo::Receiver<mojom::NativeHostClient> receiver{this};
+  std::vector<bool> events;
+};
+
+TEST_F(NativeHostTest, CoordinatorAdvertisesAndQueriesSelectedAppearance) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.setAppearance"));
+  EXPECT_TRUE(methods->contains("BayShell.isDarkAppearance"));
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["dark"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":true})");
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["light"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":false})");
+}
+
+TEST_F(NativeHostTest, AppearanceValidatesArityAndModeBeforeMutation) {
+  // Appearance does not wait for the unrelated Linux document read.
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["dark"])"),
+            R"({"value":null})");
+  for (const char* args : {"[]", "[null]", "[1]", "[true]", "[{}]", "[[]]",
+                           R"(["Dark"])", R"(["auto",1])"})
+    ExpectError(Invoke("BayShell", "setAppearance", args), "invalid_args");
+  ExpectError(Invoke("BayShell", "isDarkAppearance", "[null]"), "invalid_args");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":true})");
+}
+
+TEST_F(NativeHostTest, AppearanceConnectReplaceDisconnectAndReconnect) {
+  Invoke("BayShell", "setAppearance", R"(["light"])");
+  AppearanceClient first;
+  first.Connect(*host_);
+  Invoke("BayShell", "setAppearance", R"(["dark"])");
+  AppearanceClient second;
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(first.events.empty());
+  EXPECT_EQ(second.events, (std::vector<bool>{true}));
+  second.receiver.reset();
+  task_environment()->RunUntilIdle();
+  Invoke("BayShell", "setAppearance", R"(["light"])");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 1u);
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events, (std::vector<bool>{true, false}));
+  Invoke("BayShell", "setAppearance", R"(["dark"])");
+  host_->ResetAndDeleteThis();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 2u);
+}
+
+TEST_F(NativeHostTest, FreshDocumentReceivesCurrentAppearance) {
+  Invoke("BayShell", "setAppearance", R"(["dark"])");
+  ReplaceHost();
+  AppearanceClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client.events, (std::vector<bool>{true}));
+}
 
 TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   auto info = HostInfo();
@@ -470,6 +556,26 @@ class WindowClipboardHostTest : public ClipboardHostTest {
   testing::NiceMock<PickerWindow> window_;
   base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
 };
+
+TEST_F(WindowClipboardHostTest,
+       WindowAdvertisesAppearanceAndReceivesAppEvents) {
+  const auto info = HostInfo();
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(methods->contains("BayShell.setAppearance"));
+  EXPECT_TRUE(methods->contains("BayShell.isDarkAppearance"));
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["light"])"),
+            R"({"value":null})");
+  AppearanceClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client.events, (std::vector<bool>{false}));
+  EXPECT_EQ(Invoke("BayShell", "setAppearance", R"(["dark"])"),
+            R"({"value":null})");
+  EXPECT_EQ(Invoke("BayShell", "isDarkAppearance", "[]"), R"({"value":true})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client.events, (std::vector<bool>{false, true}));
+}
 
 TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesBothMethods) {
   const auto info = HostInfo();

@@ -514,6 +514,8 @@ base::DictValue NativeHost::Info() const {
     engine_methods.Append(std::move(method));
   for (auto& method : DocumentStore::SupportedMethods())
     engine_methods.Append(std::move(method));
+  for (auto& method : ShellAppearance::SupportedMethods())
+    engine_methods.Append(std::move(method));
   for (auto& method : ShellClipboard::SupportedMethods())
     engine_methods.Append(std::move(method));
 #endif
@@ -818,6 +820,8 @@ void NativeHost::Invoke(const std::string& module,
   // These services do not depend on Windows platform initialization. The
   // common profile check above and browser-assigned context own authority.
   if (shell_ui_->Dispatch(context_, module, method, args, callback))
+    return;
+  if (ShellAppearance::Dispatch(context_, module, method, args, callback))
     return;
   if (ShellClipboard::Dispatch(module, method, args, callback))
     return;
