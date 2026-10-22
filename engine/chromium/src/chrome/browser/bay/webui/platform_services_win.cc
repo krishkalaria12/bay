@@ -8,7 +8,6 @@
 
 #include <windows.h>
 
-#include <shellapi.h>
 #include <wincred.h>
 
 #include <map>
@@ -27,7 +26,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
@@ -82,13 +80,6 @@ scoped_refptr<base::SequencedTaskRunner> DiskRunner() {
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
   return *runner;
 }
-scoped_refptr<base::SingleThreadTaskRunner> ShellRunner() {
-  static base::NoDestructor<scoped_refptr<base::SingleThreadTaskRunner>> runner(
-      base::ThreadPool::CreateCOMSTATaskRunner(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-           base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
-  return *runner;
-}
 
 base::DictValue SystemInfo(const std::string& locale) {
   base::DictValue info;
@@ -130,13 +121,6 @@ base::DictValue ReadInitialData(std::string locale,
   snapshots.Set("BayApp", base::DictValue()
                               .Set("systemInfo", SystemInfo(locale))
                               .Set("environment", std::move(environment)));
-  base::FilePath downloads;
-  base::PathService::Get(chrome::DIR_DEFAULT_DOWNLOADS, &downloads);
-  snapshots.Set("BaySystem",
-                base::DictValue().Set(
-                    "downloadsFolder",
-                    downloads.empty() ? base::Value()
-                                      : base::Value(downloads.AsUTF8Unsafe())));
   return snapshots;
 }
 
@@ -232,7 +216,8 @@ PlatformServices::PlatformServices(HostContext context,
     : context_(std::move(context)),
       snapshots_changed_(std::move(changed)),
       disk_runner_(DiskRunner()),
-      documents_(DocumentStore::DefaultDirectory(), snapshots_changed_) {
+      documents_(DocumentStore::DefaultDirectory(), snapshots_changed_),
+      files_(context_) {
   Services()[this] = weak_factory_.GetWeakPtr();
 }
 PlatformServices::~PlatformServices() {
@@ -256,6 +241,10 @@ void PlatformServices::Prepare(base::OnceClosure ready) {
 }
 void PlatformServices::Prepared(base::DictValue snapshots) {
   snapshots_ = std::move(snapshots);
+  files_.Prepare(base::BindOnce(&PlatformServices::FilesReady,
+                                weak_factory_.GetWeakPtr()));
+}
+void PlatformServices::FilesReady() {
   documents_.Prepare(base::BindOnce(&PlatformServices::DocumentsReady,
                                     weak_factory_.GetWeakPtr()));
 }
@@ -269,6 +258,8 @@ void PlatformServices::DocumentsReady() {
 }
 base::DictValue PlatformServices::Snapshots() const {
   auto snapshots = snapshots_.Clone();
+  snapshots.Set("BaySystem", base::DictValue().Set(
+      "downloadsFolder", files_.downloads_folder()));
   snapshots.Set("BayShell",
                 base::DictValue().Set("documents", documents_.documents()));
   return snapshots;
@@ -290,12 +281,7 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayShell.prompt",
                      "BaySystem.isDefaultBrowser",
                      "BaySystem.setAsDefaultBrowser",
-                     "BaySystem.fileExists",
                      "BaySystem.fileIcon",
-                     "BaySystem.downloadsFolder",
-                     "BaySystem.openFile",
-                     "BaySystem.revealFile",
-                     "BaySystem.moveToTrash",
                      "BaySystem.launchAtLoginStatus",
                      "BaySystem.setLaunchAtLogin",
                      "BayApp.systemInfo",
@@ -306,6 +292,8 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayKeychain.set",
                      "BayKeychain.delete"})
     methods.Append(name);
+  for (auto& method : ShellFiles::SupportedMethods())
+    methods.Append(std::move(method));
   for (auto& method : ShellAppearance::SupportedMethods())
     methods.Append(std::move(method));
   for (auto& method : ShellClipboard::SupportedMethods())
@@ -407,71 +395,8 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
         std::move(callback));
     return true;
   }
-  if (module == "BaySystem" && method == "downloadsFolder") {
-    const auto* value =
-        snapshots_.FindByDottedPath("BaySystem.downloadsFolder");
-    std::move(callback).Run(Success(value ? value->Clone() : base::Value()));
+  if (files_.Dispatch(module, method, args, callback))
     return true;
-  }
-  if (module == "BaySystem" &&
-      (method == "fileExists" || method == "openFile" ||
-       method == "revealFile" || method == "moveToTrash")) {
-    const auto* name = Text(args, 0);
-    if (!name || !base::IsStringUTF8(*name) ||
-        name->find_first_of(std::string("\0*?", 3)) != std::string::npos) {
-      invalid();
-      return true;
-    }
-    auto path = base::FilePath::FromUTF8Unsafe(*name);
-    if (!path.IsAbsolute()) {
-      invalid();
-      return true;
-    }
-    if (method == "fileExists") {
-      disk_runner_->PostTaskAndReplyWithResult(
-          FROM_HERE, base::BindOnce(&base::PathExists, path),
-          base::BindOnce(
-              [](Response callback, bool exists) {
-                std::move(callback).Run(Success(base::Value(exists)));
-              },
-              std::move(callback)));
-    } else if (method == "openFile") {
-      platform_util::OpenItem(
-          context_.profile(), path, platform_util::OPEN_FILE,
-          base::BindOnce(
-              [](Response callback, platform_util::OpenOperationResult result) {
-                std::move(callback).Run(Success(
-                    base::Value(result == platform_util::OPEN_SUCCEEDED)));
-              },
-              std::move(callback)));
-    } else if (method == "revealFile") {
-      platform_util::ShowItemInFolder(context_.profile(), path);
-      std::move(callback).Run(Success(base::Value(true)));
-    } else {
-      ShellRunner()->PostTaskAndReplyWithResult(
-          FROM_HERE,
-          base::BindOnce(
-              [](base::FilePath path) {
-                std::wstring source = path.value();
-                source.push_back(L'\0');
-                source.push_back(L'\0');
-                SHFILEOPSTRUCTW operation{};
-                operation.wFunc = FO_DELETE;
-                operation.pFrom = source.c_str();
-                operation.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION |
-                                   FOF_NOERRORUI | FOF_SILENT;
-                return SHFileOperationW(&operation) == 0 &&
-                       !operation.fAnyOperationsAborted;
-              },
-              path),
-          base::BindOnce(
-              [](Response callback, bool result) {
-                std::move(callback).Run(Success(base::Value(result)));
-              },
-              std::move(callback)));
-    }
-    return true;
-  }
   if (module == "BayApp" && method == "systemInfo") {
     std::move(callback).Run(
         Success(snapshots_.FindByDottedPath("BayApp.systemInfo")->Clone()));

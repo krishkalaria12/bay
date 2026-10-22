@@ -1,4 +1,6 @@
 # Copyright 2026 Bay. Apache-2.0.
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
@@ -114,6 +116,7 @@ source_set("impl") {
     deps += [
       ":notifications",
       ":shell_appearance",
+      ":shell_files",
       "//cc/paint",
       "//chrome/browser:icon_loader",
       "//components/constrained_window",
@@ -137,6 +140,28 @@ source_set("impl") {
       ":platform_services_win",
       "//chrome/browser/bay/data:data_services",
     ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("shell_files") {
+    sources = [
+      "shell_files.cc",
+      "shell_files.h",
+    ]
+    deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser:primitives",
+      "//chrome/common:constants",
+    ]
+    if (is_linux) {
+      assert(use_gio && use_glib, "Bay Linux trash requires GIO")
+      deps += [ "//ui/base/glib" ]
+    }
+    if (is_win) {
+      libs = [ "shell32.lib" ]
+    }
   }
 }
 
@@ -166,6 +191,7 @@ if (is_win || is_linux) {
     ]
     deps = [
       ":shell_appearance",
+      ":shell_files",
       "//base/test:test_support",
       "//chrome/browser/ui/browser_window",
       "//chrome/test:test_support_unit",
@@ -281,6 +307,7 @@ if (is_win) {
       ":document_store",
       ":notifications",
       ":shell_appearance",
+      ":shell_files",
       ":shell_clipboard",
       ":webui",
       "//base",

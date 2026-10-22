@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/host_context.h"
+#include "chrome/browser/bay/webui/shell_files.h"
 
 class BrowserWindowInterface;
 namespace bay {
@@ -45,12 +46,14 @@ class PlatformServices {
 
  private:
   void Prepared(base::DictValue snapshots);
+  void FilesReady();
   void DocumentsReady();
 
   const HostContext context_;
   base::RepeatingClosure snapshots_changed_;
   scoped_refptr<base::SequencedTaskRunner> disk_runner_;
   DocumentStore documents_;
+  ShellFiles files_;
   base::DictValue snapshots_;
   std::string initialization_error_;
   bool preparing_ = false;
