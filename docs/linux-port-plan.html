@@ -1841,7 +1841,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
                 lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
                 <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. The remaining system
-                methods are still open; confirmation dialogs, context menus, documents and clipboard writes are recorded below.
+                methods are still open; confirmation dialogs, context menus, documents, clipboard writes and appearance are recorded below.
               </p>
               <p>
                 <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
@@ -1953,6 +1953,27 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 checks and response reentrancy. The helper, host and test sources pass release and DCHECK Linux x64 syntax checks with the pinned sysroot and
                 existing generated Mac configuration headers. Native tests have not been linked or run, and the Windows caller has not been compiled. Full Linux
                 GN and link validation remain pending.
+              </p>
+              <p>
+                <strong>Appearance, 22 Oct 2026.</strong> Linux hosts now advertise <code>BayShell.setAppearance</code> and <code>isDarkAppearance</code>. Both
+                window and coordinator hosts use Chromium's profile theme service for <code>light</code>, <code>dark</code> and <code>auto</code>. The query
+                follows the selected browser color scheme, with <code>auto</code> following the system. This also corrects the Windows query, which previously
+                reported the system preference even when Bay had selected a different mode. Windows retains its profile and initialization checks; macOS keeps
+                its existing implementation.
+              </p>
+              <p>
+                Hosts observe the profile theme and system theme, then post coalesced <code>onAppEvent</code> appearance updates outside Chromium's observer
+                callbacks. A new client receives the current state; replacing the client or closing its document cancels queued delivery. Private hosts use the
+                original profile's appearance preference; Chromium's separate incognito decoration remains dark. The frontend subscribes before its startup
+                query and ignores that query once an appearance event arrives, so a delayed reply cannot overwrite a newer event.
+              </p>
+              <p>
+                <strong>Appearance verification.</strong> Native tests cover selected light/dark/system modes, effective-change events, changes while Chromium's
+                theme service is not ready, independent profiles, private-profile lifetimes, reconnection, reentrant callbacks and cancellation on teardown. The
+                helper, host and test sources pass release and DCHECK Linux x64 syntax checks with the pinned sysroot and existing generated Mac configuration
+                headers. Native tests have not been linked or run; Windows compilation, full Linux GN/link validation and live X11/Wayland theme switching
+                remain unverified. Four frontend tests cover startup query/event ordering and disposal; the browser and platform suites, native and web
+                TypeScript checks, contracts, lint and formatting pass.
               </p>
             </div>
             <ul>
@@ -2264,7 +2285,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td>
                     Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), text prompts and file picking through shared
                     <code>ShellUI</code> (implemented), clipboard through Chromium's <code>ui::Clipboard</code>, documents through the shared
-                    <code>DocumentStore</code> in <code>&lt;user data&gt;/BayDocuments</code>
+                    <code>DocumentStore</code> in <code>&lt;user data&gt;/BayDocuments</code>, appearance through profile themes
                   </td>
                   <td>
                     <code>copyText</code>, <code>copyImage</code>, <code>readDocument</code>, <code>writeDocument</code>, <code>removeDocument</code>;
@@ -2274,7 +2295,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td><code>BayApp</code> (32)</td>
-                  <td>Notifications, autostart, default browser, appearance; Dock and AppleScript absent</td>
+                  <td>Notifications, autostart, default browser; Dock and AppleScript absent</td>
                   <td><code>systemInfo</code>, <code>launchEnvironment</code> → snapshot</td>
                   <td class="num">4–5</td>
                 </tr>
