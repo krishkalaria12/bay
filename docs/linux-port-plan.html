@@ -1865,6 +1865,14 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 The native binaries have not been linked or executed. Full GN checks, live prompt acceptance and cancellation, cross-window targeting, native
                 chooser behavior and X11/Wayland behavior remain unverified.
               </p>
+              <p>
+                <strong>Safe Storage naming, 22 Oct 2026.</strong> <code>chromium-safe-storage-name-linux</code> gives Bay its own os_crypt key on Linux. The
+                Secret Service item is "Bay Safe Storage" with the application attribute <code>bay</code>, and KWallet keeps it in a "Bay Keys" folder.
+                Chromium's shared "Chromium Safe Storage" item is no longer read or written, so another Chromium build can't replace Bay's key. The libsecret
+                schema is unchanged. The series pins the item next to the macOS one. The patch applies cleanly to the pinned checkout, and a fixture test checks
+                the applied names. Bay's own runtime has not yet read or written the item on a Linux keyring. Still open: the warning when only the fixed
+                <code>basic</code> key is available.
+              </p>
             </div>
             <ul>
               <li>
@@ -2301,12 +2309,13 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <li><code>chromium-bay-lifecycle</code>, <code>chromium-bay-extension-hooks</code></li>
                 <li><code>chromium-bay-native-widget</code>: the native widget and custom frame factory for both web desktops</li>
                 <li><code>chromium-bay-notifications</code>: the app notification handler type and registration hook</li>
-                <li>
-                  <code>chromium-safe-storage-name</code> is <code>mac</code> today: <strong>add a Linux version</strong> (Secret Service / KWallet naming)
-                </li>
+                <li><code>chromium-safe-storage-name</code> stays <code>mac</code>; Linux has its own version, listed below</li>
               </ul>
               <h3>New for Linux <span class="chip lnx">add</span></h3>
               <ul>
+                <li>
+                  <code>chromium-safe-storage-name-linux</code>: implemented. Bay's Secret Service item and KWallet folder, pinned next to the macOS patch
+                </li>
                 <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
                 <li><code>chromium-bay-notification-native-route-linux</code>: implemented, rejects a retained fallback notification backend</li>
                 <li>
