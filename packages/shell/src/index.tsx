@@ -141,6 +141,9 @@ export type WindowEvent =
 
 /** A window's placement, as its caption buttons show it (Windows). */
 export type WindowState = { maximized: boolean; fullscreen: boolean };
+/** Desktop decoration order, from left to right within each physical window edge. */
+export type WindowButton = "minimize" | "maximize" | "close";
+export type WindowButtonLayout = { left: readonly WindowButton[]; right: readonly WindowButton[] };
 /** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
  *  its theme, which the system backdrop follows. */
 export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean };
@@ -150,6 +153,7 @@ export type AppEvent =
   | { type: "willQuit" }
   | { type: "quitCancelled" }
   | { type: "appearance"; dark: boolean }
+  | { type: "windowButtonLayout"; layout: WindowButtonLayout }
   | { type: "quitWarningSuppressed" }
   | { type: "resignActive" }
   | { type: "screenLocked" }
@@ -265,6 +269,7 @@ const Shell = requireNativeModule<{
   minimizeWindow?(id: string): Promise<void>;
   toggleMaximizeWindow?(id: string): Promise<void>;
   windowState?(id: string): Promise<WindowState>;
+  windowButtonLayout?(): WindowButtonLayout;
   setWindowCaption?(id: string, caption: WindowCaption): Promise<void>;
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
@@ -277,6 +282,11 @@ const Shell = requireNativeModule<{
 }>("BayShell");
 
 export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+/** Linux publishes snapshots.BayShell.windowButtonLayout and matching onAppEvent updates. Other hosts keep their native order. */
+export const windowButtonLayout = (): WindowButtonLayout =>
+  platformOS === "linux"
+    ? nativeSnapshot("BayShell", "windowButtonLayout", [], () => Shell.windowButtonLayout?.() ?? { left: [], right: ["minimize", "maximize", "close"] })
+    : { left: [], right: capabilities.captionButtons ? ["minimize", "maximize", "close"] : [] };
 export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));

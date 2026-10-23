@@ -236,6 +236,13 @@ export const nativeContracts = {
           "maxArgs": 1,
           "signature": "windowState?(id: string): Promise<WindowState>;"
         },
+        "windowButtonLayout": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "windowButtonLayout?(): Promise<WindowButtonLayout>;"
+        },
         "setWindowCaption": {
           "async": true,
           "optional": true,
@@ -2018,8 +2025,10 @@ export const nativeContracts = {
       "CommandEvent": "{\n  command: BrowserCommand;\n  arg: string | null;\n  windowId: string | null;\n}",
       "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }\n  // Windows' shared runtime: openWindow named this open utility window again, with these options.\n  | { type: \"opened\"; id: string; options: OpenWindowOptions }\n  | ({ type: \"state\"; id: string } & WindowState)",
       "WindowState": "{ maximized: boolean; fullscreen: boolean }",
+      "WindowButton": "\"minimize\" | \"maximize\" | \"close\"",
+      "WindowButtonLayout": "{ left: readonly WindowButton[]; right: readonly WindowButton[] }",
       "WindowCaption": "{ maximize: [number, number, number, number] | null; dark: boolean }",
-      "AppEvent": "| { type: \"reopen\" }\n  | { type: \"willQuit\" }\n  | { type: \"quitCancelled\" }\n  | { type: \"appearance\"; dark: boolean }\n  | { type: \"quitWarningSuppressed\" }\n  | { type: \"resignActive\" }\n  | { type: \"screenLocked\" }\n  | { type: \"controlReleased\" }\n  | { type: \"switcherKey\"; key: \"escape\" | \"next\" | \"previous\" }\n  | { type: \"switcherMouseUp\" }",
+      "AppEvent": "| { type: \"reopen\" }\n  | { type: \"willQuit\" }\n  | { type: \"quitCancelled\" }\n  | { type: \"appearance\"; dark: boolean }\n  | { type: \"windowButtonLayout\"; layout: WindowButtonLayout }\n  | { type: \"quitWarningSuppressed\" }\n  | { type: \"resignActive\" }\n  | { type: \"screenLocked\" }\n  | { type: \"controlReleased\" }\n  | { type: \"switcherKey\"; key: \"escape\" | \"next\" | \"previous\" }\n  | { type: \"switcherMouseUp\" }",
       "ShellEvents": "{\n  onCommand: (e: CommandEvent) => void;\n  onOpenURLs: (e: { urls: string[]; sourceApp?: string }) => void;\n  onWindowEvent: (e: WindowEvent) => void;\n  onAppEvent: (e: AppEvent) => void;\n}",
       "MenuItem": "| { separator: true }\n  | {\n      id: string;\n      title: string;\n      symbol?: string;\n      swatch?: string;\n      key?: string;\n      modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\")[];\n      // Web hosts: the trailing hint, filled in from key and modifiers.\n      shortcut?: string;\n      enabled?: boolean;\n      checked?: boolean;\n      children?: MenuItem[];\n    }",
       "OpenWindowOptions": "{\n  frame?: [number, number, number, number] | null;\n  incognito?: boolean;\n  title?: string;\n  focus?: boolean;\n  kind?: \"browser\" | \"small\" | \"settings\" | \"import\" | \"taskManager\";\n  profile?: string;\n  // Little Bay: its remembered size; the window opens centred on the active screen.\n  size?: [number, number];\n  // Settings: the pane to show, and the space it is about.\n  pane?: string;\n  spaceId?: string;\n}",
