@@ -144,7 +144,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 const symbols = readFileSync(new URL("../../../packages/shell/src/symbols.web.tsx", import.meta.url), "utf8");
 const table = (name) => symbols.match(new RegExp(`const ${name}: Record<string, string> = \\{([^}]+)\\}`))?.[1] ?? "";
 const paths = new Set([...table("paths").matchAll(/^\s+"?([\w.]+)"?:/gm)].map((match) => match[1]));
-const aliases = Object.fromEntries([...table("aliases").matchAll(/"([\w.]+)": "([\w.]+)"/g)].map((match) => [match[1], match[2]]));
+const aliases = Object.fromEntries([...table("aliases").matchAll(/"?([\w.]+)"?: "([\w.]+)"/g)].map((match) => [match[1], match[2]]));
 
 function* sources(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
