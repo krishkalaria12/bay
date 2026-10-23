@@ -26,6 +26,7 @@ These need no new code, only the Linux runtime checks in stage 2.
   - The Safe Storage naming patch and the fixed-key warning (`BayCEF.secretStorage`).
   - `prompt`, `confirm`, `showMenu`, `pickFiles` and `fileIcon` through `ShellUI`.
   - Documents (`DocumentStore`), clipboard, appearance and file operations (`ShellFiles`).
+  - K3 window rules: size-only placement and restore on Wayland, launch tokens, and links Chrome adds to a Bay window offered as Bay tabs.
   - K1 system methods: default browser, per-user XDG autostart, external URLs, app-info/environment snapshots and package-managed updater status. The engine archive includes the XDG helper siblings; installed desktop identity still comes from K4/D5.
 - Engine siblings: `nn_downloads_linux.cc`, `nn_external_apps_linux.cc`, and shared Aura PiP.
 
@@ -80,7 +81,7 @@ Agree these early so neither person blocks the other:
   - Read the desktop's button layout (the Settings portal's `org.gnome.desktop.wm.preferences button-layout`, falling back to GTK's decoration layout) and publish it as a snapshot.
   - Draw the caption buttons on the left or right to match, including with the right-docked sidebar.
   - Edge tiling state, and client shadows or insets for restored windows.
-- [ ] **K3 · Wayland window rules (M+M = 4).**
+- [x] **K3 · Wayland window rules (M+M = 4).** Code complete 23 Oct 2026. Size-only placement and restore without global coordinates, launch tokens for new and absorbed windows, and forwarded links offered as Bay tabs are implemented; touchpad back/forward is on by default in M154. Native execution and desktop verification remain deferred.
   - Tab drag-out lets the compositor place the new window.
   - Session restore keeps size and maximized state only.
   - Activation from other apps uses xdg-activation tokens.

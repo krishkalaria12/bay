@@ -1829,6 +1829,41 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 caption interaction and compositor behavior remain deferred to stage 2.
               </p>
               <p>
+                <strong>Window placement, 23 Oct 2026 (K3).</strong> Hosts publish <code>constants.BayShell.globalWindowCoordinates</code> from Ozone's
+                <code>supports_global_screen_coordinates</code>: true on macOS, Windows and X11, false on Wayland. Without global coordinates
+                <code>windowFrame</code> answers <code>null</code>, and window state events carry the restored size and an ephemeral <code>minimized</code> flag
+                instead of a frame. The UI saves and restores only that size and the maximized state, so a session written on X11 opens on Wayland at its old
+                size without its position; fullscreen and minimized windows keep their last restorable placement. New windows ask Chromium for an unspecified
+                origin, and the startup window is resized without being moved. Tab drag-out creates a size-only window that the compositor places, and skips the
+                desktop drag preview and the drop into another window, which both need screen positions. macOS, Windows and X11 keep their frames and drag
+                behavior.
+              </p>
+              <p>
+                <strong>Launch activation, 23 Oct 2026 (K3).</strong> Chromium already forwards a second launch through <code>ProcessSingleton</code> with the
+                desktop's xdg-activation token. <code>chromium-bay-startup-id-linux</code> passes that token into the WebUI window's widget, which upstream's
+                WebUI browser omits, so Wayland and X11 let a launched window take focus. The frame reports X11 launch feedback complete when the window shows.
+                A window Chrome opens for a launch while Bay is running is absorbed and never shown, so its token now activates the Bay window that receives its
+                pages. A launch that reuses a visible Bay window already activates it.
+              </p>
+              <p>
+                <strong>Forwarded links, 23 Oct 2026 (K3).</strong> A link another app opens while Bay runs, a startup URL and an extension's new tab are added
+                by Chrome straight into a Bay window's tab strip. With the shared runtime only macOS listened for those strips, so on Windows and Linux the page
+                had no Bay tab. The window registry now offers each such page to the coordinator as a tab of its window, or of the most recently active regular
+                Bay window, once accepted state names one; a startup URL waits for the first state and moves out before the startup window retires. Pages the
+                broker holds and pages a page opened (which <code>AppRuntime::OpenPage</code> already decides on) are left alone, and private pages and new tab
+                pages stay where they are. Touchpad back/forward needs no change: Chromium 154 enables <code>TouchpadOverscrollHistoryNavigation</code> on Linux
+                by default, and Bay does not override it.
+              </p>
+              <p>
+                <strong>K3 verification.</strong> Placement tests run the session, restore and drag policies as macOS, Windows, X11 and Wayland hosts: legacy
+                frames convert to sizes, positions never reach disk without global coordinates, malformed sizes are refused, and a late state reply cannot
+                overwrite a newer event. Native tests cover option parsing, restored-size tracking across maximize, fullscreen and minimize, host metadata, and
+                the page-opened and broker checks that keep forwarded links apart from Bay's own pages. Sources pass Linux x64 release/DCHECK syntax checks
+                except for two existing symbols that only the lifecycle patch defines; no native test binary has run. Portable JavaScript and Python checks,
+                typechecks, contracts, lint and formatting pass. Compositor placement, focus on GNOME and KDE, X11 launch feedback and links from other apps on
+                Windows and Linux remain for stage 2.
+              </p>
+              <p>
                 <strong>Notifications, 22 Oct 2026.</strong> The shared <code>notifications.cc</code> service now routes Linux post/remove operations through
                 Chromium's native notification bridge. It checks native-notification policy, bridge readiness and the selected per-profile backend, rejects
                 private profiles, and buffers responses across coordinator renderer reconnects. Linux advertises only post/remove methods. Its desktop API has
@@ -2505,6 +2540,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </li>
                 <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
                 <li><code>chromium-bay-notification-native-route-linux</code>: implemented, rejects a retained fallback notification backend</li>
+                <li><code>chromium-bay-startup-id-linux</code>: implemented. Passes the desktop launch token to the WebUI window's widget</li>
                 <li>
                   <code>chromium-bay-branding-linux</code> (binary name, desktop file, AppArmor-friendly paths). The client-side frame needs no patch of its
                   own: it installs through <code>chromium-bay-native-widget</code>
