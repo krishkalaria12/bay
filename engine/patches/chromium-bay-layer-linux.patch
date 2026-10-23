@@ -1,0 +1,18 @@
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -397,6 +397,14 @@
+         "app/chrome_main_linux.cc",
+         "app/chrome_main_linux.h",
+       ]
++
++      # Bay: engine/chromium and NNCore in the browser executable, as the
++      # Windows layer patch links them into chrome.dll.
++      deps += [
++        "//bay/core",
++        "//chrome/browser/bay:exports",
++        "//chrome/browser/bay/webui:impl",
++      ]
+     }
+ 
+     if (is_chrome_for_testing) {

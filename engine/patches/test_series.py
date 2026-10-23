@@ -31,6 +31,42 @@ class PlatformRoutingTests(unittest.TestCase):
         for platform in ("mac", "win"):
             self.assertNotIn(name, {step.name for step in series.read_series(platform)})
 
+    def test_linux_linking_and_branding_are_exclusive_and_follow_shared_branding(self):
+        selected = [step.name for step in series.read_series("linux")]
+        names = ("chromium-bay-layer-linux.patch", "chromium-bay-branding-linux.patch")
+        for name in names:
+            self.assertIn(name, selected)
+            for platform in ("mac", "win"):
+                self.assertNotIn(name, {step.name for step in series.read_series(platform)})
+        self.assertLess(selected.index("chromium-branding.patch"), selected.index(names[1]))
+
+    def test_linux_layer_links_browser_executable_and_preserves_helper_targets(self):
+        step = next(s for s in series.read_series("linux") if s.name == "chromium-bay-layer-linux.patch")
+        original = '\n'.join([
+            'executable("chrome_initial") {',
+            '    if (is_linux) {',
+            '      sources += [',
+            '        "app/chrome_main_linux.cc",',
+            '        "app/chrome_main_linux.h",',
+            '      ]',
+            '    }',
+            '',
+            '    if (is_chrome_for_testing) {',
+            '    }',
+            '}',
+            'group("chrome_sandbox") {}',
+            'group("chrome_crashpad_handler") {}', ''])
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory) / "chrome/BUILD.gn"
+            build.parent.mkdir()
+            build.write_text(original)
+            self.assertIsNone(series.apply_step(step, directory))
+            text = build.read_text()
+            for dependency in ("//bay/core", "//chrome/browser/bay:exports", "//chrome/browser/bay/webui:impl"):
+                self.assertIn(f'"{dependency}"', text)
+            self.assertTrue(text.endswith('group("chrome_sandbox") {}\ngroup("chrome_crashpad_handler") {}\n'))
+            self.assertTrue(series.is_applied(step, directory))
+
     def test_comma_lists_route_to_each_target_in_series_order(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

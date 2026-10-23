@@ -43,6 +43,7 @@ chromium all chromium-extension-import.patch
 chromium all chromium-extension-window-hidden.patch
 chromium all chromium-branding.patch
 chromium win chromium-bay-branding-win.patch
+chromium linux chromium-bay-branding-linux.patch
 chromium mac chromium-icloud-keychain-window.patch
 # Load-bearing for every user's data: the Safe Storage item holds the key to their saved passwords and cookies.
 # macOS: Keychain "Bay Safe Storage" / "Bay". Linux: Secret Service "Bay Safe Storage" (application "bay"), KWallet "Bay Keys".
@@ -65,6 +66,7 @@ chromium all chromium-tab-sharing-capturer.patch
 chromium all chromium-file-chooser-all-accepted-types.patch
 chromium mac chromium-bay-layer.patch
 chromium win chromium-bay-layer-win.patch
+chromium linux chromium-bay-layer-linux.patch
 chromium win,linux chromium-bay-webui-window.patch
 chromium win,linux chromium-bay-lifecycle.patch
 chromium win,linux chromium-bay-extension-hooks.patch
