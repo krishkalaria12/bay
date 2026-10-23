@@ -76,7 +76,7 @@ void roots(const fs::path &temporary) {
         "vivaldi", "opera", "microsoft-edge", "net.imput.helium"})
     fs::create_directories(config / name / "Default");
   for (auto name : {".mozilla/firefox", "snap/firefox/common/.mozilla/firefox",
-                    ".zen", "xdg/zen"})
+                    "xdg/mozilla/firefox", ".zen", "xdg/zen"})
     fs::create_directories(home / name);
   auto flatpak = home / ".var/app";
   for (auto name :
@@ -84,13 +84,16 @@ void roots(const fs::path &temporary) {
         "org.chromium.Second/config/chromium",
         "org.chromium%2eSecond/config/chromium",
         "com.google.Chrome/config/google-chrome",
-        "org.mozilla.firefox/.mozilla/firefox", "app.zen_browser.zen/.zen",
-        "app.zen_browser.zen/config/zen", "app.zen_browser.zen/zen"})
+        "org.mozilla.firefox/.mozilla/firefox",
+        "org.mozilla.firefox/config/mozilla/firefox",
+        "app.zen_browser.zen/.zen", "app.zen_browser.zen/config/zen",
+        "app.zen_browser.zen/zen"})
     fs::create_directories(flatpak / name);
   auto all = d::linuxBrowsers({home, config});
-  for (auto id : {"chrome", "chromeBeta", "chromeDev", "chromeCanary",
-                  "chromium", "brave", "vivaldi", "opera", "edge", "helium",
-                  "firefox", "firefox:snap", "zen", "zen:legacy"})
+  for (auto id :
+       {"chrome", "chromeBeta", "chromeDev", "chromeCanary", "chromium",
+        "brave", "vivaldi", "opera", "edge", "helium", "firefox", "firefox:xdg",
+        "firefox:snap", "zen", "zen:legacy"})
     require(!browser(all, id).root.empty(), "native root missing");
   require(browser(all, "helium").root == config / "net.imput.helium",
           "Helium directory guessed");
@@ -110,8 +113,13 @@ void roots(const fs::path &temporary) {
     firefox += entry.productId == "firefox";
     zen += entry.productId == "zen";
   }
-  require(chromium == 4 && firefox == 3 && zen == 5,
+  require(chromium == 4 && firefox == 5 && zen == 5,
           "packaged installations missing or conflated");
+  require(
+      browser(all, "firefox:xdg").root == config / "mozilla/firefox" &&
+          browser(all, "firefox:flatpak:org%2emozilla%2efirefox:xdg").root ==
+              flatpak / "org.mozilla.firefox/config/mozilla/firefox",
+      "Firefox XDG roots differ");
   fs::create_directories(flatpak / "aaa.new/config/chromium");
   for (auto &entry : d::linuxBrowsers({home, config}))
     if (before.count(entry.root))

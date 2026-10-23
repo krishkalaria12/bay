@@ -272,8 +272,8 @@ std::vector<Browser> linuxBrowsers(const Environment &environment) {
     auto resolved = canonicalPath(root);
     if (resolved.empty() || !seen.insert(resolved).second)
       return;
-    out.push_back(
-        {std::move(id), std::move(name), root, firefox, rootProfile, product});
+    out.push_back({std::move(id), std::move(name), resolved, firefox,
+                   rootProfile, product});
   };
   auto identity = [](const Product &product) {
     return std::string(product.id).rfind("chrome", 0) == 0 ? "chrome"
@@ -283,6 +283,9 @@ std::vector<Browser> linuxBrowsers(const Environment &environment) {
     add(product.id, product.name, config / product.directory, identity(product),
         false, product.rootProfile);
   add("firefox", "Firefox", home / ".mozilla/firefox", "firefox", true);
+  // Firefox 147+ uses XDG for new installations; existing ones keep .mozilla.
+  add("firefox:xdg", "Firefox (XDG)", config / "mozilla/firefox", "firefox",
+      true);
   add("firefox:snap", "Firefox (Snap)",
       home / "snap/firefox/common/.mozilla/firefox", "firefox", true);
   // Zen fb80623e, nsXREDirProvider-cpp.patch: XDG plus legacy .zen.
@@ -304,9 +307,12 @@ std::vector<Browser> linuxBrowsers(const Environment &environment) {
           app / "config" / product.directory, identity(product), false,
           product.rootProfile);
     }
-    if (appId == "org.mozilla.firefox")
+    if (appId == "org.mozilla.firefox") {
       add("firefox:flatpak:" + encode(appId), "Firefox (Flatpak)",
           app / ".mozilla/firefox", "firefox", true);
+      add("firefox:flatpak:" + encode(appId) + ":xdg", "Firefox (Flatpak XDG)",
+          app / "config/mozilla/firefox", "firefox", true);
+    }
     if (appId == "app.zen_browser.zen") {
       // The manifest persists .zen; official FAQ also documents zen.
       for (auto suffix : {"config/zen", ".zen", "zen"})
