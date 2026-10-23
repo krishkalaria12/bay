@@ -126,6 +126,9 @@ source_set("impl") {
   }
   if (is_linux) {
     deps += [
+      ":app_services_linux",
+      ":autostart_linux",
+      ":default_browser",
       ":document_store",
       ":secret_storage_linux",
       ":shell_clipboard",
@@ -139,6 +142,103 @@ source_set("impl") {
     deps += [
       ":platform_services_win",
       "//chrome/browser/bay/data:data_services",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("default_browser") {
+    sources = [
+      "default_browser.cc",
+      "default_browser.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser:shell_integration",
+    ]
+    deps = [ "//chrome/browser:primitives" ]
+  }
+
+  test("default_browser_unittests") {
+    sources = [
+      "default_browser_unittest.cc",
+      "host_context.cc",
+    ]
+    deps = [
+      ":default_browser",
+      "//base/test:test_support",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_linux) {
+  source_set("autostart_linux") {
+    sources = [
+      "autostart_linux.cc",
+      "autostart_linux.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+    ]
+    deps = [ "//chrome/browser:shell_integration_linux" ]
+  }
+
+  test("autostart_linux_unittests") {
+    sources = [
+      "autostart_linux_unittest.cc",
+      "host_context.cc",
+    ]
+    deps = [
+      ":autostart_linux",
+      "//base/test:test_support",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+
+  source_set("app_services_linux") {
+    sources = [
+      "app_services_linux.cc",
+      "app_services_linux.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+    ]
+    deps = [
+      "//chrome/browser:primitives",
+      "//components/version_info",
+      "//url",
+    ]
+  }
+
+  test("app_services_linux_unittests") {
+    sources = [
+      "app_services_linux_unittest.cc",
+      "host_context.cc",
+    ]
+    deps = [
+      ":app_services_linux",
+      "//base/test:test_support",
+      "//chrome/browser:platform_util_internal",
+      "//chrome/browser/ui:test_support",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//components/version_info",
+      "//content/test:test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//url",
     ]
   }
 }
@@ -324,6 +424,7 @@ if (is_win) {
       "updater_service_win.h",
     ]
     deps = [
+      ":default_browser",
       ":document_store",
       ":notifications",
       ":shell_appearance",

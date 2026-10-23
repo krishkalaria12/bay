@@ -39,6 +39,9 @@
 #include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
 #if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/app_services_linux.h"
+#include "chrome/browser/bay/webui/autostart_linux.h"
+#include "chrome/browser/bay/webui/default_browser.h"
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/secret_storage_linux.h"
 #include "chrome/browser/bay/webui/shell_clipboard.h"
@@ -386,13 +389,19 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
 #if BUILDFLAG(IS_LINUX)
+  default_browser_ = std::make_unique<DefaultBrowser>(context_);
+  autostart_ = std::make_unique<Autostart>(context_);
+  app_services_ = std::make_unique<AppServicesLinux>(
+      context_, g_browser_process->GetApplicationLocale());
   files_ = std::make_unique<ShellFiles>(context_);
-  files_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
   shell_ui_ = std::make_unique<ShellUI>();
   secret_storage_ = std::make_unique<SecretStorage>();
   documents_ = std::make_unique<DocumentStore>(
       DocumentStore::DefaultDirectory(),
       base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  app_services_->Prepare(
+      base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
+  files_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
   documents_->Prepare(base::BindOnce(
       [](base::WeakPtr<NativeHost> host) {
         if (!host)
@@ -458,6 +467,10 @@ base::DictValue NativeHost::Info() const {
   modules.Append("BayNotifications");
   modules.Append("BaySystem");
 #endif
+  base::DictValue app;
+#if BUILDFLAG(IS_LINUX)
+  app = app_services_->snapshots();
+#else
   base::DictValue system;
   system.Set("platform",
 #if BUILDFLAG(IS_WIN)
@@ -483,6 +496,9 @@ base::DictValue NativeHost::Info() const {
   system.Set("memoryGB", base::SysInfo::AmountOfTotalPhysicalMemory().InGiBF());
   system.Set("locale", g_browser_process->GetApplicationLocale());
   system.Set("updates", false);
+  app.Set("systemInfo", std::move(system));
+  app.Set("environment", base::DictValue());
+#endif
   base::DictValue shell;
   shell.Set("role", context_.role_name());
   shell.Set("sharedRuntime", AppRuntime::Enabled());
@@ -530,6 +546,12 @@ base::DictValue NativeHost::Info() const {
     engine_methods.Append(std::move(method));
   for (auto& method : ShellFiles::SupportedMethods())
     engine_methods.Append(std::move(method));
+  for (auto& method : DefaultBrowser::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : Autostart::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : AppServicesLinux::SupportedMethods())
+    engine_methods.Append(std::move(method));
 #endif
   base::DictValue documents;
 #if BUILDFLAG(IS_LINUX)
@@ -539,9 +561,13 @@ base::DictValue NativeHost::Info() const {
       base::DictValue()
           .Set("contractVersion", 2)
           .Set("role", context_.role_name())
-          .Set("platform", system.FindString("platform")
-                               ? *system.FindString("platform")
-                               : "linux")
+          .Set("platform",
+#if BUILDFLAG(IS_WIN)
+               "windows"
+#else
+               "linux"
+#endif
+               )
           .Set("modules", std::move(modules))
           .Set("views", context_.is_window()
                             ? base::ListValue().Append("BayWebView")
@@ -553,9 +579,7 @@ base::DictValue NativeHost::Info() const {
                    .Set("BayShell", std::move(shell)))
           .Set("snapshots",
                base::DictValue()
-                   .Set("BayApp", base::DictValue()
-                                      .Set("systemInfo", std::move(system))
-                                      .Set("environment", base::DictValue()))
+                   .Set("BayApp", std::move(app))
                    .Set("BayShell", base::DictValue().Set("documents",
                                                           std::move(documents)))
                    .Set("BaySystem",
@@ -631,7 +655,7 @@ void NativeHost::PublishHostInfo() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void NativeHost::PlatformReady() {
 #if BUILDFLAG(IS_LINUX)
-  if (!documents_ready_ || !files_->ready())
+  if (!documents_ready_ || !files_->ready() || !app_services_->ready())
     return;
 #endif
   platform_ready_ = true;
@@ -840,6 +864,12 @@ void NativeHost::Invoke(const std::string& module,
 #if BUILDFLAG(IS_LINUX)
   // These services do not depend on Windows platform initialization. The
   // common profile check above and browser-assigned context own authority.
+  if (default_browser_->Dispatch(module, method, args, callback))
+    return;
+  if (autostart_->Dispatch(module, method, args, callback))
+    return;
+  if (app_services_->Dispatch(module, method, args, callback))
+    return;
   if (shell_ui_->Dispatch(context_, module, method, args, callback))
     return;
   if (ShellAppearance::Dispatch(context_, module, method, args, callback))

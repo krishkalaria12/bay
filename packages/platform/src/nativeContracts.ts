@@ -2045,7 +2045,7 @@ export const nativeContracts = {
       "TranslationModule": "{\n  readonly available: boolean;\n  userLanguages(): string[];\n  languageName(identifier: string): string;\n  detect(text: string): Promise<string | null>;\n  status(source: string, target: string): Promise<\"installed\" | \"supported\" | \"unsupported\">;\n  supportedLanguages(): Promise<string[]>;\n  prepare(source: string, target: string): Promise<void>;\n  translate(source: string, target: string, texts: string[]): Promise<string[]>;\n  translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;\n}"
     },
     "shell/src/app.ts": {
-      "UpdaterState": "| { available: false }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      pending: PendingUpdate | null;\n    }",
+      "UpdaterState": "| { available: false; managedBy?: \"packageManager\" }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      pending: PendingUpdate | null;\n    }",
       "PendingUpdate": "{ version: string; ready: boolean }",
       "AppIcon": "{ id: string; name: string; preview: string | null }",
       "NotificationPermission": "\"granted\" | \"denied\" | \"notDetermined\" | \"provisional\"",
