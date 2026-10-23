@@ -37,8 +37,10 @@ class ChromiumLayerTests(unittest.TestCase):
             here = checkout / "engine/chromium"
             shutil.copytree(HERE, here, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             for package in ("import", "sync"):
-                shutil.copytree(REPO / "packages" / package / "windows",
-                                checkout / "packages" / package / "windows")
+                for platform in ("windows", "linux"):
+                    source = REPO / "packages" / package / platform
+                    if source.exists():
+                        shutil.copytree(source, checkout / "packages" / package / platform)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="mac")
             command = [sys.executable, str(here / "apply.py")]
@@ -48,6 +50,11 @@ class ChromiumLayerTests(unittest.TestCase):
                 copied = target / package / "windows" / source
                 self.assertEqual(copied.read_bytes(), (checkout / "packages" / package / "windows" / source).read_bytes())
                 self.assertFalse((target / package / "windows/tests").exists())
+            for source in (checkout / "packages/import").rglob("*"):
+                relative = source.relative_to(checkout / "packages/import")
+                if (source.is_file() and "tests" not in relative.parts
+                        and "__pycache__" not in relative.parts and source.suffix != ".pyc"):
+                    self.assertEqual((target / "import" / relative).read_bytes(), source.read_bytes())
             data = target.parent
             for source in re.findall(r'"([^"\n]+\.(?:cc|cpp|h))"', (data / "BUILD.gn").read_text()):
                 self.assertTrue((data / source).is_file(), f"Missing GN source {source}")
@@ -63,14 +70,54 @@ class ChromiumLayerTests(unittest.TestCase):
             subprocess.run(command, env=environment, check=True, capture_output=True)
             subprocess.run([*command, "--check"], env=environment, check=True, capture_output=True)
 
+    def test_linux_overlay_tracks_canonical_sources_and_prunes_drift(self):
+        with tempfile.TemporaryDirectory(prefix="bay-linux-overlay-test-") as directory:
+            checkout = Path(directory) / "checkout"
+            here = checkout / "engine/chromium"
+            shutil.copytree(HERE, here, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            for package in ("import", "sync"):
+                for platform in ("windows", "linux"):
+                    source = REPO / "packages" / package / platform
+                    if source.exists():
+                        shutil.copytree(source, checkout / "packages" / package / platform)
+            # Fixture-only source proves the overlay copies canonical Linux code
+            # even before another platform backend has landed.
+            source = checkout / "packages/import/linux/OverlayFixture.cpp"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("canonical linux source\n")
+            tests = source.parent / "tests"
+            tests.mkdir(exist_ok=True)
+            (tests / "OverlayFixture.cpp").write_text("test only\n")
+            root = Path(directory) / "chromium"
+            environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="linux")
+            command = [sys.executable, str(here / "apply.py")]
+            subprocess.run(command, env=environment, check=True, capture_output=True)
+            copied = root / "chrome/browser/bay/data/packages/import/linux/OverlayFixture.cpp"
+            self.assertEqual(copied.read_bytes(), source.read_bytes())
+            self.assertFalse((copied.parent / "tests").exists())
+            before = copied.stat().st_mtime_ns
+            subprocess.run(command, env=environment, check=True, capture_output=True)
+            self.assertEqual(before, copied.stat().st_mtime_ns)
+            source.write_text("changed canonical linux source\n")
+            result = subprocess.run([*command, "--check"], env=environment, capture_output=True)
+            self.assertEqual(result.returncode, 1)
+            subprocess.run(command, env=environment, check=True, capture_output=True)
+            self.assertEqual(copied.read_bytes(), source.read_bytes())
+            source.unlink()
+            subprocess.run(command, env=environment, check=True, capture_output=True)
+            self.assertFalse(copied.exists())
+            subprocess.run([*command, "--check"], env=environment, check=True, capture_output=True)
+
     def test_windows_icons_are_owned_as_files_and_other_platforms_leave_them_alone(self):
         with tempfile.TemporaryDirectory(prefix="bay-icon-overlay-test-") as directory:
             checkout = Path(directory) / "checkout"
             here = checkout / "engine/chromium"
             shutil.copytree(HERE, here, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             for package in ("import", "sync"):
-                shutil.copytree(REPO / "packages" / package / "windows",
-                                checkout / "packages" / package / "windows")
+                for platform in ("windows", "linux"):
+                    source = REPO / "packages" / package / platform
+                    if source.exists():
+                        shutil.copytree(source, checkout / "packages" / package / platform)
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="win")
             command = [sys.executable, str(here / "apply.py")]
@@ -125,6 +172,20 @@ class ChromiumLayerTests(unittest.TestCase):
                 test_file.parent.mkdir()
                 test_file.write_text("test-only\n")
                 self.assertEqual(after, engine.source_digest())
+                for relative in ("packages/import/windows/BrowserDiscovery.cpp",
+                                 "packages/import/linux/ChromiumSecrets.cpp",
+                                 "packages/sync/linux/Backend.cpp"):
+                    source = engine.REPO / relative
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    source.write_text("before\n")
+                    before = engine.source_digest("linux")
+                    source.write_text("after\n")
+                    after = engine.source_digest("linux")
+                    self.assertNotEqual(before, after, relative)
+                    test = source.parent / "tests/DigestFixture.cpp"
+                    test.parent.mkdir(exist_ok=True)
+                    test.write_text("test-only\n")
+                    self.assertEqual(after, engine.source_digest("linux"))
                 icon = engine.REPO / "engine/chromium/assets/windows/bay.ico"
                 icon.parent.mkdir(parents=True)
                 icon.write_bytes(b"before")

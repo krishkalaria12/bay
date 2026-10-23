@@ -84,6 +84,7 @@ def main():
                 production = data / "packages"
                 sources = [data / "data_services.cc", data / "tests/Services.cpp"]
                 sources.extend(production / "import/windows" / name for name in ("ImportService.cpp", "Readers.cpp", "Sessions.cpp", "Arc.cpp", "Secrets.cpp"))
+                sources.append(production / "import/windows/BrowserDiscovery.cpp")
                 sources.extend(production / "sync/windows" / name for name in ("SyncService.cpp", "SyncCrypto.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp"))
                 libraries = ["winsqlite3.lib", "bcrypt.lib", "crypt32.lib", "advapi32.lib", "gdi32.lib", "ole32.lib", "shell32.lib", "user32.lib", "uuid.lib"]
                 if windows:

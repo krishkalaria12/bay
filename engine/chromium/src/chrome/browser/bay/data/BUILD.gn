@@ -2,50 +2,94 @@
 # canonical repository package sources. These parsers use C++ exceptions
 # internally. No exception crosses this target's public data_services.h API or
 # enables exceptions in Chromium callers.
-assert(is_win)
+assert(is_win || is_linux)
+
+if (is_linux) {
+  import("//build/config/linux/pkg_config.gni")
+  import("//build/config/ui.gni")
+
+  # NSS is loaded at runtime from trusted system locations by the reader.
+  pkg_config("import_nss_headers") {
+    packages = [ "nss" ]
+    ignore_libs = true
+  }
+}
 
 static_library("data_services") {
   sources = [
     "data_services.cc",
     "data_services.h",
     "packages/import/windows/Arc.cpp",
+    "packages/import/windows/BrowserDiscovery.cpp",
+    "packages/import/windows/BrowserDiscovery.h",
     "packages/import/windows/ImportCore.h",
     "packages/import/windows/ImportService.cpp",
     "packages/import/windows/Readers.cpp",
     "packages/import/windows/SQLite.h",
     "packages/import/windows/Secrets.cpp",
     "packages/import/windows/Sessions.cpp",
-    "packages/sync/windows/RecoveryKit.cpp",
-    "packages/sync/windows/RecoveryKit.h",
-    "packages/sync/windows/RecoveryKitInternal.h",
-    "packages/sync/windows/RecoveryKitWindows.cpp",
+
+    # Shared wrapper/encoding code. Its platform crypto symbols on Linux are
+    # supplied by D1; no fallback crypto backend is provided by the import port.
     "packages/sync/windows/SyncCrypto.cpp",
     "packages/sync/windows/SyncCrypto.h",
-    "packages/sync/windows/SyncService.cpp",
-    "packages/sync/windows/SyncService.h",
-    "packages/sync/windows/SyncVault.cpp",
-    "packages/sync/windows/SyncVault.h",
     "packages/sync/windows/Wordlist.h",
-    "packages/sync/windows/vendor/qrcodegen.cpp",
-    "packages/sync/windows/vendor/qrcodegen.hpp",
     "vendor/nlohmann/json.hpp",
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   include_dirs = [ "vendor" ]
-  defines = [
-    "NOMINMAX",
-    "WIN32_LEAN_AND_MEAN",
-  ]
-  libs = [
-    "advapi32.lib",
-    "bcrypt.lib",
-    "crypt32.lib",
-    "gdi32.lib",
-    "ole32.lib",
-    "shell32.lib",
-    "user32.lib",
-    "uuid.lib",
-    "winsqlite3.lib",
-  ]
+  if (is_win) {
+    sources += [
+      "packages/sync/windows/RecoveryKit.cpp",
+      "packages/sync/windows/RecoveryKit.h",
+      "packages/sync/windows/RecoveryKitInternal.h",
+      "packages/sync/windows/RecoveryKitWindows.cpp",
+      "packages/sync/windows/SyncService.cpp",
+      "packages/sync/windows/SyncService.h",
+      "packages/sync/windows/SyncVault.cpp",
+      "packages/sync/windows/SyncVault.h",
+      "packages/sync/windows/vendor/qrcodegen.cpp",
+      "packages/sync/windows/vendor/qrcodegen.hpp",
+    ]
+    defines = [
+      "NOMINMAX",
+      "WIN32_LEAN_AND_MEAN",
+    ]
+    libs = [
+      "advapi32.lib",
+      "bcrypt.lib",
+      "crypt32.lib",
+      "gdi32.lib",
+      "ole32.lib",
+      "shell32.lib",
+      "user32.lib",
+      "uuid.lib",
+      "winsqlite3.lib",
+    ]
+  } else {
+    sources += [
+      "packages/import/linux/ChromiumSecrets.cpp",
+      "packages/import/linux/ChromiumSecrets.h",
+      "packages/import/linux/FirefoxNSS.cpp",
+      "packages/import/linux/FirefoxNSS.h",
+      "packages/import/linux/SecretService.cpp",
+      "packages/import/linux/SystemLibrary.h",
+    ]
+
+    # Canonical package paths use the C++17 UTF-8 std::string interface.
+    # Keep Chromium's C++ standard while retaining that source-level contract.
+    cflags_cc = [ "-fno-char8_t" ]
+    assert(use_gio && use_glib, "Bay Linux import requires GIO")
+    configs += [
+      ":import_nss_headers",
+      "//build/config/linux:glib",
+      "//build/linux:gio_config",
+    ]
+    deps = [
+      "//third_party/boringssl",
+      "//third_party/sqlite",
+    ]
+    libs = [ "dl" ]
+  }
 }

@@ -177,7 +177,8 @@ def sha256(path):
 def source_digest(platform="win"):
     digest = hashlib.sha256(platform.encode() + b"\0")
     for directory in ("engine/patches", "engine/chromium", "engine/nncore",
-                      "packages/import/windows", "packages/sync/windows"):
+                      "packages/import/windows", "packages/import/linux",
+                      "packages/sync/windows", "packages/sync/linux"):
         for path in sorted((REPO / directory).rglob("*")):
             package_test = directory.startswith("packages/") and "tests" in path.relative_to(REPO / directory).parts
             if path.is_file() and not package_test and "__pycache__" not in path.parts and path.suffix != ".pyc":

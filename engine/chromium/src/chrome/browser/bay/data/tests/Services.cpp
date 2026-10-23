@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <string>
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
 // The service test uses the shipped CNG/Credential Manager implementation on
 // Windows. macOS tests never substitute a persistent or plaintext secret store.
 namespace bay::sync {
@@ -33,6 +33,14 @@ void Require(bool condition, const char* message) {
   if (!condition)
     throw std::runtime_error(message);
 }
+std::string NativePath(const std::filesystem::path& path) {
+#ifdef _WIN32
+  const auto utf8 = path.u8string();
+  return std::string(utf8.begin(), utf8.end());
+#else
+  return path.native();
+#endif
+}
 Json Invoke(const std::string& module,
             const std::string& method,
             const std::string& arguments) {
@@ -46,13 +54,14 @@ int main(int argc, char** argv) {
     const auto root = std::filesystem::absolute(argv[1]);
     std::filesystem::create_directories(root / "Profile-loaded");
     std::string resolved;
-    bay::data::Configure(root.u8string(), [&](const std::string& profile) {
+    bay::data::Configure(NativePath(root), [&](const std::string& profile) {
       resolved = profile;
       if (profile == "loaded")
-        return bay::data::ProfilePaths{root.u8string(),
-                                       (root / "Profile-loaded").u8string()};
+        return bay::data::ProfilePaths{NativePath(root),
+                                       NativePath(root / "Profile-loaded")};
       return bay::data::ProfilePaths{};
     });
+#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
     for (const std::string profile : {"", "Default", "missing", "private"}) {
       auto reply =
           Invoke("BaySync", "readPasswords", Json::array({profile}).dump());
@@ -71,35 +80,57 @@ int main(int argc, char** argv) {
     Require(Invoke("BaySync", "readPasswords",
                    "[\"../other\"]")["error"]["code"] == "format",
             "A profile path escaped identifier validation");
+#else
+    Require(bay::data::ModuleNames() == std::vector<std::string>{"BayImport"},
+            "Linux advertised an unfinished data module");
+    Require(bay::data::MethodNames("BaySync").empty(),
+            "Linux advertised unfinished sync methods");
+    Require(Invoke("BaySync", "newDeviceId", "[]")["error"]["code"] ==
+                "unsupported",
+            "Linux dispatched an unfinished sync operation");
+    Require(bay::data::RequiresUIThread("BayImport", "chooseImportFile") &&
+                !bay::data::RequiresUIThread("BayImport", "importData") &&
+                !bay::data::RequiresUIThread("BaySync", "saveRecoveryKit"),
+            "Linux data methods use the wrong thread");
+#endif
     Require(Invoke("BayImport", "importData", "{}")["error"]["code"] ==
                 "invalid_arguments",
             "A non-array argument crossed the service boundary");
+#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
     Require(Invoke("BaySync", "readPasswords", "[]")["error"]["code"] ==
                 "invalid_arguments",
             "A missing argument escaped the service envelope");
     Require(
         Invoke("BaySync", "missing", "[]")["error"]["code"] == "unsupported",
         "An unknown method was accepted");
+#endif
+    Require(
+        Invoke("BayImport", "missing", "[]")["error"]["code"] == "unsupported",
+        "An unknown import method was accepted");
+    Require(Invoke("BayImport", "importData", "[]")["error"]["code"] ==
+                "invalid_arguments",
+            "Missing import arguments crossed the service boundary");
     Require(Invoke("MissingModule", "missing", "[]")["error"]["code"] ==
                 "unsupported",
             "An unknown module was accepted");
+#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
     Require(bay::data::RequiresUIThread("BayImport", "chooseImportFile") &&
                 bay::data::RequiresUIThread("BaySync", "saveRecoveryKit") &&
                 !bay::data::RequiresUIThread("BaySync", "readPasswords") &&
                 !bay::data::RequiresUIThread("BayImport", "importData"),
             "Blocking work or native dialogs use the wrong thread");
-    bay::data::Configure(root.u8string(), {});
+    bay::data::Configure(NativePath(root), {});
     Require(Invoke("BaySync", "readPasswords",
                    "[\"loaded\"]")["error"]["code"] == "profile_unavailable",
             "A missing profile resolver was accepted");
     bay::data::Configure(
-        root.u8string(),
+        NativePath(root),
         [](const std::string&) -> bay::data::ProfilePaths { throw 42; });
     Require(Invoke("BaySync", "readPasswords",
                    "[\"loaded\"]")["error"]["code"] == "native_failure",
             "An exception escaped into the Chromium caller");
-    std::cout << "Native data envelopes, loaded-profile isolation and thread "
-                 "routing passed\n";
+#endif
+    std::cout << "Native data envelopes and thread routing passed\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
