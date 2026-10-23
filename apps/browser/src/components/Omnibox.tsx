@@ -272,7 +272,7 @@ export function Omnibox({
     });
     setMenu({ side: "right", title, actions });
   };
-  const openAppMenu = () => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) });
+  const openAppMenu = () => void appPaletteActions(windowId, dismiss).then((actions) => setMenu({ side: "left", title: "Bay", actions }));
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
     const { key, metaKey, altKey, shiftKey, ctrlKey } = e.nativeEvent;
