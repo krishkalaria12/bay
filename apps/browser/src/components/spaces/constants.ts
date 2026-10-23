@@ -24,6 +24,8 @@ export const DOT_IDLE_OPACITY = 0.2;
 
 export const SPACE_CELL = 26;
 export const SPACE_GLYPH = 15;
+// Between the space icons, so each one reads on its own.
+export const SPACE_GAP = 6;
 export const SPACE_PLUS = 28;
 // Room kept on each side for + (right) and the footer's downloads button (left), so the icons stay centred.
 export const SPACE_SIDE = SPACE_PLUS + 4;
