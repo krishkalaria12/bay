@@ -22,7 +22,7 @@ export function createPreviewTransport(): NativeTransport {
     ],
     constants: { BayApp: { apiVersion: 9 }, BayShell: { preview: true, hostingSpike: new URLSearchParams(location.search).has("spike") } },
     snapshots: {
-      BayShell: { documents },
+      BayShell: { documents, windowButtonLayout: { left: [], right: ["minimize", "maximize", "close"] } },
       BaySystem: { files: {}, downloadsFolder: null },
       BayApp: {
         environment: {},

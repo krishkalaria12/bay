@@ -16,7 +16,7 @@ import { useIsBookmarked, useSettings, useTabLive } from "../store/hooks";
 import { bookmarkSpaceId } from "../store/model";
 import type { Tab } from "../store/types";
 import { ToolbarButton, type ClickModifiers } from "./layout/controls";
-import { CAPTION_END_ROOM, toolbarEndRoom, type ToolbarGeometry } from "./layout/geometry";
+import { toolbarEndRoom, type ToolbarGeometry } from "./layout/geometry";
 import { SIDEBAR_FIELD, TOOLBAR_BUTTON_MID, TOOLBAR_BUTTON_TOP } from "./layout/constants";
 import { setPopover, usePage, usePages } from "./layout/pageState";
 import { closeHistoryMenu, goBack, goForward, historyItems, openHistoryMenu, useHistoryAvailability, useHistoryMenu } from "./layout/history";
@@ -92,7 +92,7 @@ export function Toolbar({
   // A toggle at the end (the sidebar on the right) is outermost but for the caption buttons: the split buttons,
   // extensions and field move in for them.
   const end = toolbarEndRoom(geometry);
-  const toggleRight = 8 + (geometry.captionEnd ? CAPTION_END_ROOM : 0);
+  const toggleRight = 8 + geometry.captionRoom;
   const right = (inSplit ? 12 + 2 * 28 : 12) + extensionsWidth + end;
   const urlStyle = { position: "absolute" as const, left: geometry.urlLeft, right, top: TOOLBAR_BUTTON_MID - 15 };
   if (!tab) return <View style={{ height: layout.toolbarHeight }} />;

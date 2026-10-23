@@ -85,7 +85,7 @@ import { makeRoom, registerSlot, reorderOffsets, settleRoom } from "./stripReord
 import { beginTabDrag, cancelTabDrag, endTabDrag, setDragPicture, setInsert, setInsertResolver, updateTabDrag, useTabDrag } from "./tabDrag";
 import { toolbarPalette, useEasedColor, useEasedColorStyle, type EasedColor, type ToolbarPalette } from "./toolbarColors";
 import { listOfTab } from "../../store/model";
-import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "./windowButtons";
+import { captionPeekInsets, useWindowButtonLayout, windowButtonRoom } from "./windowButtons";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { closeGroup, moveGroup, placeTabs, updateGroup } from "../../runtime/organizeActions";
 import { browserRead } from "../../store/read";
@@ -118,9 +118,10 @@ export function TopTabStrip({
   const { pages } = usePagerPages(windowId);
   const spaceChip = useSpaceIndicatorWidth(STRIP_PROFILE_ROOM);
   const controls = (spaceChip ? spaceChip + STRIP_CONTROLS_GAP : 0) + STRIP_DOWNLOADS_BOX;
-  const left = floating ? 8 : LIGHTS_WIDTH + STRIP_LIGHTS_GAP;
-  // The drop-down strip shows in page full screen, where the window has no caption buttons.
-  const caption = floating ? 0 : CAPTION_BUTTONS_WIDTH;
+  const room = windowButtonRoom(useWindowButtonLayout());
+  const left = floating ? 8 : room.left + STRIP_LIGHTS_GAP;
+  // The floating strip's popup provides its own clearance from the window buttons.
+  const caption = floating ? 0 : room.right;
   const right = Math.max(84, controls + 8 + 6) + caption;
   const pageWidth = Math.max(0, width - left - right);
   const flare = floating ? 0 : STRIP_FLARE;
@@ -1378,6 +1379,10 @@ function NewTabButton({ windowId }: { windowId: string }) {
 }
 
 export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
+  const buttons = useWindowButtonLayout();
+  const room = windowButtonRoom(buttons);
+  const insets = captionPeekInsets(buttons, 6);
+  const peekWidth = Math.max(0, windowWidth - insets.left - insets.right);
   const theme = useTheme();
   const { slide, live, show, hide } = usePeek(enabled);
   const slideStyle = useAnimatedStyle(() => {
@@ -1387,7 +1392,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   });
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: LIGHTS_WIDTH, right: CAPTION_BUTTONS_WIDTH, top: 0, height: 6 }} /> : null}
+      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: room.left, right: room.right, top: 0, height: 6 }} /> : null}
       {/* The window under it while it's out: the pointer reaching it hides the peek, as leaving the peek does. */}
       {live ? (
         <View pointerEvents="none" onMouseEnter={hide} style={{ position: "absolute", left: 0, right: 0, top: 4 + STRIP_PEEK_HEIGHT, bottom: 0 }} />
@@ -1399,8 +1404,8 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         style={[
           {
             position: "absolute",
-            left: 6,
-            width: windowWidth - 12,
+            left: insets.left,
+            width: peekWidth,
             // Out of the window while hidden (a transform doesn't move hover tracking): its tabs mustn't hover under the page.
             top: live ? 4 : -10_000,
             height: STRIP_PEEK_HEIGHT,
@@ -1421,7 +1426,7 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
         >
           <View style={{ position: "absolute", left: 0, right: 0, top: STRIP_PEEK_PAD - STRIP_ITEM_TOP, height: TOP_STRIP_HEIGHT }}>
             {/* The border insets the strip. */}
-            <TopTabStrip floating swipe={live} width={windowWidth - 12 - STRIP_PEEK_BORDER * 2} />
+            <TopTabStrip floating swipe={live} width={Math.max(0, peekWidth - STRIP_PEEK_BORDER * 2)} />
           </View>
         </Surface>
       </Animated.View>

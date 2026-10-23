@@ -294,3 +294,13 @@ export const extensionSidePanelUrl = (browserId, extensionId) => extensionAnswer
 
 export const prompt = () => Promise.resolve(null);
 export const copyText = () => {};
+
+// Synchronous desktop caption snapshot; tests can change it before subscribing or publish an app event.
+export const windowButtonLayoutState = {
+  layout: { left: [], right: process.env.BAY_TEST_PLATFORM === "macos" || !process.env.BAY_TEST_PLATFORM ? [] : ["minimize", "maximize", "close"] },
+  read: null,
+};
+export const windowButtonLayout = () => windowButtonLayoutState.read?.() ?? windowButtonLayoutState.layout;
+
+export const captionState = { query: () => Promise.resolve({ maximized: false, fullscreen: false }) };
+export const windowState = (windowId) => captionState.query(windowId);

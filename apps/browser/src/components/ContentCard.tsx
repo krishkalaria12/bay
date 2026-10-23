@@ -26,9 +26,19 @@ import { splitOf } from "../store/splits";
 import type { DeepReadonly } from "../runtime/projection";
 type SplitView = DeepReadonly<import("../store/types").SplitView>;
 import { BookmarksBar, useBookmarksBarShown } from "./bookmarks/BookmarksBar";
+import { useWindowButtonLayout } from "./layout/windowButtons";
 import { BOOKMARKS_BAR_HEIGHT } from "./bookmarks/constants";
 import { FindBar } from "./FindBar";
-import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, splitGeometry, toolbarEndRoom, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
+import {
+  NO_TOOLBAR,
+  noToolbarGeometry,
+  paneButtonClearance,
+  splitGeometry,
+  toolbarEndRoom,
+  toolbarGeometry,
+  type Rect,
+  type ToolbarGeometry,
+} from "./layout/geometry";
 import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
 import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
@@ -113,6 +123,7 @@ function successorOf(windowId: string, leaving: string[]): string | undefined {
 }
 
 export function ContentCard() {
+  const windowButtons = useWindowButtonLayout();
   const windowId = useWindowId();
   const activeId = useActiveTabId();
   const split = useBrowser((s) => splitOf(s, activeId));
@@ -205,16 +216,18 @@ export function ContentCard() {
   const geometryFor = (rect: Rect | undefined): ToolbarGeometry => {
     if (small) return NO_TOOLBAR;
     const leading = !!rect && rect.x === 0 && rect.y === 0;
-    if (addressInSidebar) return (sidebarRight || !sidebarOpen) && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
     // The pane at the top right, beside a sidebar docked on the right: its toolbar's end holds the toggle.
     const trailing = !!rect && rect.y === 0 && rect.x + rect.width >= size.width - 1;
-    return toolbarGeometry({
-      sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,
-      sidebarButtonEnd: trailing && sidebarRight,
-      clearTrafficLights: leading && tabLayout === "sidebar" && (!sidebarOpen || sidebarRight),
-      // The window's top right is this pane's unless a sidebar docked there or the top strip holds it.
-      captionEnd: trailing && (tabLayout === "sidebar" ? !sidebarOpen || !sidebarRight : !sidebarOpen),
-    });
+    const clearance = paneButtonClearance(leading, trailing, tabLayout, sidebarOpen, sidebarRight);
+    if (addressInSidebar) return noToolbarGeometry(clearance.clearTrafficLights, clearance.captionEnd, windowButtons);
+    return toolbarGeometry(
+      {
+        sidebarButton: leading && tabLayout === "sidebar" && !sidebarRight,
+        sidebarButtonEnd: trailing && sidebarRight,
+        ...clearance,
+      },
+      windowButtons,
+    );
   };
 
   // A link's peek over the pane of the tab it came from (layout/PeekLayer.tsx).
@@ -226,7 +239,7 @@ export function ContentCard() {
     if (!origin || !focusedRect || addressInSidebar || small) return;
     const g = geometryFor(focusedRect);
     setUrlAnchor(windowId, { left: origin.x + focusedRect.x + g.urlLeft, top: origin.y + focusedRect.y, width: focusedRect.width - g.urlLeft - 12 });
-  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, sidebarOpen, sidebarRight, addressInSidebar]);
+  }, [origin, focusedRect?.x, focusedRect?.y, focusedRect?.width, tabLayout, sidebarOpen, sidebarRight, addressInSidebar, windowButtons]);
 
   return (
     <View
@@ -349,7 +362,7 @@ const TabPane = memo(function TabPane({
   // the page's start.
   const barEnd = 8 + toolbarEndRoom(geometry);
   // Without a toolbar, past the window buttons when they show over this pane's corner.
-  const pageStart = geometry === NO_TOOLBAR_PAST_LIGHTS ? geometry.urlLeft : 8;
+  const pageStart = toolbar || devBar ? 8 : geometry.urlLeft;
   const popoverSide = toolbar || devBar ? { right: barEnd } : { left: pageStart };
   const motion = useToolbarMotion({ enabled: autoLayout, mode, height: frame.height, extra: bookmarksBar ? BOOKMARKS_BAR_HEIGHT : 0, doc });
   // A tab switched to shows its bar.

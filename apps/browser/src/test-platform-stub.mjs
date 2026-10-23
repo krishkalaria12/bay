@@ -3,9 +3,9 @@ import { capabilitiesFor } from "../../../packages/platform/src/capabilities.ts"
 import { relabelShortcuts, windowsShortcutLabel } from "../../../packages/platform/src/keys.ts";
 export * from "../../../packages/platform/src/keys.ts";
 
-export const platformOS = process.env.BAY_TEST_PLATFORM === "windows" ? "windows" : "macos";
+export const platformOS = process.env.BAY_TEST_PLATFORM ?? "macos";
 export const isMac = platformOS === "macos";
-export const isWindows = !isMac;
+export const isWindows = platformOS === "windows";
 export const batchedUpdates = (update) => update();
 export const hasNativeModule = () => true;
 export const capabilities = capabilitiesFor(platformOS, hasNativeModule);
