@@ -31,10 +31,10 @@ def validate_member(name):
     return path
 
 
-def verify(directory, expected_id=None):
+def verify(directory, expected_id=None, platform="win"):
     directory = pathlib.Path(directory)
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("schemaVersion") != 1 or manifest.get("lock") != engine.platform_lock("win"):
+    if manifest.get("schemaVersion") != 1 or manifest.get("lock") != engine.platform_lock(platform):
         raise ValueError("engine manifest schema or pinned version does not match this checkout")
     if expected_id and manifest.get("id") != expected_id:
         raise ValueError(f"engine artifact {manifest.get('id')} does not match {expected_id}")
