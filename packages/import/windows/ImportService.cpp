@@ -1,4 +1,5 @@
 #include "ImportCore.h"
+#include "BrowserDiscovery.h"
 #include <algorithm>
 #include <chrono>
 #include <map>
@@ -26,6 +27,7 @@ struct Entry {
   std::chrono::steady_clock::time_point time;
 };
 std::map<std::string, Entry> vault;
+#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
 Path environment(const wchar_t *name) {
 #ifdef _WIN32
   wchar_t value[32768]{};
@@ -36,12 +38,12 @@ Path environment(const wchar_t *name) {
   return {};
 #endif
 }
-struct Browser {
-  std::string id, name;
-  Path root;
-  bool firefox = false, rootProfile = false;
-};
+#endif
+using Browser = discovery::Browser;
 std::vector<Browser> browsers() {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  return discovery::linuxBrowsers(discovery::linuxEnvironment());
+#else
   auto local = environment(L"LOCALAPPDATA"), roaming = environment(L"APPDATA");
   std::vector<Browser> definitions;
   if (!local.empty())
@@ -82,7 +84,9 @@ std::vector<Browser> browsers() {
     if (fs::is_directory(browser.root))
       out.push_back(browser);
   return out;
+#endif
 }
+#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
 Json available(const Path &profile, bool firefox) {
   Json kinds = Json::array();
   auto add = [&](const char *kind, bool exists) {
@@ -109,7 +113,11 @@ Json available(const Path &profile, bool firefox) {
   add("autofill", !firefox && fs::exists(profile / "Web Data"));
   return kinds;
 }
+#endif
 Json profiles(const Browser &browser) {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  return discovery::linuxProfiles(browser);
+#else
   Json out = Json::array();
   if (browser.firefox) {
     if (!fs::exists(browser.root / "profiles.ini"))
@@ -241,6 +249,7 @@ Json profiles(const Browser &browser) {
     return a.value("isDefault", false) && !b.value("isDefault", false);
   });
   return out;
+#endif
 }
 std::pair<Browser, Json> resolve(const std::string &id,
                                  const std::string &profile) {
