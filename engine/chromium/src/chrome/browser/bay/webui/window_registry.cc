@@ -62,6 +62,8 @@ bool ValidName(const std::string& name) {
              "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
              "-") == std::string::npos;
 }
+// Launch pages wait for accepted state; a flood of them is not kept.
+constexpr size_t kMaximumLaunchPages = 64;
 bool KnownKind(const std::string& kind) {
   return kind == "browser" || kind == "small" || IsUtilityWindowKind(kind);
 }
@@ -74,10 +76,14 @@ base::ListValue RectValue(const gfx::Rect& rect) {
 }
 }  // namespace
 
-class WindowRegistry::Entry final : public views::WidgetObserver {
+class WindowRegistry::Entry final : public views::WidgetObserver,
+                                    public TabStripModelObserver {
  public:
   Entry(WindowRegistry& registry, BrowserWindowInterface* browser)
       : registry_(registry), browser_(browser->GetWeakPtr()) {
+    if (auto* strip = browser->GetTabStripModel();
+        strip && AppRuntime::Enabled())
+      strip->AddObserver(this);
     if (auto* window = browser->GetWindow();
         window && !GlobalWindowCoordinates())
       restored_size.Seed(window->GetRestoredBounds().size());
@@ -96,6 +102,16 @@ class WindowRegistry::Entry final : public views::WidgetObserver {
       registry_->ShowStateChanged(browser_.get());
   }
   void OnWidgetDestroyed(views::Widget*) override { observation_.Reset(); }
+  void OnTabStripModelChanged(
+      TabStripModel*,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override {
+    if (change.type() != TabStripModelChange::kInserted || !browser_)
+      return;
+    for (const auto& inserted : change.GetInsert()->contents)
+      registry_->PageInserted(browser_.get(), inserted.contents,
+                              inserted.contents == selection.new_contents);
+  }
 
   std::string id;
   base::DictValue options;
@@ -117,6 +133,11 @@ struct WindowRegistry::PendingOpen {
   raw_ptr<Profile> profile;
   std::string id;
   base::DictValue options;
+};
+struct WindowRegistry::LaunchPage {
+  base::WeakPtr<BrowserWindowInterface> browser;
+  base::WeakPtr<content::WebContents> contents;
+  bool foreground;
 };
 
 WindowRegistry& WindowRegistry::Get() {
@@ -328,6 +349,7 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
       PublishHostInfo();
       if (focus)
         requester->GetWindow()->Activate();
+      ScheduleLaunchPageAdoption();
       return Success();
     }
   }
@@ -566,6 +588,7 @@ void WindowRegistry::OnBrowserCreated(BrowserWindowInterface* browser) {
       browser->GetProfile() == pending_open_->profile) {
     entry.id = pending_open_->id;
     entry.options = pending_open_->options.Clone();
+    ScheduleLaunchPageAdoption();
     if (!GlobalWindowCoordinates()) {
       WindowPlacement placement;
       if (ParseWindowPlacement(entry.options, false, placement).empty() &&
@@ -603,21 +626,7 @@ void WindowRegistry::MoveIntoBayWindow(
   // With the shared runtime the coordinator owns every tab: the pages go to it,
   // for a regular browser window.
   const bool shared = AppRuntime::Enabled();
-  BrowserWindowInterface* target = nullptr;
-  GlobalBrowserCollection::GetInstance()->ForEach(
-      [&](BrowserWindowInterface* browser) {
-        auto it = entries_.find(browser);
-        if (browser == source.get() || it == entries_.end() ||
-            it->second->absorbed || browser->IsDeleteScheduled())
-          return true;
-        const auto* kind = it->second->options.FindString("kind");
-        if (shared && (it->second->id.empty() || !kind || *kind != "browser" ||
-                       browser->GetProfile()->IsOffTheRecord()))
-          return true;
-        target = browser;
-        return false;
-      },
-      BrowserCollection::Order::kActivation);
+  BrowserWindowInterface* target = MostRecentBayWindow(source.get());
 #if BUILDFLAG(IS_LINUX)
   // The absorbed window is never shown. Its launch token activates the Bay
   // window that receives its pages, so the desktop lets that window take focus.
@@ -662,6 +671,80 @@ void WindowRegistry::MoveIntoBayWindow(
   }
   if (source)
     source->GetWindow()->Close();
+}
+BrowserWindowInterface* WindowRegistry::MostRecentBayWindow(
+    BrowserWindowInterface* except) const {
+  const bool shared = AppRuntime::Enabled();
+  BrowserWindowInterface* target = nullptr;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&](BrowserWindowInterface* browser) {
+        auto it = entries_.find(browser);
+        if (browser == except || it == entries_.end() || it->second->absorbed ||
+            browser->IsDeleteScheduled())
+          return true;
+        const auto* kind = it->second->options.FindString("kind");
+        if (shared && (it->second->id.empty() || !kind || *kind != "browser" ||
+                       browser->GetProfile()->IsOffTheRecord()))
+          return true;
+        target = browser;
+        return false;
+      },
+      BrowserCollection::Order::kActivation);
+  return target;
+}
+void WindowRegistry::PageInserted(BrowserWindowInterface* browser,
+                                  content::WebContents* contents,
+                                  bool foreground) {
+  // Decide once Chrome's open has unwound: by then the broker tracks Bay's own
+  // new pages, and pages a page opened are marked.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&WindowRegistry::TakeLaunchPage,
+                                base::Unretained(this), browser->GetWeakPtr(),
+                                contents->GetWeakPtr(), foreground));
+}
+void WindowRegistry::TakeLaunchPage(
+    base::WeakPtr<BrowserWindowInterface> browser,
+    base::WeakPtr<content::WebContents> contents,
+    bool foreground) {
+  // An absorbed window's pages move with the window (MoveIntoBayWindow).
+  if (!browser || !contents || IsAbsorbed(browser.get()) ||
+      launch_pages_.size() >= kMaximumLaunchPages ||
+      TabBroker::Get().Tracks(contents.get()) ||
+      AppRuntime::IsOpenedByPage(contents.get()))
+    return;
+  launch_pages_.push_back(
+      {std::move(browser), std::move(contents), foreground});
+  AdoptLaunchPages();
+}
+void WindowRegistry::AdoptLaunchPages() {
+  auto* runtime = AppRuntime::GetIfStarted();
+  if (!runtime)
+    return;
+  // Offering parks the page, which changes only its tab strip.
+  for (auto& page : std::exchange(launch_pages_, {})) {
+    if (!page.contents || !page.browser ||
+        TabBroker::Get().Tracks(page.contents.get()))
+      continue;
+    std::string window_id = IdFor(page.browser.get());
+    if (!runtime->CanAdoptInto(window_id)) {
+      auto* other = MostRecentBayWindow(nullptr);
+      window_id = other ? IdFor(other) : std::string();
+    }
+    if (!runtime->CanAdoptInto(window_id)) {
+      // Wait for accepted state to name a window.
+      launch_pages_.push_back(std::move(page));
+      continue;
+    }
+    // A private page or a new tab page is refused and stays where it is.
+    runtime->AdoptPage(page.contents.get(), window_id, page.foreground);
+  }
+}
+void WindowRegistry::ScheduleLaunchPageAdoption() {
+  if (launch_pages_.empty())
+    return;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&WindowRegistry::AdoptLaunchPages,
+                                base::Unretained(this)));
 }
 void WindowRegistry::OnBrowserClosed(BrowserWindowInterface* browser) {
   const auto id = IdFor(browser);

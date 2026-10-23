@@ -18,12 +18,16 @@
 #include "base/test/scoped_path_override.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_placement.h"
+#include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/platform_util_internal.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -148,6 +152,27 @@ TEST_F(NativeHostTest, PlacementCapabilityAndUnknownWindowKeepCoordinatorRole) {
                        "[\"placement-test\"," + std::string(options) + "]"),
                 "window_error");
   }
+}
+
+// A link another app opened, or a startup URL, is told apart from a page a
+// page opened and from pages the broker already holds.
+TEST_F(NativeHostTest, LaunchPagesSkipPageOpenedAndBrokerPages) {
+  auto launched = CreateTestWebContents();
+  auto opened = CreateTestWebContents();
+  AppRuntime::MarkOpenedByPage(opened.get());
+  AppRuntime::MarkOpenedByPage(nullptr);
+  EXPECT_FALSE(AppRuntime::IsOpenedByPage(launched.get()));
+  EXPECT_TRUE(AppRuntime::IsOpenedByPage(opened.get()));
+  EXPECT_FALSE(AppRuntime::IsOpenedByPage(nullptr));
+
+  EXPECT_FALSE(TabBroker::Get().Tracks(launched.get()));
+  const auto offer = TabBroker::Get().Offer(launched.get(), /*park=*/false);
+  ASSERT_TRUE(offer.error.empty());
+  EXPECT_TRUE(TabBroker::Get().Tracks(launched.get()));
+  TabBroker::Get().ReleaseOffer(offer.adopt_id);
+  EXPECT_FALSE(TabBroker::Get().Tracks(launched.get()));
+  // Without a started runtime nothing is offered.
+  WindowRegistry::Get().AdoptLaunchPages();
 }
 
 class HostLayoutLinuxUi : public ui::FakeLinuxUi {

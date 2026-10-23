@@ -2,6 +2,7 @@
 #include "chrome/browser/bay/webui/app_runtime.h"
 
 #include <cmath>
+#include <memory>
 #include <utility>
 #include "base/command_line.h"
 #include "base/functional/bind.h"
@@ -9,6 +10,7 @@
 #include "base/json/json_writer.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
+#include "base/supports_user_data.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "base/uuid.h"
@@ -215,6 +217,10 @@ class RuntimeConnection final
         *commit->FindDict("state"));
     runtime_->accepted_ = std::move(*commit);
     runtime_->ReconcilePageOpens();
+    // Pages Chrome opened on its own may have been waiting for this window.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce([] { WindowRegistry::Get().AdoptLaunchPages(); }));
     runtime_->page_events_.Prune(*runtime_->accepted_->FindDict("state"));
     if (runtime_->ready_) {
       for (const auto& [id, connection] : runtime_->connections_) {
@@ -343,6 +349,27 @@ void RuntimeConnection::Resolve(const std::string& token,
   std::move(callback).Run(Success());
 }
 
+namespace {
+const void* const kOpenedByPageKey = &kOpenedByPageKey;
+}  // namespace
+
+// static
+void AppRuntime::MarkOpenedByPage(content::WebContents* opened) {
+  if (opened)
+    opened->SetUserData(kOpenedByPageKey,
+                        std::make_unique<base::SupportsUserData::Data>());
+}
+// static
+bool AppRuntime::IsOpenedByPage(content::WebContents* contents) {
+  return contents && contents->GetUserData(kOpenedByPageKey);
+}
+bool AppRuntime::CanAdoptInto(const std::string& window_id) const {
+  if (shutdown_ || !accepted_ || window_id.empty())
+    return false;
+  const auto* window =
+      accepted_->FindDict("state")->FindDict("windows")->FindDict(window_id);
+  return window && !window->FindBool("incognito").value_or(false);
+}
 bool AppRuntime::Enabled() {
   return IsAppRuntimeEnabled(*base::CommandLine::ForCurrentProcess());
 }
@@ -424,6 +451,8 @@ void AppRuntime::RetireUnusedStartupWindow() {
   for (const auto& value : WindowRegistry::Get().Ids()) {
     auto* replacement = WindowRegistry::Get().Find(value.GetString());
     if (replacement && replacement != startup_window_.get()) {
+      // Its launch pages (a startup URL) move out before it closes.
+      WindowRegistry::Get().AdoptLaunchPages();
       retiring_startup_window_ = startup_window_;
       startup_window_.reset();
       retiring_startup_window_->GetWindow()->Close();

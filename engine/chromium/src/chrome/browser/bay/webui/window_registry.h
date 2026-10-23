@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
@@ -19,6 +20,9 @@
 
 class BrowserWindowInterface;
 class Profile;
+namespace content {
+class WebContents;
+}
 
 namespace bay {
 class NativeHost;
@@ -72,12 +76,19 @@ class WindowRegistry final : public BrowserCollectionObserver {
   bool IsAbsorbed(BrowserWindowInterface* browser) const;
   // Returns true when `browser` is absorbed and must not be shown.
   bool AbsorbOnShow(BrowserWindowInterface* browser);
+  // A page Chrome adds to a Bay window by itself (a link another app opened,
+  // a startup URL, an extension's new tab) has no Bay tab. With the shared
+  // runtime it is offered as a tab of that window, or of the most recently
+  // active regular Bay window, once accepted state names one. Pages a page
+  // opened belong to AppRuntime::OpenPage.
+  void AdoptLaunchPages();
 
  private:
   friend class base::NoDestructor<WindowRegistry>;
   class Entry;
   struct Host;
   struct PendingOpen;
+  struct LaunchPage;
 
   WindowRegistry();
   ~WindowRegistry() override;
@@ -89,6 +100,17 @@ class WindowRegistry final : public BrowserCollectionObserver {
   void BoundsChanged(BrowserWindowInterface* browser, const gfx::Rect& bounds);
   void ShowStateChanged(BrowserWindowInterface* browser);
   void MoveIntoBayWindow(base::WeakPtr<BrowserWindowInterface> source);
+  // The most recently active Bay window other than `except`; with the shared
+  // runtime only a regular window that has an id.
+  BrowserWindowInterface* MostRecentBayWindow(
+      BrowserWindowInterface* except) const;
+  void PageInserted(BrowserWindowInterface* browser,
+                    content::WebContents* contents,
+                    bool foreground);
+  void TakeLaunchPage(base::WeakPtr<BrowserWindowInterface> browser,
+                      base::WeakPtr<content::WebContents> contents,
+                      bool foreground);
+  void ScheduleLaunchPageAdoption();
   void ReleasePrivateProfile(base::WeakPtr<Profile> profile);
   void OnBrowserCreated(BrowserWindowInterface* browser) override;
   void OnBrowserClosed(BrowserWindowInterface* browser) override;
@@ -98,6 +120,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   std::map<NativeHost*, std::unique_ptr<Host>> hosts_;
   std::unique_ptr<PendingOpen> pending_open_;
   std::map<Profile*, base::WeakPtr<Profile>> private_profiles_;
+  std::vector<LaunchPage> launch_pages_;
   base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>
       observation_{this};
 };
