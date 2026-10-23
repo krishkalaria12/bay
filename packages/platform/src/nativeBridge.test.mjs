@@ -66,6 +66,53 @@ test("native constants refresh from host snapshots and optional methods require 
   info = hostInfo();
   assert.equal(shell.windowFrame, undefined);
 });
+test("Linux window button layout uses current snapshots and the advertised optional query", async (t) => {
+  let layout = { left: ["close"], right: ["minimize", "maximize"] };
+  let info = hostInfo({
+    platform: "linux",
+    optionalMethods: ["BayShell.windowButtonLayout"],
+    snapshots: { BayShell: { windowButtonLayout: layout } },
+  });
+  let event;
+  let removed = false;
+  const calls = [];
+  const native = transport({
+    getHostInfo: () => info,
+    invoke: async (...args) => {
+      calls.push(args);
+      return JSON.stringify({ value: layout });
+    },
+    subscribe: (module, name, listener) => {
+      assert.equal(module, "BayShell");
+      assert.equal(name, "onAppEvent");
+      event = listener;
+      return { remove: () => (removed = true) };
+    },
+  });
+  const connection = installNativeTransport(native);
+  t.after(() => connection.remove());
+  const shell = bindNativeModule(native, "BayShell");
+  const read = () =>
+    nativeSnapshot("BayShell", "windowButtonLayout", [], () => {
+      throw new Error("Snapshot read must not invoke native code");
+    });
+  assert.deepEqual(read(), layout);
+  assert.deepEqual(calls, []);
+  const received = [];
+  const subscription = shell.addListener("onAppEvent", (payload) => received.push(payload));
+  layout = { left: ["close", "maximize", "minimize"], right: [] };
+  info = { ...info, snapshots: { BayShell: { windowButtonLayout: layout } } };
+  event({ type: "windowButtonLayout", layout });
+  assert.deepEqual(received, [{ type: "windowButtonLayout", layout }]);
+  assert.deepEqual(read(), layout);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(await shell.windowButtonLayout(), layout);
+  assert.deepEqual(calls, [["BayShell", "windowButtonLayout", "[]"]]);
+  info = { ...info, optionalMethods: [] };
+  assert.equal(shell.windowButtonLayout, undefined);
+  subscription.remove();
+  assert.equal(removed, true);
+});
 test("envelopes distinguish native errors from engine domain Result values", async () => {
   assert.deepEqual(decodeNativeResult('{"value":{"error":"not found"}}'), { error: "not found" });
   assert.throws(() => decodeNativeResult('{"error":{"code":"denied","message":"Access denied"}}'), { code: "denied", message: "Access denied" });
