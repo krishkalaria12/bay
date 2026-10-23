@@ -154,6 +154,19 @@ export function Omnibox({
     selection.current = { start: 0, end: 0 };
   };
 
+  // Another space while open (⌃1…9, ⌥⌘←/→): what was typed stays and its results are the new space's; an untouched
+  // field (the old page's address) clears for the new space's start.
+  const [shownSpace, setShownSpace] = useState(spaceId);
+  if (shownSpace !== spaceId) {
+    setShownSpace(spaceId);
+    setArrowed(null);
+    setSelected(0);
+    if (!edited) {
+      setTyped("");
+      setPendingSelection({ start: 0, end: 0 });
+    }
+  }
+
   const dismiss = () => onCancel?.();
   const closeMenu = () => {
     setMenu(null);
