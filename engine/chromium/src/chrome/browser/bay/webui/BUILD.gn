@@ -132,6 +132,7 @@ source_set("impl") {
       ":document_store",
       ":secret_storage_linux",
       ":shell_clipboard",
+      ":window_button_layout_linux",
     ]
   }
   if (is_win) {
@@ -468,6 +469,30 @@ if (is_win) {
 }
 
 if (is_linux) {
+  source_set("window_button_layout_linux") {
+    sources = [
+      "window_button_layout_linux.cc",
+      "window_button_layout_linux.h",
+    ]
+    public_deps = [
+      "//base",
+      "//ui/linux:linux_ui",
+    ]
+    deps = [ "//ui/views" ]
+  }
+
+  test("window_button_layout_linux_unittests") {
+    sources = [ "window_button_layout_linux_unittest.cc" ]
+    deps = [
+      ":window_button_layout_linux",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//testing/gtest",
+      "//ui/linux:test_support",
+      "//ui/views",
+    ]
+  }
+
   source_set("frame_linux") {
     sources = [
       "frame_linux.cc",
@@ -552,10 +577,12 @@ if (is_linux) {
     ]
     deps = [
       ":frame_linux",
+      "//base",
       "//mojo/core/embedder",
       "//testing/gtest",
       "//ui/base",
       "//ui/gfx/geometry",
+      "//ui/platform_window",
       "//ui/views",
       "//ui/views:test_support",
     ]
@@ -582,7 +609,9 @@ if (is_linux) {
       "//testing/gtest",
       "//ui/base:test_support",
       "//ui/base/clipboard:clipboard_test_support",
+      "//ui/linux:test_support",
       "//ui/shell_dialogs",
+      "//ui/views",
       "//url",
     ]
   }

@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/observer_list.h"
 #include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -28,10 +29,13 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/test/mock_base_window.h"
+#include "ui/linux/fake_linux_ui.h"
+#include "ui/linux/window_button_order_observer.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/shell_dialogs/selected_file_info.h"
+#include "ui/views/window/window_button_order_provider.h"
 #include "url/gurl.h"
 
 namespace bay {
@@ -110,6 +114,192 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
   mojo::Remote<mojom::NativeHost> remote_;
   base::WeakPtr<NativeHost> host_;
 };
+
+void ExpectLayoutAndCaptionMethods(const base::DictValue& info) {
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayShell.windowButtonLayout", "BayShell.minimizeWindow",
+        "BayShell.toggleMaximizeWindow", "BayShell.windowState"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+  EXPECT_FALSE(methods->contains("BayShell.setWindowCaption"));
+  const auto* layout =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(layout);
+  EXPECT_EQ(layout->size(), 2u);
+  EXPECT_TRUE(layout->FindList("left"));
+  EXPECT_TRUE(layout->FindList("right"));
+}
+
+class HostLayoutLinuxUi : public ui::FakeLinuxUi {
+ public:
+  void AddWindowButtonOrderObserver(ui::WindowButtonOrderObserver* o) override {
+    observers.AddObserver(o);
+  }
+  void RemoveWindowButtonOrderObserver(
+      ui::WindowButtonOrderObserver* o) override {
+    observers.RemoveObserver(o);
+  }
+  void Notify() {
+    for (auto& observer : observers)
+      observer.OnWindowButtonOrderingChange();
+  }
+  base::ObserverList<ui::WindowButtonOrderObserver>::Unchecked observers;
+};
+class LayoutHostTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    auto* order = views::WindowButtonOrderProvider::GetInstance();
+    left_ = order->leading_buttons();
+    right_ = order->trailing_buttons();
+    old_ui_ = ui::LinuxUi::SetInstance(&linux_ui_);
+    ReplaceHost();
+    SetLayout(false);
+    task_environment()->RunUntilIdle();
+  }
+  void TearDown() override {
+    NativeHostTest::TearDown();
+    EXPECT_TRUE(linux_ui_.observers.empty());
+    ui::LinuxUi::SetInstance(old_ui_);
+    views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
+        left_, right_);
+  }
+  void SetLayout(bool left) {
+    using Button = views::FrameButton;
+    views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
+        left ? std::vector<Button>{Button::kClose} : std::vector<Button>{},
+        left ? std::vector<Button>{Button::kMinimize, Button::kMaximize}
+             : std::vector<Button>{Button::kMinimize, Button::kMaximize,
+                                   Button::kClose});
+    linux_ui_.Notify();
+  }
+  HostLayoutLinuxUi linux_ui_;
+  raw_ptr<ui::LinuxUi> old_ui_ = nullptr;
+  std::vector<views::FrameButton> left_, right_;
+};
+class LayoutClient : public mojom::NativeHostClient {
+ public:
+  void Connect(NativeHost& host) {
+    receiver.reset();
+    host.SetClient(receiver.BindNewPipeAndPassRemote());
+  }
+  void OnNativeEvent(const std::string& module,
+                     const std::string& event,
+                     const std::string& json) override {
+    if (module != "BayShell" || event != "onAppEvent")
+      return;
+    auto payload = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(payload);
+    const auto* type = payload->FindString("type");
+    if (!type || *type != "windowButtonLayout")
+      return;
+    EXPECT_EQ(payload->size(), 2u);
+    const auto* layout = payload->FindDict("layout");
+    ASSERT_TRUE(layout);
+    events.push_back(layout->Clone());
+  }
+  void OnHostInfoChanged(const std::string& json) override {
+    auto info = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(info);
+    const auto* layout =
+        info->FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+    ASSERT_TRUE(layout);
+    snapshots.push_back(layout->Clone());
+  }
+  mojo::Receiver<mojom::NativeHostClient> receiver{this};
+  std::vector<base::DictValue> events, snapshots;
+};
+
+TEST_F(NativeHostTest, LayoutQueryDoesNotWaitForDocumentPreparation) {
+  base::test::TestFuture<const std::string&> info;
+  host_->GetHostInfo(info.GetCallback());
+  EXPECT_FALSE(info.IsReady());
+  const auto result = base::JSONReader::ReadDict(
+      Invoke("BayShell", "windowButtonLayout", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  const auto* layout = result->FindDict("value");
+  ASSERT_TRUE(layout);
+  EXPECT_TRUE(layout->FindList("left"));
+  EXPECT_TRUE(layout->FindList("right"));
+}
+
+TEST_F(LayoutHostTest, CoordinatorAdvertisesAndQueriesCurrentLayout) {
+  SetLayout(true);
+  const auto info = HostInfo();
+  ExpectLayoutAndCaptionMethods(info);
+  const auto* snapshot =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(snapshot);
+  EXPECT_EQ(Invoke("BayShell", "windowButtonLayout", "[]"),
+            base::WriteJson(base::DictValue().Set("value", snapshot->Clone())));
+  EXPECT_EQ(*snapshot->FindList("left"), base::ListValue().Append("close"));
+  EXPECT_EQ(*snapshot->FindList("right"),
+            base::ListValue().Append("minimize").Append("maximize"));
+  for (const char* args : {"{}", "[1]", "[null]", "[[],{}]"})
+    ExpectError(Invoke("BayShell", "windowButtonLayout", args), "invalid_args");
+}
+TEST_F(LayoutHostTest, CaptionCommandsPreserveCommonArityAndUnknownIdErrors) {
+  for (const char* method :
+       {"minimizeWindow", "toggleMaximizeWindow", "windowState"}) {
+    ExpectError(Invoke("BayShell", method, "[]"), "invalid_args");
+    ExpectError(Invoke("BayShell", method, R"(["missing",1])"), "invalid_args");
+    ExpectError(Invoke("BayShell", method, R"(["missing"])"), "window_error");
+  }
+}
+TEST_F(LayoutHostTest, LiveChangesPublishSnapshotAndCurrentEvent) {
+  LayoutClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 1u);
+  const auto initial = client.events[0].Clone();
+  SetLayout(true);
+  SetLayout(false);
+  SetLayout(true);
+  EXPECT_EQ(client.events.size(), 1u);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 2u);
+  ASSERT_FALSE(client.snapshots.empty());
+  EXPECT_EQ(client.snapshots.back(), client.events.back());
+  EXPECT_NE(initial, client.events.back());
+  EXPECT_EQ(client.events.back(), *HostInfo().FindDictByDottedPath(
+                                      "snapshots.BayShell.windowButtonLayout"));
+}
+TEST_F(LayoutHostTest, ReplaceDisconnectReconnectAndTeardownCancelStaleEvents) {
+  LayoutClient first;
+  first.Connect(*host_);
+  SetLayout(true);
+  LayoutClient second;
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(first.events.empty());
+  ASSERT_EQ(second.events.size(), 1u);
+  second.receiver.reset();
+  task_environment()->RunUntilIdle();
+  SetLayout(false);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 1u);
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(second.events.size(), 2u);
+  EXPECT_EQ(second.events.back(), *HostInfo().FindDictByDottedPath(
+                                      "snapshots.BayShell.windowButtonLayout"));
+  SetLayout(true);
+  host_->ResetAndDeleteThis();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 2u);
+  EXPECT_TRUE(linux_ui_.observers.empty());
+}
+TEST_F(LayoutHostTest, FreshDocumentGetsCurrentLayoutAfterDisconnectedUpdate) {
+  SetLayout(true);
+  ReplaceHost();
+  LayoutClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 1u);
+  EXPECT_EQ(client.events[0], *HostInfo().FindDictByDottedPath(
+                                  "snapshots.BayShell.windowButtonLayout"));
+}
 
 class AppearanceClient : public mojom::NativeHostClient {
  public:
@@ -754,6 +944,19 @@ class WindowClipboardHostTest : public ClipboardHostTest {
   testing::NiceMock<PickerWindow> window_;
   base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
 };
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesLayoutAndCaptionMethods) {
+  const auto info = HostInfo();
+  ExpectLayoutAndCaptionMethods(info);
+  const auto* snapshot =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(snapshot);
+  EXPECT_EQ(Invoke("BayShell", "windowButtonLayout", "[]"),
+            base::WriteJson(base::DictValue().Set("value", snapshot->Clone())));
+  for (const char* method :
+       {"minimizeWindow", "toggleMaximizeWindow", "windowState"})
+    ExpectError(Invoke("BayShell", method, R"(["missing"])"), "window_error");
+}
 
 TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
   const auto info = HostInfo();
