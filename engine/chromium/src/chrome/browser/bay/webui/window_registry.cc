@@ -2,8 +2,6 @@
 #include "chrome/browser/bay/webui/window_registry.h"
 
 #include <algorithm>
-#include <cmath>
-#include <limits>
 #include <utility>
 #include <vector>
 
@@ -17,6 +15,7 @@
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
@@ -62,29 +61,6 @@ bool ValidName(const std::string& name) {
 bool KnownKind(const std::string& kind) {
   return kind == "browser" || kind == "small" || IsUtilityWindowKind(kind);
 }
-std::optional<gfx::Rect> ReadFrame(const base::Value* value) {
-  if (!value || !value->is_list() || value->GetList().size() != 4)
-    return std::nullopt;
-  int numbers[4];
-  for (size_t i = 0; i < 4; ++i) {
-    const auto number = value->GetList()[i].GetIfDouble();
-    if (!number || !std::isfinite(*number) ||
-        *number < std::numeric_limits<int>::min() ||
-        *number > std::numeric_limits<int>::max()) {
-      return std::nullopt;
-    }
-    numbers[i] = static_cast<int>(std::round(*number));
-  }
-  if (numbers[2] <= 0 || numbers[3] <= 0)
-    return std::nullopt;
-  return gfx::Rect(numbers[0], numbers[1], numbers[2], numbers[3]);
-}
-base::DictValue StateValue(BrowserWindowInterface* browser) {
-  auto* window = browser->GetWindow();
-  return base::DictValue()
-      .Set("maximized", window->IsMaximized())
-      .Set("fullscreen", window->IsFullscreen());
-}
 base::ListValue RectValue(const gfx::Rect& rect) {
   return base::ListValue()
       .Append(rect.x())
@@ -97,7 +73,11 @@ base::ListValue RectValue(const gfx::Rect& rect) {
 class WindowRegistry::Entry final : public views::WidgetObserver {
  public:
   Entry(WindowRegistry& registry, BrowserWindowInterface* browser)
-      : registry_(registry), browser_(browser->GetWeakPtr()) {}
+      : registry_(registry), browser_(browser->GetWeakPtr()) {
+    if (auto* window = browser->GetWindow();
+        window && !GlobalWindowCoordinates())
+      restored_size.Seed(window->GetRestoredBounds().size());
+  }
   void ObserveWidget() {
     auto* window = WebUIBrowserWindow::FromBrowser(browser_.get());
     if (window && window->widget() && !observation_.IsObserving())
@@ -116,6 +96,7 @@ class WindowRegistry::Entry final : public views::WidgetObserver {
   std::string id;
   base::DictValue options;
   bool absorbed = false;
+  RestoredWindowSize restored_size;
 
  private:
   const raw_ref<WindowRegistry> registry_;
@@ -220,8 +201,12 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
     if (const auto* value = options.Find(field); value && !value->is_bool())
       return Failure("Window flags must be booleans");
   }
-  if (const auto* size = options.Find("size"); size && !size->is_list())
-    return Failure("Invalid window size");
+  const bool global_coordinates = GlobalWindowCoordinates();
+  WindowPlacement placement;
+  const auto placement_error =
+      ParseWindowPlacement(options, global_coordinates, placement);
+  if (!placement_error.empty())
+    return {false, placement_error};
   const std::string kind =
       options.FindString("kind") ? *options.FindString("kind") : "browser";
   if (!KnownKind(kind))
@@ -249,36 +234,20 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
   }
   if (pending_open_)
     return Failure("A window is already being created");
-  const auto* frame_value = options.Find("frame");
-  auto frame = ReadFrame(frame_value);
-  if (frame_value && !frame_value->is_none() && !frame)
-    return Failure("Invalid window frame");
-  if (!frame) {
-    if (const auto* size = options.FindList("size")) {
-      if (size->size() != 2)
-        return Failure("Invalid window size");
-      const auto width = (*size)[0].GetIfDouble();
-      const auto height = (*size)[1].GetIfDouble();
-      if (!width || !height || !std::isfinite(*width) ||
-          !std::isfinite(*height) || *width < 1 || *height < 1 ||
-          *width > 32768 || *height > 32768) {
-        return Failure("Invalid window size");
-      }
-      gfx::Point center;
-      if (requester) {
-        center = requester->GetWindow()->GetBounds().CenterPoint();
-      } else {
-        auto* screen = display::Screen::Get();
-        if (!screen)
-          return Failure("No display is available for the requested window");
-        center = screen->GetPrimaryDisplay().work_area().CenterPoint();
-      }
-      const gfx::Size dimensions(static_cast<int>(std::round(*width)),
-                                 static_cast<int>(std::round(*height)));
-      frame.emplace(center.x() - dimensions.width() / 2,
-                    center.y() - dimensions.height() / 2, dimensions.width(),
-                    dimensions.height());
+  auto frame = placement.frame;
+  if (global_coordinates && !frame && placement.size) {
+    gfx::Point center;
+    if (requester) {
+      center = requester->GetWindow()->GetBounds().CenterPoint();
+    } else {
+      auto* screen = display::Screen::Get();
+      if (!screen)
+        return Failure("No display is available for the requested window");
+      center = screen->GetPrimaryDisplay().work_area().CenterPoint();
     }
+    frame.emplace(center.x() - placement.size->width() / 2,
+                  center.y() - placement.size->height() / 2,
+                  placement.size->width(), placement.size->height());
   }
   const bool incognito = options.FindBool("incognito").value_or(false);
   const std::string profile_name =
@@ -331,8 +300,25 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
       current.id = id;
       current.options = options.Clone();
       current.options.Set("kind", kind);
-      if (frame)
-        requester->GetWindow()->SetBounds(*frame);
+      auto* window = requester->GetWindow();
+      if (!global_coordinates && placement.size) {
+        // The startup shell already exists. Resize it without asking for or
+        // setting a global origin, before applying its restored show state.
+        if (auto* shell = WebUIBrowserWindow::FromBrowser(requester)) {
+          current.restored_size.Seed(*placement.size);
+          if (window->IsMaximized() || window->IsMinimized())
+            window->Restore();
+          shell->widget()->SetSize(*placement.size);
+        }
+      } else if (frame) {
+        window->SetBounds(*frame);
+      }
+      if (placement.maximized.has_value()) {
+        if (*placement.maximized)
+          window->Maximize();
+        else if (window->IsMaximized() || window->IsMinimized())
+          window->Restore();
+      }
       if (const auto* title = options.FindString("title"))
         SetTitle(id, *title);
       PublishHostInfo();
@@ -350,8 +336,18 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
   }
   params.should_trigger_session_restore = false;
   params.omit_from_session_restore = true;
-  if (frame)
+  if (frame) {
     params.initial_bounds = *frame;
+  } else if (!global_coordinates && placement.size) {
+    params.initial_bounds = gfx::Rect(*placement.size);
+    params.initial_origin_specified =
+        BrowserWindowCreateParams::ValueSpecified::kUnspecified;
+  }
+  if (placement.maximized.has_value()) {
+    params.initial_show_state = *placement.maximized
+                                    ? ui::mojom::WindowShowState::kMaximized
+                                    : ui::mojom::WindowShowState::kNormal;
+  }
   if (const auto* title = options.FindString("title"))
     params.user_title = *title;
   pending_open_ = std::make_unique<PendingOpen>(profile, id, options.Clone());
@@ -412,6 +408,8 @@ WindowRegistry::Result WindowRegistry::SetFrame(const std::string& id,
     return Failure("Unknown window id");
   if (frame.IsEmpty())
     return Failure("Invalid window frame");
+  if (!GlobalWindowCoordinates())
+    return Failure("Global window coordinates are unavailable");
   browser->GetWindow()->SetBounds(frame);
   return Success();
 }
@@ -446,7 +444,7 @@ WindowRegistry::Result WindowRegistry::SetCaption(const std::string& id,
   const auto* maximize = fields ? fields->Find("maximize") : nullptr;
   std::optional<gfx::Rect> bounds;
   if (maximize && !maximize->is_none())
-    bounds = ReadFrame(maximize);
+    bounds = ReadWindowFrame(maximize);
   if (!dark || !maximize || (!maximize->is_none() && !bounds))
     return Failure("Invalid window caption");
 #if BUILDFLAG(IS_WIN)
@@ -457,12 +455,29 @@ WindowRegistry::Result WindowRegistry::SetCaption(const std::string& id,
 #endif
   return Success();
 }
+base::DictValue WindowRegistry::StateValue(
+    BrowserWindowInterface* browser) const {
+  auto* window = browser->GetWindow();
+  auto state = base::DictValue()
+                   .Set("maximized", window->IsMaximized())
+                   .Set("fullscreen", window->IsFullscreen());
+  if (!GlobalWindowCoordinates()) {
+    state.Set("minimized", window->IsMinimized());
+    const auto& size = entries_.at(browser)->restored_size.size();
+    if (size)
+      state.Set("size",
+                base::ListValue().Append(size->width()).Append(size->height()));
+  }
+  return state;
+}
 std::optional<base::DictValue> WindowRegistry::State(
     const std::string& id) const {
   auto* browser = Find(id);
   return browser ? std::make_optional(StateValue(browser)) : std::nullopt;
 }
 std::optional<gfx::Rect> WindowRegistry::Frame(const std::string& id) const {
+  if (!GlobalWindowCoordinates())
+    return std::nullopt;
   auto* browser = Find(id);
   return browser ? std::make_optional(browser->GetWindow()->GetBounds())
                  : std::nullopt;
@@ -518,6 +533,14 @@ void WindowRegistry::EmitToWindow(const std::string& id,
 }
 void WindowRegistry::BoundsChanged(BrowserWindowInterface* browser,
                                    const gfx::Rect& bounds) {
+  if (!GlobalWindowCoordinates()) {
+    auto* window = browser->GetWindow();
+    entries_.at(browser)->restored_size.BoundsChanged(
+        bounds.size(), !window->IsMaximized() && !window->IsFullscreen() &&
+                           !window->IsMinimized());
+    ShowStateChanged(browser);
+    return;
+  }
   const auto id = IdFor(browser);
   if (!id.empty())
     Broadcast(base::DictValue()
@@ -539,6 +562,12 @@ void WindowRegistry::OnBrowserCreated(BrowserWindowInterface* browser) {
       browser->GetProfile() == pending_open_->profile) {
     entry.id = pending_open_->id;
     entry.options = pending_open_->options.Clone();
+    if (!GlobalWindowCoordinates()) {
+      WindowPlacement placement;
+      if (ParseWindowPlacement(entry.options, false, placement).empty() &&
+          placement.size)
+        entry.restored_size.Seed(*placement.size);
+    }
   }
   // Decided once, before the window's document can ask for host info.
   if (!known && entry.id.empty() &&

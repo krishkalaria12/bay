@@ -60,7 +60,8 @@ class WindowRegistry final : public BrowserCollectionObserver {
   // The caption the UI draws on Windows: {maximize: Rect4 | null, dark}.
   Result SetCaption(const std::string& id, const base::Value* caption);
   std::optional<gfx::Rect> Frame(const std::string& id) const;
-  // {maximized, fullscreen}, or nullopt for an unknown window.
+  // {maximized, fullscreen}; without global coordinates also restored size and
+  // minimized state. nullopt for an unknown window.
   std::optional<base::DictValue> State(const std::string& id) const;
 
   // A normal window Chrome opens on its own (a relaunch, the taskbar, an
@@ -81,6 +82,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   WindowRegistry();
   ~WindowRegistry() override;
   Entry& EnsureEntry(BrowserWindowInterface* browser);
+  base::DictValue StateValue(BrowserWindowInterface* browser) const;
   void PublishHostInfo();
   void Broadcast(base::DictValue event);
   void EmitToWindow(const std::string& id, base::DictValue event);

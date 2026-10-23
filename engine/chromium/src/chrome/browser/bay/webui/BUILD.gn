@@ -58,6 +58,7 @@ source_set("impl") {
   ]
   deps = [
     ":webui",
+    ":window_placement",
     "resources:build_ts",
     "//bay/core:portable",
     "//chrome/app:command_ids",
@@ -145,6 +146,29 @@ source_set("impl") {
       "//chrome/browser/bay/data:data_services",
     ]
   }
+}
+
+source_set("window_placement") {
+  sources = [
+    "window_placement.cc",
+    "window_placement.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+  if (is_linux) {
+    deps = [ "//ui/ozone" ]
+  }
+}
+
+test("window_placement_unittests") {
+  sources = [ "window_placement_unittest.cc" ]
+  deps = [
+    ":window_placement",
+    "//base/test:run_all_unittests",
+    "//testing/gtest",
+  ]
 }
 
 if (is_win || is_linux) {
@@ -596,6 +620,7 @@ if (is_linux) {
     deps = [
       ":impl",
       ":webui",
+      ":window_placement",
       "//base",
       "//base/test:test_support",
       "//bay/core:engine_api",

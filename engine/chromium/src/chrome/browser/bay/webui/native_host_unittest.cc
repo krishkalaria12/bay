@@ -19,6 +19,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/platform_util_internal.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
@@ -129,6 +130,24 @@ void ExpectLayoutAndCaptionMethods(const base::DictValue& info) {
   EXPECT_EQ(layout->size(), 2u);
   EXPECT_TRUE(layout->FindList("left"));
   EXPECT_TRUE(layout->FindList("right"));
+}
+
+TEST_F(NativeHostTest, PlacementCapabilityAndUnknownWindowKeepCoordinatorRole) {
+  const auto info = HostInfo();
+  EXPECT_EQ(
+      info.FindBoolByDottedPath("constants.BayShell.globalWindowCoordinates"),
+      GlobalWindowCoordinates());
+  EXPECT_EQ(*info.FindString("role"), "coordinator");
+  EXPECT_EQ(Invoke("BayShell", "windowFrame", R"(["missing"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayShell", "windowState", R"(["missing"])"),
+              "window_error");
+  for (const char* options : {R"({"size":[0,600]})", R"({"maximized":1})",
+                              R"({"frame":[0,0,800,600],"size":[800]})"}) {
+    ExpectError(Invoke("BayShell", "openWindow",
+                       "[\"placement-test\"," + std::string(options) + "]"),
+                "window_error");
+  }
 }
 
 class HostLayoutLinuxUi : public ui::FakeLinuxUi {
@@ -956,6 +975,19 @@ TEST_F(WindowClipboardHostTest, WindowAdvertisesLayoutAndCaptionMethods) {
   for (const char* method :
        {"minimizeWindow", "toggleMaximizeWindow", "windowState"})
     ExpectError(Invoke("BayShell", method, R"(["missing"])"), "window_error");
+}
+
+TEST_F(WindowClipboardHostTest,
+       PlacementCapabilityDoesNotChangeWindowAuthority) {
+  const auto info = HostInfo();
+  EXPECT_EQ(
+      info.FindBoolByDottedPath("constants.BayShell.globalWindowCoordinates"),
+      GlobalWindowCoordinates());
+  EXPECT_EQ(*info.FindString("role"), "window");
+  EXPECT_EQ(Invoke("BayShell", "windowFrame", R"(["missing"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayShell", "windowState", R"(["missing"])"),
+              "window_error");
 }
 
 TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
