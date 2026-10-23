@@ -192,19 +192,22 @@ diff --git a/chrome/app/chrome_main.cc b/chrome/app/chrome_main.cc
  #include "build/build_config.h"
  #if !defined(BUILDING_CHROME_RENDERER)
  #include "chrome/app/chrome_main_delegate.h"
-+#if BUILDFLAG(IS_WIN)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +#include "bay/core/nn_main_delegate.h"  // nogncheck
  #endif
 +#endif
  #include "chrome/app/startup_timestamps.h"
  #include "chrome/browser/headless/headless_mode_init.h"
  #include "chrome/common/buildflags.h"
-@@ -129,7 +132,7 @@
+@@ -129,7 +132,10 @@
        base::TimeTicks::FromInternalValue(exe_entry_point_ticks),
        base::TimeTicks::FromInternalValue(preread_begin_ticks),
        base::TimeTicks::FromInternalValue(preread_end_ticks)};
 -  ChromeMainDelegate chrome_main_delegate(timestamps);
 +  nncore::NNMainDelegate chrome_main_delegate(timestamps);
++#elif BUILDFLAG(IS_LINUX)
++  nncore::NNMainDelegate chrome_main_delegate(
++      {.exe_entry_point_ticks = base::TimeTicks::Now()});
  #else  // BUILDFLAG(IS_WIN)
    ChromeMainDelegate chrome_main_delegate(
        {.exe_entry_point_ticks = base::TimeTicks::Now()});
@@ -272,7 +275,7 @@ diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
  #include "base/time/time.h"
  #include "base/trace_event/trace_event.h"
  #include "build/build_config.h"
-+#if BUILDFLAG(IS_WIN)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +#include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 +#endif
  #include "chrome/browser/ai/ai_data_keyed_service.h"          // nogncheck
@@ -283,7 +286,7 @@ diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
  
  void Browser::TabStripEmpty() {
 +  // The WebUI owns the window even when its last page is parked or closed.
-+#if BUILDFLAG(IS_WIN)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +  if (WebUIBrowserWindow::FromBrowser(this) &&
 +      !UnloadController::From(this)->is_attempting_to_close_browser()) {
 +    return;
@@ -299,7 +302,7 @@ diff --git a/chrome/browser/ui/unload_controller.cc b/chrome/browser/ui/unload_c
  #include "base/command_line.h"
  #include "base/functional/bind.h"
  #include "base/location.h"
-+#if BUILDFLAG(IS_WIN)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +#include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 +#endif
  #include "base/task/single_thread_task_runner.h"
@@ -309,7 +312,7 @@ diff --git a/chrome/browser/ui/unload_controller.cc b/chrome/browser/ui/unload_c
  }
  
  void UnloadController::TabStripEmpty() {
-+#if BUILDFLAG(IS_WIN)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 +  if (!is_attempting_to_close_browser_ &&
 +      WebUIBrowserWindow::FromBrowser(browser_)) {
 +    return;

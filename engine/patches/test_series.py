@@ -82,6 +82,16 @@ class PlatformRoutingTests(unittest.TestCase):
             self.assertIn('"//bay/core"', build.read_text())
             self.assertNotIn(("chrome/BUILD.gn", False), steps[names[1]].paths())
 
+    def test_shared_host_runs_nncore_and_keeps_empty_windows_on_linux(self):
+        patch = (HERE / "chromium-bay-webui-window.patch").read_text()
+        added = "\n".join(line[1:] for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
+        # NNCore's main delegate, and with it the frame hook, runs on both web desktops.
+        self.assertIn('#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)\n#include "bay/core/nn_main_delegate.h"', added)
+        self.assertIn("#elif BUILDFLAG(IS_LINUX)\n  nncore::NNMainDelegate chrome_main_delegate(", added)
+        # Every host gate, including the empty-strip ones that keep a parked
+        # window open, covers Linux.
+        self.assertNotIn("#if BUILDFLAG(IS_WIN)\n", added + "\n")
+
     def test_linux_safe_storage_item_is_bays_own(self):
         step = next(s for s in series.read_series("linux") if s.name == "chromium-safe-storage-name-linux.patch")
         # The pinned non-Chrome-branded names, which every Chromium build shares.
