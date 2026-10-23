@@ -56,9 +56,12 @@ class FrameHookTests(unittest.TestCase):
         frame = (WEBUI / "frame_linux.cc").read_text()
         self.assertIn("params.remove_standard_frame = true;", frame)
         self.assertIn("std::unique_ptr<views::FrameView> CreateFrameView() override", frame)
+        self.assertIn("class ClientFrame final : public views::FrameViewLinux", frame)
+        self.assertIn("void CreateCaptionButtons() override {}", frame)
         # Resize edges are tested before the client's CSS drag regions.
         hit = frame[frame.index("int NonClientHitTest("):]
-        self.assertLess(hit.index("GetHTComponentForFrame("), hit.index("NativeFrameView::NonClientHitTest(point)"))
+        self.assertLess(hit.index("if (top || bottom || left || right)"),
+                        hit.index("widget->client_view()->NonClientHitTest("))
         self.assertNotIn("windows.h", frame)
 
 
