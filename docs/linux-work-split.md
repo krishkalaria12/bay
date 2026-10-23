@@ -14,7 +14,7 @@ The code split follows ownership, so each person mostly works in their own files
 - **D** owns sync crypto and the sync key store.
 - **A** owns the web UI gaps, packaging and CI.
 
-Sizes are rough: S = 1, M = 2, L = 3, XL = 5. K keeps the largest stage 1 allocation at 32 points: 22 complete and 10 remaining. D has 5 points and A has 11 points, all remaining. These totals follow the item estimates below. In stage 2, D runs 10 points of testing, A runs 9 points and adds 2 points of CI, and K handles engine, host, import and keychain fixes as needed.
+Sizes are rough: S = 1, M = 2, L = 3, XL = 5. K keeps the largest stage 1 allocation at 32 points: 30 complete and 2 remaining. D has 5 points and A has 11 points, all remaining. These totals follow the item estimates below. In stage 2, D runs 10 points of testing, A runs 9 points and adds 2 points of CI, and K handles engine, host, import and keychain fixes as needed.
 
 A takes the former D4 and D5 as A2 and A3, plus the former K7 as A4. K takes the former D2 as K8 and the former A1, originally D3, as K9. K1–K4, K6 and D1 keep their identifiers; K7 remains the former CI task now owned by A4.
 
@@ -96,13 +96,14 @@ Use these agreements so ownership changes do not block implementation:
   - `chromium-bay-branding-linux.patch`: binary name `bay`, the desktop file name, and AppArmor-friendly paths. Keep `chrome_sandbox` and `chrome_crashpad_handler`.
   - `03-ungoogled.py`: apply `0016-chromium-sandbox-pie` and `remove-disable-setuid-sandbox-as-bad-flag` on Linux.
   - List the patches in `series` and lift the Linux `prepare`/`build` refusal in `scripts/engine.py`. Add lock fields for the glibc floor and the sysroot.
-- [ ] **K8 · Import on Linux (M+L+S+M = 8), previously D2.**
+- [x] **K8 · Import on Linux (M+L+S+M = 8), previously D2.** Code complete 24 Oct 2026 in `feat/linux-k-import`. Native, snap and Flatpak discovery, v10/v11 secrets, consent and unlock caching, isolated NSS profiles, Linux BayImport host dispatch and single-file pickers are implemented. Mac fixture checks cover the shared readers, both keyring protocols and real NSS `key4.db` data; Linux release/DCHECK syntax checks pass. Final Linux linking still depends on D1, and native/desktop execution remains deferred to stage 2.
   - Profile paths:
     - `~/.config/{google-chrome, chromium, BraveSoftware/Brave-Browser, vivaldi, opera, microsoft-edge}` and Helium's directory.
-    - Firefox native, snap and Flatpak profiles.
+    - Firefox native, snap and Flatpak profiles, including legacy and current XDG locations.
     - Flatpak Chromium-family apps under `~/.var/app/*/config`.
     - Zen's own profiles and its Flatpak profiles.
   - Chromium secrets: v10 with the fixed key, and v11 from the Secret Service or KWallet "Safe Storage" item, after consent and keyring unlock. This is the Linux version of `packages/import/windows/Secrets.cpp`.
+    - The import window can continue without unlocking, retaining v10 passwords and reporting blocked v11 rows. Unlocks are bound to canonical source roots; forgetting keys cancels late unlock results.
   - Check that Firefox's NSS `key4.db` reader works as is.
   - Open the `is_win` gate in `chrome/browser/bay/data/BUILD.gn` (currently `assert(is_win)`) and in `data_bridge.cc`. Replace the Windows-only `libs` and defines with `//third_party/sqlite` and BoringSSL. The readers, vault, sessions and SQLite code are shared.
 

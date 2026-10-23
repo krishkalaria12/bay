@@ -79,6 +79,23 @@ python -m unittest discover -s engine/patches -p 'test_*.py' -v
 python -m unittest discover -s engine/chromium -p 'test_*.py' -v
 ```
 
+K8's stage 1 Linux import fixtures also run on macOS:
+
+```sh
+python3 scripts/linux/test-import.py
+python3 scripts/windows/test-native.py
+```
+
+The first command needs Homebrew OpenSSL, NSS/NSPR and GLib/GIO with
+`pkg-config`. It compiles disposable fixture executables for Linux profile
+discovery, import consent/cache behavior, native data envelopes, fake libsecret
+and KWallet protocols, CBC formats and NSS `key4.db` reading. The NSS fixture
+keeps another initialized profile alive to check isolation. It never opens a
+real browser profile or keyring, configures GN, or builds/runs a Linux binary.
+The second command checks the existing shared reader and sync compatibility
+fixtures. Linux import linking still needs D1's BoringSSL sync backend; the
+static data target intentionally does not advertise BaySync on Linux yet.
+
 Once the Linux engine tree is prepared and GN-generated, build and run the
 native helper tests on Linux:
 
