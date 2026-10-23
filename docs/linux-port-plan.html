@@ -1267,8 +1267,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td>Capability table and OS seam</td>
                   <td><code>capabilities.ts</code>, <code>types.ts</code></td>
                   <td>
-                    <span class="chip Extend">warn</span> <code>linux</code> is already a <code>PlatformOS</code> and a web desktop. Caption buttons are
-                    Windows-only today; Linux needs them for client-side decorations
+                    <span class="chip ok">Code complete</span> <code>linux</code> is a web desktop with client-side caption buttons. K2 adds desktop button
+                    ordering and matching layout clearances; native execution remains deferred.
                   </td>
                 </tr>
                 <tr>
@@ -1788,8 +1788,45 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 window and Wayland for client-side decorations, and replaces the GTK frame so no second title bar appears. A 4&nbsp;DIP band inside each edge
                 resizes restored windows, with 16&nbsp;DIP diagonal corners; maximized and full-screen windows don't resize. Every other point goes to the WebUI
                 client view's CSS drag regions, and Chromium's Linux event filter handles moves, resizes and the desktop's double-click action.
-                <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. The desktop's button layout, edge
-                tiling and client shadows come later.
+                <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. K2 frame follow-ups are recorded
+                below.
+              </p>
+              <p>
+                <strong>Frame insets and tiling, 23 Oct 2026 (K2).</strong> The captionless frame now uses Chromium's Linux decoration, input-region and
+                opaque-region hooks. Restored windows have a solid 4&nbsp;DIP border on each free edge. A tiled edge has no border or resize handle; maximized
+                and full-screen windows have none. The host retains the compositor's four edge flags, updates geometry even when only the inset mask changes,
+                and offsets CSS drag regions into the inset client area. The solid resize border stays inside the input region. X11's tiling flags come from
+                maximization atoms, so they do not promise Wayland's per-edge precision.
+              </p>
+              <p>
+                <strong>Frame verification.</strong> Twelve native regression tests cover restored geometry, all 16 tiled-edge masks, hit testing, input-region
+                policy, CSS drag offsets and state transitions. Sources pass release and DCHECK Linux x64 syntax checks using the pinned sysroot and generated
+                Mac configuration headers. These tests have not linked or run. Linux GN validation, compositor regions, scaling, X11/Wayland resizing and
+                desktop behavior remain stage-2 work.
+              </p>
+              <p>
+                <strong>Desktop settings, 23 Oct 2026 (K2).</strong> A Linux-only GTK settings patch reads the portal's
+                <code>org.gnome.desktop.wm.preferences</code> <code>button-layout</code> through Chromium's shared session bus and portal registration. It
+                observes setting and service-owner changes, keeps GTK's latest decoration layout as fallback, and accepts an empty portal string as an empty
+                button layout. Newer signals supersede an outstanding initial read. The first host snapshot uses the current GTK or default order immediately;
+                an asynchronous portal result updates that order later. Host information is refreshed before matching layout events. Document-owned observers
+                post and coalesce delivery outside the toolkit callback, and cancel old connection events on reconnect or teardown.
+              </p>
+              <p>
+                <strong>Caption layout, 23 Oct 2026 (K2).</strong> <code>snapshots.BayShell.windowButtonLayout</code> contains ordered <code>left</code> and
+                <code>right</code> button lists. The UI draws those groups, including omitted buttons and empty layouts, and reacts to matching
+                <code>onAppEvent</code> updates. Toolbars, split panes, sidebar headers on either side, the tab strip and its collapsed peek, Little Bay and
+                Linux utility windows clear the corresponding groups. Linux now advertises the existing minimize, maximize and window-state operations. The
+                caption's initial state query cannot overwrite a newer state event. Windows' maximize hit target and macOS traffic-light spacing retain their
+                existing behavior; geometry and subscription tests cover the cross-platform cases.
+              </p>
+              <p>
+                <strong>Layout verification.</strong> Provider, host and portal tests cover layout mapping, both host roles, snapshot/event consistency,
+                reconnects, teardown, portal priority, malformed values and owner restarts. Native sources and tests pass Linux x64 release/DCHECK syntax
+                checks. Portal checks additionally use a scratch <code>USE_DBUS=1</code> buildflag with the existing Mac-generated configuration headers. These
+                checks do not establish a Linux GN graph or linkage, and no native test binary has run. Portable JavaScript/Python checks, typechecks,
+                contracts, lint, formatting, React compiler checks and the production web build pass. Actual GTK/portal startup, desktop setting changes,
+                caption interaction and compositor behavior remain deferred to stage 2.
               </p>
               <p>
                 <strong>Notifications, 22 Oct 2026.</strong> The shared <code>notifications.cc</code> service now routes Linux post/remove operations through

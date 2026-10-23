@@ -72,6 +72,7 @@ autoninja -C out/Release_GN_x64 \
   chrome/browser/bay/webui:notifications_unittests \
   chrome/browser/bay/webui:native_host_unittests \
   chrome/browser/bay/webui:frame_linux_unittests \
+  chrome/browser/bay/webui:window_button_layout_linux_unittests \
   chrome/browser/bay/webui:secret_storage_linux_unittests \
   chrome/browser/bay/webui:document_store_unittests \
   chrome/browser/bay/webui:shell_files_unittests \
@@ -80,9 +81,16 @@ autoninja -C out/Release_GN_x64 \
   chrome/browser/bay/webui:default_browser_unittests \
   chrome/browser/bay/webui:autostart_linux_unittests \
   chrome/browser/bay/webui:app_services_linux_unittests
-for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests secret_storage_linux_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests default_browser_unittests autostart_linux_unittests app_services_linux_unittests; do
+for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests window_button_layout_linux_unittests secret_storage_linux_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests default_browser_unittests autostart_linux_unittests app_services_linux_unittests; do
   out/Release_GN_x64/$test || break
 done
+```
+
+With GTK and D-Bus enabled, also run the patched portal-layout tests during stage 2:
+
+```sh
+autoninja -C out/Release_GN_x64 ui/gtk:gtk_unittests
+xvfb-run -a out/Release_GN_x64/gtk_unittests --gtest_filter='WindowButtonLayoutPortalTest.*'
 ```
 
 These test targets are added but have not run. Current source checks use the

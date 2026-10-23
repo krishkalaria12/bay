@@ -21,7 +21,7 @@ These need no new code, only the Linux runtime checks in stage 2.
 
 - Seams: the series takes `linux` and comma lists, `scripts/engine.py --platform linux` exists, Linux has its capability column, and the shared runtime is switched on by web host.
 - Host sources:
-  - The CSD frame (`frame_linux`).
+  - The CSD frame (`frame_linux`), tiled-edge insets, and K2 desktop button-layout snapshots with reactive caption placement.
   - Notifications.
   - The Safe Storage naming patch and the fixed-key warning (`BayCEF.secretStorage`).
   - `prompt`, `confirm`, `showMenu`, `pickFiles` and `fileIcon` through `ShellUI`.
@@ -76,7 +76,7 @@ Agree these early so neither person blocks the other:
   - `BayApp.systemInfo`, `environment` and `launchEnvironment` as host-info snapshots.
   - `BayApp.updaterState`, which reports that the package manager handles updates and offers no in-app updater.
   - Tests in the existing style: fakes for external effects, plus host tests for advertisement, both host roles and teardown.
-- [ ] **K2 · Frame follow-ups (M+M = 4).**
+- [x] **K2 · Frame follow-ups (M+M = 4).** Code complete 23 Oct 2026. Portal-first button ordering with GTK fallback, reactive caption placement and tiled-edge client insets are implemented; native execution and desktop verification remain deferred.
   - Read the desktop's button layout (the Settings portal's `org.gnome.desktop.wm.preferences button-layout`, falling back to GTK's decoration layout) and publish it as a snapshot.
   - Draw the caption buttons on the left or right to match, including with the right-docked sidebar.
   - Edge tiling state, and client shadows or insets for restored windows.
