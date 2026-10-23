@@ -839,6 +839,9 @@ class FakeFileDialog : public ui::SelectFileDialog {
   }
   int detach_count = 0;
   gfx::NativeWindow parent = nullptr;
+  Type selection_type = SELECT_NONE;
+  std::optional<FileTypeInfo> types;
+  std::u16string dialog_title;
   std::shared_ptr<FileDialogLifetime> lifetime =
       std::make_shared<FileDialogLifetime>();
 
@@ -852,11 +855,21 @@ class FakeFileDialog : public ui::SelectFileDialog {
                       const base::FilePath::StringType& default_extension,
                       gfx::NativeWindow owning_window,
                       const GURL* caller) override {
-    EXPECT_EQ(type, SELECT_OPEN_MULTI_FILE);
-    EXPECT_EQ(title, u"Open files");
+    selection_type = type;
+    dialog_title = title;
+    if (file_types)
+      types.emplace(*file_types);
+    if (type == SELECT_OPEN_MULTI_FILE) {
+      EXPECT_EQ(title, u"Open files");
+      EXPECT_FALSE(file_types);
+      EXPECT_EQ(file_type_index, 0);
+    } else {
+      EXPECT_EQ(type, SELECT_OPEN_FILE);
+      EXPECT_EQ(title, u"Choose import file");
+      EXPECT_TRUE(file_types);
+      EXPECT_EQ(file_type_index, 1);
+    }
     EXPECT_TRUE(default_path.empty());
-    EXPECT_FALSE(file_types);
-    EXPECT_EQ(file_type_index, 0);
     EXPECT_TRUE(default_extension.empty());
     EXPECT_FALSE(caller);
     parent = owning_window;
@@ -1102,6 +1115,13 @@ class FilePickerTest : public NativeHostTest {
     factory_ = nullptr;
     NativeHostTest::TearDown();
   }
+  void WindowHost() {
+    host_->ResetAndDeleteThis();
+    remote_.reset();
+    auto* host = new NativeHost(*main_rfh(), HostContext::ForWindow(window_),
+                                remote_.BindNewPipeAndPassReceiver());
+    host_ = host->GetWeakPtr();
+  }
   void Pick(ShellUI::Response callback) {
     EXPECT_TRUE(shell_->Dispatch(HostContext::ForWindow(window_), "BayShell",
                                  "pickFiles", {}, callback));
@@ -1159,6 +1179,134 @@ TEST_F(FilePickerTest, WindowHostAdvertisesFilePicking) {
   ASSERT_TRUE(methods);
   EXPECT_TRUE(methods->contains("BayShell.pickFiles"));
   EXPECT_TRUE(methods->contains("BayShell.showMenu"));
+}
+
+TEST_F(NativeHostTest, ImportAdvertisedAndDispatchedWithoutSyncOrReadiness) {
+  const auto info = HostInfo();
+  const auto* modules = info.FindList("modules");
+  ASSERT_TRUE(modules);
+  EXPECT_TRUE(modules->contains("BayImport"));
+  EXPECT_FALSE(modules->contains("BaySync"));
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method : {"BayImport.listBrowsers", "BayImport.importData",
+                             "BayImport.chooseImportFile"})
+    EXPECT_TRUE(methods->contains(method));
+  for (const auto& method : *methods)
+    EXPECT_FALSE(method.GetString().starts_with("BaySync."));
+  ExpectError(Invoke("BaySync", "newDeviceId", "[]"), "unsupported_method");
+  ReplaceHost();
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayImport", "cancelImport", R"(["fixture-job"])",
+                result.GetCallback());
+  EXPECT_FALSE(result.IsReady());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(result.Get(), R"({"value":null})");
+}
+
+TEST_F(FilePickerTest, ImportPickerUsesSingleSelectionAndCsvFilter) {
+  WindowHost();
+  const auto info = HostInfo();
+  ASSERT_TRUE(info.FindList("modules"));
+  EXPECT_TRUE(info.FindList("modules")->contains("BayImport"));
+  EXPECT_FALSE(info.FindList("modules")->contains("BaySync"));
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])",
+                result.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_OPEN_FILE);
+  ASSERT_TRUE(dialog->types);
+  EXPECT_EQ(dialog->types->extensions,
+            (std::vector<std::vector<std::string>>{{"csv"}}));
+  EXPECT_FALSE(dialog->types->include_all_files);
+  const base::FilePath path("/tmp/a ?#% café.csv");
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/display/name"), path));
+  auto reply = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(reply);
+  ASSERT_TRUE(reply->FindString("value"));
+  EXPECT_EQ(*reply->FindString("value"), path.value());
+}
+
+TEST_F(FilePickerTest, ImportBookmarkFilterAndCancellationSettleOnce) {
+  WindowHost();
+  std::vector<std::string> results;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["bookmarksHTML"])",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  results.push_back(result);
+                }));
+  auto dialog = factory_->dialogs.back();
+  ASSERT_TRUE(dialog->types);
+  EXPECT_EQ(dialog->types->extensions,
+            (std::vector<std::vector<std::string>>{{"html", "htm"}}));
+  dialog->Cancel();
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late.html")));
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results[0], R"({"value":null})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, ImportPickerRejectsUnsupportedKindsBeforeShowing) {
+  WindowHost();
+  for (const char* args : {R"(["safariExport"])", R"(["unknown"])", "[null]"})
+    ExpectError(Invoke("BayImport", "chooseImportFile", args), "unsupported");
+  EXPECT_TRUE(factory_->dialogs.empty());
+}
+
+TEST_F(FilePickerTest, ImportCoordinatorCannotBorrowWindow) {
+  ExpectError(Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])"),
+              "window_required");
+  EXPECT_TRUE(factory_->dialogs.empty());
+}
+
+TEST_F(FilePickerTest, ImportAndShellPickerShareBusySlotAndErrors) {
+  WindowHost();
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BayShell", "pickFiles", "[]", result.GetCallback());
+  ExpectError(Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])"),
+              "dialog_busy");
+  EXPECT_EQ(factory_->dialogs.size(), 1u);
+  factory_->dialogs.back()->Cancel();
+  task_environment()->RunUntilIdle();
+  factory_->unavailable = true;
+  ExpectError(Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])"),
+              "dialog_unavailable");
+}
+
+TEST_F(FilePickerTest, ImportOwnerTeardownCancelsOnceAndIgnoresLateResult) {
+  WindowHost();
+  std::vector<std::string> results;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  results.push_back(result);
+                }));
+  auto dialog = factory_->dialogs.back();
+  host_->ResetAndDeleteThis();
+  EXPECT_FALSE(host_);
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results[0], R"({"value":null})");
+  dialog->Cancel();
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late.csv")));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(results.size(), 1u);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, ImportSynchronousCompletionCanDestroyHost) {
+  WindowHost();
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  int calls = 0;
+  host_->Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])",
+                base::BindLambdaForTesting([&](const std::string& result) {
+                  ++calls;
+                  EXPECT_EQ(result, R"({"value":null})");
+                  host_->ResetAndDeleteThis();
+                }));
+  EXPECT_FALSE(host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
 }
 
 TEST_F(FilePickerTest, MultipleSelectionPreservesOrderAndReservedCharacters) {
