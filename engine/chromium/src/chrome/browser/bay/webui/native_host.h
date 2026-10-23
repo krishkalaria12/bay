@@ -84,6 +84,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 
   const HostContext context_;
 #if BUILDFLAG(IS_LINUX)
+  void ChooseImportFile(const base::ListValue& args, InvokeCallback callback);
   std::unique_ptr<WindowButtonLayoutLinux> button_layout_;
   // Document-scoped ownership dismisses prompts and settles pending icons.
   std::unique_ptr<ShellFiles> files_;

@@ -31,6 +31,7 @@ class HostContext;
 class ShellUI {
  public:
   using Response = base::OnceCallback<void(const std::string&)>;
+  enum class ImportFileKind { kPasswordsCSV, kBookmarksHTML };
   ShellUI();
   ~ShellUI();
   ShellUI(const ShellUI&) = delete;
@@ -44,7 +45,16 @@ class ShellUI {
                 const base::ListValue& args,
                 Response& callback);
 
+  // Native-only single-file adapter. Shares the public picker's authority,
+  // busy slot, URL response and cancellation lifecycle.
+  void PickImportFile(const HostContext& context,
+                      ImportFileKind kind,
+                      Response callback);
+
  private:
+  void StartFilePicker(const HostContext& context,
+                       std::optional<ImportFileKind> kind,
+                       Response callback);
   class ContextMenu;
   class FilePicker;
   struct PendingDialog;

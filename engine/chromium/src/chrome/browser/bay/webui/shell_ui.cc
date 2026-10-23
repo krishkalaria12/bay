@@ -230,7 +230,20 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
   FilePicker(Response response, base::OnceCallback<void(FilePicker*)> done)
       : response_(std::move(response)), done_(std::move(done)) {}
 
-  void Show(gfx::NativeWindow parent) {
+  void Show(gfx::NativeWindow parent, std::optional<ImportFileKind> kind) {
+    if (kind) {
+      file_types_.emplace();
+      const bool csv = *kind == ImportFileKind::kPasswordsCSV;
+      file_types_->extensions =
+          csv ? std::vector<
+                    std::vector<base::FilePath::StringType>>{{FILE_PATH_LITERAL(
+                    "csv")}}
+              : std::vector<std::vector<base::FilePath::StringType>>{
+                    {FILE_PATH_LITERAL("html"), FILE_PATH_LITERAL("htm")}};
+      file_types_->extension_description_overrides = {csv ? u"Password CSV"
+                                                          : u"Bookmarks HTML"};
+      file_types_->include_all_files = false;
+    }
     auto dialog = ui::SelectFileDialog::Create(this, nullptr);
     // A factory can re-enter and destroy the owner before returning.
     if (!response_) {
@@ -243,9 +256,12 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
       return;
     }
     dialog_ = dialog;
-    dialog->SelectFile(ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE,
-                       u"Open files", base::FilePath(), nullptr, 0,
-                       base::FilePath::StringType(), parent, nullptr);
+    dialog->SelectFile(kind ? ui::SelectFileDialog::SELECT_OPEN_FILE
+                            : ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE,
+                       kind ? u"Choose import file" : u"Open files",
+                       base::FilePath(), file_types_ ? &*file_types_ : nullptr,
+                       kind ? 1 : 0, base::FilePath::StringType(), parent,
+                       nullptr);
   }
 
   void FileSelected(const ui::SelectedFileInfo& file, int) override {
@@ -293,6 +309,7 @@ class ShellUI::FilePicker final : public base::RefCounted<FilePicker>,
                          std::move(keep_alive), std::move(done)));
   }
 
+  std::optional<ui::SelectFileDialog::FileTypeInfo> file_types_;
   scoped_refptr<ui::SelectFileDialog> dialog_;
   Response response_;
   base::OnceCallback<void(FilePicker*)> done_;
@@ -432,6 +449,35 @@ ShellUI::~ShellUI() {
     std::move(icon->callback).Run(Success(std::nullopt));
 }
 
+void ShellUI::PickImportFile(const HostContext& context,
+                             ImportFileKind kind,
+                             Response callback) {
+  StartFilePicker(context, kind, std::move(callback));
+}
+void ShellUI::StartFilePicker(const HostContext& context,
+                              std::optional<ImportFileKind> kind,
+                              Response callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Coordinators cannot borrow the last active window for either picker.
+  auto* window = context.is_window() ? context.window() : nullptr;
+  if (!window || !window->GetWindow() ||
+      !window->GetWindow()->GetNativeWindow()) {
+    std::move(callback).Run(
+        Failure("window_required", "The file picker requires a window host"));
+    return;
+  }
+  if (file_picker_) {
+    std::move(callback).Run(
+        Failure("dialog_busy", "A file picker is already open"));
+    return;
+  }
+  auto picker = base::MakeRefCounted<FilePicker>(
+      std::move(callback),
+      base::BindOnce(&ShellUI::FilePickerFinished, weak_factory_.GetWeakPtr()));
+  file_picker_ = picker;
+  picker->Show(window->GetWindow()->GetNativeWindow(), kind);
+}
 bool ShellUI::Dispatch(const HostContext& context,
                        const std::string& module,
                        const std::string& method,
@@ -445,25 +491,7 @@ bool ShellUI::Dispatch(const HostContext& context,
           Failure("invalid_args", "The file picker takes no arguments"));
       return true;
     }
-    // There is no windowId in this contract. In particular, coordinators must
-    // never borrow the last active window to open a file picker.
-    auto* window = context.is_window() ? context.window() : nullptr;
-    if (!window || !window->GetWindow() ||
-        !window->GetWindow()->GetNativeWindow()) {
-      std::move(callback).Run(
-          Failure("window_required", "The file picker requires a window host"));
-      return true;
-    }
-    if (file_picker_) {
-      std::move(callback).Run(
-          Failure("dialog_busy", "A file picker is already open"));
-      return true;
-    }
-    auto picker = base::MakeRefCounted<FilePicker>(
-        std::move(callback), base::BindOnce(&ShellUI::FilePickerFinished,
-                                            weak_factory_.GetWeakPtr()));
-    file_picker_ = picker;
-    picker->Show(window->GetWindow()->GetNativeWindow());
+    StartFilePicker(context, std::nullopt, std::move(callback));
     return true;
   }
   if (module == "BayShell" && method == "showMenu") {

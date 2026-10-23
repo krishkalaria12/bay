@@ -16,6 +16,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/nn_dispatch.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,6 +27,15 @@
 
 namespace bay {
 namespace {
+// FilePath's POSIX value is already the native byte sequence. UTF-8 helpers
+// may apply locale conversions and change which filesystem object is opened.
+std::string NativePath(const base::FilePath& path) {
+#if BUILDFLAG(IS_WIN)
+  return path.AsUTF8Unsafe();
+#else
+  return path.value();
+#endif
+}
 constexpr auto kImportTimeout = base::Seconds(30);
 constexpr char kUnavailable[] = "{\"error\":\"Browser engine is unavailable\"}";
 struct ProfileSnapshot {
@@ -43,7 +53,7 @@ class ProfileTracker : public ProfileObserver {
       observations_.AddObservation(profile);
   }
   void OnProfileWillBeDestroyed(Profile* profile) override {
-    const auto path = profile->GetPath().AsUTF8Unsafe();
+    const auto path = NativePath(profile->GetPath());
     base::AutoLock lock(Profiles().lock);
     std::erase_if(Profiles().paths, [&](const auto& entry) {
       return entry.second.profile_directory == path;
@@ -127,9 +137,8 @@ void RegisterDataProfile(Profile* profile) {
   static base::NoDestructor<ProfileTracker> tracker;
   tracker->Observe(profile);
   const auto path = profile->GetPath();
-  const auto basename = path.BaseName().AsUTF8Unsafe();
-  const data::ProfilePaths paths{path.DirName().AsUTF8Unsafe(),
-                                 path.AsUTF8Unsafe()};
+  const auto basename = NativePath(path.BaseName());
+  const data::ProfilePaths paths{NativePath(path.DirName()), NativePath(path)};
   base::AutoLock lock(Profiles().lock);
   Profiles().paths[basename == "Default" ? "" : basename] = paths;
   if (basename == "Default")
@@ -145,7 +154,7 @@ void InitializeDataBridge(
     return;
   base::FilePath directory;
   CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &directory));
-  data::Configure(directory.AsUTF8Unsafe(), [](const std::string& id) {
+  data::Configure(NativePath(directory), [](const std::string& id) {
     base::AutoLock lock(Profiles().lock);
     auto found = Profiles().paths.find(id);
     return found == Profiles().paths.end() ? data::ProfilePaths{}

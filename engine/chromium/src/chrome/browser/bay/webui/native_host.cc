@@ -36,6 +36,8 @@
 #include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/data/data_services.h"
+#include "chrome/browser/bay/webui/data_bridge.h"
 #include "chrome/browser/bay/webui/notifications.h"
 #include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
@@ -51,8 +53,6 @@
 #include "chrome/browser/bay/webui/window_button_layout_linux.h"
 #endif
 #if BUILDFLAG(IS_WIN)
-#include "chrome/browser/bay/data/data_services.h"
-#include "chrome/browser/bay/webui/data_bridge.h"
 #include "chrome/browser/bay/webui/frame_win.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/updater_service_win.h"
@@ -83,6 +83,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
+#if BUILDFLAG(IS_LINUX)
+#include "net/base/filename_util.h"
+#include "url/gurl.h"
+#endif
 
 extern "C" void nn_engine_set_event_sink(nn_engine_event_t sink, void* context);
 
@@ -304,7 +308,11 @@ void EngineEvent(void*, const char* topic, const char* json) {
     return;
   if (const auto* path = parsed->FindString("profile")) {
     const auto name =
+#if BUILDFLAG(IS_WIN)
         base::FilePath::FromUTF8Unsafe(*path).BaseName().AsUTF8Unsafe();
+#else
+        base::FilePath(*path).BaseName().value();
+#endif
     parsed->Set("profile", name == "Default" ? "" : name);
   }
   const std::string normalized_json = JSON(*parsed);
@@ -343,7 +351,7 @@ void HostEvent(const std::string& module,
       host->Emit(module.c_str(), event.c_str(), payload.Clone());
 }
 #endif
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void DataEvent(const std::string& module,
                const std::string& event,
                const std::string& json) {
@@ -382,8 +390,12 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   InstallCloseHooks();
   AppUpdater().Prepare(
       base::BindOnce(&NativeHost::PublishHostInfo, GetWeakPtr()));
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   RegisterDataProfile(context_.profile());
   InitializeDataBridge(base::BindRepeating(&DataEvent));
+#endif
+#if BUILDFLAG(IS_WIN)
   platform_services_ = std::make_unique<PlatformServices>(
       context_,
       base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
@@ -454,9 +466,11 @@ base::DictValue NativeHost::Info() const {
     modules.Append(name);
   for (const auto& module : browser_services_->Modules())
     modules.Append(module.Clone());
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   for (const auto& module : data::ModuleNames())
     modules.Append(module);
+#endif
+#if BUILDFLAG(IS_WIN)
   for (const auto& module : platform_services_->Modules()) {
     bool found = false;
     for (const auto& existing : modules)
@@ -627,16 +641,18 @@ base::DictValue NativeHost::Info() const {
         "BayApp.setAutomaticUpdateChecks",
         "BayApp.setAutomaticUpdateDownloads"})
     methods.Append(method);
-  for (const auto& module : data::ModuleNames())
-    for (const auto& method : data::MethodNames(module))
-      methods.Append(module + "." + method);
   info.Set("optionalMethods", std::move(methods));
 #endif
 #if BUILDFLAG(IS_LINUX)
   info.SetByDottedPath("snapshots.BayShell.windowButtonLayout",
                        button_layout_->Snapshot());
   info.SetByDottedPath("snapshots.BaySystem.downloadsFolder",
-                      files_->downloads_folder());
+                       files_->downloads_folder());
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  for (const auto& module : data::ModuleNames())
+    for (const auto& method : data::MethodNames(module))
+      info.FindList("optionalMethods")->Append(module + "." + method);
 #endif
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
@@ -813,6 +829,52 @@ void NativeHost::CompleteEngine(uintptr_t token, const char* json) {
   std::move(callback).Run(
       Success(raw_json ? base::Value(json) : std::move(*result)));
 }
+#if BUILDFLAG(IS_LINUX)
+void NativeHost::ChooseImportFile(const base::ListValue& args,
+                                  InvokeCallback callback) {
+  const auto kind = Text(args, 0);
+  if (kind != "passwordsCSV" && kind != "bookmarksHTML") {
+    std::move(callback).Run(Failure(
+        "unsupported", "This import file kind is unavailable on Linux"));
+    return;
+  }
+  // ShellUI owns window authority, the busy slot and exact-once teardown.
+  auto completion = base::BindOnce(
+      [](InvokeCallback callback, const std::string& response) {
+        auto reply = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
+        if (reply && reply->contains("error")) {
+          std::move(callback).Run(response);
+          return;
+        }
+        const auto* files = reply ? reply->FindList("value") : nullptr;
+        if (!files || files->size() > 1) {
+          std::move(callback).Run(
+              Failure("invalid_result", "Choose one local import file"));
+          return;
+        }
+        if (files->empty()) {
+          std::move(callback).Run(Success());
+          return;
+        }
+        base::FilePath path;
+        const auto* url = (*files)[0].GetIfString();
+        if (!url || !net::FileURLToFilePath(GURL(*url), &path) ||
+            !path.IsAbsolute() || !base::IsStringUTF8(path.value())) {
+          std::move(callback).Run(Failure(
+              "invalid_result", "Selected file has no UTF-8 local path"));
+          return;
+        }
+        // Match InvokeEnvelope: the value is a native path string, never a URL.
+        std::move(callback).Run(Success(base::Value(path.value())));
+      },
+      std::move(callback));
+  shell_ui_->PickImportFile(context_,
+                            kind == "passwordsCSV"
+                                ? ShellUI::ImportFileKind::kPasswordsCSV
+                                : ShellUI::ImportFileKind::kBookmarksHTML,
+                            std::move(completion));
+}
+#endif
 void NativeHost::Invoke(const std::string& module,
                         const std::string& method,
                         const std::string& args_json,
@@ -958,7 +1020,19 @@ void NativeHost::Invoke(const std::string& module,
       return;
     }
   }
-  if (module == "BayImport" || module == "BaySync") {
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (module == "BayImport"
+#if BUILDFLAG(IS_WIN)
+      || module == "BaySync"
+#endif
+  ) {
+#if BUILDFLAG(IS_LINUX)
+    if (method == "chooseImportFile") {
+      ChooseImportFile(args, std::move(callback));
+      return;
+    }
+#endif
     if (data::RequiresUIThread(module, method)) {
       std::move(callback).Run(data::Invoke(module, method, args_json));
     } else {
@@ -971,6 +1045,8 @@ void NativeHost::Invoke(const std::string& module,
     }
     return;
   }
+#endif
+#if BUILDFLAG(IS_WIN)
   if (platform_services_->DispatchPlatformModule(module, method, args,
                                                  callback))
     return;

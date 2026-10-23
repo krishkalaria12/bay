@@ -2281,6 +2281,29 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Folder sync:</strong> check Nextcloud, Syncthing, Dropbox, rclone/FUSE mounts and SMB/NFS for rename atomicity and inotify limits.
               </li>
             </ul>
+            <p>
+              <strong>Import sources, 24 Oct 2026 (K8).</strong> Linux BayImport now discovers native Chromium-family installations, Helium at
+              <code>net.imput.helium</code>, Firefox native and snap profiles, Flatpak Chromium-family and Firefox profiles, and Zen's XDG, legacy and Flatpak
+              profiles. Firefox discovery includes both <code>.mozilla/firefox</code> and current <code>config/mozilla/firefox</code> roots. Shared readers,
+              sessions, sensitive-data vault and writer dispatch are wired through the Linux data bridge; the host advertises BayImport and supplies single-file
+              CSV and HTML pickers with window ownership and teardown handling.
+            </p>
+            <p>
+              Chromium <code>v10</code> uses the fixed basic-store key; <code>v11</code> derives its key from the source browser's existing Secret Service or
+              KWallet item only after explicit unlock consent. Import never creates a wallet, folder or secret. Cached unlocks are bound to canonical source
+              roots, isolated between installations and discarded when forgotten, including late unlock results. The import window can continue without
+              unlocking, retaining basic-store passwords and reporting locked rows. Firefox uses a private read-only database snapshot and an explicit NSS slot
+              so importing one profile does not switch or shut down another initialized NSS profile.
+            </p>
+            <p>
+              <strong>K8 verification.</strong> <code>python3 scripts/linux/test-import.py</code> passes on the Mac with disposable discovery, service,
+              libsecret/KWallet protocol and real NSS <code>key4.db</code> fixtures. Coverage includes denial, missing items, all seven browser identities,
+              mixed ciphertext formats, cancellation, source-root changes and NSS coexistence. Shared native reader and sync compatibility fixtures, JavaScript
+              and Python suites, native/web typechecks, generated contracts, lint and formatting pass. Changed native sources and host tests pass Linux x64
+              release and DCHECK syntax checks with the pinned sysroot, existing generated Mac configuration headers and scratch Mojo bindings. These checks do
+              not prove the Linux GN graph or linkage. Final linking depends on D1's BoringSSL sync backend; Linux binaries, real GNOME Keyring/KWallet imports,
+              desktop file pickers and fixture parity on Linux remain stage 2 work.
+            </p>
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>The <code>packages/import/fixtures</code> give identical results on Linux.</li>
