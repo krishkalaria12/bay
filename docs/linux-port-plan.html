@@ -1840,7 +1840,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               </p>
               <p>
                 <strong>Launch activation, 23 Oct 2026 (K3).</strong> Chromium already forwards a second launch through <code>ProcessSingleton</code> with the
-                desktop's xdg-activation token. <code>chromium-bay-startup-id-linux</code> passes that token into the WebUI window's widget, which upstream's
+                desktop's xdg-activation token. <code>chromium-bay-window-identity-linux</code> passes that token into the WebUI window's widget, which upstream's
                 WebUI browser omits, so Wayland and X11 let a launched window take focus. The frame reports X11 launch feedback complete when the window shows.
                 A window Chrome opens for a launch while Bay is running is absorbed and never shown, so its token now activates the Bay window that receives its
                 pages. A launch that reuses a visible Bay window already activates it.
@@ -2540,7 +2540,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </li>
                 <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
                 <li><code>chromium-bay-notification-native-route-linux</code>: implemented, rejects a retained fallback notification backend</li>
-                <li><code>chromium-bay-startup-id-linux</code>: implemented. Passes the desktop launch token to the WebUI window's widget</li>
+                <li><code>chromium-bay-window-identity-linux</code>: implemented. Gives the WebUI window's widget the desktop launch token, X11 window class and Wayland app id</li>
                 <li>
                   <code>chromium-bay-branding-linux</code> (binary name, desktop file, AppArmor-friendly paths). The client-side frame needs no patch of its
                   own: it installs through <code>chromium-bay-native-widget</code>

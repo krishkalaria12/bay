@@ -24,15 +24,19 @@ class FrameHookTests(unittest.TestCase):
         for earlier in ("chromium-bay-webui-window.patch", "chromium-bay-lifecycle.patch"):
             self.assertLess(names.index(earlier), names.index("chromium-bay-native-widget.patch"))
 
-    def test_linux_windows_carry_the_launch_token_after_the_frame_hook(self):
-        name = "chromium-bay-startup-id-linux.patch"
+    def test_linux_windows_carry_desktop_identity_after_the_frame_hook(self):
+        name = "chromium-bay-window-identity-linux.patch"
         names = [step.name for step in series.read_series("linux")]
         self.assertLess(names.index("chromium-bay-native-widget.patch"), names.index(name))
         for platform in ("mac", "win"):
             self.assertNotIn(name, {step.name for step in series.read_series(platform)})
         patch = added((REPO / "engine/patches" / name).read_text())
-        linux = patch[patch.index("#if BUILDFLAG(IS_LINUX)"):patch.index("#endif")]
+        # The second Linux block configures the widget; the first includes its helper.
+        linux = patch[patch.rindex("#if BUILDFLAG(IS_LINUX)"):patch.rindex("#endif")]
         self.assertIn("params.startup_id =\n      BrowserInitState::From(browser_)->create_params().startup_id;", linux)
+        # The desktop matches Bay's windows to its desktop file, as Chrome's own windows.
+        self.assertIn("params.wayland_app_id = params.wm_class_class;", linux)
+        self.assertIn("shell_integration_linux::GetProgramClassName()", linux)
         # The frame reports X11 launch feedback complete once its window shows.
         frame = (WEBUI / "frame_linux.cc").read_text()
         self.assertIn("new WindowTreeHost(GetWidget(), this, params.startup_id)", frame)
