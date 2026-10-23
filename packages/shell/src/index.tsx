@@ -140,7 +140,12 @@ export type WindowEvent =
   | ({ type: "state"; id: string } & WindowState);
 
 /** A window's placement, as its caption buttons show it (Windows). */
-export type WindowState = { maximized: boolean; fullscreen: boolean };
+export type WindowState = {
+  maximized: boolean;
+  fullscreen: boolean;
+  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */
+  size?: [number, number];
+};
 /** Desktop decoration order, from left to right within each physical window edge. */
 export type WindowButton = "minimize" | "maximize" | "close";
 export type WindowButtonLayout = { left: readonly WindowButton[]; right: readonly WindowButton[] };
@@ -191,7 +196,9 @@ export type OpenWindowOptions = {
   focus?: boolean;
   kind?: "browser" | "small" | "settings" | "import" | "taskManager";
   profile?: string;
-  // Little Bay: its remembered size; the window opens centred on the active screen.
+  // Restored size without a screen position; the compositor places the window.
+  maximized?: boolean;
+  // Little Bay also opens at its remembered size, centred on the active screen.
   size?: [number, number];
   // Settings: the pane to show, and the space it is about.
   pane?: string;
@@ -240,6 +247,7 @@ export type PromptOptions = {
 };
 
 const Shell = requireNativeModule<{
+  globalWindowCoordinates?: boolean;
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
   showMenu(items: MenuItem[]): Promise<string | null>;
   copyText(text: string): void;
@@ -359,7 +367,7 @@ export const dragPreview = {
 export const raiseView = (tag: number | null, levels: number, raised: boolean) => {
   if (tag != null) void Shell.raiseView?.(tag, levels, raised);
 };
-/** The window's frame now, on screen (AppKit's coordinates); null on builds without it. */
+/** The window's frame now, on screen (AppKit's coordinates); null without global screen coordinates. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
 

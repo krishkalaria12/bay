@@ -85,3 +85,8 @@ test("context-menu hints read as strokes on every desktop", () => {
   assert.equal(formatShortcut(menuShortcutStroke("w", ["option", "command"]), "windows"), "Ctrl+Alt+W");
   assert.deepEqual(menuShortcutStroke("x"), { key: "x", mod: false, shift: false, alt: false, ctrl: false });
 });
+
+test("global coordinates default to desktop support only on macOS and Windows", () => {
+  for (const os of ["macos", "windows"]) assert.equal(capabilitiesFor(os, () => false).globalWindowCoordinates, true);
+  assert.equal(capabilitiesFor("linux", () => true).globalWindowCoordinates, false);
+});
