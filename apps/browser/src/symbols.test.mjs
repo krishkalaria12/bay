@@ -4,51 +4,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-// Windows and Linux draw SF Symbol names from the inline paths in symbols.web.tsx. A name with no path falls
-// back to exclamationmark.circle. These still have none; draw one and take it off the list.
-const UNDRAWN = [
-  "atom",
-  "bag",
-  "banknote",
-  "basketball",
-  "brain",
-  "brain.head.profile",
-  "briefcase",
-  "bubble.left.and.bubble.right",
-  "cart",
-  "chart.bar",
-  "chart.line.uptrend.xyaxis",
-  "chart.pie",
-  "cross.case",
-  "crown",
-  "cup.and.saucer",
-  "dice",
-  "dollarsign.circle",
-  "dumbbell",
-  "figure.2.and.child.holdinghands",
-  "figure.run",
-  "flag",
-  "flask",
-  "fork.knife",
-  "gamecontroller",
-  "gift",
-  "graduationcap",
-  "guitars",
-  "hammer",
-  "heart",
-  "lightbulb",
-  "pianokeys",
-  "puzzlepiece",
-  "shippingbox",
-  "soccerball",
-  "sportscourt",
-  "terminal",
-  "testtube.2",
-  "trophy",
-  "wineglass",
-  "wrench.and.screwdriver",
-];
-
 const root = fileURLToPath(new URL(".", import.meta.url));
 const symbols = readFileSync(new URL("../../../packages/shell/src/symbols.web.tsx", import.meta.url), "utf8");
 const table = (name) => symbols.match(new RegExp(`const ${name}: Record<string, string> = \\{([^}]+)\\}`))?.[1] ?? "";
@@ -73,6 +28,8 @@ const PICKERS = [
   ["components/symbolColors.ts", /const BY_COLOR[^=]+= \[([\s\S]+?)\n\];/, /"([^"]+)"/g],
 ];
 
+// Windows and Linux draw SF Symbol names from the inline paths in symbols.web.tsx. A name with no path falls
+// back to exclamationmark.circle, so every name the app uses needs one.
 test("every symbol the app names has a web path", () => {
   assert.ok(paths.size > 50 && Object.keys(aliases).length > 0, "symbols.web.tsx tables found");
   const names = [];
@@ -91,5 +48,5 @@ test("every symbol the app names has a web path", () => {
     const base = name.replace(/\.fill$/, ""); // svgSymbol draws .fill names from their outline
     if (!paths.has(aliases[base] ?? base)) undrawn.add(base);
   }
-  assert.deepEqual([...undrawn].sort(), [...UNDRAWN].sort());
+  assert.deepEqual([...undrawn].sort(), []);
 });
