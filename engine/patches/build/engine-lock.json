@@ -20,7 +20,14 @@
       "runtime": "chrome-webui",
       "sysroot": {
         "useSysroot": true,
-        "revision": null
+        "revision": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+        "revisionType": "sha256",
+        "chromiumCommit": "a654841425914cbb703a2931e07b70a83aedbafd",
+        "metadataFile": "build/linux/sysroot_scripts/sysroots.json",
+        "metadataKey": "bullseye_amd64",
+        "directory": "debian_bullseye_amd64-sysroot",
+        "tarball": "debian_bullseye_amd64_sysroot.tar.xz",
+        "url": "https://commondatastorage.googleapis.com/chrome-linux-sysroot"
       },
       "minimumGlibc": null
     }

@@ -3,8 +3,8 @@
 
 Run on Windows from a VS 2026 Developer PowerShell with C++/ATL/MFC and the
 10.0.28000.2270 SDK installed. Use a short NTFS path such as C:\\bay-engine.
-Linux requires a native x64 Linux host and Chromium build dependencies. Linux
-preparation/builds remain gated on the Linux host and branding patches. All
+Linux requires a native x64 Linux host, Chromium build dependencies, the selected
+Linux integration patches and the pinned sysroot. All
 subprocess failures stop the build. Existing checkouts are never reset.
 """
 from __future__ import annotations
@@ -65,6 +65,7 @@ def gn_args(platform="win"):
     if platform == "linux":
         args.pop("enable_iterator_debugging")
         args.update(use_sysroot=True, is_cfi=False, use_vaapi=True, rtc_use_pipewire=True)
+        args["target_sysroot"] = "//build/linux/" + platform_lock("linux")["sysroot"]["directory"]
     elif platform != "win":
         raise ValueError(f"unsupported engine platform: {platform}")
     return args
@@ -82,21 +83,67 @@ def build_identity(platform="win"):
 def require_linux_integration(env, platform):
     if platform != "linux":
         return
-    listing = subprocess.check_output(
-        [sys.executable, REPO / "engine/patches/series.py", "files", "--platform", "linux"],
-        env=env, text=True)
+    try:
+        listing = subprocess.check_output(
+            [sys.executable, REPO / "engine/patches/series.py", "files", "--platform", "linux"],
+            env=env, text=True, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"cannot inspect Linux integration patches:\n{error.output.strip()}") from error
+    lines = listing.splitlines()
     for name in ("chromium-bay-layer-linux.patch", "chromium-bay-branding-linux.patch"):
-        if f"chromium {name}:" not in listing.splitlines():
-            raise RuntimeError(f"Linux engine integration is incomplete: series must route {name}; "
-                               "use download only until the Linux host and branding are implemented")
+        header = f"chromium {name}:"
+        if header not in lines:
+            raise RuntimeError(f"Linux engine integration is incomplete: series must route {name} to Linux")
+        index = lines.index(header)
+        if index + 1 == len(lines) or not lines[index + 1].startswith("  "):
+            raise RuntimeError(f"Linux engine integration patch has no target files: {name}")
     require_linux_sysroot(env, platform)
 
 
 def require_linux_sysroot(env, platform):
-    if platform == "linux":
-        directory = pathlib.Path(env["CHROMIUM_SRC"]) / "build/linux"
-        if not any(path.is_dir() for path in directory.glob("debian_*_amd64-sysroot")):
-            raise RuntimeError("missing Chromium Debian amd64 sysroot; finish gclient sync/hooks first")
+    if platform != "linux":
+        return
+    lock = platform_lock("linux")["sysroot"]
+    src = pathlib.Path(env["CHROMIUM_SRC"])
+    metadata_path = src / lock["metadataFile"]
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))[lock["metadataKey"]]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError(f"missing or invalid Chromium sysroot metadata: {metadata_path}; "
+                           "finish gclient sync/hooks for the pinned checkout") from error
+    expected = {"Sha256Sum": lock["revision"], "SysrootDir": lock["directory"],
+                "Tarball": lock["tarball"], "URL": lock["url"]}
+    if not isinstance(metadata, dict) or any(metadata.get(key) != value for key, value in expected.items()):
+        raise RuntimeError(f"Chromium sysroot metadata does not match engine-lock.json: {metadata_path}")
+    directory = src / "build/linux" / lock["directory"]
+    if not directory.is_dir():
+        raise RuntimeError(f"missing pinned Chromium sysroot: {directory}; finish gclient sync/hooks first")
+    # Pinned depot_tools verifies and extracts first-class GCS dependencies before
+    # writing this pair. Migration markers override any stale installer stamp.
+    revision = lock["revision"]
+    receipt = directory / f".{revision}_hash"
+    marker = directory / f".{revision}_is_first_class_gcs"
+    if receipt.exists() or any(directory.glob(".*_is_first_class_gcs")):
+        try:
+            valid = (receipt.read_text(encoding="utf-8") == revision + "\n" and
+                     marker.read_text(encoding="utf-8") == "1\n")
+        except (OSError, ValueError):
+            valid = False
+        if not valid:
+            raise RuntimeError(f"invalid pinned Chromium sysroot GCS receipts: {directory}; "
+                               "finish gclient sync for the pinned checkout")
+        return
+    # install-sysroot.py writes the content-addressed URL verbatim after verifying
+    # the archive's SHA-256 and extracting it. A directory alone proves nothing.
+    stamp = directory / ".stamp"
+    try:
+        installed = stamp.read_text(encoding="utf-8")
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"missing or invalid Chromium sysroot install stamp: {stamp}; "
+                           "rerun build/linux/sysroot_scripts/install-sysroot.py --arch=amd64") from error
+    if installed != f"{lock['url']}/{lock['revision']}":
+        raise RuntimeError(f"Chromium sysroot install stamp does not match engine-lock.json: {stamp}; "
+                           "rerun build/linux/sysroot_scripts/install-sysroot.py --arch=amd64")
 
 
 def require_tools(names, env):
