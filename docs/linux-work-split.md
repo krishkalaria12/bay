@@ -128,7 +128,7 @@ Agree these early so neither person blocks the other:
 
 Starts when every stage 1 box is ticked. D runs each step on the Linux machine and reports failures with logs. Whoever owns the area fixes it: K for the engine, host, frame and window code (K1–K5 and the host sources already done), and D for data, UI and packaging (D1–D5). Fixes are ordinary code commits, so K can make them without the machine.
 
-- [ ] **T1 · Engine build (Phase 1, L = 3).** Follow prerequisite steps 1–8 and build the stock baseline. Then run `scripts/engine.py --platform linux prepare`, `build` and `archive`. Record the glibc floor and finalise the distro tiers. Every later step needs this.
+- [ ] **T1 · Engine build (Phase 1, L = 3).** Follow prerequisite steps 1–7 directly on Arch and build the stock baseline. Then run `scripts/engine.py --platform linux prepare`, `build` and `archive`. Record the glibc floor and finalise the distro tiers. Every later step needs this.
 - [ ] **T2 · Hosting gate (Phase 2, L = 3).** SurfaceEmbed painting on Wayland and X11 comes first, then the rest of the gate table on GNOME and KDE. Write the go/no-go record. If it fails, try GuestContents, then L‑A; K writes that fallback.
 - [ ] **T3 · Native tests and Phase 3 acceptance (M = 2).**
   - Link and run all Linux native test targets in `docs/engine-cli.md`.
