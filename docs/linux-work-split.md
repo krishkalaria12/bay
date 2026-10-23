@@ -1,28 +1,29 @@
 # Linux port: work split
 
 How the rest of the [Linux port plan](linux-port-plan.html) splits between three developers, **K**, **D** and **A**, so all three can work in parallel.
-Written 23 Oct 2026, against `feat/linux` at `398b8d0e`. Ownership updated 23 Oct 2026: K is working on K4, D is working on D1, and A is joining. Keep those in-progress assignments with their current owners.
+Written 23 Oct 2026, against `feat/linux` at `398b8d0e`. Ownership updated 23 Oct 2026: K has completed K4, D is working on D1, and A is joining. Keep in-progress assignments with their current owners.
 
 The work runs in two stages:
 
 1. **Code.** Every code item is written first, by all three developers in parallel. None of it needs a Linux machine.
-2. **Linux testing and runtime.** This starts only after every code item is done. D and A both have Arch machines and split the build and runtime checks below. K fixes failures in the engine and host; D and A fix failures in their own code. A owns CI. Having an Arch machine does not move any runtime work into stage 1.
+2. **Linux testing and runtime.** This starts only after every code item is done. D and A both have Arch machines and split the build and runtime checks below. K fixes failures in the engine, host, import and keychain; D and A fix failures in their own code. A owns CI. Having an Arch machine does not move any runtime work into stage 1.
 
 The code split follows ownership, so each person mostly works in their own files:
 
-- **K** owns the engine and host: Chromium patches, `chrome/browser/bay/webui` system methods, the frame and window rules.
-- **D** owns data: sync crypto, the sync key store and import.
-- **A** owns `BayKeychain`, the web UI gaps, packaging and CI.
+- **K** owns the engine and host: Chromium patches, `chrome/browser/bay/webui` system methods, the frame and window rules, plus Linux import and `BayKeychain`.
+- **D** owns sync crypto and the sync key store.
+- **A** owns the web UI gaps, packaging and CI.
 
-Sizes are rough: S = 1, M = 2, L = 3, XL = 5. K keeps the largest stage 1 allocation at 24 points: 15 complete and 9 remaining. D has 13 points and A has 13 points, all remaining. These totals follow the item estimates below. In stage 2, D runs 10 points of testing, A runs 9 points and adds 2 points of CI, and K handles engine and host fixes as needed.
+Sizes are rough: S = 1, M = 2, L = 3, XL = 5. K keeps the largest stage 1 allocation at 32 points: 22 complete and 10 remaining. D has 5 points and A has 11 points, all remaining. These totals follow the item estimates below. In stage 2, D runs 10 points of testing, A runs 9 points and adds 2 points of CI, and K handles engine, host, import and keychain fixes as needed.
 
-A takes the former D3, D4 and D5 as A1, A2 and A3, plus the former K7 as A4. K1–K6 and D1–D2 keep their identifiers so current work stays easy to track.
+A takes the former D4 and D5 as A2 and A3, plus the former K7 as A4. K takes the former D2 as K8 and the former A1, originally D3, as K9. K1–K4, K6 and D1 keep their identifiers; K7 remains the former CI task now owned by A4.
 
 ## Already done
 
 These need no new code, only the Linux runtime checks in stage 2.
 
 - Seams: the series takes `linux` and comma lists, `scripts/engine.py --platform linux` exists, Linux has its capability column, and the shared runtime is switched on by web host.
+- K4 engine sources: Linux linking and branding patches, sandbox patch selection, and exact sysroot provenance/preflight. The measured glibc floor remains unknown until T1.
 - Host sources:
   - The CSD frame (`frame_linux`), tiled-edge insets, and K2 desktop button-layout snapshots with reactive caption placement.
   - Notifications.
@@ -30,10 +31,10 @@ These need no new code, only the Linux runtime checks in stage 2.
   - `prompt`, `confirm`, `showMenu`, `pickFiles` and `fileIcon` through `ShellUI`.
   - Documents (`DocumentStore`), clipboard, appearance and file operations (`ShellFiles`).
   - K3 window rules: size-only placement and restore on Wayland, launch tokens, and links Chrome adds to a Bay window offered as Bay tabs.
-  - K1 system methods: default browser, per-user XDG autostart, external URLs, app-info/environment snapshots and package-managed updater status. The engine archive includes the XDG helper siblings; installed desktop identity still comes from K4/A3.
+  - K1 system methods: default browser, per-user XDG autostart, external URLs, app-info/environment snapshots and package-managed updater status. The engine archive includes the XDG helper siblings; K4 supplies the desktop identity, and A3 still supplies installed desktop integration.
 - Engine siblings: `nn_downloads_linux.cc`, `nn_external_apps_linux.cc`, and shared Aura PiP.
 
-None of the native test binaries have been linked or run. The shared code split out of `platform_services_win.cc` has not been compiled on Windows.
+None of the Linux native test binaries have been linked or run.
 
 ## Working rules
 
@@ -50,7 +51,7 @@ None of the native test binaries have been linked or run. The shared code split 
 All three developers touch a few files, so merge conflicts will happen. That's fine: resolve them in the merge. Files where conflicts are likely:
 
 - `webui/native_host.{h,cc}` and `native_host_unittest.cc` (the Linux method list)
-- `webui/platform_services_win.cc` (K1 and A1 both move methods out of it)
+- `webui/platform_services_win.cc` (K1 and K9 both move methods out of it)
 - `webui/BUILD.gn` and `bay/data/BUILD.gn`
 - `engine/patches/series`
 - `docs/linux-port-plan.html`
@@ -71,7 +72,7 @@ Use these agreements so ownership changes do not block implementation:
 
 ## Stage 1: code
 
-### K: engine, host and window
+### K: engine, host, window, import and keychain
 
 - [x] **K1 · Remaining system methods (M+M+S+S+S = 7).** Code complete 23 Oct 2026. Linux hosts advertise these through shared or `_linux` services; native execution and desktop verification remain deferred.
   - `BaySystem.isDefaultBrowser` / `setAsDefaultBrowser`, through Chrome's `shell_integration_linux` (`xdg-settings`). Bundle `xdg-settings` as Helium does.
@@ -90,22 +91,12 @@ Use these agreements so ownership changes do not block implementation:
   - Activation from other apps uses xdg-activation tokens.
   - Check single instance and URL forwarding through `ProcessSingleton`.
   - Check that touchpad overscroll back/forward is on in M154.
-- [ ] **K4 · Engine linking and branding sources (L+M+S+S = 7).** In progress with K.
+- [x] **K4 · Engine linking and branding sources (L+M+S+S = 7).** Code complete 23 Oct 2026. Linking, branding, Linux sandbox patch selection and exact sysroot preflight are implemented. Linux preparation, GN/link validation and runtime checks remain deferred; `minimumGlibc` stays `null` until T1 measures a built artifact.
   - `chromium-bay-layer-linux.patch`: link `//chrome/browser/bay` and `//bay/core` into the `chrome` binary.
   - `chromium-bay-branding-linux.patch`: binary name `bay`, the desktop file name, and AppArmor-friendly paths. Keep `chrome_sandbox` and `chrome_crashpad_handler`.
   - `03-ungoogled.py`: apply `0016-chromium-sandbox-pie` and `remove-disable-setuid-sandbox-as-bad-flag` on Linux.
   - List the patches in `series` and lift the Linux `prepare`/`build` refusal in `scripts/engine.py`. Add lock fields for the glibc floor and the sysroot.
-- [ ] **K5 · Windows compile of shared code (M = 2).** Build the Windows target. It covers `document_store`, `shell_ui`, `shell_files`, `shell_clipboard`, `shell_appearance` and the trimmed `platform_services_win.cc`. Fix anything that breaks, then run the Windows native tests.
-
-### D: sync and import
-
-- [ ] **D1 · Sync crypto and key store (L+M = 5).** In progress with D.
-  - Split `packages/sync/windows/SyncCrypto.cpp` into backends: CNG on Windows, BoringSSL on Linux.
-  - The Linux backend must match `tests/golden.json` byte for byte.
-  - `SyncKeyStore` on libsecret. With no Secret Service, ask for the recovery phrase each session and never write the key to disk.
-  - A Linux version of `RecoveryKitWindows.cpp`.
-  - `newDeviceId` and `deviceName` as snapshots.
-- [ ] **D2 · Import on Linux (M+L+S+M = 8).**
+- [ ] **K8 · Import on Linux (M+L+S+M = 8), previously D2.**
   - Profile paths:
     - `~/.config/{google-chrome, chromium, BraveSoftware/Brave-Browser, vivaldi, opera, microsoft-edge}` and Helium's directory.
     - Firefox native, snap and Flatpak profiles.
@@ -115,9 +106,19 @@ Use these agreements so ownership changes do not block implementation:
   - Check that Firefox's NSS `key4.db` reader works as is.
   - Open the `is_win` gate in `chrome/browser/bay/data/BUILD.gn` (currently `assert(is_win)`) and in `data_bridge.cc`. Replace the Windows-only `libs` and defines with `//third_party/sqlite` and BoringSSL. The readers, vault, sessions and SQLite code are shared.
 
-### A: keychain, UI and shipping
+- [ ] **K9 · BayKeychain (M = 2), previously A1 and D3.** Move `get`, `set` and `delete` out of `platform_services_win.cc` into a libsecret Linux version. Linux hosts advertise them. Add tests with a fake secret backend.
 
-- [ ] **A1 · BayKeychain (M = 2), previously D3.** Move `get`, `set` and `delete` out of `platform_services_win.cc` into a libsecret Linux version. Linux hosts advertise them. Add tests with a fake secret backend.
+### D: sync crypto and key store
+
+- [ ] **D1 · Sync crypto and key store (L+M = 5).** In progress with D.
+  - Split `packages/sync/windows/SyncCrypto.cpp` into backends: CNG on Windows, BoringSSL on Linux.
+  - The Linux backend must match `tests/golden.json` byte for byte.
+  - `SyncKeyStore` on libsecret. With no Secret Service, ask for the recovery phrase each session and never write the key to disk.
+  - A Linux version of `RecoveryKitWindows.cpp`.
+  - `newDeviceId` and `deviceName` as snapshots.
+
+### A: UI and shipping
+
 - [ ] **A2 · UI gaps (S+M+S+M = 6), previously D4.**
   - Icons: 19 names in `fluentGlyphs.web.ts` have no SVG path in `symbols.web.tsx`. Add them, and add a test that every symbol name the app uses has a path.
   - Edge peek and the auto-hide toolbar peek, driven only by in-window enter, move and leave events plus the hide delay. No global pointer queries.
@@ -133,7 +134,7 @@ Use these agreements so ownership changes do not block implementation:
 
 ## Stage 2: Linux testing and runtime
 
-Starts when every stage 1 box is ticked. D and A run their assigned steps on Arch and report failures with logs. K owns engine, host, frame and window fixes, including K1–K5 and the host sources already done. D owns sync and import fixes, D1–D2. A owns keychain, UI and packaging fixes, A1–A3. Fixes are ordinary code commits, so K can make them without a Linux machine.
+Starts when every stage 1 box is ticked. D and A run their assigned steps on Arch and report failures with logs. K owns engine, host, frame, window, import and keychain fixes, including K1–K4, K8–K9 and the host sources already done. D owns sync crypto and key store fixes, D1. A owns UI and packaging fixes, A2–A3. Fixes are ordinary code commits, so K can make them without a Linux machine.
 
 D produces the T1 engine archive and shares it with A before A starts runtime checks. Both use the same engine revision and app commit. After T1, D and A can run independent checks in parallel; T2 is the hosting go/no-go gate for app-level acceptance. Each runner re-runs failed checks after the owner fixes them.
 
@@ -178,8 +179,8 @@ A during stage 2:
 | T1 engine build | K4 | The build needs the layer and branding patches |
 | A3 final layout | K4 | Binary name and paths; until then, use the names agreed up front |
 | K2 UI side | K2 snapshot field in `nativeContracts.ts` | Agree the field before coding against it |
-| D2 data gate | D1 | `bay/data` on Linux needs the BoringSSL sync backend to link |
+| K8 data gate | D1 | `bay/data` on Linux needs the BoringSSL sync backend to link |
 | A4 CI | T1 | CI builds the app from the archived engine |
 | Beta (Phase 8 exit) | T8 and A4 | Every Mac test script has a Linux CI run, and the prerelease channel has no known crash for one release cycle |
 
-All three developers can start their stage 1 work in parallel using the agreed names above. D2 can implement readers and fixtures immediately; its final Linux link check waits for D1. A1 can use a fake secret backend independently of D1, and A3 uses fixture archives until T1 provides the real engine archive.
+All three developers can start their stage 1 work in parallel using the agreed names above. K8 can implement readers and fixtures immediately; its final Linux link check waits for D1. K9 can use a fake secret backend independently of D1, and A3 uses fixture archives until T1 provides the real engine archive.
