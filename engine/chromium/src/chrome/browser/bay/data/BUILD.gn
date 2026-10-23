@@ -2,23 +2,49 @@
 # canonical repository package sources. These parsers use C++ exceptions
 # internally. No exception crosses this target's public data_services.h API or
 # enables exceptions in Chromium callers.
-assert(is_win)
+if (is_win) {
+  static_library("data_services") {
+    sources = [
+      "data_services.cc",
+      "data_services.h",
+      "packages/import/windows/Arc.cpp",
+      "packages/import/windows/ImportCore.h",
+      "packages/import/windows/ImportService.cpp",
+      "packages/import/windows/Readers.cpp",
+      "packages/import/windows/SQLite.h",
+      "packages/import/windows/Secrets.cpp",
+      "packages/import/windows/Sessions.cpp",
+      "vendor/nlohmann/json.hpp",
+    ]
+    configs -= [ "//build/config/compiler:no_exceptions" ]
+    configs += [ "//build/config/compiler:exceptions" ]
+    include_dirs = [ "vendor" ]
+    deps = [ ":sync_services" ]
+    defines = [
+      "NOMINMAX",
+      "WIN32_LEAN_AND_MEAN",
+    ]
+    libs = [
+      "advapi32.lib",
+      "bcrypt.lib",
+      "crypt32.lib",
+      "gdi32.lib",
+      "ole32.lib",
+      "shell32.lib",
+      "user32.lib",
+      "uuid.lib",
+      "winsqlite3.lib",
+    ]
+  }
+}
 
-static_library("data_services") {
+# D1 is consumable before D2 opens the import/data_services Linux gate.
+static_library("sync_services") {
   sources = [
-    "data_services.cc",
-    "data_services.h",
-    "packages/import/windows/Arc.cpp",
-    "packages/import/windows/ImportCore.h",
-    "packages/import/windows/ImportService.cpp",
-    "packages/import/windows/Readers.cpp",
-    "packages/import/windows/SQLite.h",
-    "packages/import/windows/Secrets.cpp",
-    "packages/import/windows/Sessions.cpp",
+    "packages/sync/windows/Base64.h",
     "packages/sync/windows/RecoveryKit.cpp",
     "packages/sync/windows/RecoveryKit.h",
     "packages/sync/windows/RecoveryKitInternal.h",
-    "packages/sync/windows/RecoveryKitWindows.cpp",
     "packages/sync/windows/SyncCrypto.cpp",
     "packages/sync/windows/SyncCrypto.h",
     "packages/sync/windows/SyncService.cpp",
@@ -28,24 +54,51 @@ static_library("data_services") {
     "packages/sync/windows/Wordlist.h",
     "packages/sync/windows/vendor/qrcodegen.cpp",
     "packages/sync/windows/vendor/qrcodegen.hpp",
-    "vendor/nlohmann/json.hpp",
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   include_dirs = [ "vendor" ]
-  defines = [
-    "NOMINMAX",
-    "WIN32_LEAN_AND_MEAN",
-  ]
-  libs = [
-    "advapi32.lib",
-    "bcrypt.lib",
-    "crypt32.lib",
-    "gdi32.lib",
-    "ole32.lib",
-    "shell32.lib",
-    "user32.lib",
-    "uuid.lib",
-    "winsqlite3.lib",
-  ]
+  if (is_win) {
+    sources += [
+      "packages/sync/windows/RecoveryKitWindows.cpp",
+      "packages/sync/windows/SyncCryptoWindows.cpp",
+    ]
+    defines = [
+      "NOMINMAX",
+      "WIN32_LEAN_AND_MEAN",
+    ]
+    libs = [
+      "advapi32.lib",
+      "bcrypt.lib",
+      "crypt32.lib",
+      "gdi32.lib",
+      "ole32.lib",
+      "shell32.lib",
+      "user32.lib",
+      "uuid.lib",
+    ]
+  } else if (is_linux) {
+    sources += [
+      "packages/sync/linux/RecoveryKitLinux.cpp",
+      "packages/sync/linux/SyncCryptoLinux.cpp",
+      "packages/sync/linux/SyncKeyStore.cpp",
+      "packages/sync/linux/SyncPlatformLinux.cpp",
+    ]
+    configs += [ ":sync_libsecret" ]
+    deps = [
+      "//base",
+      "//skia",
+      "//third_party/boringssl",
+      "//ui/base/clipboard",
+      "//ui/gfx",
+    ]
+  }
+}
+
+if (is_linux) {
+  import("//build/config/linux/pkg_config.gni")
+
+  pkg_config("sync_libsecret") {
+    packages = [ "libsecret-1" ]
+  }
 }

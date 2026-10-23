@@ -46,9 +46,14 @@ std::vector<std::string> recoveryWords(const Bytes &entropy);
 Bytes recoveryEntropy(const std::string &phrase);
 void erase(Bytes &bytes) noexcept;
 void createPrivateDirectory(const std::filesystem::path &path);
-// DPAPI is user-bound and intentionally never uses CRYPTPROTECT_LOCAL_MACHINE.
+// Windows uses user-bound DPAPI. Linux wraps with a Secret Service key,
+// falling back to a process-only key when Secret Service is unavailable.
 Bytes protect(const Bytes &plain);
 Bytes unprotect(const Bytes &sealed);
+#if defined(__linux__)
+void SetSecretNamespace(std::string directory);
+std::string GetSecretNamespace();
+#endif
 bool saveSecret(const std::string &account, const Bytes &secret);
 std::optional<Bytes> loadSecret(const std::string &account);
 void deleteSecret(const std::string &account);

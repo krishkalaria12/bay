@@ -9,7 +9,7 @@ import {
   readNativeSnapshot,
   validateNativeHostInfo,
 } from "./nativeBridge.ts";
-import { nativeDocumentSave, nativeDocumentWrite, nativeSnapshot } from "./native.web.ts";
+import { nativeDocumentSave, nativeDocumentWrite, nativeRandomUUID, nativeSnapshot } from "./native.web.ts";
 import { nativeContracts } from "./nativeContracts.ts";
 
 const hostInfo = (overrides) => ({
@@ -216,5 +216,30 @@ test("acknowledged saves follow queued writes, report failure and allow retry", 
     assert.equal(read(), "retry");
   } finally {
     installed.remove();
+  }
+});
+
+test("Linux sync names use host snapshots and device IDs stay fresh without IPC", () => {
+  let invoked = 0;
+  const subscription = installNativeTransport(
+    transport({
+      getHostInfo: () => hostInfo({ platform: "linux", snapshots: { BaySync: { deviceName: "Linux laptop" } } }),
+      invoke: async () => {
+        invoked++;
+        return '{"value":null}';
+      },
+    }),
+  );
+  const fallback = () => {
+    throw new Error("Synchronous native fallback called");
+  };
+  try {
+    assert.equal(nativeSnapshot("BaySync", "deviceName", [], fallback), "Linux laptop");
+    const first = nativeRandomUUID(fallback);
+    assert.match(first, /^[a-f0-9-]{36}$/);
+    assert.notEqual(nativeRandomUUID(fallback), first);
+    assert.equal(invoked, 0);
+  } finally {
+    subscription.remove();
   }
 });

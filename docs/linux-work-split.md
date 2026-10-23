@@ -100,6 +100,7 @@ Agree these early so neither person blocks the other:
   - `SyncKeyStore` on libsecret. With no Secret Service, ask for the recovery phrase each session and never write the key to disk.
   - A Linux version of `RecoveryKitWindows.cpp`.
   - `newDeviceId` and `deviceName` as snapshots.
+  - **23 Oct 2026:** D1 sources and portable checks are implemented on `feat/linux-d-sync`; the box stays open until the slice lands on `feat/linux`. Crypto uses the exact Chromium BoringSSL pin and matches the golden envelope. Fake Secret Service tests cover memory-only sessions and recovery; recovery exports have private files and an asynchronous picker adapter. D2 still opens and advertises the Linux data bridge, owns `SyncUI` and dispatches it before worker calls, and supplies Linux password reading. Chromium-dependent syntax and native tests need the stage 2 checkout/sysroot; no engine or desktop runtime checks have run. Details and commands are in the dated Phase 6 progress in the plan.
 - [ ] **D2 · Import on Linux (M+L+S+M = 8).**
   - Profile paths:
     - `~/.config/{google-chrome, chromium, BraveSoftware/Brave-Browser, vivaldi, opera, microsoft-edge}` and Helium's directory.

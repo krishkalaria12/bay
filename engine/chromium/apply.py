@@ -71,6 +71,9 @@ def layer_source(here: Path, owned: str):
             destination = staged / "data/packages" / package / "windows"
             shutil.copytree(canonical, destination,
                             ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))
+        shutil.copytree(repository / "packages/sync/linux",
+                        staged / "data/packages/sync/linux",
+                        ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc"))
         yield staged
 
 

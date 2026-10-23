@@ -516,3 +516,40 @@ if (is_win || is_linux) {
     ]
   }
 }
+
+if (is_linux) {
+  # D1 supplies the asynchronous adapter independently of D2's import gate.
+  # When data services are enabled on Linux, own this alongside ShellUI and
+  # dispatch its chooseFolder/saveRecoveryKit before the data worker routing.
+  source_set("sync_ui_linux") {
+    sources = [
+      "sync_ui_linux.cc",
+      "sync_ui_linux.h",
+    ]
+    deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser/bay/data:sync_services",
+      "//chrome/browser/ui/browser_window",
+      "//content/public/browser",
+      "//ui/shell_dialogs",
+    ]
+  }
+
+  test("sync_ui_linux_unittests") {
+    sources = [
+      "host_context.cc",
+      "sync_ui_linux_unittest.cc",
+    ]
+    deps = [
+      ":sync_ui_linux",
+      "//base/test:test_support",
+      "//chrome/browser/ui:test_support",
+      "//chrome/common:constants",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+      "//ui/shell_dialogs",
+    ]
+  }
+}

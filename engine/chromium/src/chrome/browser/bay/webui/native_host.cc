@@ -39,6 +39,7 @@
 #include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
 #if BUILDFLAG(IS_LINUX)
+#include <unistd.h>
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/secret_storage_linux.h"
 #include "chrome/browser/bay/webui/shell_clipboard.h"
@@ -562,6 +563,15 @@ base::DictValue NativeHost::Info() const {
                         base::DictValue()
                             .Set("files", base::DictValue())
                             .Set("downloadsFolder", base::Value())));
+#if BUILDFLAG(IS_LINUX)
+  char device_name[256]{};
+  const bool named =
+      gethostname(device_name, sizeof(device_name) - 1) == 0 && device_name[0];
+  info.FindDict("snapshots")
+      ->Set("BaySync",
+            base::DictValue().Set("deviceName",
+                                  named ? device_name : "This Linux device"));
+#endif
 #if BUILDFLAG(IS_WIN)
   auto snapshots = platform_services_->Snapshots();
   if (auto* app = snapshots.FindDict("BayApp")) {

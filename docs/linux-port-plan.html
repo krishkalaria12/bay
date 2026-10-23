@@ -2177,6 +2177,30 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Folder sync:</strong> check Nextcloud, Syncthing, Dropbox, rclone/FUSE mounts and SMB/NFS for rename atomicity and inotify limits.
               </li>
             </ul>
+            <p class="prose">
+              <strong>D1 sources, 23 Oct 2026.</strong> Implemented on <code>feat/linux-d-sync</code>, awaiting merge into <code>feat/linux</code>: the shared
+              sync format now has separate Windows CNG and Linux BoringSSL backends, and libsecret stores keys by account and data directory. If key storage
+              fails, setup and recovery keep the entropy only in memory; the UI explains that the recovery phrase is needed each session. Same-account unlock
+              reuses the session, while account changes, forgetting and data-directory changes clear the active entropy. The Linux recovery kit has a PNG
+              preview, private temporary PDFs, a confidential phrase clipboard and file clipboard support. An asynchronous folder/save picker adapter rejects
+              stale exports if the active key changes. Device names are host snapshots; device IDs remain freshly generated local UUIDs.
+            </p>
+            <p class="prose">
+              <code>//chrome/browser/bay/data:sync_services</code> and <code>//chrome/browser/bay/webui:sync_ui_linux</code> are independent Linux targets; the
+              package overlay copies the Linux sources. D2 still owns opening the complete import/data bridge and advertising sync on Linux. Its host must own
+              <code>SyncUI</code> and dispatch it before routing sync calls to workers; the adapter is not dispatched by the current Linux host. Password
+              reading remains explicitly unavailable until D2 supplies the Linux importer. No engine build, desktop launch or live keyring test has run.
+              Chromium-dependent rendering, clipboard and picker release/DCHECK syntax and native tests await a Chromium checkout and sysroot.
+            </p>
+            <p class="prose">
+              Portable checks pass: the exact Chromium 154.0.8037.58 BoringSSL pin
+              <code>ac39ea6853833c1f18fd23614091d11855e71752</code> matches <code>tests/golden.json</code> byte for byte, including envelope and tag checks;
+              malformed inputs, authentication and namespace isolation are covered. Fake Secret Service checks cover session-only creation, recovery after
+              session loss, account changes, forgetting, persistent reload and stale export refusal. Temporary PDF permission, cleanup and symlink checks pass.
+              Run <code>packages/sync/scripts/check-linux-crypto.sh</code> with <code>BORINGSSL_ROOT</code> and <code>BORINGSSL_CRYPTO_LIBRARY</code> pointing
+              at that build; without them it checks system OpenSSL and does not establish BoringSSL coverage. The portable service and recovery checks are
+              <code>python3 packages/sync/linux/tests/service-test.py</code> and <code>python3 packages/sync/linux/tests/recovery-kit-test.py</code>.
+            </p>
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>The <code>packages/import/fixtures</code> give identical results on Linux.</li>

@@ -39,6 +39,8 @@ class ChromiumLayerTests(unittest.TestCase):
             for package in ("import", "sync"):
                 shutil.copytree(REPO / "packages" / package / "windows",
                                 checkout / "packages" / package / "windows")
+            shutil.copytree(REPO / "packages/sync/linux",
+                            checkout / "packages/sync/linux")
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="mac")
             command = [sys.executable, str(here / "apply.py")]
@@ -48,6 +50,8 @@ class ChromiumLayerTests(unittest.TestCase):
                 copied = target / package / "windows" / source
                 self.assertEqual(copied.read_bytes(), (checkout / "packages" / package / "windows" / source).read_bytes())
                 self.assertFalse((target / package / "windows/tests").exists())
+            self.assertTrue((target / "sync/linux/SyncCryptoLinux.cpp").is_file())
+            self.assertFalse((target / "sync/linux/tests").exists())
             data = target.parent
             for source in re.findall(r'"([^"\n]+\.(?:cc|cpp|h))"', (data / "BUILD.gn").read_text()):
                 self.assertTrue((data / source).is_file(), f"Missing GN source {source}")
@@ -71,6 +75,8 @@ class ChromiumLayerTests(unittest.TestCase):
             for package in ("import", "sync"):
                 shutil.copytree(REPO / "packages" / package / "windows",
                                 checkout / "packages" / package / "windows")
+            shutil.copytree(REPO / "packages/sync/linux",
+                            checkout / "packages/sync/linux")
             root = Path(directory) / "chromium"
             environment = dict(os.environ, CHROMIUM_SRC=str(root), BAY_ENGINE_PLATFORM="win")
             command = [sys.executable, str(here / "apply.py")]
