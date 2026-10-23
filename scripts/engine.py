@@ -401,6 +401,16 @@ def archive_linux(root, output):
                     files[f"runtime/{path.relative_to(binaries).as_posix()}"] = path
     modules, shared_imports = web_artifacts.mojo_files(binaries / "gen/chrome/browser/bay/webui/resources/tsc")
     files.update({f"runtime/bay-ui/{name}": path for name, path in modules.items()})
+    # Chromium's default-browser worker uses these sibling helpers. Keep the
+    # pinned scripts and their attribution in every Linux runtime, as Helium
+    # does, without depending on the build machine's xdg-utils installation.
+    xdg_utils = REPO / "engine/patches/build/linux/xdg-utils"
+    for name in ("xdg-settings", "xdg-mime", "LICENSE", "README.chromium", "README.bay"):
+        source = xdg_utils / name
+        if not source.is_file() or source.is_symlink():
+            raise RuntimeError(f"missing or symlinked bundled XDG helper: {source}")
+        destination = name if name.startswith("xdg-") else f"licenses/xdg-utils/{name}"
+        files[f"runtime/{destination}"] = source
     identity = build_identity("linux")
     identifier = artifact_id("linux")
     with tempfile.TemporaryDirectory(prefix="bay-linux-archive-") as temporary:
@@ -415,6 +425,8 @@ def archive_linux(root, output):
             shutil.copy2(source, target)
             # Never distribute a setuid sandbox. Installation policy is separate.
             target.chmod(target.stat().st_mode & 0o777)
+            if name in ("runtime/xdg-settings", "runtime/xdg-mime"):
+                target.chmod(0o755)
             with target.open("rb") as stream:
                 is_elf = stream.read(4) == b"\x7fELF"
             if name.removeprefix("runtime/") in executables and not is_elf:

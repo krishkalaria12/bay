@@ -49,6 +49,7 @@ chromium mac chromium-icloud-keychain-window.patch
 # Both must survive any re-sync (plain Chromium for NNCore, a version bump), unchanged.
 chromium mac chromium-safe-storage-name.patch
 chromium linux chromium-safe-storage-name-linux.patch
+chromium linux chromium-bay-xdg-settings-linux.patch
 chromium all chromium-password-bubble-hook.patch
 chromium all chromium-password-generation-local.patch
 chromium all chromium-tab-strip-notify-before-insert.patch

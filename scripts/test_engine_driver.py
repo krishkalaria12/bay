@@ -243,6 +243,15 @@ class LinuxArchiveTests(unittest.TestCase):
                 manifest = json.load(archive.extractfile("manifest.json"))
                 self.assertEqual(manifest["lock"], engine.platform_lock("linux"))
                 self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", manifest["files"])
+                xdg_utils = engine.REPO / "engine/patches/build/linux/xdg-utils"
+                for name in ("xdg-settings", "xdg-mime"):
+                    member = archive.getmember(f"runtime/{name}")
+                    self.assertEqual(member.mode, 0o755)
+                    self.assertEqual(archive.extractfile(member).read(), (xdg_utils / name).read_bytes())
+                for name in ("LICENSE", "README.chromium", "README.bay"):
+                    member = f"runtime/licenses/xdg-utils/{name}"
+                    self.assertIn(member, manifest["files"])
+                    self.assertEqual(archive.extractfile(member).read(), (xdg_utils / name).read_bytes())
                 if os.name != "nt":
                     # Windows chmod/stat cannot model POSIX execute/setuid bits.
                     self.assertEqual(archive.getmember("runtime/chrome_sandbox").mode, 0o755)
@@ -287,6 +296,67 @@ class LinuxArchiveTests(unittest.TestCase):
                     engine.archive(root, output, "linux")
             self.assertFalse(output.exists())
             run.assert_not_called()
+
+    def test_archive_requires_bundled_helpers_and_attribution_before_publishing(self):
+        for missing in ("xdg-settings", "xdg-mime", "LICENSE", "README.chromium", "README.bay"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "require_tools"), \
+                 mock.patch.object(engine, "source_digest", return_value="digest"), \
+                 mock.patch.object(engine, "run") as run:
+                root = Path(directory)
+                self.make_build(root)
+                helpers = root / "repo/engine/patches/build/linux/xdg-utils"
+                helpers.mkdir(parents=True)
+                for name in ("xdg-settings", "xdg-mime", "LICENSE", "README.chromium", "README.bay"):
+                    if name != missing:
+                        (helpers / name).write_text("fixture")
+                with mock.patch.object(engine, "REPO", root / "repo"), \
+                     self.assertRaisesRegex(RuntimeError, f"bundled XDG helper:.*{missing}"):
+                    engine.archive(root, root / "archive", "linux")
+                self.assertFalse((root / "archive").exists())
+                run.assert_not_called()
+
+
+class BundledXdgTests(unittest.TestCase):
+    def test_vendored_sources_match_documented_pin_except_sibling_mime_calls(self):
+        helpers = engine.REPO / "engine/patches/build/linux/xdg-utils"
+        provenance = (helpers / "README.bay").read_text()
+        self.assertIn("f16d51e9ce95f4173ba878a61b59317f73005562", provenance)
+        self.assertIn("473c0f72d7db2e8492f0fa975b8544bc719bb027", provenance)
+        for line in provenance.splitlines():
+            if len(line) < 66 or line[64:66] != "  ":
+                continue
+            checksum, name = line.split("  ", 1)
+            data = (helpers / name).read_bytes()
+            if name == "xdg-settings":
+                self.assertEqual(data.count(b'"$(dirname "$0")/xdg-mime" '), 3)
+                data = data.replace(b'"$(dirname "$0")/xdg-mime" ', b'xdg-mime ')
+            self.assertEqual(hashlib.sha256(data).hexdigest(), checksum)
+
+    @unittest.skipUnless(shutil.which("sh"), "requires a POSIX shell")
+    def test_scripts_parse_without_running_external_desktop_commands(self):
+        for name in ("xdg-settings", "xdg-mime"):
+            subprocess.run(["sh", "-n", engine.REPO / "engine/patches/build/linux/xdg-utils" / name],
+                           check=True, capture_output=True)
+
+    @unittest.skipUnless(os.name == "posix", "requires executable shell fixtures")
+    def test_settings_queries_sibling_mime_instead_of_path_decoy(self):
+        with tempfile.TemporaryDirectory(prefix="bay xdg ") as directory:
+            root = Path(directory)
+            settings = root / "xdg-settings"
+            shutil.copy2(engine.REPO / "engine/patches/build/linux/xdg-utils/xdg-settings", settings)
+            settings.chmod(0o755)
+            decoy = root / "distro"
+            decoy.mkdir()
+            for path, answer in ((root / "xdg-mime", "bay.desktop"), (decoy / "xdg-mime", "wrong.desktop")):
+                path.write_text(f"#!/bin/sh\necho {answer}\n")
+                path.chmod(0o755)
+            # DE avoids desktop detection. Both MIME backends are harmless
+            # scripts; no real desktop setting is read or changed.
+            env = {"HOME": directory, "DE": "gnome3", "PATH": f"{decoy}:/usr/bin:/bin"}
+            result = subprocess.run([settings, "get", "default-web-browser"], env=env,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(result.stdout, "bay.desktop\n")
 
 
 if __name__ == "__main__":
