@@ -143,6 +143,8 @@ export type WindowEvent =
 export type WindowState = {
   maximized: boolean;
   fullscreen: boolean;
+  /** Ephemeral native state, never restored from a session. */
+  minimized?: boolean;
   /** Restored/normal window size, including while maximized or fullscreen. No screen position. */
   size?: [number, number];
 };
