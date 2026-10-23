@@ -24,6 +24,16 @@ class FrameHookTests(unittest.TestCase):
         for earlier in ("chromium-bay-webui-window.patch", "chromium-bay-lifecycle.patch"):
             self.assertLess(names.index(earlier), names.index("chromium-bay-native-widget.patch"))
 
+    def test_linux_windows_carry_the_launch_token_after_the_frame_hook(self):
+        name = "chromium-bay-startup-id-linux.patch"
+        names = [step.name for step in series.read_series("linux")]
+        self.assertLess(names.index("chromium-bay-native-widget.patch"), names.index(name))
+        for platform in ("mac", "win"):
+            self.assertNotIn(name, {step.name for step in series.read_series(platform)})
+        patch = added((REPO / "engine/patches" / name).read_text())
+        linux = patch[patch.index("#if BUILDFLAG(IS_LINUX)"):patch.index("#endif")]
+        self.assertIn("params.startup_id =\n      BrowserInitState::From(browser_)->create_params().startup_id;", linux)
+
     def test_hook_is_installed_before_profiles_create_windows(self):
         patch = added((REPO / "engine/patches/chromium-bay-native-widget.patch").read_text())
         self.assertIn("static void SetBayNativeWidgetFactory(", patch)

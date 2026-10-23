@@ -1,0 +1,15 @@
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.cc b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.cc
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+@@ -167,6 +167,11 @@
+                                            &params.show_state);
+   params.delegate = widget_delegate_.get();
+   params.native_widget = CreateNativeWidget();
++#if BUILDFLAG(IS_LINUX)
++  // The desktop's launch token, so Wayland and X11 focus the first window.
++  params.startup_id =
++      BrowserInitState::From(browser_)->create_params().startup_id;
++#endif
+ #if BUILDFLAG(IS_CHROMEOS)
+   params.remove_standard_frame = true;
+ #endif
