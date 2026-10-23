@@ -18,7 +18,20 @@ const setup = (options) => {
 
 test("window parser accepts bounded user options and rejects native facts", () => {
   const commands = [
-    { method: "createWindow", options: { spaceId: "s", url: "", incognito: false, tabIds: ["t"], frame: [-10, 20, 800, 600], small: false, background: true } },
+    {
+      method: "createWindow",
+      options: {
+        spaceId: "s",
+        url: "",
+        incognito: false,
+        tabIds: ["t"],
+        frame: [-10, 20, 800, 600],
+        size: [800, 600],
+        maximized: true,
+        small: false,
+        background: true,
+      },
+    },
     ...["closeWindow", "toggleSidebar", "mergeAllWindows", "focusWindow", "openInMainWindow"].map((method) => ({ method, windowId: "w" })),
     { method: "switchSpace", windowId: "w", spaceId: "s" },
     { method: "moveTabsToWindow", tabIds: ["t"], windowId: null },
@@ -37,6 +50,7 @@ test("window parser accepts bounded user options and rejects native facts", () =
   }
   assert.notEqual(parseWindowCommand(commands[0]).options.tabIds, commands[0].options.tabIds);
   assert.notEqual(parseWindowCommand(commands[0]).options.frame, commands[0].options.frame);
+  assert.notEqual(parseWindowCommand(commands[0]).options.size, commands[0].options.size);
   for (const command of [
     null,
     [],
@@ -209,4 +223,16 @@ test("Little Bay moves into or creates its main window before its source can dis
   const before = store.getState();
   assert.throws(() => run(store, { method: "openInMainWindow", windowId }), { code: "invalid_request" });
   assert.equal(store.getState(), before);
+});
+
+test("window size/maximized command fields are strict and native placement setters stay private", () => {
+  for (const size of [[], [1], [1, 2, 3], [0, 1], [-1, 1], [1, Infinity], [1, NaN], [1, "2"], sparseArray(2), null, { width: 1, height: 2 }]) {
+    assert.throws(() => parseWindowCommand({ method: "createWindow", options: { size } }), { code: "invalid_request" });
+  }
+  for (const options of [{ maximized: 1 }, { minimized: true }, { fullscreen: true }, { size: [1, 2], position: [1, 2] }]) {
+    assert.throws(() => parseWindowCommand({ method: "createWindow", options }), { code: "invalid_request" });
+  }
+  assert.throws(() => parseWindowCommand({ method: "setWindowPlacement", windowId: "w", placement: { size: [1, 2], maximized: true } }), {
+    code: "invalid_request",
+  });
 });

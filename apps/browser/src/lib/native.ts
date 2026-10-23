@@ -40,6 +40,8 @@ import { startWindowCloseGuard } from "./windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { extensionMenu, useExtensions } from "../components/extensions/state";
 import { createNativeWindowReconciler } from "./nativeWindows";
+import { nativeWindowPlacement } from "../store/windowPlacement";
+import { startWindowPlacementSync } from "./windowPlacementSync";
 import { startAppearanceSync } from "./appearanceSync";
 
 let quitting = false;
@@ -113,6 +115,9 @@ export function startNativeSync({
     }
   });
 
+  const placement = startWindowPlacementSync(store);
+  stops.push(() => placement.dispose());
+
   const windowEvents = onWindowEvent((e) => {
     const s = store.getState();
     if (e.type === "focus") s.setFocusedWindow(e.id);
@@ -130,7 +135,10 @@ export function startNativeSync({
   );
 
   const windows = createNativeWindowReconciler<OpenWindowOptions>({
-    open: openWindow,
+    open: async (id, options) => {
+      await openWindow(id, options);
+      placement.opened(id);
+    },
     close: closeWindow,
     setTitle: setWindowTitle,
     focus: focusWindow,
@@ -161,7 +169,7 @@ export function startNativeSync({
         const title = windowTitle(s, id);
         const profile = engineProfile(w.spaceId);
         const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.littleBaySize } : {};
-        return { id, title, options: { frame: w.frame, incognito: w.incognito, title, focus: id === focused, profile, ...small } };
+        return { id, title, options: { ...nativeWindowPlacement(w), incognito: w.incognito, title, focus: id === focused, profile, ...small } };
       }),
       focused,
     );

@@ -3,6 +3,7 @@ import type { BrowserStore } from "../store/browser";
 import { activeTabId, isIncognitoSpace, resolveWindowId } from "../store/model";
 import { mainWindowFor } from "../store/small";
 import type { Frame } from "../store/types";
+import { validWindowSize } from "../store/windowPlacement";
 import type { CreateWindowOptions } from "../store/windows";
 import {
   commandBoolean,
@@ -55,13 +56,15 @@ function frame(value: unknown): Frame | null {
   return [...value] as Frame;
 }
 function createOptions(value: unknown): UserCreateWindowOptions {
-  const o = commandObject(value, ["spaceId", "incognito", "url", "tabIds", "frame", "small", "background"]);
+  const o = commandObject(value, ["spaceId", "incognito", "url", "tabIds", "frame", "size", "maximized", "small", "background"]);
   return {
     ...(o.spaceId !== undefined ? { spaceId: commandText(o.spaceId) } : {}),
     ...(o.incognito !== undefined ? { incognito: commandBoolean(o.incognito) } : {}),
     ...(o.url !== undefined ? { url: commandUrl(o.url) } : {}),
     ...(o.tabIds !== undefined ? { tabIds: commandIds(o.tabIds) } : {}),
     ...(o.frame !== undefined ? { frame: frame(o.frame) } : {}),
+    ...(o.size !== undefined ? { size: validWindowSize(o.size) ? ([...o.size] as [number, number]) : invalidCommand("invalid window size") } : {}),
+    ...(o.maximized !== undefined ? { maximized: commandBoolean(o.maximized) } : {}),
     ...(o.small !== undefined ? { small: commandBoolean(o.small) } : {}),
     ...(o.background !== undefined ? { background: commandBoolean(o.background) } : {}),
   };
