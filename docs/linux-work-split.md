@@ -1,19 +1,22 @@
 # Linux port: work split
 
-How the rest of the [Linux port plan](linux-port-plan.html) splits between two developers, **K** and **D**, so both can work at the same time.
-Written 23 Oct 2026, against `feat/linux` at `398b8d0e`.
+How the rest of the [Linux port plan](linux-port-plan.html) splits between three developers, **K**, **D** and **A**, so all three can work in parallel.
+Written 23 Oct 2026, against `feat/linux` at `398b8d0e`. Ownership updated 23 Oct 2026: K is working on K4, D is working on D1, and A is joining. Keep those in-progress assignments with their current owners.
 
 The work runs in two stages:
 
-1. **Code.** Every code item is written first, by both people in parallel. None of it needs a Linux machine.
-2. **Linux testing and runtime.** This starts only after every code item is done. D has the Linux machine, so D builds and runs everything on it. K fixes what D finds in K's areas and wires up CI.
+1. **Code.** Every code item is written first, by all three developers in parallel. None of it needs a Linux machine.
+2. **Linux testing and runtime.** This starts only after every code item is done. D and A both have Arch machines and split the build and runtime checks below. K fixes failures in the engine and host; D and A fix failures in their own code. A owns CI. Having an Arch machine does not move any runtime work into stage 1.
 
 The code split follows ownership, so each person mostly works in their own files:
 
 - **K** owns the engine and host: Chromium patches, `chrome/browser/bay/webui` system methods, the frame and window rules.
-- **D** owns data, UI and shipping: import, sync and secrets, `BayKeychain`, the web UI gaps and packaging.
+- **D** owns data: sync crypto, the sync key store and import.
+- **A** owns `BayKeychain`, the web UI gaps, packaging and CI.
 
-Sizes are rough: S = 1, M = 2, L = 3, XL = 5. Stage 1 is about 25 points each. In stage 2, D runs about 19 points of testing, and K fixes what it finds in K's areas and sets up CI.
+Sizes are rough: S = 1, M = 2, L = 3, XL = 5. K keeps the largest stage 1 allocation at 24 points: 15 complete and 9 remaining. D has 13 points and A has 13 points, all remaining. These totals follow the item estimates below. In stage 2, D runs 10 points of testing, A runs 9 points and adds 2 points of CI, and K handles engine and host fixes as needed.
+
+A takes the former D3, D4 and D5 as A1, A2 and A3, plus the former K7 as A4. K1–K6 and D1–D2 keep their identifiers so current work stays easy to track.
 
 ## Already done
 
@@ -27,15 +30,15 @@ These need no new code, only the Linux runtime checks in stage 2.
   - `prompt`, `confirm`, `showMenu`, `pickFiles` and `fileIcon` through `ShellUI`.
   - Documents (`DocumentStore`), clipboard, appearance and file operations (`ShellFiles`).
   - K3 window rules: size-only placement and restore on Wayland, launch tokens, and links Chrome adds to a Bay window offered as Bay tabs.
-  - K1 system methods: default browser, per-user XDG autostart, external URLs, app-info/environment snapshots and package-managed updater status. The engine archive includes the XDG helper siblings; installed desktop identity still comes from K4/D5.
+  - K1 system methods: default browser, per-user XDG autostart, external URLs, app-info/environment snapshots and package-managed updater status. The engine archive includes the XDG helper siblings; installed desktop identity still comes from K4/A3.
 - Engine siblings: `nn_downloads_linux.cc`, `nn_external_apps_linux.cc`, and shared Aura PiP.
 
 None of the native test binaries have been linked or run. The shared code split out of `platform_services_win.cc` has not been compiled on Windows.
 
 ## Working rules
 
-- **Branches.** Each person works on short branches off `feat/linux` (`feat/linux-k-*` and `feat/linux-d-*`) and merges them back into `feat/linux`. Merge, don't rebase shared history. Pull `feat/linux` before starting each item.
-- **Order.** All of stage 1 first. The engine build, the hosting gate and all Linux testing wait for stage 2, even on D's machine.
+- **Branches.** Each person works on short branches off `feat/linux` (`feat/linux-k-*`, `feat/linux-d-*` and `feat/linux-a-*`) and merges them back into `feat/linux`. Merge, don't rebase shared history. Pull `feat/linux` before starting each item.
+- **Order.** All of stage 1 first. The engine build, the hosting gate and all Linux testing wait for stage 2, even on D's and A's machines.
 - **Checks before each commit:**
   - Typechecks, JS and Python tests, the contracts check, lint and format.
   - Linux x64 release and DCHECK syntax checks for changed native sources.
@@ -44,10 +47,10 @@ None of the native test binaries have been linked or run. The shared code split 
 
 ### Shared files
 
-Both people touch a few files, so merge conflicts will happen. That's fine: resolve them in the merge. Files where conflicts are likely:
+All three developers touch a few files, so merge conflicts will happen. That's fine: resolve them in the merge. Files where conflicts are likely:
 
 - `webui/native_host.{h,cc}` and `native_host_unittest.cc` (the Linux method list)
-- `webui/platform_services_win.cc` (K1 and D3 both move methods out of it)
+- `webui/platform_services_win.cc` (K1 and A1 both move methods out of it)
 - `webui/BUILD.gn` and `bay/data/BUILD.gn`
 - `engine/patches/series`
 - `docs/linux-port-plan.html`
@@ -60,9 +63,9 @@ A few things help when merging:
 
 ### Agreed up front
 
-Agree these early so neither person blocks the other:
+Use these agreements so ownership changes do not block implementation:
 
-- The binary is named `bay` and installs to `/opt/bay`, with `/usr/bin/bay` pointing at a wrapper. K's branding patch (K4) produces this; D's packaging (D5) consumes it.
+- The binary is named `bay` and installs to `/opt/bay`, with `/usr/bin/bay` pointing at a wrapper. K's branding patch (K4) produces this; A's packaging (A3) consumes it.
 - Packaging reads the engine archive layout that `scripts/engine.py --platform linux archive` already writes. Stage 1 packaging is tested with fixtures. The first real archive comes from the stage 2 build.
 - The window-button layout snapshot field (K2) is named and typed in `nativeContracts.ts` before either side codes against it.
 
@@ -87,16 +90,16 @@ Agree these early so neither person blocks the other:
   - Activation from other apps uses xdg-activation tokens.
   - Check single instance and URL forwarding through `ProcessSingleton`.
   - Check that touchpad overscroll back/forward is on in M154.
-- [ ] **K4 · Engine linking and branding sources (L+M+S+S = 7).**
+- [ ] **K4 · Engine linking and branding sources (L+M+S+S = 7).** In progress with K.
   - `chromium-bay-layer-linux.patch`: link `//chrome/browser/bay` and `//bay/core` into the `chrome` binary.
   - `chromium-bay-branding-linux.patch`: binary name `bay`, the desktop file name, and AppArmor-friendly paths. Keep `chrome_sandbox` and `chrome_crashpad_handler`.
   - `03-ungoogled.py`: apply `0016-chromium-sandbox-pie` and `remove-disable-setuid-sandbox-as-bad-flag` on Linux.
   - List the patches in `series` and lift the Linux `prepare`/`build` refusal in `scripts/engine.py`. Add lock fields for the glibc floor and the sysroot.
 - [ ] **K5 · Windows compile of shared code (M = 2).** Build the Windows target. It covers `document_store`, `shell_ui`, `shell_files`, `shell_clipboard`, `shell_appearance` and the trimmed `platform_services_win.cc`. Fix anything that breaks, then run the Windows native tests.
 
-### D: data, UI and shipping
+### D: sync and import
 
-- [ ] **D1 · Sync crypto and key store (L+M = 5).**
+- [ ] **D1 · Sync crypto and key store (L+M = 5).** In progress with D.
   - Split `packages/sync/windows/SyncCrypto.cpp` into backends: CNG on Windows, BoringSSL on Linux.
   - The Linux backend must match `tests/golden.json` byte for byte.
   - `SyncKeyStore` on libsecret. With no Secret Service, ask for the recovery phrase each session and never write the key to disk.
@@ -111,13 +114,16 @@ Agree these early so neither person blocks the other:
   - Chromium secrets: v10 with the fixed key, and v11 from the Secret Service or KWallet "Safe Storage" item, after consent and keyring unlock. This is the Linux version of `packages/import/windows/Secrets.cpp`.
   - Check that Firefox's NSS `key4.db` reader works as is.
   - Open the `is_win` gate in `chrome/browser/bay/data/BUILD.gn` (currently `assert(is_win)`) and in `data_bridge.cc`. Replace the Windows-only `libs` and defines with `//third_party/sqlite` and BoringSSL. The readers, vault, sessions and SQLite code are shared.
-- [ ] **D3 · BayKeychain (M = 2).** Move `get`, `set` and `delete` out of `platform_services_win.cc` into a libsecret Linux version. Linux hosts advertise them. Add tests with a fake secret backend.
-- [ ] **D4 · UI gaps (S+M+S+M = 6).**
+
+### A: keychain, UI and shipping
+
+- [ ] **A1 · BayKeychain (M = 2), previously D3.** Move `get`, `set` and `delete` out of `platform_services_win.cc` into a libsecret Linux version. Linux hosts advertise them. Add tests with a fake secret backend.
+- [ ] **A2 · UI gaps (S+M+S+M = 6), previously D4.**
   - Icons: 19 names in `fluentGlyphs.web.ts` have no SVG path in `symbols.web.tsx`. Add them, and add a test that every symbol name the app uses has a path.
   - Edge peek and the auto-hide toolbar peek, driven only by in-window enter, move and leave events plus the hide delay. No global pointer queries.
   - Shortcuts: add `Ctrl+Q` and `F11`, never bind Super, and keep the Linux column of the shortcuts table complete.
   - High contrast and reduced motion, so Phase 5's usability check passes.
-- [ ] **D5 · Packaging sources (XL = 5).**
+- [ ] **A3 · Packaging sources (XL = 5), previously D5.**
   - `scripts/linux/release.sh` stages `/opt/bay` and packs `.tar.xz`, AppImage (zsync), `.deb`, `.rpm` and the AUR `bay-bin` PKGBUILD.
   - The wrapper script sets `CHROME_WRAPPER` and the library path.
   - Desktop integration: `bay.desktop` (MIME types, New Window and New Private Window actions), AppStream metainfo and hicolor icons.
@@ -127,36 +133,41 @@ Agree these early so neither person blocks the other:
 
 ## Stage 2: Linux testing and runtime
 
-Starts when every stage 1 box is ticked. D runs each step on the Linux machine and reports failures with logs. Whoever owns the area fixes it: K for the engine, host, frame and window code (K1–K5 and the host sources already done), and D for data, UI and packaging (D1–D5). Fixes are ordinary code commits, so K can make them without the machine.
+Starts when every stage 1 box is ticked. D and A run their assigned steps on Arch and report failures with logs. K owns engine, host, frame and window fixes, including K1–K5 and the host sources already done. D owns sync and import fixes, D1–D2. A owns keychain, UI and packaging fixes, A1–A3. Fixes are ordinary code commits, so K can make them without a Linux machine.
 
-- [ ] **T1 · Engine build (Phase 1, L = 3).** Follow prerequisite steps 1–7 directly on Arch and build the stock baseline. Then run `scripts/engine.py --platform linux prepare`, `build` and `archive`. Record the glibc floor and finalise the distro tiers. Every later step needs this.
-- [ ] **T2 · Hosting gate (Phase 2, L = 3).** SurfaceEmbed painting on Wayland and X11 comes first, then the rest of the gate table on GNOME and KDE. Write the go/no-go record. If it fails, try GuestContents, then L‑A; K writes that fallback.
-- [ ] **T3 · Native tests and Phase 3 acceptance (M = 2).**
+D produces the T1 engine archive and shares it with A before A starts runtime checks. Both use the same engine revision and app commit. After T1, D and A can run independent checks in parallel; T2 is the hosting go/no-go gate for app-level acceptance. Each runner re-runs failed checks after the owner fixes them.
+
+- [ ] **T1 · D · Engine build (Phase 1, L = 3).** Follow prerequisite steps 1–7 directly on Arch and build the stock baseline. Then run `scripts/engine.py --platform linux prepare`, `build` and `archive`. Record the glibc floor and finalise the distro tiers. Every later step needs this.
+- [ ] **T2 · D · Hosting gate (Phase 2, L = 3).** SurfaceEmbed painting on Wayland and X11 comes first, then the rest of the gate table on GNOME and KDE. Write the go/no-go record. If it fails, try GuestContents, then L‑A; K writes that fallback.
+- [ ] **T3 · D · Native tests and Phase 3 acceptance (M = 2).**
   - Link and run all Linux native test targets in `docs/engine-cli.md`.
   - Check Phase 3's exit criteria: real tabs, split panes, popups, extensions, prompts, PiP, DevTools, and the same engine JSON as on Mac and Windows.
-- [ ] **T4 · App boot and test ports (Phase 4, M = 2).**
+- [ ] **T4 · A · App boot and test ports (Phase 4, M = 2).**
   - The real `App.tsx` boots from Metro (`BAY_DEV=1`) and from the packed bundle.
   - Port `apps/browser/scripts/*-test.mjs` (shortcuts, windowing, tab drag, zoom-scroll) to run under `xvfb-run` and headless Weston.
   - Windowing tests assert behaviour, not coordinates, on Wayland.
-- [ ] **T5 · Shell and desktop checks (Phases 5 and 8, M = 2).**
+- [ ] **T5 · A · Shell and desktop checks (Phases 5 and 8, M = 2).**
   - Snapping and tiling on GNOME, KDE and one wlroots compositor; caption buttons follow the desktop's layout.
   - GPUs: Mesa and NVIDIA on Wayland, VA-API, and the software fallback.
   - Displays: fractional scaling, mixed DPI and hot-plug.
   - Input: IME with fcitx5 and IBus, touchpad and touchscreen.
-- [ ] **T6 · Data acceptance (Phase 6, M = 2).**
+- [ ] **T6 · D · Data acceptance (Phase 6, M = 2).**
   - `packages/import/fixtures` give identical results on Linux.
   - One shared fixture vault opens on Mac, Windows and Linux.
   - A real keyring import works on GNOME Keyring and KWallet.
   - Folder sync: rename atomicity and inotify limits on Nextcloud, Syncthing, Dropbox, rclone and SMB/NFS.
-- [ ] **T7 · Packages and VM matrix (Phase 7, L = 3).** On clean VMs (Ubuntu 24.04, Debian 13, Fedora, Arch, openSUSE Tumbleweed), each package must install, launch, become the default browser, update to the next build and uninstall. `chrome://sandbox` must show the namespace sandbox, including on Ubuntu with AppArmor on.
-- [ ] **T8 · Accessibility and performance (Phase 8, M = 2).**
+- [ ] **T7 · A · Packages and VM matrix (Phase 7, L = 3).** On clean VMs (Ubuntu 24.04, Debian 13, Fedora, Arch, openSUSE Tumbleweed), each package must install, launch, become the default browser, update to the next build and uninstall. `chrome://sandbox` must show the namespace sandbox, including on Ubuntu with AppArmor on.
+- [ ] **T8 · A · Accessibility and performance (Phase 8, M = 2).**
   - Orca across the UI and pages, and keyboard-only use.
   - Performance next to the Mac `scripts/perf` numbers: cold start, 50 tabs, frame times.
 
 K during stage 2:
 
-- [ ] **K6 · Fixes.** Fix the failures D reports in K's areas, then ask D to re-run the step.
-- [ ] **K7 · CI (M = 2).** An app build from the archived engine on every PR, and smoke launches in distro containers, on GitHub's Ubuntu runners. This needs no local Linux machine.
+- [ ] **K6 · Fixes.** Fix failures D or A reports in K's areas, then ask the reporting developer to re-run the step.
+
+A during stage 2:
+
+- [ ] **A4 · CI (M = 2), previously K7.** An app build from the archived engine on every PR, and smoke launches in distro containers, on GitHub's Ubuntu runners. This needs no local Linux machine.
 
 ## Dependencies
 
@@ -165,10 +176,10 @@ K during stage 2:
 | Stage 2 | Every stage 1 item | Linux testing runs once, after all the code is written |
 | T2–T8 | T1 | Linux runtime work needs a built engine |
 | T1 engine build | K4 | The build needs the layer and branding patches |
-| D5 final layout | K4 | Binary name and paths; until then, use the names agreed up front |
+| A3 final layout | K4 | Binary name and paths; until then, use the names agreed up front |
 | K2 UI side | K2 snapshot field in `nativeContracts.ts` | Agree the field before coding against it |
 | D2 data gate | D1 | `bay/data` on Linux needs the BoringSSL sync backend to link |
-| K7 CI | T1 | CI builds the app from the archived engine |
-| Beta (Phase 8 exit) | T8 and K7 | Every Mac test script has a Linux CI run, and the prerelease channel has no known crash for one release cycle |
+| A4 CI | T1 | CI builds the app from the archived engine |
+| Beta (Phase 8 exit) | T8 and A4 | Every Mac test script has a Linux CI run, and the prerelease channel has no known crash for one release cycle |
 
-Neither person needs the other's stage 1 work to start, except the agreed names above.
+All three developers can start their stage 1 work in parallel using the agreed names above. D2 can implement readers and fixtures immediately; its final Linux link check waits for D1. A1 can use a fake secret backend independently of D1, and A3 uses fixture archives until T1 provides the real engine archive.
