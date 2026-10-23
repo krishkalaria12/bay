@@ -304,3 +304,11 @@ export const windowButtonLayout = () => windowButtonLayoutState.read?.() ?? wind
 
 export const captionState = { query: () => Promise.resolve({ maximized: false, fullscreen: false }) };
 export const windowState = (windowId) => captionState.query(windowId);
+
+// Desktop drag preview and live geometry, controlled by layout tests.
+export const tabDragNative = { calls: [], frame: () => Promise.resolve(null) };
+export const windowFrame = (id) => tabDragNative.frame(id);
+export const hapticTick = () => {};
+export const dragPreview = Object.fromEntries(
+  ["begin", "page", "update", "cancel", "placeholder", "end"].map((method) => [method, (...args) => tabDragNative.calls.push([method, ...args])]),
+);
