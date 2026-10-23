@@ -236,7 +236,9 @@ export function Omnibox({
   };
 
   const move = (delta: 1 | -1) => {
-    const next = Math.max(0, Math.min(selectedIndex + delta, items.length - 1));
+    if (!items.length) return;
+    // Past either end it wraps around, as the actions menu does: ↑ on the first row goes to the last.
+    const next = (Math.max(selectedIndex + delta, -1) + items.length) % items.length;
     setSelected(next);
     // Arrowing through results fills the field with the row, as Chrome's omnibox; the top row is what was typed.
     const text = !idle && next > 0 ? fillText(items[next], dropdown) : null;
