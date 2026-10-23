@@ -22,6 +22,7 @@ const paths: Record<string, string> = {
   plus: "M12 4v16M4 12h16",
   minus: "M4 12h16",
   xmark: "m5 5 14 14M5 19 19 5",
+  "xmark.circle": "m9 9 6 6m0-6-6 6M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
   ellipsis: "M4 12h.01M12 12h.01M20 12h.01",
   "line.3.horizontal": "M3 6h18M3 12h18M3 18h18",
   magnifyingglass: "M16 16 22 22M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
