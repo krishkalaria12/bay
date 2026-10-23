@@ -2,7 +2,7 @@ import { requireNativeModule, nativeSnapshot, type EventSubscription } from "@ba
 import { capabilities } from "@bay/platform";
 
 export type UpdaterState =
-  | { available: false }
+  | { available: false; managedBy?: "packageManager" }
   | {
       available: true;
       configured: boolean;

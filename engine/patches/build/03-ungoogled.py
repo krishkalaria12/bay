@@ -29,8 +29,6 @@ SB = ('assumes safe_browsing_mode=0 / removed Safe Browsing prefs; Safe Browsing
 SKIP = {
     'core/ungoogled-chromium/fix-building-with-prunned-binaries.patch': 'assumes pruned binaries (not pruned)',
     'core/ungoogled-chromium/build-with-wasm-rollup.patch': 'only needed when prebuilt rollup is pruned',
-    'extra/inox-patchset/0016-chromium-sandbox-pie.patch': 'Linux-only',
-    'extra/ungoogled-chromium/remove-disable-setuid-sandbox-as-bad-flag.patch': 'Linux-only',
     'core/inox-patchset/0001-fix-building-without-safebrowsing.patch': SB,
     'core/ungoogled-chromium/fix-building-without-safebrowsing.patch': SB,
     'ungoogled-chromium/macos/fix-disabling-safebrowsing.patch': SB,
@@ -44,6 +42,14 @@ SKIP = {
     'extra/ungoogled-chromium/enable-extra-locales.patch':
         "breaks CEF's cef_strings.grd output list; not privacy-related",
 }
+# Linux's sandbox needs these (a PIE chrome-sandbox, and --disable-setuid-sandbox
+# left alone); they touch nothing macOS or Windows builds.
+LINUX_ONLY = (
+    'extra/inox-patchset/0016-chromium-sandbox-pie.patch',
+    'extra/ungoogled-chromium/remove-disable-setuid-sandbox-as-bad-flag.patch',
+)
+if not sys.platform.startswith('linux'):
+    SKIP.update({rel: 'Linux-only' for rel in LINUX_ONLY})
 PARTIAL_EXCLUDE = {
     # Its webstore_installer.cc hunks stub out Web Store installs; Bay
     # needs them. The default component extensions stay disabled.

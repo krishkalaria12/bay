@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
+#include "chrome/browser/bay/webui/default_browser.h"
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/host_context.h"
 #include "chrome/browser/bay/webui/shell_files.h"
@@ -53,6 +54,7 @@ class PlatformServices {
   base::RepeatingClosure snapshots_changed_;
   scoped_refptr<base::SequencedTaskRunner> disk_runner_;
   DocumentStore documents_;
+  DefaultBrowser default_browser_;
   ShellFiles files_;
   base::DictValue snapshots_;
   std::string initialization_error_;

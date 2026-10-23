@@ -45,6 +45,7 @@ inline constexpr Method methods[] = {
   {"BayShell", "minimizeWindow", true, 1, 1},
   {"BayShell", "toggleMaximizeWindow", true, 1, 1},
   {"BayShell", "windowState", true, 1, 1},
+  {"BayShell", "windowButtonLayout", true, 0, 0},
   {"BayShell", "setWindowCaption", true, 2, 2},
   {"BayShell", "setAppearance", true, 1, 1},
   {"BayShell", "isDarkAppearance", true, 0, 0},

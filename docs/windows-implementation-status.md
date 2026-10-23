@@ -255,6 +255,12 @@ recently active regular Bay window (`AppRuntime::AdoptPage`), the active one in
 front. New tab and blank pages, and private pages, close with the window. Only
 the coordinator opens browser windows, from accepted state.
 
+Chrome can also add a page straight into an existing Bay window's tab strip: a
+link another app opens while Bay runs, a startup URL, an extension's new tab.
+The window registry offers each such page the same way, as a tab of that
+window or of the most recently active regular Bay window, once accepted state
+names one. Pages the broker holds and pages a page opened are left alone.
+
 ## Utility windows in the shared runtime
 
 Settings, Import and Task Manager have no record in the shared state. Any

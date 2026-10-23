@@ -811,16 +811,15 @@
           <h2 id="prereqs-h">Prerequisites & engine build</h2>
           <div class="callout lnx prose">
             <p>
-              <strong>Do this on the Arch box when the work moves there, at the end</strong> (see <a href="#order">Order of work</a>). Steps 1–3 prepare the
-              host. Steps 4–8 run inside an Ubuntu 24.04 <code>distrobox</code> that shares your home directory, so the 100+ GB tree lives on the host disk.
-              Ubuntu is the distro CEF documents, the one <code>install-build-deps.sh</code> supports, and the one GitHub's Linux runners use. Helium builds the
-              same way, but in a Debian trixie container. Chromium's Debian <strong>sysroot</strong> (<code>use_sysroot=true</code>) makes the binaries
-              independent of the build host's libraries, so an engine built here also runs on older distros.
+              <strong>Do this on the Arch box when the work moves there, at the end</strong> (see <a href="#order">Order of work</a>). Everything runs directly
+              on Arch, with no container. Chromium's Debian <strong>sysroot</strong> (<code>use_sysroot=true</code>) supplies the target libraries, so the
+              binaries don't depend on Arch's libraries and an engine built here also runs on older distros. <code>install-build-deps.sh</code> only supports
+              Debian and Ubuntu, so Step&nbsp;2 installs the same dependencies with <code>pacman</code>.
             </p>
             <p>
-              The build in Steps 4–8 is a <strong>stock Chrome baseline with the exact pins</strong> from <code>engine/patches/build/engine-lock.json</code>. It
+              The build in Steps 4–7 is a <strong>stock Chrome baseline with the exact pins</strong> from <code>engine/patches/build/engine-lock.json</code>. It
               proves the machine and toolchain work. The Bay-patched build uses the same checkout once Phase&nbsp;1 adds <code>linux</code> to the series and
-              the engine script (Step&nbsp;9).
+              the engine script (Step&nbsp;8).
             </p>
           </div>
 
@@ -858,7 +857,7 @@
                   <td>Kernel</td>
                   <td>Unprivileged user namespaces</td>
                   <td>Stock <code>linux</code> / <code>linux-zen</code></td>
-                  <td>Chrome's namespace sandbox. <code>linux-hardened</code> turns these off, which needs the SUID fallback in Step&nbsp;8.</td>
+                  <td>Chrome's namespace sandbox. <code>linux-hardened</code> turns these off, which needs the SUID fallback in Step&nbsp;7.</td>
                 </tr>
                 <tr>
                   <td>Session</td>
@@ -890,9 +889,16 @@ sudo mkswap /swapfile &amp;&amp; sudo swapon /swapfile</pre>
 
             <li>
               <h3>Install host packages <span class="where">host · Arch</span></h3>
-              <p>No compiler here: Chromium brings its own clang, and the container provides the rest.</p>
+              <p>
+                No compiler here: Chromium brings its own clang, and depot_tools brings <code>gn</code> and <code>ninja</code>. The Chromium build dependencies
+                are the Arch list from Chromium's Linux build instructions, in place of <code>install-build-deps.sh</code>, which only supports Debian and
+                Ubuntu.
+              </p>
               <div class="code">
-                <pre>sudo pacman -Syu --needed base-devel git python podman distrobox nodejs npm
+                <pre>sudo pacman -Syu --needed git curl zstd nodejs npm
+<span class="c"># Chromium build dependencies</span>
+sudo pacman -S --needed base-devel python perl gperf \
+  nss alsa-lib glib2 gtk3 nspr freetype2 cairo dbus xorg-server-xvfb xorg-xdpyinfo
 sudo npm install -g pnpm@11.1.3          <span class="c"># matches packageManager in package.json</span></pre>
               </div>
             </li>
@@ -910,31 +916,7 @@ pnpm typecheck &amp;&amp; pnpm test</pre>
             </li>
 
             <li>
-              <h3>Create the build container <span class="where">host → container</span></h3>
-              <div class="code">
-                <pre>distrobox create --name bay-engine --image docker.io/library/ubuntu:24.04 \
-  --additional-packages "git curl file lsb-release procps python3 python3-pip sudo xz-utils zstd"
-distrobox enter bay-engine               <span class="c"># same $HOME, same user; run Steps 5–7 in here</span></pre>
-              </div>
-              <details>
-                <summary>Alternative: build directly on Arch, without a container</summary>
-                <div class="inner">
-                  <p>
-                    This works because the sysroot supplies the target libraries, but Chromium doesn't officially support it and rolling-release Python or tools
-                    can break older build scripts. Use the package list from Chromium's Linux build instructions in place of <code>install-build-deps.sh</code>,
-                    then run Steps 5–7 on the host and skip the <code>install-build-deps</code> line in Step&nbsp;6.
-                  </p>
-                  <div class="code">
-                    <pre>
-sudo pacman -S --needed base-devel python perl gperf nss alsa-lib glib2 gtk3 \
-  nspr freetype2 cairo dbus xorg-server-xvfb xorg-xdpyinfo lsb-release</pre>
-                  </div>
-                </div>
-              </details>
-            </li>
-
-            <li>
-              <h3>Fetch the pinned tools <span class="where">container</span></h3>
+              <h3>Fetch the pinned tools <span class="where">host · Arch</span></h3>
               <p>Every pin is copied from <code>engine-lock.json</code>, the same pins the Windows engine script uses.</p>
               <div class="code">
                 <pre>export CB="$HOME/chromium-build"
@@ -967,7 +949,7 @@ source "$CB/env-linux.sh"
             </li>
 
             <li>
-              <h3>Download CEF + Chromium, then the build deps <span class="where">container · 1–3 h, network-bound</span></h3>
+              <h3>Download CEF + Chromium <span class="where">host · 1–3 h, network-bound</span></h3>
               <div class="code">
                 <pre>source "$HOME/chromium-build/env-linux.sh"
 python3 "$CB/automate/automate-git.py" \
@@ -976,8 +958,6 @@ python3 "$CB/automate/automate-git.py" \
   --no-chromium-history --x64-build --no-debug-build --no-build --no-distrib \
   2&gt;&amp;1 | tee "$CB/logs/linux-sync.log"
 
-<span class="c"># Chromium's own dependency installer lives in the tree, so it runs after the sync</span>
-sudo "$CB/chromium_git/chromium/src/build/install-build-deps.sh" --no-arm --no-chromeos-fonts --no-nacl
 
 <span class="c"># Verify the pins</span>
 cd "$CB/chromium_git/chromium/src"
@@ -992,7 +972,7 @@ ls build/linux | grep sysroot                                                 <s
             </li>
 
             <li>
-              <h3>Generate and build the stock baseline <span class="where">container · hours, CPU/RAM-bound</span></h3>
+              <h3>Generate and build the stock baseline <span class="where">host · hours, CPU/RAM-bound</span></h3>
               <div class="code">
                 <pre>source "$HOME/chromium-build/env-linux.sh"
 cd "$CB/chromium_git/chromium/src/cef" &amp;&amp; ./cef_create_projects.sh
@@ -1011,7 +991,7 @@ autoninja -C out/Release_GN_x64 -j "$JOBS" chrome chrome_sandbox \
             </li>
 
             <li>
-              <h3>Run it on your desktop <span class="where">host · exit the container</span></h3>
+              <h3>Run it on your desktop <span class="where">host · Arch</span></h3>
               <div class="code">
                 <pre>OUT="$HOME/chromium-build/chromium_git/chromium/src/out/Release_GN_x64"
 P="$HOME/.cache/bay-baseline"                                            <span class="c"># a throwaway profile</span>
@@ -1041,13 +1021,13 @@ export CHROME_DEVEL_SANDBOX="$OUT/chrome_sandbox"</pre>
             </li>
 
             <li>
-              <h3>Bay-patched engine, once Phase&nbsp;1 lands <span class="where">container · preparation gated</span></h3>
+              <h3>Bay-patched engine, in stage&nbsp;2 <span class="where">host · sources implemented</span></h3>
               <p>
                 <code>scripts/engine.py --platform win|linux</code> now shares the pinned checkout and build flow with a lock section for each platform.
-                <code>pin</code> works on the Mac; <code>download</code> requires the target host. Linux <code>prepare</code> and <code>build</code> refuse to
-                proceed until the Linux linking and branding patches are listed in the series. Those patches and the native host sources remain Phase&nbsp;1 and
-                Phase&nbsp;3 work. The driver keeps pinned revisions, never resets checkouts, and runs <code>series.py check</code> before every build. See
-                <a href="engine-cli.md">Engine CLI</a> for prerequisites and archive details. These build commands are for use once those sources land.
+                <code>pin</code> works on the Mac; <code>download</code> requires the target host. K4 supplies the Linux linking and branding patches. Linux
+                <code>prepare</code> and <code>build</code> check that those patches are selected and the pinned sysroot is installed. The driver keeps pinned
+                revisions, never resets checkouts, and runs <code>series.py check</code> before every build. See <a href="engine-cli.md">Engine CLI</a> for
+                prerequisites and archive details. Run these build commands only in stage 2, after all stage 1 code is complete.
               </p>
               <div class="code">
                 <pre>cd "$HOME/code/bay"
@@ -1064,7 +1044,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="distros" aria-labelledby="distros-h">
           <h2 id="distros-h">Distro support</h2>
           <p class="prose">
-            "Most distros, not all" becomes three tiers. Glibc is the hard floor: Phase&nbsp;1 reads it from the built <code>chrome</code> binary (Step&nbsp;8).
+            "Most distros, not all" becomes three tiers. Glibc is the hard floor: Phase&nbsp;1 reads it from the built <code>chrome</code> binary (Step&nbsp;7).
             CEF documents Ubuntu 20.04+ and Debian 10+ as build hosts. Treat the oldest LTS rows below as provisional until the floor is known.
           </p>
           <div class="table-wrap">
@@ -1287,8 +1267,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td>Capability table and OS seam</td>
                   <td><code>capabilities.ts</code>, <code>types.ts</code></td>
                   <td>
-                    <span class="chip Extend">warn</span> <code>linux</code> is already a <code>PlatformOS</code> and a web desktop. Caption buttons are
-                    Windows-only today; Linux needs them for client-side decorations
+                    <span class="chip ok">Code complete</span> <code>linux</code> is a web desktop with client-side caption buttons. K2 adds desktop button
+                    ordering and matching layout clearances; native execution remains deferred.
                   </td>
                 </tr>
                 <tr>
@@ -1470,9 +1450,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
           </div>
           <div class="callout">
             <p>
-              <strong>What Bay takes from them:</strong> build in a pinned container with the Chromium sysroot. Ship tarball, AppImage, deb and rpm from one
-              staged directory, with AUR on top. Install an AppArmor <code>userns</code> profile. GPG-sign everything. Keep a prerelease channel. Keep the Linux
-              UI code close to zero by rendering the UI in the engine.
+              <strong>What Bay takes from them:</strong> build against the pinned Chromium sysroot. Ship tarball, AppImage, deb and rpm from one staged
+              directory, with AUR on top. Install an AppArmor <code>userns</code> profile. GPG-sign everything. Keep a prerelease channel. Keep the Linux UI
+              code close to zero by rendering the UI in the engine.
             </p>
           </div>
         </section>
@@ -1638,15 +1618,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             <div class="phase-head">
               <span class="phase-num">Phase 1</span>
               <h3 id="p1-h">Linux engine build</h3>
-              <span class="chip lnx">Arch box (distrobox), last</span>
+              <span class="chip lnx">Arch box, last</span>
             </div>
             <p class="goal">Build Chrome from the pinned tree with Bay's series and layer on Linux x64, from one command, and archive it.</p>
             <dl class="facts">
               <dt>Depends on</dt>
-              <dd>Prerequisite steps 1–8; Phase&nbsp;0's series column and engine script (helpful, not blocking)</dd>
+              <dd>Prerequisite steps 1–7; Phase&nbsp;0's series column and engine script (helpful, not blocking)</dd>
               <dt>References</dt>
               <dd>
-                <code>helium-linux</code> (container, flags, packaging), <code>ungoogled-chromium-portablelinux</code>, the Windows <code>engine.py</code>
+                <code>helium-linux</code> (flags, packaging), <code>ungoogled-chromium-portablelinux</code>, the Windows <code>engine.py</code>
                 flow
               </dd>
             </dl>
@@ -1669,9 +1649,28 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Launch with <code>--enable-features=Webium,SurfaceEmbed</code> on Wayland and X11 and check upstream's WebUI browser: tabs paint in
                 <code>&lt;embed&gt;</code>, typing, IME and Orca reach the page.
               </li>
-              <li>Record the glibc floor (<code>objdump</code>, Step&nbsp;8) and the sysroot in the lock file. Finalise the distro tiers from it.</li>
+              <li>Record the glibc floor (<code>objdump</code>, Step&nbsp;7) and the sysroot in the lock file. Finalise the distro tiers from it.</li>
               <li>Archive the runtime and symbols separately; add <code>ccache</code>/<code>sccache</code> as Helium does.</li>
             </ul>
+            <p>
+              <strong>Engine sources, 23 Oct 2026 (K4).</strong> The Linux series now links Bay's engine, WebUI implementation and NNCore into
+              <code>chrome_initial</code>, whose output is <code>bay</code>. Branding uses <code>bay.desktop</code> and <code>/etc/bay</code> policy and
+              native-messaging paths. NNCore keeps its canonical <code>$XDG_CONFIG_HOME/Bay</code> (or <code>~/.config/Bay</code>) profile directory; Chromium's
+              unused default-directory fallback is branded <code>bay</code>. ProcessSingleton's executable identity matches the renamed binary;
+              <code>chrome_sandbox</code> and <code>chrome_crashpad_handler</code> retain their names. The shared host patch now runs NNCore's Linux main
+              delegate and keeps parked Bay windows open, and the Linux widget receives the desktop identity. The two ungoogled sandbox patches are selected
+              only on Linux. A3 still supplies the wrapper, installed <code>/opt/bay</code> tree, desktop entry and AppArmor policy.
+            </p>
+            <p>
+              <strong>K4 verification.</strong> The driver accepts the Linux integration after verifying its selected patches and the exact Debian Bullseye
+              amd64 sysroot metadata and a matching installer or gclient receipt. The lock records the pinned sysroot archive SHA-256 and Chromium source
+              revision; GN explicitly selects that directory. This does not establish a glibc floor: <code>minimumGlibc</code> remains <code>null</code> until a
+              built artifact is measured in stage 2. Portable patch/tooling tests, Mac tests, typechecks, contracts, lint and formatting pass. The changed Linux
+              patches apply in series order to scratch files from the pinned baseline, and both ungoogled patches apply to pinned-source scratch files. Sixteen
+              release/DCHECK syntax checks pass using the sysroot and generated Mac configuration headers; four checks are blocked:
+              <code>chrome_paths.cc</code> by their CEF-enabled policy-path enum, and <code>webui_browser_window.cc</code> by missing Linux Mojo types. Linux
+              preparation, GN generation, linking, native-test execution, installed paths and desktop behavior remain unverified and deferred to stage 2.
+            </p>
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>A clean checkout builds the patched Chrome with <code>scripts/engine.py --platform linux</code>, and <code>series.py check</code> passes.</li>
@@ -1808,8 +1807,80 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 window and Wayland for client-side decorations, and replaces the GTK frame so no second title bar appears. A 4&nbsp;DIP band inside each edge
                 resizes restored windows, with 16&nbsp;DIP diagonal corners; maximized and full-screen windows don't resize. Every other point goes to the WebUI
                 client view's CSS drag regions, and Chromium's Linux event filter handles moves, resizes and the desktop's double-click action.
-                <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. The desktop's button layout, edge
-                tiling and client shadows come later.
+                <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. K2 frame follow-ups are recorded
+                below.
+              </p>
+              <p>
+                <strong>Frame insets and tiling, 23 Oct 2026 (K2).</strong> The captionless frame now uses Chromium's Linux decoration, input-region and
+                opaque-region hooks. Restored windows have a solid 4&nbsp;DIP border on each free edge. A tiled edge has no border or resize handle; maximized
+                and full-screen windows have none. The host retains the compositor's four edge flags, updates geometry even when only the inset mask changes,
+                and offsets CSS drag regions into the inset client area. The solid resize border stays inside the input region. X11's tiling flags come from
+                maximization atoms, so they do not promise Wayland's per-edge precision.
+              </p>
+              <p>
+                <strong>Frame verification.</strong> Twelve native regression tests cover restored geometry, all 16 tiled-edge masks, hit testing, input-region
+                policy, CSS drag offsets and state transitions. Sources pass release and DCHECK Linux x64 syntax checks using the pinned sysroot and generated
+                Mac configuration headers. These tests have not linked or run. Linux GN validation, compositor regions, scaling, X11/Wayland resizing and
+                desktop behavior remain stage-2 work.
+              </p>
+              <p>
+                <strong>Desktop settings, 23 Oct 2026 (K2).</strong> A Linux-only GTK settings patch reads the portal's
+                <code>org.gnome.desktop.wm.preferences</code> <code>button-layout</code> through Chromium's shared session bus and portal registration. It
+                observes setting and service-owner changes, keeps GTK's latest decoration layout as fallback, and accepts an empty portal string as an empty
+                button layout. Newer signals supersede an outstanding initial read. The first host snapshot uses the current GTK or default order immediately;
+                an asynchronous portal result updates that order later. Host information is refreshed before matching layout events. Document-owned observers
+                post and coalesce delivery outside the toolkit callback, and cancel old connection events on reconnect or teardown.
+              </p>
+              <p>
+                <strong>Caption layout, 23 Oct 2026 (K2).</strong> <code>snapshots.BayShell.windowButtonLayout</code> contains ordered <code>left</code> and
+                <code>right</code> button lists. The UI draws those groups, including omitted buttons and empty layouts, and reacts to matching
+                <code>onAppEvent</code> updates. Toolbars, split panes, sidebar headers on either side, the tab strip and its collapsed peek, Little Bay and
+                Linux utility windows clear the corresponding groups. Linux now advertises the existing minimize, maximize and window-state operations. The
+                caption's initial state query cannot overwrite a newer state event. Windows' maximize hit target and macOS traffic-light spacing retain their
+                existing behavior; geometry and subscription tests cover the cross-platform cases.
+              </p>
+              <p>
+                <strong>Layout verification.</strong> Provider, host and portal tests cover layout mapping, both host roles, snapshot/event consistency,
+                reconnects, teardown, portal priority, malformed values and owner restarts. Native sources and tests pass Linux x64 release/DCHECK syntax
+                checks. Portal checks additionally use a scratch <code>USE_DBUS=1</code> buildflag with the existing Mac-generated configuration headers. These
+                checks do not establish a Linux GN graph or linkage, and no native test binary has run. Portable JavaScript/Python checks, typechecks,
+                contracts, lint, formatting, React compiler checks and the production web build pass. Actual GTK/portal startup, desktop setting changes,
+                caption interaction and compositor behavior remain deferred to stage 2.
+              </p>
+              <p>
+                <strong>Window placement, 23 Oct 2026 (K3).</strong> Hosts publish <code>constants.BayShell.globalWindowCoordinates</code> from Ozone's
+                <code>supports_global_screen_coordinates</code>: true on macOS, Windows and X11, false on Wayland. Without global coordinates
+                <code>windowFrame</code> answers <code>null</code>, and window state events carry the restored size and an ephemeral <code>minimized</code> flag
+                instead of a frame. The UI saves and restores only that size and the maximized state, so a session written on X11 opens on Wayland at its old
+                size without its position; fullscreen and minimized windows keep their last restorable placement. New windows ask Chromium for an unspecified
+                origin, and the startup window is resized without being moved. Tab drag-out creates a size-only window that the compositor places, and skips the
+                desktop drag preview and the drop into another window, which both need screen positions. macOS, Windows and X11 keep their frames and drag
+                behavior.
+              </p>
+              <p>
+                <strong>Launch activation, 23 Oct 2026 (K3).</strong> Chromium already forwards a second launch through <code>ProcessSingleton</code> with the
+                desktop's xdg-activation token. <code>chromium-bay-window-identity-linux</code> passes that token into the WebUI window's widget, which
+                upstream's WebUI browser omits, so Wayland and X11 let a launched window take focus. The frame reports X11 launch feedback complete when the
+                window shows. A window Chrome opens for a launch while Bay is running is absorbed and never shown, so its token now activates the Bay window
+                that receives its pages. A launch that reuses a visible Bay window already activates it.
+              </p>
+              <p>
+                <strong>Forwarded links, 23 Oct 2026 (K3).</strong> A link another app opens while Bay runs, a startup URL and an extension's new tab are added
+                by Chrome straight into a Bay window's tab strip. With the shared runtime only macOS listened for those strips, so on Windows and Linux the page
+                had no Bay tab. The window registry now offers each such page to the coordinator as a tab of its window, or of the most recently active regular
+                Bay window, once accepted state names one; a startup URL waits for the first state and moves out before the startup window retires. Pages the
+                broker holds and pages a page opened (which <code>AppRuntime::OpenPage</code> already decides on) are left alone, and private pages and new tab
+                pages stay where they are. Touchpad back/forward needs no change: Chromium 154 enables <code>TouchpadOverscrollHistoryNavigation</code> on Linux
+                by default, and Bay does not override it.
+              </p>
+              <p>
+                <strong>K3 verification.</strong> Placement tests run the session, restore and drag policies as macOS, Windows, X11 and Wayland hosts: legacy
+                frames convert to sizes, positions never reach disk without global coordinates, malformed sizes are refused, and a late state reply cannot
+                overwrite a newer event. Native tests cover option parsing, restored-size tracking across maximize, fullscreen and minimize, host metadata, and
+                the page-opened and broker checks that keep forwarded links apart from Bay's own pages. Sources pass Linux x64 release/DCHECK syntax checks
+                except for two existing symbols that only the lifecycle patch defines; no native test binary has run. Portable JavaScript and Python checks,
+                typechecks, contracts, lint and formatting pass. Compositor placement, focus on GNOME and KDE, X11 launch feedback and links from other apps on
+                Windows and Linux remain for stage 2.
               </p>
               <p>
                 <strong>Notifications, 22 Oct 2026.</strong> The shared <code>notifications.cc</code> service now routes Linux post/remove operations through
@@ -1951,8 +2022,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Clipboard verification.</strong> Seventeen native tests cover both host roles, text and image readback through Chromium's
                 <code>TestClipboard</code>, PNG transparency, JPEG fallback, malformed inputs leaving the clipboard unchanged, codec dimension limits, argument
                 checks and response reentrancy. The helper, host and test sources pass release and DCHECK Linux x64 syntax checks with the pinned sysroot and
-                existing generated Mac configuration headers. Native tests have not been linked or run, and the Windows caller has not been compiled. Full Linux
-                GN and link validation remain pending.
+                existing generated Mac configuration headers. Native tests have not been linked or run. Full Linux GN and link validation remain pending.
               </p>
               <p>
                 <strong>Appearance, 22 Oct 2026.</strong> Linux hosts now advertise <code>BayShell.setAppearance</code> and <code>isDarkAppearance</code>. Both
@@ -1971,9 +2041,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Appearance verification.</strong> Native tests cover selected light/dark/system modes, effective-change events, changes while Chromium's
                 theme service is not ready, independent profiles, private-profile lifetimes, reconnection, reentrant callbacks and cancellation on teardown. The
                 helper, host and test sources pass release and DCHECK Linux x64 syntax checks with the pinned sysroot and existing generated Mac configuration
-                headers. Native tests have not been linked or run; Windows compilation, full Linux GN/link validation and live X11/Wayland theme switching
-                remain unverified. Four frontend tests cover startup query/event ordering and disposal; the browser and platform suites, native and web
-                TypeScript checks, contracts, lint and formatting pass.
+                headers. Native tests have not been linked or run; full Linux GN/link validation and live X11/Wayland theme switching remain unverified. Four
+                frontend tests cover startup query/event ordering and disposal; the browser and platform suites, native and web TypeScript checks, contracts,
+                lint and formatting pass.
               </p>
               <p>
                 <strong>File operations, 22 Oct 2026.</strong> Linux hosts now advertise <code>BaySystem.fileExists</code>, <code>downloadsFolder</code>,
@@ -2004,8 +2074,42 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Verification.</strong> Service tests cover argument and path rules, locale-independent filename bytes under the C locale, folder
                 opening, FIFO rejection, the trash guards before the backend, trash failure leaving the file, and replies when the owner closes or re-enters.
                 Host tests cover the readiness gate on documents and Downloads, both host roles, contract errors and teardown. External effects go through
-                fakes; nothing opened an app or trashed a real file. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run, and
-                the Windows services, which now share this code, have not been compiled.
+                fakes; nothing opened an app or trashed a real file. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run.
+              </p>
+              <p>
+                <strong>Remaining system methods, 23 Oct 2026 (K1).</strong> Linux window and coordinator hosts now advertise default-browser checks and
+                registration, launch-at-login controls, external URL opening, app-info queries and updater status. The shared
+                <code>DefaultBrowser</code> service uses Chromium's worker on Windows and Linux; Windows retains its profile, readiness and argument checks.
+                Pending default-browser requests settle with <code>host_closed</code> on document teardown, while an already submitted OS operation may finish
+                afterward.
+              </p>
+              <p>
+                The Linux engine archive now includes pinned, attributed <code>xdg-settings</code> and <code>xdg-mime</code> helpers beside the executable. A
+                Linux-only Chromium patch prefers that sibling helper for both default-browser queries and changes; developer outputs without it retain the
+                system PATH fallback. The helper calls its sibling MIME utility. K4 branding and D5 packaging still supply the installed
+                <code>bay.desktop</code> identity and preserve the helpers and licenses in the final package.
+              </p>
+              <p>
+                Launch at login uses <code>$XDG_CONFIG_HOME/autostart/bay.desktop</code>, or <code>$HOME/.config/autostart/bay.desktop</code> when the XDG value
+                is unset, empty or relative. Its quoted executable follows Chromium's <code>CHROME_WRAPPER</code> resolution, with
+                <code>--bay-launch-at-login</code> as the only argument. Reads and atomic writes share one blocking sequence across hosts; disabling writes a
+                managed <code>Hidden=true</code> override. Status describes this managed per-user entry only. Custom entries are preserved and reported as
+                conflicts. Trusted symlinked home/config paths work; the held autostart directory and final entry reject symlinks and unsafe ownership or
+                permissions. Accepted writes may finish after the document closes, with late replies cancelled.
+              </p>
+              <p>
+                Linux app-info snapshots wait for worker OS/hardware collection alongside saved documents and the Downloads snapshot. Debug builds capture only
+                the existing eight allowed <code>BAY_*</code> settings; release builds expose an empty environment. <code>launchEnvironment</code> reads that
+                captured dictionary and returns <code>null</code> for unknown names. External URLs accept only HTTP, HTTPS and mailto, using Chromium's
+                portal-aware <code>OpenExternal</code>; <code>true</code> confirms submission, not desktop acceptance. Updater status is
+                <code>{available:false, managedBy:"packageManager"}</code>, and Linux advertises no in-app update actions.
+              </p>
+              <p>
+                <strong>K1 verification.</strong> Native service tests use fake external effects and temporary autostart files. Host tests cover both roles,
+                snapshot readiness, contract errors and teardown. Linux release and DCHECK syntax checks use the pinned sysroot, generated Mac configuration
+                headers and actual scratch-generated Mojo bindings. They do not prove GN linkage or runtime behavior. Portable tests, typechecks, contracts,
+                lint and formatting pass; archive tests use fixtures and fake tools. Native binaries, Linux builds and all desktop default-browser, autostart
+                and portal checks remain deferred to the agreed later stages.
               </p>
             </div>
             <ul>
@@ -2475,11 +2579,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <li>
                   <code>chromium-safe-storage-name-linux</code>: implemented. Bay's Secret Service item and KWallet folder, pinned next to the macOS patch
                 </li>
-                <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
+                <li><code>chromium-bay-layer-linux</code>: implemented. Bay's layer and NNCore in the browser executable</li>
                 <li><code>chromium-bay-notification-native-route-linux</code>: implemented, rejects a retained fallback notification backend</li>
                 <li>
-                  <code>chromium-bay-branding-linux</code> (binary name, desktop file, AppArmor-friendly paths). The client-side frame needs no patch of its
-                  own: it installs through <code>chromium-bay-native-widget</code>
+                  <code>chromium-bay-window-identity-linux</code>: implemented. Gives the WebUI window's widget the desktop launch token, X11 window class and
+                  Wayland app id
+                </li>
+                <li>
+                  <code>chromium-bay-branding-linux</code>: implemented (binary name, desktop file identity, AppArmor-friendly paths). The client-side frame
+                  needs no patch of its own: it installs through <code>chromium-bay-native-widget</code>
                 </li>
                 <li>SurfaceEmbed backports from trunk, only if the Linux gate needs them</li>
                 <li>Fallback only (L‑A): <code>cef-overlay-hit-mask</code> and <code>cef-overlay-backdrop-blur</code></li>
@@ -2607,7 +2715,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td>Build cost on one Arch box (disk, RAM, hours)</td>
                   <td><span class="chip ok">Low</span></td>
-                  <td>Container with sysroot, ccache/sccache, archive the artifacts, rebuild only when the pin or series changes</td>
+                  <td>Sysroot, ccache/sccache, archive the artifacts, rebuild only when the pin or series changes</td>
                 </tr>
               </tbody>
             </table>
@@ -2642,8 +2750,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>Engine build environment</td>
-                  <td>Ubuntu 24.04 distrobox on the Arch box with <code>use_sysroot=true</code>; the same image in CI</td>
-                  <td>Phase&nbsp;1</td>
+                  <td><strong>Decided 23 Oct 2026:</strong> directly on the Arch box, no container, with <code>use_sysroot=true</code></td>
+                  <td>—</td>
                 </tr>
                 <tr>
                   <td>Wayland and X11</td>
@@ -2711,8 +2819,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               Linux host work.
             </li>
             <li>
-              <code>install-build-deps.sh</code> at the pinned Chromium still takes <code>--no-nacl</code>, as CEF's current quick start uses it. If it has been
-              removed, drop the flag.
+              The pinned tree's build scripts run on Arch's current Python and host tools. If an Arch update breaks one, pin or patch that tool on the host.
             </li>
             <li>
               Reanimated 3.19 runs acceptably on the web without the worklet runtime. The Phase&nbsp;0 boot and the Phase&nbsp;2 motion test confirm this.

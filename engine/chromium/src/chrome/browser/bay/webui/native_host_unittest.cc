@@ -11,27 +11,36 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/observer_list.h"
 #include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_placement.h"
+#include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/platform_util_internal.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/filename_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/test/mock_base_window.h"
+#include "ui/linux/fake_linux_ui.h"
+#include "ui/linux/window_button_order_observer.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/shell_dialogs/selected_file_info.h"
+#include "ui/views/window/window_button_order_provider.h"
 #include "url/gurl.h"
 
 namespace bay {
@@ -52,7 +61,8 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
         std::make_unique<base::ScopedPathOverride>(chrome::DIR_USER_DATA);
     downloads_ = std::make_unique<base::ScopedPathOverride>(
         chrome::DIR_DEFAULT_DOWNLOADS,
-        base::PathService::CheckedGet(chrome::DIR_USER_DATA).Append("downloads café"),
+        base::PathService::CheckedGet(chrome::DIR_USER_DATA)
+            .Append("downloads café"),
         true, false);
     auto* host =
         new NativeHost(*main_rfh(), HostContext::ForCoordinator(*profile()),
@@ -109,6 +119,231 @@ class NativeHostTest : public ChromeRenderViewHostTestHarness {
   mojo::Remote<mojom::NativeHost> remote_;
   base::WeakPtr<NativeHost> host_;
 };
+
+void ExpectLayoutAndCaptionMethods(const base::DictValue& info) {
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BayShell.windowButtonLayout", "BayShell.minimizeWindow",
+        "BayShell.toggleMaximizeWindow", "BayShell.windowState"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+  EXPECT_FALSE(methods->contains("BayShell.setWindowCaption"));
+  const auto* layout =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(layout);
+  EXPECT_EQ(layout->size(), 2u);
+  EXPECT_TRUE(layout->FindList("left"));
+  EXPECT_TRUE(layout->FindList("right"));
+}
+
+TEST_F(NativeHostTest, PlacementCapabilityAndUnknownWindowKeepCoordinatorRole) {
+  const auto info = HostInfo();
+  EXPECT_EQ(
+      info.FindBoolByDottedPath("constants.BayShell.globalWindowCoordinates"),
+      GlobalWindowCoordinates());
+  EXPECT_EQ(*info.FindString("role"), "coordinator");
+  EXPECT_EQ(Invoke("BayShell", "windowFrame", R"(["missing"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayShell", "windowState", R"(["missing"])"),
+              "window_error");
+  for (const char* options : {R"({"size":[0,600]})", R"({"maximized":1})",
+                              R"({"frame":[0,0,800,600],"size":[800]})"}) {
+    ExpectError(Invoke("BayShell", "openWindow",
+                       "[\"placement-test\"," + std::string(options) + "]"),
+                "window_error");
+  }
+}
+
+// A link another app opened, or a startup URL, is told apart from a page a
+// page opened and from pages the broker already holds.
+TEST_F(NativeHostTest, LaunchPagesSkipPageOpenedAndBrokerPages) {
+  auto launched = CreateTestWebContents();
+  auto opened = CreateTestWebContents();
+  AppRuntime::MarkOpenedByPage(opened.get());
+  AppRuntime::MarkOpenedByPage(nullptr);
+  EXPECT_FALSE(AppRuntime::IsOpenedByPage(launched.get()));
+  EXPECT_TRUE(AppRuntime::IsOpenedByPage(opened.get()));
+  EXPECT_FALSE(AppRuntime::IsOpenedByPage(nullptr));
+
+  EXPECT_FALSE(TabBroker::Get().Tracks(launched.get()));
+  const auto offer = TabBroker::Get().Offer(launched.get(), /*park=*/false);
+  ASSERT_TRUE(offer.error.empty());
+  EXPECT_TRUE(TabBroker::Get().Tracks(launched.get()));
+  TabBroker::Get().ReleaseOffer(offer.adopt_id);
+  EXPECT_FALSE(TabBroker::Get().Tracks(launched.get()));
+  // Without a started runtime nothing is offered.
+  WindowRegistry::Get().AdoptLaunchPages();
+}
+
+class HostLayoutLinuxUi : public ui::FakeLinuxUi {
+ public:
+  void AddWindowButtonOrderObserver(ui::WindowButtonOrderObserver* o) override {
+    observers.AddObserver(o);
+  }
+  void RemoveWindowButtonOrderObserver(
+      ui::WindowButtonOrderObserver* o) override {
+    observers.RemoveObserver(o);
+  }
+  void Notify() {
+    for (auto& observer : observers)
+      observer.OnWindowButtonOrderingChange();
+  }
+  base::ObserverList<ui::WindowButtonOrderObserver>::Unchecked observers;
+};
+class LayoutHostTest : public NativeHostTest {
+ protected:
+  void SetUp() override {
+    NativeHostTest::SetUp();
+    auto* order = views::WindowButtonOrderProvider::GetInstance();
+    left_ = order->leading_buttons();
+    right_ = order->trailing_buttons();
+    old_ui_ = ui::LinuxUi::SetInstance(&linux_ui_);
+    ReplaceHost();
+    SetLayout(false);
+    task_environment()->RunUntilIdle();
+  }
+  void TearDown() override {
+    NativeHostTest::TearDown();
+    EXPECT_TRUE(linux_ui_.observers.empty());
+    ui::LinuxUi::SetInstance(old_ui_);
+    views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
+        left_, right_);
+  }
+  void SetLayout(bool left) {
+    using Button = views::FrameButton;
+    views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
+        left ? std::vector<Button>{Button::kClose} : std::vector<Button>{},
+        left ? std::vector<Button>{Button::kMinimize, Button::kMaximize}
+             : std::vector<Button>{Button::kMinimize, Button::kMaximize,
+                                   Button::kClose});
+    linux_ui_.Notify();
+  }
+  HostLayoutLinuxUi linux_ui_;
+  raw_ptr<ui::LinuxUi> old_ui_ = nullptr;
+  std::vector<views::FrameButton> left_, right_;
+};
+class LayoutClient : public mojom::NativeHostClient {
+ public:
+  void Connect(NativeHost& host) {
+    receiver.reset();
+    host.SetClient(receiver.BindNewPipeAndPassRemote());
+  }
+  void OnNativeEvent(const std::string& module,
+                     const std::string& event,
+                     const std::string& json) override {
+    if (module != "BayShell" || event != "onAppEvent")
+      return;
+    auto payload = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(payload);
+    const auto* type = payload->FindString("type");
+    if (!type || *type != "windowButtonLayout")
+      return;
+    EXPECT_EQ(payload->size(), 2u);
+    const auto* layout = payload->FindDict("layout");
+    ASSERT_TRUE(layout);
+    events.push_back(layout->Clone());
+  }
+  void OnHostInfoChanged(const std::string& json) override {
+    auto info = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+    ASSERT_TRUE(info);
+    const auto* layout =
+        info->FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+    ASSERT_TRUE(layout);
+    snapshots.push_back(layout->Clone());
+  }
+  mojo::Receiver<mojom::NativeHostClient> receiver{this};
+  std::vector<base::DictValue> events, snapshots;
+};
+
+TEST_F(NativeHostTest, LayoutQueryDoesNotWaitForDocumentPreparation) {
+  base::test::TestFuture<const std::string&> info;
+  host_->GetHostInfo(info.GetCallback());
+  EXPECT_FALSE(info.IsReady());
+  const auto result = base::JSONReader::ReadDict(
+      Invoke("BayShell", "windowButtonLayout", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  const auto* layout = result->FindDict("value");
+  ASSERT_TRUE(layout);
+  EXPECT_TRUE(layout->FindList("left"));
+  EXPECT_TRUE(layout->FindList("right"));
+}
+
+TEST_F(LayoutHostTest, CoordinatorAdvertisesAndQueriesCurrentLayout) {
+  SetLayout(true);
+  const auto info = HostInfo();
+  ExpectLayoutAndCaptionMethods(info);
+  const auto* snapshot =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(snapshot);
+  EXPECT_EQ(Invoke("BayShell", "windowButtonLayout", "[]"),
+            base::WriteJson(base::DictValue().Set("value", snapshot->Clone())));
+  EXPECT_EQ(*snapshot->FindList("left"), base::ListValue().Append("close"));
+  EXPECT_EQ(*snapshot->FindList("right"),
+            base::ListValue().Append("minimize").Append("maximize"));
+  for (const char* args : {"{}", "[1]", "[null]", "[[],{}]"})
+    ExpectError(Invoke("BayShell", "windowButtonLayout", args), "invalid_args");
+}
+TEST_F(LayoutHostTest, CaptionCommandsPreserveCommonArityAndUnknownIdErrors) {
+  for (const char* method :
+       {"minimizeWindow", "toggleMaximizeWindow", "windowState"}) {
+    ExpectError(Invoke("BayShell", method, "[]"), "invalid_args");
+    ExpectError(Invoke("BayShell", method, R"(["missing",1])"), "invalid_args");
+    ExpectError(Invoke("BayShell", method, R"(["missing"])"), "window_error");
+  }
+}
+TEST_F(LayoutHostTest, LiveChangesPublishSnapshotAndCurrentEvent) {
+  LayoutClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 1u);
+  const auto initial = client.events[0].Clone();
+  SetLayout(true);
+  SetLayout(false);
+  SetLayout(true);
+  EXPECT_EQ(client.events.size(), 1u);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 2u);
+  ASSERT_FALSE(client.snapshots.empty());
+  EXPECT_EQ(client.snapshots.back(), client.events.back());
+  EXPECT_NE(initial, client.events.back());
+  EXPECT_EQ(client.events.back(), *HostInfo().FindDictByDottedPath(
+                                      "snapshots.BayShell.windowButtonLayout"));
+}
+TEST_F(LayoutHostTest, ReplaceDisconnectReconnectAndTeardownCancelStaleEvents) {
+  LayoutClient first;
+  first.Connect(*host_);
+  SetLayout(true);
+  LayoutClient second;
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(first.events.empty());
+  ASSERT_EQ(second.events.size(), 1u);
+  second.receiver.reset();
+  task_environment()->RunUntilIdle();
+  SetLayout(false);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 1u);
+  second.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(second.events.size(), 2u);
+  EXPECT_EQ(second.events.back(), *HostInfo().FindDictByDottedPath(
+                                      "snapshots.BayShell.windowButtonLayout"));
+  SetLayout(true);
+  host_->ResetAndDeleteThis();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(second.events.size(), 2u);
+  EXPECT_TRUE(linux_ui_.observers.empty());
+}
+TEST_F(LayoutHostTest, FreshDocumentGetsCurrentLayoutAfterDisconnectedUpdate) {
+  SetLayout(true);
+  ReplaceHost();
+  LayoutClient client;
+  client.Connect(*host_);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client.events.size(), 1u);
+  EXPECT_EQ(client.events[0], *HostInfo().FindDictByDottedPath(
+                                  "snapshots.BayShell.windowButtonLayout"));
+}
 
 class AppearanceClient : public mojom::NativeHostClient {
  public:
@@ -210,12 +445,14 @@ TEST_F(NativeHostTest, AdvertisesOnlyImplementedShellAndSystemMethods) {
   for (const auto& method : *methods) {
     const auto& name = method.GetString();
     if (name.starts_with("BaySystem."))
-      EXPECT_TRUE(name == "BaySystem.fileIcon" ||
-                  name == "BaySystem.fileExists" ||
-                  name == "BaySystem.downloadsFolder" ||
-                  name == "BaySystem.openFile" ||
-                  name == "BaySystem.revealFile" ||
-                  name == "BaySystem.moveToTrash");
+      EXPECT_TRUE(
+          name == "BaySystem.fileIcon" || name == "BaySystem.fileExists" ||
+          name == "BaySystem.downloadsFolder" || name == "BaySystem.openFile" ||
+          name == "BaySystem.revealFile" || name == "BaySystem.moveToTrash" ||
+          name == "BaySystem.isDefaultBrowser" ||
+          name == "BaySystem.setAsDefaultBrowser" ||
+          name == "BaySystem.launchAtLoginStatus" ||
+          name == "BaySystem.setLaunchAtLogin");
   }
   EXPECT_TRUE(methods->contains("BayShell.confirm"));
   EXPECT_TRUE(methods->contains("BayShell.readDocument"));
@@ -268,7 +505,85 @@ TEST_F(NativeHostTest,
       ExpectError(Invoke("BaySystem", method, args), "invalid_args");
   }
   ExpectError(Invoke("BaySystem", "downloadsFolder", "[1]"), "invalid_args");
-  ExpectError(Invoke("BaySystem", "isDefaultBrowser", "[]"), "unsupported_method");
+  ExpectError(Invoke("BaySystem", "isDefaultBrowser", "[1]"), "invalid_args");
+}
+
+void ExpectDesktopSystemMethods(const base::DictValue& info) {
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(methods);
+  for (const char* method :
+       {"BaySystem.isDefaultBrowser", "BaySystem.setAsDefaultBrowser",
+        "BaySystem.launchAtLoginStatus", "BaySystem.setLaunchAtLogin",
+        "BayApp.systemInfo", "BayApp.launchEnvironment",
+        "BayApp.openExternalURL", "BayApp.updaterState"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+  for (const char* method :
+       {"BayApp.checkForUpdates", "BayApp.installPendingUpdate",
+        "BayApp.setAutomaticUpdateChecks",
+        "BayApp.setAutomaticUpdateDownloads"})
+    EXPECT_FALSE(methods->contains(method)) << method;
+}
+
+TEST_F(NativeHostTest, CoordinatorAdvertisesDesktopSystemMethods) {
+  ExpectDesktopSystemMethods(HostInfo());
+}
+
+TEST_F(NativeHostTest, AppSnapshotsAreReadyBeforeHostInfoReturns) {
+  base::test::TestFuture<const std::string&> result;
+  host_->GetHostInfo(result.GetCallback());
+  EXPECT_FALSE(result.IsReady());
+  ExpectError(Invoke("BayApp", "systemInfo", "[]"), "initialization_failed");
+  task_environment()->RunUntilIdle();
+  auto info = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(info);
+  const auto* system =
+      info->FindDictByDottedPath("snapshots.BayApp.systemInfo");
+  ASSERT_TRUE(system);
+  const auto* name = system->FindString("appName");
+  ASSERT_TRUE(name);
+  EXPECT_EQ(*name, "Bay");
+  EXPECT_EQ(system->FindBool("updates"), false);
+  EXPECT_TRUE(info->FindDictByDottedPath("snapshots.BayApp.environment"));
+  EXPECT_TRUE(info->FindDictByDottedPath("snapshots.BayShell.documents"));
+  EXPECT_EQ(
+      Invoke("BayApp", "systemInfo", "[]"),
+      base::WriteJson(base::DictValue().Set("value", system->Clone())).value());
+  EXPECT_EQ(Invoke("BayApp", "launchEnvironment", R"(["NOT_A_BAY_SETTING"])"),
+            R"({"value":null})");
+  auto updater = base::JSONReader::ReadDict(
+      Invoke("BayApp", "updaterState", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(updater);
+  EXPECT_EQ(updater->FindBoolByDottedPath("value.available"), false);
+  const auto* manager = updater->FindStringByDottedPath("value.managedBy");
+  ASSERT_TRUE(manager);
+  EXPECT_EQ(*manager, "packageManager");
+}
+
+TEST_F(NativeHostTest,
+       DesktopSystemContractsRejectArgumentsWithoutExternalEffects) {
+  HostInfo();
+  for (const char* method :
+       {"isDefaultBrowser", "setAsDefaultBrowser", "launchAtLoginStatus"})
+    ExpectError(Invoke("BaySystem", method, "[1]"), "invalid_args");
+  for (const char* args : {"[]", "[null]", "[1]", R"(["true"])"})
+    ExpectError(Invoke("BaySystem", "setLaunchAtLogin", args), "invalid_args");
+  for (const char* method : {"systemInfo", "updaterState"})
+    ExpectError(Invoke("BayApp", method, "[1]"), "invalid_args");
+  ExpectError(Invoke("BayApp", "launchEnvironment", "[1]"), "invalid_args");
+  for (const char* args : {"[]", "[null]", R"(["file:///tmp/a"])",
+                           R"json(["javascript:alert(1)"])json", R"(["ftp://example.com"])",
+                           R"(["not a URL"])"})
+    ExpectError(Invoke("BayApp", "openExternalURL", args), "invalid_args");
+}
+
+TEST_F(NativeHostTest, ClosingHostBeforeAppSnapshotReplyDropsPendingHostInfo) {
+  int calls = 0;
+  host_->GetHostInfo(
+      base::BindLambdaForTesting([&calls](const std::string&) { ++calls; }));
+  host_->ResetAndDeleteThis();
+  EXPECT_FALSE(host_);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 0);
 }
 
 TEST_F(NativeHostTest,
@@ -360,8 +675,8 @@ TEST_F(NativeHostTest, AnUnreadableDocumentBecomesTheInitializationError) {
   ASSERT_TRUE(base::WriteFile(Documents().AppendASCII("bad.json"), "\xff"));
   ReplaceHost();
   const auto info = HostInfo();
-  const auto* error = info.FindStringByDottedPath(
-      "constants.BayShell.initializationError");
+  const auto* error =
+      info.FindStringByDottedPath("constants.BayShell.initializationError");
   ASSERT_TRUE(error);
   EXPECT_NE(error->find("bad.json"), std::string::npos);
   ExpectError(Invoke("BayShell", "saveDocument", R"(["bad.json","{}"])"),
@@ -674,6 +989,32 @@ class WindowClipboardHostTest : public ClipboardHostTest {
   base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
 };
 
+TEST_F(WindowClipboardHostTest, WindowAdvertisesLayoutAndCaptionMethods) {
+  const auto info = HostInfo();
+  ExpectLayoutAndCaptionMethods(info);
+  const auto* snapshot =
+      info.FindDictByDottedPath("snapshots.BayShell.windowButtonLayout");
+  ASSERT_TRUE(snapshot);
+  EXPECT_EQ(Invoke("BayShell", "windowButtonLayout", "[]"),
+            base::WriteJson(base::DictValue().Set("value", snapshot->Clone())));
+  for (const char* method :
+       {"minimizeWindow", "toggleMaximizeWindow", "windowState"})
+    ExpectError(Invoke("BayShell", method, R"(["missing"])"), "window_error");
+}
+
+TEST_F(WindowClipboardHostTest,
+       PlacementCapabilityDoesNotChangeWindowAuthority) {
+  const auto info = HostInfo();
+  EXPECT_EQ(
+      info.FindBoolByDottedPath("constants.BayShell.globalWindowCoordinates"),
+      GlobalWindowCoordinates());
+  EXPECT_EQ(*info.FindString("role"), "window");
+  EXPECT_EQ(Invoke("BayShell", "windowFrame", R"(["missing"])"),
+            R"({"value":null})");
+  ExpectError(Invoke("BayShell", "windowState", R"(["missing"])"),
+              "window_error");
+}
+
 TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
   const auto info = HostInfo();
   const auto* methods = info.FindList("optionalMethods");
@@ -692,6 +1033,19 @@ TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
              base::WriteJson(base::ListValue().Append(Documents().value()))
                  .value()),
       R"({"value":true})");
+}
+
+TEST_F(WindowClipboardHostTest,
+       WindowAdvertisesAndQueriesDesktopSystemSnapshots) {
+  ExpectDesktopSystemMethods(HostInfo());
+  auto result = base::JSONReader::ReadDict(Invoke("BayApp", "systemInfo", "[]"),
+                                           base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  const auto* name = result->FindStringByDottedPath("value.appName");
+  ASSERT_TRUE(name);
+  EXPECT_EQ(*name, "Bay");
+  EXPECT_EQ(Invoke("BayApp", "launchEnvironment", R"(["NOT_A_BAY_SETTING"])"),
+            R"({"value":null})");
 }
 
 TEST_F(WindowClipboardHostTest,

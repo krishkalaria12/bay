@@ -358,6 +358,8 @@ class ArtifactTests(unittest.TestCase):
                 self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", archive.namelist())
                 self.assertIn("runtime/notification_helper.exe", archive.namelist())
                 self.assertNotIn("runtime/chrome.pdb", archive.namelist())
+                self.assertNotIn("runtime/xdg-settings", archive.namelist())
+                self.assertNotIn("runtime/xdg-mime", archive.namelist())
                 manifest = json.loads(archive.read("manifest.json"))
                 self.assertEqual(manifest["mojo"]["sharedImports"], ["//resources/mojo/mojo/public/js/bindings.js"])
             (generated / "helper.js").unlink()

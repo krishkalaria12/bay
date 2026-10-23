@@ -14,6 +14,8 @@ export const isWindows = platformOS === "windows";
 export const hasNativeModule = (name: string): boolean => host.modules.includes(name);
 export const capabilities = {
   ...capabilitiesFor(platformOS, hasNativeModule),
+  // Linux must report the active Ozone backend, not infer it from the desktop environment.
+  globalWindowCoordinates: isWindows || host.constants.BayShell?.globalWindowCoordinates === true,
   // Mica behind a transparent UI, when the host's frame draws it (Windows 11 22H2+); a solid window otherwise.
   windowBackdrop: host.constants.BayShell?.backdrop === "mica",
   tooltips: true,

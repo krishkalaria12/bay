@@ -25,6 +25,48 @@ class PlatformRoutingTests(unittest.TestCase):
                          set().union(*({step.name for step in series.read_series(target)}
                                        for target in ("mac", "win", "linux"))))
 
+    def test_button_layout_portal_patch_is_linux_only(self):
+        name = "chromium-window-button-layout-portal-linux.patch"
+        self.assertIn(name, {step.name for step in series.read_series("linux")})
+        for platform in ("mac", "win"):
+            self.assertNotIn(name, {step.name for step in series.read_series(platform)})
+
+    def test_linux_linking_and_branding_are_exclusive_and_follow_shared_branding(self):
+        selected = [step.name for step in series.read_series("linux")]
+        names = ("chromium-bay-layer-linux.patch", "chromium-bay-branding-linux.patch")
+        for name in names:
+            self.assertIn(name, selected)
+            for platform in ("mac", "win"):
+                self.assertNotIn(name, {step.name for step in series.read_series(platform)})
+        self.assertLess(selected.index("chromium-branding.patch"), selected.index(names[1]))
+
+    def test_linux_layer_links_browser_executable_and_preserves_helper_targets(self):
+        step = next(s for s in series.read_series("linux") if s.name == "chromium-bay-layer-linux.patch")
+        original = '\n'.join([
+            'executable("chrome_initial") {',
+            '    if (is_linux) {',
+            '      sources += [',
+            '        "app/chrome_main_linux.cc",',
+            '        "app/chrome_main_linux.h",',
+            '      ]',
+            '    }',
+            '',
+            '    if (is_chrome_for_testing) {',
+            '    }',
+            '}',
+            'group("chrome_sandbox") {}',
+            'group("chrome_crashpad_handler") {}', ''])
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory) / "chrome/BUILD.gn"
+            build.parent.mkdir()
+            build.write_text(original)
+            self.assertIsNone(series.apply_step(step, directory))
+            text = build.read_text()
+            for dependency in ("//bay/core", "//chrome/browser/bay:exports", "//chrome/browser/bay/webui:impl"):
+                self.assertIn(f'"{dependency}"', text)
+            self.assertTrue(text.endswith('group("chrome_sandbox") {}\ngroup("chrome_crashpad_handler") {}\n'))
+            self.assertTrue(series.is_applied(step, directory))
+
     def test_comma_lists_route_to_each_target_in_series_order(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -75,6 +117,16 @@ class PlatformRoutingTests(unittest.TestCase):
             self.assertIn('"//chrome/browser/bay/webui:impl"', build.read_text())
             self.assertIn('"//bay/core"', build.read_text())
             self.assertNotIn(("chrome/BUILD.gn", False), steps[names[1]].paths())
+
+    def test_shared_host_runs_nncore_and_keeps_empty_windows_on_linux(self):
+        patch = (HERE / "chromium-bay-webui-window.patch").read_text()
+        added = "\n".join(line[1:] for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
+        # NNCore's main delegate, and with it the frame hook, runs on both web desktops.
+        self.assertIn('#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)\n#include "bay/core/nn_main_delegate.h"', added)
+        self.assertIn("#elif BUILDFLAG(IS_LINUX)\n  nncore::NNMainDelegate chrome_main_delegate(", added)
+        # Every host gate, including the empty-strip ones that keep a parked
+        # window open, covers Linux.
+        self.assertNotIn("#if BUILDFLAG(IS_WIN)\n", added + "\n")
 
     def test_linux_safe_storage_item_is_bays_own(self):
         step = next(s for s in series.read_series("linux") if s.name == "chromium-safe-storage-name-linux.patch")

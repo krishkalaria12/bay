@@ -76,8 +76,10 @@ function BrowserWindow() {
   // they show only while the pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
   const buttonsOnHover = (right || !sidebarOpen) && addressInSidebar && !fullscreen;
-  // Windows' caption buttons sit at the other corner: over the page there when it has no toolbar to hold them.
-  const captionOnHover = !topTabs && addressInSidebar && (!right || !showSidebar);
+  const captionOnHover = {
+    left: !topTabs && addressInSidebar && (right || !showSidebar),
+    right: !topTabs && addressInSidebar && (!right || !showSidebar),
+  };
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   useEffect(() => {

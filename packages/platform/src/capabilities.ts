@@ -5,6 +5,8 @@
 import type { PlatformOS } from "./types";
 
 export type Capabilities = {
+  /** The host can query and place windows in global screen coordinates. */
+  globalWindowCoordinates: boolean;
   /** BayGlassEffect renders real Liquid Glass (macOS 26+). Elsewhere: the Surface fallback. */
   liquidGlass: boolean;
   /** BayVisualEffect (NSVisualEffectView vibrancy). Elsewhere: the Surface fallback. */
@@ -67,6 +69,7 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
   const windows = os === "windows";
   const webDesktop = windows || os === "linux";
   return {
+    globalWindowCoordinates: mac || windows,
     liquidGlass: mac && hasModule("BayGlassEffect"),
     vibrancy: mac && hasModule("BayVisualEffect"),
     shaders: mac && hasModule("BayAreaLight") && hasModule("BayEdgeLight") && hasModule("BayPowerUp") && hasModule("BayWindowBackdrop"),

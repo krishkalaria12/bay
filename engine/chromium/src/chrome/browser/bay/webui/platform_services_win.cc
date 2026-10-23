@@ -32,7 +32,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/version_info/version_info.h"
@@ -217,6 +216,7 @@ PlatformServices::PlatformServices(HostContext context,
       snapshots_changed_(std::move(changed)),
       disk_runner_(DiskRunner()),
       documents_(DocumentStore::DefaultDirectory(), snapshots_changed_),
+      default_browser_(context_),
       files_(context_) {
   Services()[this] = weak_factory_.GetWeakPtr();
 }
@@ -279,8 +279,6 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayShell.pickFiles",
                      "BayShell.confirm",
                      "BayShell.prompt",
-                     "BaySystem.isDefaultBrowser",
-                     "BaySystem.setAsDefaultBrowser",
                      "BaySystem.fileIcon",
                      "BaySystem.launchAtLoginStatus",
                      "BaySystem.setLaunchAtLogin",
@@ -292,6 +290,8 @@ base::ListValue PlatformServices::SupportedMethods() const {
                      "BayKeychain.set",
                      "BayKeychain.delete"})
     methods.Append(name);
+  for (auto& method : DefaultBrowser::SupportedMethods())
+    methods.Append(std::move(method));
   for (auto& method : ShellFiles::SupportedMethods())
     methods.Append(std::move(method));
   for (auto& method : ShellAppearance::SupportedMethods())
@@ -363,22 +363,8 @@ bool PlatformServices::DispatchPlatformModule(const std::string& module,
     return true;
   if (ShellAppearance::Dispatch(context_, module, method, args, callback))
     return true;
-  if (module == "BaySystem" &&
-      (method == "isDefaultBrowser" || method == "setAsDefaultBrowser")) {
-    auto worker =
-        base::MakeRefCounted<shell_integration::DefaultBrowserWorker>();
-    auto done = base::BindOnce(
-        [](Response callback, shell_integration::DefaultWebClientState state) {
-          std::move(callback).Run(
-              Success(base::Value(state == shell_integration::IS_DEFAULT)));
-        },
-        std::move(callback));
-    if (method == "isDefaultBrowser")
-      worker->StartCheckIsDefault(std::move(done));
-    else
-      worker->StartSetAsDefault(std::move(done));
+  if (default_browser_.Dispatch(module, method, args, callback))
     return true;
-  }
   if (module == "BaySystem" &&
       (method == "launchAtLoginStatus" || method == "setLaunchAtLogin")) {
     const auto* enabled = At(args, 0);

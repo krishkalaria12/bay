@@ -31,6 +31,10 @@ class SecretStorage;
 class ShellUI;
 class ShellAppearance;
 class ShellFiles;
+class DefaultBrowser;
+class Autostart;
+class AppServicesLinux;
+class WindowButtonLayoutLinux;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -68,7 +72,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   content::WebContents* ContentsForTag(int tag) const;
   base::DictValue Info() const;
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
-  // Host info waits for saved documents and the downloads-path snapshot.
+  // Host info waits for saved documents and the platform snapshots.
   void PlatformReady();
   std::unique_ptr<ShellAppearance> appearance_;
   bool platform_ready_ = false;
@@ -80,8 +84,12 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
 
   const HostContext context_;
 #if BUILDFLAG(IS_LINUX)
+  std::unique_ptr<WindowButtonLayoutLinux> button_layout_;
   // Document-scoped ownership dismisses prompts and settles pending icons.
   std::unique_ptr<ShellFiles> files_;
+  std::unique_ptr<DefaultBrowser> default_browser_;
+  std::unique_ptr<Autostart> autostart_;
+  std::unique_ptr<AppServicesLinux> app_services_;
   bool documents_ready_ = false;
   std::unique_ptr<ShellUI> shell_ui_;
   std::unique_ptr<SecretStorage> secret_storage_;

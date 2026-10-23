@@ -33,6 +33,7 @@
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/bay/webui/notifications.h"
@@ -40,11 +41,15 @@
 #endif
 #if BUILDFLAG(IS_LINUX)
 #include <unistd.h>
+#include "chrome/browser/bay/webui/app_services_linux.h"
+#include "chrome/browser/bay/webui/autostart_linux.h"
+#include "chrome/browser/bay/webui/default_browser.h"
 #include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/secret_storage_linux.h"
 #include "chrome/browser/bay/webui/shell_clipboard.h"
 #include "chrome/browser/bay/webui/shell_files.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/bay/webui/window_button_layout_linux.h"
 #endif
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/data/data_services.h"
@@ -387,13 +392,21 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
 #endif
 #if BUILDFLAG(IS_LINUX)
+  button_layout_ = std::make_unique<WindowButtonLayoutLinux>(
+      base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  default_browser_ = std::make_unique<DefaultBrowser>(context_);
+  autostart_ = std::make_unique<Autostart>(context_);
+  app_services_ = std::make_unique<AppServicesLinux>(
+      context_, g_browser_process->GetApplicationLocale());
   files_ = std::make_unique<ShellFiles>(context_);
-  files_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
   shell_ui_ = std::make_unique<ShellUI>();
   secret_storage_ = std::make_unique<SecretStorage>();
   documents_ = std::make_unique<DocumentStore>(
       DocumentStore::DefaultDirectory(),
       base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  app_services_->Prepare(
+      base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
+  files_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
   documents_->Prepare(base::BindOnce(
       [](base::WeakPtr<NativeHost> host) {
         if (!host)
@@ -459,6 +472,10 @@ base::DictValue NativeHost::Info() const {
   modules.Append("BayNotifications");
   modules.Append("BaySystem");
 #endif
+  base::DictValue app;
+#if BUILDFLAG(IS_LINUX)
+  app = app_services_->snapshots();
+#else
   base::DictValue system;
   system.Set("platform",
 #if BUILDFLAG(IS_WIN)
@@ -484,9 +501,13 @@ base::DictValue NativeHost::Info() const {
   system.Set("memoryGB", base::SysInfo::AmountOfTotalPhysicalMemory().InGiBF());
   system.Set("locale", g_browser_process->GetApplicationLocale());
   system.Set("updates", false);
+  app.Set("systemInfo", std::move(system));
+  app.Set("environment", base::DictValue());
+#endif
   base::DictValue shell;
   shell.Set("role", context_.role_name());
   shell.Set("sharedRuntime", AppRuntime::Enabled());
+  shell.Set("globalWindowCoordinates", GlobalWindowCoordinates());
   shell.Set("runtimeRole", context_.role_name());
   if (auto* window = context_.window()) {
     const std::string window_id = WindowRegistry::Get().IdFor(window);
@@ -514,6 +535,10 @@ base::DictValue NativeHost::Info() const {
 #if BUILDFLAG(IS_LINUX)
   for (auto& method : Notifications::SupportedMethods())
     engine_methods.Append(std::move(method));
+  for (const char* method :
+       {"BayShell.windowButtonLayout", "BayShell.minimizeWindow",
+        "BayShell.toggleMaximizeWindow", "BayShell.windowState"})
+    engine_methods.Append(method);
   engine_methods.Append("BayShell.prompt");
   engine_methods.Append("BayShell.confirm");
   if (context_.is_window()) {
@@ -531,6 +556,12 @@ base::DictValue NativeHost::Info() const {
     engine_methods.Append(std::move(method));
   for (auto& method : ShellFiles::SupportedMethods())
     engine_methods.Append(std::move(method));
+  for (auto& method : DefaultBrowser::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : Autostart::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : AppServicesLinux::SupportedMethods())
+    engine_methods.Append(std::move(method));
 #endif
   base::DictValue documents;
 #if BUILDFLAG(IS_LINUX)
@@ -540,9 +571,13 @@ base::DictValue NativeHost::Info() const {
       base::DictValue()
           .Set("contractVersion", 2)
           .Set("role", context_.role_name())
-          .Set("platform", system.FindString("platform")
-                               ? *system.FindString("platform")
-                               : "linux")
+          .Set("platform",
+#if BUILDFLAG(IS_WIN)
+               "windows"
+#else
+               "linux"
+#endif
+               )
           .Set("modules", std::move(modules))
           .Set("views", context_.is_window()
                             ? base::ListValue().Append("BayWebView")
@@ -554,9 +589,7 @@ base::DictValue NativeHost::Info() const {
                    .Set("BayShell", std::move(shell)))
           .Set("snapshots",
                base::DictValue()
-                   .Set("BayApp", base::DictValue()
-                                      .Set("systemInfo", std::move(system))
-                                      .Set("environment", base::DictValue()))
+                   .Set("BayApp", std::move(app))
                    .Set("BayShell", base::DictValue().Set("documents",
                                                           std::move(documents)))
                    .Set("BaySystem",
@@ -610,6 +643,8 @@ base::DictValue NativeHost::Info() const {
   info.Set("optionalMethods", std::move(methods));
 #endif
 #if BUILDFLAG(IS_LINUX)
+  info.SetByDottedPath("snapshots.BayShell.windowButtonLayout",
+                       button_layout_->Snapshot());
   info.SetByDottedPath("snapshots.BaySystem.downloadsFolder",
                       files_->downloads_folder());
 #endif
@@ -641,7 +676,7 @@ void NativeHost::PublishHostInfo() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void NativeHost::PlatformReady() {
 #if BUILDFLAG(IS_LINUX)
-  if (!documents_ready_ || !files_->ready())
+  if (!documents_ready_ || !files_->ready() || !app_services_->ready())
     return;
 #endif
   platform_ready_ = true;
@@ -669,10 +704,25 @@ void NativeHost::SetClient(
                                      .Set("dark", dark)));
       },
       GetWeakPtr()));
+#if BUILDFLAG(IS_LINUX)
+  button_layout_->SetEventSink(base::BindRepeating(
+      [](base::WeakPtr<NativeHost> host, base::DictValue layout) {
+        if (host)
+          host->Emit("BayShell", "onAppEvent",
+                     base::Value(base::DictValue()
+                                     .Set("type", "windowButtonLayout")
+                                     .Set("layout", std::move(layout))));
+      },
+      GetWeakPtr()));
+#endif
   client_.set_disconnect_handler(base::BindOnce(
       [](base::WeakPtr<NativeHost> host) {
-        if (host)
+        if (host) {
           host->appearance_->SetEventSink({});
+#if BUILDFLAG(IS_LINUX)
+          host->button_layout_->SetEventSink({});
+#endif
+        }
       },
       GetWeakPtr()));
   if (!AppRuntime::Enabled() || is_coordinator()) {
@@ -850,6 +900,16 @@ void NativeHost::Invoke(const std::string& module,
 #if BUILDFLAG(IS_LINUX)
   // These services do not depend on Windows platform initialization. The
   // common profile check above and browser-assigned context own authority.
+  if (module == "BayShell" && method == "windowButtonLayout") {
+    std::move(callback).Run(Success(base::Value(button_layout_->Snapshot())));
+    return;
+  }
+  if (default_browser_->Dispatch(module, method, args, callback))
+    return;
+  if (autostart_->Dispatch(module, method, args, callback))
+    return;
+  if (app_services_->Dispatch(module, method, args, callback))
+    return;
   if (shell_ui_->Dispatch(context_, module, method, args, callback))
     return;
   if (ShellAppearance::Dispatch(context_, module, method, args, callback))

@@ -19,6 +19,29 @@ SPEC = importlib.util.spec_from_file_location("bay_engine_driver", HERE / "engin
 engine = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(engine)
 
+SYSROOT_REVISION = "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d"
+SYSROOT_URL = "https://commondatastorage.googleapis.com/chrome-linux-sysroot"
+SYSROOT_METADATA = {
+    "Sha256Sum": SYSROOT_REVISION,
+    "SysrootDir": "debian_bullseye_amd64-sysroot",
+    "Tarball": "debian_bullseye_amd64_sysroot.tar.xz",
+    "URL": SYSROOT_URL,
+}
+
+
+def make_linux_sysroot(src, install="installer"):
+    metadata = src / "build/linux/sysroot_scripts/sysroots.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(json.dumps({"bullseye_amd64": SYSROOT_METADATA}))
+    directory = src / "build/linux" / SYSROOT_METADATA["SysrootDir"]
+    directory.mkdir()
+    if install == "gcs":
+        (directory / f".{SYSROOT_REVISION}_hash").write_text(SYSROOT_REVISION + "\n")
+        (directory / f".{SYSROOT_REVISION}_is_first_class_gcs").write_text("1\n")
+    else:
+        (directory / ".stamp").write_text(f"{SYSROOT_URL}/{SYSROOT_REVISION}")
+    return directory
+
 
 class PlatformTests(unittest.TestCase):
     def test_windows_lock_remains_flat_and_linux_compatibility_is_unmeasured(self):
@@ -28,7 +51,19 @@ class PlatformTests(unittest.TestCase):
         linux = engine.platform_lock("linux")
         self.assertEqual(linux["cefCommit"], engine.LOCK["cefCommit"])
         self.assertIsNone(linux["minimumGlibc"])
-        self.assertIsNone(linux["sysroot"]["revision"])
+        self.assertEqual(linux["sysroot"], {
+            "useSysroot": True,
+            "revision": SYSROOT_REVISION,
+            "revisionType": "sha256",
+            "chromiumCommit": "a654841425914cbb703a2931e07b70a83aedbafd",
+            "metadataFile": "build/linux/sysroot_scripts/sysroots.json",
+            "metadataKey": "bullseye_amd64",
+            "directory": SYSROOT_METADATA["SysrootDir"],
+            "tarball": SYSROOT_METADATA["Tarball"],
+            "url": SYSROOT_URL,
+        })
+        self.assertNotIn("sysroot", engine.LOCK)
+        self.assertNotIn("minimumGlibc", engine.LOCK)
         self.assertNotIn("minimumWindowsBuild", linux)
         with self.assertRaises(ValueError):
             engine.platform_lock("mac")
@@ -42,6 +77,7 @@ class PlatformTests(unittest.TestCase):
         self.assertIn("-windows-x64-", windows["id"])
         self.assertIn("-linux-x64-", linux["id"])
         self.assertIsNone(linux["minimumGlibc"])
+        self.assertEqual(linux["sysroot"], engine.platform_lock("linux")["sysroot"])
 
     def test_linux_environment_has_no_windows_toolchain_and_uses_linux_gn_args(self):
         with mock.patch.dict(os.environ, {"DEPOT_TOOLS_WIN_TOOLCHAIN": "inherited"}):
@@ -53,6 +89,7 @@ class PlatformTests(unittest.TestCase):
             self.assertIn(text, env["GN_DEFINES"])
         self.assertNotIn("enable_iterator_debugging", env["GN_DEFINES"])
         self.assertNotIn("use_sysroot", engine.GN_ARGS)
+        self.assertNotIn("target_sysroot", engine.gn_args("win"))
 
     def test_default_roots_and_explicit_environment_override(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -84,6 +121,158 @@ class PlatformTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Windows preparation"):
                 engine.check_root_platform(root, "linux")
             self.assertFalse((root / ".bay-engine-platform").exists())
+
+
+class LinuxPreflightTests(unittest.TestCase):
+    def make_series(self, repo):
+        patches = repo / "engine/patches"
+        patches.mkdir(parents=True)
+        shutil.copy2(engine.REPO / "engine/patches/series.py", patches / "series.py")
+        names = ("chromium-bay-layer-linux.patch", "chromium-bay-branding-linux.patch")
+        for name in names:
+            (patches / name).write_text("diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn\n"
+                                        "--- a/chrome/BUILD.gn\n+++ b/chrome/BUILD.gn\n"
+                                        "@@ -1 +1 @@\n-old\n+new\n")
+        (patches / "series").write_text("".join(f"chromium linux {name}\n" for name in names))
+        return patches, names
+
+    def test_selected_linux_integration_patches_pass_read_only_preflight(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "run") as run:
+            root = Path(directory)
+            self.make_series(root / "repo")
+            env = engine.environment(root, "linux")
+            make_linux_sysroot(Path(env["CHROMIUM_SRC"]))
+            with mock.patch.object(engine, "REPO", root / "repo"):
+                engine.require_linux_integration(env, "linux")
+            run.assert_not_called()
+
+    def test_missing_or_wrongly_routed_patch_stops_prepare_and_build_before_mutation(self):
+        for action in ("prepare", "build"):
+            for patch in (0, 1):
+                for failure in ("route", "missing", "empty"):
+                    with self.subTest(action=action, patch=patch, failure=failure), \
+                         tempfile.TemporaryDirectory() as directory, \
+                         mock.patch.object(engine, "run") as run, \
+                         mock.patch.object(engine, "verify_checkout") as verify:
+                        root = Path(directory)
+                        patches, names = self.make_series(root / "repo")
+                        if failure == "route":
+                            (patches / "series").write_text("".join(
+                                f"chromium {'win' if i == patch else 'linux'} {name}\n"
+                                for i, name in enumerate(names)))
+                        elif failure == "missing":
+                            (patches / names[patch]).unlink()
+                        else:
+                            (patches / names[patch]).write_text("# unfinished patch\n")
+                        env = engine.environment(root, "linux")
+                        make_linux_sysroot(Path(env["CHROMIUM_SRC"]))
+                        message = {"route": "series must route", "missing": "no such patch", "empty": "no target files"}[failure]
+                        with mock.patch.object(engine, "REPO", root / "repo"):
+                            with self.assertRaisesRegex(RuntimeError, message):
+                                if action == "prepare":
+                                    engine.prepare(root, env, "linux")
+                                else:
+                                    engine.build(root, env, [], None, "linux")
+                        run.assert_not_called()
+                        verify.assert_not_called()
+                        self.assertFalse((root / "bay-prepare-state-linux.json").exists())
+                        self.assertFalse((root / "bay-engine-build.json").exists())
+
+    def test_sysroot_requires_exact_directory_and_install_stamp(self):
+        for failure in (None, "missing", "other-release", "other-arch", "not-directory",
+                        "no-stamp", "empty-stamp", "wrong-revision", "wrong-url", "newline"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                env = engine.environment(Path(directory), "linux")
+                sysroot = make_linux_sysroot(Path(env["CHROMIUM_SRC"]))
+                stamp = sysroot / ".stamp"
+                if failure in ("missing", "other-release", "other-arch", "not-directory"):
+                    shutil.rmtree(sysroot)
+                    if failure == "other-release":
+                        (sysroot.parent / "debian_bookworm_amd64-sysroot").mkdir()
+                    elif failure == "other-arch":
+                        (sysroot.parent / "debian_bullseye_arm64-sysroot").mkdir()
+                    elif failure == "not-directory":
+                        sysroot.touch()
+                elif failure == "no-stamp":
+                    stamp.unlink()
+                elif failure == "empty-stamp":
+                    stamp.write_text("")
+                elif failure == "wrong-revision":
+                    stamp.write_text(f"{SYSROOT_URL}/{'0' * 64}")
+                elif failure == "wrong-url":
+                    stamp.write_text(f"https://other.example/{SYSROOT_REVISION}")
+                elif failure == "newline":
+                    stamp.write_text(f"{SYSROOT_URL}/{SYSROOT_REVISION}\n")
+                if failure is None:
+                    engine.require_linux_sysroot(env, "linux")
+                else:
+                    with self.assertRaisesRegex(RuntimeError, "sysroot"):
+                        engine.require_linux_sysroot(env, "linux")
+
+    def test_sysroot_metadata_must_match_pin(self):
+        invalid = [None, "invalid-json", {}, [], {"bullseye_amd64": None}]
+        for key in SYSROOT_METADATA:
+            invalid.append({"bullseye_amd64": {**SYSROOT_METADATA, key: "unexpected"}})
+        for metadata in invalid:
+            with self.subTest(metadata=metadata), tempfile.TemporaryDirectory() as directory:
+                env = engine.environment(Path(directory), "linux")
+                src = Path(env["CHROMIUM_SRC"])
+                make_linux_sysroot(src)
+                path = src / "build/linux/sysroot_scripts/sysroots.json"
+                if metadata is None:
+                    path.unlink()
+                else:
+                    path.write_text(metadata if isinstance(metadata, str) else json.dumps(metadata))
+                with self.assertRaisesRegex(RuntimeError, "sysroot metadata"):
+                    engine.require_linux_sysroot(env, "linux")
+
+    def test_first_class_gcs_requires_exact_receipt_pair_and_overrides_stale_stamp(self):
+        for failure in (None, "no-hash", "no-marker", "wrong-hash", "empty-hash", "no-hash-newline",
+                        "wrong-marker", "empty-marker", "no-marker-newline", "other-revision",
+                        "other-revision-with-valid-stamp", "wrong-hash-with-valid-stamp"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                env = engine.environment(Path(directory), "linux")
+                sysroot = make_linux_sysroot(Path(env["CHROMIUM_SRC"]), "gcs")
+                receipt = sysroot / f".{SYSROOT_REVISION}_hash"
+                marker = sysroot / f".{SYSROOT_REVISION}_is_first_class_gcs"
+                if failure is None:
+                    # A complete gclient install supersedes an older installer stamp.
+                    (sysroot / ".stamp").write_text("stale installer URL")
+                    engine.require_linux_sysroot(env, "linux")
+                    (sysroot / ".stamp").unlink()
+                    engine.require_linux_sysroot(env, "linux")
+                    continue
+                if failure == "no-hash":
+                    receipt.unlink()
+                elif failure == "no-marker":
+                    marker.unlink()
+                elif failure in ("wrong-hash", "wrong-hash-with-valid-stamp"):
+                    receipt.write_text("0" * 64 + "\n")
+                elif failure == "empty-hash":
+                    receipt.write_text("")
+                elif failure == "no-hash-newline":
+                    receipt.write_text(SYSROOT_REVISION)
+                elif failure == "wrong-marker":
+                    marker.write_text("0\n")
+                elif failure == "empty-marker":
+                    marker.write_text("")
+                elif failure == "no-marker-newline":
+                    marker.write_text("1")
+                elif failure.startswith("other-revision"):
+                    receipt.rename(sysroot / f".{('0' * 64)}_hash")
+                    marker.rename(sysroot / f".{('0' * 64)}_is_first_class_gcs")
+                if failure.endswith("with-valid-stamp"):
+                    (sysroot / ".stamp").write_text(f"{SYSROOT_URL}/{SYSROOT_REVISION}")
+                with self.assertRaisesRegex(RuntimeError, "sysroot GCS receipts"):
+                    engine.require_linux_sysroot(env, "linux")
+
+    def test_windows_does_not_inspect_linux_integration_or_sysroot(self):
+        with mock.patch.object(engine.subprocess, "check_output") as check, \
+             mock.patch.object(Path, "read_text") as read:
+            engine.require_linux_integration({}, "win")
+            engine.require_linux_sysroot({}, "win")
+            check.assert_not_called()
+            read.assert_not_called()
 
 
 class BuildTests(unittest.TestCase):
@@ -153,10 +342,11 @@ class BuildTests(unittest.TestCase):
             root = Path(directory)
             env = engine.environment(root, "linux")
             src = Path(env["CHROMIUM_SRC"])
-            (src / "build/linux/debian_fixture_amd64-sysroot").mkdir(parents=True)
+            make_linux_sysroot(src)
             engine.generate_gn(root, env, "linux")
             args = (src / engine.platform_lock("linux")["outputDirectory"] / "args.gn").read_text()
             self.assertIn('use_sysroot = true', args)
+            self.assertIn('target_sysroot = "//build/linux/debian_bullseye_amd64-sysroot"', args)
             self.assertNotIn('enable_iterator_debugging', args)
             run.assert_called_once_with(["gn", "gen", "out/Release_GN_x64"], cwd=src, env=env)
 
@@ -242,7 +432,19 @@ class LinuxArchiveTests(unittest.TestCase):
             with tarfile.open(runtime) as archive:
                 manifest = json.load(archive.extractfile("manifest.json"))
                 self.assertEqual(manifest["lock"], engine.platform_lock("linux"))
+                self.assertEqual(manifest["lock"]["sysroot"]["revision"], SYSROOT_REVISION)
+                self.assertEqual(manifest["lock"]["sysroot"]["directory"], SYSROOT_METADATA["SysrootDir"])
+                self.assertIsNone(manifest["lock"]["minimumGlibc"])
                 self.assertIn("runtime/bay-ui/native_host.mojom-webui.js", manifest["files"])
+                xdg_utils = engine.REPO / "engine/patches/build/linux/xdg-utils"
+                for name in ("xdg-settings", "xdg-mime"):
+                    member = archive.getmember(f"runtime/{name}")
+                    self.assertEqual(member.mode, 0o755)
+                    self.assertEqual(archive.extractfile(member).read(), (xdg_utils / name).read_bytes())
+                for name in ("LICENSE", "README.chromium", "README.bay"):
+                    member = f"runtime/licenses/xdg-utils/{name}"
+                    self.assertIn(member, manifest["files"])
+                    self.assertEqual(archive.extractfile(member).read(), (xdg_utils / name).read_bytes())
                 if os.name != "nt":
                     # Windows chmod/stat cannot model POSIX execute/setuid bits.
                     self.assertEqual(archive.getmember("runtime/chrome_sandbox").mode, 0o755)
@@ -256,6 +458,22 @@ class LinuxArchiveTests(unittest.TestCase):
                 self.assertEqual(artifact.with_suffix(".zst.sha256").read_text(),
                                  f"{engine.sha256(artifact)}  {artifact.name}\n")
             self.assertEqual((binaries / "bay").read_bytes(), original)
+
+    def test_archive_refuses_build_stamp_with_stale_sysroot_provenance(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "verify_checkout"), \
+             mock.patch.object(engine, "source_digest", return_value="digest"), \
+             mock.patch.object(engine, "run") as run:
+            root = Path(directory)
+            self.make_build(root)
+            identity = engine.build_identity("linux")
+            # Copy through JSON so this deliberately stale stamp cannot mutate the lock.
+            stale = json.loads(json.dumps(identity))
+            stale["lock"]["sysroot"]["revision"] = None
+            (root / "bay-engine-build.json").write_text(json.dumps(stale))
+            with self.assertRaisesRegex(RuntimeError, "sources changed"):
+                engine.archive(root, root / "archive", "linux")
+            run.assert_not_called()
+            self.assertFalse((root / "archive").exists())
 
     def test_archive_refuses_wrong_stamp_missing_outputs_symbols_and_tools(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "verify_checkout"), \
@@ -287,6 +505,67 @@ class LinuxArchiveTests(unittest.TestCase):
                     engine.archive(root, output, "linux")
             self.assertFalse(output.exists())
             run.assert_not_called()
+
+    def test_archive_requires_bundled_helpers_and_attribution_before_publishing(self):
+        for missing in ("xdg-settings", "xdg-mime", "LICENSE", "README.chromium", "README.bay"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "require_tools"), \
+                 mock.patch.object(engine, "source_digest", return_value="digest"), \
+                 mock.patch.object(engine, "run") as run:
+                root = Path(directory)
+                self.make_build(root)
+                helpers = root / "repo/engine/patches/build/linux/xdg-utils"
+                helpers.mkdir(parents=True)
+                for name in ("xdg-settings", "xdg-mime", "LICENSE", "README.chromium", "README.bay"):
+                    if name != missing:
+                        (helpers / name).write_text("fixture")
+                with mock.patch.object(engine, "REPO", root / "repo"), \
+                     self.assertRaisesRegex(RuntimeError, f"bundled XDG helper:.*{missing}"):
+                    engine.archive(root, root / "archive", "linux")
+                self.assertFalse((root / "archive").exists())
+                run.assert_not_called()
+
+
+class BundledXdgTests(unittest.TestCase):
+    def test_vendored_sources_match_documented_pin_except_sibling_mime_calls(self):
+        helpers = engine.REPO / "engine/patches/build/linux/xdg-utils"
+        provenance = (helpers / "README.bay").read_text()
+        self.assertIn("f16d51e9ce95f4173ba878a61b59317f73005562", provenance)
+        self.assertIn("473c0f72d7db2e8492f0fa975b8544bc719bb027", provenance)
+        for line in provenance.splitlines():
+            if len(line) < 66 or line[64:66] != "  ":
+                continue
+            checksum, name = line.split("  ", 1)
+            data = (helpers / name).read_bytes()
+            if name == "xdg-settings":
+                self.assertEqual(data.count(b'"$(dirname "$0")/xdg-mime" '), 3)
+                data = data.replace(b'"$(dirname "$0")/xdg-mime" ', b'xdg-mime ')
+            self.assertEqual(hashlib.sha256(data).hexdigest(), checksum)
+
+    @unittest.skipUnless(shutil.which("sh"), "requires a POSIX shell")
+    def test_scripts_parse_without_running_external_desktop_commands(self):
+        for name in ("xdg-settings", "xdg-mime"):
+            subprocess.run(["sh", "-n", engine.REPO / "engine/patches/build/linux/xdg-utils" / name],
+                           check=True, capture_output=True)
+
+    @unittest.skipUnless(os.name == "posix", "requires executable shell fixtures")
+    def test_settings_queries_sibling_mime_instead_of_path_decoy(self):
+        with tempfile.TemporaryDirectory(prefix="bay xdg ") as directory:
+            root = Path(directory)
+            settings = root / "xdg-settings"
+            shutil.copy2(engine.REPO / "engine/patches/build/linux/xdg-utils/xdg-settings", settings)
+            settings.chmod(0o755)
+            decoy = root / "distro"
+            decoy.mkdir()
+            for path, answer in ((root / "xdg-mime", "bay.desktop"), (decoy / "xdg-mime", "wrong.desktop")):
+                path.write_text(f"#!/bin/sh\necho {answer}\n")
+                path.chmod(0o755)
+            # DE avoids desktop detection. Both MIME backends are harmless
+            # scripts; no real desktop setting is read or changed.
+            env = {"HOME": directory, "DE": "gnome3", "PATH": f"{decoy}:/usr/bin:/bin"}
+            result = subprocess.run([settings, "get", "default-web-browser"], env=env,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(result.stdout, "bay.desktop\n")
 
 
 if __name__ == "__main__":
