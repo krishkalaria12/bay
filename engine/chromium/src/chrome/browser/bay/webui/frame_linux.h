@@ -11,8 +11,8 @@ namespace bay {
 
 // Bay's client-side frame for chrome://bay windows on X11 and Wayland. The
 // window has no system title bar and no Views caption; the UI draws the
-// caption and its buttons, CSS drag regions move the window, and a thin band
-// inside the client edge resizes it.
+// caption and its buttons, CSS drag regions move the window, and a thin solid
+// border provides restored-window insets and resize handles on untiled edges.
 class FrameLinux {
  public:
   // WebUIBrowserWindow's factory (chromium-bay-native-widget.patch).
