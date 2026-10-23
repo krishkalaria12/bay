@@ -2,12 +2,16 @@
 #include "chrome/browser/bay/webui/frame_linux.h"
 
 #include <memory>
+#include <set>
+#include <string>
 #include <utility>
 
+#include "base/no_destructor.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/platform_window/platform_window.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 #include "ui/views/widget/widget.h"
@@ -120,8 +124,22 @@ class ClientFrame final : public views::FrameViewLinux {
 class WindowTreeHost final : public views::DesktopWindowTreeHostLinux {
  public:
   WindowTreeHost(views::Widget* widget,
-                 views::DesktopNativeWidgetAura* native_widget)
-      : DesktopWindowTreeHostLinux(widget, native_widget) {}
+                 views::DesktopNativeWidgetAura* native_widget,
+                 std::string startup_id)
+      : DesktopWindowTreeHostLinux(widget, native_widget),
+        startup_id_(std::move(startup_id)) {}
+
+  // As BrowserDesktopWindowTreeHostLinux does: X11 launchers show feedback
+  // until a window reports its launch complete, once per launch token.
+  // Wayland consumes the same token to activate the window instead.
+  void Show(ui::mojom::WindowShowState show_state,
+            const gfx::Rect& restore_bounds) override {
+    DesktopWindowTreeHostLinux::Show(show_state, restore_bounds);
+    static base::NoDestructor<std::set<std::string>> completed;
+    if (!startup_id_.empty() && completed->insert(startup_id_).second)
+      platform_window()->NotifyStartupComplete(startup_id_);
+    startup_id_.clear();
+  }
 
   std::unique_ptr<views::FrameView> CreateFrameView() override {
     auto frame = std::make_unique<ClientFrame>(GetWidget());
@@ -145,6 +163,7 @@ class WindowTreeHost final : public views::DesktopWindowTreeHostLinux {
   }
 
   ui::WindowTiledEdges tiled_edges_;
+  std::string startup_id_;
 };
 
 class NativeWidget final : public views::DesktopNativeWidgetAura {
@@ -155,7 +174,8 @@ class NativeWidget final : public views::DesktopNativeWidgetAura {
  private:
   void InitNativeWidget(views::Widget::InitParams params) override {
     params.remove_standard_frame = true;
-    params.desktop_window_tree_host = new WindowTreeHost(GetWidget(), this);
+    params.desktop_window_tree_host =
+        new WindowTreeHost(GetWidget(), this, params.startup_id);
     DesktopNativeWidgetAura::InitNativeWidget(std::move(params));
   }
 };

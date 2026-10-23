@@ -33,6 +33,15 @@ class FrameHookTests(unittest.TestCase):
         patch = added((REPO / "engine/patches" / name).read_text())
         linux = patch[patch.index("#if BUILDFLAG(IS_LINUX)"):patch.index("#endif")]
         self.assertIn("params.startup_id =\n      BrowserInitState::From(browser_)->create_params().startup_id;", linux)
+        # The frame reports X11 launch feedback complete once its window shows.
+        frame = (WEBUI / "frame_linux.cc").read_text()
+        self.assertIn("new WindowTreeHost(GetWidget(), this, params.startup_id)", frame)
+        show = frame[frame.index("void Show(ui::mojom::WindowShowState show_state,"):]
+        self.assertLess(show.index("DesktopWindowTreeHostLinux::Show("), show.index("NotifyStartupComplete(startup_id_)"))
+        # An absorbed launch window never shows; its token focuses the Bay window instead.
+        registry = (WEBUI / "window_registry.cc").read_text()
+        absorb = registry[registry.index("void WindowRegistry::MoveIntoBayWindow("):]
+        self.assertLess(absorb.index("base::nix::SetActivationToken(token)"), absorb.index("target->GetWindow()->Activate()"))
 
     def test_hook_is_installed_before_profiles_create_windows(self):
         patch = added((REPO / "engine/patches/chromium-bay-native-widget.patch").read_text())

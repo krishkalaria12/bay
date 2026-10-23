@@ -523,8 +523,10 @@ if (is_linux) {
       "frame_linux.h",
     ]
     deps = [
+      "//base",
       "//ui/base",
       "//ui/gfx/geometry",
+      "//ui/platform_window",
       "//ui/views",
     ]
   }

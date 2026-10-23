@@ -40,6 +40,10 @@
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/webui/frame_win.h"
 #endif
+#if BUILDFLAG(IS_LINUX)
+#include "base/nix/xdg_util.h"
+#include "chrome/browser/ui/browser_init_state.h"
+#endif
 
 namespace bay {
 bool IsUtilityWindowKind(const std::string& kind) {
@@ -614,6 +618,16 @@ void WindowRegistry::MoveIntoBayWindow(
         return false;
       },
       BrowserCollection::Order::kActivation);
+#if BUILDFLAG(IS_LINUX)
+  // The absorbed window is never shown. Its launch token activates the Bay
+  // window that receives its pages, so the desktop lets that window take focus.
+  if (target) {
+    const auto& token =
+        BrowserInitState::From(source.get())->create_params().startup_id;
+    if (!token.empty())
+      base::nix::SetActivationToken(token);
+  }
+#endif
   auto* runtime = shared ? AppRuntime::GetIfStarted() : nullptr;
   if (target && runtime) {
     // Offering a page parks it, out of this tab strip.
