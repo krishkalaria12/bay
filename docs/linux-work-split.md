@@ -26,6 +26,7 @@ These need no new code, only the Linux runtime checks in stage 2.
   - The Safe Storage naming patch and the fixed-key warning (`BayCEF.secretStorage`).
   - `prompt`, `confirm`, `showMenu`, `pickFiles` and `fileIcon` through `ShellUI`.
   - Documents (`DocumentStore`), clipboard, appearance and file operations (`ShellFiles`).
+  - K1 system methods: default browser, per-user XDG autostart, external URLs, app-info/environment snapshots and package-managed updater status. The engine archive includes the XDG helper siblings; installed desktop identity still comes from K4/D5.
 - Engine siblings: `nn_downloads_linux.cc`, `nn_external_apps_linux.cc`, and shared Aura PiP.
 
 None of the native test binaries have been linked or run. The shared code split out of `platform_services_win.cc` has not been compiled on Windows.
@@ -68,7 +69,7 @@ Agree these early so neither person blocks the other:
 
 ### K: engine, host and window
 
-- [ ] **K1 · Remaining system methods (M+M+S+S+S = 7).** Today these are advertised only on Windows. Move each to a shared or `_linux` source and have Linux hosts advertise it.
+- [x] **K1 · Remaining system methods (M+M+S+S+S = 7).** Code complete 23 Oct 2026. Linux hosts advertise these through shared or `_linux` services; native execution and desktop verification remain deferred.
   - `BaySystem.isDefaultBrowser` / `setAsDefaultBrowser`, through Chrome's `shell_integration_linux` (`xdg-settings`). Bundle `xdg-settings` as Helium does.
   - `BaySystem.launchAtLoginStatus` / `setLaunchAtLogin`, through an XDG autostart entry in `~/.config/autostart/bay.desktop`.
   - `BayApp.openExternalURL`, through `platform_util` / GIO, with the OpenURI portal when sandboxed.

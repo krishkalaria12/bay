@@ -76,8 +76,11 @@ autoninja -C out/Release_GN_x64 \
   chrome/browser/bay/webui:document_store_unittests \
   chrome/browser/bay/webui:shell_files_unittests \
   chrome/browser/bay/webui:shell_appearance_unittests \
-  chrome/browser/bay/webui:shell_clipboard_unittests
-for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests secret_storage_linux_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests; do
+  chrome/browser/bay/webui:shell_clipboard_unittests \
+  chrome/browser/bay/webui:default_browser_unittests \
+  chrome/browser/bay/webui:autostart_linux_unittests \
+  chrome/browser/bay/webui:app_services_linux_unittests
+for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests secret_storage_linux_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests default_browser_unittests autostart_linux_unittests app_services_linux_unittests; do
   out/Release_GN_x64/$test || break
 done
 ```

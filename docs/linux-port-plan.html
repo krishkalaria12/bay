@@ -2007,6 +2007,41 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 fakes; nothing opened an app or trashed a real file. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run, and
                 the Windows services, which now share this code, have not been compiled.
               </p>
+              <p>
+                <strong>Remaining system methods, 23 Oct 2026 (K1).</strong> Linux window and coordinator hosts now advertise default-browser checks and
+                registration, launch-at-login controls, external URL opening, app-info queries and updater status. The shared
+                <code>DefaultBrowser</code> service uses Chromium's worker on Windows and Linux; Windows retains its profile, readiness and argument checks.
+                Pending default-browser requests settle with <code>host_closed</code> on document teardown, while an already submitted OS operation may finish
+                afterward.
+              </p>
+              <p>
+                The Linux engine archive now includes pinned, attributed <code>xdg-settings</code> and <code>xdg-mime</code> helpers beside the executable. A
+                Linux-only Chromium patch prefers that sibling helper for both default-browser queries and changes; developer outputs without it retain the
+                system PATH fallback. The helper calls its sibling MIME utility. K4 branding and D5 packaging still supply the installed
+                <code>bay.desktop</code> identity and preserve the helpers and licenses in the final package.
+              </p>
+              <p>
+                Launch at login uses <code>$XDG_CONFIG_HOME/autostart/bay.desktop</code>, or <code>$HOME/.config/autostart/bay.desktop</code> when the XDG value
+                is unset, empty or relative. Its quoted executable follows Chromium's <code>CHROME_WRAPPER</code> resolution, with
+                <code>--bay-launch-at-login</code> as the only argument. Reads and atomic writes share one blocking sequence across hosts; disabling writes a
+                managed <code>Hidden=true</code> override. Status describes this managed per-user entry only. Custom entries are preserved and reported as
+                conflicts. Trusted symlinked home/config paths work; the held autostart directory and final entry reject symlinks and unsafe ownership or
+                permissions. Accepted writes may finish after the document closes, with late replies cancelled.
+              </p>
+              <p>
+                Linux app-info snapshots wait for worker OS/hardware collection alongside saved documents and the Downloads snapshot. Debug builds capture only
+                the existing eight allowed <code>BAY_*</code> settings; release builds expose an empty environment. <code>launchEnvironment</code> reads that
+                captured dictionary and returns <code>null</code> for unknown names. External URLs accept only HTTP, HTTPS and mailto, using Chromium's
+                portal-aware <code>OpenExternal</code>; <code>true</code> confirms submission, not desktop acceptance. Updater status is
+                <code>{available:false, managedBy:"packageManager"}</code>, and Linux advertises no in-app update actions.
+              </p>
+              <p>
+                <strong>K1 verification.</strong> Native service tests use fake external effects and temporary autostart files. Host tests cover both roles,
+                snapshot readiness, contract errors and teardown. Linux release and DCHECK syntax checks use the pinned sysroot, generated Mac configuration
+                headers and actual scratch-generated Mojo bindings. They do not prove GN linkage or runtime behavior. Portable tests, typechecks, contracts,
+                lint and formatting pass; archive tests use fixtures and fake tools. Native binaries, Windows compilation, Linux builds and all desktop
+                default-browser, autostart and portal checks remain deferred to the agreed later stages.
+              </p>
             </div>
             <ul>
               <li>
