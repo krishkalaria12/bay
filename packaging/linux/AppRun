@@ -1,0 +1,37 @@
+#!/bin/sh
+# The AppImage's entry point: starts Bay from the mounted image through its wrapper.
+#
+# Where unprivileged user namespaces are restricted to programs with an AppArmor profile (Ubuntu 23.10 and later),
+# Chromium's sandbox can't start, and the image's mount point changes on every launch, so no installed profile names
+# it ahead of time. Bay offers a profile for the mount points AppImages use instead of turning the sandbox off.
+HERE=$(dirname "$(readlink -f "$0")")
+
+if [ "$1" = "--apparmor-profile" ]; then
+  # Matches any AppImage mount named after Bay. The profile only grants user namespaces, which systems without the
+  # restriction give every program.
+  cat <<'EOF'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bay-appimage /tmp/.mount_Bay*/opt/bay/bay flags=(unconfined) {
+  userns,
+
+  include if exists <local/bay-appimage>
+}
+EOF
+  exit 0
+fi
+
+if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ] && [ ! -e /etc/apparmor.d/bay-appimage ]; then
+  cat >&2 <<EOF
+Bay's sandbox needs unprivileged user namespaces, which this system allows only to programs with an AppArmor
+profile. To install Bay's profile (needs administrator rights), run:
+
+  "${APPIMAGE:-$0}" --apparmor-profile | sudo tee /etc/apparmor.d/bay-appimage >/dev/null
+  sudo apparmor_parser -r /etc/apparmor.d/bay-appimage
+
+then start Bay again.
+EOF
+fi
+
+exec "$HERE/opt/bay/bay-wrapper" "$@"
