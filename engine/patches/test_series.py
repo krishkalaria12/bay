@@ -25,6 +25,12 @@ class PlatformRoutingTests(unittest.TestCase):
                          set().union(*({step.name for step in series.read_series(target)}
                                        for target in ("mac", "win", "linux"))))
 
+    def test_button_layout_portal_patch_is_linux_only(self):
+        name = "chromium-window-button-layout-portal-linux.patch"
+        self.assertIn(name, {step.name for step in series.read_series("linux")})
+        for platform in ("mac", "win"):
+            self.assertNotIn(name, {step.name for step in series.read_series(platform)})
+
     def test_comma_lists_route_to_each_target_in_series_order(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
