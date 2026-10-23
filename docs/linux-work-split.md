@@ -131,11 +131,12 @@ Use these agreements so ownership changes do not block implementation:
 
 ### A: UI and shipping
 
-- [ ] **A2 · UI gaps (S+M+S+M = 6), previously D4.**
+- [x] **A2 · UI gaps (S+M+S+M = 6), previously D4.** Code complete 24 Oct 2026 on `feat/linux-a-ui-gaps`; desktop checks remain for stage 2.
   - Icons: 19 names in `fluentGlyphs.web.ts` have no SVG path in `symbols.web.tsx`. Add them, and add a test that every symbol name the app uses has a path.
   - Edge peek and the auto-hide toolbar peek, driven only by in-window enter, move and leave events plus the hide delay. No global pointer queries.
   - Shortcuts: add `Ctrl+Q` and `F11`, never bind Super, and keep the Linux column of the shortcuts table complete.
   - High contrast and reduced motion, so Phase 5's usability check passes.
+  - **24 Oct 2026:** 204 icons were missing, not 19, counting the icon pickers; all are drawn and `symbols.test.mjs` guards them. `LINUX_SHORTCUTS` adds Ctrl+Q and F11 and a test keeps Super out, but web hosts have no key dispatch yet, so the keys only label until the app menu's key handling lands. High contrast follows `prefers-contrast: more`, with a WCAG AA test; reduced motion needed no code. Edge peeks now hide when the pointer leaves the edge strip out of the window. Details are in Phase 5's progress in the plan.
 - [ ] **A3 · Packaging sources (XL = 5), previously D5.**
   - `scripts/linux/release.sh` stages `/opt/bay` and packs `.tar.xz`, AppImage (zsync), `.deb`, `.rpm` and the AUR `bay-bin` PKGBUILD.
   - The wrapper script sets `CHROME_WRAPPER` and the library path.
