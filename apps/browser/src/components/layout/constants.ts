@@ -129,7 +129,10 @@ export const STRIP_PEEK_BORDER = 0.5;
 export const STRIP_PINNED_CELL = 34;
 export const STRIP_PINNED_SPACING = 2;
 export const STRIP_DOCK_GAP = 4.5;
-export const STRIP_MIN_CHIP = 96;
+// Many tabs shrink, as Chrome's, down to a favicon's room (below STRIP_COMPACT_CHIP they show only it); the strip
+// scrolls only past that.
+export const STRIP_MIN_CHIP = 28;
+export const STRIP_COMPACT_CHIP = 72;
 export const STRIP_MAX_CHIP = 173;
 export const STRIP_GAP = 4;
 // A tab pulled this far below the strip leaves it for the page (Dia: its split targets came between 5.5 and 26 pt).
