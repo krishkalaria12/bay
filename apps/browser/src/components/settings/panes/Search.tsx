@@ -1,4 +1,4 @@
-import { engineHost, type SearchEngine } from "@bay/core";
+import { engineHost, POPULAR_SITE_SEARCHES, type EngineInput, type SearchEngine } from "@bay/core";
 import { Symbol } from "@bay/shell";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -21,6 +21,10 @@ export function SearchPane() {
   const selectedId = defaultSearchEngine(settings).id;
   const controlling = controllingSearchExtension(settings);
   const locked = !!controlling;
+  const customKeywords = new Set(custom.map((e) => e.keyword.toLowerCase()));
+  const common = POPULAR_SITE_SEARCHES.filter(
+    (site, index, sites) => site.keyword && !customKeywords.has(site.keyword) && sites.findIndex((s) => s.keyword === site.keyword) === index,
+  );
 
   return (
     <View>
@@ -53,6 +57,19 @@ export function SearchPane() {
           custom.map((e) => <EngineRow key={e.id} engine={e} selected={selectedId === e.id} locked={locked} editable={e.id !== "custom"} />)
         )}
       </Group>
+
+      {common.length > 0 && (
+        <>
+          <SectionHeader title="Common shortcuts" description="Edit one to save a custom shortcut with your own search URL." />
+          <Group>
+            {common.map((site) => (
+              <Row key={site.host} icon={<Favicon url={`https://${site.host}`} />} title={site.name} description={`${site.keyword} → Tab → query`}>
+                <Button title="Edit…" onPress={() => showSettingsSheet(<EngineSheet preset={{ name: site.name, keyword: site.keyword!, url: site.url }} />)} />
+              </Row>
+            ))}
+          </Group>
+        </>
+      )}
 
       {fromExtensions.length > 0 && (
         <>
@@ -104,11 +121,12 @@ function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngin
   );
 }
 
-function EngineSheet({ engine }: { engine?: SearchEngine }) {
+function EngineSheet({ engine, preset }: { engine?: SearchEngine; preset?: EngineInput }) {
   const theme = useTheme();
-  const [name, setName] = useState(engine?.name ?? "");
-  const [keyword, setKeyword] = useState(engine?.keyword ?? "");
-  const [url, setUrl] = useState(engine?.url ?? "");
+  const initial = engine ?? preset;
+  const [name, setName] = useState(initial?.name ?? "");
+  const [keyword, setKeyword] = useState(initial?.keyword ?? "");
+  const [url, setUrl] = useState(initial?.url ?? "");
   const [error, setError] = useState<string | null>(null);
   const save = () => {
     const s = useBrowser.getState();
@@ -130,7 +148,9 @@ function EngineSheet({ engine }: { engine?: SearchEngine }) {
   );
   return (
     <Sheet width={440} onClose={closeSettingsSheet}>
-      <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{engine ? "Edit Search Engine" : "Add Search Engine"}</Text>
+      <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>
+        {engine ? "Edit Search Engine" : preset ? "Customize Search Shortcut" : "Add Search Engine"}
+      </Text>
       {field("Name", name, setName, "Wikipedia")}
       {field("Shortcut", keyword, setKeyword, "w")}
       {field("URL with %s in place of the query", url, setUrl, "https://en.wikipedia.org/w/index.php?search=%s")}
