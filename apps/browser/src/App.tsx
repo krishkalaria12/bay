@@ -247,7 +247,10 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
           shadowOffset={[0, 6]}
           style={{ flex: 1, overflow: "hidden" }}
         >
-          <Sidebar />
+          {/* Swipes between spaces as the docked sidebar does, while it's out. */}
+          <SpaceSwipe swipes={live}>
+            <Sidebar />
+          </SpaceSwipe>
         </Surface>
       </Animated.View>
     </>
