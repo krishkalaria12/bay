@@ -24,4 +24,8 @@ export function watchPendingUpdate() {
 /** Downloaded: install it and relaunch. Found only: Sparkle's window, to read about it and install. */
 export const installUpdate = () => void installPendingUpdate();
 
-export const updateTitle = (pending: PendingUpdate) => (pending.ready ? "Restart to Update" : `Update ${APP_NAME}`);
+export function updateTitle(pending: PendingUpdate) {
+  if (pending.ready) return "Restart to Update";
+  if (pending.downloading) return "Downloading Update…";
+  return `Update ${APP_NAME}`;
+}

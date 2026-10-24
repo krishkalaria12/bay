@@ -89,7 +89,10 @@ function Panel({
   });
 
   const items: Item[] = [
-    ...(pending ? [{ id: "update", title: `${updateTitle(pending)} (${pending.version})`, icon: "arrow.down.circle" }, "separator" as const] : []),
+    // A downloading update has nothing to press yet: the sidebar's row shows it.
+    ...(pending && !pending.downloading
+      ? [{ id: "update", title: `${updateTitle(pending)} (${pending.version})`, icon: "arrow.down.circle" }, "separator" as const]
+      : []),
     { id: "space", title: "New Space", icon: "plus.square.on.square" },
     { id: "folder", title: "New Folder", icon: "folder.badge.plus" },
     "separator",
