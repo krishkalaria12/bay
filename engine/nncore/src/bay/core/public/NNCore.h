@@ -210,6 +210,9 @@ NNCORE_EXPORT
 - (void)holdNavigationsUntilRulesetsOf:(NSString*)extensionId;
 // Ends the hold now (the extension couldn't load), logged as an error with `reason`.
 - (void)releaseNavigationHold:(NSString*)reason;
+// Ends the hold now because the extension is ready (one without rulesets, which the host waits
+// for itself), logged as a success.
+- (void)releaseNavigationHoldReady;
 // Reports this profile's Cast routes to engine:castRoutes:profile: (now and on change).
 - (void)watchCastRoutes;
 // chrome.management-style install of an unpacked extension (MV3 fine).

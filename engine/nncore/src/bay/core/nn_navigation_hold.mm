@@ -40,8 +40,9 @@ namespace nncore {
 
 namespace {
 
-// waits-for: the extension's rulesets in force in the profile (RulesMonitorService's initial load,
-//            g_bay_dnr_rulesets_in_force), or the host's ReleaseNavigationHold
+// waits-for: the extension ready in the profile: its rulesets in force (RulesMonitorService's initial
+//            load, g_bay_dnr_rulesets_in_force), or the host's ReleaseNavigationHoldReady (an
+//            extension without rulesets, uBlock Origin's webRequest); or the host's ReleaseNavigationHold
 // on-timeout: logs an error and lets the profile's pages load without the extension's rules
 constexpr base::TimeDelta kDeadline = base::Seconds(10);
 
@@ -61,9 +62,9 @@ class Hold : public ProfileObserver {
   }
   const std::string& extension_id() const { return extension_id_; }
 
-  // Resumes what it holds and goes. `in_force`: the rulesets are (all of them unless `why` says
-  // which aren't); else `why` they aren't.
-  void Release(bool in_force, const std::string& why);
+  // Resumes what it holds and goes. `ready`: the extension is (with all its rulesets unless `why`
+  // says which aren't); else `why` it isn't.
+  void Release(bool ready, const std::string& why);
 
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override;
@@ -131,28 +132,28 @@ Hold::Hold(Profile* profile, std::string extension_id)
 
 Hold::~Hold() = default;
 
-void Hold::Release(bool in_force, const std::string& why) {
+void Hold::Release(bool ready, const std::string& why) {
   auto it = Holds().find(profile_);
   CHECK(it != Holds().end() && it->second.get() == this);
   std::unique_ptr<Hold> self = std::move(it->second);
   Holds().erase(it);
   const int64_t ms = (base::TimeTicks::Now() - since_).InMilliseconds();
-  if (!in_force) {
+  if (!ready) {
     LOG(ERROR) << "NNCore: navigation hold for " << extension_id_
-               << "'s rulesets ended without them (" << why << ") after " << ms
+               << " ended before it was ready (" << why << ") after " << ms
                << " ms; " << throttles_.size()
                << " held navigations go ahead without its rules";
   } else if (!why.empty()) {
-    LOG(ERROR) << "NNCore: " << extension_id_ << "'s rulesets in force after " << ms
+    LOG(ERROR) << "NNCore: " << extension_id_ << " ready after " << ms
                << " ms, but " << why << "; " << throttles_.size()
                << " held navigations go ahead without those rules";
   } else if (throttles_.empty()) {
     // What the hold cost (LOG(INFO) never reaches the host's log): here nothing.
-    NSLog(@"[nncore] %s's rulesets in force %lld ms after the hold began; no navigation waited",
+    NSLog(@"[nncore] %s ready %lld ms after the hold began; no navigation waited",
           extension_id_.c_str(), ms);
   } else {
     // Here how long the first page waited.
-    NSLog(@"[nncore] held %zu navigations for %s's rulesets, the first %lld ms (in force %lld ms "
+    NSLog(@"[nncore] held %zu navigations for %s, the first %lld ms (ready %lld ms "
           @"after the hold began)",
           throttles_.size(), extension_id_.c_str(),
           (base::TimeTicks::Now() - first_deferred_).InMilliseconds(), ms);
@@ -200,6 +201,12 @@ void HoldNavigationsForRulesets(Profile* profile, const std::string& extension_i
 void ReleaseNavigationHold(Profile* profile, const std::string& reason) {
   if (Hold* hold = HoldFor(profile)) {
     hold->Release(false, reason);
+  }
+}
+
+void ReleaseNavigationHoldReady(Profile* profile) {
+  if (Hold* hold = HoldFor(profile)) {
+    hold->Release(true, "");
   }
 }
 

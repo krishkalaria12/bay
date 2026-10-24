@@ -1334,6 +1334,12 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
   }
 }
 
+- (void)releaseNavigationHoldReady {
+  if (_profile) {
+    nncore::ReleaseNavigationHoldReady(_profile.get());
+  }
+}
+
 - (void)unloadComponentExtension:(NSString*)extensionId {
   if (!_profile) {
     return;
