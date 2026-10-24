@@ -159,6 +159,19 @@ export function Omnibox({
     selection.current = { start: 0, end: 0 };
   };
 
+  // Another space while open (⌃1…9, ⌥⌘←/→): what was typed stays and its results are the new space's; an untouched
+  // field (the old page's address) clears for the new space's start.
+  const [shownSpace, setShownSpace] = useState(spaceId);
+  if (shownSpace !== spaceId) {
+    setShownSpace(spaceId);
+    setArrowed(null);
+    setSelected(0);
+    if (!edited) {
+      setTyped("");
+      setPendingSelection({ start: 0, end: 0 });
+    }
+  }
+
   const dismiss = () => onCancel?.();
   const closeMenu = () => {
     setMenu(null);
@@ -242,7 +255,9 @@ export function Omnibox({
   };
 
   const move = (delta: 1 | -1) => {
-    const next = Math.max(0, Math.min(selectedIndex + delta, items.length - 1));
+    if (!items.length) return;
+    // Past either end it wraps around, as the actions menu does: ↑ on the first row goes to the last.
+    const next = (Math.max(selectedIndex + delta, -1) + items.length) % items.length;
     setSelected(next);
     // Arrowing through results fills the field with the row, as Chrome's omnibox; the top row is what was typed.
     const text = !idle && next > 0 ? fillText(items[next], dropdown) : null;
@@ -276,7 +291,7 @@ export function Omnibox({
     });
     setMenu({ side: "right", title, actions });
   };
-  const openAppMenu = () => setMenu({ side: "left", title: "Bay", actions: appPaletteActions(windowId, dismiss) });
+  const openAppMenu = () => void appPaletteActions(windowId, dismiss).then((actions) => setMenu({ side: "left", title: "Bay", actions }));
 
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
     const { key, altKey, shiftKey, ctrlKey } = e.nativeEvent;

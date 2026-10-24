@@ -24,7 +24,7 @@ if (!process.env.BAY_MENU_TEST_CHILD) {
 } else {
   const calls = [];
   const info = { appName: "Bay", appVersion: "1.0", appBuild: "42", osVersion: "11", updates: false };
-  globalThis.nnMenuTest = { calls, info, defaultBrowser: true };
+  globalThis.nnMenuTest = { calls, info, isDefault: false, defaultBrowser: true };
   const stub = `
     const fixture=globalThis.nnMenuTest;
     export const runCommand=event=>fixture.calls.push(event);
@@ -37,6 +37,7 @@ if (!process.env.BAY_MENU_TEST_CHILD) {
     export const confirm=options=>fixture.calls.push(['confirm',options]);
     export const checkForUpdates=()=>fixture.calls.push(['updates']);
     export const setAsDefaultBrowser=async()=>fixture.defaultBrowser;
+    export const isDefaultBrowser=async()=>fixture.isDefault;
     export const isInternalTab=tab=>!!tab&&String(tab.navigation?.url??tab.url).toLowerCase().startsWith("bay://");
   `;
   const stubUrl = `data:text/javascript,${encodeURIComponent(stub)}`;
@@ -65,17 +66,27 @@ if (!process.env.BAY_MENU_TEST_CHILD) {
 
   test("Settings shortcut and asynchronous app menu dismissal follow the platform", async () => {
     let dismissed = 0;
-    const settings = appPaletteActions(windowId, () => {
-      dismissed++;
-    }).find((action) => action.id === "settings");
+    const settings = (
+      await appPaletteActions(windowId, () => {
+        dismissed++;
+      })
+    ).find((action) => action.id === "settings");
     assert.equal(settings.hint, isMac ? "⌘," : "Ctrl+,");
     await settings.run();
     assert.deepEqual(calls.at(-1), ["settings", undefined]);
     assert.equal(dismissed, 1);
+    globalThis.nnMenuTest.isDefault = true;
+    assert.equal(
+      (await appPaletteActions(windowId, () => {})).some((action) => action.id === "default-browser"),
+      false,
+    );
+    globalThis.nnMenuTest.isDefault = false;
     globalThis.nnMenuTest.defaultBrowser = false;
-    const makeDefault = appPaletteActions(windowId, () => {
-      dismissed++;
-    }).find((action) => action.id === "default-browser");
+    const makeDefault = (
+      await appPaletteActions(windowId, () => {
+        dismissed++;
+      })
+    ).find((action) => action.id === "default-browser");
     await assert.rejects(makeDefault.run(), /wasn't changed/);
     assert.equal(dismissed, 1, "failed actions leave the app menu open");
   });

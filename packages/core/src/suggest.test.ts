@@ -172,3 +172,27 @@ test("remoteLimit raises how many engine suggestions show, history pages still c
   assert.ok(long.indexOf("https://blog.example/what-is-the-best-editor") < long.indexOf("suggest:what is the best 0"));
   assert.equal(long.length, 10);
 });
+
+test("a word that starts sites' addresses lists each site once, ahead of the engine's suggestions and their deeper pages", () => {
+  const remote = Array.from({ length: 10 }, (_, i) => `dash ${i}`);
+  const hist = [
+    { url: "https://dash.cloudflare.com/3bd6d50d63c2/home", title: "Cloudflare Dashboard", favicon: null, visits: 30, lastVisit: now - 1000 },
+    { url: "https://dash.cloudflare.com/login", title: "Cloudflare Dashboard", favicon: null, visits: 4, lastVisit: now - 9000 },
+    { url: "https://dashboard.render.com/", title: "Render Dashboard", favicon: null, visits: 3, lastVisit: now - DAY },
+    { url: "https://dashboard.render.com/web/srv-d2stabn5r7bs73bnm9p0/env", title: "lately · Render", favicon: null, visits: 9, lastVisit: now - 2000 },
+    { url: "https://dashboard.convex.dev/t/me/app", title: "Convex Dashboard", favicon: null, visits: 2, lastVisit: now - DAY * 2 },
+    { url: "https://example.com/dashboards", title: "Example", favicon: null, visits: 1, lastVisit: now - DAY * 3 },
+  ];
+  const list = rows(buildSuggestions("dash", { tabs: [], history: hist }, { now, remote, limit: 20, remoteLimit: 10, remoteFirst: true }).items);
+  const firstSuggest = list.indexOf("suggest:dash 0");
+  // The best site completes inline and comes first; the others follow the search row, before the engine's suggestions.
+  assert.equal(list[0], "https://dash.cloudflare.com/");
+  for (const site of ["https://dashboard.render.com/", "https://dashboard.convex.dev/"]) {
+    assert.ok(list.includes(site), site);
+    assert.ok(list.indexOf(site) < firstSuggest, site);
+  }
+  assert.ok(list.indexOf("https://dashboard.render.com/web/srv-d2stabn5r7bs73bnm9p0/env") > firstSuggest);
+  // "com" names no site: the domain's end isn't one of its names.
+  const com = rows(buildSuggestions("com", { tabs: [], history: hist }, { now, remote: [], limit: 20 }).items);
+  assert.ok(!com.includes("https://dashboard.convex.dev/"));
+});

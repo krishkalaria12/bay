@@ -277,7 +277,15 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     if (t.spaceId !== spaceId && t.pinned && sharesProfile(s, t.spaceId, spaceId)) s = { ...s, tabs: { ...s.tabs, [target]: { ...t, spaceId } } };
     // The window takes this space before the tab's activated: activated keeps a shared favourite in the space on screen.
     s = { ...s, windows: { ...s.windows, [windowId]: { ...s.windows[windowId]!, spaceId } } };
-    set(apply(s, activated(s, target, windowId)));
+    const next = apply(s, activated(s, target, windowId));
+    // The command bar stays open across the switch (activated closes it) and shows the new space's tabs and history;
+    // a new tab it was opening goes to the new space, out of the group it was for (the old space's).
+    const panel = s.windowUi[windowId]?.panel;
+    if (panel?.open) {
+      const { groupId: _, ...kept } = panel;
+      next.windowUi = { ...next.windowUi, [windowId]: { ...next.windowUi[windowId]!, panel: kept } };
+    }
+    set(next);
   },
 
   moveTabsToWindow(tabIds, windowId) {

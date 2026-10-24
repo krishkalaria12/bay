@@ -63,6 +63,7 @@ import {
   STRIP_LIFT_SLOP,
   STRIP_LIGHTS_CENTER,
   STRIP_LIGHTS_GAP,
+  STRIP_COMPACT_CHIP,
   STRIP_MAX_CHIP,
   STRIP_MEMBERS_INSET,
   STRIP_MID,
@@ -728,61 +729,70 @@ function TabChip({ tabId, width, tuck, dragged }: { tabId: string; width: number
   if (!tab) return null;
   const title = tab.customTitle || tab.title || tab.url || "New Tab";
   const onBand = active && !floating && !!palette.background;
+  const close = (
+    <IconButton
+      icon={tuck ? "minus" : "xmark"}
+      size={9}
+      weight="semibold"
+      box={20}
+      radius={5}
+      color={onBand ? palette.icon : undefined}
+      onPress={tuck ?? (() => void closeTab(tab.id))}
+      tooltip={tuck ? "Hide in Group" : "Close Tab"}
+    />
+  );
+  // Not hit: an image view under a press in an inactive window moves the window (AppKit's first mouse).
+  const icon = (
+    <View pointerEvents="none">
+      <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} />
+      <TabBadges tabId={tab.id} pip={false} />
+    </View>
+  );
+  // Squeezed, as Chrome's: only the favicon, centred; the selected tab trades it for its ✕ on hover, and the others
+  // keep no ✕ at all, so a click meant for a tab never closes it.
+  const compact = width < STRIP_COMPACT_CHIP;
   return (
     <View {...hoverProps} tooltip={tab.url ? `${title}\n${tab.url}` : title} style={{ width, height: TOP_STRIP_HEIGHT }}>
       {active && <SelectedTab width={width} band={band} opaque={dragged} />}
       <ContextMenuArea onContextMenu={() => void openTabMenu(windowId, tab)} style={StyleSheet.absoluteFill}>
         <Pressable onPress={(e) => clickTab(windowId, tab.id, modifiersOf(e))} style={{ flex: 1 }}>
-          {({ pressed }) => (
-            <ItemRow hovered={hovered && !active} pressed={pressed && !active}>
-              {/* Not hit: an image view under a press in an inactive window moves the window (AppKit's first mouse). */}
-              <View pointerEvents="none">
-                <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} />
-                <TabBadges tabId={tab.id} pip={false} />
-              </View>
-              {(playing || tab.muted) && (
-                <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 5 }} tooltip={tab.muted ? "Unmute" : "Mute"}>
-                  <Symbol
-                    name={tab.muted ? "speaker.slash" : "speaker.wave.2"}
-                    size={11}
-                    color={onBand ? palette.icon : theme.textTab}
-                    style={{ width: 16, height: 16 }}
-                  />
-                </Pressable>
-              )}
-              <FadeLabel
-                text={title}
-                fontSize={12}
-                color={onBand ? palette.text : active ? theme.tabSelectedText : theme.textTab}
-                // The label draws 2 pt in, so the text starts 7 after the favicon.
-                style={{ flex: 1, height: 16, marginLeft: 5 }}
-              />
-              <HoverSlot
-                hovered={hovered}
-                width={20}
-                hover={
-                  <IconButton
-                    icon={tuck ? "minus" : "xmark"}
-                    size={9}
-                    weight="semibold"
-                    box={20}
-                    radius={5}
-                    color={onBand ? palette.icon : undefined}
-                    onPress={tuck ?? (() => void closeTab(tab.id))}
-                    tooltip={tuck ? "Hide in Group" : "Close Tab"}
-                  />
-                }
-              />
-            </ItemRow>
-          )}
+          {({ pressed }) =>
+            compact ? (
+              <ItemRow hovered={hovered && !active} pressed={pressed && !active} compact>
+                {active && hovered ? close : icon}
+              </ItemRow>
+            ) : (
+              <ItemRow hovered={hovered && !active} pressed={pressed && !active}>
+                {icon}
+                {(playing || tab.muted) && (
+                  <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: 5 }} tooltip={tab.muted ? "Unmute" : "Mute"}>
+                    <Symbol
+                      name={tab.muted ? "speaker.slash" : "speaker.wave.2"}
+                      size={11}
+                      color={onBand ? palette.icon : theme.textTab}
+                      style={{ width: 16, height: 16 }}
+                    />
+                  </Pressable>
+                )}
+                <FadeLabel
+                  text={title}
+                  fontSize={12}
+                  color={onBand ? palette.text : active ? theme.tabSelectedText : theme.textTab}
+                  // The label draws 2 pt in, so the text starts 7 after the favicon.
+                  style={{ flex: 1, height: 16, marginLeft: 5 }}
+                />
+                <HoverSlot hovered={hovered} width={20} hover={close} />
+              </ItemRow>
+            )
+          }
         </Pressable>
       </ContextMenuArea>
     </View>
   );
 }
 
-// A tab's content row, 5…37, with Dia's hover and pressed fills for a tab that isn't selected.
-function ItemRow({ hovered, pressed, children }: { hovered: boolean; pressed: boolean; children: React.ReactNode }) {
+// A tab's content row, 5…37, with Dia's hover and pressed fills for a tab that isn't selected. `compact`: one centred icon.
+function ItemRow({ hovered, pressed, compact = false, children }: { hovered: boolean; pressed: boolean; compact?: boolean; children: React.ReactNode }) {
   const theme = useTheme();
   return (
     <View
@@ -796,8 +806,9 @@ function ItemRow({ hovered, pressed, children }: { hovered: boolean; pressed: bo
         backgroundColor: pressed ? theme.tabPressed : hovered ? theme.tabHover : undefined,
         flexDirection: "row",
         alignItems: "center",
-        paddingLeft: 9.5,
-        paddingRight: 6,
+        justifyContent: compact ? "center" : undefined,
+        paddingLeft: compact ? 0 : 9.5,
+        paddingRight: compact ? 0 : 6,
       }}
     >
       {children}
