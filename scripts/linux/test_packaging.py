@@ -157,6 +157,18 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn(b'<release version="1.3.0" date="2026-10-15" />', metainfo, "dated from release-notes/1.3.0.md")
         self.assertIn("bay-1.3.0-linux-x64.tar.xz", (output / "SHA256SUMS").read_text())
 
+    @unittest.skipUnless(shutil.which("desktop-file-validate") and shutil.which("appstreamcli"), "needs desktop-file-utils and appstream")
+    def test_desktop_entry_and_metainfo_validate(self):
+        output = self.root / "validate"
+        self.release("tar", output)
+        share = output / "bay-1.3.0/usr/share"
+        with tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz") as tar:
+            for name in ("applications/bay.desktop", "metainfo/in.krishkalaria.bay.metainfo.xml"):
+                tar.extract(f"bay-1.3.0/usr/share/{name}", output, filter="data")
+        subprocess.run(["desktop-file-validate", share / "applications/bay.desktop"], check=True)
+        subprocess.run(["appstreamcli", "validate", "--no-net", "--pedantic", share / "metainfo/in.krishkalaria.bay.metainfo.xml"],
+                       check=True, capture_output=True)
+
     def test_rejects_a_version_that_is_not_x_y_z(self):
         command = [RELEASE, "--app", self.app, "--version", "1.3", "--output", self.root / "bad", "--formats", "tar"]
         self.assertEqual(subprocess.run(command, capture_output=True).returncode, 2)
