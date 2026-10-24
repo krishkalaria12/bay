@@ -148,7 +148,8 @@ export function Omnibox({
   // ⇧⌫ forgets the selected history row once it was picked from the list, not while it's the typed match.
   const canForget = palette && forgettable(current, searchTemplates) && (!edited || selectedIndex > 0);
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
-  const tabScope = canScope ? scopeFor(typedValue, windowId) : null;
+  // A shortcut typed in full ("yt") wins over the history its letters complete to; else the completed host scopes.
+  const tabScope = canScope ? (scopeFor(typed, windowId) ?? scopeFor(typedValue, windowId)) : null;
 
   // Apply selection imperatively; RN macOS can restore a stale caret when its selection prop clears.
   useLayoutEffect(() => {
