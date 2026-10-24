@@ -5,14 +5,14 @@ const html = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "
 
 export function externalLinkRulesFixture(baseURL) {
   const host = new URL(baseURL).host;
-  const rule = (id, path, destination, sourceApp) => ({ id, pattern: `${host}${path}`, ...(sourceApp ? { sourceApp } : {}), destination });
+  const rule = (id, path, destination, sourceApp) => ({ id, matchType: "contains", pattern: `${host}${path.replace(/\*$/, "")}`, ...(sourceApp ? { sourceApp } : {}), destination });
   const intro = `<!doctype html><meta charset="utf-8"><title>External link rules playground</title>
     <body style="font:19px system-ui;max-width:760px;padding:52px;background:#f6f3ed;color:#282b32">
     <h1>External link rules playground</h1><p>This disposable profile contains fake Personal and Work spaces. Every test page is served locally.</p>
     <p>Open Settings → Links to edit the ordered rules. The terminal running the demo prints commands to send these URLs through macOS:</p>
     <ul><li><code>${html(baseURL)}/work/demo</code> → Work</li><li><code>${html(baseURL)}/quick/demo</code> → Little Bay</li>
     <li><code>${html(baseURL)}/window/demo</code> → new window</li><li><code>${html(baseURL)}/unmatched/demo</code> → default choice</li></ul>
-    <p>Rules apply to links received from another app. Clicking a normal page link keeps normal navigation behavior.</p>
+    <p>Rules apply to links received from another app and Peek's Open as Tab. Clicking a normal page link keeps normal navigation behavior.</p>
     <p>The automated test also sends fake Slack source metadata and checks priority, fallback, and persistence.</p></body>`;
   return session({
     spaces: [{ id: "default", name: "Personal", color: "blue" }, { id: "work", name: "Work", color: "green" }],
@@ -31,6 +31,11 @@ export function externalLinkRulesFixture(baseURL) {
         rule("work", "/work/*", { kind: "space", spaceId: "work" }),
         rule("quick", "/quick/*", { kind: "littleBay" }),
         rule("window", "/window/*", { kind: "newWindow" }),
+        { id: "exact", matchType: "equals", pattern: `${baseURL}/reports/weekly?view=board#today`, destination: { kind: "space", spaceId: "work" } },
+        rule("reports", "/reports/*", { kind: "littleBay" }),
+        rule("recent", "/recent/*", { kind: "mostRecentSpace" }),
+        rule("unicode", "/café/*", { kind: "space", spaceId: "work" }),
+        { id: "legacy-unicode", pattern: `${host}/legacy-café/*`, destination: { kind: "space", spaceId: "work" } },
       ],
     },
   });

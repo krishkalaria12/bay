@@ -1,8 +1,8 @@
 import { focus, openWindow } from "../../lib/actions";
-import { matchingLinkRule } from "../../lib/externalLinkRules";
+import { defaultLinkDestination, matchingLinkRule } from "../../lib/externalLinkRules";
 import { useBrowser } from "../../store/browser";
 import { activeTabId, viewTabIds } from "../../store/model";
-import { isSmall, mainWindowFor } from "../../store/small";
+import { isSmall, mainWindowFor, mostRecentSpace } from "../../store/small";
 
 const store = () => useBrowser.getState();
 
@@ -15,16 +15,17 @@ export function openLittleBay(url?: string, spaceId?: string): string {
 
 const opensInLittleBay = (url: string) => /^(https?|file):/i.test(url);
 
-// Only incoming desktop links use these rules. Page navigation and explicit tab commands keep their behavior.
+// Incoming desktop links use the first matching route, then the configured default.
 export function openExternalUrls(urls: string[], sourceApp?: string) {
   for (const url of urls) {
     const s = store();
-    const spaceId = s.settings.defaultSpaceId;
-    const target = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
-    if (target?.kind === "space" && s.spaces[target.spaceId]) openLinksInMainWindow([url], target.spaceId);
-    else if (target?.kind === "littleBay") openLittleBay(url, spaceId);
-    else if (target?.kind === "newWindow") focus(openWindow({ url, spaceId }));
-    else if (s.settings.openLinksInLittleBay && urls.length === 1 && opensInLittleBay(url)) openLittleBay(url, spaceId);
+    const matched = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
+    const target =
+      matched?.kind === "space" && !s.spaces[matched.spaceId] ? defaultLinkDestination(s.settings) : (matched ?? defaultLinkDestination(s.settings));
+    const spaceId =
+      target.kind === "space" && s.spaces[target.spaceId] ? target.spaceId : target.kind === "mostRecentSpace" ? mostRecentSpace(s) : s.settings.defaultSpaceId;
+    if (target.kind === "littleBay" && opensInLittleBay(url)) openLittleBay(url, spaceId);
+    else if (target.kind === "newWindow") focus(openWindow({ url, spaceId }));
     else openLinksInMainWindow([url], spaceId);
   }
 }

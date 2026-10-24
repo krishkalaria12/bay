@@ -69,12 +69,18 @@ export const SETTINGS = {
   syncContents: { id: "sync.syncContents", pane: "sync", title: "What Syncs", words: "bookmarks history passwords" },
   syncDevices: { id: "sync.syncDevices", pane: "sync", title: "Devices", words: "mac connect" },
   defaultSpaceId: { id: "spaces.defaultSpaceId", pane: "spaces", title: "Default space", words: "new windows profile" },
-  openLinksInLittleBay: { id: "links.openLinksInLittleBay", pane: "links", title: "Links from other apps", words: "little bay discord slack mail default" },
+  openLinksInLittleBay: {
+    id: "links.openLinksInLittleBay",
+    pane: "links",
+    title: "Default",
+    words: "links from other apps little bay discord slack mail default most recent space destination",
+  },
   externalLinkRules: {
     id: "links.externalLinkRules",
     pane: "links",
-    title: "Rules for links from other apps",
-    words: "air traffic routing url pattern wildcard domain source app bundle id space little bay new window",
+    title: "Link rules",
+    words:
+      "air traffic routing url contains equal exact query fragment wildcard domain source app bundle id space little bay new window default most recent discord slack mail peek",
   },
   peekLinksFromPinnedTabs: {
     id: "links.peekLinksFromPinnedTabs",

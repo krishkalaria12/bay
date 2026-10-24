@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { layout } from "../../lib/constants";
+import { focus } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
@@ -87,7 +88,10 @@ export function PeekLayer({ windowId, peek, rect, children }: { windowId: string
           icon="arrow.up.left.and.arrow.down.right"
           label="Open as Tab"
           tooltip="Open as Tab (⌘O)"
-          onPress={() => useBrowser.getState().keepPeek(windowId)}
+          onPress={() => {
+            const target = useBrowser.getState().keepPeek(windowId);
+            if (target) focus(target);
+          }}
         />
         <PeekButton icon="rectangle.split.2x1" label="Split View" tooltip="Open in Split View" onPress={() => useBrowser.getState().splitPeek(windowId)} />
       </Animated.View>

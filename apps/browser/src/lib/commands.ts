@@ -351,7 +351,8 @@ function runPeekCommand(command: string, windowId: string): boolean {
       s.closePeek(windowId);
       return true;
     case "openFile":
-      s.keepPeek(windowId);
+      const target = s.keepPeek(windowId);
+      if (target) focus(target);
       return true;
   }
   return false;
