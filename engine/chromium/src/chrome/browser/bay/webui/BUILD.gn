@@ -4,6 +4,10 @@ import("//build/config/ui.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
+if (is_linux) {
+  import("//build/config/linux/pkg_config.gni")
+}
+
 mojom("mojom") {
   sources = [ "native_host.mojom" ]
   webui_module_path = "/"
@@ -117,6 +121,7 @@ source_set("impl") {
       "shell_ui_options.cc",
     ]
     deps += [
+      ":keychain",
       ":notifications",
       ":shell_appearance",
       ":shell_files",
@@ -722,5 +727,49 @@ if (is_linux) {
       "//testing/gtest",
       "//ui/shell_dialogs",
     ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("keychain") {
+    sources = [
+      "keychain.cc",
+      "keychain.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+    ]
+    if (is_linux) {
+      sources += [ "keychain_linux.cc" ]
+      configs += [ ":keychain_libsecret" ]
+      deps = [ "//crypto" ]
+    } else {
+      sources += [ "keychain_win.cc" ]
+      libs = [ "advapi32.lib" ]
+    }
+  }
+
+  test("keychain_unittests") {
+    sources = [
+      "host_context.cc",
+      "keychain_unittest.cc",
+    ]
+    deps = [
+      ":keychain",
+      "//base/test:test_support",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_linux) {
+  pkg_config("keychain_libsecret") {
+    packages = [ "libsecret-1" ]
   }
 }

@@ -2317,23 +2317,25 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               mixed ciphertext formats, cancellation, source-root changes and NSS coexistence. Shared native reader and sync compatibility fixtures, JavaScript
               and Python suites, native/web typechecks, generated contracts, lint and formatting pass. Changed native sources and host tests pass Linux x64
               release and DCHECK syntax checks with the pinned sysroot, existing generated Mac configuration headers and scratch Mojo bindings. These checks do
-              not prove the Linux GN graph or linkage. Final linking depends on D1's BoringSSL sync backend; Linux binaries, real GNOME Keyring/KWallet imports,
-              desktop file pickers and fixture parity on Linux remain stage 2 work.
+              not prove the Linux GN graph or linkage. D1's BoringSSL sync backend has since merged; Linux binaries, real GNOME Keyring/KWallet imports, desktop
+              file pickers and fixture parity on Linux remain stage 2 work.
             </p>
             <p class="prose">
-              <strong>D1 sources, 23 Oct 2026.</strong> Implemented on <code>feat/linux-d-sync</code>, awaiting merge into <code>feat/linux</code>: the shared
-              sync format now has separate Windows CNG and Linux BoringSSL backends, and libsecret stores keys by account and data directory. If key storage
-              fails, setup and recovery keep the entropy only in memory; the UI explains that the recovery phrase is needed each session. Same-account unlock
-              reuses the session, while account changes, forgetting and data-directory changes clear the active entropy. The Linux recovery kit has a PNG
-              preview, private temporary PDFs, a confidential phrase clipboard and file clipboard support. An asynchronous folder/save picker adapter rejects
-              stale exports if the active key changes. Device names are host snapshots; device IDs remain freshly generated local UUIDs.
+              <strong>D1 sources, 23 Oct 2026; merge verified 24 Oct 2026.</strong> Implementation commit <code>ca1e9b95</code> landed on
+              <code>feat/linux</code> through merge <code>d2b5cf60</code>. The source milestone is complete: the shared sync format now has separate Windows CNG
+              and Linux BoringSSL backends, and libsecret stores keys by account and data directory. If key storage fails, setup and recovery keep the entropy
+              only in memory; the UI explains that the recovery phrase is needed each session. Same-account unlock reuses the session, while account changes,
+              forgetting and data-directory changes clear the active entropy. The Linux recovery kit has a PNG preview, private temporary PDFs, a confidential
+              phrase clipboard and file clipboard support. An asynchronous folder/save picker adapter rejects stale exports if the active key changes. Device
+              names are host snapshots; device IDs remain freshly generated local UUIDs.
             </p>
             <p class="prose">
               <code>//chrome/browser/bay/data:sync_services</code> and <code>//chrome/browser/bay/webui:sync_ui_linux</code> are independent Linux targets; the
-              package overlay copies the Linux sources. D2 still owns opening the complete import/data bridge and advertising sync on Linux. Its host must own
-              <code>SyncUI</code> and dispatch it before routing sync calls to workers; the adapter is not dispatched by the current Linux host. Password
-              reading remains explicitly unavailable until D2 supplies the Linux importer. No engine build, desktop launch or live keyring test has run.
-              Chromium-dependent rendering, clipboard and picker release/DCHECK syntax and native tests await a Chromium checkout and sysroot.
+              package overlay copies the Linux sources. K8 has opened the import bridge, but Linux sync integration remains code work. The host must advertise
+              and dispatch BaySync, own <code>SyncUI</code> and dispatch it before routing sync calls to workers; the adapter is not dispatched by the current
+              Linux host. Password reading in <code>SyncService.cpp</code> still throws instead of calling the Linux importer. The work split records these gaps
+              as a K8 follow-up before stage 2. No engine build, desktop launch or live keyring test has run. Chromium-dependent rendering, clipboard and picker
+              release/DCHECK syntax and native tests await a Chromium checkout and sysroot.
             </p>
             <p class="prose">
               Portable checks pass: the exact Chromium 154.0.8037.58 BoringSSL pin
@@ -2343,6 +2345,21 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               Run <code>packages/sync/scripts/check-linux-crypto.sh</code> with <code>BORINGSSL_ROOT</code> and <code>BORINGSSL_CRYPTO_LIBRARY</code> pointing
               at that build; without them it checks system OpenSSL and does not establish BoringSSL coverage. The portable service and recovery checks are
               <code>python3 packages/sync/linux/tests/service-test.py</code> and <code>python3 packages/sync/linux/tests/recovery-kit-test.py</code>.
+            </p>
+            <p class="prose">
+              <strong>BayKeychain sources, 24 Oct 2026 (K9).</strong> Connected-account <code>get</code>, <code>set</code> and <code>delete</code> now live in a
+              shared document-owned service with Windows Credential Manager and Linux libsecret backends. Both Linux host roles advertise the module and
+              methods. The Windows backend keeps its existing <code>Bay:</code> credential names. Linux uses the separate
+              <code>app.bay.ConnectedAccounts</code> schema and base64-encoded UTF-8 values, including empty strings and embedded NULs. Missing reads return
+              null, missing deletes succeed, and locked items, cancelled unlocks and service failures cannot appear as successful reads or deletions. No disk
+              fallback is used. Secret operations run on a shared worker sequence; document teardown settles pending replies once, and late results are ignored.
+            </p>
+            <p class="prose">
+              <strong>K9 verification.</strong> Fake-backend tests cover argument rejection, round trips, overwrite, empty and NUL-containing values, missing
+              items, unavailable stores, both host roles, expired profiles, reply reentrancy, teardown and ordering across replacement documents. Service,
+              libsecret adapter, host and test sources pass Linux x64 release/DCHECK syntax checks using the pinned sysroot, Debian libsecret 0.20.4 development
+              headers, existing generated Mac configuration headers and scratch Mojo bindings. Typechecks, JavaScript and Python tooling tests, generated
+              contracts, lint and formatting pass. Native test binaries, Linux GN/link validation and real GNOME Keyring/KWallet behavior remain stage 2 work.
             </p>
             <h4>Exit criteria</h4>
             <ul class="checks">

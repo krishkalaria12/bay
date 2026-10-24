@@ -24,6 +24,7 @@ class WebUI;
 namespace bay {
 class TabObserver;
 class PlatformServices;
+class Keychain;
 class BrowserServices;
 class EngineServices;
 class DocumentStore;
@@ -75,6 +76,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   // Host info waits for saved documents and the platform snapshots.
   void PlatformReady();
   std::unique_ptr<ShellAppearance> appearance_;
+  std::unique_ptr<Keychain> keychain_;
   bool platform_ready_ = false;
   std::vector<GetHostInfoCallback> host_info_callbacks_;
 #endif

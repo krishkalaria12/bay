@@ -38,6 +38,7 @@
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
+#include "chrome/browser/bay/webui/keychain.h"
 #include "chrome/browser/bay/webui/notifications.h"
 #include "chrome/browser/bay/webui/shell_appearance.h"
 #endif
@@ -393,6 +394,7 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
       base::BindOnce(&NativeHost::PublishHostInfo, GetWeakPtr()));
 #endif
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  keychain_ = std::make_unique<Keychain>(context_);
   RegisterDataProfile(context_.profile());
   InitializeDataBridge(base::BindRepeating(&DataEvent));
 #endif
@@ -468,6 +470,7 @@ base::DictValue NativeHost::Info() const {
   for (const auto& module : browser_services_->Modules())
     modules.Append(module.Clone());
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  modules.Append("BayKeychain");
   for (const auto& module : data::ModuleNames())
     modules.Append(module);
 #endif
@@ -544,6 +547,10 @@ base::DictValue NativeHost::Info() const {
   shell.Set("backdrop", FrameWin::BackdropEnabled() ? "mica" : "solid");
 #endif
   auto engine_methods = browser_services_->SupportedMethods();
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  for (auto& method : Keychain::SupportedMethods())
+    engine_methods.Append(std::move(method));
+#endif
   for (const auto& method : engine_services_->SupportedMethods())
     engine_methods.Append(method.Clone());
 #if BUILDFLAG(IS_LINUX)
@@ -636,6 +643,8 @@ base::DictValue NativeHost::Info() const {
   }
   info.Set("snapshots", std::move(snapshots));
   auto methods = platform_services_->SupportedMethods();
+  for (auto& method : Keychain::SupportedMethods())
+    methods.Append(std::move(method));
   for (const auto& method : browser_services_->SupportedMethods())
     methods.Append(method.Clone());
   for (const auto& method : engine_services_->SupportedMethods())
@@ -950,6 +959,10 @@ void NativeHost::Invoke(const std::string& module,
     InvokeView(method, args, std::move(callback));
     return;
   }
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (keychain_->Dispatch(module, method, args, callback))
+    return;
+#endif
   if (browser_services_->DispatchBrowserModule(module, method, args, callback))
     return;
 #if BUILDFLAG(IS_LINUX)
