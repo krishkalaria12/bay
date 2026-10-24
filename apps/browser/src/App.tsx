@@ -1,5 +1,5 @@
 import { WindowBackdrop } from "@bay/shaders";
-import { setTrafficLightsOnHover, Surface, WindowDragRegion } from "@bay/shell";
+import { setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
@@ -70,13 +70,12 @@ function BrowserWindow() {
   const showStrip = sidebarOpen && topTabs;
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left, the window buttons where they are.
   const right = useSidebarOnRight();
-  // The page has no toolbar to hold the window buttons then (or with the sidebar closed): it runs up under them, and
-  // they show only while the pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
-  const buttonsOnHover = (right || !sidebarOpen) && addressInSidebar && !fullscreen;
+  const [peekOut, setPeekOut] = useState(false);
+  const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, right, topTabs, peekOut });
   useEffect(() => {
-    void setTrafficLightsOnHover(windowId, buttonsOnHover);
-  }, [windowId, buttonsOnHover]);
+    void setTrafficLightsMode(windowId, lights);
+  }, [windowId, lights]);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
@@ -142,7 +141,8 @@ function BrowserWindow() {
           <TopTabStrip width={width} hidden={fullscreen} />
         </View>
       )}
-      {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} />)}
+      {!sidebarOpen &&
+        (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} onOut={setPeekOut} />)}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />
@@ -167,10 +167,40 @@ function BrowserWindow() {
   );
 }
 
-function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
+// The page has no toolbar to hold the window buttons with the address bar in the sidebar: it runs up under them. With
+// the sidebar on the right they show only while the pointer is over the window's top, as Zen has it; with it closed on
+// the left, only with its peek, as Arc has it, so they never sit over the page's corner.
+function trafficLightsMode(o: {
+  addressInSidebar: boolean;
+  fullscreen: boolean;
+  sidebarOpen: boolean;
+  right: boolean;
+  topTabs: boolean;
+  peekOut: boolean;
+}): TrafficLightsMode {
+  if (!o.addressInSidebar || o.fullscreen) return "shown";
+  if (!o.sidebarOpen && !o.right && !o.topTabs) return o.peekOut ? "shown" : "hidden";
+  return o.right || !o.sidebarOpen ? "hover" : "shown";
+}
+
+// DEV: the peek's show, by window, as the pointer reaching the window's edge does (nnPeek(windowId)).
+const devPeeks = new Map<string, () => void>();
+if (__DEV__) (globalThis as { nnPeek?: unknown }).nnPeek = (windowId: string) => devPeeks.get(windowId)?.();
+
+function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boolean; onOut: (out: boolean) => void }) {
   const theme = useTheme();
-  const sidebarWidth = useSidebarWidth(useWindowId());
+  const windowId = useWindowId();
+  const sidebarWidth = useSidebarWidth(windowId);
   const { slide, live, show, hide } = usePeek(enabled);
+  useEffect(() => {
+    if (!__DEV__) return;
+    devPeeks.set(windowId, show);
+    return () => void devPeeks.delete(windowId);
+  }, [windowId, show]);
+  useEffect(() => {
+    onOut(live);
+    return () => onOut(false);
+  }, [live, onOut]);
   const slideStyle = useAnimatedStyle(() => {
     "worklet";
     const p = slide.get();

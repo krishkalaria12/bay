@@ -1500,6 +1500,11 @@ NSEvent *Key(NSWindow *window, NSEventType type, NSEventModifierFlags flags, NSS
     NSRect r = [close convertRect:close.bounds toView:nil];
     return [NSString stringWithFormat:@"%.1f,%.1f,%.1f,%.1f", r.origin.x, r.origin.y, r.size.width, r.size.height];
   }
+  // "lightsState": the close button's opacity and whether it's hidden ("0.00,1"), as the shell fades it.
+  if ([action isEqualToString:@"lightsState"]) {
+    NSButton *close = [window standardWindowButton:NSWindowCloseButton];
+    return close ? [NSString stringWithFormat:@"%.2f,%d", close.alphaValue, close.hidden] : nil;
+  }
   if ([action isEqualToString:@"cover"] || [action isEqualToString:@"uncover"]) {
     // Tests: one of the app's own windows right above this one, a little larger, as an owner's window covering it
     // would be (Chrome's occlusion checker then reports it occluded). Never key, never takes clicks.

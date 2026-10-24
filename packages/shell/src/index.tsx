@@ -227,7 +227,7 @@ const Shell = requireNativeModule<{
   closeWindow(id: string): Promise<void>;
   focusWindow(id: string): Promise<void>;
   setTrafficLightsCenter(id: string, center: [number, number] | null): Promise<void>;
-  setTrafficLightsOnHover(id: string, on: boolean): Promise<void>;
+  setTrafficLightsMode(id: string, mode: TrafficLightsMode): Promise<void>;
   dragPreviewBegin?(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;
   dragPreviewPage?(base64: string, frame: Rect4): Promise<void>;
   dragPreviewUpdate?(shape: DragPreviewShape, point: [number, number]): Promise<void>;
@@ -287,8 +287,12 @@ export const closeWindow = (id: string) => Shell.closeWindow(id);
 export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
 export const setTrafficLightsCenter = (id: string, center: [number, number] | null) => Shell.setTrafficLightsCenter(id, center);
-/** The window's buttons shown only while the pointer is over the window's top (always in full screen). */
-export const setTrafficLightsOnHover = (id: string, on: boolean) => Shell.setTrafficLightsOnHover(id, on);
+/**
+ * The window buttons: "shown"; "hover", only while the pointer is over the window's top (Zen's, with the page under
+ * them); "hidden" (Arc's with the sidebar closed, shown with its peek).
+ */
+export type TrafficLightsMode = "shown" | "hover" | "hidden";
+export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode) => Shell.setTrafficLightsMode(id, mode);
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›

@@ -92,7 +92,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     relayoutRoot(window)
     windows[id] = window
     if let center = lightsCenters[id] { ChromeWindows.setTrafficLightsCenter(center, in: window) }
-    if lightsOnHover.contains(id) { applyLightsOnHover(id: id, window: window, animated: false) }
+    if lightsModes[id] != nil { applyLightsMode(id: id, window: window, animated: false) }
     if smallSize == nil { lastPlaced = window }
     if focus, unrevealed[id] != nil {
       // Key once it shows, its content first: made key while its content mounted, the key change's work (the old
@@ -283,21 +283,22 @@ final class WindowManager: NSObject, NSWindowDelegate {
     ChromeWindows.setTrafficLightsCenter(center, in: window)
   }
 
-  // Shown only while the pointer is over the window's top: the page runs under them with the sidebar on the right, as
-  // Zen has it. Kept per id, as the centres are.
-  private var lightsOnHover: Set<String> = []
+  // "hover": shown only while the pointer is over the window's top, as Zen has it, when the page runs under them with
+  // the sidebar on the right. "hidden": the sidebar closed, they show only with its peek ("shown" then), as Arc has
+  // it. Kept per id, as the centres are.
+  private var lightsModes: [String: String] = [:]
   private var lightsStrips: [String: TrafficLightsHoverStrip] = [:]
 
-  func setTrafficLightsOnHover(id: String, on: Bool) {
-    if on { lightsOnHover.insert(id) } else { lightsOnHover.remove(id) }
+  func setTrafficLightsMode(id: String, mode: String) {
+    lightsModes[id] = mode
     guard let window = windows[id] else { return }
-    applyLightsOnHover(id: id, window: window, animated: true)
+    applyLightsMode(id: id, window: window, animated: true)
   }
 
-  private func applyLightsOnHover(id: String, window: NSWindow, animated: Bool) {
+  private func applyLightsMode(id: String, window: NSWindow, animated: Bool) {
     lightsStrips.removeValue(forKey: id)?.removeFromSuperview()
-    guard lightsOnHover.contains(id), let content = window.contentView else {
-      return Self.fadeTrafficLights(of: window, hidden: false, animated: animated)
+    guard lightsModes[id] == "hover", let content = window.contentView else {
+      return Self.fadeTrafficLights(of: window, hidden: lightsModes[id] == "hidden", animated: animated)
     }
     let strip = TrafficLightsHoverStrip(in: content)
     strip.onHover = { [weak window] inside in
@@ -308,28 +309,35 @@ final class WindowManager: NSObject, NSWindowDelegate {
     Self.fadeTrafficLights(of: window, hidden: !strip.pointerInside, animated: animated)
   }
 
-  // Full screen keeps them in the menu bar's reveal: never faded there.
+  // Full screen keeps them in the menu bar's reveal: never faded there. Faded out, they're hidden too: a button at no
+  // opacity still takes the clicks meant for the page under it.
   private static func fadeTrafficLights(of window: NSWindow, hidden: Bool, animated: Bool) {
     let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { window.standardWindowButton($0) }
-    let alpha: CGFloat = hidden && !window.styleMask.contains(.fullScreen) ? 0 : 1
-    guard animated else { return buttons.forEach { $0.alphaValue = alpha } }
-    NSAnimationContext.runAnimationGroup { context in
-      context.duration = 0.15
-      buttons.forEach { $0.animator().alphaValue = alpha }
+    let hide = hidden && !window.styleMask.contains(.fullScreen)
+    if !hide { buttons.forEach { $0.isHidden = false } }
+    let finish = { if hide { buttons.filter { $0.alphaValue == 0 }.forEach { $0.isHidden = true } } }
+    guard animated else {
+      buttons.forEach { $0.alphaValue = hide ? 0 : 1 }
+      return finish()
     }
+    NSAnimationContext.runAnimationGroup({ context in
+      context.duration = 0.15
+      buttons.forEach { $0.animator().alphaValue = hide ? 0 : 1 }
+    }, completionHandler: finish)
   }
 
   @objc private func windowFullScreenChanged(_ note: Notification) {
-    guard let window = note.object as? NSWindow, let id = id(of: window), let strip = lightsStrips[id] else { return }
+    guard let window = note.object as? NSWindow, let id = id(of: window), let mode = lightsModes[id], mode != "shown" else { return }
     let entering = note.name == NSWindow.willEnterFullScreenNotification
-    Self.fadeTrafficLights(of: window, hidden: !entering && !strip.pointerInside, animated: false)
+    let hidden = mode == "hidden" || !(lightsStrips[id]?.pointerInside ?? false)
+    Self.fadeTrafficLights(of: window, hidden: !entering && hidden, animated: false)
   }
 
   private func adopt(from: NSWindow, to: NSWindow) {
     guard let id = id(of: from) else { return }
     NotificationCenter.default.removeObserver(self, name: nil, object: from)
     windows[id] = to
-    if lightsOnHover.contains(id) { applyLightsOnHover(id: id, window: to, animated: false) }
+    if lightsModes[id] != nil { applyLightsMode(id: id, window: to, animated: false) }
     if lastPlaced === from { lastPlaced = to }
     observeDelegateNotifications(to)
     observeFrame(to)
@@ -418,7 +426,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       if let waiting = unrevealed.removeValue(forKey: id) { waiting.forEach { $0() } }
       stopKeepingContentSized(id)
       lightsCenters[id] = nil
-      lightsOnHover.remove(id)
+      lightsModes[id] = nil
       lightsStrips[id] = nil
       auxKinds[id] = nil
       smallIds.remove(id)
@@ -461,7 +469,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     windows[id] = nil
     stopKeepingContentSized(id)
     lightsCenters[id] = nil
-    lightsOnHover.remove(id)
+    lightsModes[id] = nil
     lightsStrips[id] = nil
     auxKinds[id] = nil
     smallIds.remove(id)
