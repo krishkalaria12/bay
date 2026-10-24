@@ -30,6 +30,10 @@ class Canvas;
 // window's top and side.
 inline constexpr int kBayPipButtonMargin = 12;
 inline constexpr int kBayPipButtonSize = 28;
+// The app's speed button beside back to tab and its subtitles button beside
+// close (packages/nncore/ios/NNCorePictureInPicture.mm), with the 6 pt gap
+// before each: the origin keeps clear of the wider of them.
+inline constexpr int kBayPipAppButtonsWidth = 6 + 42;
 
 // Back to tab (top left): Dia's ↖, 28 × 28.
 class BayBackToTabButton : public OverlayWindowBackToTabButton {

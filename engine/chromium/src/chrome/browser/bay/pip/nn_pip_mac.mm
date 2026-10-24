@@ -100,3 +100,16 @@ void ResetBayPictureInPictureFade(gfx::NativeWindow window) {
   [CATransaction commit];
   ns_window.hasShadow = YES;
 }
+
+void NotifyBayPictureInPictureControls(gfx::NativeWindow window,
+                                       bool visible,
+                                       bool animate) {
+  NSWindow* ns_window = window.GetNativeNSWindow();
+  if (!ns_window) {
+    return;
+  }
+  [NSNotificationCenter.defaultCenter
+      postNotificationName:@"BayPictureInPictureControlsDidChange"
+                    object:ns_window
+                  userInfo:@{@"visible" : @(visible), @"animate" : @(animate)}];
+}

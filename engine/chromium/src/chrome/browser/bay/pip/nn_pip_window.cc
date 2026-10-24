@@ -111,7 +111,7 @@ void BayVideoOverlayWindow::OnUpdateControlsBounds() {
   // is centred between them, its baseline 1 pt above a label centred on them.
   title_view_->SetBoundsRect({0, 0, size.width(), kMargin + kButton});
   favicon_view_->SetVisible(false);
-  constexpr int kOriginX = kMargin + kButton + 8;
+  constexpr int kOriginX = kMargin + kButton + kBayPipAppButtonsWidth + 8;
   origin_->SetBoundsRect({kOriginX, kMargin - 1,
                           std::max(0, size.width() - 2 * kOriginX), kButton});
 
@@ -178,6 +178,14 @@ void BayVideoOverlayWindow::UpdateControlsVisibility(
                                           controls_bottom_scrim_view_},
         fade_animation_->type());
     fade_animation_->Start();
+  }
+
+  // The app's own controls over the window fade with these.
+  const bool visible = AreControlsVisible();
+  if (visible != nn_controls_visible_) {
+    nn_controls_visible_ = visible;
+    NotifyBayPictureInPictureControls(GetNativeWindow(), visible,
+                                      should_animate);
   }
 }
 
