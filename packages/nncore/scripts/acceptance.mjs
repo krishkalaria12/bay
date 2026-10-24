@@ -3399,6 +3399,10 @@ try {
       throw new Error(
         `uBlock Origin has no bundled lists on a fresh profile: ${state.lists.length} lists, ${enabledLists} on, ${state.stats.networkFilters} network filters`,
       );
+    // Cookie banners are blocked by default (there's no setting for it): EasyList's and uBO's cookie notice lists are on.
+    const cookieLists = ["fanboy-cookiemonster", "ublock-cookies-easylist"];
+    const cookiesOff = cookieLists.filter((id) => !state.lists.find((l) => l.id === id)?.enabled);
+    if (cookiesOff.length) throw new Error(`cookie notice lists off on a fresh profile: ${cookiesOff}`);
     await cef(`setContentBlockerAllowed("allowed.test", true)`);
     const allowed = await cef(`isContentBlockerAllowed("allowed.test")`);
     await cef(`setContentBlockerAllowed("allowed.test", false)`);

@@ -91,7 +91,6 @@ export const SETTINGS = {
   saveCreditCards: { id: "autofill.saveCreditCards", pane: "autofill", title: "Save and fill credit cards", words: "payment" },
   blockAds: { id: "privacy.blockAds", pane: "privacy", title: "Block ads", words: "ad blocker content" },
   blockTrackers: { id: "privacy.blockTrackers", pane: "privacy", title: "Block trackers", words: "tracking content" },
-  blockCookieBanners: { id: "privacy.blockCookieBanners", pane: "privacy", title: "Block cookie banners", words: "content" },
   contentBlockerFilters: { id: "privacy.contentBlockerFilters", pane: "privacy", title: "Advanced Settings", words: "filter lists easylist content blocking" },
   sitePermissions: { id: "privacy.sitePermissions", pane: "privacy", title: "Site permissions", words: "camera microphone location pop-ups notifications" },
   externalAppAllowances: { id: "privacy.externalAppAllowances", pane: "privacy", title: "Apps allowed to open links", words: "external" },

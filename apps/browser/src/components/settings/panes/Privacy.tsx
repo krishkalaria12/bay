@@ -37,7 +37,7 @@ import { ShareDiagnosticsSection } from "./ShareDiagnostics";
 const CATEGORIES: { id: FilterListCategory; toggle: string; settingId?: SettingId; section: string }[] = [
   { id: "ads", toggle: SETTINGS.blockAds.title, settingId: SETTINGS.blockAds.id, section: "Ad blockers" },
   { id: "trackers", toggle: SETTINGS.blockTrackers.title, settingId: SETTINGS.blockTrackers.id, section: "Trackers" },
-  { id: "cookies", toggle: SETTINGS.blockCookieBanners.title, settingId: SETTINGS.blockCookieBanners.id, section: "Cookie banners" },
+  { id: "cookies", toggle: "", section: "Cookie banners" },
   { id: "annoyances", toggle: "", section: "Annoyances" },
   { id: "security", toggle: "", section: "Malware and scams" },
   { id: "regional", toggle: "", section: "Regional blockers" },

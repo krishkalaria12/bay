@@ -3,7 +3,8 @@
 # embed.sh to bundle. The manifest gets Bay's key (a fixed id), http/ws hosts instead of <all_urls>, and incognito
 # spanning; uBO itself is patched to run headless in Bay (no dashboard, badge or context menu, its subscribe and
 # update page scripts gone), to update lists a while after launch, to keep diff patches on the list's own host, and to
-# turn on the regional lists for every one of the user's languages. UBO_PATCH counts those changes: bump it with them.
+# turn on the regional lists for every one of the user's languages; EasyList's and uBO's cookie notice lists are on by
+# default. UBO_PATCH counts those changes: bump it with them.
 set -euo pipefail
 
 vendor="$(cd "$(dirname "$0")/.." && pwd)/vendor"
@@ -11,7 +12,7 @@ vendor="$(cd "$(dirname "$0")/.." && pwd)/vendor"
 UBO_VERSION="1.75.0"
 UBO_SHA256="393cf95709d1074d4022970e9014e434395c53a822387f1e25f43be97cf4b582"
 UBO_KEY="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv1MPdIgJjIsN4Y0N/20GDNPfN4J//aknk5dsH8Y1LBxSnz3Jp/BT187Gub5cv6lee5CUVDmVBa3Yiqow8GMna5KwX+ZP+yc1pt/ewzyNxm2BzoQPgWz+1DgZaahz56/szi1EEtWVYxd3wNxFN4wPDqwV6aqlnV4R3RnxlF1ocw1kDgJ+8BxR1EY+MB+H8bymdef+xB3TNifBZIVmZt81cC3UMOG6KWRTU1wtIXsW+ZqSv5zaeFHLkjG4MPB7EfcMGrvO80ElJBZZLdrTmYOL4uUPsz2Wy6GiPWzpDmzzI9RfsZm11sLiJo63blcPF0Cz3sM0wQfxJPPcQuqkZDReswIDAQAB"
-UBO_PATCH="22"
+UBO_PATCH="23"
 ubo="$vendor/ubo"
 stamp="$UBO_VERSION-$UBO_PATCH"
 installed() { [ -f "$ubo/.version" ] && [ "$(cat "$ubo/.version")" = "$stamp" ]; }
@@ -150,6 +151,21 @@ patch("js/storage.js",
       "                .map(lang => (/^[a-z]+/.exec(lang) || [])[0]).filter(Boolean));\n"
       "            if ( langs.size !== 0 ) {\n"
       "                re = new RegExp('\\\\b(?:' + Array.from(langs).join('|') + ')\\\\b');")
+cookie_lists = ("fanboy-cookiemonster", "ublock-cookies-easylist")
+patch("js/assets.js",
+      "        newDict = JSON.parse(json);\n",
+      "        newDict = JSON.parse(json);\n"
+      f"        for ( const key of {json.dumps(list(cookie_lists))} ) {{\n"
+      "            if ( newDict[key] instanceof Object ) { delete newDict[key].off; }\n"
+      "        }\n")
+assets_path = os.path.join(ext, "assets", "assets.json")
+assets = json.load(open(assets_path))
+for list_id in cookie_lists:
+    entry = assets.get(list_id)
+    if not isinstance(entry, dict) or entry.get("off") is not True:
+        sys.exit(f"ubo.sh: assets.json no longer has {list_id} off by default")
+    del entry["off"]
+json.dump(assets, open(assets_path, "w"), indent="\t", ensure_ascii=False)
 PY
   [ -d "$ubo/ext" ] && mv "$ubo/ext" "$ubo/ext.old"
   mv "$ubo/ext.new" "$ubo/ext"
