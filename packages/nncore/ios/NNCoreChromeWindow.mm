@@ -535,9 +535,9 @@ NSNotificationName const NNCoreWindowSeenDidChange = @"NNCoreWindowSeenDidChange
 
 namespace {
 
-// A tab Chrome made in a window of its own (chrome.windows.create) while the app shows no page to announce it through:
-// offered to the app (tab:<id>) through the extensions module, which opens it in a window of its profile. Its URL
-// first, as -[NNCoreWebView openedTab:…] waits for it.
+// A tab Chrome made while the app shows no page to announce it through (in a window of its own, from
+// chrome.windows.create, or before the app's first page): offered to the app (tab:<id>) through the extensions module,
+// which opens it in a window of its profile. Its URL first, as -[NNCoreWebView openedTab:…] waits for it.
 void AnnounceStrayTab(NNCoreTab *tab, int tries) {
   if (tab.closed) return;
   NSString *url = tab.url;
@@ -715,18 +715,12 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
     // A page's popup, target=_blank or ⌘-click: placed by the app's opener rules.
     [openerView openedTab:tab adoptId:[NNCoreTabs offerTab:tab] disposition:nncore_host::AppDisposition(disposition)];
   } else {
-    // A tab Chrome made on its own (an extension's tabs.create): the app takes Chrome's place for it, through a view
-    // of this window; with none, through the extensions module (the app opens the URL itself).
+    // A tab Chrome made on its own (an extension's tabs.create, a DevTools page): the app takes Chrome's place for it,
+    // through a view of this window; with none (just after launch), through the extensions module, which adopts the
+    // live tab rather than loading its URL again.
     NNCoreWebView *view = [self anyShownViewForProfile:tab.profile] ?: [self anyView];
-    if (view) {
-      [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:@"foreground"];
-    } else if (NNCoreServices.extensionsHandler) {
-      NNCoreServices.extensionsHandler(@"tabs", @{
-        @"action" : @"open", @"url" : tab.url ?: @"", @"profile" : nncore_host::ProfileName(tab.profile), @"active" : @YES,
-        @"window" : NSNull.null, @"extensionId" : @""
-      });
-      [tab closeNow];
-    }
+    if (view) [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:@"foreground"];
+    else AnnounceStrayTab(tab, 0);
   }
 }
 
