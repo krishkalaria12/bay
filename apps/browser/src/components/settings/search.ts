@@ -45,11 +45,11 @@ const SETTINGS: SettingEntry[] = [
 
   { pane: "spaces", title: "Default space", words: "new windows profile" },
 
-  { pane: "links", title: "Links from other apps", words: "little bay discord slack mail default" },
   {
     pane: "links",
-    title: "Rules for links from other apps",
-    words: "air traffic routing url pattern wildcard domain source app bundle id space little bay new window",
+    title: "Link rules",
+    words:
+      "air traffic routing url contains equal exact query fragment wildcard domain source app bundle id space little bay new window default most recent discord slack mail peek",
   },
   { pane: "links", title: "Open a Peek window when clicking links to other sites", words: "peek pinned favorites" },
   { pane: "links", title: "⌘-clicking links creates tab groups", words: "cmd command click" },

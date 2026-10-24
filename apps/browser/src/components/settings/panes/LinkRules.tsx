@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { validateLinkPattern, type ExternalLinkRule, type LinkDestination } from "../../../lib/externalLinkRules";
+import { defaultLinkDestination, validateLinkPattern, type ExternalLinkRule, type LinkDestination, type LinkMatchType } from "../../../lib/externalLinkRules";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
@@ -16,8 +16,12 @@ export function showRuleEditor(ruleId?: string) {
 }
 
 export function LinkRules() {
-  const rules = useBrowser((s) => s.settings.externalLinkRules);
-  const spaces = useBrowser((s) => s.spaces);
+  const settings = useBrowser((s) => s.settings);
+  const updateSettings = useBrowser((s) => s.updateSettings);
+  const spaces = useSpaces();
+  const rules = settings.externalLinkRules;
+  const defaultDestination = defaultLinkDestination(settings);
+  const selectedDefault = defaultDestination.kind === "space" ? `space:${defaultDestination.spaceId}` : defaultDestination.kind;
   const move = (id: string, direction: number) => {
     const state = useBrowser.getState();
     const next = [...state.settings.externalLinkRules];
@@ -30,24 +34,46 @@ export function LinkRules() {
   return (
     <>
       <SectionHeader
-        title="Rules for links from other apps"
-        description="The first matching rule decides where a link opens. Other links use your choice above."
+        title="Link rules"
+        description="For links from other apps and Peek's Open as Tab. The first matching rule decides where a link opens."
         action={<Button title="Add…" icon="plus" onPress={() => showRuleEditor()} />}
       />
       <Group>
+        <Row title="Default" description="Where links from other apps open when no rule matches.">
+          <PopUp
+            value={selectedDefault}
+            options={[
+              ...spaces.map((space) => ({ value: `space:${space.id}`, title: space.name })),
+              { value: "mostRecentSpace", title: "Most Recent Space", separatorBefore: true },
+              { value: "littleBay", title: "Little Bay" },
+              ...(defaultDestination.kind === "newWindow" ? [{ value: "newWindow", title: "New window" }] : []),
+            ]}
+            onChange={(value) =>
+              updateSettings({
+                externalLinkDefault: value.startsWith("space:")
+                  ? { kind: "space", spaceId: value.slice(6) }
+                  : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
+              })
+            }
+            minWidth={180}
+          />
+        </Row>
         {rules.length === 0 ? (
-          <Row title="No link rules" description="Send matching sites or paths to a space, Little Bay or a new window." />
+          <Row title="No link rules" description="Send matching links to a space, Little Bay or a new window." />
         ) : (
           rules.map((rule, index) => {
             const destination = rule.destination;
             const target =
               destination.kind === "space"
-                ? (spaces[destination.spaceId]?.name ?? "Missing space. Edit this rule to choose another.")
-                : destination.kind === "littleBay"
-                  ? "Little Bay"
-                  : "New window";
+                ? (spaces.find((space) => space.id === destination.spaceId)?.name ?? "Missing space. Edit this rule to choose another.")
+                : destination.kind === "mostRecentSpace"
+                  ? "Most Recent Space"
+                  : destination.kind === "littleBay"
+                    ? "Little Bay"
+                    : "New window";
+            const matchLabel = rule.matchType === "contains" ? "Contains" : rule.matchType === "equals" ? "Is equal to" : "Wildcard (existing rule)";
             return (
-              <Row key={rule.id} title={`${index + 1}. ${rule.pattern}`} description={`${rule.sourceApp || "Any app"} → ${target}`}>
+              <Row key={rule.id} title={`${index + 1}. ${rule.pattern}`} description={`${matchLabel} · ${rule.sourceApp || "Any app"} → ${target}`}>
                 <IconButton icon="arrow.up" size={11} box={24} radius={6} disabled={index === 0} tooltip="Move rule up" onPress={() => move(rule.id, -1)} />
                 <IconButton
                   icon="arrow.down"
@@ -73,6 +99,7 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
   const spaces = useSpaces();
   const defaultSpaceId = useBrowser((s) => s.settings.defaultSpaceId);
   const [pattern, setPattern] = useState(rule?.pattern ?? "");
+  const [matchType, setMatchType] = useState<LinkMatchType | undefined>(rule ? rule.matchType : "contains");
   const [sourceApp, setSourceApp] = useState(rule?.sourceApp ?? "");
   const [destination, setDestination] = useState<LinkDestination>(() => rule?.destination ?? { kind: "space", spaceId: defaultSpaceId });
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +108,7 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
   const save = () => {
     const cleanPattern = pattern.trim();
     const cleanSource = sourceApp.trim();
-    const patternError = validateLinkPattern(cleanPattern);
+    const patternError = validateLinkPattern(cleanPattern, matchType);
     if (patternError) return setError(patternError);
     if (cleanSource && !/^[\w.-]+$/.test(cleanSource)) return setError("Enter an app bundle ID without spaces, or leave it blank for any app.");
     const state = useBrowser.getState();
@@ -89,6 +116,7 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
     const saved: ExternalLinkRule = {
       id: rule?.id ?? newId("link-rule"),
       pattern: cleanPattern,
+      ...(matchType ? { matchType } : {}),
       ...(cleanSource ? { sourceApp: cleanSource } : {}),
       destination,
     };
@@ -102,9 +130,41 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
     <Sheet width={460} onClose={closeSettingsSheet}>
       <Text style={{ fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{rule ? "Edit Link Rule" : "Add Link Rule"}</Text>
       <View style={{ marginTop: 12 }}>
-        <Text style={labelStyle}>Site or URL pattern</Text>
-        <TextField value={pattern} onChangeText={setPattern} placeholder="github.com/acme/*" autoFocus onSubmit={save} onEscape={closeSettingsSheet} />
-        <Text style={helpStyle}>Use * as a wildcard, such as *.example.com or example.com/work/*. A host alone matches all its paths.</Text>
+        <Text style={labelStyle}>When URL</Text>
+        <PopUp<LinkMatchType | "wildcard">
+          value={matchType ?? "wildcard"}
+          options={[
+            { value: "contains", title: "Contains" },
+            { value: "equals", title: "Is equal to" },
+            ...(rule && rule.matchType === undefined ? [{ value: "wildcard" as const, title: "Wildcard (existing rule)" }] : []),
+          ]}
+          onChange={(value) => setMatchType(value === "wildcard" ? undefined : value)}
+          minWidth={240}
+        />
+      </View>
+      <View style={{ marginTop: 12 }}>
+        <Text style={labelStyle}>{matchType === undefined ? "Site or URL pattern" : "URL or text"}</Text>
+        <TextField
+          value={pattern}
+          onChangeText={setPattern}
+          placeholder={
+            matchType === "contains"
+              ? "example.com/work?view=board"
+              : matchType === "equals"
+                ? "https://example.com/work?view=board#today"
+                : "github.com/acme/*"
+          }
+          autoFocus
+          onSubmit={save}
+          onEscape={closeSettingsSheet}
+        />
+        <Text style={helpStyle}>
+          {matchType === "contains"
+            ? "Match any part of a URL, including query strings and fragments. Text is matched literally."
+            : matchType === "equals"
+              ? "Match a full URL exactly, including its query string and fragment."
+              : "Use * as a wildcard, such as *.example.com or example.com/work/*. A host alone matches all its paths."}
+        </Text>
       </View>
       <View style={{ marginTop: 12 }}>
         <Text style={labelStyle}>From app, optional</Text>
@@ -120,11 +180,14 @@ export function RuleSheet({ rule }: { rule?: ExternalLinkRule }) {
           options={[
             ...spaces.map((space) => ({ value: `space:${space.id}`, title: `Space: ${space.name}` })),
             ...(missingSpace ? [{ value: selected, title: "Missing space. Choose another." }] : []),
-            { value: "littleBay", title: "Little Bay", separatorBefore: true },
+            { value: "mostRecentSpace", title: "Most Recent Space", separatorBefore: true },
+            { value: "littleBay", title: "Little Bay" },
             { value: "newWindow", title: "New window" },
           ]}
           onChange={(value) =>
-            setDestination(value.startsWith("space:") ? { kind: "space", spaceId: value.slice(6) } : { kind: value as "littleBay" | "newWindow" })
+            setDestination(
+              value.startsWith("space:") ? { kind: "space", spaceId: value.slice(6) } : { kind: value as "mostRecentSpace" | "littleBay" | "newWindow" },
+            )
           }
           minWidth={240}
         />
