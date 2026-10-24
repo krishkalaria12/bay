@@ -15,7 +15,7 @@ import type { BrowserState } from "./browser";
 import { layout } from "../lib/constants";
 import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/awakeSites";
 import { DEFAULT_SPACE_ID } from "./constants";
-import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
+import { normalizeExternalLinkRules, normalizeLinkDestination, type ExternalLinkRule, type LinkDestination } from "../lib/externalLinkRules";
 
 export type SearchEngineId = string;
 
@@ -80,6 +80,7 @@ export type Settings = {
   shortcuts: Record<string, string[]>;
 
   openLinksInLittleBay: boolean;
+  externalLinkDefault: LinkDestination | null;
   externalLinkRules: ExternalLinkRule[];
   // Arc's Peek: a link a pinned tab or a favourite opens in front shows over its page (store/peeks.ts).
   peekLinksFromPinnedTabs: boolean;
@@ -133,7 +134,8 @@ export const DEFAULT_SETTINGS: Settings = {
   addressBar: "sidebar",
   defaultSpaceId: DEFAULT_SPACE_ID,
   shortcuts: {},
-  openLinksInLittleBay: false,
+  openLinksInLittleBay: true,
+  externalLinkDefault: null,
   externalLinkRules: [],
   peekLinksFromPinnedTabs: true,
   littleBaySize: [900, 640],
@@ -193,6 +195,14 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
       settings: {
         ...s.settings,
         ...patch,
+        ...("externalLinkDefault" in patch
+          ? {
+              externalLinkDefault: normalizeLinkDestination(patch.externalLinkDefault),
+              openLinksInLittleBay: patch.externalLinkDefault ? patch.externalLinkDefault.kind === "littleBay" : s.settings.openLinksInLittleBay,
+            }
+          : "openLinksInLittleBay" in patch
+            ? { externalLinkDefault: null }
+            : {}),
         ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : {}),
         ...("awakeSites" in patch ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites } : {}),
       },

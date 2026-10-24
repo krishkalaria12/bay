@@ -4,7 +4,7 @@ import { useBrowser } from "../store/browser";
 
 type ProfileLinks = Record<string, { syncId: string }>;
 type SyncedRule = Omit<ExternalLinkRule, "destination"> & {
-  destination: { kind: "space"; profileId: string } | { kind: "littleBay" } | { kind: "newWindow" };
+  destination: { kind: "space"; profileId: string } | Exclude<ExternalLinkRule["destination"], { kind: "space" }>;
 };
 
 const KEY = "linkRules:ordered";
@@ -63,6 +63,8 @@ export function linkRulesAdapter(links: () => ProfileLinks): Adapter {
     },
     apply: (visible, changed) => {
       if (!changed.has(KEY)) return;
+      // Keep unpublished edits until their profile links let syncScope publish them before retrying apply.
+      if (useBrowser.getState().settings.externalLinkRules.some((rule) => rule.destination.kind === "space" && !profileIdFor(rule, links()))) return false;
       const record = visible.get(KEY) as { rules?: unknown } | undefined;
       if (!record) return;
       if (!Array.isArray(record.rules)) return;

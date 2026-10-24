@@ -8,7 +8,7 @@ import { createOrganizeSlice, forgetClosedPrivateWindows, keptDeletedGroups, typ
 import { createPeeksSlice, type PeeksSlice } from "./peeks";
 import { createSpacesSlice, DEFAULT_SPACE, engineIdOf, isolateSavedSpaces, withSpaceEmoji, type SpacesSlice } from "./spaces";
 import { normalizeAwakeSites } from "../lib/awakeSites";
-import { normalizeExternalLinkRules } from "../lib/externalLinkRules";
+import { normalizeExternalLinkRules, normalizeLinkDestination } from "../lib/externalLinkRules";
 import { createSettingsSlice, DEFAULT_SETTINGS, type SettingsSlice } from "./settings";
 import { createSplitsSlice, sanitizeSplits, type SplitsSlice } from "./splits";
 import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from "./tabs";
@@ -114,6 +114,9 @@ export const useBrowser = create<BrowserState>()(
       settings.density = settings.density === "compact" ? "compact" : "comfortable";
       settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
       if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
+      settings.externalLinkDefault = normalizeLinkDestination(settings.externalLinkDefault);
+      if (settings.externalLinkDefault?.kind === "space" && !spaces[settings.externalLinkDefault.spaceId])
+        settings.externalLinkDefault = { kind: "space", spaceId: settings.defaultSpaceId };
 
       const rawWindows: Record<string, SavedWindow> = data.windows ?? {};
       const spaceOk = (p: string) => !!spaces[p] || isIncognitoSpace(p);
