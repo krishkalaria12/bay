@@ -188,7 +188,7 @@ test("the stored document carries its ETag with the list it belongs to", () => {
   assert.equal(readBangDocument(doc)?.etag, '"v2"');
   assert.equal(readBangDocument(doc)?.table.get("gh")?.name, "GitHub");
   assert.equal(readBangDocument(bangDocument(null, fixture))?.etag, null);
-  for (const bad of [null, "", fixture, doc.slice(0, 2000), `ardia-bangs 2\t"v2"\n${fixture}`, `ardia-bangs 1\t"v2"\tx\n${fixture}`])
+  for (const bad of [null, "", fixture, doc.slice(0, 2000), `bay-bangs 2\t"v2"\n${fixture}`, `bay-bangs 1\t"v2"\tx\n${fixture}`])
     assert.equal(readBangDocument(bad), null);
 });
 

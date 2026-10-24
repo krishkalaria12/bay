@@ -9,7 +9,7 @@ const STORED_PLACEHOLDER = "{s}";
 const MIN_BANGS = 1000;
 export const MAX_BANG_LIST_CHARS = 4_000_000;
 const REQUIRED_TRIGGERS = ["gh", "w", "yt"];
-const BANG_DOCUMENT = "ardia-bangs 1";
+const BANG_DOCUMENT = "bay-bangs 1";
 
 function endOfString(text: string, from: number): number {
   let at = from;
