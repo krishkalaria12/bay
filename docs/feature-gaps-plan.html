@@ -737,8 +737,8 @@
                 </tr>
                 <tr>
                   <td>Rules for links from other apps</td>
-                  <td>One choice: Little Bay or a new tab</td>
-                  <td><code>settings/panes/Links.tsx</code>, <code>lib/appIntegration.ts</code></td>
+                  <td>Done: ordered rules by URL and source app, routed to a space, Little Bay or a new window, synced</td>
+                  <td><code>lib/externalLinkRules.ts</code>, <code>settings/panes/LinkRules.tsx</code>, <code>sync/linkRules.ts</code></td>
                   <td class="c"><span class="chip m">M</span></td>
                   <td class="c">2</td>
                 </tr>
@@ -1476,14 +1476,26 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
             </div>
 
             <div class="item">
-              <h4>Rules for links from other apps <span class="chip m">M</span></h4>
+              <h4>Rules for links from other apps <span class="chip m">M</span> <span class="chip s">Done</span></h4>
+              <p>
+                Implemented 24 October 2026 as Arc-style link routing (<code>5f2ff798</code>). Unit tests cover matching, source apps, ordering, deleted spaces
+                and sync; <code>test:links</code> drives the native app with links from other apps and Peek's Open as Tab.
+              </p>
               <dl class="facts">
-                <dt>Today</dt>
+                <dt>Before</dt>
                 <dd>
-                  Settings › Links has one choice for links from Slack, Discord or Mail: Little Bay, or a new tab (<code>openLinksInLittleBay</code>). Incoming
-                  links are handled in <code>lib/appIntegration.ts</code>.
+                  Settings › Links had one choice for links from Slack, Discord or Mail: Little Bay, or a new tab (<code>openLinksInLittleBay</code>).
                 </dd>
-                <dt>Build</dt>
+                <dt>Implemented</dt>
+                <dd>
+                  <code>lib/externalLinkRules.ts</code> matches each incoming link against an ordered list of rules. As in Arc, new rules match a URL that
+                  contains or equals some text; rules saved with a <code>*</code> host or path pattern keep working. A rule can be limited to the sending app's
+                  bundle ID, which the macOS app delegate reads from the Apple Event. It opens the link in a chosen space, the most recent space, Little Bay or a
+                  new window. The first match wins; anything unmatched goes to the default in Settings › Links, which replaces the old toggle. Rules are added,
+                  edited and reordered in <code>settings/panes/LinkRules.tsx</code> and synced as one ordered list (<code>sync/linkRules.ts</code>), with
+                  spaces mapped by sync profile.
+                </dd>
+                <dt>Planned</dt>
                 <dd>
                   An ordered list of rules. Each has an address pattern (a host or path with <code>*</code>, such as <code>github.com/acme/*</code>) and,
                   optionally, the app the link came from. Each rule opens matching links in a chosen space, in Little Bay or in a new window. The first match
