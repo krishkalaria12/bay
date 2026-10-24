@@ -137,13 +137,14 @@ Use these agreements so ownership changes do not block implementation:
   - Shortcuts: add `Ctrl+Q` and `F11`, never bind Super, and keep the Linux column of the shortcuts table complete.
   - High contrast and reduced motion, so Phase 5's usability check passes.
   - **24 Oct 2026:** 204 icons were missing, not 19, counting the icon pickers; all are drawn and `symbols.test.mjs` guards them. `LINUX_SHORTCUTS` adds Ctrl+Q and F11 and a test keeps Super out, but web hosts have no key dispatch yet, so the keys only label until the app menu's key handling lands. High contrast follows `prefers-contrast: more`, with a WCAG AA test; reduced motion needed no code. Edge peeks now hide when the pointer leaves the edge strip out of the window. Details are in Phase 5's progress in the plan.
-- [ ] **A3 · Packaging sources (XL = 5), previously D5.**
+- [x] **A3 · Packaging sources (XL = 5), previously D5.** Code complete 24 Oct 2026 on `feat/linux-a-packaging`; VM checks remain for T7.
   - `scripts/linux/release.sh` stages `/opt/bay` and packs `.tar.xz`, AppImage (zsync), `.deb`, `.rpm` and the AUR `bay-bin` PKGBUILD.
   - The wrapper script sets `CHROME_WRAPPER` and the library path.
   - Desktop integration: `bay.desktop` (MIME types, New Window and New Private Window actions), AppStream metainfo and hicolor icons.
   - The AppArmor userns profile, installed by postinst and offered by AppRun.
   - Native messaging directories, GPG signing hooks, and the `ldd` unresolved-library check.
   - Tested with fixture archives.
+  - **24 Oct 2026:** `scripts/linux/build-app.py` and `release.sh` with templates in `packaging/linux/` (see its README). All formats are implemented; fixture tests run the tarball, AUR (`makepkg`), signing and validation here, and the .deb, .rpm and AppImage tests run where `dpkg-deb`, `rpmbuild` and `appimagetool` are installed. Debian dependencies stay unversioned until T1 measures the glibc floor.
 
 ## Stage 2: Linux testing and runtime
 

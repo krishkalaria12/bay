@@ -2386,6 +2386,19 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               </li>
               <li><code>chrome://sandbox</code> shows the namespace sandbox on every Tier&nbsp;1 distro, including Ubuntu with its AppArmor restriction on.</li>
             </ul>
+            <div class="callout">
+              <p>
+                <strong>Implementation progress, 24 Oct 2026 (A3).</strong> <code>scripts/linux/build-app.py</code> checks an engine archive's checksum and
+                manifest against the Linux pin, adds the web UI and refuses an app with unresolved libraries. <code>scripts/linux/release.sh</code> stages
+                <code>/opt/bay</code> with <code>bay-wrapper</code> (<code>CHROME_WRAPPER</code> and the library path), <code>bay.desktop</code>, AppStream
+                metainfo, hicolor icons, the AppArmor user-namespace profile and the <code>/etc/bay</code> directories, then packs the tarball, .deb, .rpm,
+                AppImage with zsync and the AUR <code>bay-bin</code> PKGBUILD, with SHA-256 sums and optional GPG signatures. The sandbox is setuid only in the
+                .deb, .rpm and AUR package; the AppImage's <code>AppRun</code> prints a profile for its mounts. Fixture tests cover staging, tampering, unsafe
+                archive paths, unresolved libraries, the tarball tree, desktop and metainfo validation, signing and a real <code>makepkg</code> build; the .deb,
+                .rpm and AppImage tests run where their tools are installed, and CI installs <code>rpm</code> for them. No package has been built from a real
+                engine or installed on a VM yet (T7). Details are in <code>packaging/linux/README.md</code>.
+              </p>
+            </div>
           </article>
 
           <!-- Phase 8 -->
