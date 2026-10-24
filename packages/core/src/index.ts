@@ -1,4 +1,5 @@
 export * from "./appUrls.ts";
+export * from "./bangs.ts";
 export * from "./calculator.ts";
 export * from "./currency.ts";
 export * from "./cleanUrl.ts";

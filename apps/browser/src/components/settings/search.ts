@@ -17,6 +17,8 @@ const SETTINGS: SettingEntry[] = [
   { pane: "general", title: "Import from another browser", words: "chrome arc safari firefox bookmarks passwords history" },
 
   { pane: "search", title: "Default search engine", words: "google duckduckgo bing custom" },
+  { pane: "search", title: "Shortcut mode", words: "arc duckduckgo bangs site search tab" },
+  { pane: "search", title: "Other search engines", words: "custom shortcuts bang configuration url" },
   { pane: "search", title: "Show search suggestions", words: "autocomplete" },
   { pane: "search", title: "Calculator", words: "command bar math arithmetic units conversion currency exchange rates" },
 

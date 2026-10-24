@@ -42,6 +42,9 @@ export function startDevHarness() {
     webviews,
     shell,
     omnibox: omniboxDrivers,
+    get bangs(): typeof import("../components/omnibox/bangs") {
+      return require("../components/omnibox/bangs");
+    },
     pages: pagesDrivers,
     pageState: usePages,
     openSettings,

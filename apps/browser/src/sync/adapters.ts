@@ -19,6 +19,7 @@ export const SYNCED_SETTINGS = [
   "warnBeforeQuitting",
   "warnBeforeClosingWindow",
   "searchEngine",
+  "searchShortcutMode",
   "customSearchUrl",
   "customSearchEngines",
   "searchSuggestions",
@@ -66,6 +67,7 @@ export const settingsAdapter: Adapter = {
       if (!record || !("v" in record) || !(SYNCED_SETTINGS as readonly string[]).includes(name)) continue;
       if (name === "awakeSites" && !Array.isArray(record.v)) continue;
       if (name === "density" && record.v !== "comfortable" && record.v !== "compact") continue;
+      if (name === "searchShortcutMode" && record.v !== "arc" && record.v !== "duckduckgo") continue;
       if (name === "calculatorEnabled" && typeof record.v !== "boolean") continue;
       patch[name] = record.v;
     }

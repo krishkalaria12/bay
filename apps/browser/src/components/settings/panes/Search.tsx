@@ -1,4 +1,4 @@
-import { engineHost, POPULAR_SITE_SEARCHES, type EngineInput, type SearchEngine } from "@bay/core";
+import { engineHost, POPULAR_SITE_SEARCHES, validateEngine, type EngineInput, type SearchEngine } from "@bay/core";
 import { Symbol } from "@bay/shell";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -7,7 +7,7 @@ import { useBrowser } from "../../../store/browser";
 import { controllingSearchExtension, defaultSearchEngine, searchEngines } from "../../../store/settings";
 import { setEnabled } from "../../extensions/state";
 import { Favicon, IconButton } from "../../primitives";
-import { Button, Group, Row, SectionHeader, Sheet, TextField, Toggle, useFormColors } from "../controls";
+import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { openSettings } from "../windows";
 
@@ -21,6 +21,7 @@ export function SearchPane() {
   const selectedId = defaultSearchEngine(settings).id;
   const controlling = controllingSearchExtension(settings);
   const locked = !!controlling;
+  const duckduckgo = settings.searchShortcutMode === "duckduckgo";
   const customKeywords = new Set(custom.map((e) => e.keyword.toLowerCase()));
   const common = POPULAR_SITE_SEARCHES.filter(
     (site, index, sites) => site.keyword && !customKeywords.has(site.keyword) && sites.findIndex((s) => s.keyword === site.keyword) === index,
@@ -28,6 +29,28 @@ export function SearchPane() {
 
   return (
     <View>
+      <SectionHeader title="Search shortcuts" />
+      <Group>
+        <Row
+          title="Shortcut mode"
+          description={
+            duckduckgo
+              ? "Type !shortcut followed by your query, like !yt funny cats. Your default search engine stays the same."
+              : "Type a shortcut, press Tab, then enter your query, like yt → Tab → funny cats."
+          }
+        >
+          <PopUp
+            value={settings.searchShortcutMode}
+            options={[
+              { value: "arc", title: "Arc-style" },
+              { value: "duckduckgo", title: "DuckDuckGo-style" },
+            ]}
+            onChange={(v) => useBrowser.getState().updateSettings({ searchShortcutMode: v })}
+            minWidth={160}
+          />
+        </Row>
+      </Group>
+
       <SectionHeader title="Default search engine" description="Used by the command bar and the New Tab page." />
       <Group>
         {controlling && (
@@ -47,7 +70,11 @@ export function SearchPane() {
 
       <SectionHeader
         title="Other search engines"
-        description="Type a shortcut and press Tab in the command bar to search a site directly."
+        description={
+          duckduckgo
+            ? "Custom shortcuts work as bangs: a shortcut named yt becomes !yt. Custom shortcuts override matching built-in bangs."
+            : "Configure shortcuts here for either mode. Type a shortcut and press Tab to search a site directly."
+        }
         action={<Button title="Add…" icon="plus" onPress={() => showSettingsSheet(<EngineSheet />)} />}
       />
       <Group>
@@ -63,7 +90,12 @@ export function SearchPane() {
           <SectionHeader title="Common shortcuts" description="Edit one to save a custom shortcut with your own search URL." />
           <Group>
             {common.map((site) => (
-              <Row key={site.host} icon={<Favicon url={`https://${site.host}`} />} title={site.name} description={`${site.keyword} → Tab → query`}>
+              <Row
+                key={site.host}
+                icon={<Favicon url={`https://${site.host}`} />}
+                title={site.name}
+                description={duckduckgo ? `!${site.keyword} query` : `${site.keyword} → Tab → query`}
+              >
                 <Button title="Edit…" onPress={() => showSettingsSheet(<EngineSheet preset={{ name: site.name, keyword: site.keyword!, url: site.url }} />)} />
               </Row>
             ))}
@@ -101,10 +133,12 @@ export function SearchPane() {
 function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngine; selected: boolean; locked: boolean; editable?: boolean }) {
   const theme = useTheme();
   const colors = useFormColors();
+  const duckduckgo = useBrowser((s) => s.settings.searchShortcutMode === "duckduckgo");
+  const shortcutError = engine.custom ? validateEngine(engine, []) : null;
   const description = engine.extension
     ? `${engine.keyword ? `${engine.keyword} · ` : ""}Added by ${engine.extension.name || "an extension"}`
     : engine.custom
-      ? `${engine.keyword} · ${engine.url}`
+      ? `${duckduckgo ? "!" : ""}${engine.keyword.replace(/^!/, "")} · ${shortcutError ?? engine.url}`
       : engine.keyword;
   return (
     <Row icon={<Favicon url={`https://${engineHost(engine)}`} />} title={engine.name} description={description}>
@@ -153,6 +187,9 @@ function EngineSheet({ engine, preset }: { engine?: SearchEngine; preset?: Engin
       </Text>
       {field("Name", name, setName, "Wikipedia")}
       {field("Shortcut", keyword, setKeyword, "w")}
+      <Text style={{ fontSize: 11.5, marginTop: 5, color: theme.textSecondary }}>
+        Enter the shortcut without !. For example, yt works as !yt in DuckDuckGo-style mode.
+      </Text>
       {field("URL with %s in place of the query", url, setUrl, "https://en.wikipedia.org/w/index.php?search=%s")}
       {error && <Text style={{ fontSize: 12, marginTop: 10, color: "#FF453A" }}>{error}</Text>}
       <View style={{ flexDirection: "row", gap: 8, marginTop: 18 }}>

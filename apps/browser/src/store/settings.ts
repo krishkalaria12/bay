@@ -26,6 +26,7 @@ export type Settings = {
   // What a window shows when Bay opens: a blank new tab (its tabs waiting in the sidebar), or the tab it showed.
   launchTab: "newTab" | "lastTab";
   searchEngine: SearchEngineId;
+  searchShortcutMode: "arc" | "duckduckgo";
   customSearchUrl: string;
   customSearchEngines: CustomSearchEngine[];
   extensionSearchEngines: ExtensionSearchEngine[];
@@ -92,6 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
   restoreSession: true,
   launchTab: "newTab",
   searchEngine: "google",
+  searchShortcutMode: "arc",
   customSearchUrl: "",
   customSearchEngines: [],
   extensionSearchEngines: [],
