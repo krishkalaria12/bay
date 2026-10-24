@@ -588,7 +588,7 @@ try {
         const simulation=globalThis.nnSwipe.sidebar("w1").devSimulate(${JSON.stringify(gesture(-1))}, {ignorePreference:true});
         setTimeout(()=>{
           const until=performance.now()+180; while(performance.now()<until){}
-          nn.store.getState().reorderProfiles(["work","default"]);
+          nn.store.getState().reorderSpaces(["work","default"]);
         },20);
         return simulation.then(native=>new Promise(resolve=>setTimeout(()=>{
           globalThis.expo.modules.BaySwipe.devPagerState("w1").then(state=>resolve({native,state,
@@ -601,7 +601,7 @@ try {
       assert.ok(Math.abs(result.state.position) < 0.003);
       return result;
     } finally {
-      await nn('nn.store.getState().reorderProfiles(["default","work"]); return true;');
+      await nn('nn.store.getState().reorderSpaces(["default","work"]); return true;');
     }
   });
   await test("removing the other profile keeps the remaining sidebar at its origin", async () => {
