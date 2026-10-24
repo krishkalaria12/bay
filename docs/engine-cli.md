@@ -93,8 +93,10 @@ and KWallet protocols, CBC formats and NSS `key4.db` reading. The NSS fixture
 keeps another initialized profile alive to check isolation. It never opens a
 real browser profile or keyring, configures GN, or builds/runs a Linux binary.
 The second command checks the existing shared reader and sync compatibility
-fixtures. Linux import linking still needs D1's BoringSSL sync backend; the
-static data target intentionally does not advertise BaySync on Linux yet.
+fixtures. D1's BoringSSL sync backend is merged. Linux still needs the sync
+advertisement, UI dispatch and password-reader wiring recorded as the K8
+follow-up in `linux-work-split.md`; the data target does not advertise BaySync
+on Linux yet.
 
 Once the Linux engine tree is prepared and GN-generated, build and run the
 native helper tests on Linux:
@@ -112,6 +114,7 @@ autoninja -C out/Release_GN_x64 \
   chrome/browser/bay/webui:window_button_layout_linux_unittests \
   chrome/browser/bay/webui:quit_shortcut_linux_unittests \
   chrome/browser/bay/webui:secret_storage_linux_unittests \
+  chrome/browser/bay/webui:keychain_unittests \
   chrome/browser/bay/webui:document_store_unittests \
   chrome/browser/bay/webui:shell_files_unittests \
   chrome/browser/bay/webui:shell_appearance_unittests \
@@ -120,9 +123,15 @@ autoninja -C out/Release_GN_x64 \
   chrome/browser/bay/webui:autostart_linux_unittests \
   chrome/browser/bay/webui:app_services_linux_unittests \
   chrome/browser/bay/webui:window_placement_unittests
-for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests window_button_layout_linux_unittests quit_shortcut_linux_unittests secret_storage_linux_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests default_browser_unittests autostart_linux_unittests app_services_linux_unittests window_placement_unittests; do
+for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests window_button_layout_linux_unittests quit_shortcut_linux_unittests secret_storage_linux_unittests keychain_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests default_browser_unittests autostart_linux_unittests app_services_linux_unittests window_placement_unittests; do
   out/Release_GN_x64/$test || break
 done
+```
+
+Run the fake-backend keychain suite repeatedly to check task-environment resets and request ordering:
+
+```sh
+out/Release_GN_x64/keychain_unittests --gtest_shuffle --gtest_repeat=3
 ```
 
 With GTK and D-Bus enabled, also run the patched portal-layout tests during stage 2:

@@ -508,6 +508,24 @@ TEST_F(NativeHostTest,
   ExpectError(Invoke("BaySystem", "isDefaultBrowser", "[1]"), "invalid_args");
 }
 
+void ExpectKeychainMethods(const base::DictValue& info) {
+  const auto* modules = info.FindList("modules");
+  const auto* methods = info.FindList("optionalMethods");
+  ASSERT_TRUE(modules);
+  ASSERT_TRUE(methods);
+  EXPECT_TRUE(modules->contains("BayKeychain"));
+  for (const char* method :
+       {"BayKeychain.get", "BayKeychain.set", "BayKeychain.delete"})
+    EXPECT_TRUE(methods->contains(method)) << method;
+}
+
+TEST_F(NativeHostTest, CoordinatorAdvertisesAndDispatchesKeychain) {
+  ExpectKeychainMethods(HostInfo());
+  for (const char* method : {"get", "set", "delete"})
+    ExpectError(Invoke("BayKeychain", method, "[null]"), "invalid_args");
+  ExpectError(Invoke("BayKeychain", "unknown", "[]"), "unknown_method");
+}
+
 void ExpectDesktopSystemMethods(const base::DictValue& info) {
   const auto* methods = info.FindList("optionalMethods");
   ASSERT_TRUE(methods);
@@ -1046,6 +1064,12 @@ TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesFileMethods) {
              base::WriteJson(base::ListValue().Append(Documents().value()))
                  .value()),
       R"({"value":true})");
+}
+
+TEST_F(WindowClipboardHostTest, WindowAdvertisesAndDispatchesKeychain) {
+  ExpectKeychainMethods(HostInfo());
+  for (const char* method : {"get", "set", "delete"})
+    ExpectError(Invoke("BayKeychain", method, "[null]"), "invalid_args");
 }
 
 TEST_F(WindowClipboardHostTest,
