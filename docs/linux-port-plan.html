@@ -2248,14 +2248,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Implementation progress, 24 Oct 2026 (A2).</strong> Icons: every SF Symbol name the app uses has an inline path in
                 <code>symbols.web.tsx</code>. 204 were missing, not 19, counting the space, profile and pinned-tab pickers; <code>symbols.test.mjs</code> fails
                 on any name without one. Shortcuts: <code>LINUX_SHORTCUTS</code> is the Windows table plus Ctrl+Q (<code>quit</code>) and F11
-                (<code>toggleFullScreen</code>), a test keeps Super out of every stroke, and labels use the host's own table. The table only labels: web hosts
-                have no key dispatch yet, and <code>quit</code> and <code>toggleFullScreen</code> are not <code>BrowserCommand</code>s, so the keys do nothing
-                until the app menu's key handling lands. High contrast: <code>prefers-contrast: more</code> gives a theme with opaque text, visible edges and a
-                solid window in its space's colour, and a test holds its text to WCAG AA on every preset and on strong custom themes. Reduced motion needed no
-                code: Reanimated and <code>AccessibilityInfo</code> read <code>prefers-reduced-motion</code> on web, though Reanimated reads it once at launch.
-                Edge peek: nothing reads a global pointer, and leaving the edge strip now hides a peek that crossing the strip out of the window used to leave
-                out. Not yet run on Linux: whether Chromium reports the portal's <code>contrast</code> as <code>prefers-contrast</code>, and the edge-peek and
-                shortcut checks (T2, T4, T5).
+                (<code>toggleFullScreen</code>), a test keeps Super out of every stroke, and labels use the host's own table. The table only labels; the keys
+                run in the engine. The WebUI window loads Chrome's own accelerator table, which already maps F11 to full screen, and
+                <code>BayWebUIBrowserWindow</code> quits on Ctrl+Q ahead of the page through Chrome's user exit, so Bay's close preflight still runs
+                (<code>quit_shortcut_linux.h</code>, with unit tests). High contrast: <code>prefers-contrast: more</code> gives a theme with opaque text,
+                visible edges and a solid window in its space's colour, and a test holds its text to WCAG AA on every preset and on strong custom themes.
+                Reduced motion needed no code: Reanimated and <code>AccessibilityInfo</code> read <code>prefers-reduced-motion</code> on web, though Reanimated
+                reads it once at launch. Edge peek: nothing reads a global pointer, and leaving the edge strip now hides a peek that crossing the strip out of
+                the window used to leave out. Not yet run on Linux: whether Chromium reports the portal's <code>contrast</code> as
+                <code>prefers-contrast</code>, and the edge-peek and shortcut checks (T2, T4, T5).
               </p>
             </div>
           </article>
