@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { ThemeScope, useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
+import { everySlowly } from "../lib/slowTimers";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
@@ -623,8 +624,7 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
   useEffect(() => {
     const check = () => setCount(cleanUpCandidates(useBrowser.getState(), windowId).length);
     check();
-    const t = setInterval(check, 60_000);
-    return () => clearInterval(t);
+    return everySlowly({ every: 60_000, run: check });
   }, [windowId]);
   if (hidden || daily || count < CLEAN_UP_UPSELL_MIN) return null;
   const dismiss = () => {

@@ -1,4 +1,5 @@
 import { onAppEvent } from "@bay/shell";
+import { everySlowly } from "../../lib/slowTimers";
 import { webviews } from "../../lib/webviews";
 import { startLive } from "../../live";
 import { useBrowser } from "../../store/browser";
@@ -33,5 +34,5 @@ export function startSidebarEffects() {
     if (e.type === "switcherKey" && e.key !== "escape") moveSwitcher(e.key === "next" ? 1 : -1);
   });
 
-  setInterval(() => useBrowser.getState().cleanUpInactiveTabs(), AUTO_CLEAN_EVERY_MS);
+  everySlowly({ every: AUTO_CLEAN_EVERY_MS, run: () => useBrowser.getState().cleanUpInactiveTabs() });
 }

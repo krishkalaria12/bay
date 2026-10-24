@@ -11,6 +11,7 @@ import {
 } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
+import { everySlowly } from "../lib/slowTimers";
 import type { CalendarEvent } from "./meetings";
 import { live, updateCalendarSettings, useLive } from "./store";
 import { CALENDAR_HORIZON_MS } from "./constants";
@@ -119,7 +120,13 @@ export function startCalendar() {
   started = true;
   void refreshCalendar();
   onCalendarChanged(() => void refreshCalendar());
-  setInterval(() => void refreshCalendar(), 5 * 60_000);
+  // Only while connected: connecting refreshes on its own.
+  everySlowly({
+    every: 5 * 60_000,
+    run: () => void refreshCalendar(),
+    needed: calendarConnected,
+    watch: (changed) => useCalendar.subscribe((s, prev) => s.access !== prev.access && changed()),
+  });
   useLive.subscribe((s, prev) => {
     if (s.calendar.hiddenCalendarIds !== prev.calendar.hiddenCalendarIds) void refreshCalendar();
   });

@@ -5,7 +5,8 @@ import { activeTabId } from "../store/model";
 import { groupOf } from "../store/organize";
 import { connectCalendar, useCalendar } from "./calendar";
 import { eventForCall, isCalendarUrl, meetingOf, relatedLinks, type CalendarEvent } from "./meetings";
-import { live, setMeetingGroup, updateCalendarSettings } from "./store";
+import { everySlowly } from "../lib/slowTimers";
+import { live, setMeetingGroup, updateCalendarSettings, useLive } from "./store";
 import { MEETING_CLEANUP_IDLE_MS, MEETING_FALLBACK_TITLE } from "./constants";
 
 const store = () => useBrowser.getState();
@@ -82,7 +83,12 @@ export function startMeetingGroups() {
     }
   });
 
-  setInterval(() => tick(store(), Date.now()), 20_000);
+  everySlowly({
+    every: 30_000,
+    run: () => tick(store(), Date.now()),
+    needed: () => Object.keys(live().meetingGroups).length > 0,
+    watch: (changed) => useLive.subscribe((s, prev) => s.meetingGroups !== prev.meetingGroups && changed()),
+  });
 }
 
 async function offerAlerts(windowId: string) {

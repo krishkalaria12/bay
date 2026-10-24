@@ -1,6 +1,7 @@
 import { onWindowEvent } from "@bay/shell";
 import { useBrowser } from "../store/browser";
 import { activeTabId, pinnedPage, viewTabIds } from "../store/model";
+import { everySlowly } from "../lib/slowTimers";
 import { SOURCES } from "./sources";
 import { applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./store";
 import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
@@ -167,9 +168,14 @@ export function startLiveEngine() {
     return !!f && (!st?.lastFetch || Date.now() - st.lastFetch >= maxAge);
   };
   setTimeout(() => live().folderOrder.forEach((id) => void refreshFolder(id)), 2500);
-  setInterval(() => {
-    for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
-  }, 30_000);
+  everySlowly({
+    every: 30_000,
+    run: () => {
+      for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
+    },
+    needed: () => live().folderOrder.length > 0,
+    watch: (changed) => useLive.subscribe((s, prev) => s.folderOrder !== prev.folderOrder && changed()),
+  });
   onWindowEvent((e) => {
     if (e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);
   });
