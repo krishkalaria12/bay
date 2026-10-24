@@ -28,8 +28,11 @@ const server = createServer((req, res) => {
     Object.defineProperty(v, "duration", { get: end });
     Object.defineProperty(v, "seekable", { get: () => ({ length: 1, start: () => 0, end }) });
     Object.defineProperty(v, "currentTime", { get: () => end() - behind, set: (t) => (behind = Math.max(0, end() - t)) });
+    // Chrome keeps a stream's rate at 1: the page's player keeps the one chosen, as a site's would.
+    let rate = 1;
+    Object.defineProperty(v, "playbackRate", { get: () => rate, set: (r) => { rate = r; v.dispatchEvent(new Event("ratechange")); } });
     window.seekBack = (seconds) => { behind = seconds; v.dispatchEvent(new Event("seeked")); return true; };
-    window.behind = () => behind;
+    window.secondsBehind = () => behind;
     for (const [label, language, text] of [["English", "en", "Hello from Bay"], ["French", "fr", "Bonjour de Bay"]]) {
       const track = v.addTextTrack("subtitles", label, language);
       track.mode = "disabled";
@@ -117,7 +120,7 @@ try {
   await action("showControls");
   const behind = await pip();
   await action("live");
-  await until("the page is back at its end", async () => (await page.eval("behind()")) < 30);
+  await until("the page is back at its end", async () => (await page.eval("secondsBehind()")) < 30);
   await until("the window reads Live", async () => (await pip())?.live === "Live");
 
   // The sidebar player, for the tab in the background.
@@ -128,7 +131,7 @@ try {
   assert.equal(await shot("sidebar-behind"), true);
   // As the sidebar's "5m behind" does.
   await app.eval(`nnMedia.seekToLive("live", nn.media.getState().sessions.live); return true;`);
-  await until("the sidebar's jump puts the page at its end", async () => (await page.eval("behind()")) < 30);
+  await until("the sidebar's jump puts the page at its end", async () => (await page.eval("secondsBehind()")) < 30);
   await until("the session reads live again", async () => ((await media())?.liveBehind ?? 99) < 30);
   await sleep(600);
   assert.equal(await shot("sidebar-live"), true);

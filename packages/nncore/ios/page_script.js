@@ -99,12 +99,30 @@
       );
     return absolute([...art].sort((a, b) => size(b) - size(a))[0].src);
   };
+  // YouTube's player, which knows more than its video element: subtitles, and where a live stream's end is.
+  const youTubePlayer = (v) => {
+    const player = v.closest(".html5-video-player");
+    return player && typeof player.getOption === "function" && typeof player.setOption === "function" ? player : null;
+  };
+  // YouTube pads a live video's duration an hour past the live edge, so its seekable end never moves: the edge is
+  // its player's, in the player's own time.
+  const youTubeLive = (m) => {
+    const player = youTubePlayer(m);
+    try {
+      if (!player || !player.getVideoData?.()?.isLive) return null;
+      const { seekableEnd: end, current } = player.getProgressState();
+      return isFinite(end) && isFinite(current) ? { player, end, behind: end - current } : null;
+    } catch {
+      return null;
+    }
+  };
+
   // A live stream: an endless duration, or a seekable range whose end keeps moving with the clock (a live stream
-  // that can be rewound, as YouTube's and Twitch's are). How far behind is measured from that end.
+  // that can be rewound, as Twitch's is). How far behind is measured from that end.
   const liveSeen = new WeakMap();
   const seekableEnd = (m) => (m.seekable && m.seekable.length ? m.seekable.end(m.seekable.length - 1) : NaN);
   const isLive = (m) => {
-    if (m.duration === Infinity || liveSeen.get(m) === true) return true;
+    if (m.duration === Infinity || liveSeen.get(m) === true || youTubeLive(m)) return true;
     const end = seekableEnd(m);
     if (!isFinite(end)) return false;
     const seen = liveSeen.get(m);
@@ -114,14 +132,22 @@
     else if (elapsed >= 2 && end - seen.end >= elapsed / 2) liveSeen.set(m, true);
     return liveSeen.get(m) === true;
   };
+  // The live edge, unless the seekable end is a placeholder: Twitch's reaches 2^30 s, decades ahead, where no stream
+  // that can be rewound goes.
+  const liveEdge = (m) => {
+    const end = seekableEnd(m);
+    return end - m.currentTime < 86400 ? end : NaN;
+  };
   const liveBehind = (m) => {
-    const behind = seekableEnd(m) - m.currentTime;
+    const behind = youTubeLive(m)?.behind ?? liveEdge(m) - m.currentTime;
     return isFinite(behind) ? Math.max(0, Math.round(behind)) : 0;
   };
   const goLive = (m) => {
-    const end = seekableEnd(m);
-    if (!isFinite(end)) return;
-    m.currentTime = Math.max(m.seekable.start(m.seekable.length - 1), end - 2);
+    const youTube = youTubeLive(m);
+    const end = liveEdge(m);
+    if (youTube) youTube.player.seekTo(youTube.end, true);
+    else if (isFinite(end)) m.currentTime = Math.max(m.seekable.start(m.seekable.length - 1), end - 2);
+    else return;
     if (m.paused) m.play().catch(() => {});
   };
   let lastNowPlaying = "";
@@ -336,10 +362,6 @@
   let pipCues = null;
   let pipTimer = 0;
   let lastPip = "";
-  const youTubePlayer = (v) => {
-    const player = v.closest(".html5-video-player");
-    return player && typeof player.getOption === "function" && typeof player.setOption === "function" ? player : null;
-  };
   const youTubeTracks = (player) => {
     const listed = player.getOption("captions", "tracklist");
     if (isArray(listed) && listed.length) return listed.map((t) => ({ label: t.displayName || t.languageName || t.languageCode, track: t }));
