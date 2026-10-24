@@ -6,6 +6,7 @@ import { useTheme } from "../../lib/theme";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { CalculationAnswer } from "./CalculationAnswer";
 import { calculationRowHeight } from "./constants";
+import type { ScopeColors } from "./scopeColors";
 
 export function SuggestionIcon({ suggestion: s, color }: { suggestion: Suggestion; color?: string }) {
   const theme = useTheme();
@@ -56,18 +57,28 @@ export function SuggestionList({
   trailing,
   dropdown,
   actions,
+  selectionColors,
 }: {
   items: Suggestion[];
   selectedIndex: number;
   trailing: string | null;
   dropdown: boolean;
   actions: RowActions;
+  selectionColors?: ScopeColors | null;
 }) {
   if (!items.length) return null;
   return (
     <View style={{ paddingHorizontal: dropdown ? 6 : 9, paddingBottom: dropdown ? 6 : 2 }}>
       {items.map((s, i) => (
-        <SuggestionRow key={i} index={i} suggestion={s} selected={i === selectedIndex} trailing={i === 0 ? trailing : null} actions={actions} />
+        <SuggestionRow
+          key={i}
+          index={i}
+          suggestion={s}
+          selected={i === selectedIndex}
+          trailing={i === 0 ? trailing : null}
+          actions={actions}
+          colors={i === selectedIndex ? selectionColors : null}
+        />
       ))}
     </View>
   );
@@ -86,12 +97,14 @@ const SuggestionRow = memo(
     selected,
     trailing,
     actions,
+    colors,
   }: {
     suggestion: Suggestion;
     index: number;
     selected: boolean;
     trailing: string | null;
     actions: RowActions;
+    colors?: ScopeColors | null;
   }) {
     const theme = useTheme();
     const { hovered, hoverProps } = useHover();
@@ -122,27 +135,35 @@ const SuggestionRow = memo(
               alignItems: "center",
               paddingHorizontal: 13,
               gap: 11,
-              backgroundColor: selected ? theme.rowSelected : hovered ? theme.rowHover : undefined,
+              backgroundColor: colors?.background ?? (selected ? theme.rowSelected : hovered ? theme.rowHover : undefined),
             }}
           >
             {s.kind === "calc" ? (
               <CalculationAnswer suggestion={s} selected={selected} />
             ) : (
               <>
-                <SuggestionIcon suggestion={s} />
-                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 14, color: theme.textPrimary }}>
+                <SuggestionIcon suggestion={s} color={colors?.text} />
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 14, color: colors?.text ?? theme.textPrimary }}>
                   {title}
                   {accessory ? (
-                    <Text style={{ color: theme.textSecondary }}>
+                    <Text style={{ color: colors?.text ?? theme.textSecondary }}>
                       {" — "}
                       {accessory}
                     </Text>
                   ) : null}
                 </Text>
                 <View style={{ flex: 1 }} />
-                {hint && !removable ? <Text style={{ fontSize: 12, color: theme.textTertiary }}>{hint}</Text> : null}
+                {hint && !removable ? <Text style={{ fontSize: 12, color: colors?.text ?? theme.textTertiary }}>{hint}</Text> : null}
                 {removable ? (
-                  <IconButton icon="xmark" size={10} box={22} radius={6} color={theme.textSecondary} tooltip="Remove from History" onPress={onRemove} />
+                  <IconButton
+                    icon="xmark"
+                    size={10}
+                    box={22}
+                    radius={6}
+                    color={colors?.text ?? theme.textSecondary}
+                    tooltip="Remove from History"
+                    onPress={onRemove}
+                  />
                 ) : null}
               </>
             )}
@@ -152,5 +173,11 @@ const SuggestionRow = memo(
     );
   },
   (a, b) =>
-    a.index === b.index && a.selected === b.selected && a.trailing === b.trailing && a.actions === b.actions && sameSuggestion(a.suggestion, b.suggestion),
+    a.index === b.index &&
+    a.selected === b.selected &&
+    a.trailing === b.trailing &&
+    a.actions === b.actions &&
+    a.colors?.background === b.colors?.background &&
+    a.colors?.text === b.colors?.text &&
+    sameSuggestion(a.suggestion, b.suggestion),
 );

@@ -10,6 +10,7 @@ import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
 import { createBangSubmitter, loadBangs, mayBeBang } from "./omnibox/bangs";
+import { scopeColorFor, scopeColorsFor } from "./omnibox/scopeColors";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
 import { dispositionFor, openFromBar, openInBackground, restoreFromBar, switchFromBar, type Disposition } from "./omnibox/open";
 import { clipboardPasteAction, pasteMenuItem, pasteTarget, readClipboard } from "./omnibox/paste";
@@ -100,6 +101,8 @@ export function Omnibox({
   const [suppressCompletion, setSuppressCompletion] = useState(true);
   const [selected, setSelected] = useState(palette && !newTab && !!currentUrl && initialText === currentUrl ? -1 : 0);
   const [scope, setScope] = useState<SearchScope | null>(null);
+  const scopeColor = useBrowser((s) => (!bangsEnabled ? scopeColorFor(scope, s, spaceId) : null));
+  const scopeColors = scopeColorsFor(scopeColor);
   const [arrowed, setArrowed] = useState<{ typed: string; index: number; text: string } | null>(null);
   const scopeFrom = useRef("");
   const [pendingSelection, setPendingSelection] = useState<Selection | null>(initial ? { start: 0, end: initial.length } : null);
@@ -415,6 +418,7 @@ export function Omnibox({
       suggested: completion,
       selected: selectedIndex,
       scope,
+      scopeColor,
       scopeFrom: scopeFrom.current,
       tabScope,
       items,
@@ -479,6 +483,7 @@ export function Omnibox({
       trailing={tabScope ? `Search ${tabScope.name}  ⇥` : null}
       dropdown={dropdown}
       actions={rowActions}
+      selectionColors={scopeColors}
     />
   );
 
@@ -491,7 +496,7 @@ export function Omnibox({
           field={
             <ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}>
               <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
-                {scope ? <ScopeChip scope={scope} large /> : null}
+                {scope ? <ScopeChip scope={scope} large colors={scopeColors} /> : null}
                 {field}
               </View>
             </ContextMenuArea>
@@ -508,6 +513,7 @@ export function Omnibox({
           onHover={setSelected}
           onChoose={choose}
           onSubmit={() => choose(current, "current", true)}
+          selectionColors={scopeColors}
         />
       </View>
     );
@@ -519,7 +525,7 @@ export function Omnibox({
         <ContextMenuArea captureDescendants onContextMenu={() => void onContextMenu()}>
           <View style={{ flexDirection: "row", alignItems: "center", height: 44, paddingLeft: 13, paddingRight: 9, gap: 9 }}>
             <View style={{ width: 18, alignItems: "center" }}>{leadingIcon}</View>
-            {scope && <ScopeChip scope={scope} large={false} />}
+            {scope && <ScopeChip scope={scope} large={false} colors={scopeColors} />}
             {field}
             {currentUrl ? (
               <IconButton

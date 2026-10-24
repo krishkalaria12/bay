@@ -90,6 +90,12 @@ try {
     await key("Tab");
     await until("YouTube scope", async () => (await bar()).scope?.name === "YouTube");
     await type("funny cats");
+    assert.equal((await bar()).scopeColor, "#D90000");
+    for (const appearance of ["light", "dark"]) {
+      await run(`nn.store.getState().updateSettings({appearance:${JSON.stringify(appearance)}});return true;`);
+      await sleep(200);
+      assert.equal(await run(`return nn.shell.devSnapshotWindow("w1",${JSON.stringify(join(data, `scope-youtube-${appearance}.png`))});`), true);
+    }
     const before = await state();
     await key("Enter");
     await opened("https://www.youtube.com/results?search_query=funny%20cats", before);
@@ -219,6 +225,7 @@ try {
     await key("Tab");
     await until("site scope", async () => (await bar()).scope?.name === "YouTube");
     await type("!gh scoped");
+    assert.equal((await bar()).scopeColor, null);
     assert.equal((await bar()).items[0].url, "https://www.youtube.com/results?search_query=!gh%20scoped");
   });
   await check("Search settings render the mode selector and configuration", async () => {

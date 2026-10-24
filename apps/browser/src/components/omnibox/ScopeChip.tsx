@@ -2,8 +2,9 @@ import type { SearchScope } from "@bay/core";
 import { Text, View } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Favicon } from "../primitives";
+import type { ScopeColors } from "./scopeColors";
 
-export function ScopeChip({ scope, large }: { scope: SearchScope; large: boolean }) {
+export function ScopeChip({ scope, large, colors }: { scope: SearchScope; large: boolean; colors?: ScopeColors | null }) {
   const theme = useTheme();
   return (
     <View
@@ -15,11 +16,11 @@ export function ScopeChip({ scope, large }: { scope: SearchScope; large: boolean
         gap: 6,
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: theme.rowSelected,
+        backgroundColor: colors?.background ?? theme.rowSelected,
       }}
     >
       <Favicon url={`https://${scope.host}`} size={14} />
-      <Text numberOfLines={1} style={{ fontSize: large ? 15 : 14, fontWeight: "500", color: theme.textPrimary, maxWidth: 220 }}>
+      <Text numberOfLines={1} style={{ fontSize: large ? 15 : 14, fontWeight: "500", color: colors?.text ?? theme.textPrimary, maxWidth: 220 }}>
         {scope.name}
       </Text>
     </View>
