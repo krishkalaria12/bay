@@ -152,7 +152,15 @@ function BrowserWindow() {
       <SidebarOverlays windowWidth={width} />
       {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
       <DownloadsPanel windowWidth={width} windowHeight={size.height} />
-      <CommandPanel windowWidth={width} windowHeight={size.height} />
+      <CommandPanel
+        windowWidth={width}
+        windowHeight={size.height}
+        navigationInsets={{
+          left: showSidebar && !right && !fullscreen ? sidebarWidth : 0,
+          right: showSidebar && right && !fullscreen ? sidebarWidth : 0,
+          top: showStrip && !fullscreen ? TOP_STRIP_HEIGHT : 0,
+        }}
+      />
       <ThemeEditorHost />
       <OnboardingOverlay />
     </View>
