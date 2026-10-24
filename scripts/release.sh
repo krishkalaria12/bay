@@ -132,9 +132,9 @@ mkdir -p "$dist"
 } > "$dist/provenance.txt"
 
 echo "==> Content blocker"
-# The pinned uBlock Origin Lite, which embed.sh copies into the app.
-"$nncore/scripts/ubol.sh"
-[ -f "$nncore/vendor/ubol/ext/manifest.json" ] || die "uBlock Origin Lite isn't installed ($nncore/scripts/ubol.sh)"
+# The pinned uBlock Origin, which embed.sh copies into the app.
+"$nncore/scripts/ubo.sh"
+[ -f "$nncore/vendor/ubo/ext/manifest.json" ] || die "uBlock Origin isn't installed ($nncore/scripts/ubo.sh)"
 
 echo "==> Archive"
 # The engine is staged into this build's own folder, so a development build restaging its copy can't change a
@@ -213,7 +213,7 @@ done
 [ -d "$app/Contents/Frameworks/Sparkle.framework" ] || die "no Sparkle.framework"
 [ -d "$app/Contents/PlugIns/BayDockTile.plugin" ] || die "no dock tile plug-in"
 [ -f "$app/Contents/embedded.provisionprofile" ] || die "no Developer ID provisioning profile (keychain groups need it)"
-[ -f "$app/Contents/Resources/Extensions/ublock-lite/manifest.json" ] || die "no uBlock Origin Lite in the app"
+[ -f "$app/Contents/Resources/Extensions/ublock/manifest.json" ] || die "no uBlock Origin in the app"
 designated="$(codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => //p')"
 [[ "$designated" == *'identifier "in.krishkalaria.bay"'* && "$designated" == *"subject.OU] = GP328GJT66"* ]] \
   || die "designated requirement: $designated"
@@ -237,16 +237,14 @@ done < <(find "$app" \( -name "*.app" -o -name "*.framework" -o -name "*.dylib" 
 
 echo "==> Launch check"
 # Running the app must leave its bundle as signed: anything written into it breaks the signature (Chrome indexing
-# uBlock's rulesets next to the extension did, in 0.1.0). Launch it hidden with a throwaway data dir, wait for the
-# rulesets to be indexed, quit, verify again.
+# uBlock's rulesets next to the extension did, in 0.1.0). Launch it hidden with a throwaway data dir, wait for uBlock
+# Origin to be ready and block an ad request, quit, verify again.
 check_data="$(mktemp -d "${TMPDIR:-/tmp}/nn-release.XXXXXX")"
 before="$(pgrep -f "^$app/Contents/MacOS/Bay" | sort || true)"
-open -g -n --env BAY_BACKGROUND=1 --env BAY_DATA_DIR="$check_data" "$app"
-indexes="$check_data/Built-in Extensions/ublock-lite/_metadata/generated_indexed_rulesets"
-for _ in $(seq 1 90); do
-  [ "$(ls "$indexes" 2>/dev/null | wc -l)" -ge 6 ] && break
-  sleep 1
-done
+check_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+open -g -n --env BAY_BACKGROUND=1 --env BAY_DATA_DIR="$check_data" --env BAY_REMOTE_DEBUGGING_PORT="$check_port" "$app"
+ubo_ok=0
+node "$root/scripts/lib/ubo-ready.mjs" "$check_port" 90 && ubo_ok=1
 sleep 5
 # The instance this launched: the one started with our data dir (a copy of the same build the owner is running
 # must never be the one quit or killed here).
@@ -260,7 +258,7 @@ kill -TERM "$pid"
 for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 kill -KILL "$pid" 2>/dev/null || true
 codesign --verify --deep --strict "$app" || die "running the app changed its bundle"
-[ "$(ls "$indexes" 2>/dev/null | wc -l)" -ge 6 ] || die "uBlock's rulesets weren't indexed in the data dir (90 s)"
+[ "$ubo_ok" = 1 ] || die "uBlock Origin wasn't ready and blocking in the exported app (90 s)"
 rm -rf "$check_data"
 
 notarize_file() {

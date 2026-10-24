@@ -105,7 +105,7 @@ typedef void (^NNCoreResult)(NSDictionary<NSString *, id> *result);
 
 @end
 
-// The built-in content blocker (uBlock Origin Lite). A change that fails (error) changed nothing.
+// The built-in content blocker (uBlock Origin). A change that fails (error) changed nothing.
 @interface NNCoreContentBlocker : NSObject
 + (void)state:(void (^)(NSDictionary<NSString *, id> *state))completion NS_SWIFT_NAME(state(_:));
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *_Nullable error))completion NS_SWIFT_NAME(setEnabled(_:completion:));

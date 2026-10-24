@@ -49,7 +49,7 @@ Pods/
 .swiftpm/
 .build/
 
-# The content blocker's filter lists (packages/nncore/scripts/ubol.sh)
+# The content blocker, uBlock Origin (packages/nncore/scripts/ubo.sh)
 packages/nncore/vendor/
 
 # Generated design / video frames

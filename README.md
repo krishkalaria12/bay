@@ -46,7 +46,7 @@ Bay's own: the window, sidebar, command bar, menus and animations.
 
 **Bay's own**
 
-- **Ad blocking built in**, with uBlock Origin Lite.
+- **Ad blocking built in**, with uBlock Origin.
 - **Chrome extensions** from the Chrome Web Store, with their toolbar buttons and side panels.
 - **Import** from Arc (spaces, pinned tabs, folders, favorites), Chrome, Safari, Firefox, Dia, Brave,
   Opera and Helium: bookmarks, history and passwords too.
@@ -264,8 +264,8 @@ Bay is open source under the [Apache License 2.0](LICENSE). You may use, modify 
 including commercially, as long as you keep the copyright and license notices, state the files you
 changed, and pass on the [NOTICE](NOTICE) file. Contributions are accepted under the same license.
 
-Bay builds on Chromium, the Chromium Embedded Framework and ungoogled-chromium, and ships uBlock Origin
-Lite, Sparkle and React Native, each under its own license. [NOTICE](NOTICE) lists them, and
+Bay builds on Chromium, the Chromium Embedded Framework and ungoogled-chromium, and ships uBlock Origin,
+Sparkle and React Native, each under its own license. [NOTICE](NOTICE) lists them, and
 `chrome://credits` in the app has Chromium's full list.
 
 Bay is an independent browser. It isn't affiliated with or endorsed by The Browser Company, makers of

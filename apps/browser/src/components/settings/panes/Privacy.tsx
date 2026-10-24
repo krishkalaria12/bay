@@ -168,7 +168,7 @@ function FilterListsSheet() {
       </ScrollView>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16 }}>
         <Text style={{ flex: 1, fontSize: 11.5, color: theme.textTertiary }}>
-          {blocker?.version ? `Lists from uBlock Origin Lite ${blocker.version}, included with Bay. They update with the app.` : ""}
+          {blocker?.version ? `Blocking by uBlock Origin ${blocker.version}, included with Bay. Its lists update on their own.` : ""}
         </Text>
         <Button title="Done" kind="primary" onPress={closeSettingsSheet} />
       </View>
