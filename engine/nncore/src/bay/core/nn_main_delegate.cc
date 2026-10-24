@@ -18,6 +18,7 @@
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/cstring_view.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -113,7 +114,7 @@ constexpr const char* kSwitchesThatOpenTheProfile[] = {
     "webtransport-developer-mode",
 };
 
-constexpr const char* kEnvironmentThatOpensTheProfile[] = {
+constexpr base::cstring_view kEnvironmentThatOpensTheProfile[] = {
     "SSLKEYLOGFILE",
 };
 
@@ -143,7 +144,7 @@ void KeepRealProfileClosed(base::CommandLine* command_line,
   if (!mock_keychain) {
     RemoveSwitchesThatOpenTheProfile(command_line);
     std::unique_ptr<base::Environment> env = base::Environment::Create();
-    for (const char* name : kEnvironmentThatOpensTheProfile) {
+    for (base::cstring_view name : kEnvironmentThatOpensTheProfile) {
       env->UnSetVar(name);
     }
   }
