@@ -225,8 +225,11 @@ export function Omnibox({
   const move = (delta: 1 | -1) => {
     const next = Math.max(0, Math.min(selectedIndex + delta, items.length - 1));
     setSelected(next);
-    // Arrowing through results fills the field with the row, as Chrome's omnibox; the top row is what was typed.
-    const text = !idle && next > 0 ? fillText(items[next], dropdown) : null;
+    // Arrowing through results fills the field with the row, as Chrome's omnibox. The top row is usually what was typed
+    // or its inline completion, so it keeps the field as typed unless it's a page the field doesn't spell out.
+    const top = items[0];
+    const topFills = !shownCompletion && top?.kind === "page" && top.url !== resolveInput(typed, engine.url);
+    const text = !idle && (next > 0 || topFills) ? fillText(items[next], dropdown) : null;
     setArrowed(text === null ? null : { typed, index: next, text });
     if (text !== null) setPendingSelection({ start: text.length, end: text.length });
     else if (preview !== null) setPendingSelection({ start: typed.length, end: typedValue.length });
