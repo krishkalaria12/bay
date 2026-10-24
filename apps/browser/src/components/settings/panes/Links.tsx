@@ -1,14 +1,17 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { APP_NAME } from "../../../lib/constants";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
 import { LinkRules } from "./LinkRules";
 
 export function LinksPane() {
   const theme = useTheme();
-  const small = useBrowser((s) => s.settings.openLinksInLittleBay);
+  const small = useBrowserRead((s) => s.settings.openLinksInLittleBay);
 
   return (
     <View>
@@ -47,11 +50,10 @@ export function LinksPane() {
 function OpenInChoice({ small, title, selected }: { small: boolean; title: string; selected: boolean }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const update = useBrowser((s) => s.updateSettings);
   const bar = theme.dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)";
   const page = theme.dark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
   return (
-    <Pressable onPress={() => update({ openLinksInLittleBay: small })} style={{ flex: 1, alignItems: "center", gap: 8 }}>
+    <Pressable onPress={() => reportBrowserCommand(updateSettings({ openLinksInLittleBay: small }))} style={{ flex: 1, alignItems: "center", gap: 8 }}>
       <View
         style={{
           width: "100%",

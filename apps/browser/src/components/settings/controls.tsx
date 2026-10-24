@@ -1,9 +1,12 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { showMenu, Surface, Symbol, type MenuItem } from "@bay/shell";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSettings } from "../../runtime/settingsActions";
+import { useBrowserRead } from "../../store/read";
 import { hex, useTheme, type Theme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
 import type { Settings } from "../../store/settings";
 import { useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
@@ -468,11 +471,10 @@ export function Row({
 
 // A row that turns one of the settings on and off.
 export function SettingToggle({ setting, title, description }: { setting: keyof Settings; title: string; description?: string }) {
-  const value = useBrowser((s) => !!s.settings[setting]);
-  const update = useBrowser((s) => s.updateSettings);
+  const value = useBrowserRead((s) => !!s.settings[setting]);
   return (
     <Row title={title} description={description}>
-      <Toggle value={value} onChange={(v) => update({ [setting]: v })} />
+      <Toggle value={value} onChange={(v) => reportBrowserCommand(updateSettings({ [setting]: v }))} />
     </Row>
   );
 }

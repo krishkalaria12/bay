@@ -1,29 +1,34 @@
 import type { BrowserCommand, MenuEntry } from "@bay/shell";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { cleanUpTabs, returnToPinnedUrl } from "../../runtime/organizeActions";
+import { closeTabs, updateTabDetails } from "../../runtime/tabActions";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import { browserRead } from "../../store/read";
 import { activeTabId, pinnedPage, plural } from "../../store/model";
 import { awayFromPin, groupOf, selectedTabIds } from "../../store/organize";
 import { newGroupWithSelection, openIconPicker, startRename } from "./actions";
 import { closeAllTabs, tabsAround } from "./menus";
 import { setSidebarUi } from "./state";
 import { switcherStep } from "./switcher";
+import { openNewTabPanel } from "../../lib/newTab";
 
 export function runSidebarCommand(command: BrowserCommand, arg: string | null, windowId: string): boolean {
-  const s = useBrowser.getState();
+  const s = browserRead.getState();
   const tabId = activeTabId(s, windowId);
   switch (command) {
     case "newTabInGroup": {
       const group = groupOf(s, tabId);
-      s.openNewTabPanel(windowId, group?.id);
+      reportBrowserCommand(openNewTabPanel(windowId, group?.id));
       return true;
     }
     case "newGroupWithTabs":
-      newGroupWithSelection(windowId);
+      reportBrowserCommand(newGroupWithSelection(windowId));
       return true;
     case "cleanUpTabs":
-      s.cleanUpTabs(windowId);
+      reportBrowserCommand(cleanUpTabs(windowId));
       return true;
     case "closeAllTabs":
-      closeAllTabs(windowId);
+      reportBrowserCommand(closeAllTabs(windowId));
       return true;
     case "searchTabs":
       setSidebarUi({ searchTabs: windowId, hover: null });
@@ -35,16 +40,16 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
       if (tabId) void openIconPicker(windowId, { kind: "tab", id: tabId });
       return true;
     case "returnToPinnedUrl":
-      if (tabId) s.returnToPinnedUrl(tabId);
+      if (tabId) reportBrowserCommand(returnToPinnedUrl(tabId));
       return true;
     case "keepTab": {
       const tab = tabId ? s.tabs[tabId] : undefined;
-      if (tab && !pinnedPage(tab)) s.updateTab(tab.id, { kept: !tab.kept });
+      if (tab && !pinnedPage(tab)) reportBrowserCommand(updateTabDetails(tab.id, { kept: !tab.kept }));
       return true;
     }
     case "closeOtherTabs": {
       const tab = tabId ? s.tabs[tabId] : undefined;
-      if (tab) s.closeTabs(tabsAround(windowId, tab).others);
+      if (tab) reportBrowserCommand(closeTabs(tabsAround(windowId, tab).others));
       return true;
     }
     case "tabSwitcher":

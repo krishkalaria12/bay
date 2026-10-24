@@ -1,10 +1,12 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import { Pressable, View, shortcutForCommand, capabilities, shortcutLabel } from "@bay/platform";
 import { listInstalledBrowsers, type BrowserApplication } from "@bay/import";
 import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { interpolateColor } from "react-native-reanimated";
+import { Image, StyleSheet, Text } from "react-native";
+import { interpolateColor } from "@bay/platform/motion";
 import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personalize";
@@ -58,7 +60,7 @@ type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean 
 async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
   if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser()) && choice.trial) recordDefaultBrowserTrial();
   if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
-  if (choice.dock && !system.inDock) await addToDock();
+  if (capabilities.dock && choice.dock && !system.inDock) await addToDock();
 }
 
 export function DefaultBrowserStep() {
@@ -71,10 +73,12 @@ export function DefaultBrowserStep() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void Promise.all([isDefaultBrowser(), isInDock(), launchAtLoginStatus()]).then(([isDefault, inDock, login]) => {
-      setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
-      if (login === "enabled") setLogin(true);
-    });
+    void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(
+      ([isDefault, inDock, login]) => {
+        setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
+        if (login === "enabled") setLogin(true);
+      },
+    );
   }, []);
 
   const apply = async () => {
@@ -113,7 +117,7 @@ export function DefaultBrowserStep() {
             onChange={setTrial}
           />
         ) : null}
-        {system && !system.inDock ? (
+        {capabilities.dock && system && !system.inDock ? (
           <CheckRow icon="dock.rectangle" title="Add Bay to Dock" subtitle="Quick access to Bay whenever you need it" value={dock} onChange={setDock} />
         ) : null}
         <CheckRow icon="power" title="Open Bay at login" subtitle="Automatically open Bay when you sign in" value={login} onChange={setLogin} />
@@ -153,7 +157,7 @@ function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: b
       <Image source={APP_ICON} style={{ width: 132, height: 132 }} />
       <View style={{ gap: 8, alignItems: "center" }}>
         <SystemChip on={isDefault} icon="globe" label="Default browser" />
-        <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />
+        {capabilities.dock && <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />}
         <SystemChip on={login} icon="power" label="Opens at login" />
       </View>
     </View>
@@ -326,7 +330,7 @@ export function ImportStep() {
           subtitle={
             opened
               ? "Finish up in the import window, then continue here. You can import more any time from the Bay menu."
-              : "Import bookmarks, history, passwords and tabs from the browser you use now, and stay signed in to your sites. It all stays on this Mac."
+              : "Import bookmarks, history, passwords and tabs from the browser you use now, and stay signed in to your sites. It all stays on this computer."
           }
         />
       </Reveal>
@@ -346,7 +350,7 @@ export function PinnedTabsStep() {
   const toggle = (id: string) => setSelected((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
 
   const pinSelected = () => {
-    if (windowId) pinSites(windowId, selected);
+    if (windowId) reportBrowserCommand(pinSites(windowId, selected));
     next();
   };
 
@@ -485,7 +489,7 @@ export function OutroStep() {
         {[
           ["⌘T", "Open a new tab"],
           ["⌘L", "Go anywhere from the command bar"],
-          ["⌘S", "Hide the sidebar for more room"],
+          [shortcutForCommand("toggleSidebar", "⌘S"), "Hide the sidebar for more room"],
         ].map(([keys, label]) => (
           <View key={keys} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <View
@@ -499,7 +503,7 @@ export function OutroStep() {
                 backgroundColor: colors.button,
               }}
             >
-              <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{keys}</Text>
+              <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{shortcutLabel(keys ?? "")}</Text>
             </View>
             <Text style={{ fontSize: 13, color: colors.subtitle }}>{label}</Text>
           </View>

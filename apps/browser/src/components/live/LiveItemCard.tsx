@@ -1,23 +1,16 @@
+import { Pressable, View } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { Image, Pressable, Text, View } from "react-native";
-import Animated, {
-  cancelAnimation,
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import { Image, Text } from "react-native";
+import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
 import { openLiveItem } from "../../live/engine";
 import { summarizeChecks } from "../../live/github";
 import { ago } from "../../live/meetings";
 import { useLive } from "../../live/store";
 import type { LiveItem, PullRequestCheck } from "../../live/types";
-import { useBrowser } from "../../store/browser";
+import { newTab } from "../../runtime/tabActions";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
 import { useHover } from "../primitives";
 import { dismissHover, hoverLeave, keepHover } from "../sidebar/hover";
@@ -96,7 +89,7 @@ export function Avatar({ uri, name, size = 20 }: { uri: string | null; name: str
 
 const open = (windowId: string, url: string) => {
   dismissHover();
-  useBrowser.getState().newTab(windowId, { url });
+  reportBrowserCommand(newTab(windowId, { url }));
 };
 
 function PullRequestPreview({ item, folderId, windowId }: { item: LiveItem; folderId: string; windowId: string }) {

@@ -1,5 +1,6 @@
+import { View } from "@bay/platform";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { useWindowId } from "../../store/hooks";
 import { startSidebarEffects } from "./effects";
 import { MediaSessionsOverlay } from "../media/SessionList";

@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import {
   onExtensionInstallPrompt,
   onExtensionSidePanel,
@@ -10,8 +12,11 @@ import {
 import { AppState } from "react-native";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
+import { useBrowser as legacyBrowser } from "../../store/browser";
 import { changedIds } from "../../store/changes";
+import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
 import { activeTabId, engineProfile } from "../../store/model";
 import { tabForBrowser, usePages } from "../layout/pageState";
 import { refreshActionStates } from "./actions";
@@ -32,9 +37,9 @@ import {
   windowExtensions,
 } from "./state";
 
-export function startExtensionsBridge() {
+export function startExtensionsBridge({ sharedWindow = false } = {}) {
   onExtensionTabsRequest(openRequestedTab);
-  startExtensionSearchEngines();
+  if (!sharedWindow) startExtensionSearchEngines();
   onExtensionsChanged(({ profile }) => void refreshExtensions(profile));
 
   const loaded = new Set<string>();
@@ -59,6 +64,9 @@ export function startExtensionsBridge() {
 
 function openRequestedTab(request: TabsRequest) {
   if (!request.url) return;
+  // Only the coordinator may adopt a live page (runtime/pageOpen.ts), and extension requests are not offered to it:
+  // in shared mode the URL opens afresh, as it does without a matching profile.
+  const adoptId = pageFactsInCoordinator() ? undefined : request.adoptId;
   const s = useBrowser.getState();
   const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.spaceId) === request.profile;
   const windowId =
@@ -68,17 +76,17 @@ function openRequestedTab(request: TabsRequest) {
   const background = request.active === false;
   // A live tab Chrome made keeps its profile's cookies and storage: adopted only under an app profile on that profile,
   // in a window showing it, else in a new window of it. Without one, the URL opens afresh (and Chrome's tab goes).
-  const spaceId = request.adoptId
+  const spaceId = adoptId
     ? windowId && ofProfile(windowId)
       ? s.windows[windowId]!.spaceId
       : s.spaceOrder.find((p) => engineProfile(p) === request.profile)
     : undefined;
-  if (request.adoptId && spaceId) {
-    if (windowId && ofProfile(windowId)) s.newTab(windowId, { url: request.url, adoptId: request.adoptId, spaceId, background });
-    else openWindow({ url: request.url, adoptId: request.adoptId, spaceId });
+  if (adoptId && spaceId) {
+    if (windowId && ofProfile(windowId)) legacyBrowser.getState().newTab(windowId, { url: request.url, adoptId, spaceId, background });
+    else legacyBrowser.getState().createWindow({ url: request.url, adoptId, spaceId });
     return;
   }
-  if (windowId) s.newTab(windowId, { url: request.url, background });
+  if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: request.url, background }));
   else openWindow({ url: request.url });
 }
 

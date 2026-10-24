@@ -1,5 +1,6 @@
-import { StyleSheet, View } from "react-native";
-import { useBrowser } from "../../store/browser";
+import { View } from "@bay/platform";
+import { StyleSheet } from "react-native";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { tourAnchorRef } from "../onboarding/tour/anchors";
 import { CheckInBanner } from "./CheckInBanner";

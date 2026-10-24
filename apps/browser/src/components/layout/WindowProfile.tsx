@@ -1,6 +1,6 @@
 import { WindowProfile as NativeWindowProfile } from "@bay/shell";
 import { useShallow } from "zustand/react/shallow";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { engineProfile } from "../../store/model";
 

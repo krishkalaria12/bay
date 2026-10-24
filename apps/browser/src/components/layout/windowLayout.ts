@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { layout } from "../../lib/constants";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { useWindowId } from "../../store/hooks";
 import { developerTabShown } from "../developer/sites";
 import { SIDEBAR_FIELD } from "./constants";

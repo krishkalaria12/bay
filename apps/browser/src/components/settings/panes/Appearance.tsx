@@ -1,8 +1,11 @@
-import { appIcons, currentAppIcon, setAppearance, setAppIcon, Symbol, type AppIcon } from "@bay/shell";
+import { Pressable, View, capabilities } from "@bay/platform";
+import { appIcons, currentAppIcon, setAppIcon, Symbol, type AppIcon } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import type { Settings } from "../../../store/settings";
 import { useHover } from "../../primitives";
 import { SectionHeader, useFormColors } from "../controls";
@@ -15,11 +18,8 @@ const MODES: { value: Settings["appearance"]; title: string; description: string
 ];
 
 export function AppearancePane() {
-  const appearance = useBrowser((s) => s.settings.appearance);
-  const choose = (mode: Settings["appearance"]) => {
-    useBrowser.getState().updateSettings({ appearance: mode });
-    void setAppearance(mode);
-  };
+  const appearance = useBrowserRead((s) => s.settings.appearance);
+  const choose = (mode: Settings["appearance"]) => reportBrowserCommand(updateSettings({ appearance: mode }));
   return (
     <View>
       <SectionHeader title="Appearance Theme" description="Also in View › Appearance. Incognito windows are always dark." />
@@ -36,16 +36,16 @@ export function AppearancePane() {
         ))}
       </View>
       <DensityPicker />
-      <MaterialPicker />
+      {capabilities.vibrancy && <MaterialPicker />}
       <SidebarPositionPicker />
       <AddressBarPicker />
-      <AppIconPicker />
+      {capabilities.dock && <AppIconPicker />}
     </View>
   );
 }
 
 function DensityPicker() {
-  const density = useBrowser((s) => s.settings.density);
+  const density = useBrowserRead((s) => s.settings.density);
   const theme = useTheme();
   const colors = useFormColors();
   return (
@@ -55,7 +55,7 @@ function DensityPicker() {
         {(["comfortable", "compact"] as const).map((value) => (
           <Pressable
             key={value}
-            onPress={() => useBrowser.getState().updateSettings({ density: value })}
+            onPress={() => reportBrowserCommand(updateSettings({ density: value }))}
             accessibilityRole="radio"
             accessibilityState={{ checked: density === value }}
             style={{
@@ -78,8 +78,8 @@ function DensityPicker() {
 }
 
 function MaterialPicker() {
-  const material = useBrowser((s) => s.settings.windowMaterial);
-  const choose = (value: Settings["windowMaterial"]) => useBrowser.getState().updateSettings({ windowMaterial: value });
+  const material = useBrowserRead((s) => s.settings.windowMaterial);
+  const choose = (value: Settings["windowMaterial"]) => reportBrowserCommand(updateSettings({ windowMaterial: value }));
   return (
     <>
       <SectionHeader
@@ -148,9 +148,9 @@ function MaterialChoice({ value, title, selected, onPress }: { value: Settings["
 }
 
 function SidebarPositionPicker() {
-  const position = useBrowser((s) => s.settings.sidebarPosition);
-  const topTabs = useBrowser((s) => s.settings.tabLayout === "top");
-  const choose = (value: Settings["sidebarPosition"]) => useBrowser.getState().updateSettings({ sidebarPosition: value });
+  const position = useBrowserRead((s) => s.settings.sidebarPosition);
+  const topTabs = useBrowserRead((s) => s.settings.tabLayout === "top");
+  const choose = (value: Settings["sidebarPosition"]) => reportBrowserCommand(updateSettings({ sidebarPosition: value }));
   return (
     <>
       <SectionHeader
@@ -222,9 +222,9 @@ function SidebarPositionChoice({
 }
 
 function AddressBarPicker() {
-  const addressBar = useBrowser((s) => s.settings.addressBar);
-  const topTabs = useBrowser((s) => s.settings.tabLayout === "top");
-  const choose = (value: Settings["addressBar"]) => useBrowser.getState().updateSettings({ addressBar: value });
+  const addressBar = useBrowserRead((s) => s.settings.addressBar);
+  const topTabs = useBrowserRead((s) => s.settings.tabLayout === "top");
+  const choose = (value: Settings["addressBar"]) => reportBrowserCommand(updateSettings({ addressBar: value }));
   return (
     <>
       <SectionHeader

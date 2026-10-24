@@ -1,7 +1,8 @@
+import { Pressable, View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { Image, Text, type GestureResponderEvent, type TextStyle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { toggleMute } from "../../lib/actions";
 import { hex } from "../../lib/theme";
 import { useTab } from "../../store/hooks";

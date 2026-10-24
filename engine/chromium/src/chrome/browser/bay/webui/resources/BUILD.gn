@@ -1,0 +1,22 @@
+# Copyright 2026 Bay. Apache-2.0.
+import("//ui/webui/resources/tools/build_webui.gni")
+
+# mojom() emits TypeScript. Build the real WebUI ES module with Chromium's
+# trusted-resource path mappings before archiving the adjacent disk resources.
+build_webui("build") {
+  grd_prefix = "bay_native_host"
+  mojo_files =
+      [ "$root_gen_dir/chrome/browser/bay/webui/native_host.mojom-webui.ts" ]
+  mojo_files_deps = [ "//chrome/browser/bay/webui:mojom_ts__generator" ]
+  ts_deps = [ "//ui/webui/resources/mojo:build_ts" ]
+  webui_context_type = "trusted"
+
+  # Consumers build :build_ts directly; composite targets permit that
+  # dependency.
+  ts_composite = true
+
+  # There is no authored TypeScript to lint. The template's lint target assumes
+  # preprocess_ts_files exists, which is absent for a Mojo-only invocation.
+  enable_type_aware_eslint_checks = false
+  optimize = false
+}

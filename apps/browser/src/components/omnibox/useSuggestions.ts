@@ -14,11 +14,15 @@ import {
 } from "@bay/core";
 import { useEffect, useState } from "react";
 import { bookmarksByUrl } from "../../store/bookmarks";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { bookmarkSpaceId } from "../../store/model";
 import { cleanedTabsFor } from "../../store/organize";
 import { defaultSearchEngine, searchEngines } from "../../store/settings";
-import type { Bookmarks, ClosedTab, HistoryEntry } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type Bookmarks = DeepReadonly<import("../../store/types").Bookmarks>;
+type ClosedTab = DeepReadonly<import("../../store/types").ClosedTab>;
+type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 import { currentBarActions } from "./actions";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
@@ -45,10 +49,10 @@ function profileBookmarks(b: Bookmarks, spaceId: string): BookmarkRow[] {
 }
 
 type CleanedRow = { id: string; url: string; title: string; favicon: string | null; closedAt: number };
-const cleanedCache = new WeakMap<ClosedTab[], Map<string, CleanedRow[]>>();
+const cleanedCache = new WeakMap<readonly ClosedTab[], Map<string, CleanedRow[]>>();
 
 // The space's cleaned up tabs (Arc's archive), newest first, for the bar to find and restore.
-function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
+function spaceCleaned(list: readonly ClosedTab[], spaceId: string): CleanedRow[] {
   let perSpace = cleanedCache.get(list);
   if (!perSpace) cleanedCache.set(list, (perSpace = new Map()));
   let rows = perSpace.get(spaceId);
@@ -63,9 +67,9 @@ function spaceCleaned(list: ClosedTab[], spaceId: string): CleanedRow[] {
   return rows;
 }
 
-const historyHostCache = new WeakMap<HistoryEntry[], string[]>();
+const historyHostCache = new WeakMap<readonly HistoryEntry[], string[]>();
 
-function historyHosts(history: HistoryEntry[]): string[] {
+function historyHosts(history: readonly HistoryEntry[]): string[] {
   let hosts = historyHostCache.get(history);
   if (!hosts) {
     const set = new Set<string>();

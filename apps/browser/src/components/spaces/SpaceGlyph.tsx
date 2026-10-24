@@ -1,7 +1,7 @@
 import { Symbol } from "@bay/shell";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { iconColor } from "../symbolColors";
 import { profileSymbol } from "./icons";
 

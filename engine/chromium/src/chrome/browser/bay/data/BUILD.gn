@@ -1,0 +1,51 @@
+# Copyright 2026 Bay. Apache-2.0. apply.py materializes packages/ from the
+# canonical repository package sources. These parsers use C++ exceptions
+# internally. No exception crosses this target's public data_services.h API or
+# enables exceptions in Chromium callers.
+assert(is_win)
+
+static_library("data_services") {
+  sources = [
+    "data_services.cc",
+    "data_services.h",
+    "packages/import/windows/Arc.cpp",
+    "packages/import/windows/ImportCore.h",
+    "packages/import/windows/ImportService.cpp",
+    "packages/import/windows/Readers.cpp",
+    "packages/import/windows/SQLite.h",
+    "packages/import/windows/Secrets.cpp",
+    "packages/import/windows/Sessions.cpp",
+    "packages/sync/windows/RecoveryKit.cpp",
+    "packages/sync/windows/RecoveryKit.h",
+    "packages/sync/windows/RecoveryKitInternal.h",
+    "packages/sync/windows/RecoveryKitWindows.cpp",
+    "packages/sync/windows/SyncCrypto.cpp",
+    "packages/sync/windows/SyncCrypto.h",
+    "packages/sync/windows/SyncService.cpp",
+    "packages/sync/windows/SyncService.h",
+    "packages/sync/windows/SyncVault.cpp",
+    "packages/sync/windows/SyncVault.h",
+    "packages/sync/windows/Wordlist.h",
+    "packages/sync/windows/vendor/qrcodegen.cpp",
+    "packages/sync/windows/vendor/qrcodegen.hpp",
+    "vendor/nlohmann/json.hpp",
+  ]
+  configs -= [ "//build/config/compiler:no_exceptions" ]
+  configs += [ "//build/config/compiler:exceptions" ]
+  include_dirs = [ "vendor" ]
+  defines = [
+    "NOMINMAX",
+    "WIN32_LEAN_AND_MEAN",
+  ]
+  libs = [
+    "advapi32.lib",
+    "bcrypt.lib",
+    "crypt32.lib",
+    "gdi32.lib",
+    "ole32.lib",
+    "shell32.lib",
+    "user32.lib",
+    "uuid.lib",
+    "winsqlite3.lib",
+  ]
+}

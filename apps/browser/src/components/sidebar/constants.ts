@@ -22,7 +22,6 @@ export const NEW_TAB_DOCK = DOCKED_BOTTOM + NEW_TAB_PITCH;
 export const FIRST_PAINT_ROWS = 64;
 export const ROWS_PER_FRAME = 32;
 export const CLEAN_UP_UPSELL_MIN = 10;
-export const AUTO_CLEAN_EVERY_MS = 30 * 60 * 1000;
 
 // MARK: Rows (RowMotion.tsx, ActiveHighlight.tsx, TabIcon.tsx)
 

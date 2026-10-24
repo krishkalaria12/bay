@@ -1,8 +1,12 @@
+import { reportBrowserCommand } from "../../../runtime/commands";
+import * as tabCommands from "../../../runtime/tabActions";
+import { View } from "@bay/platform";
 import { reloadExtension, type InstalledExtension } from "@bay/nncore";
 import { useEffect, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, Text } from "react-native";
+import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
+import { useBrowserRead as useBrowser } from "../../../store/read";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile, resolveWindowId } from "../../../store/model";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";
@@ -23,7 +27,7 @@ const siteAccessOf = (ext: InstalledExtension): SiteAccess =>
 export function ExtensionsPane() {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => browserRead.getState().settings.defaultSpaceId);
   const profile = engineProfile(spaceId);
   const list = useExtensionList(profile);
   const [detail, setDetail] = useState<string | null>(null);
@@ -47,7 +51,7 @@ export function ExtensionsPane() {
     <View>
       <SectionHeader
         title="Extensions"
-        description="Add features to Bay with extensions from the Chrome Web Store. Each profile has its own."
+        description="Add features to Bay with extensions from the Chrome Web Store. Each space has its own."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
@@ -84,7 +88,7 @@ export function ExtensionsPane() {
             title="Open Web Store"
             onPress={() => {
               const windowId = resolveWindowId(useBrowser.getState());
-              if (windowId) useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
+              if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" }));
             }}
           />
         </Row>
@@ -112,7 +116,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
   const theme = useTheme();
   const openTab = (url: string) => {
     const windowId = resolveWindowId(useBrowser.getState());
-    if (windowId) useBrowser.getState().newTab(windowId, { url });
+    if (windowId) reportBrowserCommand(tabCommands.newTab(windowId, { url }));
   };
   return (
     <View>

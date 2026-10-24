@@ -1,6 +1,8 @@
-import { useBrowser } from "../../store/browser";
+import * as tabCommands from "../../runtime/tabActions";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, viewTabIds } from "../../store/model";
-import type { HistoryEntry } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 
 export type PinnableSite = { id: string; title: string; url: string };
 
@@ -27,7 +29,7 @@ const hostOf = (url: string) => {
   }
 };
 
-export function preselectedSites(history: HistoryEntry[]): string[] {
+export function preselectedSites(history: readonly HistoryEntry[]): string[] {
   const visits = new Map<string, number>();
   for (const entry of history) {
     const host = hostOf(entry.url);
@@ -40,7 +42,7 @@ export function preselectedSites(history: HistoryEntry[]): string[] {
     .map((s) => s.id);
 }
 
-export function pinSites(windowId: string, ids: string[]) {
+export async function pinSites(windowId: string, ids: string[]) {
   const s = useBrowser.getState();
   const w = s.windows[windowId];
   if (!w) return;
@@ -53,8 +55,8 @@ export function pinSites(windowId: string, ids: string[]) {
   const selectedTab = activeTabId(s, w.id);
   for (const site of PINNABLE_SITES) {
     if (ids.includes(site.id) && !pinned.has(site.url)) {
-      useBrowser.getState().newTab(w.id, { url: site.url, pinned: true, background: true, snapshot: { title: site.title } });
+      await tabCommands.newTab(w.id, { url: site.url, pinned: true, background: true });
     }
   }
-  if (selectedTab) useBrowser.getState().activate(selectedTab);
+  if (selectedTab) await tabCommands.activate(selectedTab);
 }

@@ -142,7 +142,7 @@ const bridge = g.__fbBatchedBridge;
 const emitter = g.expo?.EventEmitter?.prototype;
 if (!g.__nnApplyHeldReports && bridge && emitter && typeof bridge.__callFunction === "function" && typeof bridge.__invokeCallback === "function") {
   // Required here, not imported: tests load this module without React Native.
-  const batch = (update: () => void) => (require("react-native") as typeof import("react-native")).unstable_batchedUpdates(update);
+  const batch = (update: () => void) => (require("@bay/platform") as typeof import("@bay/platform")).batchedUpdates(update);
   // A 0 ms timer runs at once on the JS thread (RCTTiming), so its call queues behind the ones already waiting.
   const held = createHold({ batch, schedule: (callback) => setTimeout(callback, 0), report: (error) => g.ErrorUtils?.reportFatalError(error) });
   holdPageReports(bridge, held);

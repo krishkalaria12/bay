@@ -139,11 +139,58 @@ export const DEFAULT_SETTINGS: Settings = {
   littleBaySize: [900, 640],
 };
 
+type LegacySettings = Partial<Settings> & {
+  defaultProfileId?: string;
+  warnBeforeMovingTabsToProfile?: boolean;
+  openLinksInHarbor?: boolean;
+  harborSize?: [number, number];
+  openLinksInSmallYahu?: boolean;
+  smallYahuSize?: [number, number];
+};
+
+/** Preserve preferences and command bindings saved before profiles became spaces. */
+export function restoreSettings(saved: LegacySettings | null = {}): Settings {
+  const { defaultProfileId, warnBeforeMovingTabsToProfile, openLinksInHarbor, harborSize, openLinksInSmallYahu, smallYahuSize, ...current } = saved ?? {};
+  const settings = { ...DEFAULT_SETTINGS, ...current };
+  if (current.defaultSpaceId === undefined && defaultProfileId) settings.defaultSpaceId = defaultProfileId;
+  if (current.warnBeforeMovingTabsToSpace === undefined && typeof warnBeforeMovingTabsToProfile === "boolean") {
+    settings.warnBeforeMovingTabsToSpace = warnBeforeMovingTabsToProfile;
+  }
+  const externalLinks = openLinksInHarbor ?? openLinksInSmallYahu;
+  if (current.openLinksInLittleBay === undefined && typeof externalLinks === "boolean") settings.openLinksInLittleBay = externalLinks;
+  const size = harborSize ?? smallYahuSize;
+  if (current.littleBaySize === undefined && Array.isArray(size) && size.length === 2 && size.every((n) => Number.isFinite(n) && n > 0)) {
+    settings.littleBaySize = [...size];
+  }
+  const shortcuts = { ...settings.shortcuts };
+  for (const [legacy, name] of [
+    ["newSmallYahu", "newLittleBay"],
+    ["newHarbor", "newLittleBay"],
+    ["toggleOpenLinksInSmallYahu", "toggleOpenLinksInLittleBay"],
+    ["toggleOpenLinksInHarbor", "toggleOpenLinksInLittleBay"],
+    ["moveTabToProfile", "moveTabToSpace"],
+    ["switchProfile", "switchSpace"],
+    ["nextProfile", "nextSpace"],
+    ["previousProfile", "previousSpace"],
+    ["openProfileMenu", "openSpaceMenu"],
+  ] as const) {
+    if (shortcuts[legacy] && !shortcuts[name]) shortcuts[name] = shortcuts[legacy]!;
+    delete shortcuts[legacy];
+  }
+  settings.shortcuts = shortcuts;
+  return settings;
+}
+
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
 const NO_EXTENSION_ENGINES: ExtensionSearchEngine[] = [];
-const engineCache = new WeakMap<CustomSearchEngine[], { legacyUrl: string; extension: ExtensionSearchEngine[]; engines: SearchEngine[] }>();
+const engineCache = new WeakMap<readonly CustomSearchEngine[], { legacyUrl: string; extension: readonly ExtensionSearchEngine[]; engines: SearchEngine[] }>();
 
-export function searchEngines(settings: Settings): SearchEngine[] {
+type SearchSettings = Readonly<Pick<Settings, "searchEngine" | "customSearchUrl">> & {
+  readonly customSearchEngines: readonly CustomSearchEngine[];
+  readonly extensionSearchEngines: readonly ExtensionSearchEngine[];
+};
+
+export function searchEngines(settings: SearchSettings): SearchEngine[] {
   const custom = settings.customSearchEngines ?? NO_CUSTOM_ENGINES;
   const extension = settings.extensionSearchEngines ?? NO_EXTENSION_ENGINES;
   const cached = engineCache.get(custom);
@@ -157,20 +204,20 @@ export function searchEngines(settings: Settings): SearchEngine[] {
   return engines;
 }
 
-export function controllingSearchExtension(settings: Settings): ExtensionSearchEngine | undefined {
+export function controllingSearchExtension(settings: Pick<SearchSettings, "extensionSearchEngines">): ExtensionSearchEngine | undefined {
   return controllingExtensionEngine(settings.extensionSearchEngines ?? NO_EXTENSION_ENGINES);
 }
 
-export function defaultSearchEngine(settings: Settings): SearchEngine {
+export function defaultSearchEngine(settings: SearchSettings): SearchEngine {
   const controlling = controllingSearchExtension(settings);
   return engineById(searchEngines(settings), controlling ? extensionEngineId(controlling.extensionId) : settings.searchEngine);
 }
 
-export function searchUrlPrefix(settings: Settings): string {
+export function searchUrlPrefix(settings: SearchSettings): string {
   return defaultSearchEngine(settings).url;
 }
 
-export function validateCustomEngine(settings: Settings, input: EngineInput, ignoreId?: string): string | null {
+export function validateCustomEngine(settings: SearchSettings, input: EngineInput, ignoreId?: string): string | null {
   return validateEngine(input, searchEngines(settings), ignoreId);
 }
 

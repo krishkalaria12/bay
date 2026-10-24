@@ -1,11 +1,38 @@
+import { capabilities } from "@bay/platform";
 import { showMenu, type MenuItem } from "@bay/shell";
 import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
-import { armSidebarMoveUndo } from "../../lib/folderUndo";
+import { withFolderMoveUndo } from "../../lib/folderUndo";
 import { normalizeAwakeSite, siteKeptAwake } from "../../lib/awakeSites";
 import { sleepTab, useLifecycle } from "../../lib/tabLifecycle";
 import { webviews } from "../../lib/webviews";
 import { folderChildren } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
+import {
+  cleanUpTabs,
+  closeGroup,
+  deleteGroup,
+  deletePinnedFolder,
+  duplicateGroup,
+  moveGroup,
+  moveGroupToBookmarksBar,
+  movePinnedFolder,
+  pinRows,
+  pinTabs,
+  placeTabs,
+  removeTabsFromGroup,
+  restoreCleaned,
+  returnToPinnedUrl,
+  setPinnedUrl,
+  setSelection,
+  ungroup,
+  updateGroup,
+  updatePinnedFolder,
+} from "../../runtime/organizeActions";
+import { updateSettings } from "../../runtime/settingsActions";
+import { removeTabFromSplit } from "../../runtime/splitActions";
+import { closeTabs, duplicateTab, togglePin, updateTabDetails } from "../../runtime/tabActions";
+import { moveTabsToWindow, restoreClosed } from "../../runtime/windowActions";
+import { browserRead } from "../../store/read";
 import {
   activeTabId,
   bookmarkSpaceId,
@@ -43,8 +70,9 @@ import { openSyncedTab, syncedDevicesMenuItem } from "../../sync/menu";
 import { setSidebarUi } from "./state";
 import { GROUP_COLORS, nearestGroupColor } from "./tokens";
 import { canMoveFolder, childFolderIds, folderDepth, folderTabIds, MAX_FOLDER_DEPTH } from "../../store/folders";
+import { openNewTabPanel } from "../../lib/newTab";
 
-const store = () => useBrowser.getState();
+const store = () => browserRead.getState();
 const sep = { separator: true } as const;
 type Mods = NonNullable<Extract<MenuItem, { id: string }>["modifiers"]>;
 const hint = (key: string, ...modifiers: Mods) => ({ key, modifiers });
@@ -104,17 +132,11 @@ export function moveToFolderItems(windowId: string, exclude: string | undefined,
   return [...folders, ...(folders.length ? [sep] : []), ...(!movingFolder ? [{ id: "pfolder:new", title: "New Folder", symbol: "folder.badge.plus" }] : [])];
 }
 
-function withFolderMoveUndo(windowId: string, move: () => void) {
-  const before = store().folderMoveUndo;
-  move();
-  if (store().folderMoveUndo !== before) armSidebarMoveUndo(windowId);
-}
-
 function runFolderChoice(windowId: string, ids: string[], choice: string): boolean {
   if (!choice.startsWith("pfolder:")) return false;
   const folderId = choice.slice(8);
-  if (folderId === "new") newPinnedFolderWith(windowId, ids);
-  else withFolderMoveUndo(windowId, () => store().placeTabs(ids, { pinned: false, row: true, folderId }));
+  if (folderId === "new") reportBrowserCommand(newPinnedFolderWith(windowId, ids));
+  else withFolderMoveUndo(windowId, () => placeTabs(ids, { pinned: false, row: true, folderId }));
   return true;
 }
 
@@ -135,7 +157,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   const s = store();
   const selected = selectedTabIds(s, windowId);
   if (selected.length > 1 && selected.includes(tab.id)) return openMultiMenu(windowId, selected);
-  if (s.selection[windowId]?.length) s.setSelection(windowId, []);
+  if (s.selection[windowId]?.length) reportBrowserCommand(setSelection(windowId, []));
 
   const { above, below, others } = tabsAround(windowId, tab);
   const group = groupOf(s, tab.id);
@@ -164,7 +186,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
           { id: "backToPin", title: "Back to Pinned URL", symbol: "arrow.uturn.backward", enabled: away, ...hint("\r", "command") },
           { id: "replacePin", title: "Replace Pin with Current Page", symbol: "pin", enabled: away },
           { id: "editPin", title: "Edit Pinned Page…", symbol: "pencil" },
-          ...(isCalendarUrl(tab.pinnedUrl ?? tab.url) ? [calendarMenuItem()] : []),
+          ...(capabilities.calendar && isCalendarUrl(tab.pinnedUrl ?? tab.url) ? [calendarMenuItem()] : []),
           sep,
         ]
       : []),
@@ -220,21 +242,21 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   if (!choice) return;
   const t = { kind: "tab" as const, id: tab.id };
   if (runCalendarMenu(choice)) return;
-  if (choice === "backToPin") s.returnToPinnedUrl(tab.id);
-  else if (choice === "replacePin") s.setPinnedUrl(tab.id);
+  if (choice === "backToPin") reportBrowserCommand(returnToPinnedUrl(tab.id));
+  else if (choice === "replacePin") reportBrowserCommand(setPinnedUrl(tab.id));
   else if (choice === "editPin") void editPinnedPage(windowId, tab.id);
-  else if (choice === "pinRow") s.pinRows([tab.id], !tab.pinnedRow);
-  else if (choice === "essential") s.togglePin(tab.id);
+  else if (choice === "pinRow") reportBrowserCommand(pinRows([tab.id], !tab.pinnedRow));
+  else if (choice === "essential") reportBrowserCommand(togglePin(tab.id));
   else if (runFolderChoice(windowId, [tab.id], choice)) return;
   else if (choice === "leaveFolder")
     withFolderMoveUndo(windowId, () =>
-      s.placeTabs([tab.id], { pinned: false, row: true, folderId: folder?.parentId ?? null, beforeId: firstAfterFolder(tab.folderId!) }),
+      placeTabs([tab.id], { pinned: false, row: true, folderId: folder?.parentId ?? null, beforeId: firstAfterFolder(tab.folderId!) }),
     );
-  else if (choice === "keep") s.updateTab(tab.id, { kept: !tab.kept });
+  else if (choice === "keep") reportBrowserCommand(updateTabDetails(tab.id, { kept: !tab.kept }));
   else if (choice === "rename") void startRename(windowId, t);
-  else if (choice === "resetName") s.updateTab(tab.id, { customTitle: null });
-  else if (choice === "duplicate") s.duplicateTab(tab.id);
-  else if (choice === "copyToWindow") openWindow(incognito ? { incognito: true, url: tab.url } : { spaceId: tab.spaceId, url: tab.url });
+  else if (choice === "resetName") reportBrowserCommand(updateTabDetails(tab.id, { customTitle: null }));
+  else if (choice === "duplicate") reportBrowserCommand(duplicateTab(tab.id));
+  else if (choice === "copyToWindow") reportBrowserCommand(openWindow(incognito ? { incognito: true, url: tab.url } : { spaceId: tab.spaceId, url: tab.url }));
   else if (choice === "siteControls") {
     switchToTab(tab.id);
     setPopover(tab.id, "siteControls");
@@ -244,23 +266,25 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "split") openInSplit(tab.id);
   else if (choice === "keepSiteAwake" && site) {
     const sites = store().settings.awakeSites;
-    store().updateSettings({ awakeSites: siteKeptAwake(tab.url, sites) ? sites.filter((entry) => !siteKeptAwake(tab.url, [entry])) : [...sites, site] });
+    reportBrowserCommand(
+      updateSettings({ awakeSites: siteKeptAwake(tab.url, sites) ? sites.filter((entry) => !siteKeptAwake(tab.url, [entry])) : [...sites, site] }),
+    );
   } else if (choice === "sleep") void sleepTab(tab.id);
   else if (choice === "icon") void openIconPicker(windowId, t);
-  else if (choice === "resetIcon") s.updateTab(tab.id, { customIcon: null });
+  else if (choice === "resetIcon") reportBrowserCommand(updateTabDetails(tab.id, { customIcon: null }));
   else if (choice === "mute") toggleMute(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.
-  else if (choice === "bookmark") bookmarkTab(windowId, tab.id);
+  else if (choice === "bookmark") reportBrowserCommand(bookmarkTab(windowId, tab.id));
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, [tab.id], choice.slice(7));
-  else if (choice === "ungroupTab") s.removeTabsFromGroup([tab.id]);
-  else if (choice === "newGroup") newGroupWithSelection(windowId, [tab.id]);
-  else if (choice.startsWith("group:")) s.placeTabs([tab.id], { pinned: false, groupId: choice.slice(6) });
-  else if (choice.startsWith("window:")) moveTabToWindow(tab.id, choice.slice(7));
-  else if (choice === "unsplit") s.removeTabFromSplit(tab.id);
-  else if (choice === "close") void closeTab(tab.id);
-  else if (choice === "closeOthers") s.closeTabs(others);
-  else if (choice === "closeAbove") s.closeTabs(above);
-  else if (choice === "closeBelow") s.closeTabs(below);
+  else if (choice === "ungroupTab") reportBrowserCommand(removeTabsFromGroup([tab.id]));
+  else if (choice === "newGroup") reportBrowserCommand(newGroupWithSelection(windowId, [tab.id]));
+  else if (choice.startsWith("group:")) reportBrowserCommand(placeTabs([tab.id], { pinned: false, groupId: choice.slice(6) }));
+  else if (choice.startsWith("window:")) reportBrowserCommand(moveTabToWindow(tab.id, choice.slice(7)));
+  else if (choice === "unsplit") reportBrowserCommand(removeTabFromSplit(tab.id));
+  else if (choice === "close") reportBrowserCommand(closeTab(tab.id));
+  else if (choice === "closeOthers") reportBrowserCommand(closeTabs(others));
+  else if (choice === "closeAbove") reportBrowserCommand(closeTabs(above));
+  else if (choice === "closeBelow") reportBrowserCommand(closeTabs(below));
 }
 
 async function openMultiMenu(windowId: string, ids: string[]) {
@@ -297,22 +321,24 @@ async function openMultiMenu(windowId: string, ids: string[]) {
     { id: "close", title: `Close ${n} Tabs`, symbol: "xmark", ...hint("w", "command") },
   ]);
   if (!choice) return;
-  if (choice === "pinRow") s.pinRows(ids, !allRows);
-  else if (choice === "essential") s.pinTabs(ids, !allPinned);
+  if (choice === "pinRow") reportBrowserCommand(pinRows(ids, !allRows));
+  else if (choice === "essential") reportBrowserCommand(pinTabs(ids, !allPinned));
   else if (runFolderChoice(windowId, ids, choice)) return;
-  else if (choice === "duplicate") ids.forEach((id) => store().duplicateTab(id));
-  else if (choice === "newGroup") newGroupWithSelection(windowId, ids);
-  else if (choice.startsWith("group:")) s.placeTabs(ids, { pinned: false, groupId: choice.slice(6) });
-  else if (choice === "ungroup") s.removeTabsFromGroup(ids);
+  else if (choice === "duplicate") ids.forEach((id) => reportBrowserCommand(duplicateTab(id)));
+  else if (choice === "newGroup") reportBrowserCommand(newGroupWithSelection(windowId, ids));
+  else if (choice.startsWith("group:")) reportBrowserCommand(placeTabs(ids, { pinned: false, groupId: choice.slice(6) }));
+  else if (choice === "ungroup") reportBrowserCommand(removeTabsFromGroup(ids));
   else if (choice === "copy") copyUrls(ids, false);
   else if (choice === "copyMd") copyUrls(ids, true);
   else if (choice === "bar") void bookmarkTabs(windowId, ids, "bar");
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, ids, choice.slice(7));
   else if (choice.startsWith("window:")) {
-    const target = store().moveTabsToWindow(ids, choice === "window:new" ? null : choice.slice(7));
-    if (target) switchToTab(store().windows[target]?.activeTabIds[tabs[0]!.spaceId] ?? ids[0]!);
-  } else if (choice === "close") s.closeTabs(ids);
-  if (choice !== "copy" && choice !== "copyMd") store().setSelection(windowId, []);
+    const moving = moveTabsToWindow(ids, choice === "window:new" ? null : choice.slice(7)).then((target) =>
+      target ? switchToTab(store().windows[target]?.activeTabIds[tabs[0]!.spaceId] ?? ids[0]!) : null,
+    );
+    reportBrowserCommand(moving);
+  } else if (choice === "close") reportBrowserCommand(closeTabs(ids));
+  if (choice !== "copy" && choice !== "copyMd") reportBrowserCommand(setSelection(windowId, []));
 }
 
 export async function openGroupMenu(windowId: string, groupId: string) {
@@ -354,18 +380,18 @@ export async function openGroupMenu(windowId: string, groupId: string) {
   const target = { kind: "group" as const, id: groupId };
   if (choice === "rename") void startRename(windowId, target);
   else if (choice === "icon") void openIconPicker(windowId, target);
-  else if (choice.startsWith("color:")) s.updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null });
+  else if (choice.startsWith("color:")) reportBrowserCommand(updateGroup(groupId, { color: (choice.slice(6) || null) as GroupColor | null }));
   else if (choice === "newTab") {
-    store().openNewTabPanel(windowId, groupId);
-  } else if (choice === "pin") s.moveGroup(groupId, { pinned: !g.pinned });
-  else if (choice === "duplicate") s.duplicateGroup(groupId);
-  else if (choice === "collapse") s.updateGroup(groupId, { collapsed: !g.collapsed });
+    reportBrowserCommand(openNewTabPanel(windowId, groupId));
+  } else if (choice === "pin") reportBrowserCommand(moveGroup(groupId, { pinned: !g.pinned }));
+  else if (choice === "duplicate") reportBrowserCommand(duplicateGroup(groupId));
+  else if (choice === "collapse") reportBrowserCommand(updateGroup(groupId, { collapsed: !g.collapsed }));
   else if (choice === "copy") copyUrls(g.tabIds, false);
   else if (choice === "copyMd") copyUrls(g.tabIds, true);
-  else if (choice === "ungroup") s.ungroup(groupId);
-  else if (choice === "bookmarkBar") s.moveGroupToBookmarksBar(groupId);
-  else if (choice === "close") s.closeGroup(groupId);
-  else if (choice === "delete") s.deleteGroup(groupId);
+  else if (choice === "ungroup") reportBrowserCommand(ungroup(groupId));
+  else if (choice === "bookmarkBar") reportBrowserCommand(moveGroupToBookmarksBar(groupId));
+  else if (choice === "close") reportBrowserCommand(closeGroup(groupId));
+  else if (choice === "delete") reportBrowserCommand(deleteGroup(groupId));
 }
 
 // Out of its folder, a row goes just below it.
@@ -403,19 +429,18 @@ export async function openFolderMenu(windowId: string, folderId: string) {
   const target = { kind: "folder" as const, id: folderId };
   if (choice === "rename") void startRename(windowId, target);
   else if (choice === "icon") void openIconPicker(windowId, target);
-  else if (choice === "resetIcon") s.updatePinnedFolder(folderId, { icon: null });
-  else if (choice === "collapse") s.updatePinnedFolder(folderId, { collapsed: !f.collapsed });
+  else if (choice === "resetIcon") reportBrowserCommand(updatePinnedFolder(folderId, { icon: null }));
+  else if (choice === "collapse") reportBrowserCommand(updatePinnedFolder(folderId, { collapsed: !f.collapsed }));
   else if (choice === "copy") copyUrls(members, false);
   else if (choice === "copyMd") copyUrls(members, true);
-  else if (choice === "newFolder") newPinnedFolderWith(windowId, [], folderId);
+  else if (choice === "newFolder") reportBrowserCommand(newPinnedFolderWith(windowId, [], folderId));
   else if (choice === "moveOut")
-    withFolderMoveUndo(windowId, () => s.movePinnedFolder(folderId, firstAfterFolder(f.parentId!), s.pinnedFolders[f.parentId!]?.parentId ?? null));
-  else if (choice.startsWith("pfolder:")) withFolderMoveUndo(windowId, () => s.movePinnedFolder(folderId, null, choice.slice(8)));
-  else if (choice === "delete") s.deletePinnedFolder(folderId);
+    withFolderMoveUndo(windowId, () => movePinnedFolder(folderId, firstAfterFolder(f.parentId!), s.pinnedFolders[f.parentId!]?.parentId ?? null));
+  else if (choice.startsWith("pfolder:")) withFolderMoveUndo(windowId, () => movePinnedFolder(folderId, null, choice.slice(8)));
+  else if (choice === "delete") reportBrowserCommand(deletePinnedFolder(folderId));
 }
 
 export async function openSidebarMenu(windowId: string) {
-  const s = store();
   const muted = allMuted(windowId);
   const choice = await showMenu([
     { id: "newTab", title: "New Tab", symbol: "plus", ...hint("t", "command") },
@@ -429,17 +454,17 @@ export async function openSidebarMenu(windowId: string) {
     newLiveFolderMenuItem(),
   ]);
   if (choice && runNewLiveFolder(windowId, choice)) return;
-  if (choice === "newTab") store().openNewTabPanel(windowId);
-  else if (choice === "newFolder") newPinnedFolderWith(windowId);
+  if (choice === "newTab") reportBrowserCommand(openNewTabPanel(windowId));
+  else if (choice === "newFolder") reportBrowserCommand(newPinnedFolderWith(windowId));
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
-  else if (choice === "clean") s.cleanUpTabs(windowId);
-  else if (choice === "mute") muteAll(windowId, !muted);
+  else if (choice === "clean") reportBrowserCommand(cleanUpTabs(windowId));
+  else if (choice === "mute") reportBrowserCommand(muteAll(windowId, !muted));
   else if (choice === "closeAll") closeAllTabs(windowId);
 }
 
 export function closeAllTabs(windowId: string) {
   const s = store();
-  s.closeTabs(viewTabIds(s, windowId).filter((id) => !inPinnedContainer(s, id)));
+  return closeTabs(viewTabIds(s, windowId).filter((id) => !inPinnedContainer(s, id)));
 }
 
 export async function openOverflowMenu(windowId: string) {
@@ -510,13 +535,13 @@ export async function openOverflowMenu(windowId: string) {
   ]);
   if (!choice) return;
   if (choice === "search") setSidebarUi({ searchTabs: windowId });
-  else if (choice.startsWith("tab:")) switchToTab(choice.slice(4));
+  else if (choice.startsWith("tab:")) reportBrowserCommand(switchToTab(choice.slice(4)));
   else if (openSyncedTab(choice, windowId, w.spaceId)) return;
-  else if (choice.startsWith("restore:")) s.restoreClosed(choice.slice(8), windowId);
-  else if (choice.startsWith("cleaned:")) s.restoreCleaned(choice.slice(8), windowId);
-  else if (choice === "restoreAll") s.restoreCleaned(undefined, windowId);
-  else if (choice === "clean") s.cleanUpTabs(windowId);
-  else if (choice === "daily") s.updateSettings({ cleanUpInactiveTabsAfterHours: daily ? null : 24 });
-  else if (choice === "mute") muteAll(windowId, !muted);
-  else if (choice === "closeAll") closeAllTabs(windowId);
+  else if (choice.startsWith("restore:")) reportBrowserCommand(restoreClosed(choice.slice(8), windowId));
+  else if (choice.startsWith("cleaned:")) reportBrowserCommand(restoreCleaned(windowId, choice.slice(8)));
+  else if (choice === "restoreAll") reportBrowserCommand(restoreCleaned(windowId));
+  else if (choice === "clean") reportBrowserCommand(cleanUpTabs(windowId));
+  else if (choice === "daily") reportBrowserCommand(updateSettings({ cleanUpInactiveTabsAfterHours: daily ? null : 24 }));
+  else if (choice === "mute") reportBrowserCommand(muteAll(windowId, !muted));
+  else if (choice === "closeAll") reportBrowserCommand(closeAllTabs(windowId));
 }

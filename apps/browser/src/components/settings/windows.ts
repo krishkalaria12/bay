@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import { openWindow } from "@bay/shell";
 import { create } from "zustand";
 import { TASK_MANAGER_WINDOW_ID } from "../taskManager/window";
@@ -43,6 +44,7 @@ export const useSettingsNav = create<Nav>((set, get) => ({
   forward: [],
   highlight: null,
   go(pane, spaceId = null, highlight = null) {
+    if (pane === "calendar" && !capabilities.calendar) pane = "general";
     const { pane: from, spaceId: fromProfile, back } = get();
     if (from === pane && fromProfile === spaceId) return set({ highlight });
     set({ pane, spaceId, highlight, back: [...back, { pane: from, spaceId: fromProfile }].slice(-30), forward: [] });
@@ -61,7 +63,8 @@ export const useSettingsNav = create<Nav>((set, get) => ({
 
 export function openSettings(pane?: SettingsPane, spaceId?: string | null) {
   if (pane) useSettingsNav.getState().go(pane, spaceId ?? null);
-  void openWindow(SETTINGS_WINDOW_ID, { kind: "settings", title: "Settings" });
+  // Where Settings is its own document (Windows), it reads the pane from its options.
+  void openWindow(SETTINGS_WINDOW_ID, { kind: "settings", title: "Settings", ...(pane && { pane, ...(spaceId && { spaceId }) }) });
 }
 
 export function openImport() {

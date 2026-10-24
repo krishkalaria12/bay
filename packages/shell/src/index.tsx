@@ -1,5 +1,14 @@
-import { requireNativeModule, requireNativeViewManager, type EventSubscription } from "expo-modules-core";
-import type { ViewProps } from "react-native";
+import { capabilities } from "@bay/platform";
+import type { ViewProps } from "@bay/platform";
+import { requireNativeViewManager } from "./nativeViews";
+import {
+  requireNativeModule,
+  requireOptionalNativeModule,
+  nativeSnapshot,
+  nativeDocumentWrite,
+  nativeDocumentSave,
+  type EventSubscription,
+} from "@bay/platform/native";
 
 export * from "./system";
 export * from "./app";
@@ -124,7 +133,16 @@ export type WindowEvent =
   | { type: "focus"; id: string }
   | { type: "close"; id: string }
   | { type: "frame"; id: string; frame: [number, number, number, number] }
-  | { type: "closeRequest"; id: string };
+  | { type: "closeRequest"; id: string }
+  // Windows' shared runtime: openWindow named this open utility window again, with these options.
+  | { type: "opened"; id: string; options: OpenWindowOptions }
+  | ({ type: "state"; id: string } & WindowState);
+
+/** A window's placement, as its caption buttons show it (Windows). */
+export type WindowState = { maximized: boolean; fullscreen: boolean };
+/** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
+ *  its theme, which the system backdrop follows. */
+export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean };
 
 export type AppEvent =
   | { type: "reopen" }
@@ -168,6 +186,9 @@ export type OpenWindowOptions = {
   profile?: string;
   // Little Bay: its remembered size; the window opens centred on the active screen.
   size?: [number, number];
+  // Settings: the pane to show, and the space it is about.
+  pane?: string;
+  spaceId?: string;
 };
 
 export type MenuEntry = { id: string; title: string; current?: boolean };
@@ -238,6 +259,10 @@ const Shell = requireNativeModule<{
   dragPreviewEnd?(windowId: string | null, frame: Rect4 | null): Promise<void>;
   setWindowTitle(id: string, title: string): Promise<void>;
   windowIds(): Promise<string[]>;
+  minimizeWindow?(id: string): Promise<void>;
+  toggleMaximizeWindow?(id: string): Promise<void>;
+  windowState?(id: string): Promise<WindowState>;
+  setWindowCaption?(id: string, caption: WindowCaption): Promise<void>;
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
@@ -248,11 +273,11 @@ const Shell = requireNativeModule<{
   prompt(options: PromptOptions): Promise<string | null>;
 }>("BayShell");
 
-export const readDocument = (name: string) => Shell.readDocument(name);
-export const writeDocument = (name: string, contents: string) => Shell.writeDocument(name, contents);
+export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
-export const saveDocument = (name: string, contents: string) => Shell.saveDocument(name, contents);
-export const removeDocument = (name: string) => Shell.removeDocument(name);
+export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
+export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
 
 /** Claims sidebar focus only after a move; ordinary text/page focus retains its own Undo. */
 export const setSidebarMoveUndo = (windowId: string, available: boolean, focus = false) =>
@@ -267,8 +292,8 @@ export function copyText(text: string) {
 }
 
 /** An image (base64 PNG or JPEG) on the clipboard; false if it isn't one. */
-export function copyImage(base64: string): boolean {
-  return Shell.copyImage(base64);
+export async function copyImage(base64: string): Promise<boolean> {
+  return await Shell.copyImage(base64);
 }
 
 export function showMenu(items: MenuItem[]): Promise<string | null> {
@@ -286,9 +311,10 @@ export const WindowProfile = requireNativeViewManager<WindowProfileProps>("BayWi
 export const closeWindow = (id: string) => Shell.closeWindow(id);
 export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
-export const setTrafficLightsCenter = (id: string, center: [number, number] | null) => Shell.setTrafficLightsCenter(id, center);
+export const setTrafficLightsCenter = (id: string, center: [number, number] | null) =>
+  capabilities.trafficLights ? Shell.setTrafficLightsCenter(id, center) : Promise.resolve();
 /** The window's buttons shown only while the pointer is over the window's top (always in full screen). */
-export const setTrafficLightsOnHover = (id: string, on: boolean) => Shell.setTrafficLightsOnHover(id, on);
+export const setTrafficLightsOnHover = (id: string, on: boolean) => (capabilities.trafficLights ? Shell.setTrafficLightsOnHover(id, on) : Promise.resolve());
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›
@@ -313,6 +339,12 @@ export const raiseView = (tag: number | null, levels: number, raised: boolean) =
 /** The window's frame now, on screen (AppKit's coordinates); null on builds without it. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
+
+// The window's own caption buttons (capabilities.captionButtons): no-ops on hosts whose system draws them.
+export const minimizeWindow = (id: string) => Shell.minimizeWindow?.(id) ?? Promise.resolve();
+export const toggleMaximizeWindow = (id: string) => Shell.toggleMaximizeWindow?.(id) ?? Promise.resolve();
+export const windowState = (id: string): Promise<WindowState> => Shell.windowState?.(id) ?? Promise.resolve({ maximized: false, fullscreen: false });
+export const setWindowCaption = (id: string, caption: WindowCaption) => Shell.setWindowCaption?.(id, caption) ?? Promise.resolve();
 
 export const setAppearance = (mode: "auto" | "light" | "dark") => Shell.setAppearance(mode);
 export const isDarkAppearance = () => Shell.isDarkAppearance();
@@ -422,20 +454,20 @@ export type GlassEffectProps = ViewProps & {
   dark?: boolean;
 };
 
-const GlassEffectModule = requireNativeModule<{ isLiquidGlass(): boolean }>("BayGlassEffect");
+const GlassEffectModule = requireOptionalNativeModule<{ isLiquidGlass(): boolean }>("BayGlassEffect");
 
-export const isLiquidGlass = (): boolean => GlassEffectModule.isLiquidGlass();
+export const isLiquidGlass = (): boolean => GlassEffectModule?.isLiquidGlass() ?? false;
 
 export const GlassEffect = requireNativeViewManager<GlassEffectProps>("BayGlassEffect");
 
 export type IconTheme = { kind: "blur" } | { kind: "template"; fill: string; stroke?: string };
 
-const DockSelectionModule = requireNativeModule<{
+const DockSelectionModule = requireOptionalNativeModule<{
   iconTheme(uri: string | null, emoji: string | null): Promise<IconTheme | null>;
 }>("BayDockSelection");
 
 export const iconTheme = (source: { uri: string } | { emoji: string }): Promise<IconTheme | null> =>
-  DockSelectionModule.iconTheme("uri" in source ? source.uri : null, "emoji" in source ? source.emoji : null);
+  DockSelectionModule?.iconTheme("uri" in source ? source.uri : null, "emoji" in source ? source.emoji : null) ?? Promise.resolve(null);
 
 export type DockSelectionProps = ViewProps & {
   image?: string;
@@ -452,13 +484,14 @@ export type DockSelectionProps = ViewProps & {
 
 export const DockSelection = requireNativeViewManager<DockSelectionProps>("BayDockSelection");
 
-const InlineCompletionModule = requireNativeModule<{
+const InlineCompletionModule = requireOptionalNativeModule<{
   complete(tag: number, typed: string, completion: string): Promise<InlineWrite>;
 }>("BayInlineCompletion");
 
 export type InlineWrite = 0 | 1 | 2;
 
-export const completeInline = (tag: number, typed: string, completion: string) => InlineCompletionModule.complete(tag, typed, completion);
+export const completeInline = (tag: number, typed: string, completion: string) =>
+  InlineCompletionModule?.complete(tag, typed, completion) ?? Promise.resolve(0 as InlineWrite);
 
 type TranslationModule = {
   readonly available: boolean;
@@ -471,7 +504,7 @@ type TranslationModule = {
   translate(source: string, target: string, texts: string[]): Promise<string[]>;
   translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;
 };
-const TranslationNative = requireNativeModule<TranslationModule>("BayTranslate");
+const TranslationNative = requireOptionalNativeModule<TranslationModule>("BayTranslate");
 
 // Null before macOS 26, which has no translation API for apps.
-export const translation: Omit<TranslationModule, "available"> | null = TranslationNative.available ? TranslationNative : null;
+export const translation: Omit<TranslationModule, "available"> | null = TranslationNative?.available ? TranslationNative : null;

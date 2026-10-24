@@ -1,15 +1,15 @@
 # Copyright 2026 Bay. Apache-2.0.
 #
-# //chrome/browser/bay: Bay's own code in the Chromium tree. Plain
-# Chromium code over Chrome's services, exported as plain C (public/nn_engine.h)
-# and linked by both engines: CEF's libcef_static and NNCore's //chrome:chrome_dll
-# (hooks in engine/chromium/apply.sh). The repo copy is engine/chromium/src;
-# never edit the tree's copy.
+# //chrome/browser/bay: Bay's own code in the Chromium tree. Plain Chromium code
+# over Chrome's services, exported as plain C (public/nn_engine.h) and linked by
+# both engines: CEF's libcef_static and NNCore's //chrome:chrome_dll (hooks in
+# engine/chromium/apply.sh). The repo copy is engine/chromium/src; never edit
+# the tree's copy.
 #
 # One source_set: add your nn_<domain>.{h,cc} to `sources` (sorted) and the
 # deps it needs. Nothing in //chrome depends on this target.
 
-assert(is_mac)
+assert(is_mac || is_win || is_linux)
 
 source_set("bay") {
   sources = [
@@ -20,17 +20,18 @@ source_set("bay") {
     "nn_browsing_data.h",
     "nn_cookies.cc",
     "nn_cookies.h",
+    "nn_dispatch.cc",
+    "nn_dispatch.h",
     "nn_downloads.cc",
     "nn_downloads.h",
-    "nn_downloads_mac.mm",
     "nn_engine.cc",
     "nn_engine.h",
     "nn_extension_import.cc",
     "nn_extension_import.h",
     "nn_extensions.cc",
     "nn_extensions.h",
+    "nn_external_apps.cc",
     "nn_external_apps.h",
-    "nn_external_apps.mm",
     "nn_favicons.cc",
     "nn_history.cc",
     "nn_passwords.cc",
@@ -54,8 +55,7 @@ source_set("bay") {
     "nn_zoom.h",
     "pip/nn_pip_controls.cc",
     "pip/nn_pip_controls.h",
-    "pip/nn_pip_mac.h",
-    "pip/nn_pip_mac.mm",
+    "pip/nn_pip_platform.h",
     "pip/nn_pip_window.cc",
     "pip/nn_pip_window.h",
     "public/nn_engine.h",
@@ -104,11 +104,11 @@ source_set("bay") {
     "//components/search_engines",
     "//components/sessions",
     "//components/strings",
+    "//components/tab_groups",
+    "//components/tabs:public",
     "//components/update_client",
     "//components/value_store",
     "//components/version_info",
-    "//components/tab_groups",
-    "//components/tabs:public",
     "//content/public/browser",
     "//extensions/browser",
     "//extensions/browser:crx_installer",
@@ -127,15 +127,29 @@ source_set("bay") {
     "//url",
   ]
 
-  # pip/: the Picture in Picture window's Core Animation fade.
-  frameworks = [ "QuartzCore.framework" ]
-
-  # nn_downloads_mac.mm: the quarantine record (LSQuarantine);
-  # nn_external_apps.mm: the app that opens a scheme, and its icon.
-  frameworks += [
-    "AppKit.framework",
-    "CoreServices.framework",
-  ]
+  if (is_mac) {
+    sources += [
+      "nn_downloads_mac.mm",
+      "nn_external_apps.mm",
+      "pip/nn_pip_mac.mm",
+    ]
+    frameworks = [
+      "QuartzCore.framework",
+      "AppKit.framework",
+      "CoreServices.framework",
+    ]
+  } else if (is_win) {
+    sources += [
+      "nn_downloads_win.cc",
+      "nn_external_apps_win.cc",
+      "pip/nn_pip_win.cc",
+    ]
+    deps += [
+      "//ui/aura",
+      "//ui/compositor",
+    ]
+    libs = [ "shlwapi.lib" ]
+  }
 }
 
 # Chrome's framework exports only what its lists name; NNCore's framework also
@@ -143,8 +157,10 @@ source_set("bay") {
 # already, and an exports list there would hide CEF's own API, so only
 # //chrome:chrome_dll depends on this.
 config("exports_config") {
-  ldflags = [ "-Wl,-exported_symbols_list," +
-              rebase_path("nn_engine.exports", root_build_dir) ]
+  if (is_mac) {
+    ldflags = [ "-Wl,-exported_symbols_list," +
+                rebase_path("nn_engine.exports", root_build_dir) ]
+  }
 }
 
 group("exports") {

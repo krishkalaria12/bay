@@ -1,15 +1,18 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { ThemeScope, useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
 import { useEffectEvent } from "../lib/useEffectEvent";
-import { useBrowser } from "../store/browser";
+import { useBrowserRead as useBrowser } from "../store/read";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
 import { activeTabId, listIds, windowListKey } from "../store/model";
 import { cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
+import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "./layout/windowButtons";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
 import { SIDEBAR_FIELD, SIDEBAR_FOOTER_DOWNLOADS } from "./layout/constants";
 import { SidebarPlayer, useSidebarPlayerTab } from "./media/SidebarPlayer";
@@ -50,6 +53,11 @@ import {
   SPACE_TITLE_GAP,
   ROWS_PER_FRAME,
 } from "./sidebar/constants";
+import { reportBrowserCommand } from "../runtime/commands";
+import { cleanUpTabs } from "../runtime/organizeActions";
+import { updateSettings } from "../runtime/settingsActions";
+import { openNewTabPanel } from "../lib/newTab";
+import { toggleDownloads } from "../runtime/windowUiActions";
 
 // The list's room and its height: with new tabs at the bottom, the New Tab row docks below the list once the list
 // leaves no room for it (at the top it stays the list's first row).
@@ -85,8 +93,11 @@ export function Sidebar() {
   const field = useSidebarFieldShown();
   const header = field ? SIDEBAR_FIELD.top + metrics.addressHeight : layout.sidebarHeader;
   const glowRoom = field ? 0 : GLOW_ROOM;
-  // On the window's right the header has no window buttons to clear: the profile starts at the inset.
-  const profileX = useSidebarOnRight() ? layout.sidebarInset + 4 : PROFILE_INDICATOR_X;
+  // The header clears the window's buttons on its side of the window: macOS's traffic lights on the left, the caption
+  // buttons on the right (Windows). Elsewhere the profile starts at the inset.
+  const right = useSidebarOnRight();
+  const profileX = !right && LIGHTS_WIDTH ? PROFILE_INDICATOR_X : layout.sidebarInset + 4;
+  const headerEnd = right && CAPTION_BUTTONS_WIDTH ? CAPTION_BUTTONS_WIDTH : 7;
   // The footer: downloads at its left, then the space switcher with its + for a new space (every window but a
   // private one).
   const spaces = !useIsIncognito();
@@ -186,7 +197,7 @@ export function Sidebar() {
                   flexDirection: "row",
                   alignItems: "flex-start",
                   paddingLeft: profileX,
-                  paddingRight: 7,
+                  paddingRight: headerEnd,
                   paddingTop: 27 - 17,
                 }}
               >
@@ -393,7 +404,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                         {current ? <CleanUpUpsell windowId={windowId} /> : null}
                       </View>
                       <ContextMenuArea style={{ flexGrow: 1, minHeight: inlineNewTab ? 24 : 0 }} onContextMenu={() => void openSidebarMenu(windowId)}>
-                        <View style={{ flex: 1 }} onDoubleClick={() => useBrowser.getState().openNewTabPanel(windowId)} />
+                        <View style={{ flex: 1 }} onDoubleClick={() => reportBrowserCommand(openNewTabPanel(windowId))} />
                       </ContextMenuArea>
                     </Animated.ScrollView>
                   </Animated.View>
@@ -534,11 +545,8 @@ function DownloadsButton({ windowId }: { windowId: string }) {
       size={14}
       box={SIDEBAR_FOOTER_DOWNLOADS.size}
       radius={8}
-      tooltip="Downloads (⇧⌘J)"
-      onPress={() => {
-        const s = useBrowser.getState();
-        s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);
-      }}
+      tooltip={`Downloads (${shortcutForCommand("downloads", "⇧⌘J")})`}
+      onPress={() => reportBrowserCommand(toggleDownloads(windowId))}
     />
   );
 }
@@ -554,7 +562,7 @@ function NewTabRow({ windowId }: { windowId: string }) {
         style={{ flex: 1 }}
         onPress={(e) => {
           if ((e.nativeEvent as unknown as { altKey?: boolean }).altKey) openNewTabInSplit(windowId);
-          else useBrowser.getState().openNewTabPanel(windowId);
+          else reportBrowserCommand(openNewTabPanel(windowId));
         }}
       >
         {({ pressed }) => (
@@ -632,15 +640,14 @@ function CleanUpUpsell({ windowId }: { windowId: string }) {
           title="Clean Up Once"
           primary
           onPress={() => {
-            useBrowser.getState().cleanUpTabs(windowId);
+            reportBrowserCommand(cleanUpTabs(windowId));
             dismiss();
           }}
         />
         <UpsellButton
           title="Clean Up Daily"
           onPress={() => {
-            useBrowser.getState().updateSettings({ cleanUpInactiveTabsAfterHours: 24 });
-            useBrowser.getState().cleanUpTabs(windowId);
+            reportBrowserCommand(updateSettings({ cleanUpInactiveTabsAfterHours: 24 }).then(() => cleanUpTabs(windowId)));
           }}
         />
         <UpsellButton title="Not Now" onPress={dismiss} />

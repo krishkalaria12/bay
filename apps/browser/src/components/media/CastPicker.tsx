@@ -1,7 +1,9 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import { CastMode, preferredCastMode, startCasting, stopCasting, type CastSink } from "@bay/nncore";
 import { openExternalURL, showMenu, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { Popover, PromptButton } from "../layout/controls";
 import { useHover } from "../primitives";
@@ -53,7 +55,7 @@ export function CastPicker({ tabId, paneWidth }: { tabId: string; paneWidth: num
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }}>
             <ActivityIndicator size="small" style={{ transform: [{ scale: 0.6 }], width: 14, height: 14 }} />
             <Text style={{ flex: 1, fontSize: 12, color: theme.textSecondary }}>
-              Looking for devices… Cast devices need to be on the same Wi‑Fi network as this Mac.
+              Looking for devices… Cast devices need to be on the same Wi‑Fi network as this computer.
             </Text>
           </View>
         )}

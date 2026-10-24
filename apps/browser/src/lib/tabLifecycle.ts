@@ -6,8 +6,10 @@ import { showToast } from "../components/layout/splitActions";
 import { useMedia } from "../components/media/state";
 import { isInternalTab } from "../components/pages";
 import { openSettings } from "../components/settings/windows";
-import { useBrowser, type BrowserState } from "../store/browser";
-import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace, wake } from "../store/model";
+import { useBrowserRead as useBrowser } from "../store/read";
+import type { BrowserProjection as BrowserState } from "../runtime/projection";
+import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
+import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace } from "../store/model";
 import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
@@ -81,7 +83,7 @@ export function keepAliveReason(s: BrowserState, id: string): string | null {
   const page = pageOf(id);
   if (page.mediaAccess) return "capturing";
   if (page.permission) return "asking for permission";
-  if (page.newTabShown) return "kept for Forward";
+  if (tab.newTabHistory) return "kept for Forward";
   const media = useMedia.getState();
   if (media.pipOpen[id]) return "picture in picture";
   if (media.displayRequests[id]) return "choosing a screen to share";
@@ -340,7 +342,7 @@ export function reloadRecentTabs(sys: SystemState) {
     setTimeout(
       () => {
         const t = store().tabs[id];
-        if (t?.url && !t.navigation && !t.adoptId) store().updateTab(id, wake(t));
+        if (t?.url && !t.navigation && !t.adoptId) reportBrowserCommand(dispatchBrowserCommand({ method: "wakeTab", tabId: id }));
       },
       2000 * (i + 1),
     ),

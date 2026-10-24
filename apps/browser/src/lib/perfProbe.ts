@@ -477,7 +477,7 @@ if (perfProbeEnabled) {
     },
     read: () => ({ ...stats, elapsed: now() - stats.since }),
     now,
-    batch: (fn: () => void) => (require("react-native") as typeof import("react-native")).unstable_batchedUpdates(fn),
+    batch: (fn: () => void) => (require("@bay/platform") as typeof import("@bay/platform")).batchedUpdates(fn),
     findFibers,
     nameOf,
   };

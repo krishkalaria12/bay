@@ -1,24 +1,31 @@
 import { searchEngineList } from "@bay/nncore";
 import { extensionEnginesFromChrome } from "@bay/core";
-import { useBrowser } from "../../store/browser";
+import { useBrowser, type BrowserStore } from "../../store/browser";
 import { useExtensions } from "./state";
 
-export function startExtensionSearchEngines() {
+export function startExtensionSearchEngines(store: BrowserStore = useBrowser) {
+  let stopped = false;
+  const delayed = new Set<ReturnType<typeof setTimeout>>();
   const timers: Record<string, ReturnType<typeof setTimeout>> = {};
   const read = new Set<string>();
-  useExtensions.subscribe((e, prev) => {
+  const unsubscribe = useExtensions.subscribe((e, prev) => {
     if (e.lists === prev.lists) return;
     for (const [profile, list] of Object.entries(e.lists)) {
       if (list === prev.lists[profile]) continue;
       clearTimeout(timers[profile]);
-      timers[profile] = setTimeout(() => void refreshExtensionSearchEngines(profile), 400);
-      if (!read.has(profile)) setTimeout(() => void refreshExtensionSearchEngines(profile), 3000);
+      timers[profile] = setTimeout(() => void refreshExtensionSearchEngines(profile, store, () => !stopped), 400);
+      if (!read.has(profile)) delayed.add(setTimeout(() => void refreshExtensionSearchEngines(profile, store, () => !stopped), 3000));
       read.add(profile);
     }
   });
+  return () => {
+    stopped = true;
+    unsubscribe();
+    for (const timer of [...Object.values(timers), ...delayed]) clearTimeout(timer);
+  };
 }
 
-export async function refreshExtensionSearchEngines(profile: string) {
+export async function refreshExtensionSearchEngines(profile: string, store: BrowserStore = useBrowser, active = () => true) {
   let list: unknown;
   try {
     list = await searchEngineList(profile);
@@ -26,9 +33,9 @@ export async function refreshExtensionSearchEngines(profile: string) {
     console.warn("[extensions] search engines failed", error);
     return;
   }
-  if (list == null) return;
+  if (list == null || !active()) return;
   const engines = extensionEnginesFromChrome(profile, list);
-  const s = useBrowser.getState();
+  const s = store.getState();
   const current = s.settings.extensionSearchEngines ?? [];
   const next = [...current.filter((e) => e.profile !== profile), ...engines];
   if (JSON.stringify(next) !== JSON.stringify(current)) s.updateSettings({ extensionSearchEngines: next });

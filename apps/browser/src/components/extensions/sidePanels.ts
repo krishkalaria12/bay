@@ -1,5 +1,5 @@
 import { extensionSidePanelUrl } from "@bay/nncore";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeBrowserId, extensionProfile, isPrivate, pageProfile, shownIn, useExtensions } from "./store";
 
 // Which extension's side panel each window wants, set the moment it is asked for: a second click while the first is

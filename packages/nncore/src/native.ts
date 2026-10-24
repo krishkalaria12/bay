@@ -1,4 +1,4 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, type EventSubscription } from "@bay/platform/native";
 import type { ContentBlockerState, ContentBlockerStats } from "./contentBlocker";
 import type { DisplayMediaSource } from "./WebView";
 import type { ExternalAppAllowance } from "./externalApps";
@@ -36,6 +36,11 @@ export const Cef = requireNativeModule<{
   addListener(name: "onContentBlocker", listener: (s: ContentBlockerStats) => void): EventSubscription;
   addListener(name: "onSystemState", listener: (s: SystemState) => void): EventSubscription;
   addListener(name: "onEngineEvent", listener: (e: { topic: string; payload: string }) => void): EventSubscription;
+  addListener(name: "onPageEvent", listener: (event: unknown) => void): EventSubscription;
+  addListener(name: "onPageOpen", listener: (event: unknown) => void): EventSubscription;
+  startPageEvents?(): Promise<void>;
+  stopPageEvents?(): Promise<void>;
+  finishPageOpen?(offerId: string, tabId: string | null): Promise<void>;
 
   engineInfo(): Promise<EngineInfo>;
   chromeWindows(): Promise<ChromeWindowState[]>;

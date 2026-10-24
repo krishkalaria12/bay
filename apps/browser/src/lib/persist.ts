@@ -1,13 +1,13 @@
 import { cancelDownload, type Download } from "@bay/nncore";
-import { readDocument, writeDocument } from "@bay/shell";
-import { useBrowser, type BrowserState, type HydrateData } from "../store/browser";
-import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../store/model";
-import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
+import { readDocument, saveDocument, writeDocument } from "@bay/shell";
+import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } from "../store/browser";
+import { inPinnedContainer, isIncognitoSpace, makeTab, newId, snapshotTab } from "../store/model";
+import type { BrowserWindow, ClosedTab, Tab, TabSnapshot } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
-import { startFavicons } from "./favicons";
-import { startBookmarks } from "./bookmarks";
-import { startHistory } from "./history";
-import { startProfileDataCleanup } from "./profileData";
+import { createFaviconService, startFavicons } from "./favicons";
+import { createBookmarksService, startBookmarks } from "./bookmarks";
+import { createHistoryService, startHistory } from "./history";
+import { createProfileDataCleanup, startProfileDataCleanup } from "./profileData";
 import { PERSIST_VERSION, SAVE_DELAY_MS } from "./constants";
 
 type Doc = { name: string; sources: (s: BrowserState) => unknown[]; json: (s: BrowserState) => string };
@@ -110,7 +110,7 @@ type SessionV2 = {
   version: 2;
   spaces: HydrateData["spaces"];
   spaceOrder: string[];
-  profiles?: HydrateData["spaces"];
+  profiles?: Record<string, NonNullable<HydrateData["spaces"]>[string] & { dataId?: string }>;
   profileOrder?: string[];
   orphanedProfileData?: string[];
   settings: HydrateData["settings"];
@@ -121,6 +121,13 @@ type SessionV2 = {
   tabLists?: BrowserState["tabLists"];
   groups: BrowserState["groups"][string][];
   pinnedFolders?: BrowserState["pinnedFolders"][string][];
+  parkedPins?: Record<
+    string,
+    {
+      tabs: (TabSnapshot & { id: string; groupId: string | null })[];
+      groups: Pick<BrowserState["groups"][string], "id" | "name" | "icon" | "color" | "collapsed">[];
+    }
+  >;
   splits: BrowserState["splits"][string][];
   closedTabs: ClosedTab[];
   closedWindows: BrowserState["closedWindows"];
@@ -128,6 +135,69 @@ type SessionV2 = {
   deletedGroups?: BrowserState["deletedGroups"];
   cleanedTabs?: BrowserState["cleanedTabs"];
 };
+
+function locatedInSpace<T extends { spaceId: string }>(value: T & { profileId?: string }): T {
+  const { profileId, ...current } = value;
+  return { ...current, spaceId: current.spaceId ?? profileId } as T;
+}
+
+/** Older builds used profileId for the space and dataId for its native profile. */
+function migrateProfileSession(saved: SessionV2): SessionV2 {
+  if (saved.spaces || !saved.profiles) return saved;
+  const spaces = Object.fromEntries(
+    Object.entries(saved.profiles).map(([id, { dataId, ...space }]) => [
+      id,
+      {
+        ...space,
+        ...(space.profileId === undefined && dataId !== undefined ? { profileId: dataId, sharesSignIns: space.sharesSignIns ?? true } : {}),
+      },
+    ]),
+  );
+  const tabs = (saved.tabs ?? []).map(locatedInSpace);
+  const groups = (saved.groups ?? []).map(locatedInSpace);
+  const tabIds = new Set(tabs.map((tab) => tab.id));
+  // Closed windows used to park their pinned pages outside the live tab map.
+  // Space-owned lists retain these pages even without a window showing them.
+  for (const [spaceId, parked] of Object.entries(saved.parkedPins ?? {})) {
+    const members = new Map<string, string[]>();
+    for (const { id, groupId, ...snapshot } of parked.tabs) {
+      if (tabIds.has(id)) continue;
+      const tab = {
+        ...makeTab("", spaceId, snapshot.url, { ...locatedInSpace(snapshot), spaceId, pinned: !groupId }),
+        id,
+        unloaded: true,
+      };
+      tabs.push(tab);
+      tabIds.add(id);
+      if (groupId) members.set(groupId, [...(members.get(groupId) ?? []), id]);
+    }
+    for (const group of parked.groups) {
+      const ids = members.get(group.id);
+      if (ids?.length && !groups.some((g) => g.id === group.id)) {
+        groups.push({ ...group, spaceId, pinned: true, tabIds: ids, createdAt: Date.now() });
+      }
+    }
+  }
+  const closedGroup = (entry: BrowserState["closedGroups"][number]) => ({ ...entry, tabs: entry.tabs.map(locatedInSpace) });
+  return {
+    ...saved,
+    spaces,
+    spaceOrder: saved.profileOrder ?? [],
+    windows: (saved.windows ?? []).map(locatedInSpace),
+    tabs,
+    groups,
+    closedTabs: (saved.closedTabs ?? []).map((entry) => ({ ...entry, tab: locatedInSpace(entry.tab) })),
+    closedWindows: (saved.closedWindows ?? []).map((entry) => ({
+      ...entry,
+      window: locatedInSpace(entry.window),
+      tabs: entry.tabs.map(locatedInSpace),
+      groups: entry.groups.map(locatedInSpace),
+    })),
+    closedGroups: (saved.closedGroups ?? []).map(closedGroup),
+    deletedGroups: (saved.deletedGroups ?? []).map(closedGroup),
+    cleanedTabs: (saved.cleanedTabs ?? []).map((entry) => ({ ...entry, tab: locatedInSpace(entry.tab) })),
+  };
+}
 
 function backupBeforeIsolation(name: string) {
   const original = readDocument(name);
@@ -165,14 +235,15 @@ function isolateLegacyFiles(owners: Map<string, string[]>, detached: Set<string>
 }
 
 export function loadSession(): HydrateData | null {
-  const session = read<SessionV2>("session.json");
-  if (session?.version !== 2) return null;
+  const saved = read<SessionV2>("session.json");
+  if (saved?.version !== 2) return null;
+  const session = migrateProfileSession(saved);
   const spaces = session.spaces ?? session.profiles;
   const spaceOrder = session.spaceOrder ?? session.profileOrder ?? [];
   if (spaces) {
     const order = [...new Set([...spaceOrder.filter((id) => spaces[id]), ...Object.keys(spaces)])];
     const { owners, detached } = isolateSavedSpaces(spaces, order, session.orphanedProfileData ?? []);
-    if (detached.size || (!session.spaces && session.profiles)) backupBeforeIsolation("session.json");
+    if (detached.size || session !== saved) backupBeforeIsolation("session.json");
     if (detached.size) isolateLegacyFiles(owners, detached);
   }
   const downloads = read<{ downloads: Download[] }>("downloads.json");
@@ -230,87 +301,216 @@ export function loadSession(): HydrateData | null {
   return data;
 }
 
-let flush: () => void = () => {};
-let resume: () => void = () => {};
-// From the quit's last save until the quit ends or is cancelled: what the quit itself does to the store (its windows
-// closing) is never saved.
-let frozen = false;
+export type PersistenceOwner = {
+  flush(options?: { final?: boolean }): Promise<void>;
+  resume(): void;
+  dispose(): void;
+};
 
-export function flushPersistence({ final = false } = {}) {
-  flush();
-  if (final) frozen = true;
-}
-
-// The quit was cancelled (a page's beforeunload said Stay): saving goes on, starting with what changed meanwhile.
-export function resumePersistence() {
-  frozen = false;
-  resume();
-}
-
-export function startPersistence() {
+/** Restore disk state before creating the shared authority. Recovery skips this. */
+export function restoreBrowserSession(store: BrowserStore) {
   const session = loadSession();
-  useBrowser.getState().hydrate(session ?? {});
+  store.getState().hydrate(session ?? {});
+  return session;
+}
 
+/** Owns session/download persistence for one authority store. Global history,
+ * bookmark, favicon and profile services are started separately by its caller.
+ */
+export function createPersistence({ store, restoreSession = true }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
+  const session = restoreSession ? restoreBrowserSession(store) : null;
   const lastSources = new Map<string, unknown[]>();
   const lastJson = new Map<string, string>();
   const dirty = new Set<Doc>();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let generation = 0;
+  let finalFlush: Promise<void> | null = null;
+  let frozen = false;
+  let disposed = false;
 
-  const save = () => {
+  function save(final = false, snapshot = store.getState()): Promise<void> {
     clearTimeout(timer);
     timer = undefined;
-    if (frozen) return;
-    const s = useBrowser.getState();
-    for (const doc of DOCS.filter((d) => dirty.has(d))) {
-      const json = doc.json(s);
-      if (lastJson.get(doc.name) !== json) {
+    if (disposed) return Promise.reject(new Error("Persistence owner is disposed"));
+    if (frozen && !final) return finalFlush ?? Promise.resolve();
+    const savingGeneration = generation;
+    const pending: Promise<void>[] = [];
+    for (const doc of DOCS.filter((d) => final || dirty.has(d))) {
+      const json = doc.json(snapshot);
+      if (final) {
+        // Re-save every final document, including a previous background write
+        // whose completion is otherwise unknown on an asynchronous host.
+        let saved: Promise<void>;
+        try {
+          saved = Promise.resolve(saveDocument(doc.name, json));
+        } catch (error) {
+          saved = Promise.reject(error);
+        }
+        pending.push(
+          saved.then(
+            () => {
+              if (!disposed && savingGeneration === generation) lastJson.set(doc.name, json);
+            },
+            (error) => {
+              if (!disposed && savingGeneration === generation) {
+                lastJson.delete(doc.name);
+                dirty.add(doc);
+              }
+              throw error;
+            },
+          ),
+        );
+      } else if (lastJson.get(doc.name) !== json) {
         lastJson.set(doc.name, json);
         write(doc.name, json);
       }
     }
     dirty.clear();
-  };
-  flush = save;
-
-  const check = (s: BrowserState, initial = false) => {
-    if (frozen) return;
+    return Promise.all(pending).then(() => {});
+  }
+  function check(state: BrowserState, initial = false) {
+    if (disposed || frozen) return;
     for (const doc of DOCS) {
-      const sources = doc.sources(s);
-      const prev = lastSources.get(doc.name);
-      if (prev && sources.every((v, i) => v === prev[i])) continue;
+      const sources = doc.sources(state);
+      const previous = lastSources.get(doc.name);
+      if (previous && sources.every((value, index) => value === previous[index])) continue;
       lastSources.set(doc.name, sources);
       if (!initial) dirty.add(doc);
     }
-    if (dirty.size && !timer) timer = setTimeout(save, SAVE_DELAY_MS);
-  };
-  check(useBrowser.getState(), true);
+    if (dirty.size && !timer)
+      timer = setTimeout(() => {
+        try {
+          void save().catch((error) => console.warn("Couldn't save the session", error));
+        } catch (error) {
+          console.warn("Couldn't save the session", error);
+        }
+      }, SAVE_DELAY_MS);
+  }
+  check(store.getState(), true);
+  // A session saved with profiles, or before its spaces were isolated, is written once in its current shape.
   if (
     session?.spaces &&
     (!read<SessionV2>("session.json")?.spaces ||
-      Object.entries(session.spaces).some(([id, space]) => space.profileId !== useBrowser.getState().spaces[id]?.profileId))
+      Object.entries(session.spaces).some(([id, space]) => space.profileId !== store.getState().spaces[id]?.profileId))
   ) {
     dirty.add(DOCS.find((doc) => doc.name === "session.json")!);
-    save();
+    try {
+      void save().catch((error) => console.warn("Couldn't save the session", error));
+    } catch (error) {
+      console.warn("Couldn't save the session", error);
+    }
   }
-  resume = () => {
-    check(useBrowser.getState());
-    save();
-  };
-  const stopFavicons = startFavicons();
-  const stopHistory = startHistory();
-  const stopBookmarks = startBookmarks();
-  const stopProfileData = startProfileDataCleanup();
-  const stopSession = useBrowser.subscribe((s, prev) => {
-    check(s);
-    if (s.windows !== prev.windows) forgetClosedIncognito(s, prev);
+  const unsubscribe = store.subscribe((_state, previous) => {
+    // Space/private-window cleanup can produce nested updates before this
+    // subscriber runs, so save the current state rather than the outer event.
+    const state = store.getState();
+    check(state);
+    if (state.windows !== previous.windows) forgetClosedIncognito(state, previous);
   });
-  return () => {
-    stopFavicons();
-    stopHistory();
-    stopBookmarks();
-    stopProfileData();
-    stopSession();
+  return {
+    flush({ final = false } = {}) {
+      if (disposed) return Promise.reject(new Error("Persistence owner is disposed"));
+      if (final) {
+        if (finalFlush) return finalFlush;
+        // Capture before freezing. Window closure during quit must not replace
+        // this snapshot while its acknowledged writes are still in flight.
+        const snapshot = store.getState();
+        frozen = true;
+        try {
+          finalFlush = save(true, snapshot);
+        } catch (error) {
+          finalFlush = Promise.reject(error);
+        }
+        return finalFlush;
+      }
+      try {
+        return save();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    },
+    resume() {
+      if (disposed) return;
+      generation++;
+      frozen = false;
+      finalFlush = null;
+      check(store.getState());
+      try {
+        void save().catch((error) => console.warn("Couldn't save the session", error));
+      } catch (error) {
+        console.warn("Couldn't save the session", error);
+      }
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      generation++;
+      clearTimeout(timer);
+      timer = undefined;
+      unsubscribe();
+      dirty.clear();
+      lastSources.clear();
+      lastJson.clear();
+      finalFlush = null;
+    },
   };
+}
+
+let defaultPersistence: PersistenceOwner | null = null;
+let stopDefault: (() => void) | null = null;
+export function flushPersistence(options: { final?: boolean } = {}) {
+  return defaultPersistence?.flush(options) ?? Promise.resolve();
+}
+
+// A page's beforeunload cancelled quit. Resume from whatever changed meanwhile.
+export function resumePersistence() {
+  defaultPersistence?.resume();
+}
+
+/** All document/native-data watchers belong to the same authority store. */
+export function createBrowserPersistence({ store, restoreSession = true }: { store: BrowserStore; restoreSession?: boolean }): PersistenceOwner {
+  const owner = createPersistence({ store, restoreSession });
+  const stops: (() => void)[] = [];
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    try {
+      for (const stopService of stops.reverse()) {
+        try {
+          stopService();
+        } catch (error) {
+          console.error("[runtime] persistence service cleanup failed", error);
+        }
+      }
+    } finally {
+      owner.dispose();
+    }
+  };
+  try {
+    stops.push(store === useBrowser ? startFavicons() : createFaviconService(store).start());
+    stops.push(store === useBrowser ? startHistory() : createHistoryService(store).start());
+    stops.push(store === useBrowser ? startBookmarks() : createBookmarksService(store).start());
+    stops.push(store === useBrowser ? startProfileDataCleanup() : createProfileDataCleanup(store).start());
+  } catch (error) {
+    stop();
+    throw error;
+  }
+  return { flush: owner.flush, resume: owner.resume, dispose: stop };
+}
+
+/** Compatibility entry for the single-runtime host and existing integrations. */
+export function startPersistence() {
+  stopDefault?.();
+  const owner = createBrowserPersistence({ store: useBrowser });
+  defaultPersistence = owner;
+  const stop = () => {
+    owner.dispose();
+    if (defaultPersistence === owner) defaultPersistence = null;
+    if (stopDefault === stop) stopDefault = null;
+  };
+  stopDefault = stop;
+  return stop;
 }
 
 function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {

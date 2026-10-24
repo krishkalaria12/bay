@@ -8,14 +8,8 @@
 #include <utility>
 
 #include "base/strings/sys_string_conversions.h"
-#include "chrome/common/pref_names.h"
-#include "components/prefs/pref_service.h"
-#include "components/prefs/scoped_user_pref_update.h"
 
 namespace bay {
-namespace {
-
-const char* const kPairs = prefs::kProtocolHandlerPerOriginAllowedProtocols;
 
 // As NNExternalApps.mm: the bundle's display name, else its file name.
 NSString* AppName(NSURL* app) {
@@ -61,8 +55,7 @@ NSString* IconDataURI(NSURL* app, int pixels) {
              : nil;
 }
 
-base::DictValue Allowance(const std::string& origin,
-                          const std::string& scheme) {
+base::DictValue AppForScheme(const std::string& scheme) {
   NSURL* probe = [NSURL
       URLWithString:[base::SysUTF8ToNSString(scheme) stringByAppendingString:@":"]];
   NSURL* app =
@@ -70,55 +63,10 @@ base::DictValue Allowance(const std::string& origin,
             : nil;
   NSString* icon = app ? IconDataURI(app, 64) : nil;
   return base::DictValue()
-      .Set("origin", origin)
-      .Set("scheme", scheme)
       .Set("app", app ? base::Value(base::SysNSStringToUTF8(AppName(app)))
                       : base::Value())
       .Set("icon", icon ? base::Value(base::SysNSStringToUTF8(icon))
                         : base::Value());
 }
 
-}  // namespace
 }  // namespace bay
-
-NN_ENGINE_CALL(nn_external_apps_allowances) {
-  bay::Call call(profile_dir, args_json, reply, context);
-  if (!call) {
-    return;
-  }
-  // base::DictValue iterates in key order: sorted by origin, then scheme.
-  base::ListValue allowances;
-  for (const auto [origin, schemes] :
-       call.profile()->GetPrefs()->GetDict(bay::kPairs)) {
-    if (!schemes.is_dict()) {
-      continue;
-    }
-    for (const auto [scheme, allowed] : schemes.GetDict()) {
-      if (allowed.is_bool() && allowed.GetBool()) {
-        allowances.Append(bay::Allowance(origin, scheme));
-      }
-    }
-  }
-  call.TakeReply().Send(
-      base::DictValue().Set("allowances", std::move(allowances)));
-}
-
-NN_ENGINE_CALL(nn_external_apps_remove) {
-  bay::Call call(profile_dir, args_json, reply, context);
-  if (!call) {
-    return;
-  }
-  const std::string origin = call.String("origin");
-  const std::string scheme = call.String("scheme");
-  if (origin.empty() || scheme.empty()) {
-    return call.TakeReply().Error("origin and scheme required");
-  }
-  ScopedDictPrefUpdate pairs(call.profile()->GetPrefs(), bay::kPairs);
-  if (base::DictValue* schemes = pairs->FindDict(origin)) {
-    schemes->Remove(scheme);
-    if (schemes->empty()) {
-      pairs->Remove(origin);
-    }
-  }
-  call.TakeReply().Ok();
-}

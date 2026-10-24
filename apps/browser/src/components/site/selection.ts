@@ -3,7 +3,7 @@ import { chooseTextFragment, cleanUrl, searchUrl, withTextFragment, type Selecti
 import { copyText } from "@bay/shell";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { defaultSearchEngine } from "../../store/settings";
 import { showToast } from "../layout/splitActions";
 import { openModeFor } from "../bookmarks/actions";
@@ -30,7 +30,7 @@ export function startSelectionTools() {
   return useBrowser.subscribe((s, prev) => s.settings !== prev.settings && sync());
 }
 
-export type ClickModifiers = { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };
+export type ClickModifiers = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean };
 
 // A new tab next to the page, or where the keys held say (Chrome's): ⌘ behind, ⇧⌘ in front, ⇧ a new window.
 export function searchSelection(tabId: string, text: string, modifiers: ClickModifiers = {}) {

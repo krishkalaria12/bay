@@ -1,6 +1,7 @@
+import { Pressable, View, modKey } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -11,7 +12,7 @@ import Animated, {
   withRepeat,
   withSpring,
   withTiming,
-} from "react-native-reanimated";
+} from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { closeTab } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
@@ -21,9 +22,9 @@ import { COMPLETION_MS } from "../../live/constants";
 import { prBadge } from "../../live/github";
 import { folderRows, type FolderRow } from "../../live/rows";
 import { SOURCES } from "../../live/sources";
-import { setLive, updateFolder, useLive, profileFolders } from "../../live/store";
+import { setLiveView, updateFolder, useLive, profileFolders } from "../../live/store";
 import type { CompletedItem, LiveItem } from "../../live/types";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePageSpaceId } from "../../store/hooks";
 import { activeTabId, viewTabIds } from "../../store/model";
 import { openSettings } from "../settings/windows";
@@ -282,7 +283,7 @@ function MoreRow({ folderId, section, count }: { folderId: string; section: stri
   const key = `${folderId}:${section}`;
   return (
     <View {...hoverProps}>
-      <Pressable onPress={() => setLive((s) => ({ showAll: { ...s.showAll, [key]: true } }))}>
+      <Pressable onPress={() => setLiveView("showAll", key, true)}>
         <View
           style={{
             height: 26,
@@ -313,7 +314,7 @@ function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: s
     <View>
       <View {...hoverProps}>
         <Pressable
-          onPress={() => setLive((s) => ({ expandedStacks: { ...s.expandedStacks, [stack.id]: collapsed } }))}
+          onPress={() => setLiveView("expandedStacks", stack.id, collapsed)}
           accessibilityLabel={collapsed ? "Expand pull request stack" : "Collapse pull request stack"}
         >
           <View
@@ -409,7 +410,7 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
           <Pressable
             onPress={(e) => {
               dismissHover();
-              openLiveItem(windowId, folderId, item, { background: clickMods(e).metaKey });
+              openLiveItem(windowId, folderId, item, { background: modKey(clickMods(e)) });
             }}
           >
             {({ pressed }) => (

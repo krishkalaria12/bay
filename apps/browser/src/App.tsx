@@ -1,8 +1,9 @@
+import { View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
 import { setTrafficLightsOnHover, Surface, WindowDragRegion } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import { StyleSheet } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
 import { CommandPanel } from "./components/CommandPanel";
 import { ContentCard } from "./components/ContentCard";
 import { BookmarkDialog } from "./components/bookmarks/BookmarkDialog";
@@ -19,6 +20,7 @@ import { RenameDialogHost } from "./components/RenameDialog";
 import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/layout/SpaceSwipe";
+import { CaptionButtons } from "./components/layout/CaptionButtons";
 import { TopStripPeek, TopTabStrip } from "./components/layout/TopTabStrip";
 import { TOP_CARD_INSET } from "./components/layout/constants";
 import { TOP_STRIP_HEIGHT } from "./components/layout/constants";
@@ -33,7 +35,7 @@ import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme } from "./lib/theme";
 import { layout } from "./lib/constants";
-import { useBrowser } from "./store/browser";
+import { useBrowserRead as useBrowser } from "./store/read";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
 export function WindowRoot({ windowId }: { windowId?: string }) {
@@ -74,6 +76,10 @@ function BrowserWindow() {
   // they show only while the pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
   const buttonsOnHover = (right || !sidebarOpen) && addressInSidebar && !fullscreen;
+  // Windows' caption buttons sit at the other corner: over the page there when it has no toolbar to hold them.
+  const captionOnHover = !topTabs && addressInSidebar && (!right || !showSidebar);
+  const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
+  const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   useEffect(() => {
     void setTrafficLightsOnHover(windowId, buttonsOnHover);
   }, [windowId, buttonsOnHover]);
@@ -143,6 +149,7 @@ function BrowserWindow() {
         </View>
       )}
       {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} />)}
+      {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} onHover={captionOnHover} />}
       <ExtensionOverlays />
       <DownloadMagnet />
       <BookmarkDialog />

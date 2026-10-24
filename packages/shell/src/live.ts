@@ -1,4 +1,4 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule, requireOptionalNativeModule, type EventSubscription } from "@bay/platform/native";
 
 export type CalendarAuthorization = "fullAccess" | "writeOnly" | "denied" | "restricted" | "notDetermined";
 
@@ -31,7 +31,7 @@ export type SystemCalendarEvent = {
   attendees: CalendarParticipant[];
 };
 
-const Calendar = requireNativeModule<{
+const Calendar = requireOptionalNativeModule<{
   addListener(name: "onCalendarChanged", listener: () => void): EventSubscription;
   authorizationStatus(): CalendarAuthorization;
   requestAccess(): Promise<boolean>;
@@ -39,11 +39,12 @@ const Calendar = requireNativeModule<{
   events(start: number, end: number, calendarIds: string[]): Promise<SystemCalendarEvent[]>;
 }>("BayCalendar");
 
-export const calendarAuthorization = (): CalendarAuthorization => Calendar.authorizationStatus();
-export const requestCalendarAccess = () => Calendar.requestAccess();
-export const systemCalendars = () => Calendar.calendars();
-export const systemCalendarEvents = (start: number, end: number, calendarIds: string[] = []) => Calendar.events(start, end, calendarIds);
-export const onCalendarChanged = (listener: () => void) => Calendar.addListener("onCalendarChanged", listener);
+export const calendarAuthorization = (): CalendarAuthorization => Calendar?.authorizationStatus() ?? "denied";
+export const requestCalendarAccess = () => Calendar?.requestAccess() ?? Promise.resolve(false);
+export const systemCalendars = () => Calendar?.calendars() ?? Promise.resolve([]);
+export const systemCalendarEvents = (start: number, end: number, calendarIds: string[] = []) =>
+  Calendar?.events(start, end, calendarIds) ?? Promise.resolve([]);
+export const onCalendarChanged = (listener: () => void) => Calendar?.addListener("onCalendarChanged", listener) ?? { remove() {} };
 
 const Keychain = requireNativeModule<{
   get(account: string): Promise<string | null>;

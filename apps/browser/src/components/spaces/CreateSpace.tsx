@@ -1,8 +1,9 @@
+import { Pressable, View } from "@bay/platform";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { create } from "zustand";
 import { SPACE_COLORS, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { SPACE_LOOKS, themeOfColor, unusedSpaceLook } from "../../store/spaces";
 import type { SpaceColor } from "../../store/types";
@@ -11,6 +12,7 @@ import { closeSettingsSheet, showSettingsSheet } from "../settings/sheet";
 import { CREATE_SPACE_ICON_COLUMNS } from "./constants";
 import { SpaceBadge, SPACE_EMOJI, unusedSpaceIcon } from "./icons";
 import { NewSpacePanel } from "./NewSpace";
+import { createSpace } from "../../runtime/spaceActions";
 
 export type CreateSpacePreset = { name?: string };
 
@@ -53,8 +55,10 @@ function CreateSpaceSheet({ preset, onDone }: { preset: CreateSpacePreset; onDon
   const [icon, setIcon] = useState(() => unusedSpaceIcon(useBrowser.getState().spaces));
 
   const submit = () => {
-    const id = useBrowser.getState().createSpace({ name, color: look.color, theme: look.theme, icon });
-    onDone(id);
+    createSpace({ name, color: look.color, theme: look.theme, icon }).then(onDone, (error) => {
+      console.error("Couldn't create the space", error);
+      onDone(null);
+    });
   };
 
   return (

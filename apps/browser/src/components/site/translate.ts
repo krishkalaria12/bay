@@ -1,7 +1,9 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as settingsCommands from "../../runtime/settingsActions";
 import { translation } from "@bay/shell";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { changedIds } from "../../store/changes";
 import { isIncognitoSpace } from "../../store/model";
 import { hideKeyedToast, showToast } from "../layout/splitActions";
@@ -60,7 +62,11 @@ export function setNeverTranslate(tabId: string, never: boolean) {
   if (!tab || !host || isIncognitoSpace(tab.spaceId)) return;
   const all = s.settings.neverTranslateSites;
   const list = (all[tab.spaceId] ?? []).filter((h) => h !== host);
-  s.updateSettings({ neverTranslateSites: { ...all, [tab.spaceId]: never ? [...list, host] : list } });
+  reportBrowserCommand(
+    settingsCommands.updateSettings({
+      neverTranslateSites: Object.fromEntries(Object.entries({ ...all, [tab.spaceId]: never ? [...list, host] : list }).map(([id, sites]) => [id, [...sites]])),
+    }),
+  );
   if (!never) return void detect(tabId);
   if (stateOf(tabId).status !== "idle") void revertPage(tabId, { quiet: true });
   patch(tabId, { source: null });

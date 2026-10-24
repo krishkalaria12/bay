@@ -1,42 +1,57 @@
+import { modKey } from "@bay/platform";
 import { cleanUrl, markdownLink } from "@bay/core";
 import { copyText, prompt } from "@bay/shell";
 import { updateFolder } from "../../live/store";
-import { useBrowser } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
+import {
+  addTabsToGroup,
+  groupTabs,
+  newPinnedFolder,
+  setMuted,
+  setPinnedUrl,
+  setSelection,
+  updateGroup,
+  updatePinnedFolder,
+} from "../../runtime/organizeActions";
+import { activate, updateTabDetails } from "../../runtime/tabActions";
+import { browserRead } from "../../store/read";
 import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
 import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
+import { updateSpace } from "../../runtime/spaceActions";
+import { addBookmark, addBookmarkFolder } from "../../runtime/bookmarkActions";
 
-const store = () => useBrowser.getState();
+const store = () => browserRead.getState();
 // An Essential or a pinned row: never in a group.
 const inPinnedSection = (s: ReturnType<typeof store>, id: string) => !!s.tabs[id] && pinnedPage(s.tabs[id]!);
 
 const anchors = new Map<string, string>();
 
-export function clickTab(windowId: string, tabId: string, mods: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {}) {
+export function clickTab(windowId: string, tabId: string, mods: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {}) {
   const s = store();
-  if (mods.altKey && mods.shiftKey && !mods.metaKey && s.settings.optShiftClickOpensInGroup) return openInCurrentGroup(windowId, tabId);
+  if (mods.altKey && mods.shiftKey && !modKey(mods) && s.settings.optShiftClickOpensInGroup) return openInCurrentGroup(windowId, tabId);
   const view = viewTabIds(s, windowId);
   const active = activeTabId(s, windowId);
   const current = s.selection[windowId] ?? [];
-  if (mods.metaKey) {
+  if (modKey(mods)) {
     const base = current.length ? current : active ? [active] : [];
     const next = base.includes(tabId) ? base.filter((id) => id !== tabId) : [...base, tabId];
     anchors.set(windowId, tabId);
-    return s.setSelection(windowId, next.length > 1 ? next : []);
+    return reportBrowserCommand(setSelection(windowId, next.length > 1 ? next : []));
   }
   if (mods.shiftKey) {
     const from = view.indexOf(anchors.get(windowId) ?? active ?? tabId);
     const to = view.indexOf(tabId);
     if (from >= 0 && to >= 0) {
       const [a, b] = from < to ? [from, to] : [to, from];
-      return s.setSelection(windowId, view.slice(a, b + 1));
+      return reportBrowserCommand(setSelection(windowId, view.slice(a, b + 1)));
     }
   }
   anchors.set(windowId, tabId);
-  s.setSelection(windowId, []);
-  s.activate(tabId, windowId);
+  reportBrowserCommand(setSelection(windowId, []));
+  reportBrowserCommand(activate(tabId, windowId));
 }
 
 function openInCurrentGroup(windowId: string, tabId: string) {
@@ -44,12 +59,11 @@ function openInCurrentGroup(windowId: string, tabId: string) {
   const active = activeTabId(s, windowId);
   if (active && active !== tabId && !inPinnedSection(s, tabId) && !inPinnedSection(s, active)) {
     const group = groupOf(s, active);
-    if (group) s.addTabsToGroup(group.id, [tabId]);
-    else s.groupTabs([active, tabId]);
+    reportBrowserCommand(group ? addTabsToGroup(group.id, [tabId]) : groupTabs([active, tabId]));
   }
   anchors.set(windowId, tabId);
-  store().setSelection(windowId, []);
-  store().activate(tabId, windowId);
+  reportBrowserCommand(setSelection(windowId, []));
+  reportBrowserCommand(activate(tabId, windowId));
 }
 
 export async function startRename(windowId: string, target: Target) {
@@ -66,15 +80,15 @@ export async function startRename(windowId: string, target: Target) {
         confirmTitle: "Update",
         windowId,
       });
-      if (name !== null) store().updateTab(tab.id, { customTitle: name });
+      if (name !== null) await updateTabDetails(tab.id, { customTitle: name });
       return;
     }
     const group = groupOf(s, tab.id);
-    if (group?.collapsed && activeTabId(s, windowId) !== tab.id) s.updateGroup(group.id, { collapsed: false });
+    if (group?.collapsed && activeTabId(s, windowId) !== tab.id) reportBrowserCommand(updateGroup(group.id, { collapsed: false }));
     const folder = tab.pinnedRow && tab.folderId ? s.pinnedFolders[tab.folderId] : undefined;
     let parent = folder;
     while (parent) {
-      if (parent.collapsed) s.updatePinnedFolder(parent.id, { collapsed: false });
+      if (parent.collapsed) reportBrowserCommand(updatePinnedFolder(parent.id, { collapsed: false }));
       parent = parent.parentId ? s.pinnedFolders[parent.parentId] : undefined;
     }
   }
@@ -85,9 +99,9 @@ export function commitRename(target: Target, text: string) {
   const name = text.trim();
   if (target.kind === "tab") {
     const tab = store().tabs[target.id];
-    if (tab) store().updateTab(tab.id, { customTitle: name && name !== tab.title ? name : null });
-  } else if (target.kind === "folder") store().updatePinnedFolder(target.id, { name });
-  else store().updateGroup(target.id, { name });
+    if (tab) reportBrowserCommand(updateTabDetails(tab.id, { customTitle: name && name !== tab.title ? name : null }));
+  } else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { name }));
+  else reportBrowserCommand(updateGroup(target.id, { name }));
   endRename(target);
 }
 
@@ -102,17 +116,19 @@ export async function openIconPicker(windowId: string, target: Target) {
 }
 
 export function setIcon(target: Target, icon: string | null) {
-  if (target.kind === "tab") store().updateTab(target.id, { customIcon: icon });
+  if (target.kind === "tab") reportBrowserCommand(updateTabDetails(target.id, { customIcon: icon }));
   // A live folder's header row ("livefolder|<id>").
   else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
-  else if (target.kind === "folder") store().updatePinnedFolder(target.id, { icon });
-  else if (target.kind === "space") store().updateSpace(target.id, { icon });
-  else store().updateGroup(target.id, { icon });
+  else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { icon }));
+  else if (target.kind === "space") reportBrowserCommand(updateSpace(target.id, { icon }));
+  else reportBrowserCommand(updateGroup(target.id, { icon }));
 }
 
-export function newGroupWithSelection(windowId: string, ids = selectedTabIds(store(), windowId)) {
-  const groupId = store().groupTabs(ids.filter((id) => !inPinnedSection(store(), id)));
-  if (groupId) void startRename(windowId, { kind: "group", id: groupId });
+export async function newGroupWithSelection(windowId: string, ids = selectedTabIds(store(), windowId)) {
+  const tabIds = ids.filter((id) => !inPinnedSection(store(), id));
+  if (!tabIds.length) return "";
+  const groupId = await groupTabs(tabIds);
+  await startRename(windowId, { kind: "group", id: groupId });
   return groupId;
 }
 
@@ -124,7 +140,7 @@ export const urlLabel = (url: string) =>
     .replace(/\/$/, "");
 export const tabTitle = (t: Pick<Tab, "customTitle" | "title" | "url">) => t.customTitle || t.title || (t.url && urlLabel(t.url)) || "New Tab";
 
-export function copyUrls(ids: string[], markdown: boolean) {
+export function copyUrls(ids: readonly string[], markdown: boolean) {
   const tabs = ids.map((id) => store().tabs[id]).filter((t): t is Tab => !!t?.url);
   if (!tabs.length) return;
   const lines = tabs.map((t) => (markdown ? markdownLink(tabTitle(t), t.url) : cleanUrl(t.url)));
@@ -138,20 +154,20 @@ export async function bookmarkTabs(windowId: string, ids: string[], folder: stri
   if (folder === "new") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
     if (!title) return;
-    parentId = store().addBookmarkFolder({ spaceId, title });
+    parentId = await addBookmarkFolder({ spaceId, title });
   }
   for (const id of ids) {
     const t = store().tabs[id];
-    if (t?.url) store().addBookmark({ spaceId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId });
+    if (t?.url) await addBookmark({ spaceId, url: t.url, title: tabTitle(t), favicon: t.favicon, parentId });
   }
 }
 
 /** A new folder in the Pinned section, with `ids` pinned into it; its name is typed in place. */
-export function newPinnedFolderWith(windowId: string, ids: string[] = [], parentId?: string) {
+export async function newPinnedFolderWith(windowId: string, ids: string[] = [], parentId?: string) {
   if (parentId && folderDepth(store(), parentId) >= MAX_FOLDER_DEPTH) return "";
-  if (parentId) store().updatePinnedFolder(parentId, { collapsed: false });
-  const folderId = store().newPinnedFolder(windowId, { tabIds: ids, parentId });
-  if (folderId) void startRename(windowId, { kind: "folder", id: folderId });
+  if (parentId) await updatePinnedFolder(parentId, { collapsed: false });
+  const folderId = await newPinnedFolder(windowId, { tabIds: ids, parentId });
+  await startRename(windowId, { kind: "folder", id: folderId });
   return folderId;
 }
 
@@ -165,11 +181,11 @@ export async function editPinnedPage(windowId: string, tabId: string) {
     confirmTitle: "Save",
     windowId,
   });
-  if (url) store().setPinnedUrl(tabId, url.includes("://") ? url : `https://${url}`);
+  if (url) await setPinnedUrl(tabId, url.includes("://") ? url : `https://${url}`);
 }
 
 export function muteAll(windowId: string, muted: boolean) {
-  store().setMuted(viewTabIds(store(), windowId), muted);
+  return setMuted(viewTabIds(store(), windowId), muted);
 }
 
 export const allMuted = (windowId: string) => {

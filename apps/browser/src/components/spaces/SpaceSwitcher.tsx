@@ -1,12 +1,12 @@
+import { Pressable, View } from "@bay/platform";
 import { showMenu, Symbol } from "@bay/shell";
-import { Pressable, View } from "react-native";
 import { useEffect } from "react";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { deleteSpace, switchSpace } from "../../lib/actions";
 import { layout } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { usePagerOpacity, usePagerPages, type PagerPage } from "../layout/spacePager";
 import { useHover } from "../primitives";
 import { openSettings } from "../settings/windows";
@@ -31,6 +31,8 @@ import {
   SPACE_SELECTED_OPACITY,
   SPACE_SIDE,
 } from "./constants";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { updateSpace } from "../../runtime/spaceActions";
 
 // Each icon selects a space with its own browsing profile. Dots replace icons once they no longer fit.
 
@@ -122,7 +124,7 @@ export async function openSpaceMenu(windowId: string, id: string) {
   else if (choice === "look") openThemeEditor(windowId, id);
   else if (choice === "newFolder") {
     here();
-    newPinnedFolderWith(windowId);
+    reportBrowserCommand(newPinnedFolderWith(windowId));
   } else if (choice.startsWith("live:")) {
     here();
     runNewLiveFolder(windowId, choice);
@@ -140,5 +142,5 @@ export async function renameSpace(windowId: string, id: string) {
     placeholder: "Space name",
     icon: <SpaceGlyph spaceId={id} size={26} />,
   });
-  if (name) useBrowser.getState().updateSpace(id, { name });
+  if (name) await updateSpace(id, { name });
 }

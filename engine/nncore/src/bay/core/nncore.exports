@@ -1,4 +1,7 @@
 # Symbols NNCore exports from Chrome's framework, on top of chrome/app/framework.exports.
 _NNCoreMain
+_nncore_engine_abi_version
+_nncore_engine_call
+_nncore_engine_set_event_sink
 _OBJC_CLASS_$_NNCore*
 _OBJC_METACLASS_$_NNCore*

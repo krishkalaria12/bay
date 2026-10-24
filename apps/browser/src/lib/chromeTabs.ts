@@ -10,6 +10,7 @@ import {
   type TabStripTransaction,
 } from "@bay/nncore";
 import { useBrowser, type BrowserState } from "../store/browser";
+import { pageFactsInCoordinator } from "./pageFactOwnership";
 import { changedIds } from "../store/changes";
 import { chromeChanged, groupStep, stripActual, stripPlan, type GroupBindings } from "../store/liveTabs";
 
@@ -48,7 +49,8 @@ if (__DEV__) {
 }
 
 export function startChromeTabs() {
-  if (started) return;
+  // The mirror writes the store it reads; a shared-runtime window has only a read-only projection.
+  if (started || pageFactsInCoordinator()) return;
   started = true;
   onTabStripTransaction((tx) => (lastRev < 0 ? early.push(tx) : receive(tx)));
   void tabStrips().then((snapshot) => {

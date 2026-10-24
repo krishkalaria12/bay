@@ -1,29 +1,37 @@
+import { Pressable, View } from "@bay/platform";
 import { breadcrumb } from "@bay/core";
 import { WindowBackdrop } from "@bay/shaders";
 import { ContextMenuArea, FadeLabel, setTrafficLightsCenter, Symbol, WindowDragRegion } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { useActiveTab, useTabLive, useWindowId, useWindowUi } from "../../store/hooks";
 import type { Tab } from "../../store/types";
 import { CommandPanel } from "../CommandPanel";
 import { ContentCard } from "../ContentCard";
 import { DownloadsPanel } from "../DownloadsPanel";
+import { CaptionButtons } from "../layout/CaptionButtons";
 import { usePage } from "../layout/pageState";
+import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../layout/windowButtons";
 import { setUrlAnchor } from "../layout/windowLayout";
 import { showUrlBarMenu } from "../omnibox/paste";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { copyPageUrl } from "../site/selection";
 import { openInMainWindow } from "./actions";
 import { SMALL_BAR_HEIGHT, SMALL_BAR_INSET, SMALL_BAR_MID, SMALL_BUTTON, SMALL_FIELD_HEIGHT, SMALL_FIELD_LEFT, SMALL_LIGHTS_CENTER } from "./constants";
+import { openCommandPanel } from "../../runtime/windowUiActions";
 
 // Arc's Little Arc as a Bay window: a thin bar in the profile's colour (window buttons, the page's favicon, host
 // and title, Copy Link, Open in Bay) over one page card. Dia's card styling, the top strip's 6 pt inset.
+// Past the traffic lights on macOS; the caption buttons take the bar's other end on Windows.
+const FIELD_LEFT = LIGHTS_WIDTH ? SMALL_FIELD_LEFT : SMALL_BAR_INSET + 4;
+const BAR_END = SMALL_BAR_INSET + CAPTION_BUTTONS_WIDTH;
 
 export function LittleBayWindow() {
   const theme = useTheme();
+  const windowId = useWindowId();
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
     <View style={{ flex: 1 }} onLayout={(e) => setSize(e.nativeEvent.layout)}>
@@ -43,6 +51,7 @@ export function LittleBayWindow() {
       <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
         <LittleBayBar />
       </View>
+      <CaptionButtons windowId={windowId} height={SMALL_BAR_HEIGHT} />
       <CommandPanel windowWidth={size.width} windowHeight={size.height} />
       <DownloadsPanel windowWidth={size.width} windowHeight={size.height} />
     </View>
@@ -74,15 +83,15 @@ function LittleBayBar() {
       <View
         style={{
           position: "absolute",
-          left: SMALL_FIELD_LEFT,
-          right: SMALL_BAR_INSET + 2 * SMALL_BUTTON + 8,
+          left: FIELD_LEFT,
+          right: BAR_END + 2 * SMALL_BUTTON + 8,
           top: SMALL_BAR_MID - SMALL_FIELD_HEIGHT / 2,
           height: SMALL_FIELD_HEIGHT,
         }}
       >
         {tab ? <PageField tab={tab} windowId={windowId} hidden={panelOpen} /> : null}
       </View>
-      <View style={{ position: "absolute", right: SMALL_BAR_INSET, top: SMALL_BAR_MID - SMALL_BUTTON / 2, flexDirection: "row", gap: 2 }}>
+      <View style={{ position: "absolute", right: BAR_END, top: SMALL_BAR_MID - SMALL_BUTTON / 2, flexDirection: "row", gap: 2 }}>
         <IconButton
           icon={copied ? "checkmark" : "link"}
           size={14}
@@ -98,7 +107,7 @@ function LittleBayBar() {
           box={SMALL_BUTTON}
           radius={7}
           tooltip="Open in Bay (⌘O)"
-          onPress={() => openInMainWindow(windowId)}
+          onPress={() => reportBrowserCommand(openInMainWindow(windowId))}
         />
       </View>
     </View>
@@ -123,7 +132,7 @@ function PageField({ tab, windowId, hidden }: { tab: Tab; windowId: string; hidd
     <View ref={field} onLayout={anchor} {...hoverProps} style={{ flex: 1, opacity: hidden ? 0 : 1 }}>
       <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => tab.url && void showUrlBarMenu(tab)}>
         <Pressable
-          onPress={() => useBrowser.getState().openPanel(windowId, tab.url)}
+          onPress={() => reportBrowserCommand(openCommandPanel(windowId, tab.url))}
           style={{
             flex: 1,
             flexDirection: "row",

@@ -1,3 +1,5 @@
+import { reportBrowserCommand } from "../../runtime/commands";
+import * as tabCommands from "../../runtime/tabActions";
 import {
   chooseExtensionFolder,
   configureExtension,
@@ -18,7 +20,8 @@ import {
 import { confirm, showMenu } from "@bay/shell";
 import { openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
-import { useBrowser, type BrowserState } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTabId, engineProfile } from "../../store/model";
 import { openSettings } from "../settings/windows";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";
@@ -79,7 +82,7 @@ export function addFromWebStore(windowId: string, urlOrId: string, profile = ext
   const url = `https://chromewebstore.google.com/detail/${id}`;
   const s = useBrowser.getState();
   const target = s.windows[windowId] ? windowId : s.ui.focusOrder.find((w) => s.windows[w] && extensionProfile(s, w) === profile && !s.windows[w]!.incognito);
-  if (target) s.newTab(target, { url });
+  if (target) reportBrowserCommand(tabCommands.newTab(target, { url }));
   else openWindow({ spaceId: s.spaceOrder.find((p) => engineProfile(p) === profile), url });
 }
 
@@ -196,12 +199,13 @@ function patchExtension(profile: string, id: string, patch: Partial<InstalledExt
 }
 
 export function openOptions(windowId: string, ext: InstalledExtension) {
-  if (ext.optionsUrl) useBrowser.getState().newTab(windowId, { url: ext.optionsUrl });
+  if (ext.optionsUrl) reportBrowserCommand(tabCommands.newTab(windowId, { url: ext.optionsUrl }));
 }
 
 export const openManageExtensions = () => openSettings("extensions");
 export const openPinDialog = (windowId: string) => useExtensions.setState({ pinDialog: { windowId } });
-export const openWebStore = (windowId: string) => useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
+export const openWebStore = (windowId: string) =>
+  reportBrowserCommand(tabCommands.newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" }));
 
 // MARK: Action popups
 

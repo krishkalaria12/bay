@@ -1,6 +1,7 @@
+import { Pressable, TextInput, View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, Text, TextInput, View } from "react-native";
+import { FlatList, Text } from "react-native";
 import { onEscapeKey } from "../lib/escapeKey";
 import { SYMBOL_PREFIX } from "../lib/constants";
 import { useTheme } from "../lib/theme";

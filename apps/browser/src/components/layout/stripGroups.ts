@@ -1,4 +1,4 @@
-import type { BrowserState } from "../../store/browser";
+import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { viewTabIds } from "../../store/model";
 import { groupIndex, splitIndex, stableList } from "../../store/structure";
 import { STRIP_GROUP_MARGIN_LEFT, STRIP_GROUP_MARGIN_RIGHT, STRIP_MEMBERS_INSET, STRIP_TAIL_COLLAPSED, STRIP_TAIL_EXPANDED } from "./constants";

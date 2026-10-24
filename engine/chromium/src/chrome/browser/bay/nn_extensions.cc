@@ -300,7 +300,7 @@ NN_ENGINE_CALL(nn_extensions_list) {
 NN_ENGINE_CALL(nn_extensions_install) {
   NN_EXTENSIONS_CALL();
   const std::string path = call.String("path");
-  if (path.empty() || path[0] != '/') {
+  if (!base::FilePath::FromUTF8Unsafe(path).IsAbsolute()) {
     return call.TakeReply().Error("an absolute path required");
   }
   Profile* profile = call.profile();
@@ -325,13 +325,13 @@ NN_ENGINE_CALL(nn_extensions_install) {
         reply.Send(base::DictValue().Set("id", extension->id()));
       },
       call.TakeReply()));
-  installer->Load(base::FilePath(path));
+  installer->Load(base::FilePath::FromUTF8Unsafe(path));
 }
 
 NN_ENGINE_CALL(nn_extensions_install_crx) {
   NN_EXTENSIONS_CALL();
   const std::string path = call.String("path");
-  if (path.empty() || path[0] != '/') {
+  if (!base::FilePath::FromUTF8Unsafe(path).IsAbsolute()) {
     return call.TakeReply().Error("an absolute path required");
   }
   Profile* profile = call.profile();
@@ -361,7 +361,7 @@ NN_ENGINE_CALL(nn_extensions_install_crx) {
                                          : installer->expected_id()));
       },
       call.TakeReply(), installer));
-  installer->InstallCrx(base::FilePath(path));
+  installer->InstallCrx(base::FilePath::FromUTF8Unsafe(path));
 }
 
 NN_ENGINE_CALL(nn_extensions_set_enabled) {

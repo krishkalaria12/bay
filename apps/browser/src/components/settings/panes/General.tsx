@@ -1,3 +1,4 @@
+import { View, isMac, shortcutLabel } from "@bay/platform";
 import {
   checkForUpdates,
   isDefaultBrowser,
@@ -11,17 +12,18 @@ import {
   type UpdaterState,
 } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { AppState, Text, View } from "react-native";
+import { AppState, Text } from "react-native";
+import { reportBrowserCommand } from "../../../runtime/commands";
+import { updateSettings } from "../../../runtime/settingsActions";
+import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { SHARING_COPY } from "../../../telemetry/copy";
 import { Button, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
 
 export function GeneralPane() {
-  const settings = useBrowser((s) => s.settings);
-  const update = useBrowser((s) => s.updateSettings);
+  const settings = useBrowserRead((s) => s.settings);
   const [loginStatus, setLoginStatus] = useState<string>("notRegistered");
 
   const refreshLogin = () => void launchAtLoginStatus().then(setLoginStatus);
@@ -46,11 +48,11 @@ export function GeneralPane() {
             }
           />
         </Row>
-        <Row title="Warn before quitting" description={`Asks before ${APP_NAME} quits with ⌘Q.`}>
-          <Toggle value={settings.warnBeforeQuitting} onChange={(v) => update({ warnBeforeQuitting: v })} />
+        <Row title="Warn before quitting" description={isMac ? `Asks before ${APP_NAME} quits with ⌘Q.` : `Asks before ${APP_NAME} quits.`}>
+          <Toggle value={settings.warnBeforeQuitting} onChange={(v) => reportBrowserCommand(updateSettings({ warnBeforeQuitting: v }))} />
         </Row>
-        <Row title="Warn before closing a window with multiple tabs" description="Asks before ⇧⌘W or the close button closes its tabs.">
-          <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => update({ warnBeforeClosingWindow: v })} />
+        <Row title="Warn before closing a window with multiple tabs" description={shortcutLabel("Asks before ⇧⌘W or the close button closes its tabs.")}>
+          <Toggle value={settings.warnBeforeClosingWindow} onChange={(v) => reportBrowserCommand(updateSettings({ warnBeforeClosingWindow: v }))} />
         </Row>
       </Group>
 
@@ -63,7 +65,7 @@ export function GeneralPane() {
               { value: "newTab", title: "A new tab" },
               { value: "lastTab", title: "The last tab you viewed" },
             ]}
-            onChange={(v) => update({ launchTab: v })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ launchTab: v }))}
             minWidth={190}
           />
         </Row>
@@ -78,7 +80,7 @@ export function GeneralPane() {
               { value: "keep", title: "Preserve tabs and windows" },
               { value: "close", title: "Start fresh" },
             ]}
-            onChange={(v) => update({ restoreSession: v === "keep" })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ restoreSession: v === "keep" }))}
             minWidth={190}
           />
         </Row>
@@ -93,7 +95,7 @@ export function GeneralPane() {
               { value: "website", title: "Use Website First" },
               { value: "search", title: "Prefer Search Engine" },
             ]}
-            onChange={(v) => update({ commandBarPreference: v })}
+            onChange={(v) => reportBrowserCommand(updateSettings({ commandBarPreference: v }))}
             minWidth={190}
           />
         </Row>

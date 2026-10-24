@@ -1,7 +1,9 @@
+import { View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { SPACE_COLORS } from "../../lib/theme";
-import type { Space } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type Space = DeepReadonly<import("../../store/types").Space>;
 import { SYMBOL_PREFIX } from "../../lib/constants";
 import type { IconChoice } from "../IconGrid";
 

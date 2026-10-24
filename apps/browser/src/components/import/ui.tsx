@@ -1,8 +1,9 @@
+import { Pressable, ScrollView, View } from "@bay/platform";
 import type { BrowserSource, SpaceSummary } from "@bay/import";
 import { Symbol, VisualEffect, WindowDragRegion } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
+import { ActivityIndicator, StyleSheet, Text } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "@bay/platform/motion";
 import { APP_NAME } from "../../lib/constants";
 import { useTheme } from "../../lib/theme";
 import { useSpaces } from "../../store/hooks";

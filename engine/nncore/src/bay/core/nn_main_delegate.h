@@ -24,6 +24,7 @@ class NNMainDelegate : public ChromeMainDelegate {
 
  protected:
   // ChromeMainDelegate:
+  std::optional<int> BasicStartupComplete() override;
   void PreSandboxStartup() override;
   void CreateThreadPool(std::string_view name) override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;

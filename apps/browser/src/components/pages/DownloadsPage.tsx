@@ -1,10 +1,11 @@
+import { Pressable, View, isMac } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
-import { ContextMenuArea, fileExists, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
+import { ContextMenuArea, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { downloadsIn } from "../../store/ui";
 import { openUrl } from "../bookmarks/actions";
 import { downloadMenu, downloadStatus, FileIcon } from "../Downloads";
@@ -12,6 +13,9 @@ import { IconButton, useHover } from "../primitives";
 import { Button, useFormColors } from "../settings/controls";
 import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
 import { PAGE_WIDTH } from "./constants";
+import { useFileExists } from "../useFileExists";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { clearDownloads, removeDownload } from "../../runtime/windowUiActions";
 
 export function DownloadsPage({ tabId }: { tabId: string }) {
   const theme = useTheme();
@@ -28,7 +32,7 @@ export function DownloadsPage({ tabId }: { tabId: string }) {
         onQuery={setQuery}
         placeholder="Search downloads"
         actions={
-          downloads.some((d) => d.state !== "downloading") ? <Button title="Clear All" onPress={() => useBrowser.getState().clearDownloads(windowId)} /> : null
+          downloads.some((d) => d.state !== "downloading") ? <Button title="Clear All" onPress={() => reportBrowserCommand(clearDownloads(windowId))} /> : null
         }
       />
       {shown.length === 0 ? (
@@ -52,8 +56,9 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
-  const exists = d.state !== "finished" || fileExists(d.path);
-  const done = d.state === "finished" && exists;
+  const fileState = useFileExists(d.path, d.state === "finished");
+  const exists = d.state !== "finished" || fileState !== false;
+  const done = d.state === "finished" && fileState === true;
   const progress = d.total > 0 ? d.received / d.total : 0;
   return (
     <View {...hoverProps} style={{ width: PAGE_WIDTH - 32, maxWidth: "100%" }}>
@@ -106,7 +111,7 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
                 </View>
               )}
               <Text numberOfLines={1} style={{ fontSize: 12, color: theme.textSecondary }}>
-                {downloadStatus(d, exists)}
+                {downloadStatus(d, fileState !== false)}
               </Text>
             </View>
             {d.state === "downloading" ? (
@@ -115,11 +120,18 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
                 <Button title="Cancel" onPress={() => void cancelDownload(d.id)} />
               </View>
             ) : done ? (
-              <Button title="Show in Finder" onPress={() => void revealFile(d.path)} />
+              <Button title={isMac ? "Show in Finder" : "Show in File Explorer"} onPress={() => void revealFile(d.path)} />
             ) : null}
             <IconButton icon="ellipsis" size={13} box={26} radius={6} onPress={() => void downloadMenu(d, windowId)} tooltip="More actions" />
             {d.state !== "downloading" && (
-              <IconButton icon="xmark" size={11} box={26} radius={6} onPress={() => useBrowser.getState().removeDownload(d.id)} tooltip="Remove from List" />
+              <IconButton
+                icon="xmark"
+                size={11}
+                box={26}
+                radius={6}
+                onPress={() => reportBrowserCommand(removeDownload(windowId, d.id))}
+                tooltip="Remove from List"
+              />
             )}
           </View>
         </ContextMenuArea>

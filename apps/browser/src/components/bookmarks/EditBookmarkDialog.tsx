@@ -1,14 +1,18 @@
+import { ScrollView } from "@bay/platform";
+import { Pressable, View } from "@bay/platform";
 import { resolveInput } from "@bay/core";
 import { Surface } from "@bay/shell";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { searchUrlPrefix } from "../../store/settings";
 import { Button, TextField, useFormColors } from "../settings/controls";
 import { useBookmarkEditor, type EditorState } from "./edit";
 import { FolderTree } from "./FolderTree";
+import { reportBrowserCommand } from "../../runtime/commands";
+import { addBookmark, addBookmarkFolder, moveBookmark, updateBookmark } from "../../runtime/bookmarkActions";
 
 export function EditBookmarkDialog() {
   const windowId = useWindowId();
@@ -34,14 +38,14 @@ function Sheet({ state }: { state: EditorState }) {
 
   const save = () => {
     if (!valid) return;
-    const s = useBrowser.getState();
     if (node) {
-      s.updateBookmark(node.id, state.folder ? { title: title.trim() } : { title: title.trim(), url: resolvedUrl });
-      if (parentId && parentId !== node.parentId) s.moveBookmark(node.id, parentId);
+      reportBrowserCommand(updateBookmark(node.id, state.folder ? { title: title.trim() } : { title: title.trim(), url: resolvedUrl }));
+      if (parentId && parentId !== node.parentId) reportBrowserCommand(moveBookmark(node.id, parentId));
     } else if (state.folder) {
-      s.addBookmarkFolder({ spaceId: state.spaceId, title: title.trim(), parentId: parentId ?? undefined, index: state.index });
+      reportBrowserCommand(addBookmarkFolder({ spaceId: state.spaceId, title: title.trim(), parentId: parentId ?? undefined, index: state.index }));
     } else {
-      s.addBookmark({ spaceId: state.spaceId, url: resolvedUrl, title: title.trim() || resolvedUrl, parentId: parentId ?? undefined, index: state.index });
+      const options = { spaceId: state.spaceId, url: resolvedUrl, title: title.trim() || resolvedUrl, parentId: parentId ?? undefined, index: state.index };
+      reportBrowserCommand(addBookmark(options));
     }
     close();
   };

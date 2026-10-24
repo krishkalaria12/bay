@@ -1,3 +1,4 @@
+import { View } from "@bay/platform";
 import {
   deletePassword,
   exportPasswords,
@@ -14,9 +15,9 @@ import {
 } from "@bay/nncore";
 import { confirm, copyText, Symbol, systemInfo } from "@bay/shell";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { browserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
-import { useBrowser } from "../../../store/browser";
 import { useSpaces } from "../../../store/hooks";
 import { engineProfile, plural } from "../../../store/model";
 import { importModule } from "../../import/module";
@@ -41,7 +42,7 @@ const isUnlocked = (profile: string) => Date.now() < (unlockedUntil.get(profile)
 export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
   const profiles = useSpaces();
-  const [spaceId, setSpaceId] = useState(() => initial ?? useBrowser.getState().settings.defaultSpaceId);
+  const [spaceId, setSpaceId] = useState(() => initial ?? browserRead.getState().settings.defaultSpaceId);
   const [, setUnlockedAt] = useState(0);
   const [list, setList] = useState<SavedPassword[] | null>(null);
   const [never, setNever] = useState<string[]>([]);
@@ -106,7 +107,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
     <View>
       <SectionHeader
         title="Passwords"
-        description="Saved on this Mac, separately for each profile, and encrypted with a key in your Keychain."
+        description="Saved on this Mac, separately for each space, and encrypted with a key in your Keychain."
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }

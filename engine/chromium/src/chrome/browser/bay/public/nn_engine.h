@@ -33,7 +33,11 @@
 extern "C" {
 #endif
 
+#if defined(_WIN32)
+#define NN_ENGINE_EXPORT __declspec(dllexport)
+#else
 #define NN_ENGINE_EXPORT __attribute__((visibility("default")))
+#endif
 
 // The version of these conventions; bumped only when they change, not when a
 // call is added (a missing call is a missing symbol).

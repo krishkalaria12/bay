@@ -1,21 +1,27 @@
+import * as settingsCommands from "../../runtime/settingsActions";
+import { Pressable, View } from "@bay/platform";
 import { cleanUrl } from "@bay/core";
 import { ContextMenuArea, copyText, MouseArea, prompt, showMenu, Symbol, type MenuItem } from "@bay/shell";
 import { useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, View, type LayoutRectangle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { PanResponder, StyleSheet, Text, type LayoutRectangle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue } from "@bay/platform/motion";
 import { useTheme } from "../../lib/theme";
+import { reportBrowserCommand } from "../../runtime/commands";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { folderChildren, folderLinks } from "../../store/bookmarks";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { bookmarkSpaceId, isIncognitoSpace } from "../../store/model";
-import type { BookmarkNode } from "../../store/types";
+import type { DeepReadonly } from "../../runtime/projection";
+type BookmarkNode = DeepReadonly<import("../../store/types").BookmarkNode>;
 import { openInternalPage } from "../pages/urls";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
 import { openFolder, openModeFor, openUrl } from "./actions";
 import { editBookmark } from "./edit";
 import { BOOKMARK_ITEM_HEIGHT, BOOKMARKS_BAR_HEIGHT, BOOKMARKS_OVERFLOW_WIDTH } from "./constants";
+import { addBookmarkFolder, moveBookmark, removeBookmark } from "../../runtime/bookmarkActions";
+import { updateSettings } from "../../runtime/settingsActions";
 
 export function BookmarksBar({ tabId, placeholder }: { tabId: string; placeholder?: boolean }) {
   const windowId = useWindowId();
@@ -83,10 +89,9 @@ function Bar({ windowId }: { windowId: string }) {
   const onDrop = (id: string, target: { index: number; into: string | null } | null) => {
     setDrop(null);
     if (!target || !barId) return;
-    const s = useBrowser.getState();
-    if (target.into) return s.moveBookmark(id, target.into);
+    if (target.into) return reportBrowserCommand(moveBookmark(id, target.into));
     const from = children.indexOf(id);
-    s.moveBookmark(id, barId, target.index > from ? target.index - 1 : target.index);
+    reportBrowserCommand(moveBookmark(id, barId, target.index > from ? target.index - 1 : target.index));
   };
 
   const indicatorX = (() => {
@@ -203,8 +208,8 @@ function BarItem({
     }),
   );
   if (!node) return null;
-  const open = (e: { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>
-    node.kind === "url" ? openUrl(node.url, windowId, openModeFor(e)) : void openFolderMenu(windowId, node.children, undefined, node.id);
+  const open = (e: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; middle?: boolean }) =>
+    node.kind === "url" ? reportBrowserCommand(openUrl(node.url, windowId, openModeFor(e))) : void openFolderMenu(windowId, node.children, undefined, node.id);
 
   return (
     <Animated.View
@@ -229,7 +234,7 @@ function BarItem({
   );
 }
 
-type ClickMods = { metaKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+type ClickMods = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
 
 function BarButton({
   title,
@@ -292,7 +297,7 @@ function ImportButton() {
     <ContextMenuArea
       onContextMenu={async () => {
         const choice = await showMenu([{ id: "hide", title: "Hide Import Bookmarks Button" }]);
-        if (choice === "hide") useBrowser.getState().updateSettings({ hideBookmarksBarImport: true });
+        if (choice === "hide") reportBrowserCommand(settingsCommands.updateSettings({ hideBookmarksBarImport: true }));
       }}
     >
       <BarButton icon="rectangle.portrait.and.arrow.right" title="Import bookmarks" tooltip="Add bookmarks from another browser" onPress={() => openImport()} />
@@ -300,9 +305,9 @@ function ImportButton() {
   );
 }
 
-async function openFolderMenu(windowId: string, ids: string[], _e?: ClickMods, folderId?: string) {
+async function openFolderMenu(windowId: string, ids: readonly string[], _e?: ClickMods, folderId?: string) {
   const b = useBrowser.getState().bookmarks;
-  const build = (list: string[], parent?: string, depth = 0): MenuItem[] => {
+  const build = (list: readonly string[], parent?: string, depth = 0): MenuItem[] => {
     const items: MenuItem[] = list
       .map((id) => b.nodes[id])
       .filter((n): n is BookmarkNode => !!n)
@@ -327,10 +332,10 @@ async function openFolderMenu(windowId: string, ids: string[], _e?: ClickMods, f
   if (!choice) return;
   const [action, id] = splitChoice(choice);
   const node = id ? useBrowser.getState().bookmarks.nodes[id] : undefined;
-  if (action === "open" && node?.kind === "url") openUrl(node.url, windowId, "current");
-  if (action === "openAll" && id) void openFolder(id, windowId, "tabs");
-  if (action === "openAllWindow" && id) void openFolder(id, windowId, "window");
-  if (action === "openAllIncognito" && id) void openFolder(id, windowId, "incognito");
+  if (action === "open" && node?.kind === "url") reportBrowserCommand(openUrl(node.url, windowId, "current"));
+  if (action === "openAll" && id) reportBrowserCommand(openFolder(id, windowId, "tabs"));
+  if (action === "openAllWindow" && id) reportBrowserCommand(openFolder(id, windowId, "window"));
+  if (action === "openAllIncognito" && id) reportBrowserCommand(openFolder(id, windowId, "incognito"));
 }
 
 const splitChoice = (choice: string): [string, string] => {
@@ -385,27 +390,27 @@ async function openBarMenu(windowId: string, spaceId: string, node: BookmarkNode
   if (!choice) return;
   const bar = s.bookmarks.roots[spaceId]?.bar;
   if (node?.kind === "url") {
-    if (choice === "tab") openUrl(node.url, windowId, "foreground");
-    if (choice === "window") openUrl(node.url, windowId, "window");
-    if (choice === "incognito") openUrl(node.url, windowId, "incognito");
-    if (choice === "split") openUrl(node.url, windowId, "split");
+    if (choice === "tab") reportBrowserCommand(openUrl(node.url, windowId, "foreground"));
+    if (choice === "window") reportBrowserCommand(openUrl(node.url, windowId, "window"));
+    if (choice === "incognito") reportBrowserCommand(openUrl(node.url, windowId, "incognito"));
+    if (choice === "split") reportBrowserCommand(openUrl(node.url, windowId, "split"));
     if (choice === "edit") void editBookmark(node.id, windowId);
     if (choice === "copy") copyText(cleanUrl(node.url));
   }
   if (node?.kind === "folder") {
-    if (choice === "openAll") void openFolder(node.id, windowId, "tabs");
-    if (choice === "openAllWindow") void openFolder(node.id, windowId, "window");
-    if (choice === "openAllIncognito") void openFolder(node.id, windowId, "incognito");
+    if (choice === "openAll") reportBrowserCommand(openFolder(node.id, windowId, "tabs"));
+    if (choice === "openAllWindow") reportBrowserCommand(openFolder(node.id, windowId, "window"));
+    if (choice === "openAllIncognito") reportBrowserCommand(openFolder(node.id, windowId, "incognito"));
     if (choice === "rename") void editBookmark(node.id, windowId);
   }
-  if (choice === "delete" && node) useBrowser.getState().removeBookmark(node.id);
+  if (choice === "delete" && node) reportBrowserCommand(removeBookmark(node.id));
   const parentId = node?.parentId ?? bar;
   const index = node && parentId ? folderChildren(useBrowser.getState().bookmarks, parentId).findIndex((n) => n.id === node.id) + 1 : undefined;
   if (choice === "addPage") void editBookmark(null, windowId, { spaceId, parentId: parentId ?? undefined, index });
   if (choice === "addFolder") {
     const title = await prompt({ title: "New Folder", placeholder: "Folder name", confirmTitle: "Create", windowId });
-    if (title) useBrowser.getState().addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index });
+    if (title) reportBrowserCommand(addBookmarkFolder({ spaceId, title, parentId: parentId ?? undefined, index }));
   }
-  if (choice === "manage") openInternalPage("bookmarks", windowId);
-  if (choice.startsWith("bar:")) useBrowser.getState().updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode });
+  if (choice === "manage") reportBrowserCommand(openInternalPage("bookmarks", windowId));
+  if (choice.startsWith("bar:")) reportBrowserCommand(updateSettings({ bookmarksBar: choice.slice(4) as typeof barMode }));
 }

@@ -1,5 +1,6 @@
+import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { Symbol } from "@bay/shell";
-import { Pressable, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useTab } from "../../store/hooks";
@@ -55,7 +56,7 @@ export function ZoomStepper({ tabId, zoom, percent = true }: { tabId: string; zo
           </Text>
         </Pressable>
       ) : null}
-      <StepButton icon="plus" tooltip="Zoom In (⌘+)" onPress={() => void webviews.get(tabId)?.zoomStep(1)} />
+      <StepButton icon="plus" tooltip={`Zoom In (${shortcutForCommand("zoomIn", "⌘+")})`} onPress={() => void webviews.get(tabId)?.zoomStep(1)} />
     </View>
   );
 }

@@ -1,11 +1,12 @@
+import { View } from "@bay/platform";
 import { SwipeArea, type SwipeAreaHandle, type SwipeEvent } from "@bay/nncore";
 import { WindowBackdrop } from "@bay/shaders";
 import { useEffect, useRef, type ReactNode } from "react";
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { Extrapolation, interpolate, useAnimatedStyle, useEvent } from "react-native-reanimated";
+import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useEvent } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
 import { themeFor, themeKey } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./spacePager";
 

@@ -1,11 +1,12 @@
+import { Pressable, View, capabilities } from "@bay/platform";
 import { FadeLabel, Surface, Symbol } from "@bay/shell";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text } from "react-native";
 import { displayUrl, hostOf } from "@bay/core";
 import { hex, useTheme } from "../../lib/theme";
 import { besideRow, useSidebarOnRight } from "../layout/windowLayout";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId, isIncognitoSpace } from "../../store/model";
 import { splitOf } from "../../store/splits";
 import { lastPicture } from "../../lib/tabPictures";
@@ -31,7 +32,7 @@ export function HoverCard({ windowId, windowWidth }: { windowId: string; windowW
   if (!hover) return null;
   if (hover.kind === "live") return <LiveItemCard id={hover.id} windowId={windowId} anchor={hover.anchor} />;
   if (hover.kind === "tab" && player) return <HoverPlayer tabId={hover.id} windowId={windowId} anchor={hover.anchor} windowWidth={windowWidth} />;
-  if (hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
+  if (capabilities.calendar && hover.kind === "tab" && calendar) return <CalendarPreview tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
   if (hover.kind === "tab" && site) return <SitePreview key={hover.id} tabId={hover.id} site={site} anchor={hover.anchor} />;
   if (hover.kind === "tab") return <TabCard tabId={hover.id} windowId={windowId} anchor={hover.anchor} />;
   if (!folders) return null;
@@ -153,7 +154,7 @@ function FolderPeek({ folderId, windowId, anchor }: { folderId: string; windowId
   return <Peek label={name || "New Folder"} tabIds={tabIds} windowId={windowId} anchor={anchor} />;
 }
 
-function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: string[]; windowId: string; anchor: Anchor }) {
+function Peek({ label, tabIds, windowId, anchor }: { label: string; tabIds: readonly string[]; windowId: string; anchor: Anchor }) {
   const theme = useTheme();
   const more = tabIds.length - HOVER_CARD_PEEK_ROWS;
   return (

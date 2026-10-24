@@ -1,6 +1,6 @@
 import { showMenu, translation, type MenuItem } from "@bay/shell";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { isIncognitoSpace } from "../../store/model";
 import { PopoverRow, PopoverSeparator, Toggle, ToolbarButton } from "../layout/controls";
 import type { ToolbarPalette } from "../layout/toolbarColors";

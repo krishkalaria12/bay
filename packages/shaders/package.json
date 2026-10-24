@@ -4,10 +4,21 @@
   "private": true,
   "description": "Metal shaders: Dia-style new-tab area light and grained OKLab window backdrop",
   "main": "src/index.tsx",
+  "browser": "./src/index.web.tsx",
   "types": "src/index.tsx",
+  "exports": {
+    ".": {
+      "browser": "./src/index.web.tsx",
+      "react-native": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    }
+  },
   "scripts": {
     "typecheck": "tsc -p .",
     "shaders:check": "node scripts/check-shaders.mjs"
+  },
+  "dependencies": {
+    "@bay/platform": "workspace:*"
   },
   "peerDependencies": {
     "expo": "*",

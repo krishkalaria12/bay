@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { resolveWindowId } from "../../store/model";
 
 export type EditorState = {

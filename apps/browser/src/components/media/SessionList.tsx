@@ -1,9 +1,10 @@
+import { Pressable, ScrollView, View } from "@bay/platform";
 import { useEffect, useRef } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { switchToTab } from "../../lib/actions";
 import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
+import { useBrowserRead as useBrowser } from "../../store/read";
 import { useTab } from "../../store/hooks";
 import { Popover, PromptButton } from "../layout/controls";
 import { useSidebarOnRight } from "../layout/windowLayout";

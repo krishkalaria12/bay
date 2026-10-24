@@ -1,12 +1,15 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
-import { engineProfile, without } from "./model";
-import type { BookmarkFolder, BookmarkNode, Bookmarks } from "./types";
+import type { DeepReadonly } from "../runtime/projection";
+import { engineProfile, engineProfileFor, newId, without } from "./model";
+import type { BookmarkFolder, BookmarkNode, Bookmarks, Space } from "./types";
 
 export type BookmarksSlice = {
   bookmarks: Bookmarks;
   // Profiles whose tree has been read from Chrome (until then it's empty, not "no bookmarks").
   bookmarksReady: Record<string, true>;
+  // Recent removals Undo can put back, newest last. Not saved.
+  bookmarkUndo: BookmarkUndo[];
 
   addBookmark(options: { spaceId: string; url: string; title: string; favicon?: string | null; parentId?: string; index?: number }): string;
   addBookmarkFolder(options: { spaceId: string; title: string; parentId?: string; index?: number }): string;
@@ -17,11 +20,16 @@ export type BookmarksSlice = {
   addBookmarkTree(spaceId: string, drafts: BookmarkDraft[], parentId?: string, index?: number): string[];
   removeBookmarks(ids: string[]): RemovedBookmarks;
   restoreBookmarks(removed: RemovedBookmarks): void;
+  /** Removes the bookmarks and keeps them for Undo; the entry's id, or "" when nothing was removed. */
+  removeBookmarksWithUndo(spaceId: string, ids: string[]): string;
+  restoreRemovedBookmarks(undoId: string): void;
 };
 
 export type BookmarkDraft = { title: string; url?: string; addedAt?: number; children?: BookmarkDraft[] };
 
 export type RemovedBookmarks = { nodes: BookmarkNode[]; places: { id: string; parentId: string; index: number }[] };
+export type BookmarkUndo = { id: string; spaceId: string; removed: RemovedBookmarks };
+const MAX_BOOKMARK_UNDO = 10;
 
 export const EMPTY_BOOKMARKS: Bookmarks = { nodes: {}, roots: {} };
 
@@ -73,14 +81,14 @@ export function bookmarkUuidFor(id: string): string {
 /** An engine profile's permanent folders, as store ids. */
 export const rootIdsFor = (engine: string) => ({ bar: `bar@${engine || "default"}`, other: `other@${engine || "default"}` });
 
-export function bookmarkRoots(b: Bookmarks, spaceId: string) {
+export function bookmarkRoots(b: DeepReadonly<Bookmarks>, spaceId: string) {
   return b.roots[spaceId];
 }
 
-export function ensureRoots(b: Bookmarks, spaceId: string): [Bookmarks, { bar: string; other: string }] {
+export function ensureRoots(b: Bookmarks, spaceId: string, spaces?: Record<string, Space>): [Bookmarks, { bar: string; other: string }] {
   const existing = b.roots[spaceId];
   if (existing) return [b, existing];
-  return engineRoots(b, spaceId, engineProfile(spaceId));
+  return engineRoots(b, spaceId, spaces ? engineProfileFor(spaceId, spaces) : engineProfile(spaceId));
 }
 
 /** The profile takes the engine profile's roots, made if they aren't there. */
@@ -92,7 +100,7 @@ export function engineRoots(b: Bookmarks, spaceId: string, engine: string): [Boo
   return [{ nodes, roots: { ...b.roots, [spaceId]: roots } }, roots];
 }
 
-function subtree(b: Bookmarks, ids: string[]): string[] {
+function subtree(b: DeepReadonly<Bookmarks>, ids: string[]): string[] {
   const out: string[] = [];
   const walk = (id: string) => {
     const node = b.nodes[id];
@@ -115,9 +123,9 @@ export function removeBookmarkTree(b: Bookmarks, ids: string[], spaceId?: string
   return { nodes, roots: spaceId ? without(b.roots, [spaceId]) : b.roots };
 }
 
-const urlIndex = new WeakMap<Bookmarks, Map<string, Map<string, string[]>>>();
+const urlIndex = new WeakMap<DeepReadonly<Bookmarks>, Map<string, Map<string, string[]>>>();
 
-export function bookmarksByUrl(b: Bookmarks, spaceId: string): Map<string, string[]> {
+export function bookmarksByUrl(b: DeepReadonly<Bookmarks>, spaceId: string): Map<string, string[]> {
   let perProfile = urlIndex.get(b);
   if (!perProfile) urlIndex.set(b, (perProfile = new Map()));
   let index = perProfile.get(spaceId);
@@ -132,11 +140,13 @@ export function bookmarksByUrl(b: Bookmarks, spaceId: string): Map<string, strin
   return index;
 }
 
-export const isBookmarked = (b: Bookmarks, spaceId: string, url: string) => !!url && bookmarksByUrl(b, spaceId).has(url);
+export const isBookmarked = (b: DeepReadonly<Bookmarks>, spaceId: string, url: string) => !!url && bookmarksByUrl(b, spaceId).has(url);
 
-export function folderChildren(b: Bookmarks, folderId: string): BookmarkNode[] {
+export function folderChildren(b: Bookmarks, folderId: string): BookmarkNode[];
+export function folderChildren(b: DeepReadonly<Bookmarks>, folderId: string): DeepReadonly<BookmarkNode>[];
+export function folderChildren(b: DeepReadonly<Bookmarks>, folderId: string): DeepReadonly<BookmarkNode>[] {
   const folder = b.nodes[folderId];
-  return folder?.kind === "folder" ? folder.children.map((id) => b.nodes[id]).filter((n): n is BookmarkNode => !!n) : [];
+  return folder?.kind === "folder" ? folder.children.map((id) => b.nodes[id]).filter((n): n is DeepReadonly<BookmarkNode> => !!n) : [];
 }
 
 function insertChild(b: Bookmarks, node: BookmarkNode, parentId: string, index?: number): Bookmarks {
@@ -147,8 +157,10 @@ function insertChild(b: Bookmarks, node: BookmarkNode, parentId: string, index?:
   return { ...b, nodes: { ...b.nodes, [node.id]: { ...node, parentId } as BookmarkNode, [parentId]: { ...parent, children } } };
 }
 
-export function bookmarkAncestors(b: Bookmarks, id: string): BookmarkFolder[] {
-  const out: BookmarkFolder[] = [];
+export function bookmarkAncestors(b: Bookmarks, id: string): BookmarkFolder[];
+export function bookmarkAncestors(b: DeepReadonly<Bookmarks>, id: string): DeepReadonly<BookmarkFolder>[];
+export function bookmarkAncestors(b: DeepReadonly<Bookmarks>, id: string): DeepReadonly<BookmarkFolder>[] {
+  const out: DeepReadonly<BookmarkFolder>[] = [];
   let node = b.nodes[id];
   for (let i = 0; node?.parentId && i < 64; i++) {
     const parent = b.nodes[node.parentId];
@@ -159,23 +171,24 @@ export function bookmarkAncestors(b: Bookmarks, id: string): BookmarkFolder[] {
   return out;
 }
 
-export function folderLinks(b: Bookmarks, folderId: string): Extract<BookmarkNode, { kind: "url" }>[] {
+export function folderLinks(b: DeepReadonly<Bookmarks>, folderId: string): Extract<BookmarkNode, { kind: "url" }>[] {
   return folderChildren(b, folderId).flatMap((n) => (n.kind === "url" ? [n] : folderLinks(b, n.id)));
 }
 
 export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksSlice> = (set, get) => ({
   bookmarks: EMPTY_BOOKMARKS,
   bookmarksReady: {},
+  bookmarkUndo: [],
 
   addBookmark({ spaceId, url, title, favicon = null, parentId, index }) {
-    const [b, roots] = ensureRoots(get().bookmarks, spaceId);
+    const [b, roots] = ensureRoots(get().bookmarks, spaceId, get().spaces);
     const node: BookmarkNode = { kind: "url", id: newBookmarkId(), parentId: parentId ?? roots.bar, title, url, favicon, addedAt: Date.now() };
     set({ bookmarks: insertChild(b, node, node.parentId, index) });
     return node.id;
   },
 
   addBookmarkFolder({ spaceId, title, parentId, index }) {
-    const [b, roots] = ensureRoots(get().bookmarks, spaceId);
+    const [b, roots] = ensureRoots(get().bookmarks, spaceId, get().spaces);
     const node: BookmarkNode = { kind: "folder", id: newBookmarkId(), parentId: parentId ?? roots.bar, title, children: [], addedAt: Date.now() };
     set({ bookmarks: insertChild(b, node, node.parentId!, index) });
     return node.id;
@@ -212,7 +225,7 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
   },
 
   addBookmarkTree(spaceId, drafts, parentId, index) {
-    let [b, roots] = ensureRoots(get().bookmarks, spaceId);
+    let [b, roots] = ensureRoots(get().bookmarks, spaceId, get().spaces);
     const nodes = { ...b.nodes };
     const build = (d: BookmarkDraft, parent: string): string => {
       const id = newBookmarkId();
@@ -265,6 +278,21 @@ export const createBookmarksSlice: StateCreator<BrowserState, [], [], BookmarksS
       }
       return { bookmarks: { ...s.bookmarks, nodes: next } };
     });
+  },
+
+  removeBookmarksWithUndo(spaceId, ids) {
+    const removed = get().removeBookmarks(ids);
+    if (!removed.places.length) return "";
+    const entry = { id: newId("bu"), spaceId, removed };
+    set((s) => ({ bookmarkUndo: [...s.bookmarkUndo, entry].slice(-MAX_BOOKMARK_UNDO) }));
+    return entry.id;
+  },
+
+  restoreRemovedBookmarks(undoId) {
+    const entry = get().bookmarkUndo.find((u) => u.id === undoId);
+    if (!entry) return;
+    get().restoreBookmarks(entry.removed);
+    set((s) => ({ bookmarkUndo: s.bookmarkUndo.filter((u) => u.id !== undoId) }));
   },
 
   toggleBookmark(spaceId, page) {
