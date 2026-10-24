@@ -54,7 +54,9 @@ Bay's own: the window, sidebar, command bar, menus and animations.
   key.
 - **⌃Tab** switches between your most recent tabs, across spaces.
 - **Picture in picture** that follows a video when you switch tabs, and media controls in the sidebar.
+- **Touch ID** before saved passwords or card numbers show, or passwords are exported.
 - **Passkeys** from Touch ID, your phone or a security key.
+- **Sits still.** Idles under half a percent of CPU with a tab open.
 - **Updates** arrive on their own through Sparkle.
 
 <table>
@@ -228,10 +230,12 @@ Most are for tests and hidden instances rather than normal use.
 |---|---|
 | `BAY_DATA_DIR` | The app's data directory. A test instance gets its own, so it never touches your real profile |
 | `BAY_BACKGROUND` | `1` launches without taking focus, for smoke tests |
-| `BAY_REMOTE_DEBUGGING_PORT` | The port DevTools attaches to |
+| `BAY_REMOTE_DEBUGGING_PORT` | The port DevTools attaches to. Like `BAY_CHROMIUM_SWITCHES` and the app's arguments, it only reaches Chrome on a scratch `BAY_DATA_DIR` or an ad hoc build, never on your real profile |
+| `BAY_TEST_REAUTH` | `granted` answers Touch ID prompts in a hidden instance of a Debug or ad hoc build on a scratch profile. Shipped builds always ask |
 | `BAY_JS_LOCATION` | Metro URL the native side loads the bundle from |
 | `BAY_RELEASE_NOTES` | `1` shows the after-update notes even when the version matches |
 | `BAY_ALLOW_AUDIO`, `BAY_ALLOW_OCCLUSION` | Let a hidden instance play sound and be treated as occluded |
+| `BAY_PA_RECLAIM=fixed`, `BAY_CPU_HEALTH_SAMPLING=on`, `BAY_DISK_CHECK_SECONDS=5`, `BAY_BLUETOOTH_POLL_ON_DEMAND=off`, `BAY_HYBRID_SCAN_ON_DEMAND=off` | Put back one of Chrome's idle timers that Bay slows down, to compare idle cost |
 | `BAY_IMPORT_SOURCE_DIR`, `BAY_IMPORT_SAFARI_HOME`, `BAY_IMPORT_TEST_SECRET` | Point the importer at fixture folders and a test Safe Storage key instead of the real Keychain |
 
 ### The icon

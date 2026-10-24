@@ -64,6 +64,8 @@ const extras = [
   ["Every Chrome extension", "From the Chrome Web Store, with toolbar buttons and side panels."],
   ["Encrypted sync", "Sealed in a folder you choose, like iCloud Drive. Only your devices can read it."],
   ["Task manager", "See which tab is eating memory, and stop it."],
+  ["Touch ID", "Saved passwords and card numbers stay hidden until your finger says so."],
+  ["Sits still", "Idles under half a percent of CPU with a tab open."],
 ];
 
 const schema = [
@@ -284,7 +286,7 @@ const schema = [
       <h2 id="more-title" class="mt-2 max-w-2xl text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
         Then we <span class="marker">kept going</span>.
       </h2>
-      <ul class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <ul class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {
           extras.map(([t, d]) => (
             <li class="card p-5">
