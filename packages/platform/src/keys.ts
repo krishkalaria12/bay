@@ -203,9 +203,20 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   returnToPinnedUrl: { key: "Enter", mod: true },
 };
 
+/**
+ * Linux takes the Windows table plus the keys Linux desktops expect: Ctrl+Q quits, as GNOME and KDE apps
+ * do, and F11 toggles full screen. Super belongs to the compositor, so no stroke uses it (a stroke has no
+ * meta modifier to ask for it).
+ */
+export const LINUX_SHORTCUTS: Record<string, ShortcutStroke> = {
+  ...WINDOWS_SHORTCUTS,
+  quit: { key: "Q", mod: true },
+  toggleFullScreen: { key: "F11" },
+};
+
 /** "Ctrl+Shift+T" for a command, or null when the table has none. */
 export function windowsShortcutLabel(command: string, os: PlatformOS = "windows"): string | null {
-  const stroke = WINDOWS_SHORTCUTS[command];
+  const stroke = (os === "linux" ? LINUX_SHORTCUTS : WINDOWS_SHORTCUTS)[command];
   return stroke ? formatShortcut(stroke, os) : null;
 }
 

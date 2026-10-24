@@ -10,6 +10,13 @@
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/window_registry.h"
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/quit_shortcut_linux.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
+#include "ui/content_accelerators/accelerator_util.h"
+#endif
 #include "chrome/browser/ui/webui_browser/webui_browser.h"
 #include "components/surface_embed/common/features.h"
 #include "content/public/browser/web_contents.h"
@@ -81,6 +88,23 @@ void BayWebUIBrowserWindow::ShowInactive() {
   if (!WindowRegistry::Get().AbsorbOnShow(browser()))
     WebUIBrowserWindow::ShowInactive();
 }
+
+#if BUILDFLAG(IS_LINUX)
+content::KeyboardEventProcessingResult
+BayWebUIBrowserWindow::PreHandleKeyboardEvent(
+    const input::NativeWebKeyboardEvent& event) {
+  // Ahead of the page, as Chrome's reserved shortcuts are. Quitting is
+  // Chrome's own user exit, so Bay's close preflight (native_host.cc) still
+  // prepares the UI, the updater and the tabs first.
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown &&
+      IsLinuxQuitShortcut(
+          ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
+    chrome::AttemptUserExit();
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+  return WebUIBrowserWindow::PreHandleKeyboardEvent(event);
+}
+#endif
 
 bool ConfigureBayWebUI(content::WebUI* web_ui) {
   if (!web_ui->GetWebContents()->GetVisibleURL().SchemeIs(

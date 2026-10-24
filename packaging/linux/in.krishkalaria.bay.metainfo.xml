@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for software centres. scripts/linux/release.sh adds the <releases> entry for the version it packs. -->
+<component type="desktop-application">
+  <id>in.krishkalaria.bay</id>
+  <name>Bay</name>
+  <summary>A fast browser with your tabs in a sidebar</summary>
+  <developer id="in.krishkalaria">
+    <name>Krish Kalaria</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <description>
+    <p>
+      Bay is a browser built around a sidebar. Favorites sit on top, pinned tabs and folders under them, and the day's
+      tabs below. Spaces keep work and home apart, each with its own theme and its own sign-ins.
+    </p>
+    <p>Built on Chromium, so sites and Chrome Web Store extensions work as they do in Chrome. Bay adds:</p>
+    <ul>
+      <li>Spaces, pinned tabs and folders, with unused tabs put away after a time you choose</li>
+      <li>Peek and Split View, to open links over or beside the page</li>
+      <li>A command bar for addresses, searches and open tabs</li>
+      <li>Built-in ad blocking with uBlock Origin Lite</li>
+      <li>Import from Arc, Chrome, Firefox, Brave and other browsers</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">bay.desktop</launchable>
+  <url type="homepage">https://bay.krishkalaria.in</url>
+  <url type="bugtracker">https://github.com/krishkalaria12/bay/issues</url>
+  <url type="vcs-browser">https://github.com/krishkalaria12/bay</url>
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+  <provides>
+    <binary>bay</binary>
+    <mediatype>text/html</mediatype>
+    <mediatype>application/xhtml+xml</mediatype>
+    <mediatype>x-scheme-handler/http</mediatype>
+    <mediatype>x-scheme-handler/https</mediatype>
+  </provides>
+  <content_rating type="oars-1.1" />
+</component>

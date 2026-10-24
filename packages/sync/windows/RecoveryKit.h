@@ -7,7 +7,7 @@ std::string recoveryKitPDF(const Bytes &entropy, const std::string &device);
 Bytes recoveryQrPNG(const Bytes &entropy);
 Bytes recoveryKitPreviewPNG(const Bytes &entropy, const std::string &device,
                             unsigned width);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__linux__)
 std::filesystem::path
 temporaryRecoveryKit(const Bytes &entropy, const std::string &device,
                      const std::filesystem::path &dataDirectory);

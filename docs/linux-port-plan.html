@@ -2243,6 +2243,22 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <li>Every Mac shortcut has a Linux counterpart, and the shortcuts test passes.</li>
               <li>The app is usable with high contrast on and animations reduced.</li>
             </ul>
+            <div class="callout">
+              <p>
+                <strong>Implementation progress, 24 Oct 2026 (A2).</strong> Icons: every SF Symbol name the app uses has an inline path in
+                <code>symbols.web.tsx</code>. 204 were missing, not 19, counting the space, profile and pinned-tab pickers; <code>symbols.test.mjs</code> fails
+                on any name without one. Shortcuts: <code>LINUX_SHORTCUTS</code> is the Windows table plus Ctrl+Q (<code>quit</code>) and F11
+                (<code>toggleFullScreen</code>), a test keeps Super out of every stroke, and labels use the host's own table. The table only labels; the keys
+                run in the engine. The WebUI window loads Chrome's own accelerator table, which already maps F11 to full screen, and
+                <code>BayWebUIBrowserWindow</code> quits on Ctrl+Q ahead of the page through Chrome's user exit, so Bay's close preflight still runs
+                (<code>quit_shortcut_linux.h</code>, with unit tests). High contrast: <code>prefers-contrast: more</code> gives a theme with opaque text,
+                visible edges and a solid window in its space's colour, and a test holds its text to WCAG AA on every preset and on strong custom themes.
+                Reduced motion needed no code: Reanimated and <code>AccessibilityInfo</code> read <code>prefers-reduced-motion</code> on web, though Reanimated
+                reads it once at launch. Edge peek: nothing reads a global pointer, and leaving the edge strip now hides a peek that crossing the strip out of
+                the window used to leave out. Not yet run on Linux: whether Chromium reports the portal's <code>contrast</code> as
+                <code>prefers-contrast</code>, and the edge-peek and shortcut checks (T2, T4, T5).
+              </p>
+            </div>
           </article>
 
           <!-- Phase 6 -->
@@ -2303,6 +2319,30 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               release and DCHECK syntax checks with the pinned sysroot, existing generated Mac configuration headers and scratch Mojo bindings. These checks do
               not prove the Linux GN graph or linkage. Final linking depends on D1's BoringSSL sync backend; Linux binaries, real GNOME Keyring/KWallet imports,
               desktop file pickers and fixture parity on Linux remain stage 2 work.
+            </p>
+            <p class="prose">
+              <strong>D1 sources, 23 Oct 2026.</strong> Implemented on <code>feat/linux-d-sync</code>, awaiting merge into <code>feat/linux</code>: the shared
+              sync format now has separate Windows CNG and Linux BoringSSL backends, and libsecret stores keys by account and data directory. If key storage
+              fails, setup and recovery keep the entropy only in memory; the UI explains that the recovery phrase is needed each session. Same-account unlock
+              reuses the session, while account changes, forgetting and data-directory changes clear the active entropy. The Linux recovery kit has a PNG
+              preview, private temporary PDFs, a confidential phrase clipboard and file clipboard support. An asynchronous folder/save picker adapter rejects
+              stale exports if the active key changes. Device names are host snapshots; device IDs remain freshly generated local UUIDs.
+            </p>
+            <p class="prose">
+              <code>//chrome/browser/bay/data:sync_services</code> and <code>//chrome/browser/bay/webui:sync_ui_linux</code> are independent Linux targets; the
+              package overlay copies the Linux sources. D2 still owns opening the complete import/data bridge and advertising sync on Linux. Its host must own
+              <code>SyncUI</code> and dispatch it before routing sync calls to workers; the adapter is not dispatched by the current Linux host. Password
+              reading remains explicitly unavailable until D2 supplies the Linux importer. No engine build, desktop launch or live keyring test has run.
+              Chromium-dependent rendering, clipboard and picker release/DCHECK syntax and native tests await a Chromium checkout and sysroot.
+            </p>
+            <p class="prose">
+              Portable checks pass: the exact Chromium 154.0.8037.58 BoringSSL pin
+              <code>ac39ea6853833c1f18fd23614091d11855e71752</code> matches <code>tests/golden.json</code> byte for byte, including envelope and tag checks;
+              malformed inputs, authentication and namespace isolation are covered. Fake Secret Service checks cover session-only creation, recovery after
+              session loss, account changes, forgetting, persistent reload and stale export refusal. Temporary PDF permission, cleanup and symlink checks pass.
+              Run <code>packages/sync/scripts/check-linux-crypto.sh</code> with <code>BORINGSSL_ROOT</code> and <code>BORINGSSL_CRYPTO_LIBRARY</code> pointing
+              at that build; without them it checks system OpenSSL and does not establish BoringSSL coverage. The portable service and recovery checks are
+              <code>python3 packages/sync/linux/tests/service-test.py</code> and <code>python3 packages/sync/linux/tests/recovery-kit-test.py</code>.
             </p>
             <h4>Exit criteria</h4>
             <ul class="checks">
@@ -2370,6 +2410,19 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               </li>
               <li><code>chrome://sandbox</code> shows the namespace sandbox on every Tier&nbsp;1 distro, including Ubuntu with its AppArmor restriction on.</li>
             </ul>
+            <div class="callout">
+              <p>
+                <strong>Implementation progress, 24 Oct 2026 (A3).</strong> <code>scripts/linux/build-app.py</code> checks an engine archive's checksum and
+                manifest against the Linux pin, adds the web UI and refuses an app with unresolved libraries. <code>scripts/linux/release.sh</code> stages
+                <code>/opt/bay</code> with <code>bay-wrapper</code> (<code>CHROME_WRAPPER</code> and the library path), <code>bay.desktop</code>, AppStream
+                metainfo, hicolor icons, the AppArmor user-namespace profile and the <code>/etc/bay</code> directories, then packs the tarball, .deb, .rpm,
+                AppImage with zsync and the AUR <code>bay-bin</code> PKGBUILD, with SHA-256 sums and optional GPG signatures. The sandbox is setuid only in the
+                .deb, .rpm and AUR package; the AppImage's <code>AppRun</code> prints a profile for its mounts. Fixture tests cover staging, tampering, unsafe
+                archive paths, unresolved libraries, the tarball tree, desktop and metainfo validation, signing and a real <code>makepkg</code> build; the .deb,
+                .rpm and AppImage tests run where their tools are installed, and CI installs <code>rpm</code> for them. No package has been built from a real
+                engine or installed on a VM yet (T7). Details are in <code>packaging/linux/README.md</code>.
+              </p>
+            </div>
           </article>
 
           <!-- Phase 8 -->

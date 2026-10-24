@@ -55,6 +55,8 @@ class ChromiumLayerTests(unittest.TestCase):
                 if (source.is_file() and "tests" not in relative.parts
                         and "__pycache__" not in relative.parts and source.suffix != ".pyc"):
                     self.assertEqual((target / "import" / relative).read_bytes(), source.read_bytes())
+            self.assertTrue((target / "sync/linux/SyncCryptoLinux.cpp").is_file())
+            self.assertFalse((target / "sync/linux/tests").exists())
             data = target.parent
             for source in re.findall(r'"([^"\n]+\.(?:cc|cpp|h))"', (data / "BUILD.gn").read_text()):
                 self.assertTrue((data / source).is_file(), f"Missing GN source {source}")

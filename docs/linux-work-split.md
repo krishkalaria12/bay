@@ -117,21 +117,24 @@ Use these agreements so ownership changes do not block implementation:
   - `SyncKeyStore` on libsecret. With no Secret Service, ask for the recovery phrase each session and never write the key to disk.
   - A Linux version of `RecoveryKitWindows.cpp`.
   - `newDeviceId` and `deviceName` as snapshots.
+  - **23 Oct 2026:** D1 sources and portable checks are implemented on `feat/linux-d-sync`; the box stays open until the slice lands on `feat/linux`. Crypto uses the exact Chromium BoringSSL pin and matches the golden envelope. Fake Secret Service tests cover memory-only sessions and recovery; recovery exports have private files and an asynchronous picker adapter. D2 still opens and advertises the Linux data bridge, owns `SyncUI` and dispatches it before worker calls, and supplies Linux password reading. Chromium-dependent syntax and native tests need the stage 2 checkout/sysroot; no engine or desktop runtime checks have run. Details and commands are in the dated Phase 6 progress in the plan.
 
 ### A: UI and shipping
 
-- [ ] **A2 · UI gaps (S+M+S+M = 6), previously D4.**
+- [x] **A2 · UI gaps (S+M+S+M = 6), previously D4.** Code complete 24 Oct 2026 on `feat/linux-a-ui-gaps`; desktop checks remain for stage 2.
   - Icons: 19 names in `fluentGlyphs.web.ts` have no SVG path in `symbols.web.tsx`. Add them, and add a test that every symbol name the app uses has a path.
   - Edge peek and the auto-hide toolbar peek, driven only by in-window enter, move and leave events plus the hide delay. No global pointer queries.
   - Shortcuts: add `Ctrl+Q` and `F11`, never bind Super, and keep the Linux column of the shortcuts table complete.
   - High contrast and reduced motion, so Phase 5's usability check passes.
-- [ ] **A3 · Packaging sources (XL = 5), previously D5.**
+  - **24 Oct 2026:** 204 icons were missing, not 19, counting the icon pickers; all are drawn and `symbols.test.mjs` guards them. `LINUX_SHORTCUTS` labels Ctrl+Q and F11 and a test keeps Super out; F11 runs through Chrome's own accelerator table, and the WebUI window quits on Ctrl+Q (`quit_shortcut_linux.h`). High contrast follows `prefers-contrast: more`, with a WCAG AA test; reduced motion needed no code. Edge peeks now hide when the pointer leaves the edge strip out of the window. Details are in Phase 5's progress in the plan.
+- [x] **A3 · Packaging sources (XL = 5), previously D5.** Code complete 24 Oct 2026 on `feat/linux-a-packaging`; VM checks remain for T7.
   - `scripts/linux/release.sh` stages `/opt/bay` and packs `.tar.xz`, AppImage (zsync), `.deb`, `.rpm` and the AUR `bay-bin` PKGBUILD.
   - The wrapper script sets `CHROME_WRAPPER` and the library path.
   - Desktop integration: `bay.desktop` (MIME types, New Window and New Private Window actions), AppStream metainfo and hicolor icons.
   - The AppArmor userns profile, installed by postinst and offered by AppRun.
   - Native messaging directories, GPG signing hooks, and the `ldd` unresolved-library check.
   - Tested with fixture archives.
+  - **24 Oct 2026:** `scripts/linux/build-app.py` and `release.sh` with templates in `packaging/linux/` (see its README). All formats are implemented; fixture tests run the tarball, AUR (`makepkg`), signing and validation here, and the .deb, .rpm and AppImage tests run where `dpkg-deb`, `rpmbuild` and `appimagetool` are installed. Debian dependencies stay unversioned until T1 measures the glibc floor.
 
 ## Stage 2: Linux testing and runtime
 
@@ -173,15 +176,15 @@ A during stage 2:
 
 ## Dependencies
 
-| Waits | On | Why |
-| --- | --- | --- |
-| Stage 2 | Every stage 1 item | Linux testing runs once, after all the code is written |
-| T2–T8 | T1 | Linux runtime work needs a built engine |
-| T1 engine build | K4 | The build needs the layer and branding patches |
-| A3 final layout | K4 | Binary name and paths; until then, use the names agreed up front |
-| K2 UI side | K2 snapshot field in `nativeContracts.ts` | Agree the field before coding against it |
-| K8 data gate | D1 | `bay/data` on Linux needs the BoringSSL sync backend to link |
-| A4 CI | T1 | CI builds the app from the archived engine |
-| Beta (Phase 8 exit) | T8 and A4 | Every Mac test script has a Linux CI run, and the prerelease channel has no known crash for one release cycle |
+| Waits               | On                                        | Why                                                                                                           |
+| ------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Stage 2             | Every stage 1 item                        | Linux testing runs once, after all the code is written                                                        |
+| T2–T8               | T1                                        | Linux runtime work needs a built engine                                                                       |
+| T1 engine build     | K4                                        | The build needs the layer and branding patches                                                                |
+| A3 final layout     | K4                                        | Binary name and paths; until then, use the names agreed up front                                              |
+| K2 UI side          | K2 snapshot field in `nativeContracts.ts` | Agree the field before coding against it                                                                      |
+| K8 data gate        | D1                                        | `bay/data` on Linux needs the BoringSSL sync backend to link                                                  |
+| A4 CI               | T1                                        | CI builds the app from the archived engine                                                                    |
+| Beta (Phase 8 exit) | T8 and A4                                 | Every Mac test script has a Linux CI run, and the prerelease channel has no known crash for one release cycle |
 
 All three developers can start their stage 1 work in parallel using the agreed names above. K8 can implement readers and fixtures immediately; its final Linux link check waits for D1. K9 can use a fake secret backend independently of D1, and A3 uses fixture archives until T1 provides the real engine archive.

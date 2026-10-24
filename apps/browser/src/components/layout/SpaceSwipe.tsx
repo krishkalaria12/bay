@@ -5,6 +5,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, useEvent } from "@bay/platform/motion";
 import { useShallow } from "zustand/react/shallow";
+import { useHighContrast } from "../../lib/highContrast";
 import { themeFor, themeKey } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
@@ -84,7 +85,8 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
 export function SpaceTint() {
   const windowId = useWindowId();
   const { pages, paging } = usePagerPages(windowId);
-  const keys = useBrowser(useShallow((s) => pages.map((p) => themeKey(s, windowId, p.id))));
+  const contrast = useHighContrast();
+  const keys = useBrowser(useShallow((s) => pages.map((p) => themeKey(s, windowId, p.id, undefined, contrast))));
   if (!paging) return null;
   return (
     <>

@@ -1392,7 +1392,10 @@ export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; en
   });
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", left: room.left, right: room.right, top: 0, height: 6 }} /> : null}
+      {/* Leaving the strip hides the peek unless the pointer goes on into it, as at the sidebar's edge (App.tsx). */}
+      {enabled ? (
+        <View onMouseEnter={show} onMouseLeave={hide} style={{ position: "absolute", left: room.left, right: room.right, top: 0, height: 6 }} />
+      ) : null}
       {/* The window under it while it's out: the pointer reaching it hides the peek, as leaving the peek does. */}
       {live ? (
         <View pointerEvents="none" onMouseEnter={hide} style={{ position: "absolute", left: 0, right: 0, top: 4 + STRIP_PEEK_HEIGHT, bottom: 0 }} />
