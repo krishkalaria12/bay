@@ -92,9 +92,10 @@ class PlatformTests(unittest.TestCase):
         self.assertNotIn("target_sysroot", engine.gn_args("win"))
 
     def test_default_roots_and_explicit_environment_override(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
+        home = HERE / "fixture-home"
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(Path, "home", return_value=home):
             self.assertEqual(engine.default_root(), Path("C:/bay-engine"))
-            self.assertEqual(engine.default_root("linux"), Path.home() / "chromium-build")
+            self.assertEqual(engine.default_root("linux"), home / "chromium-build")
         with mock.patch.dict(os.environ, {"BAY_ENGINE_ROOT": "custom-root"}):
             self.assertEqual(engine.default_root("linux"), Path("custom-root"))
 
@@ -439,7 +440,9 @@ class LinuxArchiveTests(unittest.TestCase):
                 xdg_utils = engine.REPO / "engine/patches/build/linux/xdg-utils"
                 for name in ("xdg-settings", "xdg-mime"):
                     member = archive.getmember(f"runtime/{name}")
-                    self.assertEqual(member.mode, 0o755)
+                    if os.name != "nt":
+                        # Windows chmod/stat cannot represent POSIX execute bits.
+                        self.assertEqual(member.mode, 0o755)
                     self.assertEqual(archive.extractfile(member).read(), (xdg_utils / name).read_bytes())
                 for name in ("LICENSE", "README.chromium", "README.bay"):
                     member = f"runtime/licenses/xdg-utils/{name}"
