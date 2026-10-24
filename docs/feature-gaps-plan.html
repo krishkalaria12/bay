@@ -772,15 +772,15 @@
                 </tr>
                 <tr>
                   <td>Speed and subtitles on the floating video</td>
-                  <td>The PiP window drops Chrome's captions control</td>
-                  <td><code>bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code></td>
+                  <td>Done: speed menu, subtitles menu and the chosen subtitles drawn in the window, YouTube's included</td>
+                  <td><code>bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code>, <code>page_script.js</code></td>
                   <td class="c"><span class="chip m">M</span></td>
                   <td class="c">4</td>
                 </tr>
                 <tr>
                   <td>Live streams labelled Live</td>
-                  <td>None</td>
-                  <td><code>media/state.ts</code>, player views</td>
+                  <td>Done: Live or "5m behind" in the floating video and the sidebar and mini players, a click jumps to live</td>
+                  <td><code>media/state.ts</code>, player views, <code>page_script.js</code></td>
                   <td class="c"><span class="chip s">S</span></td>
                   <td class="c">4</td>
                 </tr>
@@ -1629,15 +1629,26 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
             <p class="goal">Bring the floating video up to the controls people reach for.</p>
 
             <div class="item">
-              <h4>Speed and subtitles on the floating video <span class="chip m">M</span></h4>
+              <h4>Speed and subtitles on the floating video <span class="chip m">M</span> <span class="chip s">Done</span></h4>
+              <p>
+                Implemented 24 October 2026. <code>apps/browser/scripts/pip-media-test.mjs</code> drives both menus in the native app, and the choices were
+                checked on YouTube: a TED talk's 60-odd subtitle tracks listed, English chosen and drawn in the window, subtitles off, and 1.5× in YouTube's
+                own player. The window's look was not checked on screen, since test instances keep it invisible.
+              </p>
               <dl class="facts">
-                <dt>Today</dt>
+                <dt>Before</dt>
                 <dd>
-                  Bay's PiP window (<code>engine/chromium/src/chrome/browser/bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code>) leaves out
-                  Chrome's captions control. The page script already reports <code>playbackRate</code>.
+                  Bay's PiP window (<code>engine/chromium/src/chrome/browser/bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code>) left out
+                  Chrome's captions control. The page script already reported <code>playbackRate</code>.
                 </dd>
-                <dt>Build</dt>
-                <dd>A speed button with a short menu (0.5× to 2×) and a subtitles button listing the video's text tracks, both in the window's top row.</dd>
+                <dt>Implemented</dt>
+                <dd>
+                  The speed button (its title is the rate) sits beside back to tab and the subtitles button beside close, drawn as AppKit views over Chrome's
+                  and fading with its controls, which the window now announces (<code>BayPictureInPictureControlsDidChange</code>); the origin leaves room for
+                  them. The page script reports the video in Picture in Picture (rate, subtitle tracks, the current cue) and applies the choices: a
+                  track's mode, or YouTube's player for its own subtitles and speed. Chrome's window shows only the video's frames, so the chosen subtitles'
+                  text is drawn over it, above the controls when they show.
+                </dd>
               </dl>
               <ul class="checks">
                 <li>On YouTube, the speed and subtitle choices made in the floating window carry back to the page.</li>
@@ -1645,11 +1656,21 @@ node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/P
             </div>
 
             <div class="item">
-              <h4>Live streams labelled Live <span class="chip s">S</span></h4>
+              <h4>Live streams labelled Live <span class="chip s">S</span> <span class="chip s">Done</span></h4>
+              <p>
+                Implemented 24 October 2026. Unit tests cover how far behind a stream falls and its labels; the native test covers a stream whose end
+                moves, behind and back. Checked on YouTube (Lofi Girl: Live, "4m behind" after seeking back 5 minutes, back to Live) and Twitch (Live).
+              </p>
               <dl class="facts">
-                <dt>Today</dt>
-                <dd>A live stream shows a countdown or a time that doesn't mean anything.</dd>
-                <dt>Build</dt>
+                <dt>Before</dt>
+                <dd>A live stream showed a countdown or a time that didn't mean anything.</dd>
+                <dt>Implemented</dt>
+                <dd>
+                  As planned, with two sites' quirks: YouTube pads a live video's duration an hour past the edge, so its player gives the edge; Twitch's
+                  seekable range ends decades ahead, so an end more than a day away is not an edge. Live replaces the time and seek bar in the sidebar and
+                  mini players, and sits at the bottom left of the floating video.
+                </dd>
+                <dt>Planned</dt>
                 <dd>
                   When a video's duration is infinite, or its seekable range keeps moving, the floating video and the sidebar player say Live. Behind the live
                   edge, they say how far behind ("5m behind"), and a click jumps back to live.
