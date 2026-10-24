@@ -10,6 +10,7 @@
 #ifndef BAY_CORE_NN_MAIN_DELEGATE_H_
 #define BAY_CORE_NN_MAIN_DELEGATE_H_
 
+#include <optional>
 #include <string_view>
 
 #include "base/functional/callback.h"
@@ -24,6 +25,8 @@ class NNMainDelegate : public ChromeMainDelegate {
 
  protected:
   // ChromeMainDelegate:
+  std::optional<int> BasicStartupComplete() override;
+  std::optional<int> PostEarlyInitialization(InvokedIn invoked_in) override;
   void PreSandboxStartup() override;
   void CreateThreadPool(std::string_view name) override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;

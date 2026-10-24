@@ -4,7 +4,8 @@
 # our layer), ChromeMain making NNCore's main delegate, Browser asking NNCore for the window of a
 # Browser Chrome makes itself, HistoryTabHelper asking NNCore which tabs are history,
 # declarativeNetRequest telling it which rules matched a tab's requests and when an extension's
-# rulesets are in force, and four
+# rulesets are in force, fewer idle wakeups (CPU sampling, the disk check, Bluetooth polling and the
+# phone scan for passkeys), and four
 # CHECKs made tolerant of Browsers without a BrowserView (CEF's and Chrome's behaviour unchanged).
 # Idempotent. Never touches
 # args.gn; the next autoninja re-runs gn by itself.
@@ -41,7 +42,16 @@ if [[ "${1:-}" == --check ]]; then
     grep -q 'g_bay_tab_shown_by_host' "$src/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_strip_observer_helper.cc" &&
     grep -q 'g_bay_permission_tab_shown' "$src/components/permissions/permission_request_manager.cc" &&
     grep -q 'g_bay_file_system_restore_prompt' "$src/chrome/browser/ui/views/file_system_access/file_system_access_restore_permission_bubble_view.cc" &&
-    grep -q 'g_bay_tab_shown_by_host' "$src/chrome/browser/ui/tabs/tab_dialog_manager.cc"
+    grep -q 'g_bay_tab_shown_by_host' "$src/chrome/browser/ui/tabs/tab_dialog_manager.cc" &&
+    grep -q 'g_bay_skip_cpu_health_sampling' "$src/chrome/browser/performance_manager/user_tuning/cpu_health_tracker.cc" &&
+    grep -q 'g_bay_disk_space_check_seconds' "$src/components/memory_pressure/system_memory_pressure_evaluator_mac.cc" &&
+    grep -q 'SetHybridUiShown' "$src/device/fido/cable/v2_discovery.h" &&
+    grep -q 'g_bay_hybrid_scan_on_demand' "$src/device/fido/cable/v2_discovery.cc" &&
+    grep -q 'BaySetHybridUiShown' "$src/chrome/browser/webauthn/authenticator_request_dialog_model.cc" &&
+    grep -q 'OnLowEnergyCentralManagerStateUpdated' "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.h" &&
+    grep -q 'OnLowEnergyCentralManagerStateUpdated' "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.mm" &&
+    grep -q 'PollAdapterOnDemand' "$src/device/bluetooth/bluetooth_adapter_mac.h" &&
+    grep -q 'g_bay_bluetooth_poll_on_demand' "$src/device/bluetooth/bluetooth_adapter_mac.mm"
   exit
 fi
 
@@ -922,4 +932,443 @@ assert s.count(old_ns) == 1 and s.count(old) == 1 and s.count(bg_old) == 1
 s = s.replace(old_ns, decl + old_ns).replace(old, new).replace(bg_old, bg_new)
 open(path, "w").write(s)
 print("hooked TabDialogManager's visibility")
+PY2
+
+# Idle wakeups. Chrome's own periodic work in an idle browser process: CpuHealthTracker samples the
+# system's and every page's CPU every 15 s, only for the performance-intervention toolbar button Bay
+# doesn't show; the macOS memory pressure evaluator checks free disk every 5 s. With the hooks set,
+# the tracker gets no CpuProbe, and free disk is checked every g_bay_disk_space_check_seconds while
+# more than 20 GiB are free (Chrome's 5 s otherwise, so a critical vote under 250 MiB still comes in
+# time). Only NNCore sets them (nn_main_delegate.cc).
+python3 - "$src/chrome/browser/performance_manager/user_tuning/cpu_health_tracker.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_skip_cpu_health_sampling" in s:
+    sys.exit(0)
+at = "namespace performance_manager::user_tuning {\n"
+decl = """// Bay: NNCore (engine/nncore) shows no performance-intervention button.
+bool g_bay_skip_cpu_health_sampling = false;
+
+"""
+old = """  std::unique_ptr<system_cpu::CpuProbe> cpu_probe =
+      system_cpu::CpuProbe::Create();
+  if (cpu_probe) {"""
+new = """  std::unique_ptr<system_cpu::CpuProbe> cpu_probe =
+      g_bay_skip_cpu_health_sampling ? nullptr
+                                     : system_cpu::CpuProbe::Create();
+  if (cpu_probe) {"""
+assert s.count(at) == 1 and s.count(old) == 1
+i = s.index(at)
+s = s[:i] + decl + s[i:].replace(old, new)
+open(path, "w").write(s)
+print("hooked CpuHealthTracker's sampling")
+PY2
+
+python3 - "$src/components/memory_pressure/system_memory_pressure_evaluator_mac.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_disk_space_check_seconds" in s:
+    sys.exit(0)
+at = "namespace memory_pressure::mac {\n"
+decl = """// Bay: NNCore (engine/nncore) checks free disk less often while there's plenty.
+int g_bay_disk_space_check_seconds = 0;
+
+namespace {
+constexpr base::ByteSize kBayRelaxedDiskSpace = base::GiB(20);
+}
+
+"""
+old = """  if (disk_pressure_vote_ != new_disk_vote) {
+    disk_pressure_vote_ = new_disk_vote;
+    UpdatePressureAndManageNotifications();
+  }
+"""
+new = old + """
+  // Bay: NNCore
+  if (g_bay_disk_space_check_seconds > 0) {
+    const base::TimeDelta period =
+        disk_space_info.has_value() &&
+                disk_space_info->available > kBayRelaxedDiskSpace
+            ? base::Seconds(g_bay_disk_space_check_seconds)
+            : kDiskSpaceCheckPeriod;
+    if (disk_space_check_timer_.GetCurrentDelay() != period) {
+      disk_space_check_timer_.Start(
+          FROM_HERE, period,
+          base::BindRepeating(&SystemMemoryPressureEvaluator::CheckDiskSpace,
+                              weak_ptr_factory_.GetWeakPtr()));
+    }
+  }
+"""
+assert s.count(at) == 1 and s.count(old) == 1
+i = s.index(at)
+s = s[:i] + decl + s[i:].replace(old, new)
+open(path, "w").write(s)
+print("hooked the disk space check's period")
+PY2
+
+# Bluetooth stays quiet while a page merely holds a WebAuthn request. A sign-in page that offers
+# passkeys (Google's makes a conditional-mediation get) starts Chrome's hybrid (phone) discovery,
+# which keeps a BLE scan running and the Mac adapter polling bluetoothd every 500 ms for as long as
+# the tab is open, once the app has the Bluetooth grant. With the hooks set:
+# - the hybrid discovery scans only while some request's sheet shows the phone steps (QR code,
+#   connecting, connected: every phone path goes through the QR sheet), or while it has contacted a
+#   linked phone. The dialog model reports its step (BaySetHybridUiShown);
+# - the adapter polls every 500 ms only while discovering. Otherwise a poll runs on demand, one at a
+#   time and no sooner than 500 ms after the last: when anything uses the adapter, and when
+#   CoreBluetooth reports a central state change (one that comes during a poll gets a fresh poll
+#   after it, so a power toggle at the WebAuthn power sheet lands).
+# Only NNCore sets them (nn_main_delegate.cc).
+python3 - "$src/device/fido/cable/v2_discovery.h" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "SetHybridUiShown" in s:
+    sys.exit(0)
+edits = [
+    ("""  void StartInternal() override;
+
+""", """  void StartInternal() override;
+
+  // Bay: NNCore. Whether `model`'s sheet shows the phone steps.
+  static void SetHybridUiShown(const void* model, bool shown);
+
+"""),
+    ("""  bool device_committed_ = false;
+""", """  bool device_committed_ = false;
+  // Bay: NNCore. A scan was asked for; it runs while a phone sheet shows.
+  bool scan_wanted_ = false;
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+PY2
+
+python3 - "$src/device/fido/cable/v2_discovery.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_hybrid_scan_on_demand" in s:
+    sys.exit(0)
+edits = [
+    ("""#include "base/metrics/histogram_functions.h"
+""", """#include "base/metrics/histogram_functions.h"
+#include "base/no_destructor.h"
+"""),
+    ("""namespace device::cablev2 {
+
+namespace {
+""", """// Bay: NNCore (engine/nncore) scans for a phone only while a phone sheet shows.
+bool g_bay_hybrid_scan_on_demand = false;
+
+namespace device::cablev2 {
+
+namespace {
+
+// Bay: NNCore. The dialog models showing a phone step.
+base::flat_set<const void*>& ModelsShowingHybrid() {
+  static base::NoDestructor<base::flat_set<const void*>> models;
+  return *models;
+}
+
+// Bay: NNCore. Discoveries that asked for a scan.
+std::vector<base::WeakPtr<Discovery>>& ScanWaiters() {
+  static base::NoDestructor<std::vector<base::WeakPtr<Discovery>>> waiters;
+  return *waiters;
+}
+"""),
+    ("""      event_callback_));
+}
+
+void Discovery::PairingIsInvalid(""", """      event_callback_));
+  // Bay: NNCore. A linked phone was contacted: listen for its advert.
+  if (g_bay_hybrid_scan_on_demand && scan_wanted_ && !discovery_session_) {
+    StartCableDiscovery();
+  }
+}
+
+void Discovery::PairingIsInvalid("""),
+    ("""void Discovery::StartCableDiscovery() {
+""", """// static
+void Discovery::SetHybridUiShown(const void* model, bool shown) {
+  base::flat_set<const void*>& models = ModelsShowingHybrid();
+  const bool was_shown = !models.empty();
+  if (shown) {
+    models.insert(model);
+  } else {
+    models.erase(model);
+  }
+  if (was_shown == !models.empty()) {
+    return;
+  }
+  std::vector<base::WeakPtr<Discovery>> live;
+  for (const base::WeakPtr<Discovery>& waiter : ScanWaiters()) {
+    if (waiter) {
+      live.push_back(waiter);
+    }
+  }
+  ScanWaiters() = live;
+  for (const base::WeakPtr<Discovery>& discovery : live) {
+    if (!discovery) {
+      continue;
+    }
+    if (!models.empty()) {
+      discovery->StartCableDiscovery();
+    } else if (discovery->tunnels_pending_advert_.empty()) {
+      discovery->discovery_session_.reset();
+    }
+  }
+}
+
+void Discovery::StartCableDiscovery() {
+  // Bay: NNCore
+  if (g_bay_hybrid_scan_on_demand) {
+    if (!scan_wanted_) {
+      scan_wanted_ = true;
+      std::erase_if(ScanWaiters(), [](const base::WeakPtr<Discovery>& waiter) {
+        return !waiter;
+      });
+      ScanWaiters().push_back(weak_factory_.GetWeakPtr());
+    }
+    if (ModelsShowingHybrid().empty() && tunnels_pending_advert_.empty()) {
+      return;
+    }
+  }
+"""),
+    ("""  FIDO_LOG(DEBUG) << "Discovery session started.";
+  SetDiscoverySession(std::move(session));
+""", """  FIDO_LOG(DEBUG) << "Discovery session started.";
+  // Bay: NNCore. The sheet closed while the session started.
+  if (g_bay_hybrid_scan_on_demand && ModelsShowingHybrid().empty() &&
+      tunnels_pending_advert_.empty()) {
+    return;
+  }
+  SetDiscoverySession(std::move(session));
+"""),
+    ("""Discovery::~Discovery() {
+  if (adapter_) {
+""", """Discovery::~Discovery() {
+  // Bay: NNCore
+  if (scan_wanted_) {
+    std::erase_if(ScanWaiters(), [this](const base::WeakPtr<Discovery>& waiter) {
+      return !waiter || waiter.get() == this;
+    });
+  }
+  if (adapter_) {
+"""),
+    ("""}  // namespace device::cablev2
+""", """}  // namespace device::cablev2
+
+// Bay: NNCore (the WebAuthn dialog model reports its step).
+void BaySetHybridUiShown(const void* model, bool shown) {
+  device::cablev2::Discovery::SetHybridUiShown(model, shown);
+}
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+print("hooked the hybrid discovery's scan")
+PY2
+
+python3 - "$src/chrome/browser/webauthn/authenticator_request_dialog_model.cc" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "BaySetHybridUiShown" in s:
+    sys.exit(0)
+decl = """// Bay: NNCore (engine/nncore): the hybrid discovery scans only while a phone
+// step shows (device/fido/cable/v2_discovery.cc).
+extern bool g_bay_hybrid_scan_on_demand;
+void BaySetHybridUiShown(const void* model, bool shown);
+
+"""
+edits = [
+    ("""AuthenticatorRequestDialogModel::~AuthenticatorRequestDialogModel() {
+""", decl + """AuthenticatorRequestDialogModel::~AuthenticatorRequestDialogModel() {
+  BaySetHybridUiShown(this, false);
+"""),
+    ("""  const StepUIType previous_ui_type = step_ui_type(step_);
+  step_ = step;
+""", """  const StepUIType previous_ui_type = step_ui_type(step_);
+  step_ = step;
+  // Bay: NNCore
+  if (g_bay_hybrid_scan_on_demand) {
+    BaySetHybridUiShown(this, step_ == Step::kCableV2QRCode ||
+                                  step_ == Step::kCableV2Connecting ||
+                                  step_ == Step::kCableV2Connected);
+  }
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+print("hooked the WebAuthn dialog's phone steps")
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.h" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "OnLowEnergyCentralManagerStateUpdated" in s:
+    sys.exit(0)
+old = """  virtual void TriggerSystemPermissionPrompt() = 0;
+"""
+new = old + """  // Bay: NNCore. CoreBluetooth's central manager changed state.
+  virtual void OnLowEnergyCentralManagerStateUpdated() {}
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_low_energy_adapter_apple.mm" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "OnLowEnergyCentralManagerStateUpdated" in s:
+    sys.exit(0)
+old = """        device_mac->DidDisconnectPeripheral(nullptr);
+      }
+    }
+  }
+}
+"""
+new = """        device_mac->DidDisconnectPeripheral(nullptr);
+      }
+    }
+  }
+  // Bay: NNCore
+  OnLowEnergyCentralManagerStateUpdated();
+}
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_adapter_mac.h" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "PollAdapterOnDemand" in s:
+    sys.exit(0)
+old = """  void PollAdapter();
+  void OnBackgroundPollComplete(AdapterState state);
+"""
+new = old + """  // Bay: NNCore. Polls only while discovering, else on demand.
+  void PollAdapterOnDemand();
+  void OnLowEnergyCentralManagerStateUpdated() override;
+
+  bool poll_pending_ = false;
+  bool poll_dirty_ = false;
+  base::TimeTicks last_poll_completed_;
+"""
+assert s.count(old) == 1
+open(path, "w").write(s.replace(old, new))
+PY2
+
+python3 - "$src/device/bluetooth/bluetooth_adapter_mac.mm" <<'PY2'
+import sys
+path = sys.argv[1]
+s = open(path).read()
+if "g_bay_bluetooth_poll_on_demand" in s:
+    sys.exit(0)
+at = "namespace device {\n"
+decl = """// Bay: NNCore (engine/nncore) polls the adapter only while discovering, else on demand.
+bool g_bay_bluetooth_poll_on_demand = false;
+
+"""
+edits = [
+    ("""void BluetoothAdapterMac::LazyInitialize() {
+  if (lazy_initialized_)
+    return;
+""", """void BluetoothAdapterMac::LazyInitialize() {
+  if (lazy_initialized_) {
+    // Bay: NNCore. Someone uses the adapter: let them see its state.
+    if (g_bay_bluetooth_poll_on_demand) {
+      PollAdapterOnDemand();
+    }
+    return;
+  }
+"""),
+    ("""void BluetoothAdapterMac::PollAdapter() {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+""", """void BluetoothAdapterMac::PollAdapter() {
+  poll_pending_ = true;
+  poll_dirty_ = false;
+  base::ThreadPool::PostTaskAndReplyWithResult(
+"""),
+    ("""  RemoveTimedOutDevices();
+
+  ui_task_runner_->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&BluetoothAdapterMac::PollAdapter,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::Milliseconds(kPollIntervalMs));
+""", """  RemoveTimedOutDevices();
+
+  // Bay: NNCore
+  if (g_bay_bluetooth_poll_on_demand && !IsDiscovering()) {
+    poll_pending_ = false;
+    last_poll_completed_ = base::TimeTicks::Now();
+    if (poll_dirty_) {
+      PollAdapterOnDemand();
+    }
+  } else {
+    ui_task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&BluetoothAdapterMac::PollAdapter,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::Milliseconds(kPollIntervalMs));
+  }
+"""),
+    ("""void BluetoothAdapterMac::OnConnectedDeviceStateRetrieved(
+""", """void BluetoothAdapterMac::PollAdapterOnDemand() {
+  if (poll_pending_) {
+    return;
+  }
+  poll_pending_ = true;
+  const base::TimeDelta wait = last_poll_completed_ +
+                               base::Milliseconds(kPollIntervalMs) -
+                               base::TimeTicks::Now();
+  if (wait.is_positive()) {
+    ui_task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&BluetoothAdapterMac::PollAdapter,
+                       weak_ptr_factory_.GetWeakPtr()),
+        wait);
+    return;
+  }
+  PollAdapter();
+}
+
+void BluetoothAdapterMac::OnLowEnergyCentralManagerStateUpdated() {
+  if (!g_bay_bluetooth_poll_on_demand || !lazy_initialized_) {
+    return;
+  }
+  if (poll_pending_) {
+    poll_dirty_ = true;
+    return;
+  }
+  PollAdapterOnDemand();
+}
+
+void BluetoothAdapterMac::OnConnectedDeviceStateRetrieved(
+"""),
+]
+for old, _ in edits:
+    assert s.count(old) == 1, old
+i = s.index(at)
+s = s[:i] + decl + s[i:]
+for old, new in edits:
+    s = s.replace(old, new)
+open(path, "w").write(s)
+print("hooked the Bluetooth adapter's polling")
 PY2

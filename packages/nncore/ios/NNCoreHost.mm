@@ -342,7 +342,11 @@ NSMutableDictionary<NSString *, NSDictionary *> *gInstallPrompts = [NSMutableDic
       "--user-data-dir=" + std::string(gDataDirectory.UTF8String),
       "--enable-smooth-scrolling",
       "--disable-stack-profiler",
-      "--disable-features=MacAppCodeSignClone",
+      // AutofillAiWalletPrivatePasses (Google Wallet passes in Autofill AI, on outside a few countries) makes every
+      // tab's ChromeAutofillClient ask LocalAuthentication, synchronously over XPC, whether Touch ID can
+      // re-authenticate: most of the time between a new tab and its navigation starting. Bay has no Google account,
+      // so no Wallet passes; Touch ID for passwords and cards asks when it's needed.
+      "--disable-features=MacAppCodeSignClone,AutofillAiWalletPrivatePasses",
       // Chrome holds its BEST_EFFORT tasks (the UI thread's queues and the thread pool's) until startup is complete,
       // which waits for a visible tab to load, else 3 minutes. The app's own New Tab page is no tab, so a launch on it
       // held them that long (a trace was never written: endTracing didn't answer). ImprovedStartupBestEffortDelay stops
@@ -352,11 +356,17 @@ NSMutableDictionary<NSString *, NSDictionary *> *gInstallPrompts = [NSMutableDic
       // Chrome otherwise starts in the profile last used (Local State), and Personal is the Default directory
       // (packages/cef does the same, a4ffd530).
       "--profile-directory=Default",
+      // V8's memory reducer runs mark-compacts after each page load, which kept every renderer busy for half a minute
+      // after tabs loaded (idle CPU at 20 tabs about twice Chrome's); V8's allocation-driven GCs and Chrome's memory
+      // pressure path still run. Extension processes keep it (nn_main_delegate.cc). BAY_CHROMIUM_SWITCHES=
+      // --js-flags=--memory-reducer turns it back on in a scratch instance.
+      "--js-flags=--no-memory-reducer",
   };
   // Test instances (a scratch data dir) and ad hoc builds keep off the login keychain, as the CEF releases did. Never
   // anything else: the installed data's cookies and passwords are encrypted with the real key, and Chrome drops what
   // it can't decrypt. (The release's carryover check runs the installed-data path on ad hoc copies.)
-  if (gScratchDataDir || !IsTeamSigned()) extra.push_back("--use-mock-keychain");
+  const bool mockKeychain = gScratchDataDir || !IsTeamSigned();
+  if (mockKeychain) extra.push_back("--use-mock-keychain");
   nncore_host::PrepareStartup(gDataDirectory, extra);
   // A background (test) instance shares the screen with the owner's windows: when one of theirs covers it, Chrome
   // marks its pages hidden (WebContentsOcclusionCheckerMac / macOS occlusion) and drops their input, so a run's
@@ -388,11 +398,15 @@ NSMutableDictionary<NSString *, NSDictionary *> *gInstallPrompts = [NSMutableDic
     return getenv("BAY_BACKGROUND") && (!strncmp(sw, "--use-fake-ui-for-media-stream", 30) ||
                                               !strncmp(sw, "--auto-accept-camera-and-microphone-capture", 43));
   };
-  if (const char *port = getenv("BAY_REMOTE_DEBUGGING_PORT")) {
+  // DevTools, extra switches and argv reach Chrome only on its mock keychain, where the real Safe Storage key can't be
+  // read. On the real one they would open the owner's profile to whoever started the app (cookies decrypted over CDP,
+  // saved passwords filled into a page) without Touch ID; the engine's browser process also drops every switch that
+  // could, however it's spelled (nn_main_delegate.cc).
+  if (const char *port = getenv("BAY_REMOTE_DEBUGGING_PORT"); port && mockKeychain) {
     extra.push_back(std::string("--remote-debugging-port=") + port);
     extra.push_back("--remote-allow-origins=*");
   }
-  if (const char *switches = getenv("BAY_CHROMIUM_SWITCHES")) {
+  if (const char *switches = getenv("BAY_CHROMIUM_SWITCHES"); switches && mockKeychain) {
     NSString *all = [@" " stringByAppendingString:@(switches)];
     for (NSString *item in [all componentsSeparatedByString:@" --"]) {
       NSString *sw = [item stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
@@ -406,7 +420,7 @@ NSMutableDictionary<NSString *, NSDictionary *> *gInstallPrompts = [NSMutableDic
   // must never be lost to one (PreSandboxStartup CHECKs that Chrome has it).
   std::vector<const char *> args = {argc > 0 && argv[0] ? argv[0] : "Bay"};
   for (const std::string &s : extra) args.push_back(s.c_str());
-  for (int i = 1; i < argc; i++) {
+  for (int i = 1; mockKeychain && i < argc; i++) {
     const char *arg = argv[i];
     if (!arg) break;
     const bool cocoaDefault = arg[0] == '-' && arg[1] != '-' && isalpha((unsigned char)arg[1]) &&

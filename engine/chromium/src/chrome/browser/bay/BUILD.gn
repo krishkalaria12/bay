@@ -98,6 +98,7 @@ source_set("bay") {
     "//components/favicon_base",
     "//components/history/core/browser",
     "//components/keyed_service/core",
+    "//components/os_crypt/common:switches",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
     "//components/prefs",
@@ -131,10 +132,12 @@ source_set("bay") {
   frameworks = [ "QuartzCore.framework" ]
 
   # nn_downloads_mac.mm: the quarantine record (LSQuarantine);
-  # nn_external_apps.mm: the app that opens a scheme, and its icon.
+  # nn_external_apps.mm: the app that opens a scheme, and its icon;
+  # nn_reauth.cc: whether the running code is signed for distribution.
   frameworks += [
     "AppKit.framework",
     "CoreServices.framework",
+    "Security.framework",
   ]
 }
 
