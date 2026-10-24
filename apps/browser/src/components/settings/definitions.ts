@@ -23,6 +23,13 @@ export const SETTINGS = {
     words: "chrome arc safari firefox bookmarks passwords history",
   },
   searchEngine: { id: "search.searchEngine", pane: "search", title: "Default search engine", words: "google duckduckgo bing custom" },
+  searchShortcutMode: { id: "search.searchShortcutMode", pane: "search", title: "Shortcut mode", words: "arc duckduckgo bangs site search tab" },
+  otherSearchEngines: {
+    id: "search.otherSearchEngines",
+    pane: "search",
+    title: "Other search engines",
+    words: "custom shortcuts bang configuration url",
+  },
   searchSuggestions: { id: "search.searchSuggestions", pane: "search", title: "Show search suggestions", words: "autocomplete" },
   calculatorEnabled: {
     id: "search.calculatorEnabled",

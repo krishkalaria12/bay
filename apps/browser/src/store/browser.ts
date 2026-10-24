@@ -112,6 +112,7 @@ export const useBrowser = create<BrowserState>()(
       const settings = { ...DEFAULT_SETTINGS, ...data.settings };
       settings.externalLinkRules = normalizeExternalLinkRules(settings.externalLinkRules);
       settings.density = settings.density === "compact" ? "compact" : "comfortable";
+      settings.searchShortcutMode = settings.searchShortcutMode === "duckduckgo" ? "duckduckgo" : "arc";
       settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
       if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
 

@@ -1,4 +1,5 @@
 import { calculate } from "./calculator.ts";
+import { findBang, type BangMatch, type BangTable } from "./bangs.ts";
 import { parseCurrency, type CurrencyAnswer } from "./currency.ts";
 import { findEmoji } from "./emoji.ts";
 import { BUILT_IN_ENGINES, searchUrl, type SearchEngine } from "./engines.ts";
@@ -28,7 +29,7 @@ export type Suggestion =
       bookmarked?: boolean;
       visited?: boolean;
     }
-  | { kind: "search"; query: string; url: string; engine: string; suggested?: boolean }
+  | { kind: "search"; query: string; url: string; engine: string; suggested?: boolean; bang?: true }
   | { kind: "calc"; expression: string; value: string; url: string; detail?: string }
   | { kind: "emoji"; value: string; name: string }
   | { kind: "action"; id: string; title: string; icon?: string; hint?: string }
@@ -54,6 +55,7 @@ export type SuggestOptions = {
   currentTabId?: string;
   currentUrl?: string;
   scope?: SearchScope | null;
+  bangs?: BangTable | null;
   currency?: CurrencyAnswer | null;
   calculatorEnabled?: boolean;
 };
@@ -355,6 +357,9 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   const q = query.toLowerCase();
   const tokens = q.split(/\s+/).filter(Boolean);
 
+  const bang = scope ? null : findBang(query, options.bangs);
+  if (bang) return bangSuggestions(bang, source, options, limit);
+
   if (!scope && query.startsWith("?")) {
     const text = query.slice(1).trim();
     if (!text) return { items: [], completion: "" };
@@ -385,6 +390,8 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   const matched: Candidate[] = [];
   const top = new TopList(limit + 1);
   const onSite = scope ? new TopList(4) : null;
+  // One word that isn't a path: the sites whose address it starts, each counted over all its pages.
+  const sites = !scope && oneWord && !/[/?#:]/.test(q) ? new Map<string, Site>() : null;
   let inline: Ranked | null = null;
   for (const list of [pages, extra]) {
     for (const c of list) {
@@ -396,6 +403,7 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
       const derank = currentKey !== null && c.text.key === currentKey ? 80 : 0;
       const r: Ranked = { c, tabId, cleanedId, m, s: m + frecency(c, tabId, cleanedId, now) - derank };
       top.offer(r);
+      if (sites) addSite(sites, c, q);
       if (onSite) {
         const host = hostOfPage(c.text);
         if (host === scope!.host || host.endsWith(`.${scope!.host}`)) onSite.offer(r);
@@ -455,13 +463,66 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   out.push(search);
   out.push(...actionMatches.slice(0, 2).map((m) => actionRow(m.action)));
   out.push(...creates.map(createRow));
+  // The sites themselves, as Chrome's omnibox lists them ("dash": dash.cloudflare.com, dashboard.render.com…), ahead of
+  // the engine's suggestions; their deeper pages come after those, so a site's many addresses don't crowd the others out.
+  const shownSites = sites ? topSites(sites, now, options.remoteFirst ? 4 : 2) : [];
+  const siteRows = shownSites.map((site) => known(`${site.origin}/`) ?? siteRow(site));
+  const siteOrigins = new Set(shownSites.map((site) => site.origin));
   const pageRows = ranked.map((x) => pageSuggestion(x.c, x.tabId, x.cleanedId));
-  const ahead = options.remoteFirst ? 0 : 3;
-  out.push(...pageRows.slice(0, ahead));
+  const deeper = (row: Suggestion) => row.kind === "page" && siteOrigins.has(/^https?:\/\/[^/?#]+/i.exec(row.url)?.[0] ?? "");
+  const ahead = options.remoteFirst ? [] : pageRows.filter((row) => !deeper(row)).slice(0, Math.max(0, 3 - siteRows.length));
+  out.push(...siteRows);
+  out.push(...ahead);
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));
-  out.push(...pageRows.slice(ahead));
+  out.push(...pageRows);
   return { items: out.items, completion: answer || emoji.length ? "" : completion };
 }
+
+function bangSuggestions(match: BangMatch, source: SuggestionSource, options: SuggestOptions, limit: number): SuggestionResult {
+  const { bang, query } = match;
+  const out = new Output(limit);
+  if (!query) {
+    out.push({ kind: "page", url: bang.home, title: bang.name, favicon: null });
+    return { items: out.items, completion: "" };
+  }
+  out.push({ kind: "search", query, url: match.url, engine: bang.name, bang: true });
+  const scope: SearchScope = { kind: "site", name: bang.name, host: hostOf(bang.home), url: bang.template };
+  out.push(...buildSuggestions(query, source, { ...options, scope, remote: [], bangs: null }).items.slice(1));
+  return { items: out.items, completion: "" };
+}
+
+type Site = { origin: string; prefix: boolean; visits: number; lastVisit: number; bookmarked: boolean; favicon: string | null };
+
+// A page counts toward its site when the query starts the site's address, or (three letters or more) one of its names
+// before the domain's end ("cloud" in dash.cloudflare.com, not "com").
+function addSite(sites: Map<string, Site>, c: Candidate, q: string) {
+  const origin = originOfPage(c.text);
+  if (!origin) return;
+  const host = hostPart(c.text.shownLower);
+  const prefix = host.startsWith(q);
+  const names = host.split(".").slice(1, -1);
+  if (!prefix && (q.length < 3 || !names.some((name) => name.startsWith(q)))) return;
+  const site = sites.get(origin);
+  if (!site) {
+    sites.set(origin, { origin, prefix, visits: c.visits, lastVisit: c.lastVisit, bookmarked: c.bookmarked, favicon: c.favicon });
+    return;
+  }
+  site.visits += c.visits;
+  site.lastVisit = Math.max(site.lastVisit, c.lastVisit);
+  site.bookmarked ||= c.bookmarked;
+  site.favicon ??= c.favicon;
+}
+
+function topSites(sites: Map<string, Site>, now: number, count: number): Site[] {
+  const score = (site: Site) => {
+    const ageDays = site.lastVisit ? Math.max(0, (now - site.lastVisit) / DAY) : 10;
+    return (site.prefix ? 40 : 0) + Math.log2(1 + site.visits) * 8 - Math.min(ageDays, 30) + (site.bookmarked ? 20 : 0);
+  };
+  return [...sites.values()].sort((a, b) => score(b) - score(a)).slice(0, count);
+}
+
+// A site never visited at its root: its address alone.
+const siteRow = (site: Site): Suggestion => ({ kind: "page", url: `${site.origin}/`, title: "", favicon: site.favicon, visited: true });
 
 function inlineMatch(t: PageText, q: string): boolean {
   if (hostPart(t.shownLower).startsWith(q) && originOfPage(t)) return true;

@@ -23,6 +23,7 @@ import { SpaceDots } from "./SpaceDots";
 import {
   PROFILE_DOTS_HEIGHT,
   SPACE_CELL,
+  SPACE_GAP,
   SPACE_GLYPH,
   SPACE_HOVERED_OPACITY,
   SPACE_IDLE_OPACITY,
@@ -37,11 +38,11 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const ids = useBrowser(useShallow((s) => s.spaceOrder));
   const width = useSidebarWidth(windowId);
   const { pages } = usePagerPages(windowId);
-  const fits = ids.length * SPACE_CELL <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
+  const fits = ids.length * SPACE_CELL + (ids.length - 1) * SPACE_GAP <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT }}>
       {fits ? (
-        <View style={{ height: PROFILE_DOTS_HEIGHT - 3, flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
+        <View style={{ height: PROFILE_DOTS_HEIGHT - 3, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACE_GAP }}>
           {ids.map((id) => (
             <SpaceIcon key={id} id={id} windowId={windowId} page={pages.find((p) => p.id === id)} />
           ))}
