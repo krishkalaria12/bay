@@ -500,6 +500,61 @@ index 0a4efc1fff0a6e32ea1634ab5f863c211f452409..751d6a53f627a66a8199b7fa98cf2fd3
  
    if (useIOSBorderRendering) {
      layer.cornerRadius = cornerRadii.topLeftHorizontal;
+@@ -1536,8 +1541,42 @@ - (void)updateTrackingAreas
+   [super updateTrackingAreas];
+ }
+ 
++// [Bay: whether the pointer is over the view where it's drawn. AppKit's tracking areas follow the frame and know
++// nothing of layer transforms, so a view moved aside by a translate (a profile's page off to the side of the sidebar)
++// still took hover where it would sit untransformed, under the page that's shown there. Only translations are
++// followed; anything else is left to the tracking area.
++static BOOL RCTViewPointerOver(NSView *view, NSPoint locationInWindow)
++{
++  CGFloat dx = 0, dy = 0;
++  for (NSView *v = view; v != nil; v = v.superview) {
++    // A view without a layer (the window's frame view) has no transform: its zeroed one isn't the identity.
++    if (![v isKindOfClass:[RCTUIView class]] && v.layer == nil) {
++      continue;
++    }
++    CATransform3D t = [v isKindOfClass:[RCTUIView class]] ? ((RCTUIView *)v).transform3D : v.layer.transform;
++    if (CATransform3DIsIdentity(t)) {
++      continue;
++    }
++    if (!CATransform3DIsAffine(t)) {
++      return YES;
++    }
++    CGAffineTransform a = CATransform3DGetAffineTransform(t);
++    if (a.a != 1 || a.b != 0 || a.c != 0 || a.d != 1 || !v.isFlipped) {
++      return YES;
++    }
++    dx += a.tx;
++    dy += a.ty;
++  }
++  NSPoint p = [view convertPoint:locationInWindow fromView:nil];
++  return NSPointInRect(NSMakePoint(p.x - dx, p.y - dy), view.bounds);
++}
++// Bay]
++
+ - (void)mouseEntered:(NSEvent *)event
+ {
++  if (!RCTViewPointerOver(self, event.locationInWindow)) { // [Bay]
++    return;
++  }
+   _hasMouseOver = YES;
+   [self sendMouseEventWithBlock:self.onMouseEnter
+                    locationInfo:[self locationInfoFromEvent:event]
+@@ -1547,6 +1586,11 @@ - (void)mouseEntered:(NSEvent *)event
+ 
+ - (void)mouseExited:(NSEvent *)event
+ {
++  // [Bay: a leave only after an enter (one ignored above has none to end).
++  if (!_hasMouseOver) {
++    return;
++  }
++  // Bay]
+   _hasMouseOver = NO;
+   [self sendMouseEventWithBlock:self.onMouseLeave
+                    locationInfo:[self locationInfoFromEvent:event]
 diff --git a/React/Views/ScrollView/RCTScrollView.m b/React/Views/ScrollView/RCTScrollView.m
 index eb79ff32614392cb16e6eb3dbec6cc5b037fe27a..18b2f96cf65892c3db53b751d2878ecb5b05a71d 100644
 --- a/React/Views/ScrollView/RCTScrollView.m
