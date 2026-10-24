@@ -9,7 +9,7 @@ import { useTab } from "../../store/hooks";
 import { Favicon, IconButton, useHover } from "../primitives";
 import { useSidebarTokens } from "../sidebar/tokens";
 import { useArtwork } from "./artwork";
-import { SeekBar } from "./MiniPlayer";
+import { LiveLabel, SeekBar } from "./MiniPlayer";
 import { hasTrackControls, hostOf, isPlaying, isTabShown, mediaCommand, playerTabFor, seekTo, skip, useMedia, useSession, useTicker } from "./state";
 import { SIDEBAR_PLAYER_HEIGHT, SKIP_SECONDS } from "./constants";
 import { useMediaTokens } from "./tokens";
@@ -120,7 +120,11 @@ export function SidebarPlayer({ tabId }: { tabId: string }) {
             tooltip={tracks ? "Play Next Track" : `Skip ahead ${SKIP_SECONDS} seconds`}
             onPress={() => (tracks ? mediaCommand(tabId, "next") : skip(tabId, session, SKIP_SECONDS))}
           />
-          {session.duration ? (
+          {session.live ? (
+            <View style={{ flex: 1, flexDirection: "row", marginLeft: 6 }}>
+              <LiveLabel tabId={tabId} session={session} tokens={media} fontSize={11} />
+            </View>
+          ) : session.duration ? (
             <View style={{ flex: 1, flexDirection: "row", marginLeft: 6 }}>
               <TickingSeekBar
                 playing={playing}

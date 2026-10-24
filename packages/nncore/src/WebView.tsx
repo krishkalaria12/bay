@@ -29,8 +29,12 @@ export type NowPlaying = {
   timestamp: number;
   hasVideo: boolean;
   actions: string[];
+  /** An endless video, or one whose seekable end keeps moving (a live stream that can be rewound). */
+  live: boolean;
+  /** Seconds behind a live stream's end, at `timestamp`. */
+  liveBehind: number;
 };
-export type MediaCommand = "play" | "pause" | "toggle" | "next" | "previous" | "seekBy" | "seekTo" | "stop";
+export type MediaCommand = "play" | "pause" | "toggle" | "next" | "previous" | "seekBy" | "seekTo" | "seekToLive" | "stop";
 export type MediaAccess = { camera: boolean; microphone: boolean; screen: boolean };
 
 export type OpenDisposition = "foreground" | "background" | "window" | "popup" | "incognito" | "current" | "split";

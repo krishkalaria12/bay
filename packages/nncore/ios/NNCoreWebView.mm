@@ -120,10 +120,13 @@ T *Field(NSDictionary *d, NSString *key) {
   return [value isKindOfClass:[T class]] ? value : nil;
 }
 
-NSString *Text(NSDictionary *d, NSString *key, NSUInteger max) {
-  NSString *s = Field<NSString>(d, key);
+NSString *Clip(NSString *s, NSUInteger max) {
   if (s.length <= max) return s;
   return [s substringToIndex:[s rangeOfComposedCharacterSequenceAtIndex:max].location];
+}
+
+NSString *Text(NSDictionary *d, NSString *key, NSUInteger max) {
+  return Clip(Field<NSString>(d, key), max);
 }
 
 bool Flag(NSDictionary *d, NSString *key) {
@@ -149,11 +152,12 @@ NSDictionary *NowPlayingState(NSDictionary *d) {
   NSMutableArray *actions = [NSMutableArray array];
   for (id action in Field<NSArray>(d, @"actions"))
     if ([action isKindOfClass:NSString.class] && [action length] <= 64 && actions.count < 32) [actions addObject:action];
-  double position = 0, duration = 0, rate = 1, timestamp = 0;
+  double position = 0, duration = 0, rate = 1, timestamp = 0, behind = 0;
   Finite(d, @"position", &position);
   const bool hasDuration = Finite(d, @"duration", &duration) && duration >= 0;
   Finite(d, @"playbackRate", &rate);
   Finite(d, @"timestamp", &timestamp);
+  Finite(d, @"liveBehind", &behind);
   return @{
     @"frame" : Text(d, @"frame", 64) ?: @"",
     @"title" : Text(d, @"title", 1024) ?: @"",
@@ -167,6 +171,31 @@ NSDictionary *NowPlayingState(NSDictionary *d) {
     @"timestamp" : @(timestamp),
     @"hasVideo" : @(Flag(d, @"hasVideo")),
     @"actions" : actions,
+    @"live" : @(Flag(d, @"live")),
+    @"liveBehind" : @(MAX(behind, 0)),
+  };
+}
+
+// The video in Picture in Picture, for the window's speed, subtitles and Live controls (page_script.js › Picture in
+// Picture).
+NSDictionary *PictureInPictureState(NSDictionary *d) {
+  double rate = 1, selected = -1, behind = 0;
+  Finite(d, @"rate", &rate);
+  Finite(d, @"selected", &selected);
+  Finite(d, @"behind", &behind);
+  NSMutableArray *tracks = [NSMutableArray array];
+  for (id label in Field<NSArray>(d, @"tracks")) {
+    if (tracks.count >= 64) break;
+    [tracks addObject:[label isKindOfClass:NSString.class] ? Clip(label, 200) : @""];
+  }
+  return @{
+    @"rate" : @(MIN(MAX(rate, 0.0625), 16.0)),
+    @"tracks" : tracks,
+    @"selected" : @(selected >= 0 && selected < tracks.count ? (NSInteger)selected : -1),
+    @"cue" : Text(d, @"cue", 1000) ?: @"",
+    @"live" : @(Flag(d, @"live")),
+    @"endless" : @(Flag(d, @"endless")),
+    @"behind" : @(MAX(behind, 0)),
   };
 }
 
@@ -1304,6 +1333,8 @@ const char kPageReportsKey = 0;
     [self emit:@"pictureInPicture" payload:@{@"kind" : pipKind, @"active" : active}];
     // Chrome's video window, styled and handled as on CEF (NNCorePictureInPicture).
     if ([pipKind isEqual:@"video"]) nncore_pip::VideoChanged(self, [NSURL URLWithString:tab.url ?: @""].host ?: @"", frameId, active.boolValue);
+  } else if ([kind isEqualToString:@"pipState"] && dict) {
+    nncore_pip::StateChanged(self, frameId, PictureInPictureState(dict));
   } else if ([kind isEqualToString:@"notification"] && dict) {
     NSString *nid = Text(dict, @"id", 128);
     NSString *origin = OriginOf(tab.url);
@@ -1723,6 +1754,10 @@ const char kPageReportsKey = 0;
     [_tab executeJavaScript:@"document.pictureInPictureElement && document.exitPictureInPicture()" frame:frameId];
   else
     [self exitPictureInPicture];
+}
+
+- (void)pictureInPictureAction:(NSString *)action value:(double)value inFrame:(NSString *)frameId {
+  [self callFrame:frameId ?: @"" kind:@"pip" json:JSONString(@{@"action" : action, @"value" : @(value)})];
 }
 
 - (void)exitPictureInPicture {
