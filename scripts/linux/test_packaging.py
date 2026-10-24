@@ -1,6 +1,7 @@
 """Linux packaging against fixture engine archives: no engine build or Linux desktop needed."""
 import importlib.util
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -112,6 +113,102 @@ class BuildAppTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "helper: libgone.so"):
             build_app.stage(self.engine, self.web, self.root / "app")
         self.assertFalse((self.root / "app").exists())
+
+
+RELEASE = HERE / "release.sh"
+
+
+class ReleaseTests(unittest.TestCase):
+    """release.sh on a staged fixture app. Formats whose tool isn't installed are skipped, not faked."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = pathlib.Path(tempfile.mkdtemp(prefix="bay-release-test-"))
+        make_runtime(cls.root / "engine")
+        write_manifest(cls.root / "engine")
+        cls.app = cls.root / "app"
+        build_app.stage(cls.root / "engine", make_web(cls.root / "web"), cls.app)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root)
+
+    def release(self, formats, output, **env):
+        return subprocess.run(
+            [RELEASE, "--app", self.app, "--version", "1.3.0", "--output", output, "--formats", formats],
+            check=True, capture_output=True, text=True, env={**os.environ, **env},
+        )
+
+    def listing(self, tarball):
+        return {member.name: member for member in tarfile.open(tarball)}
+
+    def test_tarball_holds_the_installed_tree(self):
+        output = self.root / "tar"
+        self.release("tar", output)
+        members = self.listing(output / "bay-1.3.0-linux-x64.tar.xz")
+        for name in ("opt/bay/bay", "opt/bay/bay-wrapper", "opt/bay/bay-ui/index.html", "usr/share/applications/bay.desktop",
+                     "usr/share/icons/hicolor/16x16/apps/bay.png", "usr/share/icons/hicolor/512x512/apps/bay.png",
+                     "usr/share/icons/hicolor/scalable/apps/bay.svg", "etc/apparmor.d/bay", "etc/bay/native-messaging-hosts"):
+            self.assertIn(f"bay-1.3.0/{name}", members)
+        self.assertEqual(members["bay-1.3.0/usr/bin/bay"].linkname, "/opt/bay/bay-wrapper")
+        self.assertFalse(members["bay-1.3.0/opt/bay/chrome_sandbox"].mode & 0o4000, "a tarball never ships a setuid sandbox")
+        self.assertTrue(all(member.uid == 0 and member.gid == 0 for member in members.values()))
+        metainfo = tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz").extractfile("bay-1.3.0/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml").read()
+        self.assertIn(b'<release version="1.3.0" date="2026-10-15" />', metainfo, "dated from release-notes/1.3.0.md")
+        self.assertIn("bay-1.3.0-linux-x64.tar.xz", (output / "SHA256SUMS").read_text())
+
+    def test_rejects_a_version_that_is_not_x_y_z(self):
+        command = [RELEASE, "--app", self.app, "--version", "1.3", "--output", self.root / "bad", "--formats", "tar"]
+        self.assertEqual(subprocess.run(command, capture_output=True).returncode, 2)
+        self.assertFalse((self.root / "bad").exists())
+
+    @unittest.skipUnless(shutil.which("makepkg"), "needs makepkg")
+    def test_aur_package_installs_a_setuid_sandbox(self):
+        output = self.root / "aur"
+        self.release("tar,aur", output)
+        aur = output / "aur"
+        self.assertIn("pkgver = 1.3.0", (aur / ".SRCINFO").read_text())
+        shutil.copy2(output / "bay-1.3.0-linux-x64.tar.xz", aur)
+        subprocess.run(["makepkg", "-f", "--nodeps", "--noconfirm"], cwd=aur, check=True, capture_output=True)
+        members = self.listing(next(aur.glob("bay-bin-1.3.0-1-x86_64.pkg.tar.*")))
+        sandbox = members["opt/bay/chrome_sandbox"]
+        self.assertEqual((sandbox.mode & 0o7777, sandbox.uid), (0o4755, 0))
+
+    @unittest.skipUnless(shutil.which("dpkg-deb"), "needs dpkg-deb")
+    def test_deb_installs_a_setuid_sandbox_and_its_scripts(self):
+        output = self.root / "deb"
+        self.release("deb", output)
+        deb = output / "bay_1.3.0_amd64.deb"
+        contents = subprocess.run(["dpkg-deb", "--contents", deb], check=True, capture_output=True, text=True).stdout
+        self.assertRegex(contents, r"-rwsr-xr-x root/root .* \./opt/bay/chrome_sandbox")
+        self.assertEqual(subprocess.run(["dpkg-deb", "--field", deb, "Version"], capture_output=True, text=True).stdout.strip(), "1.3.0")
+
+    @unittest.skipUnless(shutil.which("rpmbuild") and shutil.which("rpm"), "needs rpmbuild")
+    def test_rpm_installs_a_setuid_sandbox(self):
+        output = self.root / "rpm"
+        self.release("rpm", output)
+        listing = subprocess.run(["rpm", "-qlvp", output / "bay-1.3.0-1.x86_64.rpm"], check=True, capture_output=True, text=True).stdout
+        self.assertRegex(listing, r"-rwsr-xr-x .* root +root .* /opt/bay/chrome_sandbox")
+
+    @unittest.skipUnless(shutil.which("appimagetool") and shutil.which("zsyncmake"), "needs appimagetool and zsyncmake")
+    def test_appimage_and_its_zsync_file(self):
+        output = self.root / "appimage"
+        self.release("appimage", output)
+        image = output / "Bay-1.3.0-x86_64.AppImage"
+        self.assertTrue(image.is_file() and (output / "Bay-1.3.0-x86_64.AppImage.zsync").is_file())
+
+    @unittest.skipUnless(shutil.which("gpg"), "needs gpg")
+    def test_signs_every_artifact_and_the_checksums(self):
+        home = self.root / "gnupg"
+        home.mkdir(mode=0o700)
+        env = {"GNUPGHOME": str(home)}
+        subprocess.run(["gpg", "--batch", "--passphrase", "", "--quick-gen-key", "Bay Test <test@invalid>", "ed25519", "sign", "never"],
+                       check=True, capture_output=True, env={**os.environ, **env})
+        output = self.root / "signed"
+        self.release("tar", output, BAY_GPG_KEY="test@invalid", **env)
+        for name in ("bay-1.3.0-linux-x64.tar.xz", "SHA256SUMS"):
+            subprocess.run(["gpg", "--verify", output / f"{name}.asc", output / name], check=True, capture_output=True,
+                           env={**os.environ, **env})
 
 
 if __name__ == "__main__":
