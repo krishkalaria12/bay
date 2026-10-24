@@ -93,8 +93,7 @@ Bytes recoveryKitPreviewPNG(const Bytes &entropy, const std::string &device,
   };
   drawText(image.dc, "Bay Recovery Kit", x(50), x(48), x(24), FW_BOLD);
   drawText(image.dc, "Created on " + device, x(50), x(80), x(11));
-  drawText(image.dc, "To recover on another Mac or Windows PC:", x(50), x(118),
-           x(12));
+  drawText(image.dc, "To recover on another computer:", x(50), x(118), x(12));
   drawText(image.dc, "1. Open Bay > Settings > Sync. Choose the same folder.",
            x(50), x(145), x(11));
   drawText(image.dc, "2. Click Enter Recovery Phrase.", x(50), x(166), x(11));

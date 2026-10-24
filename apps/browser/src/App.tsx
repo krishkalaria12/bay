@@ -76,8 +76,10 @@ function BrowserWindow() {
   // they show only while the pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
   const buttonsOnHover = (right || !sidebarOpen) && addressInSidebar && !fullscreen;
-  // Windows' caption buttons sit at the other corner: over the page there when it has no toolbar to hold them.
-  const captionOnHover = !topTabs && addressInSidebar && (!right || !showSidebar);
+  const captionOnHover = {
+    left: !topTabs && addressInSidebar && (right || !showSidebar),
+    right: !topTabs && addressInSidebar && (!right || !showSidebar),
+  };
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   useEffect(() => {
@@ -179,7 +181,11 @@ function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
 
   return (
     <>
-      {enabled ? <View onMouseEnter={show} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} /> : null}
+      {/* Leaving the strip hides the peek after the delay, unless the pointer goes on into it: crossing the strip out of the
+          window is otherwise never seen, as nothing reads the pointer outside it (Wayland has no global pointer). */}
+      {enabled ? (
+        <View onMouseEnter={show} onMouseLeave={hide} style={{ position: "absolute", [side]: 0, top: layout.sidebarHeader, bottom: 0, width: 8 }} />
+      ) : null}
       {/* The rest of the window while it's out: the pointer reaching it hides the peek, as leaving the peek does. Its own
           leave alone missed some exits (onto the page, say), leaving it out. */}
       {live ? (

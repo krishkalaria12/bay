@@ -1,0 +1,49 @@
+# Bay for Fedora and openSUSE, built by scripts/linux/release.sh from its staged tree (bay_root). @VERSION@ is filled in.
+%global debug_package %{nil}
+# The binaries are already stripped, with their symbols in the engine's own archive.
+%global __os_install_post %{nil}
+# Libraries bundled in /opt/bay are Bay's own: never offer them to other packages or require them from the system.
+%global __provides_exclude_from ^/opt/bay/.*$
+%global __requires_exclude ^lib(EGL|GLESv2|vk_swiftshader|vulkan|qt5_shim|qt6_shim)\\.so.*$
+
+Name:           bay
+Version:        @VERSION@
+Release:        1
+Summary:        A fast browser with your tabs in a sidebar
+License:        Apache-2.0
+URL:            https://bay.krishkalaria.in
+BuildArch:      x86_64
+Requires:       xdg-utils
+
+%description
+Bay is a browser built around a sidebar, on Chromium: spaces, pinned tabs and folders, Peek and Split View, a
+command bar, and built-in ad blocking.
+
+%install
+cp -a %{bay_root}/. %{buildroot}/
+# Only the native package installs a root-owned setuid sandbox; the shared tree stays 0755.
+chmod 4755 %{buildroot}/opt/bay/chrome_sandbox
+
+%post
+if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+  apparmor_parser -r -T -W /etc/apparmor.d/bay || true
+fi
+
+%preun
+if [ "$1" = 0 ] && command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+  apparmor_parser -R /etc/apparmor.d/bay 2>/dev/null || true
+fi
+
+%files
+%defattr(-,root,root,-)
+/opt/bay
+/usr/bin/bay
+/usr/share/applications/bay.desktop
+/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml
+/usr/share/icons/hicolor/*/apps/bay.*
+%config(noreplace) /etc/apparmor.d/bay
+%dir /etc/bay
+%dir /etc/bay/native-messaging-hosts
+%dir /etc/bay/policies
+%dir /etc/bay/policies/managed
+%dir /etc/bay/policies/recommended

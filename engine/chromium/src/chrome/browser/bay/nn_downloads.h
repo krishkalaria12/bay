@@ -40,9 +40,9 @@
 // named uniquely by Chrome (" (1)"), without a save panel: the first call
 // turns "Ask where to save each file" (download.prompt_for_download, which the
 // ungoogled patches default to on) off unless it was set, and private
-// profiles follow it (Chrome forces it on for them). A finished file gets com.apple.quarantine
-// (Gatekeeper checks what it opens) unless it already has one; a private
-// download's record leaves out its URLs.
+// profiles follow it (Chrome forces it on for them). macOS adds
+// com.apple.quarantine unless it is already present; private downloads leave
+// URLs out of that record. Bay adds no Linux quarantine metadata.
 
 #ifndef CHROME_BROWSER_BAY_NN_DOWNLOADS_H_
 #define CHROME_BROWSER_BAY_NN_DOWNLOADS_H_
@@ -60,7 +60,7 @@ NN_ENGINE_CALL(nn_downloads_remove);
 
 namespace bay {
 
-// nn_downloads_mac.mm: adds com.apple.quarantine to |file| unless it has one.
+// macOS adds com.apple.quarantine to |file| unless it has one.
 // |source| and |referrer| go into the record when they are web URLs (without
 // credentials). Blocking: call on a MayBlock thread.
 void QuarantineDownload(const base::FilePath& file,

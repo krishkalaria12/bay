@@ -9,7 +9,7 @@ import {
   readNativeSnapshot,
   validateNativeHostInfo,
 } from "./nativeBridge.ts";
-import { nativeDocumentSave, nativeDocumentWrite, nativeSnapshot } from "./native.web.ts";
+import { nativeDocumentSave, nativeDocumentWrite, nativeRandomUUID, nativeSnapshot } from "./native.web.ts";
 import { nativeContracts } from "./nativeContracts.ts";
 
 const hostInfo = (overrides) => ({
@@ -65,6 +65,53 @@ test("native constants refresh from host snapshots and optional methods require 
   assert.equal(typeof shell.windowFrame, "function");
   info = hostInfo();
   assert.equal(shell.windowFrame, undefined);
+});
+test("Linux window button layout uses current snapshots and the advertised optional query", async (t) => {
+  let layout = { left: ["close"], right: ["minimize", "maximize"] };
+  let info = hostInfo({
+    platform: "linux",
+    optionalMethods: ["BayShell.windowButtonLayout"],
+    snapshots: { BayShell: { windowButtonLayout: layout } },
+  });
+  let event;
+  let removed = false;
+  const calls = [];
+  const native = transport({
+    getHostInfo: () => info,
+    invoke: async (...args) => {
+      calls.push(args);
+      return JSON.stringify({ value: layout });
+    },
+    subscribe: (module, name, listener) => {
+      assert.equal(module, "BayShell");
+      assert.equal(name, "onAppEvent");
+      event = listener;
+      return { remove: () => (removed = true) };
+    },
+  });
+  const connection = installNativeTransport(native);
+  t.after(() => connection.remove());
+  const shell = bindNativeModule(native, "BayShell");
+  const read = () =>
+    nativeSnapshot("BayShell", "windowButtonLayout", [], () => {
+      throw new Error("Snapshot read must not invoke native code");
+    });
+  assert.deepEqual(read(), layout);
+  assert.deepEqual(calls, []);
+  const received = [];
+  const subscription = shell.addListener("onAppEvent", (payload) => received.push(payload));
+  layout = { left: ["close", "maximize", "minimize"], right: [] };
+  info = { ...info, snapshots: { BayShell: { windowButtonLayout: layout } } };
+  event({ type: "windowButtonLayout", layout });
+  assert.deepEqual(received, [{ type: "windowButtonLayout", layout }]);
+  assert.deepEqual(read(), layout);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(await shell.windowButtonLayout(), layout);
+  assert.deepEqual(calls, [["BayShell", "windowButtonLayout", "[]"]]);
+  info = { ...info, optionalMethods: [] };
+  assert.equal(shell.windowButtonLayout, undefined);
+  subscription.remove();
+  assert.equal(removed, true);
 });
 test("envelopes distinguish native errors from engine domain Result values", async () => {
   assert.deepEqual(decodeNativeResult('{"value":{"error":"not found"}}'), { error: "not found" });
@@ -216,5 +263,30 @@ test("acknowledged saves follow queued writes, report failure and allow retry", 
     assert.equal(read(), "retry");
   } finally {
     installed.remove();
+  }
+});
+
+test("Linux sync names use host snapshots and device IDs stay fresh without IPC", () => {
+  let invoked = 0;
+  const subscription = installNativeTransport(
+    transport({
+      getHostInfo: () => hostInfo({ platform: "linux", snapshots: { BaySync: { deviceName: "Linux laptop" } } }),
+      invoke: async () => {
+        invoked++;
+        return '{"value":null}';
+      },
+    }),
+  );
+  const fallback = () => {
+    throw new Error("Synchronous native fallback called");
+  };
+  try {
+    assert.equal(nativeSnapshot("BaySync", "deviceName", [], fallback), "Linux laptop");
+    const first = nativeRandomUUID(fallback);
+    assert.match(first, /^[a-f0-9-]{36}$/);
+    assert.notEqual(nativeRandomUUID(fallback), first);
+    assert.equal(invoked, 0);
+  } finally {
+    subscription.remove();
   }
 });

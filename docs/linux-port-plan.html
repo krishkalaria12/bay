@@ -715,16 +715,17 @@
 
     <header class="top">
       <div class="wrap">
-        <div class="eyebrow">Bay · Port plan · <span class="mono">feat/linux</span> (after <span class="mono">feat/windows</span>)</div>
+        <div class="eyebrow">Bay · Port plan · <span class="mono">feat/linux</span> (built on <span class="mono">feat/windows</span>)</div>
         <h1>Bay for Linux</h1>
         <p class="lede">
           Linux is the third desktop target, and it differs from the other two in one important way: React Native has no usable Linux platform. Linux shares the
           Windows plan's host: Bay's React UI runs on react-native-web as a Chrome WebUI page, tabs are SurfaceEmbed elements in it, and the engine is NNCore,
-          Chrome plus Bay's layer. Zen and Vivaldi are both built this way. The plan begins with what the Linux machine needs, including the commands to build
-          the pinned Chromium. The phases follow.
+          Chrome plus Bay's layer. Zen and Vivaldi are both built this way. Linux is built on top of the Windows branch and reuses its host, bridge and shared
+          runtime. Work runs code-first: everything that can be written and checked on the Mac lands first, and building and testing on the Linux machine come
+          last.
         </p>
         <div class="meta">
-          <span>Drafted 17 Oct 2026</span>
+          <span>Drafted 17 Oct 2026 · Revised 21 Oct 2026</span>
           <span>Engine: Chromium 154.0.8037.58 + NNCore</span>
           <span>UI: React 19.1 · RN 0.81 · Expo 54 → react-native-web on Linux</span>
           <span>Build box: Arch Linux, x86_64</span>
@@ -743,9 +744,10 @@
           <li class="sub"><a href="#commands">Commands, step by step</a></li>
           <li><a href="#distros">Distro support</a></li>
           <li><a href="#scope">Scope</a></li>
-          <li><a href="#inherit">What Linux inherits</a></li>
+          <li><a href="#inherit">Building on feat/windows</a></li>
           <li><a href="#lessons">Lessons from Helium & Zen</a></li>
           <li><a href="#hosting">The hosting decision</a></li>
+          <li><a href="#order">Order of work</a></li>
           <li><a href="#phases">Phases</a></li>
           <li class="sub"><a href="#p0">0 · Groundwork</a></li>
           <li class="sub"><a href="#p1">1 · Linux engine build</a></li>
@@ -789,11 +791,18 @@
               Linux (crbug.com/534291359) while it runs on Windows and macOS. Phase&nbsp;2 tests painting on Wayland and X11 before anything else.
             </p>
             <p>
-              <strong>Shared with Windows:</strong> the web build of the UI, the <code>@bay/platform</code> web wrappers, the asynchronous bridge over Mojo, the
-              NNCore <code>.mm</code> split, the Bay window class and <code>chrome://bay</code>. Each is written once, in the Windows plan's phases, and Linux
-              adds its frame, backdrop, secrets and packaging. The prerequisite steps below build stock Chrome from the pinned tree, which is the baseline both
-              platforms start from.
+              <strong>Built on <code>feat/windows</code>:</strong> the web build of the UI and its <code>@bay/platform</code> wrappers, the asynchronous bridge
+              over Mojo, <code>chrome://bay</code> with SurfaceEmbed tab mounting, and the shared runtime (one coordinator, read-only window projections, native
+              per-window checks) already exist there as portable sources. Linux merges that branch, turns the Windows-only switches into web-host switches, and
+              adds its frame, notifications, secrets, data backends, engine build and packaging. See <a href="#inherit">Building on feat/windows</a>.
             </p>
+            <div class="callout warn">
+              <p>
+                <strong>Order:</strong> code first, build and test last. Nothing in the shared host has run on Windows or Linux yet, and the Windows hosting
+                gate is also still to run. Deferring the Linux build means the Linux code is written against an unverified host; the
+                <a href="#order">order of work</a> keeps the Linux-only code thin so a late gate failure costs little.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -802,16 +811,15 @@
           <h2 id="prereqs-h">Prerequisites & engine build</h2>
           <div class="callout lnx prose">
             <p>
-              <strong>Do this first on the Arch box.</strong> Steps 1–3 prepare the host. Steps 4–8 run inside an Ubuntu 24.04 <code>distrobox</code> that
-              shares your home directory, so the 100+ GB tree lives on the host disk. Ubuntu is the distro CEF documents, the one
-              <code>install-build-deps.sh</code> supports, and the one GitHub's Linux runners use. Helium builds the same way, but in a Debian trixie container.
-              Chromium's Debian <strong>sysroot</strong> (<code>use_sysroot=true</code>) makes the binaries independent of the build host's libraries, so an
-              engine built here also runs on older distros.
+              <strong>Do this on the Arch box when the work moves there, at the end</strong> (see <a href="#order">Order of work</a>). Everything runs directly
+              on Arch, with no container. Chromium's Debian <strong>sysroot</strong> (<code>use_sysroot=true</code>) supplies the target libraries, so the
+              binaries don't depend on Arch's libraries and an engine built here also runs on older distros. <code>install-build-deps.sh</code> only supports
+              Debian and Ubuntu, so Step&nbsp;2 installs the same dependencies with <code>pacman</code>.
             </p>
             <p>
-              The build in Steps 4–8 is a <strong>stock Chrome baseline with the exact pins</strong> from <code>engine/patches/build/engine-lock.json</code>. It
+              The build in Steps 4–7 is a <strong>stock Chrome baseline with the exact pins</strong> from <code>engine/patches/build/engine-lock.json</code>. It
               proves the machine and toolchain work. The Bay-patched build uses the same checkout once Phase&nbsp;1 adds <code>linux</code> to the series and
-              the engine script (Step&nbsp;9).
+              the engine script (Step&nbsp;8).
             </p>
           </div>
 
@@ -849,7 +857,7 @@
                   <td>Kernel</td>
                   <td>Unprivileged user namespaces</td>
                   <td>Stock <code>linux</code> / <code>linux-zen</code></td>
-                  <td>Chrome's namespace sandbox. <code>linux-hardened</code> turns these off, which needs the SUID fallback in Step&nbsp;8.</td>
+                  <td>Chrome's namespace sandbox. <code>linux-hardened</code> turns these off, which needs the SUID fallback in Step&nbsp;7.</td>
                 </tr>
                 <tr>
                   <td>Session</td>
@@ -881,9 +889,16 @@ sudo mkswap /swapfile &amp;&amp; sudo swapon /swapfile</pre>
 
             <li>
               <h3>Install host packages <span class="where">host · Arch</span></h3>
-              <p>No compiler here: Chromium brings its own clang, and the container provides the rest.</p>
+              <p>
+                No compiler here: Chromium brings its own clang, and depot_tools brings <code>gn</code> and <code>ninja</code>. The Chromium build dependencies
+                are the Arch list from Chromium's Linux build instructions, in place of <code>install-build-deps.sh</code>, which only supports Debian and
+                Ubuntu.
+              </p>
               <div class="code">
-                <pre>sudo pacman -Syu --needed base-devel git python podman distrobox nodejs npm
+                <pre>sudo pacman -Syu --needed git curl zstd nodejs npm
+<span class="c"># Chromium build dependencies</span>
+sudo pacman -S --needed base-devel python perl gperf \
+  nss alsa-lib glib2 gtk3 nspr freetype2 cairo dbus xorg-server-xvfb xorg-xdpyinfo
 sudo npm install -g pnpm@11.1.3          <span class="c"># matches packageManager in package.json</span></pre>
               </div>
             </li>
@@ -894,38 +909,14 @@ sudo npm install -g pnpm@11.1.3          <span class="c"># matches packageManage
                 <pre>
 git clone https://github.com/krishkalaria12/bay.git "$HOME/code/bay"
 cd "$HOME/code/bay"
-git switch feat/windows &amp;&amp; git switch -c feat/linux
+git switch feat/linux
 pnpm install --frozen-lockfile
 pnpm typecheck &amp;&amp; pnpm test</pre>
               </div>
             </li>
 
             <li>
-              <h3>Create the build container <span class="where">host → container</span></h3>
-              <div class="code">
-                <pre>distrobox create --name bay-engine --image docker.io/library/ubuntu:24.04 \
-  --additional-packages "git curl file lsb-release procps python3 python3-pip sudo xz-utils zstd"
-distrobox enter bay-engine               <span class="c"># same $HOME, same user; run Steps 5–7 in here</span></pre>
-              </div>
-              <details>
-                <summary>Alternative: build directly on Arch, without a container</summary>
-                <div class="inner">
-                  <p>
-                    This works because the sysroot supplies the target libraries, but Chromium doesn't officially support it and rolling-release Python or tools
-                    can break older build scripts. Use the package list from Chromium's Linux build instructions in place of <code>install-build-deps.sh</code>,
-                    then run Steps 5–7 on the host and skip the <code>install-build-deps</code> line in Step&nbsp;6.
-                  </p>
-                  <div class="code">
-                    <pre>
-sudo pacman -S --needed base-devel python perl gperf nss alsa-lib glib2 gtk3 \
-  nspr freetype2 cairo dbus xorg-server-xvfb xorg-xdpyinfo lsb-release</pre>
-                  </div>
-                </div>
-              </details>
-            </li>
-
-            <li>
-              <h3>Fetch the pinned tools <span class="where">container</span></h3>
+              <h3>Fetch the pinned tools <span class="where">host · Arch</span></h3>
               <p>Every pin is copied from <code>engine-lock.json</code>, the same pins the Windows engine script uses.</p>
               <div class="code">
                 <pre>export CB="$HOME/chromium-build"
@@ -958,7 +949,7 @@ source "$CB/env-linux.sh"
             </li>
 
             <li>
-              <h3>Download CEF + Chromium, then the build deps <span class="where">container · 1–3 h, network-bound</span></h3>
+              <h3>Download CEF + Chromium <span class="where">host · 1–3 h, network-bound</span></h3>
               <div class="code">
                 <pre>source "$HOME/chromium-build/env-linux.sh"
 python3 "$CB/automate/automate-git.py" \
@@ -967,8 +958,6 @@ python3 "$CB/automate/automate-git.py" \
   --no-chromium-history --x64-build --no-debug-build --no-build --no-distrib \
   2&gt;&amp;1 | tee "$CB/logs/linux-sync.log"
 
-<span class="c"># Chromium's own dependency installer lives in the tree, so it runs after the sync</span>
-sudo "$CB/chromium_git/chromium/src/build/install-build-deps.sh" --no-arm --no-chromeos-fonts --no-nacl
 
 <span class="c"># Verify the pins</span>
 cd "$CB/chromium_git/chromium/src"
@@ -983,7 +972,7 @@ ls build/linux | grep sysroot                                                 <s
             </li>
 
             <li>
-              <h3>Generate and build the stock baseline <span class="where">container · hours, CPU/RAM-bound</span></h3>
+              <h3>Generate and build the stock baseline <span class="where">host · hours, CPU/RAM-bound</span></h3>
               <div class="code">
                 <pre>source "$HOME/chromium-build/env-linux.sh"
 cd "$CB/chromium_git/chromium/src/cef" &amp;&amp; ./cef_create_projects.sh
@@ -1002,7 +991,7 @@ autoninja -C out/Release_GN_x64 -j "$JOBS" chrome chrome_sandbox \
             </li>
 
             <li>
-              <h3>Run it on your desktop <span class="where">host · exit the container</span></h3>
+              <h3>Run it on your desktop <span class="where">host · Arch</span></h3>
               <div class="code">
                 <pre>OUT="$HOME/chromium-build/chromium_git/chromium/src/out/Release_GN_x64"
 P="$HOME/.cache/bay-baseline"                                            <span class="c"># a throwaway profile</span>
@@ -1032,14 +1021,17 @@ export CHROME_DEVEL_SANDBOX="$OUT/chrome_sandbox"</pre>
             </li>
 
             <li>
-              <h3>Bay-patched engine, once Phase&nbsp;1 lands <span class="where">container · planned interface</span></h3>
+              <h3>Bay-patched engine, in stage&nbsp;2 <span class="where">host · sources implemented</span></h3>
               <p>
-                This command shape is planned and doesn't work yet: Phase&nbsp;0 generalises <code>scripts/windows/engine.py</code> into one script with a
-                platform profile, and Phase&nbsp;1 adds the <code>linux</code> series lines. It reuses the checkout from Step&nbsp;6 and keeps the Windows
-                script's safety rules: pinned revisions, no resets, and a <code>series.py check</code> before every build.
+                <code>scripts/engine.py --platform win|linux</code> now shares the pinned checkout and build flow with a lock section for each platform.
+                <code>pin</code> works on the Mac; <code>download</code> requires the target host. K4 supplies the Linux linking and branding patches. Linux
+                <code>prepare</code> and <code>build</code> check that those patches are selected and the pinned sysroot is installed. The driver keeps pinned
+                revisions, never resets checkouts, and runs <code>series.py check</code> before every build. See <a href="engine-cli.md">Engine CLI</a> for
+                prerequisites and archive details. Run these build commands only in stage 2, after all stage 1 code is complete.
               </p>
               <div class="code">
                 <pre>cd "$HOME/code/bay"
+python3 scripts/engine.py --platform linux pin       <span class="c"># available now, on any host</span>
 python3 scripts/engine.py --platform linux prepare   <span class="c"># checkout → ungoogled → domain subst. → chromium series → Bay layers → gn gen</span>
 python3 scripts/engine.py --platform linux build     <span class="c"># chrome (as bay) with Bay's layer, chrome_sandbox</span>
 python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engine-154.0.8037.58-linux-x64-&lt;digest&gt;.tar.zst + symbols</span></pre>
@@ -1052,7 +1044,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="distros" aria-labelledby="distros-h">
           <h2 id="distros-h">Distro support</h2>
           <p class="prose">
-            "Most distros, not all" becomes three tiers. Glibc is the hard floor: Phase&nbsp;1 reads it from the built <code>chrome</code> binary (Step&nbsp;8).
+            "Most distros, not all" becomes three tiers. Glibc is the hard floor: Phase&nbsp;1 reads it from the built <code>chrome</code> binary (Step&nbsp;7).
             CEF documents Ubuntu 20.04+ and Debian 10+ as build hosts. Treat the oldest LTS rows below as provisional until the floor is known.
           </p>
           <div class="table-wrap">
@@ -1213,105 +1205,181 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
 
         <!-- ============================== INHERIT ============================== -->
         <section id="inherit" aria-labelledby="inherit-h">
-          <h2 id="inherit-h">What Linux inherits</h2>
+          <h2 id="inherit-h">Building on feat/windows</h2>
           <p class="prose">
-            From the current <code>feat/windows</code> working tree. Linux is the third consumer of each seam, so most rows are about generalising a seam, not
-            starting from nothing.
+            <code>feat/linux</code> is <code>feat/windows</code> plus Linux-only changes, and merges it as it moves. As of 21 October 2026 the Windows branch
+            has the whole web-rendered host in source form, checked on the Mac (see <a href="windows-implementation-status.md">the Windows status</a>). Most
+            Linux rows below are switches and siblings, not new systems.
           </p>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Already there</th>
+                  <th scope="col">In feat/windows</th>
                   <th scope="col">Where</th>
                   <th scope="col">On Linux</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>React UI, 46k lines</td>
-                  <td><code>apps/browser/src</code></td>
+                  <td>React UI on react-native-web, Reanimated web, desktop key/hover/focus/drag/menu adapters</td>
+                  <td><code>apps/browser</code>, <code>@bay/platform</code> <code>.web.tsx</code></td>
                   <td>
-                    <span class="chip ok">Reuse</span> through react-native-web. macOS-only props are already funnelled through <code>@bay/platform</code> views
+                    <span class="chip Reuse">ok</span> Production web export and web typecheck already pass. Linux needs bundled SVG icons, since Segoe Fluent
+                    Icons is a Windows font
                   </td>
                 </tr>
                 <tr>
-                  <td>Capability table + OS seam</td>
-                  <td><code>packages/platform/src/capabilities.ts</code>, <code>os.ts</code></td>
-                  <td><span class="chip ok">Extend</span>: add <code>"linux"</code> to <code>PlatformOS</code>; the web OS layer is shared with Windows</td>
+                  <td>Asynchronous native bridge: 16 modules, 254 methods (none synchronous), 17 views</td>
+                  <td><code>nativeContracts.ts</code>, <code>nativeBridge.ts</code>, <code>native_host.mojom</code></td>
+                  <td><span class="chip Reuse">ok</span> The Mojo transport, envelopes, snapshots and contract checks are platform-neutral</td>
                 </tr>
                 <tr>
-                  <td>Ctrl shortcut table, motion seam</td>
-                  <td><code>shortcuts.ts</code>, <code>keys.ts</code>, <code>motion.ts</code></td>
-                  <td><span class="chip ok">Reuse</span>; Linux shares the Windows key table with a few differences, and Reanimated runs on the web on both</td>
-                </tr>
-                <tr>
-                  <td>Native contracts: 15 modules, 237 methods, 17 views</td>
-                  <td><code>nativeContracts.ts</code>, <code>native-contracts.mjs</code></td>
-                  <td><span class="chip ok">Reuse</span> as the spec the Linux bridge is tested against</td>
-                </tr>
-                <tr>
-                  <td>JSON envelope bridge</td>
-                  <td><code>nativeBridge.ts</code> (<code>bindWindowsModule</code>, <code>decodeNativeResult</code>)</td>
-                  <td><span class="chip ok">Reuse</span>: transport-neutral, with the Mojo transport the Windows plan adds</td>
-                </tr>
-                <tr>
-                  <td>The web host</td>
-                  <td>Windows plan: <code>BayWebUIBrowserWindow</code>, <code>chrome://bay</code>, SurfaceEmbed tabs, Mojo bridge</td>
-                  <td><span class="chip ok">Share</span>: written once; Linux adds its frame view and backdrop</td>
-                </tr>
-                <tr>
-                  <td>NNCore engine, ~10k lines</td>
-                  <td><code>engine/nncore/src/bay/core</code> (about 9.2k lines are Chrome C++ in <code>.mm</code> files)</td>
+                  <td><code>chrome://bay</code> host: WebUI controller, NativeHost, host context, page observers and security, engine and browser services</td>
+                  <td><code>chrome/browser/bay/webui</code> (<code>impl</code> target)</td>
                   <td>
-                    <span class="chip warn">Split</span> once in Phase&nbsp;0 for Windows and Linux; the CEF host in <code>win/</code> is Windows-only and being
-                    retired
+                    <span class="chip Reuse">ok</span> Ungated portable sources. Their Windows-only branches are behind <code>BUILDFLAG(IS_WIN)</code> and need
+                    Linux counterparts or a shared web-host branch
                   </td>
                 </tr>
                 <tr>
-                  <td>Portable .cc moved out of .mm</td>
+                  <td>SurfaceEmbed tab mounting, tab broker (park, transfer, adopt), window registry</td>
+                  <td><code>tab_broker.cc</code>, <code>window_registry.cc</code></td>
+                  <td><span class="chip Reuse">ok</span> Shared; Wayland window placement rules affect only the registry's frame restore</td>
+                </tr>
+                <tr>
                   <td>
-                    <code>nn_devtools_call.cc</code>, <code>nn_desktop_capture.cc</code>, <code>nn_host_visibility.cc</code>, <code>nn_external_apps.cc</code>
+                    Shared runtime: coordinator, ordered command authority, read-only window projections, native per-window checks, page facts and page offers,
+                    services projection
                   </td>
-                  <td><span class="chip ok">Reuse</span></td>
-                </tr>
-                <tr>
-                  <td>Platform services split</td>
+                  <td><code>app_runtime.cc</code>, <code>runtime_state.cc</code>, <code>apps/browser/src/runtime</code></td>
                   <td>
-                    <code>nn_downloads_win.cc</code>, <code>nn_external_apps_win.cc</code>, <code>pip/nn_pip_win.cc</code>, <code>nn_pip_platform.h</code>
+                    <span class="chip Enable">warn</span> <code>AppRuntime::Enabled()</code> defaults on only on Windows, and the UI's
+                    <code>pageFactsInCoordinator()</code> checks <code>isWindows</code>. Both become a web-host check
                   </td>
-                  <td><span class="chip warn">Add</span> <code>_linux.cc</code> siblings</td>
                 </tr>
                 <tr>
-                  <td>Sync crypto + vault (C++)</td>
-                  <td><code>packages/sync/windows</code> (CNG)</td>
-                  <td><span class="chip warn">Split</span>: the vault is shared and served over Mojo; crypto backend is BoringSSL on Linux</td>
+                  <td>Shared-runtime gaps: windows Chrome opens itself, and the Settings, Import and Task Manager utility windows</td>
+                  <td><code>docs/windows-implementation-status.md</code></td>
+                  <td><span class="chip ok">Done in feat/windows</span> Linux gets the same behavior through the merge</td>
                 </tr>
                 <tr>
-                  <td>Import readers (C++)</td>
-                  <td><code>packages/import/windows</code>: Readers, Sessions, SQLite are portable; Secrets uses DPAPI</td>
-                  <td><span class="chip warn">Split</span>: shared readers, Linux secrets via libsecret/KWallet</td>
+                  <td>Capability table and OS seam</td>
+                  <td><code>capabilities.ts</code>, <code>types.ts</code></td>
+                  <td>
+                    <span class="chip ok">Code complete</span> <code>linux</code> is a web desktop with client-side caption buttons. K2 adds desktop button
+                    ordering and matching layout clearances; native execution remains deferred.
+                  </td>
                 </tr>
                 <tr>
-                  <td>Series platform column</td>
-                  <td><code>engine/patches/series</code>, <code>series.py</code> (<code>host_platform()</code> already returns <code>linux</code>)</td>
-                  <td><span class="chip warn">Extend</span>: accept <code>linux</code> in the column (it's rejected today)</td>
+                  <td>Win32 frame, Mica backdrop, toasts, platform services (DPAPI and Credential Manager, shell integration), updater</td>
+                  <td>
+                    <code>frame_win.cc</code>, shared <code>notifications.cc</code>, <code>platform_services_win.cc</code>, <code>updater_service_win.cc</code>
+                  </td>
+                  <td>
+                    <span class="chip Extend">warn</span> Linux frame and shared notification sources are implemented; desktop validation remains open. Linux
+                    platform services still need libsecret/KWallet and XDG integration. No updater: the package manager owns updates
+                  </td>
                 </tr>
                 <tr>
-                  <td>Engine script + lock</td>
-                  <td><code>scripts/windows/engine.py</code>, <code>engine-lock.json</code> (<code>"platform": "windows"</code>)</td>
-                  <td><span class="chip warn">Generalise</span>: one script, a lock section per platform</td>
+                  <td>Import and sync data services in the browser process</td>
+                  <td><code>chrome/browser/bay/data</code>, <code>data_bridge.cc</code> (gated <code>is_win</code>)</td>
+                  <td>
+                    <span class="chip Split">warn</span> Ungate for Linux with a BoringSSL sync backend and libsecret/KWallet secrets; the readers, vault,
+                    sessions and SQLite code are shared
+                  </td>
+                </tr>
+                <tr>
+                  <td>NNCore engine: portable sources linked; downloads, external apps and PiP split per platform</td>
+                  <td><code>engine/nncore/src/bay/core</code>, <code>chrome/browser/bay/nn_*_win.cc</code></td>
+                  <td><span class="chip Add">warn</span> <code>_linux.cc</code> siblings for downloads, external apps and PiP</td>
+                </tr>
+                <tr>
+                  <td>Patch series: 56 lines (18 <code>cef</code> mac, 36 <code>chromium</code>: 20 all, 9 mac, 7 win; 2 layers)</td>
+                  <td><code>engine/patches/series</code>, <code>series.py</code></td>
+                  <td>
+                    <span class="chip Extend">warn</span> <code>series.py</code> accepts only <code>all|mac|win</code>. Three of the win patches
+                    (<code>chromium-bay-webui-window</code>, <code>chromium-bay-lifecycle</code>, <code>chromium-bay-extension-hooks</code>) are host patches
+                    Linux needs, so they become <code>win,linux</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Windows engine and app scripts, pinned lock, runtime unit tests</td>
+                  <td>
+                    <code>scripts/windows/engine.py</code>, <code>build-app.py</code>, <code>engine-lock.json</code>, <code>webui:runtime_unittests</code>
+                  </td>
+                  <td>
+                    <span class="chip Generalise">warn</span> One engine script with a platform profile; the runtime unit tests are platform-neutral and run
+                    unchanged
+                  </td>
                 </tr>
                 <tr>
                   <td>Ungoogled step</td>
                   <td><code>engine/patches/build/03-ungoogled.py</code> skips two patches as "Linux-only"</td>
                   <td>
-                    <span class="chip warn">Revisit</span>: <code>0016-chromium-sandbox-pie</code> and
+                    <span class="chip Revisit">warn</span> <code>0016-chromium-sandbox-pie</code> and
                     <code>remove-disable-setuid-sandbox-as-bad-flag</code> apply on Linux
                   </td>
                 </tr>
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <section id="order" aria-labelledby="order-h">
+          <h2 id="order-h">Order of work</h2>
+          <p class="prose">
+            Everything that can be written and checked on the Mac comes first. The Linux machine is used once, at the end, for the engine build, the hosting
+            gate and the distro matrix. The phases below keep their content; this is the order they run in.
+          </p>
+          <div class="cols">
+            <div>
+              <h4>Now, on the Mac</h4>
+              <ol>
+                <li>
+                  <strong>Seams</strong> (<a href="#p0">Phase&nbsp;0</a>): series platform lists, one engine script, the Linux capability column, and the shared
+                  runtime switched on by web host rather than by Windows.
+                </li>
+                <li>
+                  <strong>Host sources</strong> (<a href="#p3">Phase&nbsp;3</a>): the CSD frame view, Linux platform services, notifications, the
+                  <code>_linux.cc</code> engine siblings, and the <code>is_win</code> gates opened where the code is shared.
+                </li>
+                <li><strong>Shared-runtime gaps</strong>: Chrome-opened windows and the utility windows, fixed on <code>feat/windows</code> and merged.</li>
+                <li>
+                  <strong>UI</strong> (<a href="#p4">Phase&nbsp;4</a>, <a href="#p5">5</a>): SVG icons, caption buttons in the desktop's layout, Wayland window
+                  rules, edge peek without a global pointer.
+                </li>
+                <li>
+                  <strong>Data</strong> (<a href="#p6">Phase&nbsp;6</a>): Linux profile paths, v10/v11 secrets, the BoringSSL sync backend against the golden
+                  vectors, which run on the Mac.
+                </li>
+                <li>
+                  <strong>Packaging sources</strong> (<a href="#p7">Phase&nbsp;7</a>): the release script, deb/rpm/AppImage/AUR files, the desktop entry and the
+                  AppArmor profile.
+                </li>
+              </ol>
+              <p>
+                Checks at each step: typechecks, JavaScript and portable native tests, the web build, <code>series.py</code> for <code>--platform linux</code>,
+                and the runtime unit tests against the pinned Chromium libraries on the Mac. A Linux-target syntax check on the Mac is possible once Chromium's
+                Debian sysroot is fetched, as the Windows branch does with mingw headers.
+              </p>
+            </div>
+            <div>
+              <h4>Last, on the Linux machine</h4>
+              <ol>
+                <li><strong>Prerequisites and engine build</strong> (<a href="#prereqs">steps</a>, <a href="#p1">Phase&nbsp;1</a>).</li>
+                <li><strong>Hosting gate</strong> (<a href="#p2">Phase&nbsp;2</a>): SurfaceEmbed painting on Wayland and X11 first.</li>
+                <li><strong>Acceptance</strong>: the exit criteria of Phases&nbsp;3–6 on GNOME and KDE.</li>
+                <li><strong>Packages and matrix</strong> (<a href="#p7">Phase&nbsp;7</a>, <a href="#p8">8</a>): clean VMs, GPUs, IME, accessibility, beta.</li>
+              </ol>
+              <div class="callout warn">
+                <p>
+                  <strong>The cost of a late gate.</strong> If SurfaceEmbed fails on Linux (its upstream render test is disabled there), the fallback is
+                  upstream's GuestContents path or the L‑A overlay host. Both keep the UI, the bridge, the runtime and the data work; only the tab mounting and
+                  the frame change. Running the Windows gate first, when a Windows machine is free, would also catch shared host failures early.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1382,9 +1450,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
           </div>
           <div class="callout">
             <p>
-              <strong>What Bay takes from them:</strong> build in a pinned container with the Chromium sysroot. Ship tarball, AppImage, deb and rpm from one
-              staged directory, with AUR on top. Install an AppArmor <code>userns</code> profile. GPG-sign everything. Keep a prerelease channel. Keep the Linux
-              UI code close to zero by rendering the UI in the engine.
+              <strong>What Bay takes from them:</strong> build against the pinned Chromium sysroot. Ship tarball, AppImage, deb and rpm from one staged
+              directory, with AUR on top. Install an AppArmor <code>userns</code> profile. GPG-sign everything. Keep a prerelease channel. Keep the Linux UI
+              code close to zero by rendering the UI in the engine.
             </p>
           </div>
         </section>
@@ -1444,12 +1512,12 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="phases" aria-labelledby="phases-h">
           <h2 id="phases-h">Phases</h2>
           <p class="prose">
-            Phases run in order unless noted. Phase&nbsp;2 is the go/no-go gate. Phases 3 and 4 can run in parallel once it passes, and so can 5 and 6.
-            Phase&nbsp;0 needs no Linux machine and can start on the Mac today. The prerequisite steps above can run in parallel with it.
+            Phase&nbsp;2 is the go/no-go gate for the architecture on Linux. The <a href="#order">order of work</a> writes the code in Phases&nbsp;0 and 3–7 on
+            the Mac first, then runs Phases&nbsp;1, 2 and the Linux acceptance at the end. Phases 3 and 4 can be written in parallel, and so can 5 and 6.
           </p>
           <ol class="flow" aria-label="Phase order">
-            <li><strong>0 · Groundwork</strong>Shared with Windows Phase&nbsp;0<br /><span class="chip mac">Mac or Linux</span></li>
-            <li><strong>1 · Engine build</strong>Chrome target on Linux<br /><span class="chip lnx">Arch box</span></li>
+            <li><strong>0 · Groundwork</strong>Mostly done in feat/windows<br /><span class="chip mac">Mac, now</span></li>
+            <li><strong>1 · Engine build</strong>Chrome target on Linux<br /><span class="chip lnx">Arch box, last</span></li>
             <li class="gate"><strong>2 · Hosting spike</strong>WebUI + SurfaceEmbed<br /><span class="chip gate">Gate</span></li>
             <li><strong>3 · Engine</strong>NNCore on Linux<br /><span class="chip lnx">Arch box</span></li>
             <li><strong>4 · UI on web</strong>Shared bridge + DOM views<br /><span class="chip lnx">Mostly shared</span></li>
@@ -1464,47 +1532,70 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             <div class="phase-head">
               <span class="phase-num">Phase 0</span>
               <h3 id="p0-h">Groundwork</h3>
-              <span class="chip mac">Runs on Mac or Linux, now</span>
+              <span class="chip mac">Mac, now</span>
             </div>
             <p class="goal">
-              The Windows plan's Phase&nbsp;0, with Linux added wherever the code asks "which platform?". The Mac app behaves exactly as before.
+              The Windows plan's Phase&nbsp;0, with Linux added wherever the code asks "which platform?". The shared half is done in
+              <code>feat/windows</code>; Linux groundwork is in progress. Preserve the Mac app's behavior.
             </p>
             <dl class="facts">
               <dt>Depends on</dt>
               <dd>Nothing; it is the same work as <a href="windows-port-plan.html#p0">Windows Phase&nbsp;0</a></dd>
             </dl>
+            <div class="callout">
+              <p>
+                <strong>Implementation progress, 21 Oct 2026.</strong> Linux caption buttons and shared-runtime defaults are implemented. Web page-fact
+                ownership reads the host's <code>sharedRuntime</code> constant; the native Mac app keeps local ownership. The series accepts Linux and comma
+                lists, selects the shared host patches, and installs NNCore without the Mac hooks. Windows DLL dependencies stay in the Windows layer patch. The
+                engine driver now shares platform profiles and keeps the Windows entry point. Linux archives have separate runtime and debug symbol files with
+                checksums; packaging is tested with fixtures, not a built Bay engine. An Ubuntu&nbsp;24.04 workflow covers portable JavaScript and Python tests,
+                typechecks, web export and Linux patch selection. The shared driver tests also run in the Windows workflow.
+              </p>
+              <p>
+                <strong>Still open.</strong> Linux crypto and secrets backends, native host sources and GN gates, and Linux engine linking and branding. Native
+                runtime policy tests are added and syntax-checked; their binaries have not run. The Ubuntu workflow, full engine build and Wayland/X11 hosting
+                gate still need to run. Phase&nbsp;0 is not complete.
+              </p>
+            </div>
             <div class="cols">
               <div>
-                <h4>Shared with Windows</h4>
+                <h4>Shared with Windows <span class="chip ok">Done in feat/windows</span></h4>
                 <ul>
-                  <li>Boot <code>App.tsx</code> on the web with Metro (Expo&nbsp;54) against stub native modules, and list every react-native-web gap.</li>
                   <li>
-                    <code>.web.tsx</code> versions of the <code>@bay/platform</code> view wrappers: hover → pointer events, <code>tooltip</code> →
-                    <code>title</code>, focus ring → <code>:focus-visible</code>, <code>draggedTypes</code> → HTML5 drag, <code>mouseDownCanMoveWindow</code> →
+                    The UI boots on the web with Metro (Expo&nbsp;54), React&nbsp;19, react-native-web and Reanimated's web path; production export passes.
+                  </li>
+                  <li>
+                    <code>.web.tsx</code> versions of the <code>@bay/platform</code> view wrappers: hover, tooltips, the focus ring, HTML5 drag, menus and
                     <code>app-region: drag</code>.
                   </li>
-                  <li>Convert the 26 synchronous native methods to async, snapshots or optional.</li>
-                  <li>Put a transport interface under the JSON envelopes so a Mojo transport can replace the TurboModule one.</li>
-                  <li>Split NNCore's <code>.mm</code> files into portable <code>.cc</code> and small <code>_mac.mm</code> files.</li>
+                  <li>No synchronous native call remains: 254 methods are async, snapshots or optional.</li>
+                  <li>A transport interface under the JSON envelopes, with the Mojo transport.</li>
+                  <li>Portable NNCore sources linked into the Chrome build; the CEF host retired.</li>
                 </ul>
               </div>
               <div>
                 <h4>Linux additions</h4>
                 <ul>
                   <li>
-                    Add <code>"linux"</code> to <code>PlatformOS</code> and a Linux column to <code>capabilitiesFor</code>: hover, tooltips, focus ring and drag
-                    are true; glass, vibrancy, shaders, dock, menu bar and traffic lights are false. The host passes the OS in its constants.
+                    Capabilities: <code>linux</code> is already a <code>PlatformOS</code> and a web desktop. Turn on caption buttons for Linux (client-side
+                    decorations) and keep glass, vibrancy, shaders, dock, menu bar and traffic lights off.
                   </li>
                   <li>
-                    <code>series</code>: accept <code>linux</code> and comma lists such as <code>mac,win</code> in the platform column; mark the
-                    <code>cef-*</code> patches <code>mac,win</code>, since Linux doesn't build CEF.
+                    Shared runtime by web host, not by Windows: <code>AppRuntime::Enabled()</code> defaults on for Linux too, and
+                    <code>pageFactsInCoordinator()</code> checks the host's <code>sharedRuntime</code> constant without <code>isWindows</code>.
+                  </li>
+                  <li>
+                    <code>series</code>: accept <code>linux</code> and comma lists such as <code>win,linux</code> in the platform column. The 18
+                    <code>cef-*</code> patches are already <code>mac</code>; the host patches <code>chromium-bay-webui-window</code>,
+                    <code>chromium-bay-lifecycle</code> and <code>chromium-bay-extension-hooks</code> become <code>win,linux</code>.
                   </li>
                   <li>
                     Generalise <code>scripts/windows/engine.py</code> into <code>scripts/engine.py --platform win|linux</code> with a lock section per platform.
                   </li>
                   <li>
                     Split <code>packages/sync/windows</code> crypto into backends (CNG on Windows, BoringSSL on Linux) and
-                    <code>packages/import/windows</code> secrets into DPAPI and libsecret/KWallet versions.
+                    <code>packages/import/windows</code> secrets into DPAPI and libsecret/KWallet versions, then open the <code>is_win</code> gate on
+                    <code>//chrome/browser/bay/data</code> and <code>data_bridge.cc</code>.
                   </li>
                   <li>
                     CI: a <code>linux-checks.yml</code> on <code>ubuntu-24.04</code> running typecheck, tests, the web bundle and
@@ -1516,8 +1607,8 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>The Mac test scripts and the Windows checks pass unchanged.</li>
-              <li><code>App.tsx</code> renders in desktop Chrome with stubbed natives, and every web incompatibility is fixed or listed.</li>
-              <li>No synchronous native call remains in the contracts.</li>
+              <li><code>series.py files --platform linux</code> lists the shared host patches and no <code>cef-*</code> or Windows-only patch.</li>
+              <li>The shared runtime turns on for a Linux host constant in the TypeScript and native unit tests.</li>
               <li>The Linux CI job is green.</li>
             </ul>
           </article>
@@ -1527,15 +1618,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             <div class="phase-head">
               <span class="phase-num">Phase 1</span>
               <h3 id="p1-h">Linux engine build</h3>
-              <span class="chip lnx">Arch box (distrobox)</span>
+              <span class="chip lnx">Arch box, last</span>
             </div>
             <p class="goal">Build Chrome from the pinned tree with Bay's series and layer on Linux x64, from one command, and archive it.</p>
             <dl class="facts">
               <dt>Depends on</dt>
-              <dd>Prerequisite steps 1–8; Phase&nbsp;0's series column and engine script (helpful, not blocking)</dd>
+              <dd>Prerequisite steps 1–7; Phase&nbsp;0's series column and engine script (helpful, not blocking)</dd>
               <dt>References</dt>
               <dd>
-                <code>helium-linux</code> (container, flags, packaging), <code>ungoogled-chromium-portablelinux</code>, the Windows <code>engine.py</code>
+                <code>helium-linux</code> (flags, packaging), <code>ungoogled-chromium-portablelinux</code>, the Windows <code>engine.py</code>
                 flow
               </dd>
             </dl>
@@ -1558,9 +1649,28 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 Launch with <code>--enable-features=Webium,SurfaceEmbed</code> on Wayland and X11 and check upstream's WebUI browser: tabs paint in
                 <code>&lt;embed&gt;</code>, typing, IME and Orca reach the page.
               </li>
-              <li>Record the glibc floor (<code>objdump</code>, Step&nbsp;8) and the sysroot in the lock file. Finalise the distro tiers from it.</li>
+              <li>Record the glibc floor (<code>objdump</code>, Step&nbsp;7) and the sysroot in the lock file. Finalise the distro tiers from it.</li>
               <li>Archive the runtime and symbols separately; add <code>ccache</code>/<code>sccache</code> as Helium does.</li>
             </ul>
+            <p>
+              <strong>Engine sources, 23 Oct 2026 (K4).</strong> The Linux series now links Bay's engine, WebUI implementation and NNCore into
+              <code>chrome_initial</code>, whose output is <code>bay</code>. Branding uses <code>bay.desktop</code> and <code>/etc/bay</code> policy and
+              native-messaging paths. NNCore keeps its canonical <code>$XDG_CONFIG_HOME/Bay</code> (or <code>~/.config/Bay</code>) profile directory; Chromium's
+              unused default-directory fallback is branded <code>bay</code>. ProcessSingleton's executable identity matches the renamed binary;
+              <code>chrome_sandbox</code> and <code>chrome_crashpad_handler</code> retain their names. The shared host patch now runs NNCore's Linux main
+              delegate and keeps parked Bay windows open, and the Linux widget receives the desktop identity. The two ungoogled sandbox patches are selected
+              only on Linux. A3 still supplies the wrapper, installed <code>/opt/bay</code> tree, desktop entry and AppArmor policy.
+            </p>
+            <p>
+              <strong>K4 verification.</strong> The driver accepts the Linux integration after verifying its selected patches and the exact Debian Bullseye
+              amd64 sysroot metadata and a matching installer or gclient receipt. The lock records the pinned sysroot archive SHA-256 and Chromium source
+              revision; GN explicitly selects that directory. This does not establish a glibc floor: <code>minimumGlibc</code> remains <code>null</code> until a
+              built artifact is measured in stage 2. Portable patch/tooling tests, Mac tests, typechecks, contracts, lint and formatting pass. The changed Linux
+              patches apply in series order to scratch files from the pinned baseline, and both ungoogled patches apply to pinned-source scratch files. Sixteen
+              release/DCHECK syntax checks pass using the sysroot and generated Mac configuration headers; four checks are blocked:
+              <code>chrome_paths.cc</code> by their CEF-enabled policy-path enum, and <code>webui_browser_window.cc</code> by missing Linux Mojo types. Linux
+              preparation, GN generation, linking, native-test execution, installed paths and desktop behavior remain unverified and deferred to stage 2.
+            </p>
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>A clean checkout builds the patched Chrome with <code>scripts/engine.py --platform linux</code>, and <code>series.py check</code> passes.</li>
@@ -1574,7 +1684,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
             <div class="phase-head">
               <span class="phase-num">Phase 2</span>
               <h3 id="p2-h">Hosting spike</h3>
-              <span class="chip gate">Go / no-go gate</span><span class="chip lnx">Arch box</span>
+              <span class="chip gate">Go / no-go gate</span><span class="chip lnx">Arch box, last</span>
             </div>
             <p class="goal">The Windows spike, run on Linux desktops. The output is a short decision record.</p>
             <dl class="facts">
@@ -1680,10 +1790,333 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <dt>Runs alongside</dt>
               <dd>Phase&nbsp;4</dd>
             </dl>
+            <div class="callout">
+              <p>
+                <strong>Host helper sources, 21 Oct 2026.</strong> Linux now has the download completion hook and GIO protocol-handler display names. Protocol
+                lookups copy prefs on the UI sequence and resolve names on a worker. The shared Aura PiP implementation provides the window fade; Linux preloads
+                bounds asynchronously and queues writes. Ozone backends without global screen coordinates skip rectangle persistence, so Wayland cannot
+                overwrite saved X11 positions. A PiP window opened before preload finishes uses Chromium's default placement.
+              </p>
+              <p>
+                <strong>Verification.</strong> Helper and unit-test sources pass Linux x64 syntax checks with the pinned Debian sysroot. These checks reuse
+                generated Mac headers and do not establish a Linux GN build. Native unit-test binaries, desktop startup integration and X11/Wayland behavior
+                remain unverified. Host platform services, linking and branding are still open; notification source progress is recorded below.
+              </p>
+              <p>
+                <strong>Frame, 21 Oct 2026.</strong> <code>frame_linux.cc</code> installs through the shared native-widget hook. It asks X11 for an undecorated
+                window and Wayland for client-side decorations, and replaces the GTK frame so no second title bar appears. A 4&nbsp;DIP band inside each edge
+                resizes restored windows, with 16&nbsp;DIP diagonal corners; maximized and full-screen windows don't resize. Every other point goes to the WebUI
+                client view's CSS drag regions, and Chromium's Linux event filter handles moves, resizes and the desktop's double-click action.
+                <code>frame_linux_unittests</code> covers the hit tests and passes a Linux x64 syntax check; it has not run. K2 frame follow-ups are recorded
+                below.
+              </p>
+              <p>
+                <strong>Frame insets and tiling, 23 Oct 2026 (K2).</strong> The captionless frame now uses Chromium's Linux decoration, input-region and
+                opaque-region hooks. Restored windows have a solid 4&nbsp;DIP border on each free edge. A tiled edge has no border or resize handle; maximized
+                and full-screen windows have none. The host retains the compositor's four edge flags, updates geometry even when only the inset mask changes,
+                and offsets CSS drag regions into the inset client area. The solid resize border stays inside the input region. X11's tiling flags come from
+                maximization atoms, so they do not promise Wayland's per-edge precision.
+              </p>
+              <p>
+                <strong>Frame verification.</strong> Twelve native regression tests cover restored geometry, all 16 tiled-edge masks, hit testing, input-region
+                policy, CSS drag offsets and state transitions. Sources pass release and DCHECK Linux x64 syntax checks using the pinned sysroot and generated
+                Mac configuration headers. These tests have not linked or run. Linux GN validation, compositor regions, scaling, X11/Wayland resizing and
+                desktop behavior remain stage-2 work.
+              </p>
+              <p>
+                <strong>Desktop settings, 23 Oct 2026 (K2).</strong> A Linux-only GTK settings patch reads the portal's
+                <code>org.gnome.desktop.wm.preferences</code> <code>button-layout</code> through Chromium's shared session bus and portal registration. It
+                observes setting and service-owner changes, keeps GTK's latest decoration layout as fallback, and accepts an empty portal string as an empty
+                button layout. Newer signals supersede an outstanding initial read. The first host snapshot uses the current GTK or default order immediately;
+                an asynchronous portal result updates that order later. Host information is refreshed before matching layout events. Document-owned observers
+                post and coalesce delivery outside the toolkit callback, and cancel old connection events on reconnect or teardown.
+              </p>
+              <p>
+                <strong>Caption layout, 23 Oct 2026 (K2).</strong> <code>snapshots.BayShell.windowButtonLayout</code> contains ordered <code>left</code> and
+                <code>right</code> button lists. The UI draws those groups, including omitted buttons and empty layouts, and reacts to matching
+                <code>onAppEvent</code> updates. Toolbars, split panes, sidebar headers on either side, the tab strip and its collapsed peek, Little Bay and
+                Linux utility windows clear the corresponding groups. Linux now advertises the existing minimize, maximize and window-state operations. The
+                caption's initial state query cannot overwrite a newer state event. Windows' maximize hit target and macOS traffic-light spacing retain their
+                existing behavior; geometry and subscription tests cover the cross-platform cases.
+              </p>
+              <p>
+                <strong>Layout verification.</strong> Provider, host and portal tests cover layout mapping, both host roles, snapshot/event consistency,
+                reconnects, teardown, portal priority, malformed values and owner restarts. Native sources and tests pass Linux x64 release/DCHECK syntax
+                checks. Portal checks additionally use a scratch <code>USE_DBUS=1</code> buildflag with the existing Mac-generated configuration headers. These
+                checks do not establish a Linux GN graph or linkage, and no native test binary has run. Portable JavaScript/Python checks, typechecks,
+                contracts, lint, formatting, React compiler checks and the production web build pass. Actual GTK/portal startup, desktop setting changes,
+                caption interaction and compositor behavior remain deferred to stage 2.
+              </p>
+              <p>
+                <strong>Window placement, 23 Oct 2026 (K3).</strong> Hosts publish <code>constants.BayShell.globalWindowCoordinates</code> from Ozone's
+                <code>supports_global_screen_coordinates</code>: true on macOS, Windows and X11, false on Wayland. Without global coordinates
+                <code>windowFrame</code> answers <code>null</code>, and window state events carry the restored size and an ephemeral <code>minimized</code> flag
+                instead of a frame. The UI saves and restores only that size and the maximized state, so a session written on X11 opens on Wayland at its old
+                size without its position; fullscreen and minimized windows keep their last restorable placement. New windows ask Chromium for an unspecified
+                origin, and the startup window is resized without being moved. Tab drag-out creates a size-only window that the compositor places, and skips the
+                desktop drag preview and the drop into another window, which both need screen positions. macOS, Windows and X11 keep their frames and drag
+                behavior.
+              </p>
+              <p>
+                <strong>Launch activation, 23 Oct 2026 (K3).</strong> Chromium already forwards a second launch through <code>ProcessSingleton</code> with the
+                desktop's xdg-activation token. <code>chromium-bay-window-identity-linux</code> passes that token into the WebUI window's widget, which
+                upstream's WebUI browser omits, so Wayland and X11 let a launched window take focus. The frame reports X11 launch feedback complete when the
+                window shows. A window Chrome opens for a launch while Bay is running is absorbed and never shown, so its token now activates the Bay window
+                that receives its pages. A launch that reuses a visible Bay window already activates it.
+              </p>
+              <p>
+                <strong>Forwarded links, 23 Oct 2026 (K3).</strong> A link another app opens while Bay runs, a startup URL and an extension's new tab are added
+                by Chrome straight into a Bay window's tab strip. With the shared runtime only macOS listened for those strips, so on Windows and Linux the page
+                had no Bay tab. The window registry now offers each such page to the coordinator as a tab of its window, or of the most recently active regular
+                Bay window, once accepted state names one; a startup URL waits for the first state and moves out before the startup window retires. Pages the
+                broker holds and pages a page opened (which <code>AppRuntime::OpenPage</code> already decides on) are left alone, and private pages and new tab
+                pages stay where they are. Touchpad back/forward needs no change: Chromium 154 enables <code>TouchpadOverscrollHistoryNavigation</code> on Linux
+                by default, and Bay does not override it.
+              </p>
+              <p>
+                <strong>K3 verification.</strong> Placement tests run the session, restore and drag policies as macOS, Windows, X11 and Wayland hosts: legacy
+                frames convert to sizes, positions never reach disk without global coordinates, malformed sizes are refused, and a late state reply cannot
+                overwrite a newer event. Native tests cover option parsing, restored-size tracking across maximize, fullscreen and minimize, host metadata, and
+                the page-opened and broker checks that keep forwarded links apart from Bay's own pages. Sources pass Linux x64 release/DCHECK syntax checks
+                except for two existing symbols that only the lifecycle patch defines; no native test binary has run. Portable JavaScript and Python checks,
+                typechecks, contracts, lint and formatting pass. Compositor placement, focus on GNOME and KDE, X11 launch feedback and links from other apps on
+                Windows and Linux remain for stage 2.
+              </p>
+              <p>
+                <strong>Notifications, 22 Oct 2026.</strong> The shared <code>notifications.cc</code> service now routes Linux post/remove operations through
+                Chromium's native notification bridge. It checks native-notification policy, bridge readiness and the selected per-profile backend, rejects
+                private profiles, and buffers responses across coordinator renderer reconnects. Linux advertises only post/remove methods. Its desktop API has
+                no permission query, permission request or common settings launcher; the UI skips that preflight without inventing a permission grant. Windows
+                keeps its existing permission flow.
+              </p>
+              <p>
+                <strong>Notification limits.</strong> Portal mode remains unavailable because it cannot provide the history synchronization this service uses. A
+                returned ID means local submission, not confirmed desktop delivery; successful removal means a close was requested. Rapid replacement or removal
+                before the desktop service replies remains best effort. Chromium does not distinguish expiration from user dismissal on this path, and Linux
+                activation after a browser restart is unsupported. Linux desktop delivery, failure cases and these timing interleavings still need runtime
+                validation.
+              </p>
+              <p>
+                <strong>Notification verification.</strong> The service and Bay unit-test sources pass Linux x64 syntax checks with the pinned sysroot and
+                generated Mac configuration headers. Native unit-test binaries have not run. Native-host syntax is covered by the shell UI checks below; startup
+                callers, full Linux GN dependency checks, linking and desktop behavior remain unverified. Portable checks cover 595 browser, 54 platform and 56
+                Python tests, the generated contracts, typechecks, web export, lint and formatting.
+              </p>
+              <p>
+                <strong>Text prompts and file icons, 22 Oct 2026.</strong> Linux now dispatches <code>BayShell.prompt</code> and
+                <code>BaySystem.fileIcon</code> through the shared <code>ShellUI</code> implementation. A coordinator prompt needs an explicit live window ID; a
+                window host can prompt only in its own window. The document owns pending requests, so renderer teardown closes prompts and settles icon
+                callbacks. Windows retains its platform-service owner and initialization gate.
+              </p>
+              <p>
+                Linux icons come from MIME types and the desktop icon theme through Chromium's <code>IconLoader</code>. They are not file thumbnails. MIME
+                lookup runs on a worker, theme lookup stays on the UI sequence, and PNG resizing and encoding run on a worker. Missing theme support returns
+                <code>null</code> for the UI's fallback. POSIX icon names follow native path rules; Windows path validation is unchanged. The remaining system
+                methods are still open; confirmation dialogs, context menus, documents, clipboard writes, appearance and file operations are recorded below.
+              </p>
+              <p>
+                <strong>File picking, 22 Oct 2026.</strong> Linux window hosts now advertise <code>BayShell.pickFiles</code> through shared
+                <code>ShellUI</code>. The picker requires its document's live window; coordinators cannot borrow another window. Chromium chooses the portal or
+                desktop fallback backend. Multiple selections return encoded <code>file:</code> URLs in selection order, matching macOS and fixing the inherited
+                Windows raw-path mismatch for filenames containing spaces, <code>?</code>, <code>#</code> or <code>%</code>. Cancellation returns an empty list;
+                a null dialog factory returns <code>dialog_unavailable</code>.
+              </p>
+              <p>
+                Each document permits one pending picker. The slot stays busy until native callback cleanup completes, including during a reentrant response.
+                Document teardown settles the pending response once. Listener and dialog references survive synchronous completion and nested response loops;
+                cleanup is posted after the response returns. Listener detachment does not guarantee immediate dismissal of every native chooser backend.
+                Windows retains its existing window and initialization checks.
+              </p>
+              <p>
+                <strong>Shell UI verification.</strong> The shared implementation, parser, native host and test sources pass release and DCHECK Linux x64 syntax
+                checks with the pinned sysroot. These use real scratch-generated Mojo bindings and existing generated Mac configuration headers. Native test
+                cases cover method advertisement, coordinator prompts without a live target, argument errors, untouched callbacks for unhandled methods, and
+                host teardown before late icon completion. Picker tests additionally cover encoded URL roundtrips, local-path preference, ordered multiple
+                selection, cancellation, busy and missing-window errors, a null factory, owner teardown, synchronous and reentrant completion, and nested loops.
+                The native binaries have not been linked or executed. Full GN checks, live prompt acceptance and cancellation, cross-window targeting, native
+                chooser behavior and X11/Wayland behavior remain unverified.
+              </p>
+              <p>
+                <strong>Safe Storage naming, 22 Oct 2026.</strong> <code>chromium-safe-storage-name-linux</code> gives Bay its own os_crypt key on Linux. The
+                Secret Service item is "Bay Safe Storage" with the application attribute <code>bay</code>, and KWallet keeps it in a "Bay Keys" folder.
+                Chromium's shared "Chromium Safe Storage" item is no longer read or written, so another Chromium build can't replace Bay's key. The libsecret
+                schema is unchanged. The series pins the item next to the macOS one. The patch applies cleanly to the pinned checkout, and a fixture test checks
+                the applied names. Bay's own runtime has not yet read or written the item on a Linux keyring.
+              </p>
+              <p>
+                <strong>Fixed-key warning, 22 Oct 2026.</strong> Linux hosts advertise <code>BayCEF.secretStorage</code>, which reports <code>keyring</code>,
+                <code>basic</code> or <code>unavailable</code>. Chromium's encryptor doesn't name its provider, so the host encrypts a probe and reads the tag:
+                <code>v10</code> is the fixed key, while <code>v11</code> (Secret Service, KWallet) and <code>v12</code> (Secret portal) are keyring keys.
+                Requests wait together on one encryptor lookup, which can sit behind a keyring unlock prompt, and settle with <code>host_closed</code> if the
+                document goes away first. The Passwords pane shows a warning for <code>basic</code> and <code>unavailable</code>. Its storage description and
+                Autofill's card-number note now name each platform's own store; the Passwords text no longer says "this Mac" on Windows and Linux. macOS and
+                Windows don't advertise the method, so they show no warning.
+              </p>
+              <p>
+                <strong>Verification.</strong> Classification tests use real <code>OSCryptAsync</code> instances with the fixed-key provider and fake v11 and
+                v12 providers, including a decrypt-only keyring. Native host tests cover the advertised method, dispatch ahead of the engine facade, joined
+                requests, argument errors and teardown. They pass release and DCHECK Linux x64 syntax checks but have not run. Browser, platform and copy tests,
+                the generated contracts, typechecks, lint and formatting pass. A real fallback to the fixed key on a Linux desktop has not been observed.
+              </p>
+              <p>
+                <strong>Confirmation dialogs, 22 Oct 2026.</strong> <code>BayShell.confirm</code> now lives in the shared <code>ShellUI</code> next to
+                <code>prompt</code>, and Linux advertises it. Both use one dialog path: the same window targeting (a coordinator names a live window, and a
+                window host confirms only in its own), one open dialog per window, and a cancelled answer if the document goes away. Confirm honors
+                <code>confirmTitle</code>, <code>cancelTitle</code> and <code>suppression</code>, which shows a checkbox reported with either button, as on
+                macOS. Views has no destructive button style, so a <code>destructive</code> confirm makes Cancel the default button, as GNOME does. Windows
+                drops its Yes/No message box, which ignored these options and outlived its document, and gets the shared dialog.
+              </p>
+              <p>
+                <strong>Verification.</strong> Parser tests cover every option, the defaults and malformed input. Native host tests cover advertisement,
+                coordinator targeting and argument errors. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run, and the
+                dialog's buttons, checkbox and Return behavior have not been seen on X11, Wayland or Windows.
+              </p>
+              <p>
+                <strong>Context menus, 22 Oct 2026.</strong> <code>BayShell.showMenu</code> moved from the Windows platform services into the shared
+                <code>ShellUI</code>, and Linux window hosts advertise it; coordinators have no window and get <code>window_required</code>. The menu keeps the
+                Windows rules (separators, submenus, disabled and check items, 16 levels, 1000 items) and adds two things macOS already drew: color swatches,
+                read as macOS reads them (<code>#RRGGBB</code> or <code>#RRGGBBAA</code>), and shortcut hints. On web hosts the shell's
+                <code>showMenu</code> turns each item's <code>key</code> and <code>modifiers</code> into a <code>shortcut</code> label with
+                <code>formatShortcut</code>, so a hint reads "Ctrl+Shift+C" as in the rest of Bay's keyboard tables; the host shows it as trailing text. SF
+                Symbols remain macOS only. Closing the document while a menu is open now answers <code>null</code>; the Windows version left that request
+                unanswered. The menu opens at the pointer; on Wayland Chromium reports it relative to the window, which is how Chrome places its own context
+                menus there.
+              </p>
+              <p>
+                <strong>Verification.</strong> Parser tests cover items, separators, submenus, check and disabled items, malformed input, the depth and size
+                limits and swatch formats. Native host tests cover window-only advertisement, coordinator rejection and argument errors; platform tests cover
+                the hint labels. Sources pass release and DCHECK Linux x64 syntax checks. Native tests have not run, and menu placement, swatches and hints have
+                not been seen on X11, Wayland or Windows.
+              </p>
+              <p>
+                <strong>Documents, 22 Oct 2026.</strong> The app's saved documents (<code>BayShell.readDocument</code>, <code>writeDocument</code>,
+                <code>saveDocument</code>, <code>removeDocument</code>) moved from the Windows platform services into a shared <code>DocumentStore</code>, and
+                Linux hosts now use it. Before this, a Linux host started with no documents and couldn't save any, so session and settings state didn't survive
+                a restart. Both platforms keep the Windows rules: files in <code>&lt;user data&gt;/BayDocuments</code>, names that are safe on every desktop,
+                UTF-8 up to 64&nbsp;MB, atomic writes on one blocking sequence, and each write applied to every host on the folder. A host's
+                <code>GetHostInfo</code> waits for the folder to be read, and an unreadable document becomes the <code>initializationError</code> rather than
+                being overwritten. Windows still refuses reparse points anywhere on the path. On Linux only the folder and the files themselves are refused if
+                they are symlinks, since symlinked homes (<code>/home</code> to <code>/var/home</code> on Fedora Silverblue) are ordinary.
+              </p>
+              <p>
+                <strong>Verification.</strong> Store tests cover the name rules, loading, writes reaching other stores on the same folder and not on another,
+                removal, argument errors, refusal before the read and after an unreadable document, a folder in a document's place, and symlinked files and
+                folders. Native host tests cover documents arriving in host info, a save landing on disk and the initialization error. Linux sources pass
+                release and DCHECK syntax checks; the native tests have not run, and the Windows services, which now delegate to the store, have not been
+                compiled.
+              </p>
+              <p>
+                <strong>Clipboard, 22 Oct 2026.</strong> Linux hosts now advertise <code>BayShell.copyText</code> and <code>copyImage</code>. A shared
+                <code>ShellClipboard</code> keeps the Windows implementation: text is written to the ordinary copy/paste clipboard, and base64 images are
+                decoded as PNG or JPEG before writing. Invalid base64 rejects with <code>invalid_args</code>; valid base64 that is not a supported image returns
+                <code>false</code> without replacing the clipboard. Both window and coordinator hosts can copy. Windows retains its profile and initialization
+                checks, and macOS keeps its existing implementation.
+              </p>
+              <p>
+                Writes run on the UI sequence and finish their call to Chromium before answering. The answer does not confirm that another app can paste the
+                content. Chromium handles X11 and Wayland; Wayland needs an input-event serial to offer the selection. Image decoding retains the Windows
+                UI-sequence behavior; Chromium also PNG-encodes Linux clipboard images on that sequence. Cross-app paste, compositor behavior and clipboard
+                retention after exit remain unverified.
+              </p>
+              <p>
+                <strong>Clipboard verification.</strong> Seventeen native tests cover both host roles, text and image readback through Chromium's
+                <code>TestClipboard</code>, PNG transparency, JPEG fallback, malformed inputs leaving the clipboard unchanged, codec dimension limits, argument
+                checks and response reentrancy. The helper, host and test sources pass release and DCHECK Linux x64 syntax checks with the pinned sysroot and
+                existing generated Mac configuration headers. Native tests have not been linked or run. Full Linux GN and link validation remain pending.
+              </p>
+              <p>
+                <strong>Appearance, 22 Oct 2026.</strong> Linux hosts now advertise <code>BayShell.setAppearance</code> and <code>isDarkAppearance</code>. Both
+                window and coordinator hosts use Chromium's profile theme service for <code>light</code>, <code>dark</code> and <code>auto</code>. The query
+                follows the selected browser color scheme, with <code>auto</code> following the system. This also corrects the Windows query, which previously
+                reported the system preference even when Bay had selected a different mode. Windows retains its profile and initialization checks; macOS keeps
+                its existing implementation.
+              </p>
+              <p>
+                Hosts observe the profile theme and system theme, then post coalesced <code>onAppEvent</code> appearance updates outside Chromium's observer
+                callbacks. A new client receives the current state; replacing the client or closing its document cancels queued delivery. Private hosts use the
+                original profile's appearance preference; Chromium's separate incognito decoration remains dark. The frontend subscribes before its startup
+                query and ignores that query once an appearance event arrives, so a delayed reply cannot overwrite a newer event.
+              </p>
+              <p>
+                <strong>Appearance verification.</strong> Native tests cover selected light/dark/system modes, effective-change events, changes while Chromium's
+                theme service is not ready, independent profiles, private-profile lifetimes, reconnection, reentrant callbacks and cancellation on teardown. The
+                helper, host and test sources pass release and DCHECK Linux x64 syntax checks with the pinned sysroot and existing generated Mac configuration
+                headers. Native tests have not been linked or run; full Linux GN/link validation and live X11/Wayland theme switching remain unverified. Four
+                frontend tests cover startup query/event ordering and disposal; the browser and platform suites, native and web TypeScript checks, contracts,
+                lint and formatting pass.
+              </p>
+              <p>
+                <strong>File operations, 22 Oct 2026.</strong> Linux hosts now advertise <code>BaySystem.fileExists</code>, <code>downloadsFolder</code>,
+                <code>openFile</code>, <code>revealFile</code> and <code>moveToTrash</code> through shared <code>ShellFiles</code>. Both window and coordinator
+                hosts can call them. Paths are absolute native UTF-8 paths, not file URLs, and Linux keeps their bytes as sent whatever the process locale;
+                Linux treats spaces, <code>?</code>, <code>*</code>, <code>#</code> and <code>%</code> literally. Relative paths, embedded NUL and invalid UTF-8
+                reject with <code>invalid_args</code>. Windows retains its path rules, profile and initialization checks, and existing shell backends.
+              </p>
+              <p>
+                Existence checks and the initial Downloads-folder lookup run on a worker. <code>fileExists</code> follows symlinks and accepts folders; missing
+                or inaccessible paths return <code>false</code>. The Downloads snapshot uses Chromium's default user Downloads directory, which can differ from
+                the profile's chosen download destination and need not exist. Host info waits for that lookup and saved documents; lookup failure publishes
+                <code>null</code> without blocking startup.
+              </p>
+              <p>
+                Linux checks the path on a worker first, so <code>openFile</code> opens a folder as a folder (the Downloads panel opens its folder this way) and
+                both open and reveal return <code>false</code> for a missing path or a special file such as a FIFO, which could block Chromium's read. It then
+                opens through Chromium's <code>platform_util</code> helpers and reveals through the portal, desktop file manager or parent-folder fallback. The
+                path can still change between that check and Chromium's own open. A successful answer confirms dispatch, not that another application opened a
+                window or selected the item. Trash uses GIO on a worker and returns <code>false</code> on failure, with no permanent-delete fallback. Linux
+                Trash rejects <code>.</code> and <code>..</code> components and a trailing slash with <code>invalid_args</code>. GIO simplifies paths as text,
+                so <code>/a/link/../file</code> could trash a different file than the kernel resolves, and <code>/a/file/</code> could trash a regular file the
+                kernel would refuse. A symlink is trashed as the link, never its target. Names such as <code>.hidden</code> and <code>..file</code> are
+                unaffected. Closing the document settles pending calls with <code>host_closed</code>; work already submitted to the desktop or worker may finish
+                afterward.
+              </p>
+              <p>
+                <strong>Verification.</strong> Service tests cover argument and path rules, locale-independent filename bytes under the C locale, folder
+                opening, FIFO rejection, the trash guards before the backend, trash failure leaving the file, and replies when the owner closes or re-enters.
+                Host tests cover the readiness gate on documents and Downloads, both host roles, contract errors and teardown. External effects go through
+                fakes; nothing opened an app or trashed a real file. Sources pass release and DCHECK Linux x64 syntax checks; the native tests have not run.
+              </p>
+              <p>
+                <strong>Remaining system methods, 23 Oct 2026 (K1).</strong> Linux window and coordinator hosts now advertise default-browser checks and
+                registration, launch-at-login controls, external URL opening, app-info queries and updater status. The shared
+                <code>DefaultBrowser</code> service uses Chromium's worker on Windows and Linux; Windows retains its profile, readiness and argument checks.
+                Pending default-browser requests settle with <code>host_closed</code> on document teardown, while an already submitted OS operation may finish
+                afterward.
+              </p>
+              <p>
+                The Linux engine archive now includes pinned, attributed <code>xdg-settings</code> and <code>xdg-mime</code> helpers beside the executable. A
+                Linux-only Chromium patch prefers that sibling helper for both default-browser queries and changes; developer outputs without it retain the
+                system PATH fallback. The helper calls its sibling MIME utility. K4 branding and D5 packaging still supply the installed
+                <code>bay.desktop</code> identity and preserve the helpers and licenses in the final package.
+              </p>
+              <p>
+                Launch at login uses <code>$XDG_CONFIG_HOME/autostart/bay.desktop</code>, or <code>$HOME/.config/autostart/bay.desktop</code> when the XDG value
+                is unset, empty or relative. Its quoted executable follows Chromium's <code>CHROME_WRAPPER</code> resolution, with
+                <code>--bay-launch-at-login</code> as the only argument. Reads and atomic writes share one blocking sequence across hosts; disabling writes a
+                managed <code>Hidden=true</code> override. Status describes this managed per-user entry only. Custom entries are preserved and reported as
+                conflicts. Trusted symlinked home/config paths work; the held autostart directory and final entry reject symlinks and unsafe ownership or
+                permissions. Accepted writes may finish after the document closes, with late replies cancelled.
+              </p>
+              <p>
+                Linux app-info snapshots wait for worker OS/hardware collection alongside saved documents and the Downloads snapshot. Debug builds capture only
+                the existing eight allowed <code>BAY_*</code> settings; release builds expose an empty environment. <code>launchEnvironment</code> reads that
+                captured dictionary and returns <code>null</code> for unknown names. External URLs accept only HTTP, HTTPS and mailto, using Chromium's
+                portal-aware <code>OpenExternal</code>; <code>true</code> confirms submission, not desktop acceptance. Updater status is
+                <code>{available:false, managedBy:"packageManager"}</code>, and Linux advertises no in-app update actions.
+              </p>
+              <p>
+                <strong>K1 verification.</strong> Native service tests use fake external effects and temporary autostart files. Host tests cover both roles,
+                snapshot readiness, contract errors and teardown. Linux release and DCHECK syntax checks use the pinned sysroot, generated Mac configuration
+                headers and actual scratch-generated Mojo bindings. They do not prove GN linkage or runtime behavior. Portable tests, typechecks, contracts,
+                lint and formatting pass; archive tests use fixtures and fake tools. Native binaries, Linux builds and all desktop default-browser, autostart
+                and portal checks remain deferred to the agreed later stages.
+              </p>
+            </div>
             <ul>
               <li>
-                Shared with Windows Phase&nbsp;3: <code>BayWebUIBrowserWindow</code>, <code>chrome://bay</code> with its CSP and Mojo receiver, the SurfaceEmbed
-                allowlist, NNCore tab strips with <code>SurfaceEmbedHandle</code> ids, and the engine calls behind the dispatcher.
+                Written in <code>feat/windows</code>: the Bay window over upstream's WebUI browser window, <code>chrome://bay</code> with its CSP and Mojo
+                receiver, SurfaceEmbed mounting through the tab broker, the window registry, the shared runtime and the engine calls behind the dispatcher.
+                Linux opens the <code>is_win</code> gates where that code is shared and writes the rest of this list.
               </li>
               <li>
                 Linux frame view: client-side decorations on Wayland, caption buttons drawn by the UI in the desktop's button layout, resize edges and drag
@@ -1695,9 +2128,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 with Chromium's, pin it as the macOS series comment does, and warn the user when only <code>basic</code> is available.
               </li>
               <li>
-                Platform services: <code>nn_downloads_linux.cc</code> (Chrome already writes <code>user.xdg.origin.url</code>),
-                <code>nn_external_apps_linux.cc</code> (GIO or the OpenURI portal), <code>pip/nn_pip_linux.cc</code>, desktop capture through PipeWire and the
-                ScreenCast portal.
+                Platform services: <code>nn_downloads_linux.cc</code> (the current patched engine adds no Linux quarantine metadata),
+                <code>nn_external_apps_linux.cc</code> (GIO handler names), shared <code>pip/nn_pip_aura.cc</code>, external URL launching through GIO or the
+                OpenURI portal, and desktop capture through PipeWire and the ScreenCast portal.
               </li>
               <li>Prompts and menus keep their JSON events; only the anchoring geometry is per platform.</li>
             </ul>
@@ -1727,8 +2160,10 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               </dd>
             </dl>
             <ul>
-              <li>The Mojo transport in <code>@bay/platform</code>; contract tests run against it.</li>
-              <li><code>BayCEF</code> becomes an <code>&lt;embed&gt;</code> component with the same props and handle as today's web view.</li>
+              <li>
+                Done in <code>feat/windows</code>: the Mojo transport in <code>@bay/platform</code> with contract tests, and <code>BayCEF</code> as an
+                <code>&lt;embed&gt;</code> component with the same props and handle as the macOS web view.
+              </li>
               <li>
                 <code>BaySymbol</code> through bundled SVG icons (Segoe Fluent Icons isn't available on Linux); <code>BaySurface</code>,
                 <code>BayFadeLabel</code>, <code>BayActivitySpinner</code>, <code>BayContextMenuArea</code>, <code>BayWindowProfile</code> as web components;
@@ -1808,6 +2243,22 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               <li>Every Mac shortcut has a Linux counterpart, and the shortcuts test passes.</li>
               <li>The app is usable with high contrast on and animations reduced.</li>
             </ul>
+            <div class="callout">
+              <p>
+                <strong>Implementation progress, 24 Oct 2026 (A2).</strong> Icons: every SF Symbol name the app uses has an inline path in
+                <code>symbols.web.tsx</code>. 204 were missing, not 19, counting the space, profile and pinned-tab pickers; <code>symbols.test.mjs</code> fails
+                on any name without one. Shortcuts: <code>LINUX_SHORTCUTS</code> is the Windows table plus Ctrl+Q (<code>quit</code>) and F11
+                (<code>toggleFullScreen</code>), a test keeps Super out of every stroke, and labels use the host's own table. The table only labels; the keys
+                run in the engine. The WebUI window loads Chrome's own accelerator table, which already maps F11 to full screen, and
+                <code>BayWebUIBrowserWindow</code> quits on Ctrl+Q ahead of the page through Chrome's user exit, so Bay's close preflight still runs
+                (<code>quit_shortcut_linux.h</code>, with unit tests). High contrast: <code>prefers-contrast: more</code> gives a theme with opaque text,
+                visible edges and a solid window in its space's colour, and a test holds its text to WCAG AA on every preset and on strong custom themes.
+                Reduced motion needed no code: Reanimated and <code>AccessibilityInfo</code> read <code>prefers-reduced-motion</code> on web, though Reanimated
+                reads it once at launch. Edge peek: nothing reads a global pointer, and leaving the edge strip now hides a peek that crossing the strip out of
+                the window used to leave out. Not yet run on Linux: whether Chromium reports the portal's <code>contrast</code> as
+                <code>prefers-contrast</code>, and the edge-peek and shortcut checks (T2, T4, T5).
+              </p>
+            </div>
           </article>
 
           <!-- Phase 6 -->
@@ -1846,6 +2297,53 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <strong>Folder sync:</strong> check Nextcloud, Syncthing, Dropbox, rclone/FUSE mounts and SMB/NFS for rename atomicity and inotify limits.
               </li>
             </ul>
+            <p>
+              <strong>Import sources, 24 Oct 2026 (K8).</strong> Linux BayImport now discovers native Chromium-family installations, Helium at
+              <code>net.imput.helium</code>, Firefox native and snap profiles, Flatpak Chromium-family and Firefox profiles, and Zen's XDG, legacy and Flatpak
+              profiles. Firefox discovery includes both <code>.mozilla/firefox</code> and current <code>config/mozilla/firefox</code> roots. Shared readers,
+              sessions, sensitive-data vault and writer dispatch are wired through the Linux data bridge; the host advertises BayImport and supplies single-file
+              CSV and HTML pickers with window ownership and teardown handling.
+            </p>
+            <p>
+              Chromium <code>v10</code> uses the fixed basic-store key; <code>v11</code> derives its key from the source browser's existing Secret Service or
+              KWallet item only after explicit unlock consent. Import never creates a wallet, folder or secret. Cached unlocks are bound to canonical source
+              roots, isolated between installations and discarded when forgotten, including late unlock results. The import window can continue without
+              unlocking, retaining basic-store passwords and reporting locked rows. Firefox uses a private read-only database snapshot and an explicit NSS slot
+              so importing one profile does not switch or shut down another initialized NSS profile.
+            </p>
+            <p>
+              <strong>K8 verification.</strong> <code>python3 scripts/linux/test-import.py</code> passes on the Mac with disposable discovery, service,
+              libsecret/KWallet protocol and real NSS <code>key4.db</code> fixtures. Coverage includes denial, missing items, all seven browser identities,
+              mixed ciphertext formats, cancellation, source-root changes and NSS coexistence. Shared native reader and sync compatibility fixtures, JavaScript
+              and Python suites, native/web typechecks, generated contracts, lint and formatting pass. Changed native sources and host tests pass Linux x64
+              release and DCHECK syntax checks with the pinned sysroot, existing generated Mac configuration headers and scratch Mojo bindings. These checks do
+              not prove the Linux GN graph or linkage. Final linking depends on D1's BoringSSL sync backend; Linux binaries, real GNOME Keyring/KWallet imports,
+              desktop file pickers and fixture parity on Linux remain stage 2 work.
+            </p>
+            <p class="prose">
+              <strong>D1 sources, 23 Oct 2026.</strong> Implemented on <code>feat/linux-d-sync</code>, awaiting merge into <code>feat/linux</code>: the shared
+              sync format now has separate Windows CNG and Linux BoringSSL backends, and libsecret stores keys by account and data directory. If key storage
+              fails, setup and recovery keep the entropy only in memory; the UI explains that the recovery phrase is needed each session. Same-account unlock
+              reuses the session, while account changes, forgetting and data-directory changes clear the active entropy. The Linux recovery kit has a PNG
+              preview, private temporary PDFs, a confidential phrase clipboard and file clipboard support. An asynchronous folder/save picker adapter rejects
+              stale exports if the active key changes. Device names are host snapshots; device IDs remain freshly generated local UUIDs.
+            </p>
+            <p class="prose">
+              <code>//chrome/browser/bay/data:sync_services</code> and <code>//chrome/browser/bay/webui:sync_ui_linux</code> are independent Linux targets; the
+              package overlay copies the Linux sources. D2 still owns opening the complete import/data bridge and advertising sync on Linux. Its host must own
+              <code>SyncUI</code> and dispatch it before routing sync calls to workers; the adapter is not dispatched by the current Linux host. Password
+              reading remains explicitly unavailable until D2 supplies the Linux importer. No engine build, desktop launch or live keyring test has run.
+              Chromium-dependent rendering, clipboard and picker release/DCHECK syntax and native tests await a Chromium checkout and sysroot.
+            </p>
+            <p class="prose">
+              Portable checks pass: the exact Chromium 154.0.8037.58 BoringSSL pin
+              <code>ac39ea6853833c1f18fd23614091d11855e71752</code> matches <code>tests/golden.json</code> byte for byte, including envelope and tag checks;
+              malformed inputs, authentication and namespace isolation are covered. Fake Secret Service checks cover session-only creation, recovery after
+              session loss, account changes, forgetting, persistent reload and stale export refusal. Temporary PDF permission, cleanup and symlink checks pass.
+              Run <code>packages/sync/scripts/check-linux-crypto.sh</code> with <code>BORINGSSL_ROOT</code> and <code>BORINGSSL_CRYPTO_LIBRARY</code> pointing
+              at that build; without them it checks system OpenSSL and does not establish BoringSSL coverage. The portable service and recovery checks are
+              <code>python3 packages/sync/linux/tests/service-test.py</code> and <code>python3 packages/sync/linux/tests/recovery-kit-test.py</code>.
+            </p>
             <h4>Exit criteria</h4>
             <ul class="checks">
               <li>The <code>packages/import/fixtures</code> give identical results on Linux.</li>
@@ -1912,6 +2410,19 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               </li>
               <li><code>chrome://sandbox</code> shows the namespace sandbox on every Tier&nbsp;1 distro, including Ubuntu with its AppArmor restriction on.</li>
             </ul>
+            <div class="callout">
+              <p>
+                <strong>Implementation progress, 24 Oct 2026 (A3).</strong> <code>scripts/linux/build-app.py</code> checks an engine archive's checksum and
+                manifest against the Linux pin, adds the web UI and refuses an app with unresolved libraries. <code>scripts/linux/release.sh</code> stages
+                <code>/opt/bay</code> with <code>bay-wrapper</code> (<code>CHROME_WRAPPER</code> and the library path), <code>bay.desktop</code>, AppStream
+                metainfo, hicolor icons, the AppArmor user-namespace profile and the <code>/etc/bay</code> directories, then packs the tarball, .deb, .rpm,
+                AppImage with zsync and the AUR <code>bay-bin</code> PKGBUILD, with SHA-256 sums and optional GPG signatures. The sandbox is setuid only in the
+                .deb, .rpm and AUR package; the AppImage's <code>AppRun</code> prints a profile for its mounts. Fixture tests cover staging, tampering, unsafe
+                archive paths, unresolved libraries, the tarball tree, desktop and metainfo validation, signing and a real <code>makepkg</code> build; the .deb,
+                .rpm and AppImage tests run where their tools are installed, and CI installs <code>rpm</code> for them. No package has been built from a real
+                engine or installed on a VM yet (T7). Details are in <code>packaging/linux/README.md</code>.
+              </p>
+            </div>
           </article>
 
           <!-- Phase 8 -->
@@ -1954,8 +2465,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="modules" aria-labelledby="modules-h">
           <h2 id="modules-h">Native module map</h2>
           <p class="prose">
-            From <code>nativeContracts.ts</code>: 15 modules, 237 methods, 26 of them synchronous, and 17 views. On Linux, as on Windows, every module is C++ in
-            the browser process behind the Mojo bridge, and every view is a DOM component.
+            From <code>nativeContracts.ts</code>: 16 modules, 254 methods and 17 views. On Linux, as on Windows, every module is C++ in the browser process
+            behind the Mojo bridge, and every view is a DOM component. The synchronous methods in the third column were already converted in
+            <code>feat/windows</code> (async, snapshot or optional); the column records how.
           </p>
           <div class="table-wrap">
             <table>
@@ -1983,8 +2495,9 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td><code>BayShell</code> (32)</td>
                   <td>
-                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), dialogs, clipboard (Chrome's <code>ui::Clipboard</code>), documents in
-                    <code>BAY_DATA_DIR</code>
+                    Windows (<code>BayWebUIBrowserWindow</code>), app menu (DOM), text prompts and file picking through shared
+                    <code>ShellUI</code> (implemented), clipboard through Chromium's <code>ui::Clipboard</code>, documents through the shared
+                    <code>DocumentStore</code> in <code>&lt;user data&gt;/BayDocuments</code>, appearance through profile themes
                   </td>
                   <td>
                     <code>copyText</code>, <code>copyImage</code>, <code>readDocument</code>, <code>writeDocument</code>, <code>removeDocument</code>;
@@ -1994,13 +2507,15 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td><code>BayApp</code> (32)</td>
-                  <td>Notifications, autostart, default browser, appearance; Dock and AppleScript absent</td>
+                  <td>Notifications, autostart, default browser; Dock and AppleScript absent</td>
                   <td><code>systemInfo</code>, <code>launchEnvironment</code> → snapshot</td>
                   <td class="num">4–5</td>
                 </tr>
                 <tr>
                   <td><code>BaySystem</code> (15)</td>
-                  <td>GIO/portal open and reveal, Trash spec, file icons from the icon theme, <code>xdg-user-dir DOWNLOAD</code></td>
+                  <td>
+                    File icons use Chromium's MIME/theme lookup; file operations use shared <code>ShellFiles</code>, Chromium's desktop helpers and GIO Trash
+                  </td>
                   <td><code>fileExists</code> → async; <code>downloadsFolder</code> → snapshot; <code>hapticTick</code> → none</td>
                   <td class="num">4</td>
                 </tr>
@@ -2082,43 +2597,51 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
         <section id="patches" aria-labelledby="patches-h">
           <h2 id="patches-h">Patch series map</h2>
           <p class="prose">
-            From the current <code>engine/patches/series</code> (50 lines: 18 <code>cef</code>, 30 <code>chromium</code>, 2 layers). "Portable" still means it
+            From the current <code>engine/patches/series</code> (56 lines: 18 <code>cef</code>, 36 <code>chromium</code>, 2 layers). "Portable" still means it
             must apply cleanly and build in Phase&nbsp;1.
           </p>
           <div class="grid2">
             <div class="card">
-              <h3>Portable, expected to work <span class="chip ok">most</span></h3>
+              <h3>Portable, expected to work <span class="chip ok">20 lines</span></h3>
               <p class="prose">
-                Every <code>chromium all</code> line not listed on the right: tab model hooks, DevTools, media, extensions, autofill, password, cast, device
-                chooser, side panel, PiP, tab sharing, branding, extension import, file chooser.
+                Every <code>chromium all</code> line: tab model hooks, DevTools title, extensions, autofill and password bubbles, cast, device chooser, side
+                panel, PiP, tab sharing, branding, extension import, file chooser.
               </p>
               <h3>Skip on Linux <span class="chip risk">mac / win only</span></h3>
               <ul>
                 <li>
-                  <code>chromium-autofill-card-touchbar</code>, <code>chromium-icloud-keychain-window</code>,
-                  <code>chromium-devtools-redock-display</code> (mac)
+                  All 18 <code>cef-*</code> patches and the 9 <code>chromium mac</code> lines, including the macOS hosting and docking patches
+                  (<code>chromium-window-hosted</code>, <code>chromium-webview-native-hosted</code>, <code>chromium-window-docked-devtools</code>,
+                  <code>chromium-browser-view-hosted-fullscreen</code>) that the web host doesn't need
                 </li>
-                <li><code>chromium-bay-layer</code> (mac framework), <code>chromium-bay-layer-win</code> (chrome.dll)</li>
-                <li>All 18 <code>cef-*</code> patches: Linux doesn't build CEF (mark them <code>mac,win</code>)</li>
+                <li>Windows-only: <code>chromium-bay-layer-win</code> (chrome.dll) and <code>chromium-bay-branding-win</code></li>
               </ul>
             </div>
             <div class="card">
-              <h3>Needs Linux work <span class="chip warn">rework</span></h3>
+              <h3>Shared with Windows <span class="chip warn">win,linux</span></h3>
               <ul>
-                <li><code>chromium-window-docked-devtools</code>: Views docking</li>
-                <li><code>chromium-safe-storage-name</code>: <strong>add a Linux version</strong> (Secret Service / KWallet naming)</li>
-                <li>
-                  <code>chromium-window-hosted</code>, <code>chromium-webview-native-hosted</code>: host Chrome's views inside the macOS app; not needed with
-                  the web host. Mark them <code>mac</code>
-                </li>
+                <li><code>chromium-bay-webui-window</code>: Bay's window factory, <code>chrome://bay</code> and the SurfaceEmbed registration</li>
+                <li><code>chromium-bay-lifecycle</code>, <code>chromium-bay-extension-hooks</code></li>
+                <li><code>chromium-bay-native-widget</code>: the native widget and custom frame factory for both web desktops</li>
+                <li><code>chromium-bay-notifications</code>: the app notification handler type and registration hook</li>
+                <li><code>chromium-safe-storage-name</code> stays <code>mac</code>; Linux has its own version, listed below</li>
               </ul>
               <h3>New for Linux <span class="chip lnx">add</span></h3>
               <ul>
-                <li><code>chromium-bay-layer-linux</code>: Bay's layer and NNCore in the <code>chrome</code> binary</li>
                 <li>
-                  Shared with Windows: <code>chromium-bay-webui-window</code>, <code>chromium-surface-embed-bay</code>, and the SurfaceEmbed backports from
-                  trunk
+                  <code>chromium-safe-storage-name-linux</code>: implemented. Bay's Secret Service item and KWallet folder, pinned next to the macOS patch
                 </li>
+                <li><code>chromium-bay-layer-linux</code>: implemented. Bay's layer and NNCore in the browser executable</li>
+                <li><code>chromium-bay-notification-native-route-linux</code>: implemented, rejects a retained fallback notification backend</li>
+                <li>
+                  <code>chromium-bay-window-identity-linux</code>: implemented. Gives the WebUI window's widget the desktop launch token, X11 window class and
+                  Wayland app id
+                </li>
+                <li>
+                  <code>chromium-bay-branding-linux</code>: implemented (binary name, desktop file identity, AppArmor-friendly paths). The client-side frame
+                  needs no patch of its own: it installs through <code>chromium-bay-native-widget</code>
+                </li>
+                <li>SurfaceEmbed backports from trunk, only if the Linux gate needs them</li>
                 <li>Fallback only (L‑A): <code>cef-overlay-hit-mask</code> and <code>cef-overlay-backdrop-blur</code></li>
                 <li>Candidates from Helium: default theme rather than GTK for Chrome-drawn UI; a clear error when the <code>.desktop</code> file is missing</li>
                 <li>From portablelinux: <code>use-oauth2-client-switches-as-default</code> (only if Bay keeps sign-in features)</li>
@@ -2144,17 +2667,34 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                   <td>react-native-web gaps against the macOS RN UI (layout, text, macOS-only props, Reanimated web path)</td>
                   <td><span class="chip risk">High</span></td>
                   <td>
-                    The Phase&nbsp;0 browser boot surfaces them on the Mac before any Linux work; fixes go in the <code>@bay/platform</code> wrappers, not in
-                    components; screenshot diffs against Mac
+                    The web boot and production export already pass in <code>feat/windows</code>; remaining gaps go in the <code>@bay/platform</code>
+                    wrappers, not in components; screenshot diffs against Mac
                   </td>
                 </tr>
                 <tr>
                   <td>SurfaceEmbed on Linux: upstream's render test is disabled on Linux (crbug.com/534291359), and the feature is off by default in M154</td>
                   <td><span class="chip risk">High</span></td>
                   <td>
-                    Phase&nbsp;1 smoke test and the Phase&nbsp;2 painting test come first; carry upstream fixes as backports; GuestContents, then L‑A, as
-                    fallbacks
+                    The Phase&nbsp;1 smoke test and the Phase&nbsp;2 painting test come first once the Linux machine is used; carry upstream fixes as backports;
+                    GuestContents, then L‑A, as fallbacks
                   </td>
+                </tr>
+                <tr>
+                  <td>
+                    Building and testing last: the Linux code is written against a host that hasn't run on Linux, and the shared host hasn't run on Windows
+                    either
+                  </td>
+                  <td><span class="chip risk">High</span></td>
+                  <td>
+                    Keep Linux-only code thin (switches, siblings, packaging); check every step on the Mac with unit tests and, once the Debian sysroot is
+                    fetched, a Linux-target syntax check; run the Windows hosting gate first if a Windows machine is free; both fallbacks keep the UI, bridge,
+                    runtime and data work
+                  </td>
+                </tr>
+                <tr>
+                  <td>Shared-runtime gaps inherited from Windows: windows Chrome opens itself, and the Settings, Import and Task Manager utility windows</td>
+                  <td><span class="chip ok">Fixed</span></td>
+                  <td>Fixed on <code>feat/windows</code> and merged; Task Manager still cannot match processes to tabs</td>
                 </tr>
                 <tr>
                   <td>
@@ -2227,7 +2767,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 <tr>
                   <td>Build cost on one Arch box (disk, RAM, hours)</td>
                   <td><span class="chip ok">Low</span></td>
-                  <td>Container with sysroot, ccache/sccache, archive the artifacts, rebuild only when the pin or series changes</td>
+                  <td>Sysroot, ccache/sccache, archive the artifacts, rebuild only when the pin or series changes</td>
                 </tr>
               </tbody>
             </table>
@@ -2254,13 +2794,16 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>Branching</td>
-                  <td><code>feat/linux</code> from <code>feat/windows</code>, rebased onto <code>main</code> once the Windows PR merges</td>
-                  <td>Now</td>
+                  <td>
+                    <strong>Decided 21 Oct 2026:</strong> <code>feat/linux</code> is built on <code>feat/windows</code> and merges it as it moves (no rebases of
+                    the shared history). Rebase onto <code>main</code> once the Windows PR merges
+                  </td>
+                  <td>—</td>
                 </tr>
                 <tr>
                   <td>Engine build environment</td>
-                  <td>Ubuntu 24.04 distrobox on the Arch box with <code>use_sysroot=true</code>; the same image in CI</td>
-                  <td>Phase&nbsp;1</td>
+                  <td><strong>Decided 23 Oct 2026:</strong> directly on the Arch box, no container, with <code>use_sysroot=true</code></td>
+                  <td>—</td>
                 </tr>
                 <tr>
                   <td>Wayland and X11</td>
@@ -2302,8 +2845,16 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
                 </tr>
                 <tr>
                   <td>Branch order</td>
-                  <td>Engine and host work lands on <code>feat/windows</code> first; Linux-only changes on <code>feat/linux</code>, stacked on it</td>
+                  <td>Shared host, runtime and engine work lands on <code>feat/windows</code> first; Linux-only changes on <code>feat/linux</code></td>
                   <td>Now</td>
+                </tr>
+                <tr>
+                  <td>Build and test order</td>
+                  <td>
+                    <strong>Decided 21 Oct 2026:</strong> code first on the Mac; the engine build, the hosting gate and all Linux testing run last on the Linux
+                    machine. See <a href="#order">Order of work</a>
+                  </td>
+                  <td>—</td>
                 </tr>
                 <tr>
                   <td>arm64</td>
@@ -2320,8 +2871,7 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               Linux host work.
             </li>
             <li>
-              <code>install-build-deps.sh</code> at the pinned Chromium still takes <code>--no-nacl</code>, as CEF's current quick start uses it. If it has been
-              removed, drop the flag.
+              The pinned tree's build scripts run on Arch's current Python and host tools. If an Arch update breaks one, pin or patch that tool on the host.
             </li>
             <li>
               Reanimated 3.19 runs acceptably on the web without the worklet runtime. The Phase&nbsp;0 boot and the Phase&nbsp;2 motion test confirm this.

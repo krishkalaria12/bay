@@ -236,6 +236,13 @@ export const nativeContracts = {
           "maxArgs": 1,
           "signature": "windowState?(id: string): Promise<WindowState>;"
         },
+        "windowButtonLayout": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "windowButtonLayout?(): Promise<WindowButtonLayout>;"
+        },
         "setWindowCaption": {
           "async": true,
           "optional": true,
@@ -306,7 +313,9 @@ export const nativeContracts = {
         "onWindowEvent",
         "onAppEvent"
       ],
-      "constants": {}
+      "constants": {
+        "globalWindowCoordinates": "boolean"
+      }
     },
     "BayGlassEffect": {
       "source": "shell/src/index.tsx",
@@ -511,17 +520,17 @@ export const nativeContracts = {
         },
         "notificationPermission": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 0,
           "maxArgs": 0,
-          "signature": "notificationPermission(): Promise<NotificationPermission>;"
+          "signature": "notificationPermission?(): Promise<NotificationPermission>;"
         },
         "requestNotificationPermission": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 0,
           "maxArgs": 0,
-          "signature": "requestNotificationPermission(): Promise<boolean>;"
+          "signature": "requestNotificationPermission?(): Promise<boolean>;"
         },
         "postNotification": {
           "async": true,
@@ -539,10 +548,10 @@ export const nativeContracts = {
         },
         "openNotificationSettings": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 0,
           "maxArgs": 0,
-          "signature": "openNotificationSettings(): Promise<void>;"
+          "signature": "openNotificationSettings?(): Promise<void>;"
         },
         "setScriptState": {
           "async": true,
@@ -1223,6 +1232,13 @@ export const nativeContracts = {
           "minArgs": 1,
           "maxArgs": 1,
           "signature": "getNeverSavePasswordOrigins(profile: string): Promise<Result<{ origins: string[] }>>;"
+        },
+        "secretStorage": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "secretStorage?(): Promise<SecretStorageKind>;"
         },
         "allowSavingPasswords": {
           "async": true,
@@ -2010,12 +2026,14 @@ export const nativeContracts = {
       "BrowserCommand": "| \"undoPinnedFolderMove\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
       "CommandEvent": "{\n  command: BrowserCommand;\n  arg: string | null;\n  windowId: string | null;\n}",
       "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }\n  // Windows' shared runtime: openWindow named this open utility window again, with these options.\n  | { type: \"opened\"; id: string; options: OpenWindowOptions }\n  | ({ type: \"state\"; id: string } & WindowState)",
-      "WindowState": "{ maximized: boolean; fullscreen: boolean }",
+      "WindowState": "{\n  maximized: boolean;\n  fullscreen: boolean;\n  /** Ephemeral native state, never restored from a session. */\n  minimized?: boolean;\n  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */\n  size?: [number, number];\n}",
+      "WindowButton": "\"minimize\" | \"maximize\" | \"close\"",
+      "WindowButtonLayout": "{ left: readonly WindowButton[]; right: readonly WindowButton[] }",
       "WindowCaption": "{ maximize: [number, number, number, number] | null; dark: boolean }",
-      "AppEvent": "| { type: \"reopen\" }\n  | { type: \"willQuit\" }\n  | { type: \"quitCancelled\" }\n  | { type: \"appearance\"; dark: boolean }\n  | { type: \"quitWarningSuppressed\" }\n  | { type: \"resignActive\" }\n  | { type: \"screenLocked\" }\n  | { type: \"controlReleased\" }\n  | { type: \"switcherKey\"; key: \"escape\" | \"next\" | \"previous\" }\n  | { type: \"switcherMouseUp\" }",
+      "AppEvent": "| { type: \"reopen\" }\n  | { type: \"willQuit\" }\n  | { type: \"quitCancelled\" }\n  | { type: \"appearance\"; dark: boolean }\n  | { type: \"windowButtonLayout\"; layout: WindowButtonLayout }\n  | { type: \"quitWarningSuppressed\" }\n  | { type: \"resignActive\" }\n  | { type: \"screenLocked\" }\n  | { type: \"controlReleased\" }\n  | { type: \"switcherKey\"; key: \"escape\" | \"next\" | \"previous\" }\n  | { type: \"switcherMouseUp\" }",
       "ShellEvents": "{\n  onCommand: (e: CommandEvent) => void;\n  onOpenURLs: (e: { urls: string[]; sourceApp?: string }) => void;\n  onWindowEvent: (e: WindowEvent) => void;\n  onAppEvent: (e: AppEvent) => void;\n}",
-      "MenuItem": "| { separator: true }\n  | {\n      id: string;\n      title: string;\n      symbol?: string;\n      swatch?: string;\n      key?: string;\n      modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\")[];\n      enabled?: boolean;\n      checked?: boolean;\n      children?: MenuItem[];\n    }",
-      "OpenWindowOptions": "{\n  frame?: [number, number, number, number] | null;\n  incognito?: boolean;\n  title?: string;\n  focus?: boolean;\n  kind?: \"browser\" | \"small\" | \"settings\" | \"import\" | \"taskManager\";\n  profile?: string;\n  // Little Bay: its remembered size; the window opens centred on the active screen.\n  size?: [number, number];\n  // Settings: the pane to show, and the space it is about.\n  pane?: string;\n  spaceId?: string;\n}",
+      "MenuItem": "| { separator: true }\n  | {\n      id: string;\n      title: string;\n      symbol?: string;\n      swatch?: string;\n      key?: string;\n      modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\")[];\n      // Web hosts: the trailing hint, filled in from key and modifiers.\n      shortcut?: string;\n      enabled?: boolean;\n      checked?: boolean;\n      children?: MenuItem[];\n    }",
+      "OpenWindowOptions": "{\n  frame?: [number, number, number, number] | null;\n  incognito?: boolean;\n  title?: string;\n  focus?: boolean;\n  kind?: \"browser\" | \"small\" | \"settings\" | \"import\" | \"taskManager\";\n  profile?: string;\n  // Restored size without a screen position; the compositor places the window.\n  maximized?: boolean;\n  // Little Bay also opens at its remembered size, centred on the active screen.\n  size?: [number, number];\n  // Settings: the pane to show, and the space it is about.\n  pane?: string;\n  spaceId?: string;\n}",
       "MenuEntry": "{ id: string; title: string; current?: boolean }",
       "MenuBookmark": "{ id: string; title: string; url?: string; children?: MenuBookmark[] }",
       "MenuState": "{\n  checked: string[];\n  disabled: string[];\n  titles: Record<string, string>;\n  spaces: MenuEntry[];\n  windows: MenuEntry[];\n  bookmarkFolders: MenuEntry[];\n  recentBookmarks: MenuBookmark[];\n  bookmarksBar: MenuBookmark[];\n  otherBookmarks: MenuBookmark[];\n  recentlyClosed: MenuEntry[];\n  recentlyClosedGroups?: MenuEntry[];\n  warnBeforeQuitting: boolean;\n  warnBeforeClosingWindow?: boolean;\n  downloadsInProgress?: number;\n  extensions?: { id: string; title: string; icon?: string | null; enabled: boolean }[];\n  shortcuts?: Record<string, string[]>;\n}",
@@ -2038,7 +2056,7 @@ export const nativeContracts = {
       "TranslationModule": "{\n  readonly available: boolean;\n  userLanguages(): string[];\n  languageName(identifier: string): string;\n  detect(text: string): Promise<string | null>;\n  status(source: string, target: string): Promise<\"installed\" | \"supported\" | \"unsupported\">;\n  supportedLanguages(): Promise<string[]>;\n  prepare(source: string, target: string): Promise<void>;\n  translate(source: string, target: string, texts: string[]): Promise<string[]>;\n  translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;\n}"
     },
     "shell/src/app.ts": {
-      "UpdaterState": "| { available: false }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      pending: PendingUpdate | null;\n    }",
+      "UpdaterState": "| { available: false; managedBy?: \"packageManager\" }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      pending: PendingUpdate | null;\n    }",
       "PendingUpdate": "{ version: string; ready: boolean }",
       "AppIcon": "{ id: string; name: string; preview: string | null }",
       "NotificationPermission": "\"granted\" | \"denied\" | \"notDetermined\" | \"provisional\"",
@@ -2049,7 +2067,7 @@ export const nativeContracts = {
       "NativeFrame": "{ image: string; symbol?: string; offset?: number }",
       "ScriptState": "{\n  windows: {\n    id: string;\n    title: string;\n    profileId: string;\n    incognito: boolean;\n    activeTabId: string | null;\n    tabs: { id: string; title: string; url: string; loading: boolean; pinned: boolean }[];\n  }[];\n  profiles: { id: string; name: string }[];\n}",
       "ScriptCommand": "{ id: string } & (\n  | { command: \"newWindow\"; url?: string; incognito: boolean; profileId?: string }\n  | { command: \"newTab\"; windowId?: string; url?: string; index?: number }\n  | { command: \"setURL\"; tabId: string; url: string }\n  | { command: \"closeTab\" | \"reload\" | \"back\" | \"forward\" | \"focusTab\"; tabId: string }\n  | { command: \"closeWindow\"; windowId: string }\n  | { command: \"setActiveTabIndex\"; windowId: string; index: number }\n  | { command: \"execute\"; tabId: string; code: string }\n  | { command: \"focusProfile\"; profileId: string }\n)",
-      "AppModule": "{\n  readonly apiVersion: number;\n  addListener(name: \"onNotificationResponse\", listener: (e: NotificationResponse) => void): EventSubscription;\n  addListener(name: \"onScriptCommand\", listener: (e: ScriptCommand) => void): EventSubscription;\n  addListener(name: \"onUpdatePending\", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;\n  updaterState(): Promise<UpdaterState>;\n  checkForUpdates(): Promise<void>;\n  installPendingUpdate(): Promise<void>;\n  disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;\n  setAutomaticUpdateChecks(on: boolean): Promise<void>;\n  setAutomaticUpdateDownloads(on: boolean): Promise<void>;\n  setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;\n  share(url: string, title: string | null, windowId: string | null): Promise<void>;\n  isInDock(): Promise<boolean>;\n  addToDock(): Promise<boolean>;\n  appIcons(size: number): Promise<AppIcon[]>;\n  appIcon(): Promise<string>;\n  setAppIcon(id: string): Promise<void>;\n  notificationPermission(): Promise<NotificationPermission>;\n  requestNotificationPermission(): Promise<boolean>;\n  postNotification(options: NotificationOptions): Promise<string | null>;\n  removeNotifications(ids: string[]): Promise<void>;\n  openNotificationSettings(): Promise<void>;\n  setScriptState(state: ScriptState): Promise<void>;\n  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;\n  systemInfo(): SystemInfo;\n  openExternalURL(url: string): Promise<boolean>;\n  launchEnvironment(name: string): string | null;\n  playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;\n  setIntroMusicMuted(muted: boolean): Promise<void>;\n  stopIntroMusic(fade: number): Promise<void>;\n  devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;\n  devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;\n  devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;\n  devMenuCommand(command: string, arg: string | null): Promise<void>;\n  devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;\n  devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;\n  crashReports(since: number): Promise<CrashReport[]>;\n  devCrash(kind?: \"exception\"): Promise<void>;\n}",
+      "AppModule": "{\n  readonly apiVersion: number;\n  addListener(name: \"onNotificationResponse\", listener: (e: NotificationResponse) => void): EventSubscription;\n  addListener(name: \"onScriptCommand\", listener: (e: ScriptCommand) => void): EventSubscription;\n  addListener(name: \"onUpdatePending\", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;\n  updaterState(): Promise<UpdaterState>;\n  checkForUpdates(): Promise<void>;\n  installPendingUpdate(): Promise<void>;\n  disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;\n  setAutomaticUpdateChecks(on: boolean): Promise<void>;\n  setAutomaticUpdateDownloads(on: boolean): Promise<void>;\n  setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;\n  share(url: string, title: string | null, windowId: string | null): Promise<void>;\n  isInDock(): Promise<boolean>;\n  addToDock(): Promise<boolean>;\n  appIcons(size: number): Promise<AppIcon[]>;\n  appIcon(): Promise<string>;\n  setAppIcon(id: string): Promise<void>;\n  notificationPermission?(): Promise<NotificationPermission>;\n  requestNotificationPermission?(): Promise<boolean>;\n  postNotification(options: NotificationOptions): Promise<string | null>;\n  removeNotifications(ids: string[]): Promise<void>;\n  openNotificationSettings?(): Promise<void>;\n  setScriptState(state: ScriptState): Promise<void>;\n  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;\n  systemInfo(): SystemInfo;\n  openExternalURL(url: string): Promise<boolean>;\n  launchEnvironment(name: string): string | null;\n  playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;\n  setIntroMusicMuted(muted: boolean): Promise<void>;\n  stopIntroMusic(fade: number): Promise<void>;\n  devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;\n  devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;\n  devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;\n  devMenuCommand(command: string, arg: string | null): Promise<void>;\n  devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;\n  devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;\n  crashReports(since: number): Promise<CrashReport[]>;\n  devCrash(kind?: \"exception\"): Promise<void>;\n}",
       "IntroMusicCues": "{\n  icon: number;\n  letters: number;\n  letterStep: number;\n  letterCount: number;\n  tagline: number;\n  exit: number;\n  end: number;\n}",
       "KeyTiming": "{ due: number; handled: number; drawn: number }",
       "KeyPress": "{\n  key: string;\n  keyCode: number;\n  modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\" | \"function\")[];\n  characters?: string;\n  focus?: \"window\" | \"page\" | \"devtools\";\n  asKey?: boolean;\n  settle?: number;\n  wait?: number;\n  dry?: boolean;\n}",
@@ -2146,7 +2164,7 @@ export const nativeContracts = {
     },
     "nncore/src/NativeWebView.tsx": {},
     "sync/src/native.ts": {
-      "FolderInfo": "{\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",
+      "FolderInfo": "{\n  keyStorage?: \"persistent\" | \"session\" | \"locked\";\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",
       "PhraseResult": "| { ok: true }\n  | { error: \"wordCount\"; count: number }\n  | { error: \"unknownWord\"; word: string }\n  | { error: \"checksum\" }\n  | { error: \"noData\" }\n  | { error: \"mismatch\" }\n  | { error: \"keychain\" }",
       "SavedLogin": "{ origin: string; url: string; username: string; password: string; created: number }",
       "SyncNative": "{\n  folderInfo(path: string | null): Promise<FolderInfo>;\n  chooseFolder(current: string | null): Promise<string | null>;\n  newDeviceId(): string;\n  deviceName(): string;\n  createPhrase(account: string): Promise<boolean>;\n  enterPhrase(account: string, text: string, folder: string): Promise<PhraseResult>;\n  unlock(account: string): Promise<boolean>;\n  forget(account: string): Promise<void>;\n  chainStatus(folder: string): Promise<\"ok\" | \"missing\" | \"unavailable\">;\n  createChain(folder: string): Promise<void>;\n  write(folder: string, scope: string, payload: string): Promise<string>;\n  read(folder: string, scope: string, known: string[]): Promise<Listing>;\n  remove(folder: string, scope: string, ids: string[]): Promise<void>;\n  deleteChain(folder: string): Promise<void>;\n  sealLocal(text: string): Promise<string>;\n  openLocal(sealed: string): Promise<string | null>;\n  recoveryWords(): Promise<string[]>;\n  qrCode(): Promise<string | null>;\n  recoveryKitPreview(width: number): Promise<string | null>;\n  saveRecoveryKit(format: \"pdf\" | \"text\"): Promise<string | null>;\n  copyRecoveryKit(): Promise<void>;\n  shareRecoveryKit(): Promise<void>;\n  copyRecoveryPhrase(): Promise<void>;\n  revealFolder(path: string): Promise<void>;\n  readPasswords(engineProfile: string): Promise<SavedLogin[] | null>;\n}"

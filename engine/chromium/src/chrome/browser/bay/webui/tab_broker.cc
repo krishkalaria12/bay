@@ -97,7 +97,10 @@ class TabBroker::Entry final : public content::WebContentsObserver {
                            ui::PageTransition,
                            bool,
                            bool) override {
-    if (key.empty() || !contents || !profile || !AppRuntime::Enabled())
+    if (!AppRuntime::Enabled())
+      return;
+    AppRuntime::MarkOpenedByPage(opened);
+    if (key.empty() || !contents || !profile)
       return;
     if (auto* runtime = AppRuntime::GetIfStarted())
       runtime->OpenPage(contents, opened, key, {}, url, disposition);
@@ -494,6 +497,10 @@ TabBroker::OfferResult TabBroker::Offer(content::WebContents* contents, bool par
 bool TabBroker::HasPageKey(content::WebContents* contents) const {
   const auto it = entries_.find(contents);
   return it != entries_.end() && !it->second->key.empty();
+}
+bool TabBroker::Tracks(content::WebContents* contents) {
+  PruneDestroyed();
+  return entries_.contains(contents);
 }
 void TabBroker::ReleaseOffer(const std::string& adopt_id) {
   PruneDestroyed();

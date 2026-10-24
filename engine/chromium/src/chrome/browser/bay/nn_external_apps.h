@@ -7,7 +7,7 @@
 //
 //   nn_external_apps_allowances {} -> {allowances: [{origin, scheme,
 //       app: <name> | null, icon: <PNG data: URI> | null}]}: sorted by origin
-//       then scheme; app is the app that opens the scheme on this Mac now.
+//       then scheme; app is the currently registered handler's display name.
 //   nn_external_apps_remove {origin, scheme} -> {ok}
 
 #ifndef CHROME_BROWSER_BAY_NN_EXTERNAL_APPS_H_

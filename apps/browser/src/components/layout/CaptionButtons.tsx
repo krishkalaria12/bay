@@ -1,10 +1,11 @@
 import { capabilities, Pressable, View } from "@bay/platform";
-import { closeWindow, minimizeWindow, onWindowEvent, setWindowCaption, Symbol, toggleMaximizeWindow, windowState, type WindowState } from "@bay/shell";
+import { closeWindow, minimizeWindow, setWindowCaption, Symbol, toggleMaximizeWindow, type WindowButton, type WindowState } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { useWindowDimensions } from "react-native";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
-import { CAPTION_BUTTON_WIDTH } from "./windowButtons";
+import { startCaptionStateSync } from "./captionStateSync";
+import { captionMaximizeRect, useWindowButtonLayout, CAPTION_BUTTON_WIDTH } from "./windowButtons";
 
 // Windows 11's own close colours.
 const CLOSE_HOVER = "#C42B1C";
@@ -18,10 +19,10 @@ type Props = {
   /** From the window's top: where the glyphs centre, level with the bar beside them. */
   glyphCenter?: number;
   /** A page runs up under the window's corner: the buttons show only while the pointer is over them. */
-  onHover?: boolean;
+  onHover?: boolean | { left: boolean; right: boolean };
 };
 
-/** Minimize, maximize and close at the window's top right, on hosts where the app draws its caption (Windows). The
+/** Ordered caption groups on hosts where the app draws its caption. The
  *  host treats the maximize button as the window's (HTMAXBUTTON), so Windows offers Snap Layouts over it; its clicks
  *  still come here. */
 export function CaptionButtons(props: Props) {
@@ -31,54 +32,81 @@ export function CaptionButtons(props: Props) {
 function Caption({ windowId, height, glyphCenter, onHover = false }: Props) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const { hovered, hoverProps } = useHover();
+  const buttons = useWindowButtonLayout();
   const [state, setState] = useState<WindowState>({ maximized: false, fullscreen: false });
-  useEffect(() => {
-    let live = true;
-    void windowState(windowId).then(
-      (s) => live && setState(s),
-      () => {},
-    );
-    const subscription = onWindowEvent((e) => {
-      if (e.type === "state" && e.id === windowId) setState({ maximized: e.maximized, fullscreen: e.fullscreen });
-    });
-    return () => {
-      live = false;
-      subscription.remove();
-    };
-  }, [windowId]);
+  useEffect(() => startCaptionStateSync(windowId, setState), [windowId]);
 
-  // The buttons sit at the window's corner, so the maximize button's rect follows from its size alone.
+  // Windows uses this rect for HTMAXBUTTON and Snap Layouts.
   const dark = useRef(theme.dark);
   useEffect(() => {
     dark.current = theme.dark;
   }, [theme.dark]);
   const shown = !state.fullscreen;
   useEffect(() => {
-    const maximize: [number, number, number, number] | null = shown ? [width - 2 * CAPTION_BUTTON_WIDTH, 0, CAPTION_BUTTON_WIDTH, height] : null;
+    const maximize: [number, number, number, number] | null = shown ? captionMaximizeRect(buttons, width, height) : null;
     void setWindowCaption(windowId, { maximize, dark: theme.dark }).catch(() => {});
-  }, [windowId, width, height, shown, theme.dark]);
+  }, [windowId, width, height, shown, theme.dark, buttons]);
   useEffect(() => () => void setWindowCaption(windowId, { maximize: null, dark: dark.current }).catch(() => {}), [windowId]);
 
   if (!shown) return null;
   const glyphTop = (glyphCenter ?? height / 2) - GLYPH / 2;
   return (
+    <>
+      {(["left", "right"] as const).map((side) =>
+        buttons[side].length ? (
+          <CaptionGroup
+            key={side}
+            side={side}
+            buttons={buttons[side]}
+            windowId={windowId}
+            maximized={state.maximized}
+            height={height}
+            glyphTop={glyphTop}
+            onHover={typeof onHover === "boolean" ? onHover : onHover[side]}
+          />
+        ) : null,
+      )}
+    </>
+  );
+}
+
+function CaptionGroup({
+  side,
+  buttons,
+  windowId,
+  maximized,
+  height,
+  glyphTop,
+  onHover,
+}: {
+  side: "left" | "right";
+  buttons: readonly WindowButton[];
+  windowId: string;
+  maximized: boolean;
+  height: number;
+  glyphTop: number;
+  onHover: boolean;
+}) {
+  const { hovered, hoverProps } = useHover();
+  return (
     <View
       {...hoverProps}
       mouseDownCanMoveWindow={false}
-      style={{ position: "absolute", top: 0, right: 0, height, flexDirection: "row", opacity: onHover && !hovered ? 0 : 1 }}
+      style={{ position: "absolute", top: 0, [side]: 0, height, flexDirection: "row", opacity: onHover && !hovered ? 0 : 1 }}
     >
-      <CaptionButton icon="window.minimize" label="Minimize" height={height} glyphTop={glyphTop} onPress={() => void minimizeWindow(windowId)} />
-      <CaptionButton
-        icon={state.maximized ? "window.restore" : "window.maximize"}
-        // Windows shows Snap Layouts over this button in place of a tooltip.
-        label={state.maximized ? "Restore Down" : "Maximize"}
-        tooltip={false}
-        height={height}
-        glyphTop={glyphTop}
-        onPress={() => void toggleMaximizeWindow(windowId)}
-      />
-      <CaptionButton icon="window.close" label="Close" close height={height} glyphTop={glyphTop} onPress={() => void closeWindow(windowId)} />
+      {buttons.map((button) => (
+        <CaptionButton
+          key={button}
+          icon={button === "maximize" ? (maximized ? "window.restore" : "window.maximize") : `window.${button}`}
+          label={button === "maximize" ? (maximized ? "Restore Down" : "Maximize") : button === "close" ? "Close" : "Minimize"}
+          // Windows shows Snap Layouts over maximize in place of a tooltip.
+          tooltip={button !== "maximize"}
+          close={button === "close"}
+          height={height}
+          glyphTop={glyphTop}
+          onPress={() => void (button === "close" ? closeWindow(windowId) : button === "minimize" ? minimizeWindow(windowId) : toggleMaximizeWindow(windowId))}
+        />
+      ))}
     </View>
   );
 }

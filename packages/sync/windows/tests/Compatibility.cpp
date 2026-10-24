@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
       require(pdf.find(word) != std::string::npos,
               "Recovery PDF lost a phrase word");
     require(pdf.find("re f\n") != std::string::npos &&
-                recoveryKitText(entropy, "test").find("Windows") !=
+                recoveryKitText(entropy, "test").find("another computer") !=
                     std::string::npos,
             "Recovery kit is missing its QR or desktop instructions");
     {

@@ -14,7 +14,7 @@ import { ContentCard } from "../ContentCard";
 import { DownloadsPanel } from "../DownloadsPanel";
 import { CaptionButtons } from "../layout/CaptionButtons";
 import { usePage } from "../layout/pageState";
-import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../layout/windowButtons";
+import { LIGHTS_WIDTH, useWindowButtonLayout, windowButtonRoom } from "../layout/windowButtons";
 import { setUrlAnchor } from "../layout/windowLayout";
 import { showUrlBarMenu } from "../omnibox/paste";
 import { Favicon, IconButton, useHover } from "../primitives";
@@ -25,9 +25,6 @@ import { openCommandPanel } from "../../runtime/windowUiActions";
 
 // Arc's Little Arc as a Bay window: a thin bar in the profile's colour (window buttons, the page's favicon, host
 // and title, Copy Link, Open in Bay) over one page card. Dia's card styling, the top strip's 6 pt inset.
-// Past the traffic lights on macOS; the caption buttons take the bar's other end on Windows.
-const FIELD_LEFT = LIGHTS_WIDTH ? SMALL_FIELD_LEFT : SMALL_BAR_INSET + 4;
-const BAR_END = SMALL_BAR_INSET + CAPTION_BUTTONS_WIDTH;
 
 export function LittleBayWindow() {
   const theme = useTheme();
@@ -59,6 +56,9 @@ export function LittleBayWindow() {
 }
 
 function LittleBayBar() {
+  const room = windowButtonRoom(useWindowButtonLayout());
+  const fieldLeft = LIGHTS_WIDTH ? SMALL_FIELD_LEFT : room.left + SMALL_BAR_INSET + 4;
+  const barEnd = SMALL_BAR_INSET + room.right;
   const windowId = useWindowId();
   const tab = useActiveTab();
   const panelOpen = useWindowUi().panel.open;
@@ -83,15 +83,15 @@ function LittleBayBar() {
       <View
         style={{
           position: "absolute",
-          left: FIELD_LEFT,
-          right: BAR_END + 2 * SMALL_BUTTON + 8,
+          left: fieldLeft,
+          right: barEnd + 2 * SMALL_BUTTON + 8,
           top: SMALL_BAR_MID - SMALL_FIELD_HEIGHT / 2,
           height: SMALL_FIELD_HEIGHT,
         }}
       >
         {tab ? <PageField tab={tab} windowId={windowId} hidden={panelOpen} /> : null}
       </View>
-      <View style={{ position: "absolute", right: BAR_END, top: SMALL_BAR_MID - SMALL_BUTTON / 2, flexDirection: "row", gap: 2 }}>
+      <View style={{ position: "absolute", right: barEnd, top: SMALL_BAR_MID - SMALL_BUTTON / 2, flexDirection: "row", gap: 2 }}>
         <IconButton
           icon={copied ? "checkmark" : "link"}
           size={14}

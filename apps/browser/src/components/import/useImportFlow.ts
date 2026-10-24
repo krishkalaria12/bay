@@ -1,4 +1,4 @@
-import { capabilities, isMac } from "@bay/platform";
+import { capabilities, isMac, platformOS } from "@bay/platform";
 import type { BrowserProfile, BrowserSource, DiaAutomationStatus, DiaTabsResult, ImportKind, ImportResult, SpaceSummary } from "@bay/import";
 import { closeWindow, confirm } from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
@@ -21,7 +21,7 @@ import {
   type ImportCounts,
   type ExtensionFailure,
 } from "./apply";
-import { DIA_LAUNCH_MS, DIA_POLL_MS, DONE_DELAY_MS, ENCRYPTED, KINDS } from "./constants";
+import { DIA_LAUNCH_MS, DIA_POLL_MS, DONE_DELAY_MS, ENCRYPTED, KINDS, kindsWithoutUnlock } from "./constants";
 import { importModule } from "./module";
 
 // Dia's tabs come over AppleScript, which only macOS has.
@@ -111,6 +111,7 @@ export function useImportFlow() {
   const allSpaces: (SpaceSummary & { spaceId: string })[] = (source?.profiles ?? []).flatMap((p) => (p.spaces ?? []).map((s) => ({ ...s, spaceId: p.id })));
   const isArc = source?.family === "arc";
   const isDiaTabs = source?.family === "automation";
+  const basicStore = platformOS === "linux" && source?.family === "chromium";
 
   const next = async () => {
     if (!source || checkingUnlock.current) return;
@@ -155,16 +156,16 @@ export function useImportFlow() {
       setError(
         isMac
           ? `macOS didn't allow access to ${source.name}'s keychain item. Try again, or skip the encrypted data.`
-          : `Couldn't decrypt ${source.name}'s data. Try again, or skip the encrypted data.`,
+          : basicStore
+            ? `Couldn't unlock ${source.name}'s data. Try again, or continue without unlocking to import data that doesn't need the keyring.`
+            : `Couldn't decrypt ${source.name}'s data. Try again, or skip the encrypted data.`,
       );
     }
   };
 
   // Addresses need no key; cards, passwords and cookies do (the importer skips cards with a warning).
   const skipEncrypted = () => {
-    const without = new Set(kinds);
-    without.delete("passwords");
-    without.delete("cookies");
+    const without = kindsWithoutUnlock(kinds, basicStore);
     setKinds(without);
     void run(without);
   };
@@ -564,6 +565,7 @@ export function useImportFlow() {
     next,
     unlock,
     skipEncrypted,
+    basicStore,
     recheckAccess,
     refreshDia,
     allowDia,

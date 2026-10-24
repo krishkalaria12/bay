@@ -7,6 +7,7 @@
 #include <vector>
 
 namespace bay::data {
+// UTF-8 on Windows; native, byte-preserving filesystem paths on POSIX.
 struct ProfilePaths {
   std::string user_data_directory;
   std::string profile_directory;

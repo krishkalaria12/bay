@@ -1,4 +1,6 @@
 # Copyright 2026 Bay. Apache-2.0.
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
@@ -13,6 +15,12 @@ source_set("webui") {
     "host_context.h",
     "native_host.h",
   ]
+  if (is_win || is_linux) {
+    sources += [
+      "shell_ui.h",
+      "shell_ui_options.h",
+    ]
+  }
   public_deps = [
     ":mojom",
     "//base",
@@ -26,6 +34,8 @@ source_set("impl") {
   sources = [
     "app_runtime.cc",
     "app_runtime.h",
+    "app_runtime_options.cc",
+    "app_runtime_options.h",
     "bay_webui.cc",
     "browser_services.cc",
     "browser_services.h",
@@ -48,6 +58,7 @@ source_set("impl") {
   ]
   deps = [
     ":webui",
+    ":window_placement",
     "resources:build_ts",
     "//bay/core:portable",
     "//chrome/app:command_ids",
@@ -98,14 +109,332 @@ source_set("impl") {
     "//ui/webui",
     "//url",
   ]
-  if (is_win) {
+  if (is_win || is_linux) {
     sources += [
       "data_bridge.cc",
       "data_bridge.h",
+      "shell_ui.cc",
+      "shell_ui_options.cc",
     ]
     deps += [
-      ":platform_services_win",
+      ":notifications",
+      ":shell_appearance",
+      ":shell_files",
+      "//cc/paint",
+      "//chrome/browser:icon_loader",
       "//chrome/browser/bay/data:data_services",
+      "//components/constrained_window",
+      "//ui/base/mojom:ui_base_types",
+      "//ui/menus",
+    ]
+  }
+  if (is_linux) {
+    sources += [ "quit_shortcut_linux.h" ]
+    deps += [
+      ":app_services_linux",
+      ":autostart_linux",
+      ":default_browser",
+      ":document_store",
+      ":secret_storage_linux",
+      ":shell_clipboard",
+      ":window_button_layout_linux",
+      "//components/input",
+      "//ui/base",
+      "//ui/content_accelerators",
+      "//ui/events",
+    ]
+  }
+  if (is_win) {
+    deps += [ ":platform_services_win" ]
+  }
+}
+
+source_set("window_placement") {
+  sources = [
+    "window_placement.cc",
+    "window_placement.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+  if (is_linux) {
+    deps = [ "//ui/ozone" ]
+  }
+}
+
+test("window_placement_unittests") {
+  sources = [ "window_placement_unittest.cc" ]
+  deps = [
+    ":window_placement",
+    "//base/test:run_all_unittests",
+    "//testing/gtest",
+  ]
+}
+
+if (is_win || is_linux) {
+  source_set("default_browser") {
+    sources = [
+      "default_browser.cc",
+      "default_browser.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser:shell_integration",
+    ]
+    deps = [ "//chrome/browser:primitives" ]
+  }
+
+  test("default_browser_unittests") {
+    sources = [
+      "default_browser_unittest.cc",
+      "host_context.cc",
+    ]
+    deps = [
+      ":default_browser",
+      "//base/test:test_support",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_linux) {
+  source_set("autostart_linux") {
+    sources = [
+      "autostart_linux.cc",
+      "autostart_linux.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+    ]
+    deps = [ "//chrome/browser:shell_integration_linux" ]
+  }
+
+  test("autostart_linux_unittests") {
+    sources = [
+      "autostart_linux_unittest.cc",
+      "host_context.cc",
+    ]
+    deps = [
+      ":autostart_linux",
+      "//base/test:test_support",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+
+  source_set("app_services_linux") {
+    sources = [
+      "app_services_linux.cc",
+      "app_services_linux.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+    ]
+    deps = [
+      "//chrome/browser:primitives",
+      "//components/version_info",
+      "//url",
+    ]
+  }
+
+  test("app_services_linux_unittests") {
+    sources = [
+      "app_services_linux_unittest.cc",
+      "host_context.cc",
+    ]
+    deps = [
+      ":app_services_linux",
+      "//base/test:test_support",
+      "//chrome/browser:platform_util_internal",
+      "//chrome/browser/ui:test_support",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//components/version_info",
+      "//content/test:test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//url",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("shell_files") {
+    sources = [
+      "shell_files.cc",
+      "shell_files.h",
+    ]
+    public_deps = [
+      ":webui",
+      "//base",
+    ]
+    deps = [
+      "//chrome/browser:primitives",
+      "//chrome/common:constants",
+    ]
+    if (is_linux) {
+      assert(use_gio && use_glib, "Bay Linux trash requires GIO")
+      deps += [ "//ui/base/glib" ]
+    }
+    if (is_win) {
+      libs = [ "shell32.lib" ]
+    }
+  }
+}
+
+if (is_linux) {
+  test("shell_files_unittests") {
+    sources = [
+      "host_context.cc",
+      "shell_files_unittest.cc",
+    ]
+    deps = [
+      ":shell_files",
+      "//base/test:test_support",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/common:constants",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("shell_appearance") {
+    sources = [
+      "shell_appearance.cc",
+      "shell_appearance.h",
+    ]
+    deps = [ "//chrome/common" ]
+    public_deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/themes",
+      "//components/prefs",
+      "//ui/native_theme",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("shell_appearance_unittests") {
+    sources = [
+      "host_context.cc",
+      "shell_appearance_unittest.cc",
+    ]
+    deps = [
+      ":shell_appearance",
+      ":shell_files",
+      "//base/test:test_support",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+      "//ui/native_theme:test_support",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("shell_clipboard") {
+    sources = [
+      "shell_clipboard.cc",
+      "shell_clipboard.h",
+    ]
+    deps = [
+      "//base",
+      "//skia",
+      "//ui/base/clipboard",
+      "//ui/gfx/codec",
+    ]
+  }
+
+  test("shell_clipboard_unittests") {
+    sources = [ "shell_clipboard_unittest.cc" ]
+    deps = [
+      ":shell_clipboard",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//skia",
+      "//testing/gtest",
+      "//ui/base/clipboard:clipboard_test_support",
+      "//ui/gfx/codec",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("document_store") {
+    sources = [
+      "document_store.cc",
+      "document_store.h",
+    ]
+    deps = [
+      "//base",
+      "//chrome/common:constants",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  source_set("notifications") {
+    sources = [
+      "notifications.cc",
+      "notifications.h",
+    ]
+    deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser:browser_process",
+      "//chrome/browser/notifications",
+      "//chrome/browser/profiles:profile",
+      "//skia",
+      "//ui/base",
+      "//ui/gfx/codec",
+      "//ui/message_center/public/cpp",
+      "//url",
+    ]
+    if (is_win) {
+      deps += [
+        "//chrome/install_static:install_static_util",
+        "//chrome/installer/util:with_no_strings",
+      ]
+      libs = [ "shell32.lib" ]
+    }
+    if (is_linux) {
+      deps += [
+        "//chrome/common",
+        "//components/prefs",
+      ]
+    }
+  }
+}
+
+if (is_linux) {
+  source_set("secret_storage_linux") {
+    sources = [
+      "secret_storage_linux.cc",
+      "secret_storage_linux.h",
+    ]
+    deps = [
+      "//base",
+      "//chrome/browser:browser_process",
+      "//components/os_crypt/async/browser",
+      "//components/os_crypt/async/common",
     ]
   }
 }
@@ -115,18 +444,18 @@ if (is_win) {
     sources = [
       "frame_win.cc",
       "frame_win.h",
-      "notifications_win.cc",
-      "notifications_win.h",
       "platform_services_win.cc",
       "platform_services_win.h",
-      "shell_ui.cc",
-      "shell_ui.h",
-      "shell_ui_options.cc",
-      "shell_ui_options.h",
       "updater_service_win.cc",
       "updater_service_win.h",
     ]
     deps = [
+      ":default_browser",
+      ":document_store",
+      ":notifications",
+      ":shell_appearance",
+      ":shell_clipboard",
+      ":shell_files",
       ":webui",
       "//base",
       "//chrome/browser:browser_process",
@@ -135,7 +464,6 @@ if (is_win) {
       "//chrome/browser:shell_integration",
       "//chrome/browser/notifications",
       "//chrome/browser/profiles:profile",
-      "//chrome/browser/themes",
       "//chrome/browser/ui",
       "//chrome/browser/ui:simple_message_box_headers",
       "//chrome/browser/ui/browser_window",
@@ -148,13 +476,10 @@ if (is_win) {
       "//crypto",
       "//skia",
       "//ui/base",
-      "//ui/base/clipboard",
       "//ui/base/mojom:ui_base_types",
       "//ui/display",
       "//ui/gfx/codec",
-      "//ui/menus",
       "//ui/message_center/public/cpp",
-      "//ui/native_theme",
       "//ui/shell_dialogs",
       "//ui/views",
       "//url",
@@ -168,9 +493,65 @@ if (is_win) {
   }
 }
 
+if (is_linux) {
+  source_set("window_button_layout_linux") {
+    sources = [
+      "window_button_layout_linux.cc",
+      "window_button_layout_linux.h",
+    ]
+    public_deps = [
+      "//base",
+      "//ui/linux:linux_ui",
+    ]
+    deps = [ "//ui/views" ]
+  }
+
+  test("quit_shortcut_linux_unittests") {
+    sources = [
+      "quit_shortcut_linux.h",
+      "quit_shortcut_linux_unittest.cc",
+    ]
+    deps = [
+      "//base/test:run_all_unittests",
+      "//testing/gtest",
+      "//ui/base",
+      "//ui/events",
+    ]
+  }
+
+  test("window_button_layout_linux_unittests") {
+    sources = [ "window_button_layout_linux_unittest.cc" ]
+    deps = [
+      ":window_button_layout_linux",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//testing/gtest",
+      "//ui/linux:test_support",
+      "//ui/views",
+    ]
+  }
+
+  source_set("frame_linux") {
+    sources = [
+      "frame_linux.cc",
+      "frame_linux.h",
+    ]
+    deps = [
+      "//base",
+      "//ui/base",
+      "//ui/gfx/geometry",
+      "//ui/platform_window",
+      "//ui/views",
+    ]
+  }
+}
+
 # Pure browser-side privacy/command checks can run without a browser window.
 test("runtime_unittests") {
   sources = [
+    "app_runtime_options.cc",
+    "app_runtime_options.h",
+    "app_runtime_options_unittest.cc",
     "runtime_state.cc",
     "runtime_state.h",
     "runtime_state_unittest.cc",
@@ -209,14 +590,137 @@ test("shell_ui_options_unittests") {
   ]
 }
 
-if (is_win) {
-  test("notifications_win_unittests") {
-    sources = [ "notifications_win_unittest.cc" ]
+if (is_win || is_linux) {
+  test("notifications_unittests") {
+    sources = [ "notifications_unittest.cc" ]
     deps = [
-      ":platform_services_win",
+      ":notifications",
       "//base",
       "//base/test:run_all_unittests",
+      "//base/test:test_support",
       "//testing/gtest",
+    ]
+    if (is_linux) {
+      deps += [
+        "//chrome/common",
+        "//components/prefs:test_support",
+      ]
+    }
+  }
+}
+
+if (is_linux) {
+  test("frame_linux_unittests") {
+    sources = [
+      "//ui/views/run_all_unittests_main.cc",
+      "frame_linux_unittest.cc",
+    ]
+    deps = [
+      ":frame_linux",
+      "//base",
+      "//mojo/core/embedder",
+      "//testing/gtest",
+      "//ui/base",
+      "//ui/gfx/geometry",
+      "//ui/platform_window",
+      "//ui/views",
+      "//ui/views:test_support",
+    ]
+  }
+}
+
+if (is_linux) {
+  # Reuse Chrome's unit-test runner and platform IconLoader implementation.
+  test("native_host_unittests") {
+    sources = [ "native_host_unittest.cc" ]
+    deps = [
+      ":impl",
+      ":webui",
+      ":window_placement",
+      "//base",
+      "//base/test:test_support",
+      "//bay/core:engine_api",
+      "//chrome/browser:platform_util_internal",
+      "//chrome/browser/ui:test_support",
+      "//chrome/common:constants",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//net",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//ui/base:test_support",
+      "//ui/base/clipboard:clipboard_test_support",
+      "//ui/linux:test_support",
+      "//ui/shell_dialogs",
+      "//ui/views",
+      "//url",
+    ]
+  }
+}
+
+if (is_linux) {
+  test("secret_storage_linux_unittests") {
+    sources = [ "secret_storage_linux_unittest.cc" ]
+    deps = [
+      ":secret_storage_linux",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//components/os_crypt/async/browser",
+      "//components/os_crypt/async/browser:key_provider_interface",
+      "//components/os_crypt/async/browser:posix_key_provider",
+      "//components/os_crypt/async/common",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  test("document_store_unittests") {
+    sources = [ "document_store_unittest.cc" ]
+    deps = [
+      ":document_store",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_linux) {
+  # D1 supplies the asynchronous adapter independently of D2's import gate.
+  # When data services are enabled on Linux, own this alongside ShellUI and
+  # dispatch its chooseFolder/saveRecoveryKit before the data worker routing.
+  source_set("sync_ui_linux") {
+    sources = [
+      "sync_ui_linux.cc",
+      "sync_ui_linux.h",
+    ]
+    deps = [
+      ":webui",
+      "//base",
+      "//chrome/browser/bay/data:sync_services",
+      "//chrome/browser/ui/browser_window",
+      "//content/public/browser",
+      "//ui/shell_dialogs",
+    ]
+  }
+
+  test("sync_ui_linux_unittests") {
+    sources = [
+      "host_context.cc",
+      "sync_ui_linux_unittest.cc",
+    ]
+    deps = [
+      ":sync_ui_linux",
+      "//base/test:test_support",
+      "//chrome/browser/ui:test_support",
+      "//chrome/common:constants",
+      "//chrome/test:test_support_unit",
+      "//content/test:test_support",
+      "//testing/gtest",
+      "//ui/shell_dialogs",
     ]
   }
 }

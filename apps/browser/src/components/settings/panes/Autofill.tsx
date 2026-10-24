@@ -1,4 +1,4 @@
-import { View, isMac } from "@bay/platform";
+import { View, platformOS } from "@bay/platform";
 import {
   cardNetworkName,
   deleteAddress,
@@ -24,6 +24,7 @@ import { IconButton } from "../../primitives";
 import { NetworkBadge } from "../../site/Autofill";
 import { Button, Group, PopUp, Row, SectionHeader, Sheet, TextField, Toggle, type Option } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
+import { cardStoreName } from "../secretStorage";
 
 export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) {
   const theme = useTheme();
@@ -61,7 +62,7 @@ export function AutofillPane({ spaceId: initial }: { spaceId?: string | null }) 
     <View>
       <SectionHeader
         title="Autofill"
-        description={`Addresses and cards you save are offered when you fill in a form, separately for each space. Card numbers are kept in ${isMac ? "your macOS Keychain" : "Windows Credential Manager"}.`}
+        description={`Addresses and cards you save are offered when you fill in a form, separately for each space. Card numbers are kept in ${cardStoreName(platformOS)}.`}
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }

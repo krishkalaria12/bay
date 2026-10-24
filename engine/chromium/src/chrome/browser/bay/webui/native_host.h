@@ -26,6 +26,15 @@ class TabObserver;
 class PlatformServices;
 class BrowserServices;
 class EngineServices;
+class DocumentStore;
+class SecretStorage;
+class ShellUI;
+class ShellAppearance;
+class ShellFiles;
+class DefaultBrowser;
+class Autostart;
+class AppServicesLinux;
+class WindowButtonLayoutLinux;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -62,14 +71,31 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
                            InvokeCallback callback);
   content::WebContents* ContentsForTag(int tag) const;
   base::DictValue Info() const;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  // Host info waits for saved documents and the platform snapshots.
   void PlatformReady();
-  std::unique_ptr<PlatformServices> platform_services_;
+  std::unique_ptr<ShellAppearance> appearance_;
   bool platform_ready_ = false;
   std::vector<GetHostInfoCallback> host_info_callbacks_;
 #endif
+#if BUILDFLAG(IS_WIN)
+  std::unique_ptr<PlatformServices> platform_services_;
+#endif
 
   const HostContext context_;
+#if BUILDFLAG(IS_LINUX)
+  void ChooseImportFile(const base::ListValue& args, InvokeCallback callback);
+  std::unique_ptr<WindowButtonLayoutLinux> button_layout_;
+  // Document-scoped ownership dismisses prompts and settles pending icons.
+  std::unique_ptr<ShellFiles> files_;
+  std::unique_ptr<DefaultBrowser> default_browser_;
+  std::unique_ptr<Autostart> autostart_;
+  std::unique_ptr<AppServicesLinux> app_services_;
+  bool documents_ready_ = false;
+  std::unique_ptr<ShellUI> shell_ui_;
+  std::unique_ptr<SecretStorage> secret_storage_;
+  std::unique_ptr<DocumentStore> documents_;
+#endif
   std::unique_ptr<BrowserServices> browser_services_;
   std::unique_ptr<EngineServices> engine_services_;
   mojo::Remote<mojom::NativeHostClient> client_;

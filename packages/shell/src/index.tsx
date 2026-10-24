@@ -1,4 +1,5 @@
-import { capabilities } from "@bay/platform";
+import { capabilities, isMac, platformOS } from "@bay/platform";
+import { formatShortcut, menuShortcutStroke } from "@bay/platform/keys";
 import type { ViewProps } from "@bay/platform";
 import { requireNativeViewManager } from "./nativeViews";
 import {
@@ -139,7 +140,17 @@ export type WindowEvent =
   | ({ type: "state"; id: string } & WindowState);
 
 /** A window's placement, as its caption buttons show it (Windows). */
-export type WindowState = { maximized: boolean; fullscreen: boolean };
+export type WindowState = {
+  maximized: boolean;
+  fullscreen: boolean;
+  /** Ephemeral native state, never restored from a session. */
+  minimized?: boolean;
+  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */
+  size?: [number, number];
+};
+/** Desktop decoration order, from left to right within each physical window edge. */
+export type WindowButton = "minimize" | "maximize" | "close";
+export type WindowButtonLayout = { left: readonly WindowButton[]; right: readonly WindowButton[] };
 /** The caption the UI draws (Windows): its maximize button, in the window from the top-left, for Snap Layouts; and
  *  its theme, which the system backdrop follows. */
 export type WindowCaption = { maximize: [number, number, number, number] | null; dark: boolean };
@@ -149,6 +160,7 @@ export type AppEvent =
   | { type: "willQuit" }
   | { type: "quitCancelled" }
   | { type: "appearance"; dark: boolean }
+  | { type: "windowButtonLayout"; layout: WindowButtonLayout }
   | { type: "quitWarningSuppressed" }
   | { type: "resignActive" }
   | { type: "screenLocked" }
@@ -172,6 +184,8 @@ export type MenuItem =
       swatch?: string;
       key?: string;
       modifiers?: ("command" | "shift" | "option" | "control")[];
+      // Web hosts: the trailing hint, filled in from key and modifiers.
+      shortcut?: string;
       enabled?: boolean;
       checked?: boolean;
       children?: MenuItem[];
@@ -184,7 +198,9 @@ export type OpenWindowOptions = {
   focus?: boolean;
   kind?: "browser" | "small" | "settings" | "import" | "taskManager";
   profile?: string;
-  // Little Bay: its remembered size; the window opens centred on the active screen.
+  // Restored size without a screen position; the compositor places the window.
+  maximized?: boolean;
+  // Little Bay also opens at its remembered size, centred on the active screen.
   size?: [number, number];
   // Settings: the pane to show, and the space it is about.
   pane?: string;
@@ -233,6 +249,7 @@ export type PromptOptions = {
 };
 
 const Shell = requireNativeModule<{
+  globalWindowCoordinates?: boolean;
   addListener<K extends keyof ShellEvents>(name: K, listener: ShellEvents[K]): EventSubscription;
   showMenu(items: MenuItem[]): Promise<string | null>;
   copyText(text: string): void;
@@ -262,6 +279,7 @@ const Shell = requireNativeModule<{
   minimizeWindow?(id: string): Promise<void>;
   toggleMaximizeWindow?(id: string): Promise<void>;
   windowState?(id: string): Promise<WindowState>;
+  windowButtonLayout?(): WindowButtonLayout;
   setWindowCaption?(id: string, caption: WindowCaption): Promise<void>;
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
@@ -274,6 +292,11 @@ const Shell = requireNativeModule<{
 }>("BayShell");
 
 export const readDocument = (name: string) => nativeSnapshot("BayShell", "readDocument", [name], () => Shell.readDocument(name));
+/** Linux publishes snapshots.BayShell.windowButtonLayout and matching onAppEvent updates. Other hosts keep their native order. */
+export const windowButtonLayout = (): WindowButtonLayout =>
+  platformOS === "linux"
+    ? nativeSnapshot("BayShell", "windowButtonLayout", [], () => Shell.windowButtonLayout?.() ?? { left: [], right: ["minimize", "maximize", "close"] })
+    : { left: [], right: capabilities.captionButtons ? ["minimize", "maximize", "close"] : [] };
 export const writeDocument = (name: string, contents: string) => nativeDocumentWrite(name, contents, () => Shell.writeDocument(name, contents));
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
@@ -296,8 +319,18 @@ export async function copyImage(base64: string): Promise<boolean> {
   return await Shell.copyImage(base64);
 }
 
+// macOS draws key and modifiers itself; the web hosts show the label Bay's keyboard tables would.
+const withShortcutLabels = (items: MenuItem[]): MenuItem[] =>
+  items.map((item) => {
+    if ("separator" in item) return item;
+    const labeled = { ...item };
+    if (item.children) labeled.children = withShortcutLabels(item.children);
+    if (item.key) labeled.shortcut = formatShortcut(menuShortcutStroke(item.key, item.modifiers), platformOS);
+    return labeled;
+  });
+
 export function showMenu(items: MenuItem[]): Promise<string | null> {
-  return Shell.showMenu(items);
+  return Shell.showMenu(isMac ? items : withShortcutLabels(items));
 }
 
 export const openWindow = (id: string, options: OpenWindowOptions = {}) => Shell.openWindow(id, options);
@@ -336,7 +369,7 @@ export const dragPreview = {
 export const raiseView = (tag: number | null, levels: number, raised: boolean) => {
   if (tag != null) void Shell.raiseView?.(tag, levels, raised);
 };
-/** The window's frame now, on screen (AppKit's coordinates); null on builds without it. */
+/** The window's frame now, on screen (AppKit's coordinates); null without global screen coordinates. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
 

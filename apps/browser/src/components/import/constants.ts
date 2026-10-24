@@ -17,6 +17,17 @@ export const KINDS: { kind: ImportKind; title: string; icon: string }[] = [
 // The kinds a Chromium-family browser encrypts with its keychain key ("<Browser> Safe Storage").
 export const ENCRYPTED: ImportKind[] = ["passwords", "cookies", "autofill"];
 
+// Linux's basic store needs no keyring. Its native reader imports v10 and
+// reports locked v11 rows in the result, preserving every selected category.
+export function kindsWithoutUnlock(kinds: Set<ImportKind>, basicStore: boolean): Set<ImportKind> {
+  const wanted = new Set(kinds);
+  if (!basicStore) {
+    wanted.delete("passwords");
+    wanted.delete("cookies");
+  }
+  return wanted;
+}
+
 export const DIA_NOT_SHARED = "Custom tab names, colours, spaces and folders stay in Dia: its AppleScript doesn't share them.";
 
 // How long the finished progress list stays before the summary.

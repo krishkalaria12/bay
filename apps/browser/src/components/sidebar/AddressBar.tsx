@@ -1,5 +1,5 @@
 import * as windowCommands from "../../runtime/windowActions";
-import { Pressable, View, shortcutForCommand } from "@bay/platform";
+import { platformOS, Pressable, View, shortcutForCommand } from "@bay/platform";
 import { useRef } from "react";
 import { FadeLabel } from "@bay/shell";
 import { StyleSheet } from "react-native";
@@ -14,7 +14,8 @@ import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
 import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
 import { SIDEBAR_FIELD } from "../layout/constants";
-import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../layout/windowButtons";
+import { LIGHTS_WIDTH, useWindowButtonLayout } from "../layout/windowButtons";
+import { sidebarButtonRoom } from "../layout/geometry";
 import { GlassFill, useLiquidGlass } from "../glass";
 import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../primitives";
@@ -32,9 +33,9 @@ export function SidebarHeaderTools({ width }: { width: number }) {
   const palette = toolbarPalette(useTheme(), null);
   const top = ADDRESS_LIGHTS_Y - ADDRESS_BUTTON / 2;
   const right = useSidebarOnRight();
-  // The window's buttons on this side of the window: the traffic lights at its left, the caption buttons at its right.
-  const toggleX = right || !LIGHTS_WIDTH ? ADDRESS_TOGGLE_X_RIGHT : ADDRESS_TOGGLE_X;
-  const end = ADDRESS_EDGE + (right ? CAPTION_BUTTONS_WIDTH : 0);
+  const room = sidebarButtonRoom(useWindowButtonLayout(), right);
+  const toggleX = !right && LIGHTS_WIDTH ? ADDRESS_TOGGLE_X : ADDRESS_TOGGLE_X_RIGHT + room.left;
+  const end = ADDRESS_EDGE + room.right;
   const sidebarSymbol = useSidebarSymbol();
   return (
     <>
@@ -47,9 +48,11 @@ export function SidebarHeaderTools({ width }: { width: number }) {
           tooltip={`Auto-Hide Tabs (${shortcutForCommand("toggleSidebar", "⌘S")})`}
         />
       ) : null}
-      <View style={{ position: "absolute", top, right: end, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
-        {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
-      </View>
+      {platformOS !== "linux" || width >= room.left + end + ADDRESS_NAV_WIDTH ? (
+        <View style={{ position: "absolute", top, right: end, flexDirection: "row", gap: ADDRESS_NAV_GAP }}>
+          {tab ? <NavigationButtons tab={tab} palette={palette} /> : null}
+        </View>
+      ) : null}
     </>
   );
 }

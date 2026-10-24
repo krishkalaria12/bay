@@ -1,6 +1,7 @@
 # The order Bay's changes go into the CEF/Chromium tree.
 #
-# Every step has an explicit platform: all, mac or win. Select with series.py --platform after the command.
+# Every step has an explicit platform: all, mac, win, linux, or a comma list (win,linux).
+# Select with series.py --platform after the command.
 #   cef <patch>       a patch to CEF's own tree (chromium/src/cef), step 2, before CEF's gclient hook
 #   chromium <patch>  a patch to chromium/src, after ungoogled-chromium and domain substitution (step 4)
 #   layer <dir>       our own files, copied in by <dir>/apply.sh (engine/<layer>/src mirrors chromium/src)
@@ -42,10 +43,15 @@ chromium all chromium-extension-import.patch
 chromium all chromium-extension-window-hidden.patch
 chromium all chromium-branding.patch
 chromium win chromium-bay-branding-win.patch
+chromium linux chromium-bay-branding-linux.patch
 chromium mac chromium-icloud-keychain-window.patch
-# Load-bearing for every user's data: the Safe Storage item ("Bay Safe Storage" / "Bay") holds the key to
-# their saved passwords and cookies. It must survive any re-sync (plain Chromium for NNCore, a version bump), unchanged.
+# Load-bearing for every user's data: the Safe Storage item holds the key to their saved passwords and cookies.
+# macOS: Keychain "Bay Safe Storage" / "Bay". Linux: Secret Service "Bay Safe Storage" (application "bay"), KWallet "Bay Keys".
+# Both must survive any re-sync (plain Chromium for NNCore, a version bump), unchanged.
 chromium mac chromium-safe-storage-name.patch
+chromium linux chromium-safe-storage-name-linux.patch
+chromium linux chromium-bay-xdg-settings-linux.patch
+chromium linux chromium-window-button-layout-portal-linux.patch
 chromium all chromium-password-bubble-hook.patch
 chromium all chromium-password-generation-local.patch
 chromium all chromium-tab-strip-notify-before-insert.patch
@@ -60,11 +66,14 @@ chromium all chromium-tab-sharing-capturer.patch
 chromium all chromium-file-chooser-all-accepted-types.patch
 chromium mac chromium-bay-layer.patch
 chromium win chromium-bay-layer-win.patch
-chromium win chromium-bay-webui-window.patch
-chromium win chromium-bay-lifecycle.patch
-chromium win chromium-bay-extension-hooks.patch
-chromium win chromium-bay-notifications-win.patch
-chromium win chromium-bay-frame-win.patch
+chromium linux chromium-bay-layer-linux.patch
+chromium win,linux chromium-bay-webui-window.patch
+chromium win,linux chromium-bay-lifecycle.patch
+chromium win,linux chromium-bay-extension-hooks.patch
+chromium win,linux chromium-bay-notifications.patch
+chromium linux chromium-bay-notification-native-route-linux.patch
+chromium win,linux chromium-bay-native-widget.patch
+chromium linux chromium-bay-window-identity-linux.patch
 
 layer all engine/chromium
 layer all engine/nncore

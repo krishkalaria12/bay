@@ -1,0 +1,24 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Bay
+GenericName=Web Browser
+Comment=Your tabs, finally in order
+Exec=/usr/bin/bay %U
+TryExec=/usr/bin/bay
+Icon=bay
+Terminal=false
+StartupNotify=true
+StartupWMClass=Bay
+Categories=Network;WebBrowser;
+Keywords=web;browser;internet;tabs;
+MimeType=text/html;text/xml;application/xhtml+xml;application/xml;application/pdf;image/svg+xml;x-scheme-handler/http;x-scheme-handler/https;
+Actions=new-window;new-private-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=/usr/bin/bay --new-window
+
+[Desktop Action new-private-window]
+Name=New Private Window
+Exec=/usr/bin/bay --incognito

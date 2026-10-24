@@ -1,3 +1,4 @@
+import { capabilities } from "@bay/platform";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { orderSections, syncGroupOrder, leaveGroups } from "./groups";
@@ -25,7 +26,8 @@ import { restoringGroup } from "./organize";
 import { isSmall, isSmallWindow, mainWindowFor, littleBayProfile } from "./small";
 import { removeFromSplits } from "./splits";
 import { activated, apply, removeTabs, successors, withNewTab } from "./tabs";
-import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, Tab, TabGroup } from "./types";
+import type { BrowserWindow, ClosedTab, ClosedWindow, Frame, Tab, TabGroup, WindowPlacement, WindowSize } from "./types";
+import { nativeWindowPlacement, restoredWindowPlacement, validWindowSize } from "./windowPlacement";
 import { MAX_CLOSED_WINDOWS } from "./constants";
 
 // A closed tab's back/forward list is Chrome's (TabRestoreService), which the engine finds by the closed tab's id.
@@ -38,6 +40,8 @@ export type CreateWindowOptions = {
   adoptId?: string;
   tabIds?: string[];
   frame?: Frame | null;
+  size?: WindowPlacement["size"];
+  maximized?: boolean;
   small?: boolean;
   // Opened behind: the focused window keeps focus.
   background?: boolean;
@@ -53,6 +57,7 @@ export type WindowsSlice = {
    *  Little Bay's page go with it. */
   closeWindow(id: string): void;
   setWindowFrame(id: string, frame: Frame): void;
+  setWindowPlacement(id: string, placement: WindowPlacement): void;
   toggleSidebar(windowId: string): void;
   switchSpace(windowId: string, spaceId: string): void;
   /** Shows the tabs in the window (a new one for null): their pages move there. */
@@ -168,7 +173,11 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const id = newId("w");
     const small = !!o.small && !o.incognito;
     const spaceId = o.incognito ? incognitoSpaceId(id) : o.spaceId && s.spaces[o.spaceId] ? o.spaceId : small ? littleBayProfile(s) : s.settings.defaultSpaceId;
-    let next = withWindow(s, small ? smallWindow(id, spaceId) : emptyWindow(id, spaceId, !!o.incognito, o.frame ?? null));
+    const global = capabilities.globalWindowCoordinates;
+    const w = emptyWindow(id, spaceId, !!o.incognito, global ? (o.frame ?? null) : null);
+    // Without global coordinates a frame contributes only its size.
+    Object.assign(w, restoredWindowPlacement(global ? { ...o, frame: null } : o));
+    let next = withWindow(s, small ? smallWindow(id, spaceId) : w);
     if (o.tabIds?.length && !small) next = moveTabsInto(next, o.tabIds, id);
     const shown = o.tabIds?.length && !small ? findLast(o.tabIds, (t) => next.tabs[t]?.windowId === id) : undefined;
     if (shown) next = apply(next, activated(next, shown, id));
@@ -206,7 +215,13 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       const entry: ClosedWindow = {
         kind: "window",
         id: newId("cw"),
-        window: { spaceId: w.spaceId, sidebarOpen: w.sidebarOpen, frame: w.frame, shownTabId: w.activeTabIds[w.spaceId] },
+        window: {
+          spaceId: w.spaceId,
+          sidebarOpen: w.sidebarOpen,
+          frame: null,
+          ...nativeWindowPlacement(w),
+          shownTabId: w.activeTabIds[w.spaceId],
+        },
         tabs: [],
         groups: [],
         closedAt: Date.now(),
@@ -217,6 +232,7 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
   },
 
   setWindowFrame(id, frame) {
+    if (!capabilities.globalWindowCoordinates) return;
     set((s) => {
       const w = s.windows[id];
       if (!w || (w.frame && w.frame.every((v, i) => v === frame[i]))) return {};
@@ -226,6 +242,20 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
       const size: [number, number] = [Math.round(frame[2]), Math.round(frame[3])];
       const [width, height] = s.settings.littleBaySize ?? [];
       return size[0] === width && size[1] === height ? { windows } : { windows, settings: { ...s.settings, littleBaySize: size } };
+    });
+  },
+
+  setWindowPlacement(id, placement) {
+    if (capabilities.globalWindowCoordinates) return;
+    set((s) => {
+      const w = s.windows[id];
+      if (!w) return {};
+      const size: WindowSize | undefined = validWindowSize(placement.size) ? [...placement.size] : w.size;
+      const maximized = typeof placement.maximized === "boolean" ? placement.maximized : w.maximized;
+      if (w.frame === null && size?.[0] === w.size?.[0] && size?.[1] === w.size?.[1] && maximized === w.maximized) return {};
+      const windows = { ...s.windows, [id]: { ...w, frame: null, ...(size ? { size } : {}), ...(maximized !== undefined ? { maximized } : {}) } };
+      if (!isSmallWindow(w) || !size) return { windows };
+      return { windows, settings: { ...s.settings, littleBaySize: size } };
     });
   },
 
@@ -428,7 +458,8 @@ function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null
 function restoreWindow(s: BrowserState, entry: ClosedWindow): BrowserState {
   const id = newId("w");
   const spaceOk = (p: string) => (s.spaces[p] ? p : s.settings.defaultSpaceId);
-  const w = emptyWindow(id, spaceOk(entry.window.spaceId), false, entry.window.frame);
+  const w = emptyWindow(id, spaceOk(entry.window.spaceId), false, capabilities.globalWindowCoordinates ? entry.window.frame : null);
+  Object.assign(w, restoredWindowPlacement(entry.window));
   w.sidebarOpen = entry.window.sidebarOpen;
   // What it showed, as it showed it (tabToShow takes it while it's still the space's and no other window shows it).
   if (entry.window.shownTabId && s.tabs[entry.window.shownTabId]) w.activeTabIds[w.spaceId] = entry.window.shownTabId;

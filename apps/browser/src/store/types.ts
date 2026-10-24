@@ -1,4 +1,6 @@
 export type Frame = [number, number, number, number];
+export type WindowSize = [number, number];
+export type WindowPlacement = { size?: WindowSize; maximized?: boolean };
 
 export type SpaceColor = "plum" | "blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "neutral";
 
@@ -37,6 +39,9 @@ export type BrowserWindow = {
   sidebarOpen: boolean;
   tabLayout?: "sidebar" | "top";
   frame: Frame | null;
+  // Restored geometry on hosts where the compositor owns global placement.
+  size?: WindowSize;
+  maximized?: boolean;
   createdAt: number;
   // Little Bay (Arc's Little Arc): one page, no sidebar, never saved with the session (store/small.ts).
   kind?: "small";
@@ -171,7 +176,7 @@ export type ClosedWindow = {
   kind: "window";
   id: string;
   // `shownTabId`: the tab it showed, which it shows again when it comes back (if nothing else shows it by then).
-  window: Pick<BrowserWindow, "spaceId" | "sidebarOpen" | "frame"> & { shownTabId?: string };
+  window: Pick<BrowserWindow, "spaceId" | "sidebarOpen" | "frame" | "size" | "maximized"> & { shownTabId?: string };
   tabs: (TabSnapshot & { active: boolean; tabId?: string })[];
   groups: (Omit<TabGroup, "tabIds"> & { tabIndexes: number[] })[];
   closedAt: number;
