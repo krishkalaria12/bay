@@ -60,6 +60,9 @@ export const PINNED_SELECTION_STROKE = 3;
 export const PINNED_GLASS_RIM = 1;
 // The back-to-pinned badge pops in and out on Animated's old spring (speed 18, bounciness 8).
 export const PINNED_BADGE_SPRING = bouncySpring(18, 8);
+// The marker for the window's tab scrolled out of view (OffscreenTabMarker.tsx): its height, and its gap to the edge.
+export const OFFSCREEN_MARKER_HEIGHT = 20;
+export const OFFSCREEN_MARKER_INSET = 4;
 // A favorite's unread count (UnreadBadge.tsx): the system's notification red.
 export const UNREAD_BADGE_RED = "#FF3B30";
 // A drag this near the list's top or bottom scrolls it.

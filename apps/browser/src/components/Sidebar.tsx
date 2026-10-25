@@ -36,7 +36,8 @@ import { LiveFolders } from "./sidebar/LiveFolderBlock";
 import { openOverflowMenu, openSidebarMenu } from "./sidebar/menus";
 import { PinDropZone, PinnedGrid } from "./sidebar/PinnedGrid";
 import { ResizeHandle } from "./sidebar/ResizeHandle";
-import { entriesHeight, rowSpan, type Section } from "./sidebar/geometry";
+import { entriesHeight, offscreenSide, rowSpan, type Section } from "./sidebar/geometry";
+import { OffscreenTabMarker } from "./sidebar/OffscreenTabMarker";
 import { measureRow } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./sidebar/RowMotion";
@@ -100,6 +101,11 @@ export function Sidebar() {
   const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
   useRevealTabs(windowId, scroll, scrollY, geometry, glowRoom);
+  const offscreen = useOffscreenTab(windowId, scroll, scrollY, geometry, glowRoom);
+  useEffect(() => {
+    if (!__DEV__) return;
+    devSidebars.set(windowId, { side: offscreen.side, scrollTo: (y: number) => scroll.current?.scrollTo({ y, animated: false }), reveal: offscreen.reveal });
+  }, [windowId, offscreen.side, offscreen.reveal]);
   // A card anchored to a row of the page paging away would stay where the row was.
   useEffect(() => dismissHover(), [current]);
 
@@ -148,9 +154,11 @@ export function Sidebar() {
                     scrollY.current = y;
                     controller.scrollY = y;
                     dismissHover();
+                    offscreen.check();
                   }}
                 />
               ))}
+              {offscreen.side ? <OffscreenTabMarker windowId={windowId} side={offscreen.side} top={glowRoom} onPress={offscreen.reveal} /> : null}
             </View>
 
             {playerTab ? (
@@ -545,6 +553,58 @@ function useRevealTabs(
       geometryRef.current.laidOut = undefined;
     };
   }, [windowId, glowRoom]);
+}
+
+// DEV: a window's sidebar list, for tests: where the tab marker is, and a scroll (nnSidebar(windowId)).
+const devSidebars = new Map<string, { side: "above" | "below" | null; scrollTo: (y: number) => void; reveal: () => void }>();
+if (__DEV__) (globalThis as { nnSidebar?: unknown }).nnSidebar = (windowId: string) => devSidebars.get(windowId);
+
+// The window's tab, when it's a list row scrolled out of view: which edge it's beyond, kept up as the list scrolls and
+// changes, and a scroll that brings it back.
+function useOffscreenTab(
+  windowId: string,
+  scroll: RefObject<ScrollView | null>,
+  scrollY: RefObject<number>,
+  geometryRef: RefObject<SidebarGeometry>,
+  glowRoom: number,
+) {
+  const [side, setSide] = useState<"above" | "below" | null>(null);
+  const activeRow = () => {
+    const s = useBrowser.getState();
+    const spaceId = s.windows[windowId]?.spaceId;
+    const tabId = activeTabId(s, windowId);
+    if (!spaceId || !tabId) return null;
+    const { regions, newTabAtTop } = geometryRef.current;
+    const span = rowSpan(s, windowId, spaceId, tabId, newTabAtTop);
+    return span ? { y: glowRoom + regions[span.section] + span.top, height: span.height } : null;
+  };
+  const check = useEffectEvent(() => {
+    const row = activeRow();
+    setSide(row ? offscreenSide(row, scrollY.current ?? 0, geometryRef.current.viewport, glowRoom) : null);
+  });
+  const reveal = useEffectEvent(() => {
+    const row = activeRow();
+    if (!row) return;
+    const viewport = geometryRef.current.viewport;
+    const y = row.y < (scrollY.current ?? 0) + glowRoom ? row.y - glowRoom : row.y + row.height - viewport + 8;
+    scroll.current?.scrollTo({ y: Math.max(0, y), animated: true });
+  });
+  useEffect(() => {
+    let frame = 0;
+    // After the frame's layout: rows opened or closed have moved the tab.
+    const later = () => {
+      if (!frame) frame = requestAnimationFrame(() => ((frame = 0), check()));
+    };
+    const unsubscribe = useBrowser.subscribe((s, prev) => {
+      if (s.windows !== prev.windows || s.tabs !== prev.tabs || s.tabLists !== prev.tabLists || s.spaces !== prev.spaces) later();
+    });
+    later();
+    return () => {
+      cancelAnimationFrame(frame);
+      unsubscribe();
+    };
+  }, [windowId, glowRoom]);
+  return { side, check, reveal };
 }
 
 function NewTabRow({ windowId }: { windowId: string }) {
