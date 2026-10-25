@@ -20,6 +20,7 @@ import { requestAutofill } from "../components/site/Autofill";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
 import { captureFullPage, startCapture } from "../components/capture/state";
+import { newEasel, openLibrary } from "../components/library/actions";
 import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
 import { shownPeek } from "../store/peeks";
@@ -249,6 +250,10 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     }
     case "toggleMute":
       return page ? toggleMute(page.id) : undefined;
+    case "newEasel":
+      return newEasel(windowId);
+    case "openLibrary":
+      return openLibrary(windowId, arg ?? undefined);
     case "downloads":
       return s.setDownloadsOpen(windowId, !ui?.downloadsOpen);
     case "cast":

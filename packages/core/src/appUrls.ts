@@ -5,7 +5,7 @@ const ENGINE_PREFIX = /^(view-source:)?chrome:(?:\/\/)?/i;
 const ABOUT_PAGE = /^about:(blank|srcdoc)([?#]|$)/i;
 const ABOUT_ALIAS = /^about:([a-z][a-z0-9-]*)/i;
 
-export const APP_PAGE_HOSTS = ["history", "bookmarks", "downloads"] as const;
+export const APP_PAGE_HOSTS = ["history", "bookmarks", "downloads", "library", "easel"] as const;
 export type AppPageHost = (typeof APP_PAGE_HOSTS)[number];
 
 function split(url: string, prefix: RegExp): { viewSource: string; host: string; rest: string } | null {

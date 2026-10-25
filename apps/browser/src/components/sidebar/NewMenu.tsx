@@ -2,6 +2,7 @@ import { Surface, Symbol } from "@bay/shell";
 import { useEffect, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { newEasel, openLibrary } from "../library/actions";
 import { createSpace, switchSpace } from "../../lib/actions";
 import { hex, useTheme } from "../../lib/theme";
 import { installUpdate, updateTitle, usePendingUpdate } from "../../lib/updates";
@@ -41,6 +42,8 @@ async function newSpace(windowId: string) {
 
 function run(windowId: string, id: string) {
   if (id === "update") installUpdate();
+  else if (id === "easel") newEasel(windowId);
+  else if (id === "library") openLibrary(windowId);
   else if (id === "space") void newSpace(windowId);
   else if (id === "folder") newPinnedFolderWith(windowId);
   else if (id === "split") splitWithCurrentTab(windowId);
@@ -94,6 +97,8 @@ function Panel({
       ? [{ id: "update", title: `${updateTitle(pending)} (${pending.version})`, icon: "arrow.down.circle" }, "separator" as const]
       : []),
     { id: "space", title: "New Space", icon: "plus.square.on.square" },
+    { id: "easel", title: "New Easel", icon: "scribble.variable", shortcut: "⌃⇧E" },
+    { id: "library", title: "Library", icon: "books.vertical" },
     { id: "folder", title: "New Folder", icon: "folder.badge.plus" },
     "separator",
     { id: "split", title: "Split View", icon: "rectangle.split.2x1", shortcut: "⌃⇧=" },

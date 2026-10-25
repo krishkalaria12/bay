@@ -4,6 +4,7 @@ import { useBrowser, type BrowserState, type HydrateData } from "../store/browse
 import { inPinnedContainer, isIncognitoSpace, newId, snapshotTab } from "../store/model";
 import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
+import { startLibrary } from "../components/library/state";
 import { startFavicons } from "./favicons";
 import { startBookmarks } from "./bookmarks";
 import { startHistory } from "./history";
@@ -250,6 +251,7 @@ export function resumePersistence() {
 export function startPersistence() {
   const session = loadSession();
   useBrowser.getState().hydrate(session ?? {});
+  startLibrary();
 
   const lastSources = new Map<string, unknown[]>();
   const lastJson = new Map<string, string>();

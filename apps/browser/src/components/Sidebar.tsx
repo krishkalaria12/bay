@@ -1,3 +1,4 @@
+import { LibraryButton } from "./library/LibraryButton";
 import { ContextMenuArea, FadeLabel, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -168,7 +169,7 @@ export function Sidebar() {
             ) : null}
             {spaces ? <SpaceSwitcher windowId={windowId} /> : null}
             <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
-              <DownloadsButton windowId={windowId} />
+              <LibraryButton windowId={windowId} />
             </View>
           </View>
 
@@ -539,22 +540,6 @@ function useRevealTabs(
       geometryRef.current.laidOut = undefined;
     };
   }, [windowId, glowRoom]);
-}
-
-function DownloadsButton({ windowId }: { windowId: string }) {
-  return (
-    <IconButton
-      icon="arrow.down.circle"
-      size={14}
-      box={SIDEBAR_FOOTER_DOWNLOADS.size}
-      radius={8}
-      tooltip="Downloads (⇧⌘J)"
-      onPress={() => {
-        const s = useBrowser.getState();
-        s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);
-      }}
-    />
-  );
 }
 
 function NewTabRow({ windowId }: { windowId: string }) {

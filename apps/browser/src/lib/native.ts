@@ -216,6 +216,8 @@ const WINDOW_COMMANDS = [
   "moveTabToWindow",
   "toggleSidebar",
   "downloads",
+  "newEasel",
+  "openLibrary",
   "mergeAllWindows",
   "switchSpace",
   "nextSpace",

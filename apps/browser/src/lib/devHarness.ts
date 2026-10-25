@@ -133,6 +133,19 @@ export function startDevHarness() {
       return require("../components/developer/devMode");
     },
     // Capture's sessions and actions (scripts/capture-test.mjs).
+    get library(): {
+      state: typeof import("../components/library/state");
+      actions: typeof import("../components/library/actions");
+      canvases: typeof import("../components/library/EaselPage").easelCanvases;
+      canvasStates: typeof import("../components/library/EaselPage").easelCanvasStates;
+    } {
+      return {
+        state: require("../components/library/state"),
+        actions: require("../components/library/actions"),
+        canvases: require("../components/library/EaselPage").easelCanvases,
+        canvasStates: require("../components/library/EaselPage").easelCanvasStates,
+      };
+    },
     get capture(): typeof import("../components/capture/state") {
       return require("../components/capture/state");
     },

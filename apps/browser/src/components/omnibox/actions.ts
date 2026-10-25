@@ -104,6 +104,8 @@ const DEFS: ActionDef[] = [
     keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"],
   },
   { command: "toggleBookmarksBar", title: "Toggle Bookmarks Bar", icon: "menubar.rectangle", hint: "⇧⌘B", keywords: ["bookmarks bar"] },
+  { command: "newEasel", title: "New Easel", icon: "scribble.variable", hint: "⌃⇧E", keywords: ["whiteboard", "canvas", "create easel"] },
+  { command: "openLibrary", title: "Open Library", icon: "books.vertical", keywords: ["media", "captures", "easels", "archived tabs", "library"] },
   { command: "downloads", title: "Downloads", icon: "arrow.down.circle", hint: "⇧⌘J", keywords: ["show downloads", "dl"] },
   { command: "showHistory", title: "History", icon: "clock", hint: "⌘Y", keywords: ["show history"] },
   { command: "manageBookmarks", title: "Bookmarks", icon: "book", hint: "⌥⌘B", keywords: ["manage bookmarks", "show bookmarks"] },
