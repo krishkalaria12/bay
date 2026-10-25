@@ -27,6 +27,8 @@ import { isInternalTab } from "../components/pages/urls";
 import { sidebarMenuState } from "../components/sidebar/commands";
 import { openWindow as createWindow } from "./actions";
 import { openExternalUrls } from "../components/littleBay/actions";
+import { startLittleBayAccess } from "../components/littleBay/access";
+import { startLittleBayPutAway } from "../components/littleBay/putAway";
 import { meetingToJoin } from "../live/alerts";
 import { useCalendar } from "../live/calendar";
 import { everySlowly } from "./slowTimers";
@@ -49,6 +51,8 @@ export function startNativeSync() {
   startSidebarMoveUndoSync();
   startWindowCloseGuard();
   startExtensionsBridge();
+  startLittleBayAccess();
+  startLittleBayPutAway();
   onOpenURLs(openExternalUrls);
   onDownload((d) => store.getState().upsertDownload(d));
 

@@ -2,11 +2,14 @@ import { View } from "react-native";
 import { Group, SectionHeader, SettingToggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { LinkRules } from "./LinkRules";
+import { LittleBaySettings } from "./LittleBaySettings";
 
 export function LinksPane() {
   return (
     <View>
       <LinkRules />
+
+      <LittleBaySettings />
 
       <SectionHeader title="Clicking links" />
       <Group>

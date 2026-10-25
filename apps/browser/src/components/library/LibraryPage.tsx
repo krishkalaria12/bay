@@ -534,9 +534,11 @@ async function libraryTabMenu(windowId: string, tab: Tab) {
   if (choice === "close") current.closeTab(tab.id);
 }
 
-type ArchiveEntry = { id: string; title: string; detail: string; at: number; icon: string; cleaned: boolean; tab?: TabSnapshot };
+type ArchiveEntry = { id: string; title: string; detail: string; at: number; icon: string; cleaned: boolean; small?: boolean; tab?: TabSnapshot };
 
 function ArchiveSection({ windowId, query }: { windowId: string; query: string }) {
+  // Arc's archive filter for links closed in Little Arc: Little Bay's pages, closed or put away.
+  const [onlyLittleBay, setOnlyLittleBay] = useState(false);
   const { cleanedTabs, closedTabs, closedGroups, closedWindows, spaces, windows } = useBrowser(
     useShallow((s) => ({
       cleanedTabs: s.cleanedTabs,
@@ -552,15 +554,23 @@ function ArchiveSection({ windowId, query }: { windowId: string; query: string }
   const entries: ArchiveEntry[] = [
     ...[...cleanedTabs.map((entry) => ({ entry, cleaned: true })), ...closedTabs.map((entry) => ({ entry, cleaned: false }))]
       .filter(({ entry }) => publicTab(entry.tab) && !windows[entry.windowId]?.incognito)
-      .map(({ entry, cleaned }) => ({
-        id: entry.id,
-        title: entry.tab.customTitle || entry.tab.title || hostLabel(entry.tab.url) || "New Tab",
-        detail: `${spaceName(entry.tab.spaceId)} · ${cleaned ? "Cleaned up" : "Closed"} · ${hostLabel(entry.tab.url)}`,
-        at: entry.closedAt,
-        icon: "archivebox",
-        cleaned,
-        tab: entry.tab,
-      })),
+      .map(({ entry, cleaned }) => {
+        // A page from a Little Bay window, closed or put away.
+        const small = !cleaned && "small" in entry && !!entry.small;
+        let how = "Closed";
+        if (cleaned) how = "Cleaned up";
+        else if (small) how = "Little Bay";
+        return {
+          id: entry.id,
+          title: entry.tab.customTitle || entry.tab.title || hostLabel(entry.tab.url) || "New Tab",
+          detail: `${spaceName(entry.tab.spaceId)} · ${how} · ${hostLabel(entry.tab.url)}`,
+          at: entry.closedAt,
+          icon: "archivebox",
+          cleaned,
+          small,
+          tab: entry.tab,
+        };
+      }),
     ...closedGroups
       .filter((entry) => entry.tabs.length && entry.tabs.every(publicTab) && !windows[entry.windowId]?.incognito)
       .map((entry) => ({
@@ -582,22 +592,36 @@ function ArchiveSection({ windowId, query }: { windowId: string; query: string }
         cleaned: false,
       })),
   ];
-  const shown = entries.filter((entry) => matchesQuery(query, entry.title, entry.detail)).sort((a, b) => b.at - a.at);
+  const shown = entries.filter((entry) => (!onlyLittleBay || entry.small) && matchesQuery(query, entry.title, entry.detail)).sort((a, b) => b.at - a.at);
+  const hasLittleBay = entries.some((entry) => entry.small);
+  // Over the list (in its padding), or alone over the empty state.
+  const filters = (inList: boolean) =>
+    hasLittleBay || onlyLittleBay ? (
+      <View style={{ flexDirection: "row", gap: 4, ...(inList ? { paddingBottom: 8 } : { paddingHorizontal: 24, paddingTop: 24 }) }}>
+        <SectionButton title="All" icon="archivebox" selected={!onlyLittleBay} onPress={() => setOnlyLittleBay(false)} />
+        <SectionButton title="Little Bay" icon="macwindow" selected={onlyLittleBay} onPress={() => setOnlyLittleBay(true)} />
+      </View>
+    ) : null;
   const restore = (entry: ArchiveEntry) => {
     const s = useBrowser.getState();
     if (entry.cleaned) s.restoreCleaned(entry.id, windowId);
     else s.restoreClosed(entry.id, windowId);
   };
-  if (!shown.length)
+  if (!shown.length) {
+    let empty = { title: "No archived tabs", subtitle: "Closed tabs and tabs cleaned up from your spaces appear here." };
+    if (query) empty = { title: "No matching archived tabs", subtitle: "Try a tab title, website, or space name." };
+    else if (onlyLittleBay) empty = { title: "No Little Bay pages", subtitle: "Pages from Little Bay windows you close, or that are put away, appear here." };
     return (
-      <EmptyState
-        title={query ? "No matching archived tabs" : "No archived tabs"}
-        subtitle={query ? "Try a tab title, website, or space name." : "Closed tabs and tabs cleaned up from your spaces appear here."}
-      />
+      <>
+        {filters(false)}
+        <EmptyState title={empty.title} subtitle={empty.subtitle} />
+      </>
     );
+  }
   return (
     <LegendList
       style={{ flex: 1 }}
+      ListHeaderComponent={filters(true)}
       data={shown}
       keyExtractor={(entry) => `${entry.cleaned ? "cleaned" : "closed"}:${entry.id}`}
       contentContainerStyle={{ padding: 24, paddingBottom: 40 }}

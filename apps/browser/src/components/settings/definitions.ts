@@ -94,6 +94,24 @@ export const SETTINGS = {
     words:
       "air traffic routing url contains equal exact query fragment wildcard domain source app bundle id space little bay new window default most recent discord slack mail peek",
   },
+  littleBayShortcut: {
+    id: "links.littleBayShortcut",
+    pane: "links",
+    title: "Open Little Bay from any app",
+    words: "little bay global shortcut hotkey keyboard option command n background",
+  },
+  littleBayMenuBarItem: {
+    id: "links.littleBayMenuBarItem",
+    pane: "links",
+    title: "Show Little Bay in the menu bar",
+    words: "little bay menu bar status item icon",
+  },
+  littleBayPutAwayAfterHours: {
+    id: "links.littleBayPutAwayAfterHours",
+    pane: "links",
+    title: "Put away Little Bay windows",
+    words: "little bay close archive idle hours",
+  },
   peekLinksFromPinnedTabs: {
     id: "links.peekLinksFromPinnedTabs",
     pane: "links",

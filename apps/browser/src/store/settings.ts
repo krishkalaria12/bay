@@ -90,7 +90,15 @@ export type Settings = {
   // Arc's Peek: a link a pinned tab or a favourite opens in front shows over its page (store/peeks.ts).
   peekLinksFromPinnedTabs: boolean;
   littleBaySize: [number, number];
+  // Little Bay from any app (components/littleBay/access.ts), as Little Arc's: a shortcut (a key's code and its
+  // modifiers; null is off) and a menu bar button. Both are this Mac's, off until chosen.
+  littleBayShortcut: LittleBayShortcut | null;
+  littleBayMenuBarItem: boolean;
+  // A Little Bay left alone this long is put away, its page in the Library's archive (littleBay/putAway.ts); null never.
+  littleBayPutAwayAfterHours: number | null;
 };
+
+export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
 
 export const DEFAULT_SETTINGS: Settings = {
   warnBeforeQuitting: false,
@@ -147,6 +155,10 @@ export const DEFAULT_SETTINGS: Settings = {
   externalLinkRules: [],
   peekLinksFromPinnedTabs: true,
   littleBaySize: [900, 640],
+  littleBayShortcut: null,
+  littleBayMenuBarItem: false,
+  // Arc's: six hours.
+  littleBayPutAwayAfterHours: 6,
 };
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
