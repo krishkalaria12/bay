@@ -19,6 +19,7 @@ import { openManageExtensions, openPinDialog, openWebStore } from "../components
 import { requestAutofill } from "../components/site/Autofill";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
+import { captureFullPage, startCapture } from "../components/capture/state";
 import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
 import { shownPeek } from "../store/peeks";
@@ -133,6 +134,10 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void web?.runPageCommand("systemPrint");
     case "savePage":
       return void web?.runPageCommand("savePage");
+    case "capture":
+      return page ? void startCapture(page.id) : undefined;
+    case "captureFullPage":
+      return page ? void captureFullPage(page.id) : undefined;
     case "caretBrowsing":
       return void web?.runPageCommand("caretBrowsing");
     case "emailPageLocation":
@@ -284,6 +289,8 @@ const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
   "print",
   "printWithSystemDialog",
   "savePage",
+  "capture",
+  "captureFullPage",
   "caretBrowsing",
   "emailPageLocation",
   "stop",

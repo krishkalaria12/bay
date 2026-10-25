@@ -132,6 +132,10 @@ export function startDevHarness() {
     get developer(): typeof import("../components/developer/devMode") {
       return require("../components/developer/devMode");
     },
+    // Capture's sessions and actions (scripts/capture-test.mjs).
+    get capture(): typeof import("../components/capture/state") {
+      return require("../components/capture/state");
+    },
     // Hovering moves nothing but a HoverSlot's contents (scripts/hover-shift-test.mjs).
     get hoverShift(): typeof import("./hoverShift") {
       return require("./hoverShift");

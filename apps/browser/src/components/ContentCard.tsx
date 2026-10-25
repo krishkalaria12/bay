@@ -73,6 +73,8 @@ import { DevBar } from "./developer/DevBar";
 import { DEV_BAR_HEIGHT } from "./developer/constants";
 import { DeveloperOffer } from "./developer/DeveloperOffer";
 import { onDeveloperMessage, startDeveloperMode } from "./developer/devMode";
+import { CaptureLayer } from "./capture/CaptureLayer";
+import { closeCaptureOnEscape, onCaptureGesture, onCaptureMessage, startCaptures } from "./capture/state";
 import { useIsDeveloperTab } from "./developer/sites";
 
 // Where the card's panes are: the active tab's (or its split's), or the full-screen tab's over everything.
@@ -124,6 +126,7 @@ export function ContentCard() {
   useEffect(startMedia, []);
   useEffect(startSelectionTools, []);
   useEffect(startDeveloperMode, []);
+  useEffect(startCaptures, []);
   useEffect(startPeeks, []);
 
   // The tabs whose page is in this window. Recomputed only when tabs change, not on every store update (page
@@ -427,6 +430,7 @@ const TabPane = memo(function TabPane({
                 <CastPicker tabId={tabId} paneWidth={frame.width} />
                 <NavigationOverlays tabId={tabId} windowId={windowId} geometry={geometry} />
                 <SelectionPopover tabId={tabId} zoom={zoom} />
+                <CaptureLayer tabId={tabId} />
               </>
             )}
           </Animated.View>
@@ -611,6 +615,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         else if (command === "escape") {
           // Esc in a page closes the theme editor over it; in a peek's page, the peek; in Little Bay's, Little Bay.
           const t = tab();
+          if (closeCaptureOnEscape(tabId)) return;
           if (t && closeThemeEditorOnEscape(t.windowId)) return;
           if (t?.peekOf) store().closePeek(t.windowId);
           else closeLittleBayOnEscape(tabId);
@@ -620,6 +625,8 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);
         else if (kind === "scroll") noteScroll(tabId, data);
         else if (kind === "devMode") onDeveloperMessage(tabId, data);
+        else if (kind === "capture") onCaptureMessage(tabId, data);
+        else if (kind === "captureGesture") onCaptureGesture(tabId, data);
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {

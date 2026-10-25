@@ -192,6 +192,8 @@ const PAGE_COMMANDS = [
   "javaScriptConsole",
   "inspectElements",
   "savePage",
+  "capture",
+  "captureFullPage",
   "emailPageLocation",
   "printWithSystemDialog",
   "stop",

@@ -23,6 +23,7 @@ import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../layout/controls";
 import { toggleDeveloperMode } from "../developer/devMode";
+import { captureFullPage, startCapture } from "../capture/state";
 import { useIsDeveloperTab } from "../developer/sites";
 import { patchPage, setPopover, usePage, usePages } from "../layout/pageState";
 import { showToast } from "../layout/splitActions";
@@ -180,6 +181,7 @@ export function SiteControls({
     }
     items.push(
       { id: "markdown", title: "Copy Markdown Link", symbol: "link" },
+      { id: "captureFullPage", title: "Capture Full Page", symbol: "camera" },
       { separator: true },
       { id: "manage", title: "Manage Extensions…" },
       { id: "store", title: "Chrome Web Store…" },
@@ -192,6 +194,9 @@ export function SiteControls({
     else if (choice === "translate") {
       close();
       toggleTranslation(tabId);
+    } else if (choice === "captureFullPage") {
+      close();
+      void captureFullPage(tabId);
     } else if (choice === "markdown") {
       copyText(markdownLink(tab.customTitle || tab.title, url));
       showToast(tab.windowId, "Copied Markdown Link", undefined, { icon: "link" });
@@ -239,6 +244,14 @@ export function SiteControls({
                 }}
               />
               <ActionTile icon={copied ? "checkmark" : "link"} title={copied ? "Copied Clean Link" : "Copy Clean Link"} onPress={copyClean} />
+              <ActionTile
+                icon="camera.viewfinder"
+                title="Capture (⇧⌘2)"
+                onPress={() => {
+                  close();
+                  void startCapture(tabId);
+                }}
+              />
               <ActionTile
                 icon={bookmarked ? "star.fill" : "star"}
                 title={bookmarked ? "Remove Bookmark" : "Bookmark Page"}
