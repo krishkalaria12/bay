@@ -4,6 +4,7 @@ import type { ViewProps } from "react-native";
 export * from "./system";
 export * from "./app";
 export * from "./live";
+export * from "./capture";
 
 export type BrowserCommand =
   | "undoPinnedFolderMove"
@@ -105,6 +106,8 @@ export type BrowserCommand =
   | "autofill"
   | "openFile"
   | "savePage"
+  | "capture"
+  | "captureFullPage"
   | "emailPageLocation"
   | "printWithSystemDialog"
   | "stop"

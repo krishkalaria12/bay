@@ -18,7 +18,8 @@
       "DockSelectionModule",
       "InlineCompletionModule",
       "TranslateModule",
-      "WindowProfileModule"
+      "WindowProfileModule",
+      "CaptureModule"
     ]
   }
 }
