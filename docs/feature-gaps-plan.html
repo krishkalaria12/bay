@@ -394,11 +394,6 @@
           grid-template-columns: repeat(3, 1fr);
         }
       }
-      @media (min-width: 1180px) {
-        .flow {
-          grid-template-columns: repeat(6, 1fr);
-        }
-      }
       .flow li {
         margin: 0;
         background: var(--surface);
@@ -580,6 +575,8 @@
         <div class="meta">
           <span>Checked against <code>main</code> at <code>6f52d921</code></span>
           <span>25 October 2026</span>
+          <span>Phase 1 shipped on <code>main</code> at <code>f16526b6</code></span>
+          <span>Phase 2 done; VoiceOver and Gmail checks before release</span>
           <span>Source: Arc's macOS release notes, 2021–2026</span>
           <span>Sizes are estimates: S a day or two, M about a week, L more</span>
         </div>
@@ -596,8 +593,6 @@
           <li><a href="#missing">What's missing</a></li>
           <li><a href="#retest">Re-test</a></li>
           <li><a href="#phases">Phases</a></li>
-          <li class="sub"><a href="#p1">1 · Before Arc shuts down</a></li>
-          <li class="sub"><a href="#p2">2 · Keyboard & undo</a></li>
           <li class="sub"><a href="#p3">3 · Boosts</a></li>
           <li class="sub"><a href="#p4">4 · Sharing</a></li>
           <li class="sub"><a href="#p5">5 · Arc Max, on device</a></li>
@@ -615,17 +610,12 @@
             <p>
               Bay already matches most of Arc: spaces with themes and profiles, favorites, pinned tabs and nested folders, auto cleanup, Peek, Split View,
               Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
-              folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>.
+              folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>. The ten small
+              ones (Phase 1) and the three keyboard, undo and Finder ones (Phase 2) have shipped and are listed under <a href="#have">Already in Bay</a>;
+              <strong>9 gaps</strong> remain.
             </p>
-            <p>The gaps are of four kinds:</p>
+            <p>The gaps left are of two kinds:</p>
             <ul>
-              <li>
-                <strong>Small habits Arc users will miss on day one.</strong> Unread counts on favorites, opening Little Bay from any app, mouse buttons that
-                switch spaces, Shift-Return for the top result. Ten items, mostly S.
-              </li>
-              <li>
-                <strong>Keyboard and undo.</strong> Moving around the sidebar from the keyboard, ⌘Z for any sidebar edit, and files from Finder in the sidebar.
-              </li>
               <li>
                 <strong>Boosts.</strong> Arc's way to restyle or zap parts of a site. Bay has no answer except uBlock's cosmetic filters. One large build.
               </li>
@@ -634,7 +624,7 @@
                 starts.
               </li>
             </ul>
-            <p>Phase 1 is sized to land before <strong>22 December 2026</strong>, when Arc stops opening. The later phases don't depend on that date.</p>
+            <p>Phase 1 landed before Arc's sunset reminders start on 23 November. The phases left don't depend on Arc's dates.</p>
           </div>
         </section>
 
@@ -670,9 +660,14 @@
           <ul class="have">
             <li>Spaces with an icon, colour theme (gradient, intensity, grain) and profile</li>
             <li>Swipe between spaces; space switcher in the sidebar's foot</li>
+            <li>Mouse buttons 4 and 5 switch spaces over the sidebar</li>
             <li>Favorites as tiles (Essentials), shared between spaces on one profile</li>
+            <li>Unread counts on favorites from Gmail, Slack, X and other sites' titles, also while asleep</li>
             <li>Pinned tabs and folders, nested five deep</li>
             <li>Custom names and emoji icons for tabs and folders</li>
+            <li>⌘. moves around the sidebar from the keyboard: arrows, Return, Space to peek, ⌫, ⌃⌘R, Escape</li>
+            <li>⌘Z for sidebar edits: close, clear, move, pin, rename, icon, theme</li>
+            <li>Files and folders from Finder in the sidebar; drag a file row into a page to upload it</li>
             <li>Fold a space's pinned section</li>
             <li>Back to Pinned URL, Replace Pin, Edit Pinned Page</li>
             <li>Today's tabs cleaned up after a time set per space</li>
@@ -681,12 +676,17 @@
             <li>Multi-select tabs: copy links, copy as Markdown, group</li>
             <li>Drag a tab out into a new window</li>
             <li>Sidebar on either side, auto-hide, or tabs on top</li>
+            <li>Hold Option to show the hidden sidebar</li>
+            <li>Marker for the current tab when it's scrolled out of view</li>
             <li>Optional toolbar with full URL</li>
             <li>Peek for links from pinned tabs, then keep it or split it</li>
             <li>Split View, horizontal and vertical, several panes</li>
             <li>Little Bay for links from other apps, with Move to Space</li>
+            <li>Little Bay from any app: a global shortcut and a menu bar button</li>
+            <li>Little Bay windows put away after six hours, into the archive; Show/Hide All in the Dock menu</li>
             <li>Link rules by URL and source app (Air Traffic Control)</li>
             <li>Command bar with actions, site shortcuts and bangs</li>
+            <li>Shift-Return opens a search's top result (Instant Links)</li>
             <li>Paste and Go; forget a suggestion</li>
             <li>Calculator, units, currency and emoji answers</li>
             <li>Command bar integrations: New Linear Issue, Google Meet, FigJam, Notion, Confluence, Google Docs and more</li>
@@ -694,16 +694,19 @@
             <li>Supercopy: ⇧⌘C copies a link without trackers</li>
             <li>Copy URL as Markdown; link to highlighted text</li>
             <li>Capture an element, an area or the full page, with markup</li>
+            <li>Capture in Portrait: the page framed on the space's colours</li>
             <li>Easels with live captures; export as PNG or HTML</li>
             <li>Library: media, downloads, Easels, spaces, archive</li>
             <li>Previews for folders, Gmail, GitHub and Calendar</li>
             <li>GitHub live folders</li>
             <li>Live calendar: next meeting, time to it, Join</li>
+            <li>⌃⌘J joins the meeting that's on now</li>
             <li>Automatic picture in picture, off per site</li>
             <li>Sidebar player for every playing tab, with Pause All</li>
             <li>Share This Tab Instead during a call</li>
             <li>Camera, microphone and screen-share badges on tabs</li>
             <li>Developer Mode for localhost, with inspector</li>
+            <li>JSON viewer in Developer Mode: folding, Raw, copy path</li>
             <li>Site Controls: permissions, zoom, translate</li>
             <li>Battery Saver; sleeping tabs; sites kept awake</li>
             <li>Cast; Task Manager</li>
@@ -721,7 +724,8 @@
           <h2 id="missing-h">What's missing</h2>
           <p class="prose">
             "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
-            not run for this review. The date is when Arc shipped the feature.
+            not run for this review. The date is when Arc shipped the feature. Gaps 1–13 (Phases 1 and 2) have shipped and moved to
+            <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
           </p>
           <div class="table-wrap">
             <table class="gaps">
@@ -739,110 +743,6 @@
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>1</td>
-                  <td>Unread counts on favorites</td>
-                  <td>Mar 2022</td>
-                  <td>Tiles show away, media and capture badges; no counts</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>2</td>
-                  <td>Little Bay from any app (shortcut and menu bar button)</td>
-                  <td>Aug 2021</td>
-                  <td>⌥⌘N works only with Bay in front</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>3</td>
-                  <td>Little Bay windows put away after six hours</td>
-                  <td>Nov 2023</td>
-                  <td>They stay open until closed</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>4</td>
-                  <td>Mouse buttons 4 and 5 switch spaces</td>
-                  <td>Mar 2022</td>
-                  <td>Only the middle button is handled</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>5</td>
-                  <td>Option shows the hidden sidebar</td>
-                  <td>May 2021</td>
-                  <td>Hover the edge only</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>6</td>
-                  <td>Arrow showing the current tab is scrolled out of view</td>
-                  <td>Jul 2023</td>
-                  <td>None</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>7</td>
-                  <td>Shift-Return opens the top result (Instant Links)</td>
-                  <td>Feb 2024</td>
-                  <td>Return always searches</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>8</td>
-                  <td>⌃⌘J joins the meeting that's on now</td>
-                  <td>Jun 2024</td>
-                  <td>Join buttons in the meeting alert only</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>9</td>
-                  <td>Portrait capture of a tab</td>
-                  <td>Dec 2023</td>
-                  <td>Element, area and full page</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>10</td>
-                  <td>JSON viewer in Developer Mode</td>
-                  <td>Dec 2023</td>
-                  <td>Raw JSON</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>11</td>
-                  <td>Move around the sidebar from the keyboard</td>
-                  <td>Jun 2021</td>
-                  <td>None</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">2</td>
-                </tr>
-                <tr>
-                  <td>12</td>
-                  <td>⌘Z for any sidebar edit</td>
-                  <td>Jun 2021</td>
-                  <td>⌘Z undoes folder moves; ⇧⌘T reopens tabs</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">2</td>
-                </tr>
-                <tr>
-                  <td>13</td>
-                  <td>Files and folders from Finder in the sidebar</td>
-                  <td>Jun 2021</td>
-                  <td>None</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">2</td>
-                </tr>
                 <tr>
                   <td>14</td>
                   <td>Boosts: zap, colours, fonts, custom CSS</td>
@@ -972,6 +872,19 @@
                   <td>The sidebar dims when the window isn't in front (Oct 2023)</td>
                   <td>Click into another app. The sidebar dims, and brightens again on return.</td>
                 </tr>
+                <tr>
+                  <td>R8</td>
+                  <td>VoiceOver reads the sidebar's keyboard focus (Jun 2021)</td>
+                  <td>
+                    With VoiceOver on, press ⌘. and walk favorites, pinned tabs, folders, groups, splits, live folders and files. Each row is read as it is
+                    focused.
+                  </td>
+                </tr>
+                <tr>
+                  <td>R9</td>
+                  <td>A file row drags into a site as an upload (Jun 2021)</td>
+                  <td>Drag a PDF row from the sidebar into a Gmail message. It attaches.</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -980,12 +893,6 @@
         <section id="phases" aria-labelledby="phases-h">
           <h2 id="phases-h">Phases</h2>
           <ol class="flow">
-            <li>
-              <a href="#p1"><span class="n">Phase 1</span><strong>Before Arc shuts down</strong>10 small items</a>
-            </li>
-            <li>
-              <a href="#p2"><span class="n">Phase 2</span><strong>Keyboard &amp; undo</strong>3 items</a>
-            </li>
             <li>
               <a href="#p3"><span class="n">Phase 3</span><strong>Boosts</strong>Site tweaks</a>
             </li>
@@ -997,230 +904,9 @@
             </li>
           </ol>
           <p class="prose">
-            Phase 1 has a date: 22 December. Phases 2 and 3 don't depend on each other and can run side by side. Phases 4 and 5 start only after their decisions
-            are made. Phase 3 comes before Boost sharing in Phase 4.
+            Phase 1 (ten small habits) and Phase 2 (keyboard, undo and Finder files) have shipped. Phase 3 can start now. Phases 4 and 5 start only after their
+            decisions are made. Phase 3 comes before Boost sharing in Phase 4.
           </p>
-
-          <article class="phase" id="p1" aria-labelledby="p1-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 1</span>
-              <h3 id="p1-h">Before Arc shuts down</h3>
-              <span class="chip s">10 × S</span>
-            </div>
-            <p class="goal">
-              Small habits Arc users will reach for in their first week. Each one ships alone. Land them before Arc's reminders start on 23 November if
-              possible, and before 22 December at the latest.
-            </p>
-
-            <div class="item">
-              <h4>1 · Unread counts on favorites <span class="chip s">S</span></h4>
-              <p>
-                Arc badged Slack, X, Google Calendar and Gmail favorites with their counts. Read the count from the page title ("Inbox (3)", "(2) Slack") and
-                from favicon badges, and draw it on the Essentials tile. Keep a short list of title patterns per site, and fall back to a dot when a site only
-                changes its favicon.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>sidebar/PinnedGrid.tsx</code>, <code>media/TabBadges.tsx</code>, <code>lib/siteIcons.ts</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>A Gmail favorite shows the inbox count and clears when it reaches zero, also while asleep after its last count.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>2 · Little Bay from any app <span class="chip s">S</span></h4>
-              <p>
-                Arc had a menu bar button for Little Arc. Add an optional menu bar item and a global shortcut (default ⌥⌘N, settable, off until chosen) that
-                open a Little Bay window with the command bar focused, even when Bay is in the background.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>packages/shell/ios/AppModule.swift</code> (status item, global hot key), <code>littleBay/actions.ts</code>, Settings › Links</dd>
-              </dl>
-              <ul class="checks">
-                <li>From Finder, the shortcut opens Little Bay ready to type. Clicking the menu bar item does the same. Turning it off unregisters the key.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>3 · Little Bay windows put away after six hours <span class="chip s">S</span></h4>
-              <p>
-                Arc closed idle Little Arc windows after six hours and kept their links in the archive, filtered as Little Arc. Do the same with a setting for
-                the time, and add "Show/Hide All Little Bay Windows" to the Dock menu.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>littleBay/</code>, <code>lib/tabLifecycle.ts</code>, <code>packages/shell/ios/DockSelection.swift</code>, Library archive filter</dd>
-              </dl>
-              <ul class="checks">
-                <li>A Little Bay left alone for six hours closes, and its page is in the Library's archive under Little Bay.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>4 · Mouse buttons 4 and 5 switch spaces <span class="chip s">S</span></h4>
-              <p>
-                Arc let mice without a trackpad cycle spaces with the side buttons. Bay handles only the middle button (AppKit's <code>buttonNumber</code> 2).
-                Map the side buttons (<code>buttonNumber</code> 3 and 4) to Previous and Next Space when the pointer is over the sidebar, and keep Back and
-                Forward over the page.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>packages/shell/ios/System.swift</code> (<code>otherMouseUp</code>), <code>layout/spacePager.ts</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>Over the sidebar the side buttons switch spaces with the swipe animation; over a page they go back and forward.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>5 · Option shows the hidden sidebar <span class="chip s">S</span></h4>
-              <p>
-                With the sidebar auto-hidden, holding Option slides it in, and releasing slides it out. A setting turns it off. The shell already watches
-                modifier changes for ⌃Tab, so this adds Option to that monitor.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>packages/shell/ios/ShellModule.swift</code> (<code>flagsChanged</code>), <code>layout/useSidebarDock.ts</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>Holding Option alone shows the sidebar; Option as part of a shortcut or while typing doesn't.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>6 · Current tab out of view <span class="chip s">S</span></h4>
-              <p>When the selected tab is scrolled out of the sidebar, show a small marker at the top or bottom edge. Clicking it scrolls to the tab.</p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>components/Sidebar.tsx</code>, <code>sidebar/geometry.ts</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>With forty tabs, the marker shows at the edge nearest the tab and disappears once the tab is in view, in both densities.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>7 · Shift-Return opens the top result <span class="chip s">S</span></h4>
-              <p>
-                Arc's Instant Links skipped the results page. Shift-Return in the command bar sends the query through DuckDuckGo's "\" redirect (first result)
-                using Bay's bang support, with no AI and no new service. The hint shows in the Return keycap.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>omnibox/open.ts</code>, <code>omnibox/bangs.ts</code>, <code>omnibox/Keycaps.tsx</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>"bay browser github" with Shift-Return lands on the repository, not a results page. Private windows behave the same.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>8 · ⌃⌘J joins the meeting on now <span class="chip s">S</span></h4>
-              <p>Add Join Meeting to the menus with ⌃⌘J, using the same path as the alert's Join button. It is disabled when no meeting is on.</p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>packages/shell/ios/Menus.swift</code>, <code>live/MeetingAlert.tsx</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>Two minutes before a Meet event, ⌃⌘J opens the call in the space set for it.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>9 · Portrait capture <span class="chip s">S</span></h4>
-              <p>
-                Arc's Portrait Mode made a neat screenshot of the page in a phone-shaped frame with the theme behind it. Add "Capture in Portrait" to the
-                command bar and Option-click on Capture Full Page.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>components/capture/</code>, <code>developer/screenshot.ts</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>The image is saved to Downloads and the Library, at 2× scale, framed in the space's colours.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>10 · JSON viewer in Developer Mode <span class="chip s">S</span></h4>
-              <p>
-                Arc installed the JSON Formatter extension when Developer Mode was turned on. Bay can do better with no extension: format
-                <code>application/json</code> responses on dev tabs with folding, a raw toggle and copy path.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>components/developer/</code>, engine page script</dd>
-              </dl>
-              <ul class="checks">
-                <li>A localhost JSON endpoint shows formatted with folding; Raw shows the original bytes; non-dev tabs are unchanged.</li>
-              </ul>
-            </div>
-            <h4 class="exit">Exit criteria</h4>
-            <ul>
-              <li>All ten shipped in a release before 22 December, each with a native or unit check where the harness reaches it.</li>
-            </ul>
-          </article>
-
-          <article class="phase" id="p2" aria-labelledby="p2-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 2</span>
-              <h3 id="p2-h">Keyboard &amp; undo</h3>
-              <span class="chip m">2 × M</span><span class="chip m">1 × M</span>
-            </div>
-            <p class="goal">Arc's sidebar could be driven without a mouse, and almost every edit could be undone.</p>
-
-            <div class="item">
-              <h4>11 · Move around the sidebar from the keyboard <span class="chip m">M</span></h4>
-              <p>
-                ⌘. focuses the sidebar. Arrow keys move between rows and into folders, Return opens, Space peeks, ⌫ closes, ⌃⌘R renames, Escape returns to the
-                page. The focused row has a visible ring separate from the selection, and VoiceOver reads it.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>components/Sidebar.tsx</code>, <code>sidebar/state.ts</code>, <code>sidebar/entries.ts</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>Every row type (favorite, pinned, folder, group, live folder, split) can be reached and opened from the keyboard alone.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>12 · ⌘Z for any sidebar edit <span class="chip m">M</span></h4>
-              <p>
-                Generalise the folder-move undo into one stack per window for sidebar edits: close, clear, move, pin, unpin, rename, icon, theme. ⌘Z applies
-                when focus isn't in a text field or page editor, the same rule the folder undo already follows.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>lib/folderUndo.ts</code> to a general stack, <code>store/organize.ts</code>, <code>sidebar/clear.ts</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>Clear, then ⌘Z, brings every cleared tab back in place. Undo never fires while typing in a page.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>13 · Files and folders from Finder <span class="chip m">M</span></h4>
-              <p>
-                Dragging a file or folder from Finder into the pinned section keeps it there. A file opens in a tab (PDFs, images, HTML) or with its app. A
-                folder expands in place to show its files. Rows can be dragged into a page to upload. Synced as a bookmark-style path, shown as missing on a Mac
-                without the file.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>store/types.ts</code>, <code>sidebar/dnd.tsx</code>, sync schema, security-scoped bookmarks in the shell</dd>
-              </dl>
-              <ul class="checks">
-                <li>A dropped PDF opens from the sidebar after relaunch. Dragging it into Gmail attaches it. A second Mac shows the row as unavailable.</li>
-              </ul>
-            </div>
-            <h4 class="exit">Exit criteria</h4>
-            <ul>
-              <li>Keyboard pass with VoiceOver on; undo covers every listed edit; file rows survive relaunch and sync.</li>
-            </ul>
-          </article>
 
           <article class="phase" id="p3" aria-labelledby="p3-h">
             <div class="phase-head">
@@ -1396,26 +1082,11 @@
           <h2 id="risks-h">Risks</h2>
           <div class="grid2">
             <div class="card">
-              <h3>Time to the sunset</h3>
-              <p>
-                58 days to 22 December. If Phase 1 slips, ship the items that are done; the import and the features already matched matter more than any single
-                gap.
-              </p>
-            </div>
-            <div class="card">
               <h3>Boost injection</h3>
               <p>
                 Boosts run in every matching page. Arc had a security problem here in September 2024. Keep JS local and opt-in, inject in an isolated world, and
                 review before release.
               </p>
-            </div>
-            <div class="card">
-              <h3>Global shortcut clashes</h3>
-              <p>⌥⌘N is used by other apps. The global shortcut must be settable, start off, and say when the key is taken.</p>
-            </div>
-            <div class="card">
-              <h3>Unread counts are fragile</h3>
-              <p>Sites change their title formats. Keep the patterns in one place with tests, and fall back to a dot instead of a wrong number.</p>
             </div>
             <div class="card">
               <h3>On-device model reach</h3>
@@ -1462,11 +1133,6 @@
                   <td>JavaScript Boosts</td>
                   <td>Local, opt-in · CSS only</td>
                   <td>Local and opt-in, never synced</td>
-                </tr>
-                <tr>
-                  <td>Files from Finder</td>
-                  <td>Build · drop</td>
-                  <td>Build after keyboard and undo; drop if Phase 1 runs late</td>
                 </tr>
               </tbody>
             </table>
