@@ -5,9 +5,12 @@ export * from "./system";
 export * from "./app";
 export * from "./live";
 export * from "./capture";
+export * from "./easel";
 
 export type BrowserCommand =
   | "undoPinnedFolderMove"
+  | "openLibrary"
+  | "newEasel"
   | "newTab"
   | "newWindow"
   | "newIncognitoWindow"

@@ -308,6 +308,8 @@ enum MainMenu {
       cmd("Clean Up Tabs", "cleanUpTabs", "k", [.command, .option]),
       .separator(),
       cmd("Save Page As…", "savePage"),
+      cmd("New Easel", "newEasel", "e", [.control, .shift]),
+      cmd("Open Library", "openLibrary"),
       // Arc's Capture (apps/browser components/capture); ⇧2 types "@", which the hidden one matches.
       cmd("Capture", "capture", "2", [.command, .shift]),
       cmd("Capture", "capture", "@").hiddenShortcut(),

@@ -19,7 +19,8 @@
       "InlineCompletionModule",
       "TranslateModule",
       "WindowProfileModule",
-      "CaptureModule"
+      "CaptureModule",
+      "EaselModule"
     ]
   }
 }
