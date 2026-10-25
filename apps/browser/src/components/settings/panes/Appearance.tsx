@@ -5,7 +5,7 @@ import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import type { Settings } from "../../../store/settings";
 import { useHover } from "../../primitives";
-import { SectionHeader, useFormColors } from "../controls";
+import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { APP_ICON_CHOICE_SIZE } from "../constants";
 
@@ -176,6 +176,16 @@ function SidebarPositionPicker() {
         <SidebarPositionChoice value="left" title="On the left" selected={position !== "right"} onPress={() => choose("left")} />
         <SidebarPositionChoice value="right" title="On the right" selected={position === "right"} onPress={() => choose("right")} />
       </View>
+      {topTabs ? null : (
+        <Group style={{ marginTop: 14 }}>
+          <SettingToggle
+            setting="showSidebarOnOption"
+            settingId={SETTINGS.showSidebarOnOption.id}
+            title={SETTINGS.showSidebarOnOption.title}
+            description="With the sidebar hidden (⌘S), it slides out while you hold Option and away when you let go."
+          />
+        </Group>
+      )}
     </>
   );
 }

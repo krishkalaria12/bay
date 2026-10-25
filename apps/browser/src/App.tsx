@@ -1,6 +1,6 @@
 import { WindowBackdrop } from "@bay/shaders";
-import { setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/shell";
-import { useEffect, useState } from "react";
+import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/shell";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { CommandPanel } from "./components/CommandPanel";
@@ -33,6 +33,7 @@ import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme } from "./lib/theme";
 import { layout } from "./lib/constants";
+import { useEffectEvent } from "./lib/useEffectEvent";
 import { useBrowser } from "./store/browser";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
@@ -197,6 +198,31 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
     devPeeks.set(windowId, show);
     return () => void devPeeks.delete(windowId);
   }, [windowId, show]);
+  // Holding Option shows it, as Arc's did, and letting go hides it unless the pointer has gone into it meanwhile.
+  const pointerIn = useRef(false);
+  const heldOut = useRef(false);
+  const optionOn = useBrowser((s) => s.settings.showSidebarOnOption);
+  const optionEvent = useEffectEvent((type: string, from?: string) => {
+    if (type === "optionHeld" && from === windowId && optionOn && enabled) {
+      heldOut.current = true;
+      show();
+    } else if (type === "optionReleased" && heldOut.current) {
+      heldOut.current = false;
+      if (!pointerIn.current) hide();
+    }
+  });
+  useEffect(() => {
+    const sub = onAppEvent((e) => optionEvent(e.type, "windowId" in e ? e.windowId : undefined));
+    return () => sub.remove();
+  }, []);
+  const enter = () => {
+    pointerIn.current = true;
+    show();
+  };
+  const leave = () => {
+    pointerIn.current = false;
+    hide();
+  };
   useEffect(() => {
     onOut(live);
     return () => onOut(false);
@@ -222,8 +248,8 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
       ) : null}
       <Animated.View
         pointerEvents={live ? "auto" : "none"}
-        onMouseEnter={live ? show : undefined}
-        onMouseLeave={live ? hide : undefined}
+        onMouseEnter={live ? enter : undefined}
+        onMouseLeave={live ? leave : undefined}
         style={[
           {
             position: "absolute",

@@ -41,6 +41,12 @@ export const SETTINGS = {
   density: { id: "appearance.density", pane: "appearance", title: "Density", words: "comfortable compact rows icons size" },
   windowMaterial: { id: "appearance.windowMaterial", pane: "appearance", title: "Window", words: "solid glass transparent material background" },
   sidebarPosition: { id: "appearance.sidebarPosition", pane: "appearance", title: "Sidebar", words: "left right position side" },
+  showSidebarOnOption: {
+    id: "appearance.showSidebarOnOption",
+    pane: "appearance",
+    title: "Hold Option to show the hidden sidebar",
+    words: "alt option key peek auto-hide reveal",
+  },
   addressBar: { id: "appearance.addressBar", pane: "appearance", title: "Address Bar", words: "url toolbar location" },
   appIcon: { id: "appearance.appIcon", pane: "appearance", title: "App Icon", words: "dock" },
   tabLayout: { id: "tabs.tabLayout", pane: "tabs", title: "Tab layout", words: "sidebar top vertical horizontal" },

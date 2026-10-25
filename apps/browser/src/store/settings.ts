@@ -64,6 +64,8 @@ export type Settings = {
   sidebarWidth: number;
   // Which side of the window the sidebar docks on; the page takes the other. The window buttons stay at the top left.
   sidebarPosition: "left" | "right";
+  // Holding Option alone slides the hidden sidebar out, as Arc's did (App.tsx › SidebarPeek).
+  showSidebarOnOption: boolean;
   batterySaver: boolean;
   extensionSidePanelWidth: number;
 
@@ -128,6 +130,7 @@ export const DEFAULT_SETTINGS: Settings = {
   unreadBadges: true,
   sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
+  showSidebarOnOption: true,
   batterySaver: true,
   extensionSidePanelWidth: 360,
   showFullUrl: false,
