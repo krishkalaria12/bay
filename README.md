@@ -31,25 +31,31 @@ Bay's own: the window, sidebar, command bar, menus and animations.
 **From Arc, kept**
 
 - **Sidebar.** Favorites as tiles on top, pinned tabs under them, today's tabs below. It can sit on
-  either side, auto-hide, or turn into a top tab bar.
+  either side, auto-hide, or turn into a top tab bar. Hold Option to see a hidden sidebar, and use a mouse's side
+  buttons over it to change space. Favorites show unread counts from Gmail, Slack, X and other sites.
 - **Spaces.** Each has its own icon, colour theme and profile, so sign-ins stay apart. Swipe between them.
 - **Pinned tabs and folders.** Kept open a click away, and never closed by tidying.
 - **Old tabs put away.** Unused tabs leave after a time you choose for each space, say twelve hours for
   work and a week for home. They stay one search away.
 - **Peek.** A link opens over the page. Keep it as a tab or move it beside the page.
 - **Split View.** Two or more tabs side by side in one tab.
-- **Little Bay.** Links from Slack, Mail or Discord open in a small window of their own.
+- **Little Bay.** Links from Slack, Mail or Discord open in a small window of their own. Open one from any app
+  with a shortcut or the menu bar (Settings › Links). Windows left alone are put away after six hours, into the
+  Library's archive.
 - **Command bar.** One place for addresses, searches, open tabs and the ones put away (⌘L, or ⌘T for a
-  new tab).
+  new tab). ⇧↩ on a search opens its top result.
 - **Capture.** ⇧⌘2 lights up the part of the page under the pointer. Click it, or drag over any area, then copy,
-  save to Library, add to an Easel, share or mark up the picture. Capture Full Page saves the whole page to Downloads.
+  save to Library, add to an Easel, share or mark up the picture. Capture Full Page saves the whole page to Downloads,
+  and Capture in Portrait frames the page on your space's colours.
 - **Easels.** Local whiteboards for captures, images, links, text and drawings. Move and resize objects, pan and
   zoom, undo edits, or make a capture live. Create one with ⌃⇧E or “New Easel” in the command bar. Export as PNG
   or a self-contained HTML file. Closing its pinned tab keeps the Easel in Library.
 - **Library.** The books button at the foot of the sidebar gathers saved media, downloads, Easels, Spaces and
   archived tabs. Hover it to drag recent files, or type “Open Library” in the command bar.
 - **Previews.** Hover a folder, a Gmail or GitHub tab, or a calendar to see what's inside without
-  opening it.
+  opening it. ⌃⌘J joins the meeting that's on now.
+- **Developer Mode.** Local servers get the full address, an inspector and DevTools a click away. JSON responses
+  show as a tree you can fold, with the raw text a click away.
 
 **Bay's own**
 
@@ -100,6 +106,8 @@ A Mac with Apple silicon, running macOS 14 Sonoma or later.
 | ⌘R / ⇧⌘R | Reload / reload without the cache |
 | ⌘1 – ⌘8 | Select a tab |
 | ⌃Tab | Switch between recent tabs |
+| ⇧↩ | Open a search's top result (command bar) |
+| ⌃⌘J | Join the meeting that's on now |
 | ⌃⇧= | Add a split pane |
 | ⌥⇧⌘I | Send feedback |
 
