@@ -1,6 +1,19 @@
 export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
 export const writeDocument = (name, contents) => docs.set(name, contents);
+// Native file access is opt-in for each test. A synced path by itself has no grant.
+export const localFileAnswers = {
+  inspect: async () => ({ status: "inaccessible" }),
+  list: async () => ({ access: { status: "inaccessible" }, entries: [] }),
+  open: async () => ({ status: "inaccessible" }),
+  reconnect: async () => null,
+};
+export const localFiles = {
+  inspect: (...args) => localFileAnswers.inspect(...args),
+  list: (...args) => localFileAnswers.list(...args),
+  open: (...args) => localFileAnswers.open(...args),
+  reconnect: (...args) => localFileAnswers.reconnect(...args),
+};
 // saveDocument lands at once, or, while heldSaves.on, when a test runs the queued releases.
 export const heldSaves = { on: false, queue: [] };
 export const saveDocument = (name, contents) =>
@@ -239,3 +252,6 @@ export const extensionSidePanelUrl = (browserId, extensionId) => extensionAnswer
 // Library assets: a test can replace the importer to simulate an unavailable file.
 export const libraryImages = { retain: async (path) => ({ path: `/data/Library Media/${path.split("/").pop()}`, width: 640, height: 480 }) };
 export const retainLibraryImage = (path) => libraryImages.retain(path);
+
+export const sidebarKeyboardCalls = [];
+export const setSidebarKeyboard = (windowId, active) => (sidebarKeyboardCalls.push({ windowId, active }), Promise.resolve());

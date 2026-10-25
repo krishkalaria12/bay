@@ -6,8 +6,12 @@ export * from "./app";
 export * from "./live";
 export * from "./capture";
 export * from "./easel";
+export * from "./localFiles";
 
 export type BrowserCommand =
+  | "focusSidebar"
+  | "sidebarKey"
+  | "sidebarBlur"
   | "undoPinnedFolderMove"
   | "openLibrary"
   | "newEasel"
@@ -252,6 +256,8 @@ const Shell = requireNativeModule<{
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
+  focusSidebarRow?(windowId: string, tag: number): Promise<void>;
+  setSidebarKeyboard?(windowId: string, active: boolean): Promise<void>;
   setSidebarMoveUndo?(windowId: string, available: boolean, focus: boolean): Promise<void>;
   setMenuBookmarks(bookmarks: Pick<MenuState, MenuBookmarkKey>): Promise<void>;
   replyToTerminate(ok: boolean): Promise<void>;
@@ -264,6 +270,10 @@ export const writeDocument = (name: string, contents: string) => Shell.writeDocu
 /** Resolves once the document is on disk (writeDocument returns before), rejects if it can't be written. */
 export const saveDocument = (name: string, contents: string) => Shell.saveDocument(name, contents);
 export const removeDocument = (name: string) => Shell.removeDocument(name);
+
+export const focusSidebarRow = (windowId: string, tag: number) => Shell.focusSidebarRow?.(windowId, tag) ?? Promise.resolve();
+
+export const setSidebarKeyboard = (windowId: string, active: boolean) => Shell.setSidebarKeyboard?.(windowId, active) ?? Promise.resolve();
 
 /** Claims sidebar focus only after a move; ordinary text/page focus retains its own Undo. */
 export const setSidebarMoveUndo = (windowId: string, available: boolean, focus = false) =>

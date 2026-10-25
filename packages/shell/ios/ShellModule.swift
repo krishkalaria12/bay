@@ -315,6 +315,13 @@ public class ShellModule: Module {
       MenuState.current = MenuState(state)
       MainMenu.refresh()
     }.runOnQueue(.main)
+    AsyncFunction("focusSidebarRow") { (windowId: String, tag: Int) in
+      guard let row = self.appContext?.findView(withTag: tag, ofType: NSView.self) else { return }
+      SidebarMoveUndoView.focusRow(windowId: windowId, row: row)
+    }.runOnQueue(.main)
+    AsyncFunction("setSidebarKeyboard") { (windowId: String, active: Bool) in
+      SidebarMoveUndoView.setKeyboard(windowId: windowId, active: active)
+    }.runOnQueue(.main)
     AsyncFunction("setSidebarMoveUndo") { (windowId: String, available: Bool, focus: Bool) in
       SidebarMoveUndoView.set(windowId: windowId, available: available, focus: focus)
     }.runOnQueue(.main)

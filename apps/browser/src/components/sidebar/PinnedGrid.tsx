@@ -12,11 +12,11 @@ import { useBrowser } from "../../store/browser";
 import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
 import { awayFromPin } from "../../store/organize";
 import { NextMeetingBadge } from "../live/NextMeetingBadge";
-import { clickTab, startRename } from "./actions";
+import { clickTab, startRename, tabTitle } from "./actions";
 import { useDragController, useDragItem, useDropPins } from "./dnd";
 import { dismissHover, useRowHover } from "./hover";
 import { openTabMenu } from "./menus";
-import { registerRow } from "./state";
+import { SidebarKeyboardRowView } from "./keyboardFocus";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { UnreadBadge } from "./UnreadBadge";
@@ -113,7 +113,13 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
 
   return (
     <Animated.View ref={ref} style={style} {...handle}>
-      <View ref={(v) => registerRow(windowId, tabId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}>
+      <SidebarKeyboardRowView
+        rowId={`t:${tabId}`}
+        legacyId={tabId}
+        label={tabTitle(tab)}
+        {...hoverProps}
+        onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
+      >
         <MouseArea onMiddleClick={() => void closeTab(tabId)}>
           <ContextMenuArea
             onContextMenu={() => {
@@ -216,7 +222,7 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
             <Symbol name={tab.muted ? "speaker.slash.fill" : "speaker.wave.2.fill"} size={8} color={theme.textSecondary} style={{ width: 12, height: 10 }} />
           </View>
         ) : null}
-      </View>
+      </SidebarKeyboardRowView>
     </Animated.View>
   );
 });

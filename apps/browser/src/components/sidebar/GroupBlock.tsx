@@ -19,7 +19,8 @@ import { GROUP_BORDER, GROUP_PAD } from "./constants";
 import { useGroupEntries } from "./entries";
 import { dismissHover, useRowHover } from "./hover";
 import { openGroupMenu } from "./menus";
-import { registerRow, useSidebarUi } from "./state";
+import { SidebarKeyboardRowView } from "./keyboardFocus";
+import { useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, SplitRowItem, TabRowItem } from "./TabRow";
 import { GROUP_COLORS, useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
@@ -101,7 +102,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
       return t && { url: t.url, favicon: t.favicon, customIcon: t.customIcon, spaceId: t.spaceId };
     }),
   );
-  const renaming = useSidebarUi((u) => u.renaming?.kind === "group" && u.renaming.id === groupId);
+  const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "group" && u.renaming.id === groupId);
   const dropInto = useDropInto() === groupId;
   const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming ? { kind: "group", id: groupId } : null);
   const countdown = useMeetingCountdown(groupId);
@@ -110,7 +111,13 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
   const target = { kind: "group" as const, id: groupId };
 
   return (
-    <View ref={(v) => registerRow(windowId, groupId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, target)}>
+    <SidebarKeyboardRowView
+      rowId={`g:${groupId}`}
+      legacyId={groupId}
+      label={`${label}, ${collapsed ? "collapsed" : "expanded"}`}
+      {...hoverProps}
+      onDoubleClick={() => void startRename(windowId, target)}
+    >
       <ContextMenuArea
         onContextMenu={() => {
           dismissHover();
@@ -185,6 +192,6 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
           )}
         </Pressable>
       </ContextMenuArea>
-    </View>
+    </SidebarKeyboardRowView>
   );
 }

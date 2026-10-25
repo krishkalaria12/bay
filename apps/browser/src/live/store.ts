@@ -1,5 +1,7 @@
 import { readDocument, writeDocument } from "@bay/shell";
 import { create } from "zustand";
+import { useBrowser } from "../store/browser";
+import { sidebarUndoWindow } from "../store/sidebarUndo";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
 import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 
@@ -149,8 +151,19 @@ export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: Li
   return id;
 }
 
-export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>) {
+export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>, originWindowId?: string) {
+  const before = useLive.getState().folders[id];
   setLive((s) => (s.folders[id] ? { folders: { ...s.folders, [id]: { ...s.folders[id]!, ...patch } } } : {}));
+  const fields = (["name", "icon"] as const).filter((key) => before && patch[key] !== undefined && before[key] !== patch[key]);
+  const windowId = originWindowId ?? sidebarUndoWindow() ?? useBrowser.getState().ui.focusedWindowId;
+  if (before && windowId && fields.length)
+    useBrowser.getState().pushSidebarUndo(windowId, () => {
+      const current = useLive.getState().folders[id];
+      if (!current) return;
+      const restore: Partial<LiveFolder> = {};
+      for (const key of fields) if (current[key] === patch[key]) Object.assign(restore, { [key]: before[key] });
+      setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
+    });
 }
 
 const without = <T>(record: Record<string, T>, key: string) => {

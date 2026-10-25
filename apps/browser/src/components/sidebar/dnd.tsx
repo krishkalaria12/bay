@@ -1,6 +1,6 @@
-import { hapticTick } from "@bay/shell";
+import { hapticTick, LocalFilesArea } from "@bay/shell";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
-import { PanResponder, type ScrollView, type View } from "react-native";
+import { PanResponder, Text, type ScrollView, type View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -493,6 +493,39 @@ class DragController {
 }
 
 const DragContext = createContext<DragController | null>(null);
+
+/** Native Finder drops are pins, separate from the internal tab-reordering gesture. */
+export function FinderDropZone({ windowId, spaceId, enabled = true, children }: { windowId: string; spaceId: string; enabled?: boolean; children: ReactNode }) {
+  const theme = useTheme();
+  const allowed = useBrowser(
+    (s) => enabled && !!s.spaces[spaceId] && !!s.windows[windowId] && !s.windows[windowId]!.incognito && s.windows[windowId]!.kind !== "small",
+  );
+  const [active, setActive] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <LocalFilesArea
+      dropEnabled={allowed}
+      onDropActive={(event) => {
+        setActive(event.nativeEvent.active);
+        if (event.nativeEvent.active) setError("");
+      }}
+      onFilesDropError={(event) => setError(event.nativeEvent.message)}
+      onFilesDropped={(event) => {
+        if (!allowed) return;
+        useBrowser.getState().pinLocalFiles(windowId, event.nativeEvent.files, spaceId);
+        setActive(false);
+      }}
+      style={{ minHeight: 12, borderRadius: 8, backgroundColor: active && allowed ? theme.tabHover : "transparent" }}
+    >
+      {children}
+      {error ? (
+        <Text accessibilityRole="alert" style={{ color: theme.textSecondary, fontSize: 11, padding: 6 }}>
+          {error}
+        </Text>
+      ) : null}
+    </LocalFilesArea>
+  );
+}
 
 export function DragProvider({ children }: { children: (ghost: Ghost | null, controller: DragController) => ReactNode }) {
   const windowId = useWindowId();

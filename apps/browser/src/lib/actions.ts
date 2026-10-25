@@ -1,3 +1,4 @@
+import { sidebarUndoWindow, withSidebarUndoWindow } from "../store/sidebarUndo";
 import * as cef from "@bay/nncore";
 import { listExtensions } from "@bay/nncore";
 import { confirm, focusWindow } from "@bay/shell";
@@ -35,6 +36,7 @@ export async function closeTab(tabId: string) {
   const tab = s.tabs[tabId];
   const w = tab && s.windows[tab.windowId];
   if (!tab || !w) return;
+  const origin = sidebarUndoWindow() ?? s.ui.focusedWindowId ?? tab.windowId;
   const last = closesWindow(s, tabId);
   if (last && s.settings.warnBeforeClosingLastTab && !w.incognito) {
     const { confirmed, suppressed } = await confirm({ ...closeWindowDialog(w.id), suppression: "Don’t ask me again", windowId: w.id });
@@ -43,7 +45,7 @@ export async function closeTab(tabId: string) {
     // The page's last reports land before the tab closes (Reopen Closed Tab restores what it showed).
     applyHeldReports();
   }
-  store().closeTab(tabId);
+  withSidebarUndoWindow(origin, () => store().closeTab(tabId));
 }
 
 export function toggleMute(tabId: string) {

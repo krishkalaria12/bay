@@ -1,3 +1,4 @@
+import { withSidebarUndoWindow } from "../store/sidebarUndo";
 import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/shell";
 import { markdownLink } from "@bay/core";
 import { useBrowser } from "../store/browser";
@@ -28,7 +29,11 @@ import { isSmall, mainWindowFor } from "../store/small";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
 import { joinMeetingNow } from "../live/alerts";
 
-export function runCommand({ command, arg, windowId: requested }: CommandEvent) {
+export function runCommand(event: CommandEvent) {
+  return withSidebarUndoWindow(event.windowId ?? undefined, () => dispatchCommand(event));
+}
+
+function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
   const s = useBrowser.getState();
 
   if (isUtilityWindowId(requested)) {
@@ -42,8 +47,10 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
   switch (command) {
-    case "undoPinnedFolderMove":
-      return s.undoPinnedFolderMove();
+    case "undoPinnedFolderMove": {
+      const id = resolveWindowId(s, requested);
+      return id ? s.undoSidebarEdit(id) : false;
+    }
     case "newWindow":
       return void openWindow({ spaceId: arg ?? undefined });
     case "newIncognitoWindow":

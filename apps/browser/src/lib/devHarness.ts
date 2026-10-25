@@ -31,6 +31,10 @@ export function startDevHarness() {
 
   const nn = {
     store: useBrowser,
+    sidebarUi: useSidebarUi,
+    get sidebarKeyboard(): typeof import("../components/sidebar/keyboard") & { model: typeof import("../components/sidebar/keyboardModel") } {
+      return { ...require("../components/sidebar/keyboard"), model: require("../components/sidebar/keyboardModel") };
+    },
     actions,
     runCommand,
     get externalLinks(): typeof import("../components/littleBay/actions") {

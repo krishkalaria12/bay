@@ -152,7 +152,7 @@ const shortcuts = [
   ["⌘E", cmd("e", 14), { command: "useSelectionForFind" }, "⌘E is Chat (no AI)"],
   ["⌘:", cmd(":", 41, "shift"), { title: "Show Spelling and Grammar" }, "⌘:", "window-only"],
   ["⌘;", cmd(";", 41), { title: "Check Document Now" }, "⌘;", "window-only"],
-  ["⌘.", cmd(".", 47), { command: "stop" }, "(Chrome's)"],
+  ["⌘.", cmd(".", 47), { command: "focusSidebar" }, "sidebar navigation"],
   ["⌘R", cmd("r", 15), { command: "reload" }, "⌘R"],
   ["⇧⌘R", cmd("R", 15, "shift"), { command: "forceReload" }, "⇧⌘R"],
   ["⇧⌘S", cmd("S", 1, "shift"), { command: "toggleTabLayout" }, "⇧⌘S"],

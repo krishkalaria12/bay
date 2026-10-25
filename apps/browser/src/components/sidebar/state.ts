@@ -5,6 +5,7 @@ export type Anchor = { x: number; y: number; width: number; height: number };
 export type Target = { kind: "tab" | "group" | "folder" | "live" | "space"; id: string };
 
 type SidebarUi = {
+  keyboard: Record<string, { rowId: string | null; active: boolean }>;
   renaming: (Target & { windowId: string }) | null;
   iconPicker: (Target & { windowId: string; anchor: Anchor | null }) | null;
   // The + menu at the sidebar's foot (sidebar/NewMenu.tsx), over the + it came from.
@@ -16,6 +17,7 @@ type SidebarUi = {
 };
 
 export const useSidebarUi = create<SidebarUi>()(() => ({
+  keyboard: {},
   renaming: null,
   iconPicker: null,
   newMenu: null,

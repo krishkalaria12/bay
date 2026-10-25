@@ -26,18 +26,20 @@ import { clearableTabs, clearTabs } from "./sidebar/clear";
 import { UPDATE_ROW_HEIGHT, UpdateRow, useUpdateRowShown } from "./sidebar/UpdateRow";
 import { SidebarAddressRow, SidebarHeaderTools } from "./sidebar/AddressBar";
 import { DragGhost } from "./sidebar/DragGhost";
-import { DragProvider, DragScope, useDragController, useDragItem, type Ghost } from "./sidebar/dnd";
+import { FinderDropZone, DragProvider, DragScope, useDragController, useDragItem, type Ghost } from "./sidebar/dnd";
 import { sidebarEntries, useSidebarEntries } from "./sidebar/entries";
 import { FolderBlock } from "./sidebar/FolderBlock";
 import { FoldAway, useFold } from "./sidebar/Fold";
 import { GroupBlock } from "./sidebar/GroupBlock";
 import { dismissHover } from "./sidebar/hover";
+import { LocalFiles } from "./sidebar/LocalFiles";
 import { LiveFolders } from "./sidebar/LiveFolderBlock";
 import { openOverflowMenu, openSidebarMenu } from "./sidebar/menus";
 import { PinDropZone, PinnedGrid } from "./sidebar/PinnedGrid";
 import { ResizeHandle } from "./sidebar/ResizeHandle";
 import { entriesHeight, offscreenSide, rowSpan, type Section } from "./sidebar/geometry";
 import { OffscreenTabMarker } from "./sidebar/OffscreenTabMarker";
+import { SidebarKeyboardScope, useSidebarKeyboard } from "./sidebar/keyboardFocus";
 import { measureRow } from "./sidebar/state";
 import { SplitRowItem, TabRowItem } from "./sidebar/TabRow";
 import { ClosingTabRow, OpeningRow, useRowMotion } from "./sidebar/RowMotion";
@@ -100,6 +102,7 @@ export function Sidebar() {
   const footer = PROFILE_DOTS_HEIGHT + (update ? UPDATE_ROW_HEIGHT : 0);
   const nothingPinned = useBrowser((s) => sidebarEntries(s, windowId, current).tiles.length === 0);
 
+  useSidebarKeyboard(windowId, scroll, scrollY, glowRoom);
   useRevealTabs(windowId, scroll, scrollY, geometry, glowRoom);
   const offscreen = useOffscreenTab(windowId, scroll, scrollY, geometry, glowRoom);
   useEffect(() => {
@@ -248,6 +251,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
   const windowId = useWindowId();
   const metrics = useSidebarMetrics();
   const folded = useBrowser((s) => !!s.spaces[spaceId]?.folded);
+  const hasLocalFiles = useBrowser((s) => Object.values(s.localFiles).some((pin) => pin.spaceId === spaceId));
   const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, spaceId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
   // long sidebar neither holds up the window's first frame nor mounts in one long task after it.
@@ -312,111 +316,116 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
       <PageSpaceContext.Provider value={spaceId}>
         <ThemeScope>
           <DragScope enabled={current}>
-            <PageContent>
-              {(controller) => (
-                <Animated.View style={[{ flex: 1, overflow: "hidden" }, clip]}>
-                  <Animated.View style={[{ flex: 1 }, unclip]}>
-                    <Animated.ScrollView
-                      ref={current ? onScrollView : undefined}
-                      onLayout={
-                        geometryRef
-                          ? (e) => {
-                              geometryRef.current.viewport = e.nativeEvent.layout.height;
-                              geometryRef.current.laidOut?.();
-                            }
-                          : undefined
-                      }
-                      style={{ flex: 1 }}
-                      showsVerticalScrollIndicator={false}
-                      scrollEventThrottle={16}
-                      onScroll={current ? onScroll : undefined}
-                      contentContainerStyle={{ flexGrow: 1, width, paddingHorizontal: layout.sidebarInset, paddingTop: glowRoom }}
-                    >
-                      <View
-                        onLayout={(e) => {
-                          measured.current = e.nativeEvent.layout.height + glowRoom - (inlineNewTab ? metrics.rowHeight + NEW_TAB_GAP : 0);
-                          if (current) onListHeight(measured.current);
-                        }}
+            <SidebarKeyboardScope>
+              <PageContent>
+                {(controller) => (
+                  <Animated.View style={[{ flex: 1, overflow: "hidden" }, clip]}>
+                    <Animated.View style={[{ flex: 1 }, unclip]}>
+                      <Animated.ScrollView
+                        ref={current ? onScrollView : undefined}
+                        onLayout={
+                          geometryRef
+                            ? (e) => {
+                                geometryRef.current.viewport = e.nativeEvent.layout.height;
+                                geometryRef.current.laidOut?.();
+                              }
+                            : undefined
+                        }
+                        style={{ flex: 1 }}
+                        showsVerticalScrollIndicator={false}
+                        scrollEventThrottle={16}
+                        onScroll={current ? onScroll : undefined}
+                        contentContainerStyle={{ flexGrow: 1, width, paddingHorizontal: layout.sidebarInset, paddingTop: glowRoom }}
                       >
-                        <PinnedGrid tabs={tiles} innerWidth={innerWidth} />
-                        <View style={{ marginTop: tiles.length ? 6 : topGap }}>
-                          <SpaceTitle windowId={windowId} spaceId={spaceId} />
-                        </View>
-                        {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
-                        <FoldAway
-                          collapsed={folded}
-                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y + SPACE_TITLE_GAP) : undefined}
+                        <View
+                          onLayout={(e) => {
+                            measured.current = e.nativeEvent.layout.height + glowRoom - (inlineNewTab ? metrics.rowHeight + NEW_TAB_GAP : 0);
+                            if (current) onListHeight(measured.current);
+                          }}
                         >
-                          <View style={{ marginTop: SPACE_TITLE_GAP, gap: layout.rowGap }}>
-                            {pinned.map((entry) => (
-                              <PinnedEntry key={entry} entry={entry} />
-                            ))}
-                            <Tail id="tail:pinned" section="pinned" />
+                          <PinnedGrid tabs={tiles} innerWidth={innerWidth} />
+                          <View style={{ marginTop: tiles.length ? 6 : topGap }}>
+                            <SpaceTitle windowId={windowId} spaceId={spaceId} />
                           </View>
-                        </FoldAway>
-                        <PinnedDivider
-                          pinned={!folded && pinned.length > 0}
-                          listed={all.length > 0 || (!folded && pinnedGroups.length > 0)}
-                          windowId={windowId}
-                          spaceId={spaceId}
-                        />
-                        {/* The gap under the groups folds with them. */}
-                        <FoldAway
-                          collapsed={folded}
-                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
-                        >
+                          {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
+                          <FoldAway
+                            collapsed={folded}
+                            onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinned = e.nativeEvent.layout.y + SPACE_TITLE_GAP) : undefined}
+                          >
+                            <FinderDropZone windowId={windowId} spaceId={spaceId} enabled={current && !folded}>
+                              <View style={{ marginTop: SPACE_TITLE_GAP, gap: layout.rowGap }}>
+                                {pinned.map((entry) => (
+                                  <PinnedEntry key={entry} entry={entry} />
+                                ))}
+                                <LocalFiles windowId={windowId} spaceId={spaceId} />
+                                <Tail id="tail:pinned" section="pinned" />
+                              </View>
+                            </FinderDropZone>
+                          </FoldAway>
+                          <PinnedDivider
+                            pinned={!folded && (pinned.length > 0 || hasLocalFiles)}
+                            listed={all.length > 0 || (!folded && pinnedGroups.length > 0)}
+                            windowId={windowId}
+                            spaceId={spaceId}
+                          />
+                          {/* The gap under the groups folds with them. */}
+                          <FoldAway
+                            collapsed={folded}
+                            onLayout={geometryRef ? (e) => void (geometryRef.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
+                          >
+                            <View
+                              ref={(v) => {
+                                controller?.regions.set("pinnedGroups", v);
+                              }}
+                              style={{ gap: layout.rowGap, marginBottom: pinnedGroups.length ? 7 : 0 }}
+                            >
+                              {pinnedGroups.map((id) => (
+                                <GroupBlock key={id} groupId={id} section="pinnedGroups" />
+                              ))}
+                              <Tail id="tail:pinnedGroups" section="pinnedGroups" />
+                            </View>
+                          </FoldAway>
+                          <LiveFolders windowId={windowId} spaced={!folded && pinnedGroups.length > 0} />
                           <View
                             ref={(v) => {
-                              controller?.regions.set("pinnedGroups", v);
+                              controller?.regions.set("list", v);
                             }}
-                            style={{ gap: layout.rowGap, marginBottom: pinnedGroups.length ? 7 : 0 }}
+                            onLayout={geometryRef ? (e) => void (geometryRef.current.regions.list = e.nativeEvent.layout.y) : undefined}
+                            style={{ gap: layout.rowGap }}
                           >
-                            {pinnedGroups.map((id) => (
-                              <GroupBlock key={id} groupId={id} section="pinnedGroups" />
-                            ))}
-                            <Tail id="tail:pinnedGroups" section="pinnedGroups" />
+                            {newTabsAtTop && inlineNewTab ? (
+                              <View style={{ marginBottom: NEW_TAB_GAP - layout.rowGap }}>
+                                <NewTabRow windowId={windowId} />
+                              </View>
+                            ) : null}
+                            {listed.map((row) =>
+                              typeof row === "string" ? (
+                                <OpeningRow key={row} entry={row} opening={motion.opening.has(row)} onOpened={motion.opened}>
+                                  <ListEntry entry={row} />
+                                </OpeningRow>
+                              ) : (
+                                <ClosingTabRow key={`closing:${row.tab.id}`} row={row} onGone={motion.gone} />
+                              ),
+                            )}
+                            {pending ? <View style={{ height: pending }} /> : null}
+                            <Tail id="tail:list" section="list" />
+                            {!newTabsAtTop && inlineNewTab ? (
+                              <View style={{ marginTop: NEW_TAB_GAP - layout.rowGap }}>
+                                <NewTabRow windowId={windowId} />
+                              </View>
+                            ) : null}
                           </View>
-                        </FoldAway>
-                        <LiveFolders windowId={windowId} spaced={!folded && pinnedGroups.length > 0} />
-                        <View
-                          ref={(v) => {
-                            controller?.regions.set("list", v);
-                          }}
-                          onLayout={geometryRef ? (e) => void (geometryRef.current.regions.list = e.nativeEvent.layout.y) : undefined}
-                          style={{ gap: layout.rowGap }}
-                        >
-                          {newTabsAtTop && inlineNewTab ? (
-                            <View style={{ marginBottom: NEW_TAB_GAP - layout.rowGap }}>
-                              <NewTabRow windowId={windowId} />
-                            </View>
-                          ) : null}
-                          {listed.map((row) =>
-                            typeof row === "string" ? (
-                              <OpeningRow key={row} entry={row} opening={motion.opening.has(row)} onOpened={motion.opened}>
-                                <ListEntry entry={row} />
-                              </OpeningRow>
-                            ) : (
-                              <ClosingTabRow key={`closing:${row.tab.id}`} row={row} onGone={motion.gone} />
-                            ),
-                          )}
-                          {pending ? <View style={{ height: pending }} /> : null}
-                          <Tail id="tail:list" section="list" />
-                          {!newTabsAtTop && inlineNewTab ? (
-                            <View style={{ marginTop: NEW_TAB_GAP - layout.rowGap }}>
-                              <NewTabRow windowId={windowId} />
-                            </View>
-                          ) : null}
+                          {current ? <CleanUpUpsell windowId={windowId} /> : null}
                         </View>
-                        {current ? <CleanUpUpsell windowId={windowId} /> : null}
-                      </View>
-                      <ContextMenuArea style={{ flexGrow: 1, minHeight: inlineNewTab ? 24 : 0 }} onContextMenu={() => void openSidebarMenu(windowId)}>
-                        <View style={{ flex: 1 }} onDoubleClick={() => useBrowser.getState().openNewTabPanel(windowId)} />
-                      </ContextMenuArea>
-                    </Animated.ScrollView>
+                        <ContextMenuArea style={{ flexGrow: 1, minHeight: inlineNewTab ? 24 : 0 }} onContextMenu={() => void openSidebarMenu(windowId)}>
+                          <View style={{ flex: 1 }} onDoubleClick={() => useBrowser.getState().openNewTabPanel(windowId)} />
+                        </ContextMenuArea>
+                      </Animated.ScrollView>
+                    </Animated.View>
                   </Animated.View>
-                </Animated.View>
-              )}
-            </PageContent>
+                )}
+              </PageContent>
+            </SidebarKeyboardScope>
           </DragScope>
         </ThemeScope>
       </PageSpaceContext.Provider>

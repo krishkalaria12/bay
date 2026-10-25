@@ -12,6 +12,7 @@
       "GlassEffectModule",
       "SystemModule",
       "FileDragModule",
+      "LocalFilesModule",
       "AppModule",
       "CalendarModule",
       "KeychainModule",

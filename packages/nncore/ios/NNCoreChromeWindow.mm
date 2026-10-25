@@ -243,7 +243,7 @@ bool IsReservedKey(NSEvent *event) {
   NSString *key = event.charactersIgnoringModifiers.lowercaseString;
   if ((mods & NSEventModifierFlagControl) && event.keyCode == 48) return true;  // ⌃Tab, ⌃⇧Tab
   if (!(mods & NSEventModifierFlagCommand) || (mods & (NSEventModifierFlagControl | NSEventModifierFlagOption))) return false;
-  return [@[ @"t", @"w", @"n", @"q" ] containsObject:key];
+  return [@[ @"t", @"w", @"n", @"q", @"." ] containsObject:key];
 }
 
 }  // namespace
@@ -1068,6 +1068,19 @@ NSView *NNWindowRootView(NSWindow *window) {
 
 + (void (^)(NSWindow *, NSWindow *))swappedHandler {
   return gSwapped;
+}
+
++ (NSNumber *)focusedPageEditableInWindow:(NSWindow *)window {
+  NNCoreWindowController *controller = [NNCoreWindowController forNSWindow:window];
+  NSResponder *focused = window.firstResponder;
+  if (!controller || ![focused isKindOfClass:NSView.class]) return nil;
+  for (NNCoreProfile *profile in nncore_host::LoadedProfiles()) {
+    for (NNCoreTab *tab in [controller.coreWindow tabsForProfile:profile]) {
+      NNCoreWebView *view = [NNCoreTabs viewForTab:tab];
+      if (view.visible && [(NSView *)focused isDescendantOf:tab.view]) return @(tab.focusedEditable);
+    }
+  }
+  return nil;
 }
 
 + (void)closeWindow:(NSWindow *)window {

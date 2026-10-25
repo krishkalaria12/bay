@@ -237,6 +237,7 @@ final class FileDragView: ExpoView, NSDraggingSource {
   }
 
   func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-    context == .outsideApplication ? [.copy, .generic] : []
+    // Chromium pages are inside Bay too. They need .copy to accept a file URL as an upload.
+    context == .outsideApplication ? [.copy, .generic] : .copy
   }
 }

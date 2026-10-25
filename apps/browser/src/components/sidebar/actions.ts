@@ -5,6 +5,7 @@ import { useBrowser } from "../../store/browser";
 import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
 import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
+import { withSidebarUndoWindow } from "../../store/sidebarUndo";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
 
@@ -66,7 +67,7 @@ export async function startRename(windowId: string, target: Target) {
         confirmTitle: "Update",
         windowId,
       });
-      if (name !== null) store().updateTab(tab.id, { customTitle: name });
+      if (name !== null) withSidebarUndoWindow(windowId, () => store().updateTab(tab.id, { customTitle: name }));
       return;
     }
     const group = groupOf(s, tab.id);
@@ -82,13 +83,15 @@ export async function startRename(windowId: string, target: Target) {
 }
 
 export function commitRename(target: Target, text: string) {
-  const name = text.trim();
-  if (target.kind === "tab") {
-    const tab = store().tabs[target.id];
-    if (tab) store().updateTab(tab.id, { customTitle: name && name !== tab.title ? name : null });
-  } else if (target.kind === "folder") store().updatePinnedFolder(target.id, { name });
-  else store().updateGroup(target.id, { name });
-  endRename(target);
+  return withSidebarUndoWindow(sidebarUi().renaming?.windowId, () => {
+    const name = text.trim();
+    if (target.kind === "tab") {
+      const tab = store().tabs[target.id];
+      if (tab) store().updateTab(tab.id, { customTitle: name && name !== tab.title ? name : null });
+    } else if (target.kind === "folder") store().updatePinnedFolder(target.id, { name });
+    else store().updateGroup(target.id, { name });
+    endRename(target);
+  });
 }
 
 export function endRename(target: Target) {
@@ -101,13 +104,15 @@ export async function openIconPicker(windowId: string, target: Target) {
   setSidebarUi({ iconPicker: { windowId, ...target, anchor }, hover: null });
 }
 
-export function setIcon(target: Target, icon: string | null) {
-  if (target.kind === "tab") store().updateTab(target.id, { customIcon: icon });
-  // A live folder's header row ("livefolder|<id>").
-  else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
-  else if (target.kind === "folder") store().updatePinnedFolder(target.id, { icon });
-  else if (target.kind === "space") store().updateSpace(target.id, { icon });
-  else store().updateGroup(target.id, { icon });
+export function setIcon(target: Target & { windowId?: string }, icon: string | null) {
+  return withSidebarUndoWindow(target.windowId, () => {
+    if (target.kind === "tab") store().updateTab(target.id, { customIcon: icon });
+    // A live folder's header row ("livefolder|<id>").
+    else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
+    else if (target.kind === "folder") store().updatePinnedFolder(target.id, { icon });
+    else if (target.kind === "space") store().updateSpace(target.id, { icon });
+    else store().updateGroup(target.id, { icon });
+  });
 }
 
 export function newGroupWithSelection(windowId: string, ids = selectedTabIds(store(), windowId)) {

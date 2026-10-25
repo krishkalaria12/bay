@@ -19,6 +19,7 @@ import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowser } from "../../store/browser";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
+import { withSidebarUndoWindow } from "../../store/sidebarUndo";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
@@ -120,7 +121,7 @@ function ThemeEditor({ request }: { request: Request }) {
         <View ref={keys} focusable enableFocusRing={false} keyDownEvents={[{ key: "Escape" }]} onKeyDown={close} style={{ padding: THEME_EDITOR_PAD }}>
           <ThemeControls
             look={{ color: space.color, theme: space.theme ?? null, followSite: space.followSite }}
-            onChange={(next) => useBrowser.getState().updateSpace(request.spaceId, next)}
+            onChange={(next) => withSidebarUndoWindow(request.windowId, () => useBrowser.getState().updateSpace(request.spaceId, next))}
           />
         </View>
       </Surface>

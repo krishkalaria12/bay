@@ -34,7 +34,12 @@ Bay's own: the window, sidebar, command bar, menus and animations.
   either side, auto-hide, or turn into a top tab bar. Hold Option to see a hidden sidebar, and use a mouse's side
   buttons over it to change space. Favorites show unread counts from Gmail, Slack, X and other sites.
 - **Spaces.** Each has its own icon, colour theme and profile, so sign-ins stay apart. Swipe between them.
-- **Pinned tabs and folders.** Kept open a click away, and never closed by tidying.
+- **Pinned tabs and folders.** Kept open a click away, and never closed by tidying. ⌘. focuses the sidebar;
+  arrows move through its rows and folders, Return opens, Space peeks, and Escape returns to the page.
+- **Sidebar undo.** ⌘Z reverses closes, clearing, moves, pinning, names, icons and themes in the window where
+  you edited them. Page editors and text fields keep their own Undo.
+- **Finder files.** Drop files or folders into the pinned section. Folders expand in place; PDFs, images and
+  HTML open in tabs. Drag a file row into a website to upload it. Synced pins ask for local access on another Mac.
 - **Old tabs put away.** Unused tabs leave after a time you choose for each space, say twelve hours for
   work and a week for home. They stay one search away.
 - **Peek.** A link opens over the page. Keep it as a tab or move it beside the page.
@@ -100,6 +105,8 @@ A Mac with Apple silicon, running macOS 14 Sonoma or later.
 | ⌘T | New tab (command bar) |
 | ⌘L | Command bar for the current tab |
 | ⌘W / ⇧⌘T | Close tab / reopen it |
+| ⌘. | Focus sidebar, then use arrow keys |
+| ⌘Z | Undo a sidebar edit |
 | ⌘S | Auto-hide the sidebar |
 | ⇧⌘S | Tabs in the sidebar or along the top |
 | ⌘[ / ⌘] | Back / forward |

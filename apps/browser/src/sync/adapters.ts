@@ -1,3 +1,4 @@
+import { withoutSidebarUndo } from "../store/sidebarUndo";
 import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } from "@bay/nncore";
 import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
@@ -101,7 +102,9 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
       for (const [id, { syncId }] of linked()) {
         const record = visible.get(`prof:${syncId}`) as ProfileRecord | undefined;
         if (!record || !changed.has(`prof:${syncId}`)) continue;
-        store().updateSpace(id, { name: record.n, color: record.c, icon: record.i, ...(typeof record.f === "boolean" ? { folded: record.f } : {}) });
+        withoutSidebarUndo(() =>
+          store().updateSpace(id, { name: record.n, color: record.c, icon: record.i, ...(typeof record.f === "boolean" ? { folded: record.f } : {}) }),
+        );
       }
     },
   };

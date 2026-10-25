@@ -36,6 +36,7 @@ import {
 } from "./adapters";
 import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_CYCLE_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
 import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules";
+import { localFilesAdapter } from "./localFiles";
 
 export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "settings";
 
@@ -43,7 +44,7 @@ export const DATA_TYPES: { id: DataType; title: string; description: string }[] 
   { id: "bookmarks", title: "Bookmarks", description: "Each synced profile’s bookmarks bar and other bookmarks." },
   { id: "history", title: "History", description: "The last 90 days." },
   { id: "tabs", title: "Open Tabs", description: "Your other devices’ tabs show in the tab overflow menu." },
-  { id: "pinned", title: "Pinned Tabs and Groups", description: "Pinned tabs and pinned tab groups." },
+  { id: "pinned", title: "Pinned Tabs and Groups", description: "Pinned tabs, folders and file paths. File access stays on each Mac." },
   { id: "passwords", title: "Passwords", description: "Saved passwords. Turning sync off never removes them from this Mac." },
   { id: "settings", title: "Settings", description: "Search engine, appearance, tab and keyboard settings." },
 ];
@@ -261,7 +262,7 @@ function profileAdapters(spaceId: string, retiring: boolean): Adapter[] {
   // Spaces sharing sign-ins share one profile's bookmarks, history and passwords: one of them syncs those.
   const owns = ownsProfileData(useBrowser.getState(), spaceId);
   return [
-    ...(t.pinned ? [pinnedAdapter(spaceId)] : []),
+    ...(t.pinned ? [pinnedAdapter(spaceId), localFilesAdapter(spaceId)] : []),
     ...(t.bookmarks && owns ? [bookmarksAdapter(spaceId)] : []),
     ...(t.history && owns ? [historyAdapter(spaceId)] : []),
     deviceTabsAdapter(spaceId, id, deviceName, !t.tabs),
@@ -550,7 +551,14 @@ export function startSync() {
   }
   useBrowser.subscribe((s, prev) => {
     if (!doc.enabled || running) return;
-    if (s.bookmarks !== prev.bookmarks || s.settings !== prev.settings || s.spaces !== prev.spaces || s.groups !== prev.groups) scheduleSync();
+    if (
+      s.bookmarks !== prev.bookmarks ||
+      s.settings !== prev.settings ||
+      s.spaces !== prev.spaces ||
+      s.groups !== prev.groups ||
+      s.localFiles !== prev.localFiles
+    )
+      scheduleSync();
   });
   if (__DEV__) {
     (globalThis as { nnSync?: object }).nnSync = {

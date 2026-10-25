@@ -34,7 +34,7 @@ import { clickMods, TabRow } from "./TabRow";
 import { Fold, useFold, type FoldEntry } from "./Fold";
 import { dismissHover, useRowHover } from "./hover";
 import { openLiveFolderMenu, openLiveItemMenu } from "./liveMenus";
-import { registerRow } from "./state";
+import { SidebarKeyboardRowView } from "./keyboardFocus";
 import { TabIcon } from "./TabIcon";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { LIVE_FOLDER_PAD, LIVE_POP_SPRING } from "./constants";
@@ -110,7 +110,7 @@ function FolderRowView({ row, folderId, windowId }: { row: FolderRow; folderId: 
     case "header":
       return <SectionTitle title={row.title} />;
     case "more":
-      return <MoreRow folderId={folderId} section={row.section} count={row.count} />;
+      return <MoreRow windowId={windowId} folderId={folderId} section={row.section} count={row.count} />;
     case "stack":
       return <StackRow folderId={folderId} windowId={windowId} stack={row} />;
     case "item":
@@ -145,7 +145,12 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
   const icon = folder.icon ?? (folder.sources.length > 1 && folder.kind === "documents" ? "symbol:doc.text" : null);
 
   return (
-    <View ref={(v) => registerRow(windowId, `livefolder|${folderId}`, v)} {...hoverProps}>
+    <SidebarKeyboardRowView
+      rowId={`livefolder|${folderId}`}
+      legacyId={`livefolder|${folderId}`}
+      label={`${folder.name}, ${collapsed ? "collapsed" : "expanded"}`}
+      {...hoverProps}
+    >
       <ContextMenuArea
         onContextMenu={() => {
           dismissHover();
@@ -201,7 +206,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
           )}
         </Pressable>
       </ContextMenuArea>
-    </View>
+    </SidebarKeyboardRowView>
   );
 }
 
@@ -277,12 +282,12 @@ function Spinner() {
   );
 }
 
-function MoreRow({ folderId, section, count }: { folderId: string; section: string; count: number }) {
+function MoreRow({ folderId, section, count }: { windowId: string; folderId: string; section: string; count: number }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   const key = `${folderId}:${section}`;
   return (
-    <View {...hoverProps}>
+    <SidebarKeyboardRowView rowId={`more|${folderId}|${section}`} label={`Show ${count} more`} {...hoverProps}>
       <Pressable onPress={() => setLive((s) => ({ showAll: { ...s.showAll, [key]: true } }))}>
         <View
           style={{
@@ -298,7 +303,7 @@ function MoreRow({ folderId, section, count }: { folderId: string; section: stri
           <Text style={{ marginLeft: 5, fontSize: 12, color: theme.textSecondary }}>Show {count} More</Text>
         </View>
       </Pressable>
-    </View>
+    </SidebarKeyboardRowView>
   );
 }
 
@@ -312,7 +317,7 @@ function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: s
   const repo = stack.repo.split("/")[1] ?? stack.repo;
   return (
     <View>
-      <View {...hoverProps}>
+      <SidebarKeyboardRowView rowId={`stack|${folderId}|${stack.id}`} label={`${repo} stack, ${collapsed ? "collapsed" : "expanded"}`} {...hoverProps}>
         <Pressable
           onPress={() => setLive((s) => ({ expandedStacks: { ...s.expandedStacks, [stack.id]: collapsed } }))}
           accessibilityLabel={collapsed ? "Expand pull request stack" : "Collapse pull request stack"}
@@ -355,7 +360,7 @@ function StackRow({ folderId, windowId, stack }: { folderId: string; windowId: s
             />
           </View>
         </Pressable>
-      </View>
+      </SidebarKeyboardRowView>
       <Fold
         fold={fold}
         collapsed={collapsed}
@@ -400,7 +405,7 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
 
   return (
     <Animated.View style={foldStyle}>
-      <View ref={(v) => registerRow(windowId, key, v)} {...hoverProps}>
+      <SidebarKeyboardRowView rowId={key} legacyId={key} label={item.title} {...hoverProps}>
         <ContextMenuArea
           onContextMenu={() => {
             dismissHover();
@@ -458,7 +463,7 @@ function LiveItemRow({ folderId, item, windowId, indent = 0 }: { folderId: strin
             )}
           </Pressable>
         </ContextMenuArea>
-      </View>
+      </SidebarKeyboardRowView>
     </Animated.View>
   );
 }

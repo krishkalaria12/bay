@@ -5,12 +5,22 @@ import { awayFromPin, groupOf, selectedTabIds } from "../../store/organize";
 import { newGroupWithSelection, openIconPicker, startRename } from "./actions";
 import { closeAllTabs, tabsAround } from "./menus";
 import { setSidebarUi } from "./state";
+import { blurSidebar, focusSidebar, renameKeyboardRow, runSidebarKey } from "./keyboard";
 import { switcherStep } from "./switcher";
 
 export function runSidebarCommand(command: BrowserCommand, arg: string | null, windowId: string): boolean {
   const s = useBrowser.getState();
   const tabId = activeTabId(s, windowId);
   switch (command) {
+    case "focusSidebar":
+      focusSidebar(windowId);
+      return true;
+    case "sidebarKey":
+      if (arg) runSidebarKey(windowId, arg);
+      return true;
+    case "sidebarBlur":
+      blurSidebar(windowId);
+      return true;
     case "newTabInGroup": {
       const group = groupOf(s, tabId);
       s.openNewTabPanel(windowId, group?.id);
@@ -29,6 +39,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
       setSidebarUi({ searchTabs: windowId, hover: null });
       return true;
     case "renameTab":
+      if (renameKeyboardRow(windowId)) return true;
       if (tabId) void startRename(windowId, { kind: "tab", id: tabId });
       return true;
     case "changeTabIcon":
@@ -55,6 +66,7 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
 }
 
 export const SIDEBAR_WINDOW_COMMANDS = [
+  "focusSidebar",
   "newTabInGroup",
   "newGroupWithTabs",
   "cleanUpTabs",

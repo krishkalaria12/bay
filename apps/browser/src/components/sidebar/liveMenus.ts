@@ -89,7 +89,7 @@ export async function openLiveFolderMenu(windowId: string, folderId: string) {
     void refreshFolder(folderId);
   } else if (choice === "rename") {
     const name = await prompt({ title: "Rename Live Folder", value: folder.name, placeholder: "Live folder name", confirmTitle: "Rename", windowId });
-    if (name?.trim()) updateFolder(folderId, { name: name.trim() });
+    if (name?.trim()) updateFolder(folderId, { name: name.trim() }, windowId);
   } else if (choice === "icon") void openIconPicker(windowId, { kind: "live", id: `livefolder|${folderId}` });
   else if (choice === "read") markRead(folderId);
   else if (choice === "collapse") updateFolder(folderId, { collapsed: !folder.collapsed });

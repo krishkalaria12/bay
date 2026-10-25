@@ -5,6 +5,94 @@ final class SidebarMoveUndoView: NSView, NSMenuItemValidation {
   private static var views: [String: SidebarMoveUndoView] = [:]
   private var windowId = ""
   private var available = false
+  private var keyboard = false
+  private static var mouseMonitor: Any?
+  private weak var focusedRow: NSView?
+  private weak var rowNextResponder: NSResponder?
+  private var focusObservation: NSKeyValueObservation?
+  private var changingRow = false
+
+  private func releaseRow() {
+    if focusedRow?.nextResponder === self { focusedRow?.nextResponder = rowNextResponder }
+    focusedRow = nil
+    rowNextResponder = nil
+  }
+
+  private func endKeyboard() {
+    guard keyboard else { return }
+    keyboard = false
+    releaseRow()
+    MenuTarget.shared.handler?("sidebarBlur", nil, windowId)
+  }
+
+  static func focusRow(windowId: String, row: NSView) {
+    guard let view = views[windowId], view.keyboard, row.window === view.window else { return }
+    view.changingRow = true
+    if view.focusedRow !== row {
+      view.releaseRow()
+      view.focusedRow = row
+      view.rowNextResponder = row.nextResponder
+      // Standard AppKit Undo continues through the same sidebar responder while the actual row owns focus.
+      row.nextResponder = view
+    }
+    row.window?.makeFirstResponder(row)
+    row.setAccessibilityFocused(true)
+    NSAccessibility.post(element: row, notification: .focusedUIElementChanged)
+    view.changingRow = false
+  }
+
+  // Arming undo follows a sidebar edit; it must never pull keys out of a text field or a page editor.
+  private static func protectsTyping(_ responder: NSResponder?) -> Bool {
+    guard let responder else { return false }
+    if responder is NSText || responder is NSTextField { return true }
+    if let window = (responder as? NSView)?.window, let editable = ChromeWindows.focusedPageEditable(in: window) { return editable }
+    return String(describing: type(of: responder)).contains("RenderWidgetHostView")
+  }
+
+  static func setKeyboard(windowId: String, active: Bool) {
+    if views[windowId] == nil { set(windowId: windowId, available: false, focus: false) }
+    guard let view = views[windowId], let window = view.window else { return }
+    if active {
+      view.keyboard = true
+      view.changingRow = true
+      window.makeFirstResponder(view)
+      view.changingRow = false
+      if view.focusObservation == nil {
+        view.focusObservation = window.observe(\.firstResponder) { [weak view] window, _ in
+          guard let view, view.keyboard, !view.changingRow else { return }
+          if window.firstResponder !== view && window.firstResponder !== view.focusedRow { view.endKeyboard() }
+        }
+      }
+      if mouseMonitor == nil {
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]) { event in
+          guard let view = views.values.first(where: { $0.keyboard && $0.window === event.window }) else { return event }
+          if event.type == .keyDown {
+            return view.handleKey(event) ? nil : event
+          }
+          view.endKeyboard()
+          event.window?.makeFirstResponder(nil)
+          return event
+        }
+      }
+    } else {
+      let owned = window.firstResponder === view || window.firstResponder === view.focusedRow
+      view.endKeyboard()
+      if owned { window.makeFirstResponder(nil) }
+    }
+  }
+
+  private func handleKey(_ event: NSEvent) -> Bool {
+    guard keyboard, window?.firstResponder === self || window?.firstResponder === focusedRow else { return false }
+    let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    let keys: [UInt16: String] = [123: "ArrowLeft", 124: "ArrowRight", 125: "ArrowDown", 126: "ArrowUp", 36: "Enter", 76: "Enter", 49: "Space", 51: "Backspace", 53: "Escape", 115: "Home", 119: "End"]
+    guard modifiers.isEmpty, let key = keys[event.keyCode] else { return false }
+    MenuTarget.shared.handler?("sidebarKey", key, windowId)
+    return true
+  }
+
+  override func keyDown(with event: NSEvent) {
+    if !handleKey(event) { super.keyDown(with: event) }
+  }
 
   override var acceptsFirstResponder: Bool { true }
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -19,11 +107,14 @@ final class SidebarMoveUndoView: NSView, NSMenuItemValidation {
       content.addSubview(view)
     }
     views[windowId] = view
-    if focus && available { window.makeFirstResponder(view) }
+    if focus && available && !view.keyboard && !protectsTyping(window.firstResponder) { window.makeFirstResponder(view) }
   }
 
   static func remove(windowId: String) {
-    views.removeValue(forKey: windowId)?.removeFromSuperview()
+    guard let view = views.removeValue(forKey: windowId) else { return }
+    view.endKeyboard()
+    view.focusObservation = nil
+    view.removeFromSuperview()
   }
 
   @objc func undo(_ sender: Any?) {
@@ -392,13 +483,14 @@ enum MainMenu {
         cmd("Light", "setAppearance", arg: "light"),
         cmd("Dark", "setAppearance", arg: "dark"),
       ]),
-      cmd("Stop", "stop", "."),
+      cmd("Stop", "stop"),
       cmd("Refresh", "reload", "r"),
       cmd("Force Refresh the Page", "forceReload", "r", [.command, .shift]).alternate(),
       .separator(),
       cmd("Show Tabs in Sidebar", "toggleTabLayout", "s", [.command, .shift]),
       cmd("Auto-Hide Tabs", "toggleSidebar", "s"),
       cmd("Auto-Hide Tabs", "toggleSidebar", "f", [.command, .shift]).hiddenShortcut(),
+      cmd("Focus Sidebar", "focusSidebar", "."),
       .separator(),
       cmd("Open Split Pane", "openSplitPane", "=", [.control, .shift]),
       cmd("Focus Next Split Pane", "focusNextPane", "]", [.control, .shift]),
