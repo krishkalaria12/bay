@@ -149,6 +149,24 @@ export function startDevHarness() {
     get capture(): typeof import("../components/capture/state") {
       return require("../components/capture/state");
     },
+    // Arc's small habits (scripts/arc-gaps-test.mjs): unread counts, Little Bay from any app and put away, ⌃⌘J.
+    get arcGaps(): {
+      unread: typeof import("./unreadBadges");
+      littleBayAccess: typeof import("../components/littleBay/access");
+      putAway: typeof import("../components/littleBay/putAway");
+      alerts: typeof import("../live/alerts");
+      calendar: typeof import("../live/calendar").useCalendar;
+      menuState: typeof import("./native").menuState;
+    } {
+      return {
+        unread: require("./unreadBadges"),
+        littleBayAccess: require("../components/littleBay/access"),
+        putAway: require("../components/littleBay/putAway"),
+        alerts: require("../live/alerts"),
+        calendar: require("../live/calendar").useCalendar,
+        menuState: require("./native").menuState,
+      };
+    },
     // Hovering moves nothing but a HoverSlot's contents (scripts/hover-shift-test.mjs).
     get hoverShift(): typeof import("./hoverShift") {
       return require("./hoverShift");

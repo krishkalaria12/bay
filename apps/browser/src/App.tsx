@@ -184,9 +184,14 @@ function trafficLightsMode(o: {
   return o.right || !o.sidebarOpen ? "hover" : "shown";
 }
 
-// DEV: the peek's show, by window, as the pointer reaching the window's edge does (nnPeek(windowId)).
+// DEV: the peek's show, by window, as the pointer reaching the window's edge does (nnPeek(windowId)), and whether
+// it's out (nnPeekOut(windowId)).
 const devPeeks = new Map<string, () => void>();
-if (__DEV__) (globalThis as { nnPeek?: unknown }).nnPeek = (windowId: string) => devPeeks.get(windowId)?.();
+const devPeeksOut = new Map<string, boolean>();
+if (__DEV__) {
+  (globalThis as { nnPeek?: unknown }).nnPeek = (windowId: string) => devPeeks.get(windowId)?.();
+  (globalThis as { nnPeekOut?: unknown }).nnPeekOut = (windowId: string) => devPeeksOut.get(windowId) ?? false;
+}
 
 function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boolean; onOut: (out: boolean) => void }) {
   const theme = useTheme();
@@ -225,6 +230,7 @@ function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boole
   };
   useEffect(() => {
     onOut(live);
+    if (__DEV__) devPeeksOut.set(windowId, live);
     return () => onOut(false);
   }, [live, onOut]);
   const slideStyle = useAnimatedStyle(() => {
