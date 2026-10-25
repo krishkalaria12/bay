@@ -64,6 +64,7 @@ export function PaletteContent({
   onHover,
   onChoose,
   onSubmit,
+  onTopResult,
   selectionColors,
 }: {
   field: ReactNode;
@@ -81,6 +82,8 @@ export function PaletteContent({
   onHover(index: number): void;
   onChoose(s: Suggestion, disposition: Disposition): void;
   onSubmit(): void;
+  /** ⇧↩: the search's first result, when the row is a search. */
+  onTopResult?: () => void;
   selectionColors?: ScopeColors | null;
 }) {
   const theme = useTheme();
@@ -211,6 +214,7 @@ export function PaletteContent({
             }}
           >
             <FooterButton label={label} hint="↩" onPress={onSubmit} />
+            {onTopResult ? <FooterButton label="Top Result" hint="⇧↩" onPress={onTopResult} /> : null}
             <FooterButton label="Actions" hint="⌘K" onPress={onRowMenu} />
           </View>
         )}

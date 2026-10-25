@@ -83,6 +83,18 @@ export function mayBeBang(text: string): boolean {
 
 export const BANG_ENTER_TIMEOUT_MS = 1500;
 
+// MARK: Instant links
+
+/**
+ * ⇧↩ on a search (Arc's Instant Links): straight to the search's first result, through DuckDuckGo's "\" (I'm Feeling
+ * Ducky) redirect: no results page shows, and no model is asked. Null for a row that isn't
+ * a plain search: an address, a page, a search shortcut ("!yt cats", "Search YouTube").
+ */
+export function topResultUrl(s: { kind: string; query?: string; bang?: true } | undefined): string | null {
+  const query = s?.kind === "search" && !s.bang ? s.query?.trim() : "";
+  return query ? `https://duckduckgo.com/?q=${encodeURIComponent(`\\${query}`)}` : null;
+}
+
 export type BangSubmitter = { submit(text: string, commit: (url: string | null) => void): void; cancel(): void };
 
 export function createBangSubmitter(load: () => Promise<BangTable> = loadBangs, timeoutMs = BANG_ENTER_TIMEOUT_MS): BangSubmitter {

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import * as bundled from "../../../../../packages/core/src/bangList.ts";
 import { bangDocument, findBang, MAX_BANG_LIST_CHARS } from "../../../../../packages/core/src/bangs.ts";
 import { docs, heldSaves } from "../../test-native-stub.mjs";
-import { bangStatus, createBangSubmitter, loadBangs, mayBeBang, refreshBangs, refreshBangsOnce, resetBangsForTests } from "./bangs.ts";
+import { bangStatus, createBangSubmitter, loadBangs, mayBeBang, refreshBangs, refreshBangsOnce, resetBangsForTests, topResultUrl } from "./bangs.ts";
 
 const originalFetch = globalThis.fetch;
 const originalRequire = globalThis.require;
@@ -173,4 +173,17 @@ test("invalid, oversized and failed refreshes preserve the working catalog", asy
     assert.equal(findBang("!gh react", await loadBangs())?.url, "https://github.com/search?q=react");
     assert.equal(docs.has("bangs.txt"), false);
   }
+});
+
+test("shift-return on a search goes to its first result through DuckDuckGo's backslash redirect", () => {
+  assert.equal(
+    topResultUrl({ kind: "search", query: "bay browser github", url: "https://www.google.com/search?q=bay+browser+github" }),
+    "https://duckduckgo.com/?q=%5Cbay%20browser%20github",
+  );
+  assert.equal(topResultUrl({ kind: "search", query: " c++ & rust ", suggested: true }), "https://duckduckgo.com/?q=%5Cc%2B%2B%20%26%20rust");
+  // A search shortcut, an address or an empty query isn't a search to jump through.
+  assert.equal(topResultUrl({ kind: "search", query: "cats", bang: true }), null);
+  assert.equal(topResultUrl({ kind: "page", url: "https://example.com" }), null);
+  assert.equal(topResultUrl({ kind: "search", query: "  " }), null);
+  assert.equal(topResultUrl(undefined), null);
 });

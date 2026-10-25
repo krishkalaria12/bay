@@ -9,7 +9,7 @@ import { useBrowser } from "../store/browser";
 import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
-import { createBangSubmitter, loadBangs, mayBeBang } from "./omnibox/bangs";
+import { createBangSubmitter, loadBangs, mayBeBang, topResultUrl } from "./omnibox/bangs";
 import { scopeColorFor, scopeColorsFor } from "./omnibox/scopeColors";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
 import { dispositionFor, openFromBar, openInBackground, restoreFromBar, switchFromBar, type Disposition } from "./omnibox/open";
@@ -150,6 +150,8 @@ export function Omnibox({
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
   // A shortcut typed in full ("yt") wins over the history its letters complete to; else the completed host scopes.
   const tabScope = canScope ? (scopeFor(typed, windowId) ?? scopeFor(typedValue, windowId)) : null;
+  // ⇧↩ on a search opens its first result (Arc's Instant Links); on an address or a page it's a new window, as ever.
+  const topResult = scope || (bangsEnabled && mayBeBang(typed)) ? null : topResultUrl(current);
 
   // Apply selection imperatively; RN macOS can restore a stale caret when its selection prop clears.
   useLayoutEffect(() => {
@@ -349,6 +351,7 @@ export function Omnibox({
         return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
       if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return choose(current, "newTab", true, true);
+      if (shiftKey && !metaKey && !altKey && topResult) return go(topResult);
       if (metaKey || altKey || shiftKey) return choose(current, dispositionFor({ metaKey, altKey, shiftKey }), true);
       return choose(current, "current", true);
     }
@@ -517,6 +520,7 @@ export function Omnibox({
           onHover={setSelected}
           onChoose={choose}
           onSubmit={() => choose(current, "current", true)}
+          onTopResult={topResult ? () => go(topResult) : undefined}
           selectionColors={scopeColors}
         />
       </View>
