@@ -41,6 +41,8 @@ Bay's own: the window, sidebar, command bar, menus and animations.
 - **Little Bay.** Links from Slack, Mail or Discord open in a small window of their own.
 - **Command bar.** One place for addresses, searches, open tabs and the ones put away (⌘L, or ⌘T for a
   new tab).
+- **Capture.** ⇧⌘2 lights up the part of the page under the pointer. Click it, or drag over any area, then copy,
+  save, share or mark up the picture. Capture Full Page saves the whole page to Downloads.
 - **Previews.** Hover a folder, a Gmail or GitHub tab, or a calendar to see what's inside without
   opening it.
 
