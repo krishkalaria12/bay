@@ -21,6 +21,7 @@ import { requestAutofill } from "../components/site/Autofill";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
 import { captureFullPage, capturePortrait, startCapture } from "../components/capture/state";
+import { canBoost, openBoostEditor, siteBoosts, startPicking, toggleSiteBoosts } from "../components/boosts/editor";
 import { newEasel, openLibrary } from "../components/library/actions";
 import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
@@ -151,6 +152,16 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
       return page ? void captureFullPage(page.id) : undefined;
     case "capturePortrait":
       return page ? void capturePortrait(page.id) : undefined;
+    case "newBoost":
+      return page && canBoost(page.id) ? openBoostEditor(page.id, { fresh: siteBoosts(page.id).length > 0 }) : undefined;
+    case "editBoost":
+      return page && canBoost(page.id) ? openBoostEditor(page.id) : undefined;
+    case "zapElements":
+      if (!page || !canBoost(page.id)) return;
+      openBoostEditor(page.id);
+      return startPicking(page.id, "zap");
+    case "toggleSiteBoosts":
+      return page ? toggleSiteBoosts(page.id) : undefined;
     case "caretBrowsing":
       return void web?.runPageCommand("caretBrowsing");
     case "emailPageLocation":

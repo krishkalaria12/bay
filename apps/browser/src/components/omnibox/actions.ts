@@ -6,6 +6,14 @@ import { useBrowser, type BrowserState } from "../../store/browser";
 import { activeTab, bookmarkSpaceId } from "../../store/model";
 import { isDeveloperUrl, siteKey } from "../developer/sites";
 import type { Tab } from "../../store/types";
+import { boostHost } from "../../lib/boosts";
+import { boostsForHost, useBoosts } from "../boosts/state";
+
+const siteHasBoosts = (url: string | undefined) => {
+  const host = boostHost(url);
+  return !!host && boostsForHost(useBoosts.getState(), host).length > 0;
+};
+const siteBoostsOn = (url: string) => useBoosts.getState().on && boostsForHost(useBoosts.getState(), boostHost(url)).some((b) => b.enabled);
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
 
@@ -16,7 +24,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "spaces";
+  needs?: "page" | "site" | "tab" | "spaces" | "boost" | "boosted";
 };
 
 const page = "page" as const;
@@ -85,6 +93,34 @@ const DEFS: ActionDef[] = [
     keywords: ["portrait mode", "screenshot", "framed screenshot", "pretty screenshot"],
     needs: page,
   },
+  {
+    command: "newBoost",
+    title: "Boost This Site",
+    icon: "paintbrush.pointed",
+    keywords: ["new boost", "boost", "customize site", "restyle", "custom css", "site colors", "change font", "dark mode for site"],
+    needs: "boost",
+  },
+  {
+    command: "zapElements",
+    title: "Zap Elements",
+    icon: "bolt",
+    keywords: ["zap", "hide element", "remove element", "block element", "boost"],
+    needs: "boost",
+  },
+  {
+    command: "editBoost",
+    title: "Edit Boost",
+    icon: "paintbrush.pointed.fill",
+    keywords: ["boost", "edit boost"],
+    needs: "boosted",
+  },
+  {
+    command: "toggleSiteBoosts",
+    title: ({ tab }) => (tab && siteBoostsOn(tab.url) ? "Turn Off Boosts for This Site" : "Turn On Boosts for This Site"),
+    icon: "paintbrush.pointed",
+    keywords: ["boost", "disable boost", "enable boost"],
+    needs: "boosted",
+  },
   { command: "zoomIn", title: "Zoom In", icon: "plus.magnifyingglass", hint: "⌘+", needs: page },
   { command: "zoomOut", title: "Zoom Out", icon: "minus.magnifyingglass", hint: "⌘-", needs: page },
   { command: "zoomReset", title: "Actual Size", icon: "1.magnifyingglass", hint: "⌘0", keywords: ["reset zoom"], needs: page },
@@ -139,6 +175,8 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     if (d.needs === "tab" && !tab) continue;
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
     if (d.needs === "spaces" && w?.incognito) continue;
+    if (d.needs === "boost" && !boostHost(tab?.url)) continue;
+    if (d.needs === "boosted" && !siteHasBoosts(tab?.url)) continue;
     out.push({
       id: actionId(d),
       title: typeof d.title === "string" ? d.title : d.title(c),

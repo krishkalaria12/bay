@@ -6,6 +6,8 @@ import { useBrowser } from "../../../store/browser";
 import { openInternalPage } from "../../pages/urls";
 import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
+import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
+import { openLibrary } from "../../library/actions";
 
 export function AdvancedPane() {
   const theme = useTheme();
@@ -40,6 +42,11 @@ export function AdvancedPane() {
         <Row settingId={SETTINGS.showBookmarksImport.id} title={SETTINGS.showBookmarksImport.title} description="On an empty bookmarks bar.">
           <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => update({ hideBookmarksBarImport: !v })} />
         </Row>
+      </Group>
+
+      <SectionHeader title="Websites" />
+      <Group>
+        <BoostsRow />
       </Group>
 
       <SectionHeader title="Performance" />
@@ -82,5 +89,24 @@ export function AdvancedPane() {
         />
       </Group>
     </View>
+  );
+}
+
+// Every Boost on or off at once (Arc's Boosts; each site's are in Site Controls and Library › Boosts).
+function BoostsRow() {
+  const on = useBoosts((s) => s.on);
+  const count = useBoosts((s) => Object.keys(s.boosts).length);
+  useEffect(() => startBoosts(), []);
+  return (
+    <Row
+      settingId={SETTINGS.boosts.id}
+      title={SETTINGS.boosts.title}
+      description={`Your changes to how sites look${count ? ` (${count} ${count === 1 ? "Boost" : "Boosts"})` : ""}. Off shows every site as it is.`}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Button title="Show Boosts" onPress={() => openLibrary(null, "boosts")} />
+        <Toggle value={on} onChange={setBoostsOn} />
+      </View>
+    </Row>
   );
 }

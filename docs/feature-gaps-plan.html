@@ -577,6 +577,7 @@
           <span>25 October 2026</span>
           <span>Phase 1 shipped on <code>main</code> at <code>f16526b6</code></span>
           <span>Phase 2 done; VoiceOver and Gmail checks before release</span>
+          <span>Phase 3 (Boosts) done; a two-Mac sync check before release</span>
           <span>Source: Arc's macOS release notes, 2021–2026</span>
           <span>Sizes are estimates: S a day or two, M about a week, L more</span>
         </div>
@@ -593,7 +594,6 @@
           <li><a href="#missing">What's missing</a></li>
           <li><a href="#retest">Re-test</a></li>
           <li><a href="#phases">Phases</a></li>
-          <li class="sub"><a href="#p3">3 · Boosts</a></li>
           <li class="sub"><a href="#p4">4 · Sharing</a></li>
           <li class="sub"><a href="#p5">5 · Arc Max, on device</a></li>
           <li><a href="#risks">Risks</a></li>
@@ -611,19 +611,13 @@
               Bay already matches most of Arc: spaces with themes and profiles, favorites, pinned tabs and nested folders, auto cleanup, Peek, Split View,
               Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
               folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>. The ten small
-              ones (Phase 1) and the three keyboard, undo and Finder ones (Phase 2) have shipped and are listed under <a href="#have">Already in Bay</a>;
-              <strong>9 gaps</strong> remain.
+              ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2) and Boosts (Phase 3) have shipped and are listed under
+              <a href="#have">Already in Bay</a>; <strong>7 gaps</strong> remain.
             </p>
-            <p>The gaps left are of two kinds:</p>
-            <ul>
-              <li>
-                <strong>Boosts.</strong> Arc's way to restyle or zap parts of a site. Bay has no answer except uBlock's cosmetic filters. One large build.
-              </li>
-              <li>
-                <strong>Sharing and Arc Max.</strong> Shared folders, Share Quote, Easel links, and the "tidy" AI features. Each needs a decision before work
-                starts.
-              </li>
-            </ul>
+            <p>
+              The gaps left are <strong>sharing and Arc Max</strong>: shared folders, Share Quote, Easel links, and the "tidy" AI features. Each needs a
+              decision before work starts.
+            </p>
             <p>Phase 1 landed before Arc's sunset reminders start on 23 November. The phases left don't depend on Arc's dates.</p>
           </div>
         </section>
@@ -717,6 +711,12 @@
             <li>AppleScript; Handoff from iPhone</li>
             <li>App icon picker; haptics toggle</li>
             <li>Automatic updates; What's New row in the sidebar</li>
+            <li>Boosts: colours on a two-dot wheel, Invert, contrast, brightness and saturation, fonts, size, case, and CSS</li>
+            <li>Zap elements, with related ones, and unzap from the editor; Zen's Focus keeps one element alone</li>
+            <li>Boosts follow the space's colours; CSS can use them as <code>--bay-palette-*</code></li>
+            <li>Several Boosts a site, each switched on or off in Site Controls; all off in Settings or Library › Boosts</li>
+            <li>JavaScript Boosts in their own world, on one Mac only, off by default, not in private windows unless allowed</li>
+            <li>Boosts sync without their JavaScript; import and export Bay's and Zen's Boost files</li>
           </ul>
         </section>
 
@@ -724,7 +724,7 @@
           <h2 id="missing-h">What's missing</h2>
           <p class="prose">
             "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
-            not run for this review. The date is when Arc shipped the feature. Gaps 1–13 (Phases 1 and 2) have shipped and moved to
+            not run for this review. The date is when Arc shipped the feature. Gaps 1–15 (Phases 1 to 3) have shipped and moved to
             <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
           </p>
           <div class="table-wrap">
@@ -743,22 +743,6 @@
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>14</td>
-                  <td>Boosts: zap, colours, fonts, custom CSS</td>
-                  <td>Jul 2022, v2 May 2023</td>
-                  <td>Only uBlock's cosmetic filters</td>
-                  <td class="c"><span class="chip l">L</span></td>
-                  <td class="c">3</td>
-                </tr>
-                <tr>
-                  <td>15</td>
-                  <td>Boosts with JavaScript, kept on one Mac</td>
-                  <td>Jul 2022; sync off Sep 2024</td>
-                  <td>None</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">3</td>
-                </tr>
                 <tr>
                   <td>16</td>
                   <td>Share Quote: highlighted text as a card image and link</td>
@@ -893,9 +877,6 @@
         <section id="phases" aria-labelledby="phases-h">
           <h2 id="phases-h">Phases</h2>
           <ol class="flow">
-            <li>
-              <a href="#p3"><span class="n">Phase 3</span><strong>Boosts</strong>Site tweaks</a>
-            </li>
             <li class="gate">
               <a href="#p4"><span class="n">Phase 4</span><strong>Sharing</strong>Decision first</a>
             </li>
@@ -904,59 +885,9 @@
             </li>
           </ol>
           <p class="prose">
-            Phase 1 (ten small habits) and Phase 2 (keyboard, undo and Finder files) have shipped. Phase 3 can start now. Phases 4 and 5 start only after their
-            decisions are made. Phase 3 comes before Boost sharing in Phase 4.
+            Phase 1 (ten small habits), Phase 2 (keyboard, undo and Finder files) and Phase 3 (Boosts) have shipped. Phases 4 and 5 start only after their
+            decisions are made.
           </p>
-
-          <article class="phase" id="p3" aria-labelledby="p3-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 3</span>
-              <h3 id="p3-h">Boosts</h3>
-              <span class="chip l">L</span><span class="chip m">M</span>
-            </div>
-            <p class="goal">
-              Change how a site looks without writing code, and with code if you want. Arc users who relied on Boosts will have no other way to keep them.
-            </p>
-
-            <div class="item">
-              <h4>14 · Zap, colours, fonts and custom CSS <span class="chip l">L</span></h4>
-              <p>
-                A Boost belongs to a host and lives in Site Controls. The editor offers: Zap (click elements to hide them, stored as selectors), a colour tint,
-                a font, page zoom, and a CSS field. Bay's theme colours are exposed as CSS variables, as Arc did, so a Boost can match the sidebar. Each Boost
-                toggles on and off per site; a global switch turns all off. CSS Boosts sync.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd>
-                  New <code>lib/boosts.ts</code>, <code>site/SiteControls.tsx</code>, engine content-script injection at document start, <code>sync/</code>
-                </dd>
-                <dt>Reuses</dt>
-                <dd>The Capture element picker for Zap</dd>
-              </dl>
-              <ul class="checks">
-                <li>Zapping an element on a news site hides it on reload and on a second Mac. Turning the Boost off restores the page without reload.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>15 · JavaScript Boosts, kept on one Mac <span class="chip m">M</span></h4>
-              <p>
-                A JS field that runs in the page's isolated world. Arc stopped syncing JS Boosts in September 2024 after a security report and made users
-                re-enable each one per device. Bay starts there: JS Boosts never sync, are off by default, and show a warning when first turned on.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd>Same as 14, isolated world script, excluded from the sync schema</dd>
-              </dl>
-              <ul class="checks">
-                <li>A JS Boost runs only on its host, only on the Mac where it was turned on, and never in private windows unless allowed.</li>
-              </ul>
-            </div>
-            <h4 class="exit">Exit criteria</h4>
-            <ul>
-              <li>Boosts are created, toggled, synced (CSS only) and removed; a security review of injection is complete.</li>
-            </ul>
-          </article>
 
           <article class="phase gate" id="p4" aria-labelledby="p4-h">
             <div class="phase-head">
@@ -1082,10 +1013,13 @@
           <h2 id="risks-h">Risks</h2>
           <div class="grid2">
             <div class="card">
-              <h3>Boost injection</h3>
+              <h3>Boost injection (reviewed)</h3>
               <p>
-                Boosts run in every matching page. Arc had a security problem here in September 2024. Keep JS local and opt-in, inject in an isolated world, and
-                review before release.
+                Arc's September 2024 hole was its Boost server's access rules; Bay has no Boost server. JavaScript never leaves the Mac: it isn't in a Boost's
+                synced record, imported scripts arrive off, and a synced site change clears this Mac's script consent. It runs off by default, after a warning,
+                in its own isolated world with the page's origin and CSP (no extra privileges), and not in private windows unless allowed. Selectors and font
+                names that could end a CSS rule early are refused, including ones a page sends back while picking. Like extensions' content scripts, every
+                renderer of a regular profile holds the Boost list, so a compromised renderer could read it.
               </p>
             </div>
             <div class="card">
@@ -1128,11 +1062,6 @@
                   <td>Sharing Easels</td>
                   <td>Hosted bucket · iCloud public links · HTML export only</td>
                   <td>HTML export only for now</td>
-                </tr>
-                <tr>
-                  <td>JavaScript Boosts</td>
-                  <td>Local, opt-in · CSS only</td>
-                  <td>Local and opt-in, never synced</td>
                 </tr>
               </tbody>
             </table>

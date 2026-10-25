@@ -117,6 +117,10 @@ export type BrowserCommand =
   | "savePage"
   | "capture"
   | "captureFullPage"
+  | "newBoost"
+  | "editBoost"
+  | "zapElements"
+  | "toggleSiteBoosts"
   | "emailPageLocation"
   | "printWithSystemDialog"
   | "stop"
@@ -234,6 +238,9 @@ const Shell = requireNativeModule<{
   setSwitcherCapture(active: boolean): Promise<void>;
   startDictation(): void;
   pickFiles(): Promise<string[]>;
+  fontFamilies?(): string[];
+  saveTextFile?(name: string, contents: string): Promise<boolean>;
+  openTextFile?(extensions: string[]): Promise<string | null>;
   readDocument(name: string): string | null;
   writeDocument(name: string, contents: string): void;
   saveDocument(name: string, contents: string): Promise<void>;
@@ -282,6 +289,9 @@ export const setSidebarMoveUndo = (windowId: string, available: boolean, focus =
 export const startDictation = () => Shell.startDictation();
 export const setSwitcherCapture = (active: boolean) => void Shell.setSwitcherCapture(active);
 export const pickFiles = () => Shell.pickFiles();
+export const fontFamilies = (): string[] => Shell.fontFamilies?.() ?? [];
+export const saveTextFile = (name: string, contents: string) => Shell.saveTextFile?.(name, contents) ?? Promise.resolve(false);
+export const openTextFile = (extensions: string[] = []) => Shell.openTextFile?.(extensions) ?? Promise.resolve(null);
 
 export function copyText(text: string) {
   Shell.copyText(text);

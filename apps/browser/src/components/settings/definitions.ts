@@ -148,6 +148,7 @@ export const SETTINGS = {
     words: "confirm",
   },
   showBookmarksImport: { id: "advanced.showBookmarksImport", pane: "advanced", title: "Show the Import bookmarks button", words: "bookmarks bar" },
+  boosts: { id: "advanced.boosts", pane: "advanced", title: "Boosts", words: "boost zap custom css site style javascript arc" },
   batterySaver: { id: "advanced.batterySaver", pane: "advanced", title: "Battery Saver", words: "energy power performance" },
   history: { id: "advanced.history", pane: "advanced", title: "History", words: "visited pages" },
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },

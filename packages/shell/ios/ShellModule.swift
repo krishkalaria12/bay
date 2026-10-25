@@ -1,5 +1,6 @@
 import AppKit
 import ExpoModulesCore
+import UniformTypeIdentifiers
 
 public enum OpenURLInbox {
   struct Batch {
@@ -375,6 +376,40 @@ public class ShellModule: Module {
       panel.canChooseDirectories = false
       panel.begin { response in
         promise.resolve(response == .OK ? panel.urls.map(\.absoluteString) : [])
+      }
+    }.runOnQueue(.main)
+
+    // The Mac's font families, for a Boost's font menu.
+    Function("fontFamilies") { () -> [String] in NSFontManager.shared.availableFontFamilies }
+
+    // A text file the user saves (a Boost's export): true once written.
+    AsyncFunction("saveTextFile") { (name: String, contents: String, promise: Promise) in
+      let panel = NSSavePanel()
+      panel.nameFieldStringValue = name
+      panel.canCreateDirectories = true
+      panel.begin { response in
+        guard response == .OK, let url = panel.url else { return promise.resolve(false) }
+        do {
+          try contents.write(to: url, atomically: true, encoding: .utf8)
+          promise.resolve(true)
+        } catch {
+          promise.resolve(false)
+        }
+      }
+    }.runOnQueue(.main)
+
+    // One text file the user opens (a Boost to import), up to a megabyte; nil if cancelled or unreadable.
+    AsyncFunction("openTextFile") { (extensions: [String], promise: Promise) in
+      let panel = NSOpenPanel()
+      panel.allowsMultipleSelection = false
+      panel.canChooseDirectories = false
+      if !extensions.isEmpty { panel.allowedContentTypes = extensions.compactMap { UTType(filenameExtension: $0) } }
+      panel.begin { response in
+        guard response == .OK, let url = panel.url,
+          let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 1_000_000,
+          let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return promise.resolve(nil) }
+        promise.resolve(text)
       }
     }.runOnQueue(.main)
 

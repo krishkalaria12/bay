@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import {
   getContentBlocker,
   getSiteSettings,
@@ -33,6 +34,9 @@ import { TranslateRows } from "./TranslateControls";
 import { ZoomStepper } from "./ZoomControls";
 import { activateExtension, loadUnpacked, openManageExtensions, openWebStore, useExtensions, useWindowExtensions, type Anchor } from "../extensions/state";
 import { defaultTarget, languageName, toggleTranslation, useTranslateState } from "./translate";
+import { boostHost } from "../../lib/boosts";
+import { openBoostEditor } from "../boosts/editor";
+import { boostsForHost, setBoostsOn, updateBoost, useBoosts } from "../boosts/state";
 
 const PERMISSIONS: { type: SiteSettingType; title: string; icon: string; choices: SiteSettingValue[] }[] = [
   { type: "popups", title: "Pop-ups and Redirects", icon: "macwindow.on.rectangle", choices: ["allow", "block"] },
@@ -314,6 +318,7 @@ export function SiteControls({
                   detail={developer ? "Address, inspector and DevTools over the page" : undefined}
                   accessory={<Toggle value={developer} onChange={() => toggleDeveloperMode(tabId)} />}
                 />
+                <BoostRows tabId={tabId} url={url} />
               </>
             ) : null}
           </>
@@ -431,6 +436,42 @@ export function SiteControls({
     </Popover>
   );
 }
+
+// Arc's Boosts in Site Controls: the site's Boosts, each switched on or off here (a click opens it in the editor),
+// and a new one.
+function BoostRows({ tabId, url }: { tabId: string; url: string }) {
+  const theme = useTheme();
+  const host = boostHost(url);
+  const boosts = useBoosts(useShallow((s) => (host ? boostsForHost(s, host) : NO_BOOSTS)));
+  const on = useBoosts((s) => s.on);
+  if (!host) return null;
+  return (
+    <>
+      <Text style={{ paddingHorizontal: 14, paddingTop: 13, paddingBottom: 5, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Boosts</Text>
+      {boosts.map((b) => (
+        <PopoverRow
+          key={b.id}
+          icon={b.enabled && on ? "paintbrush.pointed.fill" : "paintbrush.pointed"}
+          title={b.name}
+          detail={!on ? "Boosts are off" : undefined}
+          onPress={() => openBoostEditor(tabId, { boostId: b.id })}
+          accessory={
+            <Toggle
+              value={b.enabled && on}
+              onChange={(value) => {
+                if (value && !on) setBoostsOn(true);
+                updateBoost(b.id, { enabled: value });
+              }}
+            />
+          }
+        />
+      ))}
+      <PopoverRow icon="plus" title={boosts.length ? "New Boost" : "Boost This Site"} onPress={() => openBoostEditor(tabId, { fresh: true })} />
+    </>
+  );
+}
+
+const NO_BOOSTS: never[] = [];
 
 function ActionTile({
   icon,

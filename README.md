@@ -59,6 +59,10 @@ Bay's own: the window, sidebar, command bar, menus and animations.
   archived tabs. Hover it to drag recent files, or type “Open Library” in the command bar.
 - **Previews.** Hover a folder, a Gmail or GitHub tab, or a calendar to see what's inside without
   opening it. ⌃⌘J joins the meeting that's on now.
+- **Boosts.** Change how a site looks: tint it from a colour wheel or your space's colours, invert it, pick a font,
+  size and case, zap away what you don't want (or keep one part alone with Focus), and add your own CSS, live as you
+  edit. Boost This Site is in Site Controls, the command bar and a tab's menu; Library › Boosts lists them all.
+  Boosts sync; a Boost's JavaScript stays on the Mac where you turned it on, off in private windows unless you allow it.
 - **Developer Mode.** Local servers get the full address, an inspector and DevTools a click away. JSON responses
   show as a tree you can fold, with the raw text a click away.
 

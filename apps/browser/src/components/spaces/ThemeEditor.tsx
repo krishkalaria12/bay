@@ -261,7 +261,7 @@ function wheel(width: number) {
 
 // The dotted field over the colour wheel, a dot for each colour, the first one large. A press or a drag anywhere
 // brings the first colour to the pointer (held to the wheel's edge), and the others follow it.
-function ColorField({ colors, width, onMoveFirst }: { colors: string[]; width: number; onMoveFirst(color: string): void }) {
+export function ColorField({ colors, width, onMoveFirst }: { colors: string[]; width: number; onMoveFirst(color: string): void }) {
   const theme = useTheme();
   const { height, radius, cx, cy, dotAt } = wheel(width);
   const field = useRef<View>(null);

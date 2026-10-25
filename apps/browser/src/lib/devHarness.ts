@@ -136,6 +136,14 @@ export function startDevHarness() {
     get developer(): typeof import("../components/developer/devMode") {
       return require("../components/developer/devMode");
     },
+    // Boosts: the store, the editor and the model (scripts/boosts-test.mjs).
+    get boosts(): {
+      state: typeof import("../components/boosts/state");
+      editor: typeof import("../components/boosts/editor");
+      model: typeof import("./boosts");
+    } {
+      return { state: require("../components/boosts/state"), editor: require("../components/boosts/editor"), model: require("./boosts") };
+    },
     // Capture's sessions and actions (scripts/capture-test.mjs).
     get library(): {
       state: typeof import("../components/library/state");

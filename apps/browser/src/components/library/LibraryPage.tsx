@@ -29,12 +29,17 @@ import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { chooseEasel, easelMenu, libraryWindow, newEasel, openEasel } from "./actions";
 import type { EaselDocument, LibraryMedia } from "./model";
 import { removeLibraryMedia, saveLibraryMedia, startLibrary, useLibrary } from "./state";
+import type { Boost } from "../../lib/boosts";
+import { Toggle } from "../layout/controls";
+import { exportBoostFile, openBoostEditor, removeBoost } from "../boosts/editor";
+import { setBoostsOn, startBoosts, updateBoost, useBoosts } from "../boosts/state";
 
 const SECTIONS = [
   { id: "media", title: "Media", icon: "photo.on.rectangle" },
   { id: "downloads", title: "Downloads", icon: "arrow.down.circle" },
   { id: "easels", title: "Easels", icon: "rectangle.on.rectangle" },
   { id: "spaces", title: "Spaces", icon: "square.stack" },
+  { id: "boosts", title: "Boosts", icon: "paintbrush.pointed" },
   { id: "archive", title: "Archived Tabs", icon: "archivebox" },
 ] as const;
 type Section = (typeof SECTIONS)[number]["id"];
@@ -143,6 +148,8 @@ function PublicLibrary({ tabId, windowId, initialSection }: { tabId: string; win
         <DownloadsPage tabId={tabId} />
       ) : section === "spaces" ? (
         <SpacesSection windowId={windowId} query={query} />
+      ) : section === "boosts" ? (
+        <BoostsSection windowId={windowId} query={query} />
       ) : section === "archive" ? (
         <ArchiveSection windowId={windowId} query={query} />
       ) : !loaded ? (
@@ -501,6 +508,107 @@ function SpacesSection({ windowId, query }: { windowId: string; query: string })
       ))}
     </ScrollView>
   );
+}
+
+// Arc's Library › Boosts: every site's Boosts, each switched on or off here, opened on its site to edit, exported or
+// deleted.
+function BoostsSection({ windowId, query }: { windowId: string; query: string }) {
+  const theme = useTheme();
+  const colors = useFormColors();
+  const { boosts, scripts, on } = useBoosts(useShallow((s) => ({ boosts: s.boosts, scripts: s.scripts, on: s.on })));
+  useEffect(() => startBoosts(), []);
+  const sites = new Map<string, Boost[]>();
+  for (const b of Object.values(boosts).sort((a, b) => a.host.localeCompare(b.host) || a.createdAt - b.createdAt))
+    if (matchesQuery(query, b.name, b.host)) sites.set(b.host, [...(sites.get(b.host) ?? []), b]);
+  const header = (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 4 }}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>Boosts</Text>
+        <Text style={{ fontSize: 11.5, color: theme.textTertiary }}>
+          {on ? "Sites look the way you made them. Turn this off to see every site as it is." : "Off: every site shows as it is."}
+        </Text>
+      </View>
+      <Toggle value={on} onChange={setBoostsOn} />
+    </View>
+  );
+  if (!sites.size)
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={{ padding: 24, paddingBottom: 0 }}>{header}</View>
+        <EmptyState
+          title={query ? "No matching Boosts" : "No Boosts yet"}
+          subtitle={query ? "Try a Boost's name or website." : "Open a site, then choose Boost This Site in Site Controls or the command bar."}
+        />
+      </View>
+    );
+  return (
+    <ScrollView contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 40 }}>
+      {header}
+      {[...sites].map(([host, list]) => (
+        <View
+          key={host}
+          style={{
+            backgroundColor: colors.group,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: colors.groupBorder,
+            borderRadius: 10,
+            overflow: "hidden",
+            padding: 4,
+          }}
+        >
+          {list.map((b) => (
+            <ContextMenuArea key={b.id} onContextMenu={() => void libraryBoostMenu(windowId, b)}>
+              <LibraryRow
+                title={b.name}
+                detail={`${host} · ${boostSummary(b, !!scripts[b.id]?.enabled)}`}
+                icon={<Favicon url={`https://${host}/`} />}
+                onPress={() => editBoostOnSite(windowId, b)}
+                accessory={
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Toggle value={b.enabled} onChange={(enabled) => updateBoost(b.id, { enabled })} />
+                    <IconButton icon="ellipsis" box={24} size={12} tooltip="Boost actions" onPress={() => void libraryBoostMenu(windowId, b)} />
+                  </View>
+                }
+              />
+            </ContextMenuArea>
+          ))}
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+function boostSummary(b: Boost, script: boolean): string {
+  const parts = [
+    b.color ? (b.color.theme ? "Space colours" : "Colours") : null,
+    b.invert ? "Inverted" : null,
+    b.font ? b.font : null,
+    b.size !== 1 ? `${Math.round(b.size * 100)}%` : null,
+    b.textCase !== "none" ? "Case" : null,
+    b.zaps.length ? `${b.zaps.length} zapped` : null,
+    b.focus.length ? "Focus" : null,
+    b.css.trim() ? "CSS" : null,
+    script ? "JavaScript" : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "No changes yet";
+}
+
+function editBoostOnSite(windowId: string, b: Boost) {
+  if (!libraryWindow(windowId)) return;
+  const tabId = useBrowser.getState().newTab(windowId, { url: `https://${b.host}/` });
+  openBoostEditor(tabId, { boostId: b.id });
+}
+
+async function libraryBoostMenu(windowId: string, b: Boost) {
+  const choice = await showMenu([
+    { id: "edit", title: "Edit on Site", symbol: "paintbrush.pointed" },
+    { id: "export", title: "Export Boost…", symbol: "square.and.arrow.up" },
+    { separator: true },
+    { id: "delete", title: "Delete Boost…", symbol: "trash" },
+  ]);
+  if (choice === "edit") editBoostOnSite(windowId, b);
+  else if (choice === "export") void exportBoostFile(b.id);
+  else if (choice === "delete") void removeBoost(null, b.id);
 }
 
 async function libraryTabMenu(windowId: string, tab: Tab) {

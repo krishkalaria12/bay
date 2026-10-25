@@ -1,3 +1,5 @@
+import { boostHost } from "../../lib/boosts";
+import { openBoostEditor } from "../boosts/editor";
 import { showMenu, type MenuItem } from "@bay/shell";
 import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
 import { armSidebarMoveUndo } from "../../lib/folderUndo";
@@ -184,6 +186,8 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "copyToWindow", title: "Open Copy in New Window", symbol: "macwindow.badge.plus", enabled: !!tab.url },
     sep,
     { id: "siteControls", title: "Site Controls", symbol: "slider.horizontal.3", enabled: !!tab.url },
+    // Arc's "Boost this site": the editor over the tab's page.
+    { id: "boost", title: "Boost This Site", symbol: "paintbrush.pointed", enabled: !!boostHost(tab.url) },
     { id: "copy", title: "Copy Address", symbol: "link", enabled: !!tab.url, ...hint("c", "shift", "command") },
     { id: "copyMd", title: "Copy Markdown Link", symbol: "m.square", enabled: !!tab.url, ...hint("c", "option", "shift", "command") },
     { id: "moveToSpace", title: "Move to Space", symbol: "square.stack.3d.up", enabled: !incognito, children: moveToSpace },
@@ -238,6 +242,9 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "siteControls") {
     switchToTab(tab.id);
     setPopover(tab.id, "siteControls");
+  } else if (choice === "boost") {
+    switchToTab(tab.id);
+    openBoostEditor(tab.id);
   } else if (choice === "copy") copyUrls([tab.id], false);
   else if (choice === "copyMd") copyUrls([tab.id], true);
   else if (choice.startsWith("profile:")) void moveTabToSpace(tab.id, choice.slice(8));

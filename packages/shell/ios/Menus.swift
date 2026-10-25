@@ -409,6 +409,9 @@ enum MainMenu {
       cmd("Capture Full Page", "captureFullPage"),
       // ⌥: Arc's Portrait Mode, the page framed on the space's colours.
       cmd("Capture in Portrait", "capturePortrait", "", .option).alternate(),
+      // Arc's Boosts (apps/browser components/boosts): the site's look, and zapping what you don't want on it.
+      cmd("Boost This Site", "newBoost"),
+      cmd("Zap Elements", "zapElements"),
       cmd("Share…", "share"),
       cmd("Email Page Location", "emailPageLocation", "i", [.command, .shift]),
       cmd("Print…", "print", "p"),

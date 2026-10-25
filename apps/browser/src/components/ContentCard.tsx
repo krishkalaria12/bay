@@ -75,6 +75,8 @@ import { DeveloperOffer } from "./developer/DeveloperOffer";
 import { onDeveloperMessage, startDeveloperMode } from "./developer/devMode";
 import { CaptureLayer } from "./capture/CaptureLayer";
 import { closeCaptureOnEscape, onCaptureGesture, onCaptureMessage, startCaptures } from "./capture/state";
+import { BoostEditor } from "./boosts/BoostEditor";
+import { closeBoostEditorOnEscape, onBoostMessage } from "./boosts/editor";
 import { useIsDeveloperTab } from "./developer/sites";
 
 // Where the card's panes are: the active tab's (or its split's), or the full-screen tab's over everything.
@@ -431,6 +433,7 @@ const TabPane = memo(function TabPane({
                 <NavigationOverlays tabId={tabId} windowId={windowId} geometry={geometry} />
                 <SelectionPopover tabId={tabId} zoom={zoom} />
                 <CaptureLayer tabId={tabId} />
+                <BoostEditor tabId={tabId} maxHeight={Math.max(240, frame.height - 20)} />
               </>
             )}
           </Animated.View>
@@ -616,6 +619,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
           // Esc in a page closes the theme editor over it; in a peek's page, the peek; in Little Bay's, Little Bay.
           const t = tab();
           if (closeCaptureOnEscape(tabId)) return;
+          if (closeBoostEditorOnEscape(tabId)) return;
           if (t && closeThemeEditorOnEscape(t.windowId)) return;
           if (t?.peekOf) store().closePeek(t.windowId);
           else closeLittleBayOnEscape(tabId);
@@ -626,6 +630,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         else if (kind === "scroll") noteScroll(tabId, data);
         else if (kind === "devMode") onDeveloperMessage(tabId, data);
         else if (kind === "capture") onCaptureMessage(tabId, data);
+        else if (kind === "boost") onBoostMessage(tabId, data);
         else if (kind === "captureGesture") onCaptureGesture(tabId, data);
       }}
       onNotificationClose={closeWebNotification}
