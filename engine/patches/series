@@ -57,6 +57,7 @@ chromium chromium-pip-overlay-window.patch
 chromium chromium-tab-sharing-capturer.patch
 chromium chromium-file-chooser-all-accepted-types.patch
 chromium chromium-bay-layer.patch
+chromium chromium-injected-author-sheet-order.patch
 
 layer engine/chromium
 layer engine/nncore

@@ -1,0 +1,253 @@
+diff --git a/third_party/blink/public/web/web_css_origin.h b/third_party/blink/public/web/web_css_origin.h
+--- a/third_party/blink/public/web/web_css_origin.h
++++ b/third_party/blink/public/web/web_css_origin.h
+@@ -9,6 +9,11 @@
+ 
+ enum class WebCssOrigin { kAuthor, kUser };
+ 
++// Author sheets normally precede document sheets. Embedders can opt into an
++// author sheet after document and adopted sheets, without changing its origin,
++// specificity or importance. Inspector sheets remain last.
++enum class WebStyleSheetInsertionOrder { kBeforeDocument, kAfterDocument };
++
+ }  // namespace blink
+ 
+ #endif  // THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_CSS_ORIGIN_H_
+diff --git a/third_party/blink/public/web/web_document.h b/third_party/blink/public/web/web_document.h
+--- a/third_party/blink/public/web/web_document.h
++++ b/third_party/blink/public/web/web_document.h
+@@ -154,17 +154,23 @@
+   // associated to a <form> element.
+   std::vector<WebFormControlElement> UnassociatedFormControls() const;
+ 
+-  // Inserts the given CSS source code as a style sheet in the document.
++  // Inserts the given CSS source code as a style sheet in the document. The
++  // insertion order applies to author-origin sheets only.
+   WebStyleSheetKey InsertStyleSheet(
+       const WebString& source_code,
+       const WebStyleSheetKey* = nullptr,
+       WebCssOrigin = WebCssOrigin::kAuthor,
+-      BackForwardCacheAware = BackForwardCacheAware::kAllow);
++      BackForwardCacheAware = BackForwardCacheAware::kAllow,
++      WebStyleSheetInsertionOrder =
++          WebStyleSheetInsertionOrder::kBeforeDocument);
+ 
+   // Removes the CSS which was previously inserted by a call to
+-  // InsertStyleSheet().
+-  void RemoveInsertedStyleSheet(const WebStyleSheetKey&,
+-                                WebCssOrigin = WebCssOrigin::kAuthor);
++  // InsertStyleSheet(), using the same origin and insertion order.
++  void RemoveInsertedStyleSheet(
++      const WebStyleSheetKey&,
++      WebCssOrigin = WebCssOrigin::kAuthor,
++      WebStyleSheetInsertionOrder =
++          WebStyleSheetInsertionOrder::kBeforeDocument);
+ 
+   // Arranges to call WebLocalFrameClient::didMatchCSS(frame(), ...) when one of
+   // the selectors matches or stops matching an element in this document.
+diff --git a/third_party/blink/renderer/core/css/style_engine.cc b/third_party/blink/renderer/core/css/style_engine.cc
+--- a/third_party/blink/renderer/core/css/style_engine.cc
++++ b/third_party/blink/renderer/core/css/style_engine.cc
+@@ -326,11 +326,15 @@
+ 
+ void StyleEngine::InjectSheet(const StyleSheetKey& key,
+                               StyleSheetContents* sheet,
+-                              WebCssOrigin origin) {
++                              WebCssOrigin origin,
++                              WebStyleSheetInsertionOrder order) {
+   HeapVector<std::pair<StyleSheetKey, Member<CSSStyleSheet>>>&
+       injected_style_sheets =
+-          origin == WebCssOrigin::kUser ? injected_user_style_sheets_
+-                                        : injected_author_style_sheets_;
++          origin == WebCssOrigin::kUser
++              ? injected_user_style_sheets_
++              : order == WebStyleSheetInsertionOrder::kAfterDocument
++                    ? injected_author_style_sheets_after_document_
++                    : injected_author_style_sheets_;
+   injected_style_sheets.push_back(std::make_pair(
+       key, MakeGarbageCollected<CSSStyleSheet>(sheet, *document_)));
+   if (origin == WebCssOrigin::kUser) {
+@@ -341,11 +345,15 @@
+ }
+ 
+ void StyleEngine::RemoveInjectedSheet(const StyleSheetKey& key,
+-                                      WebCssOrigin origin) {
++                                      WebCssOrigin origin,
++                                      WebStyleSheetInsertionOrder order) {
+   HeapVector<std::pair<StyleSheetKey, Member<CSSStyleSheet>>>&
+       injected_style_sheets =
+-          origin == WebCssOrigin::kUser ? injected_user_style_sheets_
+-                                        : injected_author_style_sheets_;
++          origin == WebCssOrigin::kUser
++              ? injected_user_style_sheets_
++              : order == WebStyleSheetInsertionOrder::kAfterDocument
++                    ? injected_author_style_sheets_after_document_
++                    : injected_author_style_sheets_;
+   // Remove the last sheet that matches.
+   const auto& it = std::ranges::find(
+       base::Reversed(injected_style_sheets), key,
+@@ -4809,6 +4817,7 @@
+   visitor->Trace(document_);
+   visitor->Trace(injected_user_style_sheets_);
+   visitor->Trace(injected_author_style_sheets_);
++  visitor->Trace(injected_author_style_sheets_after_document_);
+   visitor->Trace(active_user_style_sheets_);
+   visitor->Trace(keyframes_rule_map_);
+   visitor->Trace(font_palette_values_rule_map_);
+diff --git a/third_party/blink/renderer/core/css/style_engine.h b/third_party/blink/renderer/core/css/style_engine.h
+--- a/third_party/blink/renderer/core/css/style_engine.h
++++ b/third_party/blink/renderer/core/css/style_engine.h
+@@ -239,6 +239,11 @@
+     return injected_author_style_sheets_;
+   }
+ 
++  const HeapVector<std::pair<StyleSheetKey, Member<CSSStyleSheet>>>&
++  InjectedAuthorStyleSheetsAfterDocument() const {
++    return injected_author_style_sheets_after_document_;
++  }
++
+   const HeapVector<Member<CSSStyleSheet>>& InspectorStyleSheets() const {
+     return inspector_style_sheet_list_;
+   }
+@@ -300,9 +305,13 @@
+ 
+   void InjectSheet(const StyleSheetKey&,
+                    StyleSheetContents*,
+-                   WebCssOrigin = WebCssOrigin::kAuthor);
++                   WebCssOrigin = WebCssOrigin::kAuthor,
++                   WebStyleSheetInsertionOrder =
++                       WebStyleSheetInsertionOrder::kBeforeDocument);
+   void RemoveInjectedSheet(const StyleSheetKey&,
+-                           WebCssOrigin = WebCssOrigin::kAuthor);
++                           WebCssOrigin = WebCssOrigin::kAuthor,
++                           WebStyleSheetInsertionOrder =
++                               WebStyleSheetInsertionOrder::kBeforeDocument);
+   CSSStyleSheet& CreateInspectorStyleSheet();
+   RuleSet* WatchedSelectorsRuleSet() {
+     DCHECK(global_rule_set_);
+@@ -1161,6 +1170,8 @@
+       injected_user_style_sheets_;
+   HeapVector<std::pair<StyleSheetKey, Member<CSSStyleSheet>>>
+       injected_author_style_sheets_;
++  HeapVector<std::pair<StyleSheetKey, Member<CSSStyleSheet>>>
++      injected_author_style_sheets_after_document_;
+ 
+   ActiveStyleSheetVector active_user_style_sheets_;
+   HeapVector<RuleSetGroup> user_rule_set_groups_;
+diff --git a/third_party/blink/renderer/core/css/style_engine_test.cc b/third_party/blink/renderer/core/css/style_engine_test.cc
+--- a/third_party/blink/renderer/core/css/style_engine_test.cc
++++ b/third_party/blink/renderer/core/css/style_engine_test.cc
+@@ -15,6 +15,7 @@
+ #include "third_party/blink/public/common/page/page_zoom.h"
+ #include "third_party/blink/public/platform/web_theme_engine.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
++#include "third_party/blink/renderer/bindings/core/v8/v8_css_style_sheet_init.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_init.h"
+ #include "third_party/blink/renderer/core/animation/animation_clock.h"
+ #include "third_party/blink/renderer/core/animation/element_animations.h"
+@@ -219,6 +220,59 @@
+   EXPECT_TRUE(IsDocumentStyleSheetCollectionClean());
+ }
+ 
++TEST_F(StyleEngineTest, InjectAuthorSheetAfterDocument) {
++  SetBodyInnerHTML("<div id=target></div><div id=important></div>");
++  auto inject = [&](const char* key, const char* css,
++                    WebStyleSheetInsertionOrder order) {
++    auto* sheet = MakeGarbageCollected<StyleSheetContents>(
++        MakeGarbageCollected<CSSParserContext>(GetDocument()));
++    sheet->ParseString(css);
++    GetStyleEngine().InjectSheet(StyleSheetKey(key), sheet,
++                                 WebCssOrigin::kAuthor, order);
++  };
++  auto color = [&](const char* id) {
++    UpdateAllLifecyclePhases();
++    return GetDocument()
++        .getElementById(AtomicString(id))
++        ->GetComputedStyle()
++        ->VisitedDependentColor(GetCSSPropertyColor());
++  };
++  // Insert before the page's sheets exist, as document-start injection does.
++  inject("ordinary", "div { color: blue; }",
++         WebStyleSheetInsertionOrder::kBeforeDocument);
++  inject("boost", "div { color: green; }",
++         WebStyleSheetInsertionOrder::kAfterDocument);
++  GetDocument().head()->SetInnerHTMLWithoutTrustedTypes(
++      "<style>div { color: red; } #important { color: red !important; }</style>");
++  EXPECT_EQ(Color::FromRGB(0, 128, 0), color("target"));
++  EXPECT_EQ(Color::FromRGB(255, 0, 0), color("important"));
++
++  auto* adopted = CSSStyleSheet::Create(
++      GetDocument(), CSSStyleSheetInit::Create(), ASSERT_NO_EXCEPTION);
++  adopted->replaceSync("div { color: purple; }", ASSERT_NO_EXCEPTION);
++  HeapVector<Member<CSSStyleSheet>> adopted_sheets;
++  adopted_sheets.push_back(adopted);
++  GetDocument().SetAdoptedStyleSheetsForTesting(adopted_sheets);
++  EXPECT_EQ(Color::FromRGB(0, 128, 0), color("target"));
++
++  inject("later-boost", "div { color: yellow; }",
++         WebStyleSheetInsertionOrder::kAfterDocument);
++  ThreadState::Current()->CollectAllGarbageForTesting();
++  EXPECT_EQ(Color::FromRGB(255, 255, 0), color("target"));
++  GetStyleEngine().RemoveInjectedSheet(
++      StyleSheetKey("later-boost"), WebCssOrigin::kAuthor,
++      WebStyleSheetInsertionOrder::kAfterDocument);
++  EXPECT_EQ(Color::FromRGB(0, 128, 0), color("target"));
++  GetStyleEngine().RemoveInjectedSheet(
++      StyleSheetKey("boost"), WebCssOrigin::kAuthor,
++      WebStyleSheetInsertionOrder::kAfterDocument);
++  // The normal injected author sheet still precedes adopted/document sheets.
++  EXPECT_EQ(Color::FromRGB(128, 0, 128), color("target"));
++  adopted_sheets.clear();
++  GetDocument().SetAdoptedStyleSheetsForTesting(adopted_sheets);
++  EXPECT_EQ(Color::FromRGB(255, 0, 0), color("target"));
++}
++
+ TEST_F(StyleEngineTest, AnalyzedInject) {
+   GetDocument().body()->SetInnerHTMLWithoutTrustedTypes(R"HTML(
+     <style>
+diff --git a/third_party/blink/renderer/core/css/style_sheet_collection.cc b/third_party/blink/renderer/core/css/style_sheet_collection.cc
+--- a/third_party/blink/renderer/core/css/style_sheet_collection.cc
++++ b/third_party/blink/renderer/core/css/style_sheet_collection.cc
+@@ -192,6 +192,11 @@
+   }
+ 
+   if (!is_shadow_tree_) {
++    for (auto& sheet : GetDocument()
++                           .GetStyleEngine()
++                           .InjectedAuthorStyleSheetsAfterDocument()) {
++      new_active_style_sheets.push_back(std::pair(sheet.second, nullptr));
++    }
+     for (CSSStyleSheet* inspector_sheet :
+          GetDocument().GetStyleEngine().InspectorStyleSheets()) {
+       new_active_style_sheets.push_back(std::pair(inspector_sheet, nullptr));
+diff --git a/third_party/blink/renderer/core/exported/web_document.cc b/third_party/blink/renderer/core/exported/web_document.cc
+--- a/third_party/blink/renderer/core/exported/web_document.cc
++++ b/third_party/blink/renderer/core/exported/web_document.cc
+@@ -289,7 +289,8 @@
+     const WebString& source_code,
+     const WebStyleSheetKey* key,
+     WebCssOrigin origin,
+-    BackForwardCacheAware back_forward_cache_aware) {
++    BackForwardCacheAware back_forward_cache_aware,
++    WebStyleSheetInsertionOrder order) {
+   Document* document = Unwrap<Document>();
+   DCHECK(document);
+   if (back_forward_cache_aware == BackForwardCacheAware::kPossiblyDisallow) {
+@@ -303,13 +304,14 @@
+   const WebStyleSheetKey& injection_key =
+       key && !key->IsNull() ? *key : GenerateStyleSheetKey();
+   DCHECK(!injection_key.IsEmpty());
+-  document->GetStyleEngine().InjectSheet(injection_key, parsed_sheet, origin);
++  document->GetStyleEngine().InjectSheet(injection_key, parsed_sheet, origin, order);
+   return injection_key;
+ }
+ 
+ void WebDocument::RemoveInsertedStyleSheet(const WebStyleSheetKey& key,
+-                                           WebCssOrigin origin) {
+-  Unwrap<Document>()->GetStyleEngine().RemoveInjectedSheet(key, origin);
++                                           WebCssOrigin origin,
++                                           WebStyleSheetInsertionOrder order) {
++  Unwrap<Document>()->GetStyleEngine().RemoveInjectedSheet(key, origin, order);
+ }
+ 
+ void WebDocument::WatchCSSSelectors(

@@ -4,6 +4,7 @@ import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
+import type { EngineBoostStyle } from "./native";
 
 export type NavigationState = {
   url: string;
@@ -222,6 +223,8 @@ export type WebViewHandle = {
   stopLoading(): Promise<void>;
   focus(): Promise<void>;
   setMuted(muted: boolean): Promise<void>;
+  // Palette and per-host tints, ready for the renderer to select when each document starts.
+  setBoostStyle(style: EngineBoostStyle): Promise<void>;
   zoomStep(direction: 1 | -1 | 0): Promise<void>;
   find(text: string, forward: boolean, findNext: boolean): Promise<void>;
   stopFinding(clearSelection: boolean): Promise<void>;
@@ -343,7 +346,8 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onExternalApp: (e) => [e],
 };
 
-type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"> & {
+type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard" | "setBoostStyle"> & {
+  setBoostStyle?(descriptor: string): Promise<void>;
   evaluate(code: string): Promise<string | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
   loadUrl(url: string, userInitiated?: boolean): Promise<void>;
@@ -389,6 +393,8 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       stopLoading: () => call(undefined, (n) => n.stopLoading()),
       focus: () => call(undefined, (n) => n.focus()),
       setMuted: (muted) => call(undefined, (n) => n.setMuted(muted)),
+      // Builds before Boosts have no such call: nothing to style.
+      setBoostStyle: (style) => call(undefined, (n) => n.setBoostStyle?.(JSON.stringify(style)) ?? Promise.resolve()),
       zoomStep: (direction) => call(undefined, (n) => n.zoomStep(direction)),
       find: (text, forward, findNext) => call(undefined, (n) => n.find(text, forward, findNext)),
       stopFinding: (clear) => call(undefined, (n) => n.stopFinding(clear)),

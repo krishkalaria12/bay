@@ -1,4 +1,6 @@
-import { Cef } from "./native";
+import { Cef, type EngineBoost } from "./native";
+
+export type { EngineBoost, EngineBoostStyle } from "./native";
 
 export type DownloadState = "downloading" | "finished" | "failed" | "cancelled";
 
@@ -153,6 +155,9 @@ export const setDisplayMediaPicker = (enabled: boolean) => Cef.setDisplayMediaPi
 // Chrome's automatic Picture in Picture (a call's own document PiP on a tab switch) follows the app's setting. (Builds
 // before it have no such function: Chrome's default, its prompt, stays.)
 export const setAutoPictureInPicture = (enabled: boolean) => Cef.setAutoPictureInPicture?.(enabled) ?? Promise.resolve();
+// Boosts (Arc's site tweaks), every one that's on: the engine puts their sheets into the pages of their site at document
+// start and runs their script in its own isolated world (NNCoreEngine setBoosts:). Builds before it ignore them.
+export const setBoosts = (boosts: EngineBoost[]) => Cef.setBoosts?.(boosts) ?? Promise.resolve();
 export const setSearchEngineName = (name: string) => Cef.setSearchEngineName(name);
 export const getDisplayMediaSources = () => Cef.displayMediaSources();
 

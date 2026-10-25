@@ -21,6 +21,13 @@ import type { ClearSiteDataResult, SiteSettingType, SiteSettingValue, SiteSettin
 
 export type Result<T> = T | { error: string };
 
+// One site's Boost as the engine applies it (NNCoreEngine setBoosts:). host: without "www."; userCss: a user-origin sheet
+// (its !important rules beat the page's); css: an author sheet after the page's; script: run in the Boost's isolated
+// world once the DOM is in (private windows only with scriptInPrivate); invert: Chrome's forced dark mode on the site.
+export type EngineBoost = { host: string; userCss: string; css: string; script: string; scriptInPrivate: boolean; invert: boolean };
+// Per-tab palette and the winning tint for each boosted host. The renderer selects by its actual document URL.
+export type EngineBoostStyle = { palette: string; sites: Record<string, string> };
+
 export function valueOr<T extends object, F>(result: Result<T>, fallback: F): T | F {
   if (result && typeof result === "object" && "error" in result) {
     console.warn(`[cef] ${result.error}`);
@@ -51,6 +58,7 @@ export const Cef = requireNativeModule<{
   isTracing(): Promise<boolean>;
   setDisplayMediaPicker(enabled: boolean): Promise<void>;
   setAutoPictureInPicture?(enabled: boolean): Promise<void>;
+  setBoosts?(boosts: EngineBoost[]): Promise<void>;
   setSearchEngineName(name: string): Promise<void>;
   displayMediaSources(): Promise<DisplayMediaSource[]>;
   listTasks(): Promise<EngineTask[]>;

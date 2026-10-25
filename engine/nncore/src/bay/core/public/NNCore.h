@@ -133,6 +133,14 @@ NNCORE_EXPORT
 // The app's automatic Picture in Picture setting: Chrome's own (a call's document PiP on a tab
 // switch) is allowed without a prompt when on, blocked when off. On by default.
 + (void)setAutoPictureInPicture:(BOOL)enabled;
+// Boosts (Arc's site tweaks), every one that's on: [{host, userCss, css, script,
+// scriptInPrivate, invert}]. host: the site without "www." (its documents match with or
+// without). userCss: a user-origin sheet (its !important rules beat the page's); css: an
+// author sheet after the page's; both go into the main frame at document start, and pages
+// already showing the site are restyled at once. script: JavaScript run in the Boost's own
+// isolated world once the DOM is in, on documents loaded from now on, and in private
+// profiles only with scriptInPrivate. invert: Chrome's forced dark mode on the site.
++ (void)setBoosts:(NSArray<NSDictionary<NSString*, id>*>*)boosts;
 // Device choosers (engine:deviceChooser:tab:). index: an option, or -1 for a scanning
 // prompt's OK.
 + (void)selectDevice:(int)chooserId index:(int)index;
@@ -567,6 +575,10 @@ NNCORE_EXPORT
       completion:(void (^)(NSString* _Nullable json))completion;
 // The page script's receive(kind, json) in the main frame.
 - (void)callPage:(NSString*)kind json:(NSString*)json;
+// Serialized EngineBoostStyle {palette, sites}: its space's palette CSS and every boosted
+// host's winning tint CSS. The renderer selects its document's host across navigation.
+// nil or empty clears the descriptor.
+- (void)setBoostStyle:(nullable NSString*)css;
 
 // Stage 2.
 // JS SecurityInfo (packages/cef/src/WebView.tsx): {level, url, origin, protocol?, certificate?,

@@ -29,14 +29,17 @@
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/chrome_content_browser_client.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/profiler/main_thread_stack_sampling_profiler.h"
 #include "components/component_updater/component_updater_paths.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/os_crypt/common/os_crypt_switches.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/common/content_switches.h"
@@ -54,6 +57,7 @@
 #include "bay/core/renderer/nn_content_renderer_client.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/switches.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 
 // The user agent brand hook (engine/nncore/apply.sh).
 extern const char* g_bay_user_agent_brand;
@@ -298,6 +302,37 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override {
     ChromeContentBrowserClient::RenderProcessWillLaunch(host);
     SendPageScript(host);
+    SendBoosts(host);
+  }
+  // A Boost's Invert (Arc's): Chrome's forced dark mode on that site's pages, which darkens
+  // light pages and keeps photos as they are.
+  void OverrideWebPreferences(content::WebContents* web_contents,
+                              content::SiteInstance& main_frame_site,
+                              blink::web_pref::WebPreferences* prefs) override {
+    ChromeContentBrowserClient::OverrideWebPreferences(web_contents,
+                                                       main_frame_site, prefs);
+    prefs->force_dark_mode_enabled |= BoostInverts(web_contents);
+  }
+  bool OverrideWebPreferencesAfterNavigation(
+      content::WebContents* web_contents,
+      content::SiteInstance& main_frame_site,
+      blink::web_pref::WebPreferences* prefs) override {
+    bool changed =
+        ChromeContentBrowserClient::OverrideWebPreferencesAfterNavigation(
+            web_contents, main_frame_site, prefs);
+    const bool dark = BoostInverts(web_contents);
+    if (dark && !prefs->force_dark_mode_enabled) {
+      prefs->force_dark_mode_enabled = true;
+      changed = true;
+    } else if (!dark && prefs->force_dark_mode_enabled &&
+               !Profile::FromBrowserContext(web_contents->GetBrowserContext())
+                    ->GetPrefs()
+                    ->GetBoolean(prefs::kWebKitForceDarkModeEnabled)) {
+      // Back to Chrome's own setting once the page leaves the Boost's site.
+      prefs->force_dark_mode_enabled = false;
+      changed = true;
+    }
+    return changed;
   }
   void RegisterAssociatedInterfaceBindersForRenderFrameHost(
       content::RenderFrameHost& render_frame_host,

@@ -343,6 +343,7 @@ const char kPageReportsKey = 0;
   CFTimeInterval _creatingAt;
   NSString *_transferredURL;
   BOOL _muted;
+  NSString *_boostStyle;
   NSInteger _tabIndex;
   BOOL _pinned;
   NSView *_devtoolsView;
@@ -708,6 +709,7 @@ const char kPageReportsKey = 0;
   [self layoutPage];
   [self applyPainting];
   if (_muted && [tab respondsToSelector:@selector(setMuted:)]) tab.muted = YES;
+  if (_boostStyle.length && [tab respondsToSelector:@selector(setBoostStyle:)]) [tab setBoostStyle:_boostStyle];
   // Always: a tab another view had may still peek its links.
   if ([tab respondsToSelector:@selector(setPeeksLinks:)]) tab.peeksLinks = _peekLinks;
   if (_pageBackgroundColor && [tab respondsToSelector:@selector(setPageBackgroundColor:)]) tab.pageBackgroundColor = _pageBackgroundColor;
@@ -1083,6 +1085,10 @@ const char kPageReportsKey = 0;
   gDisplayMediaPicker = enabled;
 }
 
++ (void)setBoosts:(NSArray<NSDictionary<NSString *, id> *> *)boosts {
+  if ([NNCoreEngine respondsToSelector:@selector(setBoosts:)]) [NNCoreEngine setBoosts:boosts];
+}
+
 + (void)setAutoPictureInPictureEnabled:(BOOL)enabled {
   if ([NNCoreEngine respondsToSelector:@selector(setAutoPictureInPicture:)]) [NNCoreEngine setAutoPictureInPicture:enabled];
 }
@@ -1290,6 +1296,9 @@ const char kPageReportsKey = 0;
     // Capture's selection, which the app put in the page (apps/browser capture/captureScript.ts), and ⌘⇧ with a drag
     // starting it (page_script.js › Capture).
     [self emit:@"pageMessage" payload:@{@"kind" : kind, @"data" : dict}];
+  } else if ([kind isEqualToString:@"boost"] && main && dict) {
+    // Boosts' element picker, which the app put in the page (apps/browser boosts/pickerScript.ts).
+    [self emit:@"pageMessage" payload:@{@"kind" : @"boost", @"data" : dict}];
   } else if ([kind isEqualToString:@"scroll"] && main) {
     // The page's scroll direction, for the toolbar that hides while scrolling (page_script.js › Scroll direction).
     NSString *state = Text(dict, @"state", 8);
@@ -1547,6 +1556,11 @@ const char kPageReportsKey = 0;
 - (void)setMuted:(BOOL)muted {
   _muted = muted;
   if ([_tab respondsToSelector:@selector(setMuted:)]) _tab.muted = muted;
+}
+
+- (void)setBoostStyle:(NSString *)css {
+  _boostStyle = css.copy;
+  if ([_tab respondsToSelector:@selector(setBoostStyle:)]) [_tab setBoostStyle:css];
 }
 
 - (void)setPeekLinks:(BOOL)peekLinks {

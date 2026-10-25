@@ -2,7 +2,9 @@
 
 #import <Foundation/Foundation.h>
 
+#include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/task/bind_post_task.h"
@@ -18,7 +20,11 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/navigation_throttle_registry.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -27,6 +33,7 @@
 #import "bay/core/nncore_internal.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -37,6 +44,42 @@ namespace {
 std::string& Script() {
   static base::NoDestructor<std::string> script;
   return *script;
+}
+
+std::vector<Boost>& BoostList() {
+  static base::NoDestructor<std::vector<Boost>> boosts;
+  return *boosts;
+}
+
+// As the renderer names a document's site (nn_content_renderer_client.cc › BoostHost).
+std::string BoostHost(const GURL& url) {
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    return std::string();
+  }
+  std::string host = base::ToLowerASCII(url.host());
+  if (base::EndsWith(host, ".")) {
+    host.pop_back();
+  }
+  if (base::StartsWith(host, "www.")) {
+    host = host.substr(4);
+  }
+  return host;
+}
+
+// Every tab's WebContents (and any other with a renderer view).
+std::vector<content::WebContents*> AllContents() {
+  std::vector<content::WebContents*> all;
+  std::unique_ptr<content::RenderWidgetHostIterator> widgets(
+      content::RenderWidgetHost::GetRenderWidgetHosts());
+  while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
+    content::RenderViewHost* view = content::RenderViewHost::From(widget);
+    content::WebContents* contents =
+        view ? content::WebContents::FromRenderViewHost(view) : nullptr;
+    if (contents && std::find(all.begin(), all.end(), contents) == all.end()) {
+      all.push_back(contents);
+    }
+  }
+  return all;
 }
 
 mojo::AssociatedRemote<mojom::NNPage> PageOf(content::RenderFrameHost* frame) {
@@ -142,6 +185,56 @@ void SendPageScript(content::RenderProcessHost* host) {
   config->SetPageScript(Script());
 }
 
+void SetBoosts(std::vector<Boost> boosts) {
+  BoostList() = std::move(boosts);
+  for (auto it = content::RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
+       it.Advance()) {
+    content::RenderProcessHost* host = it.GetCurrentValue();
+    if (host->IsInitializedAndNotDead()) {
+      SendBoosts(host);
+    }
+  }
+  // Pages whose inversion changed get their web preferences again (only those: it restyles
+  // the whole page).
+  for (content::WebContents* contents : AllContents()) {
+    if (contents->GetOrCreateWebPreferences().force_dark_mode_enabled !=
+        BoostInverts(contents)) {
+      contents->OnWebPreferencesChanged();
+    }
+  }
+}
+
+void SendBoosts(content::RenderProcessHost* host) {
+  IPC::ChannelProxy* channel = host->GetChannel();
+  if (!channel) {
+    return;
+  }
+  const bool off_the_record = host->GetBrowserContext()->IsOffTheRecord();
+  std::vector<mojom::NNBoostPtr> boosts;
+  for (const Boost& boost : BoostList()) {
+    const bool script = !off_the_record || boost.script_in_private;
+    boosts.push_back(mojom::NNBoost::New(boost.host, boost.user_css, boost.css,
+                                         script ? boost.script : std::string()));
+  }
+  mojo::AssociatedRemote<mojom::NNRendererConfig> config;
+  channel->GetRemoteAssociatedInterface(&config);
+  config->SetBoosts(std::move(boosts));
+}
+
+bool BoostInverts(content::WebContents* contents) {
+  const std::string host =
+      BoostHost(contents->GetPrimaryMainFrame()->GetLastCommittedURL());
+  if (host.empty()) {
+    return false;
+  }
+  for (const Boost& boost : BoostList()) {
+    if (boost.host == host && boost.invert) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void RegisterPageChannelBinders(content::RenderFrameHost& render_frame_host,
                                 blink::AssociatedInterfaceRegistry& registry) {
   registry.AddInterface<mojom::NNPageHost>(base::BindRepeating(
@@ -171,6 +264,29 @@ void PageChannel::PrimaryPageChanged(content::Page& page) {
   // The old document's pending evaluations get no answer (it may sit in the back/forward
   // cache, timers frozen, and answer much later otherwise).
   main_page_.reset();
+}
+
+void PageChannel::ReadyToCommitNavigation(
+    content::NavigationHandle* navigation) {
+  // Send the serialized palette and all host tints before document start or BFCache
+  // activation, including an empty descriptor that clears stale state in a reused frame.
+  if (!navigation->IsInPrimaryMainFrame() ||
+      navigation->IsSameDocument()) {
+    return;
+  }
+  if (auto page = PageOf(navigation->GetRenderFrameHost())) {
+    page->SetBoostStyle(boost_style_);
+  }
+}
+
+void PageChannel::SetBoostStyle(const std::string& descriptor) {
+  if (boost_style_ == descriptor) {
+    return;
+  }
+  boost_style_ = descriptor;
+  if (mojom::NNPage* page = MainPage()) {
+    page->SetBoostStyle(descriptor);
+  }
 }
 
 PageChannel::~PageChannel() = default;
