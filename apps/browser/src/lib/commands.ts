@@ -26,6 +26,7 @@ import { groupOf } from "../store/organize";
 import { shownPeek } from "../store/peeks";
 import { isSmall, mainWindowFor } from "../store/small";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
+import { joinMeetingNow } from "../live/alerts";
 
 export function runCommand({ command, arg, windowId: requested }: CommandEvent) {
   const s = useBrowser.getState();
@@ -49,6 +50,8 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void openWindow({ incognito: true });
     case "newLittleBay":
       return void openLittleBay();
+    case "joinMeeting":
+      return void joinMeetingNow();
     case "toggleOpenLinksInLittleBay":
       return s.updateSettings({ openLinksInLittleBay: !s.settings.openLinksInLittleBay });
     case "reopenClosedWindow":

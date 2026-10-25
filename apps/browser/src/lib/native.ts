@@ -27,6 +27,9 @@ import { isInternalTab } from "../components/pages/urls";
 import { sidebarMenuState } from "../components/sidebar/commands";
 import { openWindow as createWindow } from "./actions";
 import { openExternalUrls } from "../components/littleBay/actions";
+import { meetingToJoin } from "../live/alerts";
+import { useCalendar } from "../live/calendar";
+import { everySlowly } from "./slowTimers";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./commands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
@@ -152,6 +155,16 @@ export function startNativeSync() {
   });
   useExtensions.subscribe((e, prev) => {
     if (e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
+  });
+  // Join Meeting (⌃⌘J) comes and goes with the calendar and the clock, not the store.
+  useCalendar.subscribe((c, prev) => {
+    if (c.events !== prev.events) menuTimer ??= setTimeout(syncMenu, 120);
+  });
+  everySlowly({
+    every: 30_000,
+    run: () => void (menuTimer ??= setTimeout(syncMenu, 120)),
+    needed: () => useCalendar.getState().events.length > 0,
+    watch: (changed) => useCalendar.subscribe(changed),
   });
   void windowIds().then((ids) => {
     const s = store.getState();
@@ -310,6 +323,9 @@ export function menuState(s: BrowserState): MenuState {
   }
 
   if (!s.settings.openLinksInLittleBay) titles.toggleOpenLinksInLittleBay = "Open Links from Other Apps in Little Bay";
+  const meeting = meetingToJoin();
+  if (meeting) titles.joinMeeting = `Join “${meeting.title || "Untitled event"}”`;
+  else disabled.push("joinMeeting");
 
   const sidebar = sidebarMenuState(s, windowId);
   disabled.push(...sidebar.disabled);
