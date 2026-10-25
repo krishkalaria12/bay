@@ -1,7 +1,8 @@
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { ContextMenuArea, fileExists, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { LegendList } from "@legendapp/list/react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -37,11 +38,17 @@ export function DownloadsPage({ tabId }: { tabId: string }) {
           title={query ? "No search results found" : "Files you download appear here"}
         />
       ) : (
-        <FlatList
+        <LegendList
+          style={{ flex: 1 }}
           data={shown}
           keyExtractor={(d) => d.id}
-          contentContainerStyle={{ alignItems: "center", paddingTop: 8, paddingBottom: 40, gap: 8 }}
-          renderItem={({ item }) => <DownloadCard d={item} windowId={windowId} />}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: 40, gap: 8 }}
+          // Rows sit at the list's full width: each card centres in its own.
+          renderItem={({ item }) => (
+            <View style={{ alignItems: "center" }}>
+              <DownloadCard d={item} windowId={windowId} />
+            </View>
+          )}
         />
       )}
     </View>

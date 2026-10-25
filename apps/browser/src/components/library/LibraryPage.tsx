@@ -11,7 +11,8 @@ import {
   Symbol,
 } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
-import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { LegendList } from "@legendapp/list/react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
@@ -203,6 +204,11 @@ function gridSize(width: number) {
   return { columns, cardWidth: Math.max(1, (width - 48 - (columns - 1) * 16) / columns) };
 }
 
+// A grid's cell: half the 16 pt gap each side and 20 below, in a list padded 16 (24 at its edges with the cells').
+// The cell, not the list, spaces the cards, so a card is exactly gridSize's width in its column.
+const GRID_CONTENT = { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 20 };
+const GRID_CELL = { paddingHorizontal: 8, paddingBottom: 20 };
+
 function MediaSection({ windowId, query, width }: { windowId: string; query: string; width: number }) {
   const media = useLibrary((s) => s.media);
   const shown = Object.values(media)
@@ -218,14 +224,18 @@ function MediaSection({ windowId, query, width }: { windowId: string; query: str
       />
     );
   return (
-    <FlatList
+    <LegendList
       key={columns}
+      style={{ flex: 1 }}
       data={shown}
       numColumns={columns}
       keyExtractor={(m) => m.id}
-      columnWrapperStyle={columns > 1 ? { gap: 16 } : undefined}
-      contentContainerStyle={{ padding: 24, gap: 20, paddingBottom: 40 }}
-      renderItem={({ item }) => <MediaCard media={item} windowId={windowId} width={cardWidth} />}
+      contentContainerStyle={GRID_CONTENT}
+      renderItem={({ item }) => (
+        <View style={GRID_CELL}>
+          <MediaCard media={item} windowId={windowId} width={cardWidth} />
+        </View>
+      )}
     />
   );
 }
@@ -340,14 +350,18 @@ function EaselsSection({ windowId, query, width }: { windowId: string; query: st
       />
     );
   return (
-    <FlatList
+    <LegendList
       key={columns}
+      style={{ flex: 1 }}
       data={shown}
       numColumns={columns}
       keyExtractor={(e) => e.id}
-      columnWrapperStyle={columns > 1 ? { gap: 16 } : undefined}
-      contentContainerStyle={{ padding: 24, gap: 20, paddingBottom: 40 }}
-      renderItem={({ item }) => <EaselCard easel={item} windowId={windowId} width={cardWidth} />}
+      contentContainerStyle={GRID_CONTENT}
+      renderItem={({ item }) => (
+        <View style={GRID_CELL}>
+          <EaselCard easel={item} windowId={windowId} width={cardWidth} />
+        </View>
+      )}
     />
   );
 }
@@ -582,7 +596,8 @@ function ArchiveSection({ windowId, query }: { windowId: string; query: string }
       />
     );
   return (
-    <FlatList
+    <LegendList
+      style={{ flex: 1 }}
       data={shown}
       keyExtractor={(entry) => `${entry.cleaned ? "cleaned" : "closed"}:${entry.id}`}
       contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
