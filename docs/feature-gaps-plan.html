@@ -566,7 +566,7 @@
       }
     </style>
   </head>
-    <body>
+  <body>
     <a class="skip" href="#content">Skip to content</a>
 
     <header class="top">
@@ -619,14 +619,22 @@
             </p>
             <p>The gaps are of four kinds:</p>
             <ul>
-              <li><strong>Small habits Arc users will miss on day one.</strong> Unread counts on favorites, opening Little Bay from any app, mouse buttons that switch spaces, Shift-Return for the top result. Ten items, mostly S.</li>
-              <li><strong>Keyboard and undo.</strong> Moving around the sidebar from the keyboard, ⌘Z for any sidebar edit, and files from Finder in the sidebar.</li>
-              <li><strong>Boosts.</strong> Arc's way to restyle or zap parts of a site. Bay has no answer except uBlock's cosmetic filters. One large build.</li>
-              <li><strong>Sharing and Arc Max.</strong> Shared folders, Share Quote, Easel links, and the "tidy" AI features. Each needs a decision before work starts.</li>
+              <li>
+                <strong>Small habits Arc users will miss on day one.</strong> Unread counts on favorites, opening Little Bay from any app, mouse buttons that
+                switch spaces, Shift-Return for the top result. Ten items, mostly S.
+              </li>
+              <li>
+                <strong>Keyboard and undo.</strong> Moving around the sidebar from the keyboard, ⌘Z for any sidebar edit, and files from Finder in the sidebar.
+              </li>
+              <li>
+                <strong>Boosts.</strong> Arc's way to restyle or zap parts of a site. Bay has no answer except uBlock's cosmetic filters. One large build.
+              </li>
+              <li>
+                <strong>Sharing and Arc Max.</strong> Shared folders, Share Quote, Easel links, and the "tidy" AI features. Each needs a decision before work
+                starts.
+              </li>
             </ul>
-            <p>
-              Phase 1 is sized to land before <strong>22 December 2026</strong>, when Arc stops opening. The later phases don't depend on that date.
-            </p>
+            <p>Phase 1 is sized to land before <strong>22 December 2026</strong>, when Arc stops opening. The later phases don't depend on that date.</p>
           </div>
         </section>
 
@@ -639,9 +647,9 @@
               turned off. The official path is to move to Dia.
             </p>
             <p>
-              That gives Bay 58 days during which every Arc user is choosing a browser. Bay's Arc importer reads <code>StorableSidebar.json</code> straight
-              from disk (<code>packages/import/ios/Core/Discovery.swift</code>), so it should keep working after Arc stops opening, as long as the files stay
-              on disk. Re-test it against a profile from Arc's final build (see <a href="#retest">Re-test</a>).
+              That gives Bay 58 days during which every Arc user is choosing a browser. Bay's Arc importer reads <code>StorableSidebar.json</code> straight from
+              disk (<code>packages/import/ios/Core/Discovery.swift</code>), so it should keep working after Arc stops opening, as long as the files stay on
+              disk. Re-test it against a profile from Arc's final build (see <a href="#retest">Re-test</a>).
             </p>
           </div>
           <div class="prose">
@@ -731,28 +739,182 @@
                 </tr>
               </thead>
               <tbody>
-                <tr><td>1</td><td>Unread counts on favorites</td><td>Mar 2022</td><td>Tiles show away, media and capture badges; no counts</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>2</td><td>Little Bay from any app (shortcut and menu bar button)</td><td>Aug 2021</td><td>⌥⌘N works only with Bay in front</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>3</td><td>Little Bay windows put away after six hours</td><td>Nov 2023</td><td>They stay open until closed</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>4</td><td>Mouse buttons 4 and 5 switch spaces</td><td>Mar 2022</td><td>Only the middle button is handled</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>5</td><td>Option shows the hidden sidebar</td><td>May 2021</td><td>Hover the edge only</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>6</td><td>Arrow showing the current tab is scrolled out of view</td><td>Jul 2023</td><td>None</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>7</td><td>Shift-Return opens the top result (Instant Links)</td><td>Feb 2024</td><td>Return always searches</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>8</td><td>⌃⌘J joins the meeting that's on now</td><td>Jun 2024</td><td>Join buttons in the meeting alert only</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>9</td><td>Portrait capture of a tab</td><td>Dec 2023</td><td>Element, area and full page</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>10</td><td>JSON viewer in Developer Mode</td><td>Dec 2023</td><td>Raw JSON</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
-                <tr><td>11</td><td>Move around the sidebar from the keyboard</td><td>Jun 2021</td><td>None</td><td class="c"><span class="chip m">M</span></td><td class="c">2</td></tr>
-                <tr><td>12</td><td>⌘Z for any sidebar edit</td><td>Jun 2021</td><td>⌘Z undoes folder moves; ⇧⌘T reopens tabs</td><td class="c"><span class="chip m">M</span></td><td class="c">2</td></tr>
-                <tr><td>13</td><td>Files and folders from Finder in the sidebar</td><td>Jun 2021</td><td>None</td><td class="c"><span class="chip m">M</span></td><td class="c">2</td></tr>
-                <tr><td>14</td><td>Boosts: zap, colours, fonts, custom CSS</td><td>Jul 2022, v2 May 2023</td><td>Only uBlock's cosmetic filters</td><td class="c"><span class="chip l">L</span></td><td class="c">3</td></tr>
-                <tr><td>15</td><td>Boosts with JavaScript, kept on one Mac</td><td>Jul 2022; sync off Sep 2024</td><td>None</td><td class="c"><span class="chip m">M</span></td><td class="c">3</td></tr>
-                <tr><td>16</td><td>Share Quote: highlighted text as a card image and link</td><td>Nov 2023</td><td>Copies a link to the highlight</td><td class="c"><span class="chip m">M</span></td><td class="c">4</td></tr>
-                <tr><td>17</td><td>Share a folder, split or selection as a link</td><td>Oct 2023</td><td>Copy All Links, as text or Markdown</td><td class="c"><span class="chip m">M</span></td><td class="c">4</td></tr>
-                <tr><td>18</td><td>Share an Easel as a web page</td><td>Jun 2022</td><td>Export as a PNG or HTML file</td><td class="c"><span class="chip l">L</span></td><td class="c">4</td></tr>
-                <tr><td>19</td><td>Tidy Tab Titles: short names for pinned tabs</td><td>Oct 2023</td><td>Rename by hand</td><td class="c"><span class="chip m">M</span></td><td class="c">5</td></tr>
-                <tr><td>20</td><td>Tidy Downloads: readable file names</td><td>Oct 2023</td><td>Server's file name</td><td class="c"><span class="chip s">S</span></td><td class="c">5</td></tr>
-                <tr><td>21</td><td>Tidy Tabs: group today's tabs by topic</td><td>Feb 2024</td><td>Clean up by age; meeting groups</td><td class="c"><span class="chip m">M</span></td><td class="c">5</td></tr>
-                <tr><td>22</td><td>5-Second Previews: Shift-hover a link for a summary</td><td>Oct 2023</td><td>Hover card for tabs; Peek for links</td><td class="c"><span class="chip m">M</span></td><td class="c">5</td></tr>
+                <tr>
+                  <td>1</td>
+                  <td>Unread counts on favorites</td>
+                  <td>Mar 2022</td>
+                  <td>Tiles show away, media and capture badges; no counts</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>Little Bay from any app (shortcut and menu bar button)</td>
+                  <td>Aug 2021</td>
+                  <td>⌥⌘N works only with Bay in front</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td>Little Bay windows put away after six hours</td>
+                  <td>Nov 2023</td>
+                  <td>They stay open until closed</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>4</td>
+                  <td>Mouse buttons 4 and 5 switch spaces</td>
+                  <td>Mar 2022</td>
+                  <td>Only the middle button is handled</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>5</td>
+                  <td>Option shows the hidden sidebar</td>
+                  <td>May 2021</td>
+                  <td>Hover the edge only</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>6</td>
+                  <td>Arrow showing the current tab is scrolled out of view</td>
+                  <td>Jul 2023</td>
+                  <td>None</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>7</td>
+                  <td>Shift-Return opens the top result (Instant Links)</td>
+                  <td>Feb 2024</td>
+                  <td>Return always searches</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>8</td>
+                  <td>⌃⌘J joins the meeting that's on now</td>
+                  <td>Jun 2024</td>
+                  <td>Join buttons in the meeting alert only</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>9</td>
+                  <td>Portrait capture of a tab</td>
+                  <td>Dec 2023</td>
+                  <td>Element, area and full page</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>10</td>
+                  <td>JSON viewer in Developer Mode</td>
+                  <td>Dec 2023</td>
+                  <td>Raw JSON</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">1</td>
+                </tr>
+                <tr>
+                  <td>11</td>
+                  <td>Move around the sidebar from the keyboard</td>
+                  <td>Jun 2021</td>
+                  <td>None</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">2</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>⌘Z for any sidebar edit</td>
+                  <td>Jun 2021</td>
+                  <td>⌘Z undoes folder moves; ⇧⌘T reopens tabs</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">2</td>
+                </tr>
+                <tr>
+                  <td>13</td>
+                  <td>Files and folders from Finder in the sidebar</td>
+                  <td>Jun 2021</td>
+                  <td>None</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">2</td>
+                </tr>
+                <tr>
+                  <td>14</td>
+                  <td>Boosts: zap, colours, fonts, custom CSS</td>
+                  <td>Jul 2022, v2 May 2023</td>
+                  <td>Only uBlock's cosmetic filters</td>
+                  <td class="c"><span class="chip l">L</span></td>
+                  <td class="c">3</td>
+                </tr>
+                <tr>
+                  <td>15</td>
+                  <td>Boosts with JavaScript, kept on one Mac</td>
+                  <td>Jul 2022; sync off Sep 2024</td>
+                  <td>None</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">3</td>
+                </tr>
+                <tr>
+                  <td>16</td>
+                  <td>Share Quote: highlighted text as a card image and link</td>
+                  <td>Nov 2023</td>
+                  <td>Copies a link to the highlight</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">4</td>
+                </tr>
+                <tr>
+                  <td>17</td>
+                  <td>Share a folder, split or selection as a link</td>
+                  <td>Oct 2023</td>
+                  <td>Copy All Links, as text or Markdown</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">4</td>
+                </tr>
+                <tr>
+                  <td>18</td>
+                  <td>Share an Easel as a web page</td>
+                  <td>Jun 2022</td>
+                  <td>Export as a PNG or HTML file</td>
+                  <td class="c"><span class="chip l">L</span></td>
+                  <td class="c">4</td>
+                </tr>
+                <tr>
+                  <td>19</td>
+                  <td>Tidy Tab Titles: short names for pinned tabs</td>
+                  <td>Oct 2023</td>
+                  <td>Rename by hand</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">5</td>
+                </tr>
+                <tr>
+                  <td>20</td>
+                  <td>Tidy Downloads: readable file names</td>
+                  <td>Oct 2023</td>
+                  <td>Server's file name</td>
+                  <td class="c"><span class="chip s">S</span></td>
+                  <td class="c">5</td>
+                </tr>
+                <tr>
+                  <td>21</td>
+                  <td>Tidy Tabs: group today's tabs by topic</td>
+                  <td>Feb 2024</td>
+                  <td>Clean up by age; meeting groups</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">5</td>
+                </tr>
+                <tr>
+                  <td>22</td>
+                  <td>5-Second Previews: Shift-hover a link for a summary</td>
+                  <td>Oct 2023</td>
+                  <td>Hover card for tabs; Peek for links</td>
+                  <td class="c"><span class="chip m">M</span></td>
+                  <td class="c">5</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -773,13 +935,43 @@
                 </tr>
               </thead>
               <tbody>
-                <tr><td>R1</td><td>Import works after Arc stops</td><td>Import a profile saved by Arc 1.170 with Arc quit and its account signed out. Spaces, nested folders, favorites and pinned tabs arrive.</td></tr>
-                <tr><td>R2</td><td>A restored tab returns to its own space (Nov 2023)</td><td>Restore a tab from the Library's archive while another space is in front. It opens in the space it came from.</td></tr>
-                <tr><td>R3</td><td>Switching spaces returns to that space's last tab (Aug 2023)</td><td>Select a tab in Work, go to Home, come back. The same tab is selected.</td></tr>
-                <tr><td>R4</td><td>Duplicate keeps history (Aug 2023)</td><td>Duplicate a tab three pages deep. Back works in the copy.</td></tr>
-                <tr><td>R5</td><td>⌘-click Back opens in a new tab (Aug 2023)</td><td>⌘-click and middle-click Back and Forward. Each opens the entry in a new tab.</td></tr>
-                <tr><td>R6</td><td>Google Meet floats with call controls (Jul 2023)</td><td>Leave a Meet tab during a call. The floating window shows mute, camera and leave, and moves and resizes.</td></tr>
-                <tr><td>R7</td><td>The sidebar dims when the window isn't in front (Oct 2023)</td><td>Click into another app. The sidebar dims, and brightens again on return.</td></tr>
+                <tr>
+                  <td>R1</td>
+                  <td>Import works after Arc stops</td>
+                  <td>
+                    Import a profile saved by Arc 1.170 with Arc quit and its account signed out. Spaces, nested folders, favorites and pinned tabs arrive.
+                  </td>
+                </tr>
+                <tr>
+                  <td>R2</td>
+                  <td>A restored tab returns to its own space (Nov 2023)</td>
+                  <td>Restore a tab from the Library's archive while another space is in front. It opens in the space it came from.</td>
+                </tr>
+                <tr>
+                  <td>R3</td>
+                  <td>Switching spaces returns to that space's last tab (Aug 2023)</td>
+                  <td>Select a tab in Work, go to Home, come back. The same tab is selected.</td>
+                </tr>
+                <tr>
+                  <td>R4</td>
+                  <td>Duplicate keeps history (Aug 2023)</td>
+                  <td>Duplicate a tab three pages deep. Back works in the copy.</td>
+                </tr>
+                <tr>
+                  <td>R5</td>
+                  <td>⌘-click Back opens in a new tab (Aug 2023)</td>
+                  <td>⌘-click and middle-click Back and Forward. Each opens the entry in a new tab.</td>
+                </tr>
+                <tr>
+                  <td>R6</td>
+                  <td>Google Meet floats with call controls (Jul 2023)</td>
+                  <td>Leave a Meet tab during a call. The floating window shows mute, camera and leave, and moves and resizes.</td>
+                </tr>
+                <tr>
+                  <td>R7</td>
+                  <td>The sidebar dims when the window isn't in front (Oct 2023)</td>
+                  <td>Click into another app. The sidebar dims, and brightens again on return.</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -788,208 +980,454 @@
         <section id="phases" aria-labelledby="phases-h">
           <h2 id="phases-h">Phases</h2>
           <ol class="flow">
-            <li><a href="#p1"><span class="n">Phase 1</span><strong>Before Arc shuts down</strong>10 small items</a></li>
-            <li><a href="#p2"><span class="n">Phase 2</span><strong>Keyboard &amp; undo</strong>3 items</a></li>
-            <li><a href="#p3"><span class="n">Phase 3</span><strong>Boosts</strong>Site tweaks</a></li>
-            <li class="gate"><a href="#p4"><span class="n">Phase 4</span><strong>Sharing</strong>Decision first</a></li>
-            <li class="gate"><a href="#p5"><span class="n">Phase 5</span><strong>Arc Max, on device</strong>Research gate</a></li>
+            <li>
+              <a href="#p1"><span class="n">Phase 1</span><strong>Before Arc shuts down</strong>10 small items</a>
+            </li>
+            <li>
+              <a href="#p2"><span class="n">Phase 2</span><strong>Keyboard &amp; undo</strong>3 items</a>
+            </li>
+            <li>
+              <a href="#p3"><span class="n">Phase 3</span><strong>Boosts</strong>Site tweaks</a>
+            </li>
+            <li class="gate">
+              <a href="#p4"><span class="n">Phase 4</span><strong>Sharing</strong>Decision first</a>
+            </li>
+            <li class="gate">
+              <a href="#p5"><span class="n">Phase 5</span><strong>Arc Max, on device</strong>Research gate</a>
+            </li>
           </ol>
           <p class="prose">
-            Phase 1 has a date: 22 December. Phases 2 and 3 don't depend on each other and can run side by side. Phases 4 and 5 start only after their
-            decisions are made. Phase 3 comes before Boost sharing in Phase 4.
+            Phase 1 has a date: 22 December. Phases 2 and 3 don't depend on each other and can run side by side. Phases 4 and 5 start only after their decisions
+            are made. Phase 3 comes before Boost sharing in Phase 4.
           </p>
 
           <article class="phase" id="p1" aria-labelledby="p1-h">
-            <div class="phase-head"><span class="phase-num">Phase 1</span><h3 id="p1-h">Before Arc shuts down</h3><span class="chip s">10 × S</span></div>
-            <p class="goal">Small habits Arc users will reach for in their first week. Each one ships alone. Land them before Arc's reminders start on 23 November if possible, and before 22 December at the latest.</p>
+            <div class="phase-head">
+              <span class="phase-num">Phase 1</span>
+              <h3 id="p1-h">Before Arc shuts down</h3>
+              <span class="chip s">10 × S</span>
+            </div>
+            <p class="goal">
+              Small habits Arc users will reach for in their first week. Each one ships alone. Land them before Arc's reminders start on 23 November if
+              possible, and before 22 December at the latest.
+            </p>
 
             <div class="item">
               <h4>1 · Unread counts on favorites <span class="chip s">S</span></h4>
-              <p>Arc badged Slack, X, Google Calendar and Gmail favorites with their counts. Read the count from the page title ("Inbox (3)", "(2) Slack") and from favicon badges, and draw it on the Essentials tile. Keep a short list of title patterns per site, and fall back to a dot when a site only changes its favicon.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>sidebar/PinnedGrid.tsx</code>, <code>media/TabBadges.tsx</code>, <code>lib/siteIcons.ts</code></dd></dl>
-              <ul class="checks"><li>A Gmail favorite shows the inbox count and clears when it reaches zero, also while asleep after its last count.</li></ul>
+              <p>
+                Arc badged Slack, X, Google Calendar and Gmail favorites with their counts. Read the count from the page title ("Inbox (3)", "(2) Slack") and
+                from favicon badges, and draw it on the Essentials tile. Keep a short list of title patterns per site, and fall back to a dot when a site only
+                changes its favicon.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>sidebar/PinnedGrid.tsx</code>, <code>media/TabBadges.tsx</code>, <code>lib/siteIcons.ts</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>A Gmail favorite shows the inbox count and clears when it reaches zero, also while asleep after its last count.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>2 · Little Bay from any app <span class="chip s">S</span></h4>
-              <p>Arc had a menu bar button for Little Arc. Add an optional menu bar item and a global shortcut (default ⌥⌘N, settable, off until chosen) that open a Little Bay window with the command bar focused, even when Bay is in the background.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/AppModule.swift</code> (status item, global hot key), <code>littleBay/actions.ts</code>, Settings › Links</dd></dl>
-              <ul class="checks"><li>From Finder, the shortcut opens Little Bay ready to type. Clicking the menu bar item does the same. Turning it off unregisters the key.</li></ul>
+              <p>
+                Arc had a menu bar button for Little Arc. Add an optional menu bar item and a global shortcut (default ⌥⌘N, settable, off until chosen) that
+                open a Little Bay window with the command bar focused, even when Bay is in the background.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>packages/shell/ios/AppModule.swift</code> (status item, global hot key), <code>littleBay/actions.ts</code>, Settings › Links</dd>
+              </dl>
+              <ul class="checks">
+                <li>From Finder, the shortcut opens Little Bay ready to type. Clicking the menu bar item does the same. Turning it off unregisters the key.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>3 · Little Bay windows put away after six hours <span class="chip s">S</span></h4>
-              <p>Arc closed idle Little Arc windows after six hours and kept their links in the archive, filtered as Little Arc. Do the same with a setting for the time, and add "Show/Hide All Little Bay Windows" to the Dock menu.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>littleBay/</code>, <code>lib/tabLifecycle.ts</code>, <code>packages/shell/ios/DockSelection.swift</code>, Library archive filter</dd></dl>
-              <ul class="checks"><li>A Little Bay left alone for six hours closes, and its page is in the Library's archive under Little Bay.</li></ul>
+              <p>
+                Arc closed idle Little Arc windows after six hours and kept their links in the archive, filtered as Little Arc. Do the same with a setting for
+                the time, and add "Show/Hide All Little Bay Windows" to the Dock menu.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>littleBay/</code>, <code>lib/tabLifecycle.ts</code>, <code>packages/shell/ios/DockSelection.swift</code>, Library archive filter</dd>
+              </dl>
+              <ul class="checks">
+                <li>A Little Bay left alone for six hours closes, and its page is in the Library's archive under Little Bay.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>4 · Mouse buttons 4 and 5 switch spaces <span class="chip s">S</span></h4>
-              <p>Arc let mice without a trackpad cycle spaces with the side buttons. Bay handles only the middle button (AppKit's <code>buttonNumber</code> 2). Map the side buttons (<code>buttonNumber</code> 3 and 4) to Previous and Next Space when the pointer is over the sidebar, and keep Back and Forward over the page.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/System.swift</code> (<code>otherMouseUp</code>), <code>layout/spacePager.ts</code></dd></dl>
-              <ul class="checks"><li>Over the sidebar the side buttons switch spaces with the swipe animation; over a page they go back and forward.</li></ul>
+              <p>
+                Arc let mice without a trackpad cycle spaces with the side buttons. Bay handles only the middle button (AppKit's <code>buttonNumber</code> 2).
+                Map the side buttons (<code>buttonNumber</code> 3 and 4) to Previous and Next Space when the pointer is over the sidebar, and keep Back and
+                Forward over the page.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>packages/shell/ios/System.swift</code> (<code>otherMouseUp</code>), <code>layout/spacePager.ts</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>Over the sidebar the side buttons switch spaces with the swipe animation; over a page they go back and forward.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>5 · Option shows the hidden sidebar <span class="chip s">S</span></h4>
-              <p>With the sidebar auto-hidden, holding Option slides it in, and releasing slides it out. A setting turns it off. The shell already watches modifier changes for ⌃Tab, so this adds Option to that monitor.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/ShellModule.swift</code> (<code>flagsChanged</code>), <code>layout/useSidebarDock.ts</code></dd></dl>
-              <ul class="checks"><li>Holding Option alone shows the sidebar; Option as part of a shortcut or while typing doesn't.</li></ul>
+              <p>
+                With the sidebar auto-hidden, holding Option slides it in, and releasing slides it out. A setting turns it off. The shell already watches
+                modifier changes for ⌃Tab, so this adds Option to that monitor.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>packages/shell/ios/ShellModule.swift</code> (<code>flagsChanged</code>), <code>layout/useSidebarDock.ts</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>Holding Option alone shows the sidebar; Option as part of a shortcut or while typing doesn't.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>6 · Current tab out of view <span class="chip s">S</span></h4>
               <p>When the selected tab is scrolled out of the sidebar, show a small marker at the top or bottom edge. Clicking it scrolls to the tab.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>components/Sidebar.tsx</code>, <code>sidebar/geometry.ts</code></dd></dl>
-              <ul class="checks"><li>With forty tabs, the marker shows at the edge nearest the tab and disappears once the tab is in view, in both densities.</li></ul>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>components/Sidebar.tsx</code>, <code>sidebar/geometry.ts</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>With forty tabs, the marker shows at the edge nearest the tab and disappears once the tab is in view, in both densities.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>7 · Shift-Return opens the top result <span class="chip s">S</span></h4>
-              <p>Arc's Instant Links skipped the results page. Shift-Return in the command bar sends the query through DuckDuckGo's "\" redirect (first result) using Bay's bang support, with no AI and no new service. The hint shows in the Return keycap.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>omnibox/open.ts</code>, <code>omnibox/bangs.ts</code>, <code>omnibox/Keycaps.tsx</code></dd></dl>
-              <ul class="checks"><li>"bay browser github" with Shift-Return lands on the repository, not a results page. Private windows behave the same.</li></ul>
+              <p>
+                Arc's Instant Links skipped the results page. Shift-Return in the command bar sends the query through DuckDuckGo's "\" redirect (first result)
+                using Bay's bang support, with no AI and no new service. The hint shows in the Return keycap.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>omnibox/open.ts</code>, <code>omnibox/bangs.ts</code>, <code>omnibox/Keycaps.tsx</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>"bay browser github" with Shift-Return lands on the repository, not a results page. Private windows behave the same.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>8 · ⌃⌘J joins the meeting on now <span class="chip s">S</span></h4>
               <p>Add Join Meeting to the menus with ⌃⌘J, using the same path as the alert's Join button. It is disabled when no meeting is on.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/Menus.swift</code>, <code>live/MeetingAlert.tsx</code></dd></dl>
-              <ul class="checks"><li>Two minutes before a Meet event, ⌃⌘J opens the call in the space set for it.</li></ul>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>packages/shell/ios/Menus.swift</code>, <code>live/MeetingAlert.tsx</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>Two minutes before a Meet event, ⌃⌘J opens the call in the space set for it.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>9 · Portrait capture <span class="chip s">S</span></h4>
-              <p>Arc's Portrait Mode made a neat screenshot of the page in a phone-shaped frame with the theme behind it. Add "Capture in Portrait" to the command bar and Option-click on Capture Full Page.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>components/capture/</code>, <code>developer/screenshot.ts</code></dd></dl>
-              <ul class="checks"><li>The image is saved to Downloads and the Library, at 2× scale, framed in the space's colours.</li></ul>
+              <p>
+                Arc's Portrait Mode made a neat screenshot of the page in a phone-shaped frame with the theme behind it. Add "Capture in Portrait" to the
+                command bar and Option-click on Capture Full Page.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>components/capture/</code>, <code>developer/screenshot.ts</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>The image is saved to Downloads and the Library, at 2× scale, framed in the space's colours.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>10 · JSON viewer in Developer Mode <span class="chip s">S</span></h4>
-              <p>Arc installed the JSON Formatter extension when Developer Mode was turned on. Bay can do better with no extension: format <code>application/json</code> responses on dev tabs with folding, a raw toggle and copy path.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>components/developer/</code>, engine page script</dd></dl>
-              <ul class="checks"><li>A localhost JSON endpoint shows formatted with folding; Raw shows the original bytes; non-dev tabs are unchanged.</li></ul>
+              <p>
+                Arc installed the JSON Formatter extension when Developer Mode was turned on. Bay can do better with no extension: format
+                <code>application/json</code> responses on dev tabs with folding, a raw toggle and copy path.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>components/developer/</code>, engine page script</dd>
+              </dl>
+              <ul class="checks">
+                <li>A localhost JSON endpoint shows formatted with folding; Raw shows the original bytes; non-dev tabs are unchanged.</li>
+              </ul>
             </div>
             <h4 class="exit">Exit criteria</h4>
-            <ul><li>All ten shipped in a release before 22 December, each with a native or unit check where the harness reaches it.</li></ul>
+            <ul>
+              <li>All ten shipped in a release before 22 December, each with a native or unit check where the harness reaches it.</li>
+            </ul>
           </article>
 
           <article class="phase" id="p2" aria-labelledby="p2-h">
-            <div class="phase-head"><span class="phase-num">Phase 2</span><h3 id="p2-h">Keyboard &amp; undo</h3><span class="chip m">2 × M</span><span class="chip m">1 × M</span></div>
+            <div class="phase-head">
+              <span class="phase-num">Phase 2</span>
+              <h3 id="p2-h">Keyboard &amp; undo</h3>
+              <span class="chip m">2 × M</span><span class="chip m">1 × M</span>
+            </div>
             <p class="goal">Arc's sidebar could be driven without a mouse, and almost every edit could be undone.</p>
 
             <div class="item">
               <h4>11 · Move around the sidebar from the keyboard <span class="chip m">M</span></h4>
-              <p>⌘. focuses the sidebar. Arrow keys move between rows and into folders, Return opens, Space peeks, ⌫ closes, ⌃⌘R renames, Escape returns to the page. The focused row has a visible ring separate from the selection, and VoiceOver reads it.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>components/Sidebar.tsx</code>, <code>sidebar/state.ts</code>, <code>sidebar/entries.ts</code></dd></dl>
-              <ul class="checks"><li>Every row type (favorite, pinned, folder, group, live folder, split) can be reached and opened from the keyboard alone.</li></ul>
+              <p>
+                ⌘. focuses the sidebar. Arrow keys move between rows and into folders, Return opens, Space peeks, ⌫ closes, ⌃⌘R renames, Escape returns to the
+                page. The focused row has a visible ring separate from the selection, and VoiceOver reads it.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>components/Sidebar.tsx</code>, <code>sidebar/state.ts</code>, <code>sidebar/entries.ts</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>Every row type (favorite, pinned, folder, group, live folder, split) can be reached and opened from the keyboard alone.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>12 · ⌘Z for any sidebar edit <span class="chip m">M</span></h4>
-              <p>Generalise the folder-move undo into one stack per window for sidebar edits: close, clear, move, pin, unpin, rename, icon, theme. ⌘Z applies when focus isn't in a text field or page editor, the same rule the folder undo already follows.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>lib/folderUndo.ts</code> to a general stack, <code>store/organize.ts</code>, <code>sidebar/clear.ts</code></dd></dl>
-              <ul class="checks"><li>Clear, then ⌘Z, brings every cleared tab back in place. Undo never fires while typing in a page.</li></ul>
+              <p>
+                Generalise the folder-move undo into one stack per window for sidebar edits: close, clear, move, pin, unpin, rename, icon, theme. ⌘Z applies
+                when focus isn't in a text field or page editor, the same rule the folder undo already follows.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>lib/folderUndo.ts</code> to a general stack, <code>store/organize.ts</code>, <code>sidebar/clear.ts</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>Clear, then ⌘Z, brings every cleared tab back in place. Undo never fires while typing in a page.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>13 · Files and folders from Finder <span class="chip m">M</span></h4>
-              <p>Dragging a file or folder from Finder into the pinned section keeps it there. A file opens in a tab (PDFs, images, HTML) or with its app. A folder expands in place to show its files. Rows can be dragged into a page to upload. Synced as a bookmark-style path, shown as missing on a Mac without the file.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>store/types.ts</code>, <code>sidebar/dnd.tsx</code>, sync schema, security-scoped bookmarks in the shell</dd></dl>
-              <ul class="checks"><li>A dropped PDF opens from the sidebar after relaunch. Dragging it into Gmail attaches it. A second Mac shows the row as unavailable.</li></ul>
+              <p>
+                Dragging a file or folder from Finder into the pinned section keeps it there. A file opens in a tab (PDFs, images, HTML) or with its app. A
+                folder expands in place to show its files. Rows can be dragged into a page to upload. Synced as a bookmark-style path, shown as missing on a Mac
+                without the file.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>store/types.ts</code>, <code>sidebar/dnd.tsx</code>, sync schema, security-scoped bookmarks in the shell</dd>
+              </dl>
+              <ul class="checks">
+                <li>A dropped PDF opens from the sidebar after relaunch. Dragging it into Gmail attaches it. A second Mac shows the row as unavailable.</li>
+              </ul>
             </div>
             <h4 class="exit">Exit criteria</h4>
-            <ul><li>Keyboard pass with VoiceOver on; undo covers every listed edit; file rows survive relaunch and sync.</li></ul>
+            <ul>
+              <li>Keyboard pass with VoiceOver on; undo covers every listed edit; file rows survive relaunch and sync.</li>
+            </ul>
           </article>
 
           <article class="phase" id="p3" aria-labelledby="p3-h">
-            <div class="phase-head"><span class="phase-num">Phase 3</span><h3 id="p3-h">Boosts</h3><span class="chip l">L</span><span class="chip m">M</span></div>
-            <p class="goal">Change how a site looks without writing code, and with code if you want. Arc users who relied on Boosts will have no other way to keep them.</p>
+            <div class="phase-head">
+              <span class="phase-num">Phase 3</span>
+              <h3 id="p3-h">Boosts</h3>
+              <span class="chip l">L</span><span class="chip m">M</span>
+            </div>
+            <p class="goal">
+              Change how a site looks without writing code, and with code if you want. Arc users who relied on Boosts will have no other way to keep them.
+            </p>
 
             <div class="item">
               <h4>14 · Zap, colours, fonts and custom CSS <span class="chip l">L</span></h4>
-              <p>A Boost belongs to a host and lives in Site Controls. The editor offers: Zap (click elements to hide them, stored as selectors), a colour tint, a font, page zoom, and a CSS field. Bay's theme colours are exposed as CSS variables, as Arc did, so a Boost can match the sidebar. Each Boost toggles on and off per site; a global switch turns all off. CSS Boosts sync.</p>
-              <dl class="facts"><dt>Where</dt><dd>New <code>lib/boosts.ts</code>, <code>site/SiteControls.tsx</code>, engine content-script injection at document start, <code>sync/</code></dd><dt>Reuses</dt><dd>The Capture element picker for Zap</dd></dl>
-              <ul class="checks"><li>Zapping an element on a news site hides it on reload and on a second Mac. Turning the Boost off restores the page without reload.</li></ul>
+              <p>
+                A Boost belongs to a host and lives in Site Controls. The editor offers: Zap (click elements to hide them, stored as selectors), a colour tint,
+                a font, page zoom, and a CSS field. Bay's theme colours are exposed as CSS variables, as Arc did, so a Boost can match the sidebar. Each Boost
+                toggles on and off per site; a global switch turns all off. CSS Boosts sync.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd>
+                  New <code>lib/boosts.ts</code>, <code>site/SiteControls.tsx</code>, engine content-script injection at document start, <code>sync/</code>
+                </dd>
+                <dt>Reuses</dt>
+                <dd>The Capture element picker for Zap</dd>
+              </dl>
+              <ul class="checks">
+                <li>Zapping an element on a news site hides it on reload and on a second Mac. Turning the Boost off restores the page without reload.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>15 · JavaScript Boosts, kept on one Mac <span class="chip m">M</span></h4>
-              <p>A JS field that runs in the page's isolated world. Arc stopped syncing JS Boosts in September 2024 after a security report and made users re-enable each one per device. Bay starts there: JS Boosts never sync, are off by default, and show a warning when first turned on.</p>
-              <dl class="facts"><dt>Where</dt><dd>Same as 14, isolated world script, excluded from the sync schema</dd></dl>
-              <ul class="checks"><li>A JS Boost runs only on its host, only on the Mac where it was turned on, and never in private windows unless allowed.</li></ul>
+              <p>
+                A JS field that runs in the page's isolated world. Arc stopped syncing JS Boosts in September 2024 after a security report and made users
+                re-enable each one per device. Bay starts there: JS Boosts never sync, are off by default, and show a warning when first turned on.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd>Same as 14, isolated world script, excluded from the sync schema</dd>
+              </dl>
+              <ul class="checks">
+                <li>A JS Boost runs only on its host, only on the Mac where it was turned on, and never in private windows unless allowed.</li>
+              </ul>
             </div>
             <h4 class="exit">Exit criteria</h4>
-            <ul><li>Boosts are created, toggled, synced (CSS only) and removed; a security review of injection is complete.</li></ul>
+            <ul>
+              <li>Boosts are created, toggled, synced (CSS only) and removed; a security review of injection is complete.</li>
+            </ul>
           </article>
 
           <article class="phase gate" id="p4" aria-labelledby="p4-h">
-            <div class="phase-head"><span class="phase-num">Phase 4</span><h3 id="p4-h">Sharing</h3><span class="chip gate">Decision first</span></div>
-            <p class="goal">Arc shared things through its own servers, which are being turned off. Bay has none. Decide <a href="#decisions">how to host</a> before starting items 17 and 18.</p>
+            <div class="phase-head">
+              <span class="phase-num">Phase 4</span>
+              <h3 id="p4-h">Sharing</h3>
+              <span class="chip gate">Decision first</span>
+            </div>
+            <p class="goal">
+              Arc shared things through its own servers, which are being turned off. Bay has none. Decide <a href="#decisions">how to host</a> before starting
+              items 17 and 18.
+            </p>
 
             <div class="item">
               <h4>16 · Share Quote <span class="chip m">M</span></h4>
-              <p>Bay's selection popover already copies a link to the highlighted text. Add "Share Quote": render the quote, page title and site in the space's colours as an image, put the image and the text-fragment link on the pasteboard, and offer the share sheet. Done in the shell, needing no server.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, shell image rendering</dd></dl>
-              <ul class="checks"><li>Pasting into Messages gives the card image; pasting into a text field gives the link, which opens scrolled to the quote.</li></ul>
+              <p>
+                Bay's selection popover already copies a link to the highlighted text. Add "Share Quote": render the quote, page title and site in the space's
+                colours as an image, put the image and the text-fragment link on the pasteboard, and offer the share sheet. Done in the shell, needing no
+                server.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, shell image rendering</dd>
+              </dl>
+              <ul class="checks">
+                <li>Pasting into Messages gives the card image; pasting into a text field gives the link, which opens scrolled to the quote.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>17 · Share a folder, split or selection as a link <span class="chip m">M</span></h4>
-              <p>Recommended without a server: compress the titles and links into the fragment of a link on the Bay website (<code>bay.krishkalaria.in/share#…</code>). The fragment never reaches the server. The page lists the links in any browser and has "Add to Bay", which opens a <code>bay://</code> link that imports it as a folder.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>sidebar/menus.ts</code>, <code>apps/web</code> share page, URL scheme handler in <code>AppDelegate.swift</code></dd></dl>
-              <ul class="checks"><li>A 30-tab folder shared to Chrome lists every link; "Add to Bay" recreates it with nested folders.</li></ul>
+              <p>
+                Recommended without a server: compress the titles and links into the fragment of a link on the Bay website
+                (<code>bay.krishkalaria.in/share#…</code>). The fragment never reaches the server. The page lists the links in any browser and has "Add to Bay",
+                which opens a <code>bay://</code> link that imports it as a folder.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>sidebar/menus.ts</code>, <code>apps/web</code> share page, URL scheme handler in <code>AppDelegate.swift</code></dd>
+              </dl>
+              <ul class="checks">
+                <li>A 30-tab folder shared to Chrome lists every link; "Add to Bay" recreates it with nested folders.</li>
+              </ul>
             </div>
 
             <div class="item">
               <h4>18 · Share an Easel as a web page <span class="chip l">L</span></h4>
-              <p>Easels hold images, so they don't fit in a link. This needs storage somewhere: a hosted bucket with unlisted links, or the user's own iCloud Drive public link. Until decided, the HTML export stays the way to share.</p>
-              <dl class="facts"><dt>Where</dt><dd><code>library/export.ts</code>, plus whatever host is chosen</dd></dl>
+              <p>
+                Easels hold images, so they don't fit in a link. This needs storage somewhere: a hosted bucket with unlisted links, or the user's own iCloud
+                Drive public link. Until decided, the HTML export stays the way to share.
+              </p>
+              <dl class="facts">
+                <dt>Where</dt>
+                <dd><code>library/export.ts</code>, plus whatever host is chosen</dd>
+              </dl>
             </div>
             <h4 class="exit">Exit criteria</h4>
-            <ul><li>Share Quote shipped; collection links shipped if the fragment approach is chosen; Easel hosting either decided or recorded as out of scope.</li></ul>
+            <ul>
+              <li>
+                Share Quote shipped; collection links shipped if the fragment approach is chosen; Easel hosting either decided or recorded as out of scope.
+              </li>
+            </ul>
           </article>
 
           <article class="phase gate" id="p5" aria-labelledby="p5-h">
-            <div class="phase-head"><span class="phase-num">Phase 5</span><h3 id="p5-h">Arc Max, on device</h3><span class="chip gate">Research gate</span></div>
-            <p class="goal">Arc Max's lasting features were the small "tidy" ones. Build them on Apple's on-device model so nothing leaves the Mac, if the research spike shows the quality is good enough.</p>
+            <div class="phase-head">
+              <span class="phase-num">Phase 5</span>
+              <h3 id="p5-h">Arc Max, on device</h3>
+              <span class="chip gate">Research gate</span>
+            </div>
+            <p class="goal">
+              Arc Max's lasting features were the small "tidy" ones. Build them on Apple's on-device model so nothing leaves the Mac, if the research spike
+              shows the quality is good enough.
+            </p>
             <div class="callout">
-              <p><strong>Research spike first (S):</strong> run 200 real tab titles, 100 download names and 20 sets of today's tabs through the on-device model. Go ahead only if the results are better than the originals most of the time and fast enough to feel instant.</p>
+              <p>
+                <strong>Research spike first (S):</strong> run 200 real tab titles, 100 download names and 20 sets of today's tabs through the on-device model.
+                Go ahead only if the results are better than the originals most of the time and fast enough to feel instant.
+              </p>
             </div>
 
             <div class="item">
               <h4>19 · Tidy Tab Titles <span class="chip m">M</span></h4>
-              <p>When a tab is pinned, suggest a short name ("Inbox – Gmail" becomes "Gmail"). The original stays one click away as Reset Name, which Bay already has.</p>
+              <p>
+                When a tab is pinned, suggest a short name ("Inbox – Gmail" becomes "Gmail"). The original stays one click away as Reset Name, which Bay already
+                has.
+              </p>
             </div>
             <div class="item">
               <h4>20 · Tidy Downloads <span class="chip s">S</span></h4>
-              <p>Offer a readable name for downloads like <code>IMG_20261024_8812.pdf</code>, based on the page and file. Applied only when accepted, never to files the user named.</p>
+              <p>
+                Offer a readable name for downloads like <code>IMG_20261024_8812.pdf</code>, based on the page and file. Applied only when accepted, never to
+                files the user named.
+              </p>
             </div>
             <div class="item">
               <h4>21 · Tidy Tabs <span class="chip m">M</span></h4>
-              <p>A button over today's tabs groups them by topic into Bay's tab groups, with ⌘Z to undo (needs item 12). Pinned tabs and existing groups are left alone.</p>
+              <p>
+                A button over today's tabs groups them by topic into Bay's tab groups, with ⌘Z to undo (needs item 12). Pinned tabs and existing groups are left
+                alone.
+              </p>
             </div>
             <div class="item">
               <h4>22 · 5-Second Previews <span class="chip m">M</span></h4>
-              <p>Shift-hover a link to load it in the background and show a short summary card with Open, Peek and Copy. Uses the Peek loader and the on-device model.</p>
+              <p>
+                Shift-hover a link to load it in the background and show a short summary card with Open, Peek and Copy. Uses the Peek loader and the on-device
+                model.
+              </p>
             </div>
-            <dl class="facts"><dt>Where</dt><dd>New shell module for Foundation Models; <code>sidebar/</code>, <code>DownloadsPanel.tsx</code>, <code>layout/usePeek.ts</code></dd><dt>Availability</dt><dd>macOS 26 with Apple Intelligence on. Hidden elsewhere.</dd></dl>
+            <dl class="facts">
+              <dt>Where</dt>
+              <dd>New shell module for Foundation Models; <code>sidebar/</code>, <code>DownloadsPanel.tsx</code>, <code>layout/usePeek.ts</code></dd>
+              <dt>Availability</dt>
+              <dd>macOS 26 with Apple Intelligence on. Hidden elsewhere.</dd>
+            </dl>
             <h4 class="exit">Exit criteria</h4>
-            <ul><li>Spike passed and recorded; each feature off by default, reversible, and invisible on Macs without the model.</li></ul>
+            <ul>
+              <li>Spike passed and recorded; each feature off by default, reversible, and invisible on Macs without the model.</li>
+            </ul>
           </article>
         </section>
 
         <section id="risks" aria-labelledby="risks-h">
           <h2 id="risks-h">Risks</h2>
           <div class="grid2">
-            <div class="card"><h3>Time to the sunset</h3><p>58 days to 22 December. If Phase 1 slips, ship the items that are done; the import and the features already matched matter more than any single gap.</p></div>
-            <div class="card"><h3>Boost injection</h3><p>Boosts run in every matching page. Arc had a security problem here in September 2024. Keep JS local and opt-in, inject in an isolated world, and review before release.</p></div>
-            <div class="card"><h3>Global shortcut clashes</h3><p>⌥⌘N is used by other apps. The global shortcut must be settable, start off, and say when the key is taken.</p></div>
-            <div class="card"><h3>Unread counts are fragile</h3><p>Sites change their title formats. Keep the patterns in one place with tests, and fall back to a dot instead of a wrong number.</p></div>
-            <div class="card"><h3>On-device model reach</h3><p>Bay supports macOS 14, but the model needs macOS 26 with Apple Intelligence. Phase 5 reaches only part of the users; a cloud model would break Bay's privacy stance.</p></div>
-            <div class="card"><h3>Links in fragments</h3><p>Very large folders make long links, and anyone holding the link can read it. Cap the size and say so in the share sheet.</p></div>
+            <div class="card">
+              <h3>Time to the sunset</h3>
+              <p>
+                58 days to 22 December. If Phase 1 slips, ship the items that are done; the import and the features already matched matter more than any single
+                gap.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Boost injection</h3>
+              <p>
+                Boosts run in every matching page. Arc had a security problem here in September 2024. Keep JS local and opt-in, inject in an isolated world, and
+                review before release.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Global shortcut clashes</h3>
+              <p>⌥⌘N is used by other apps. The global shortcut must be settable, start off, and say when the key is taken.</p>
+            </div>
+            <div class="card">
+              <h3>Unread counts are fragile</h3>
+              <p>Sites change their title formats. Keep the patterns in one place with tests, and fall back to a dot instead of a wrong number.</p>
+            </div>
+            <div class="card">
+              <h3>On-device model reach</h3>
+              <p>
+                Bay supports macOS 14, but the model needs macOS 26 with Apple Intelligence. Phase 5 reaches only part of the users; a cloud model would break
+                Bay's privacy stance.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Links in fragments</h3>
+              <p>Very large folders make long links, and anyone holding the link can read it. Cap the size and say so in the share sheet.</p>
+            </div>
           </div>
         </section>
 
@@ -997,19 +1435,47 @@
           <h2 id="decisions-h">Decisions needed</h2>
           <div class="table-wrap">
             <table>
-              <thead><tr><th scope="col">Decision</th><th scope="col">Options</th><th scope="col">Recommendation</th></tr></thead>
+              <thead>
+                <tr>
+                  <th scope="col">Decision</th>
+                  <th scope="col">Options</th>
+                  <th scope="col">Recommendation</th>
+                </tr>
+              </thead>
               <tbody>
-                <tr><td>AI for the tidy features</td><td>On-device only · cloud opt-in · skip Phase 5</td><td>On-device only, behind the research spike</td></tr>
-                <tr><td>Sharing collections</td><td>Fragment links on the Bay site · a hosted service · none</td><td>Fragment links: no server, no stored data</td></tr>
-                <tr><td>Sharing Easels</td><td>Hosted bucket · iCloud public links · HTML export only</td><td>HTML export only for now</td></tr>
-                <tr><td>JavaScript Boosts</td><td>Local, opt-in · CSS only</td><td>Local and opt-in, never synced</td></tr>
-                <tr><td>Files from Finder</td><td>Build · drop</td><td>Build after keyboard and undo; drop if Phase 1 runs late</td></tr>
+                <tr>
+                  <td>AI for the tidy features</td>
+                  <td>On-device only · cloud opt-in · skip Phase 5</td>
+                  <td>On-device only, behind the research spike</td>
+                </tr>
+                <tr>
+                  <td>Sharing collections</td>
+                  <td>Fragment links on the Bay site · a hosted service · none</td>
+                  <td>Fragment links: no server, no stored data</td>
+                </tr>
+                <tr>
+                  <td>Sharing Easels</td>
+                  <td>Hosted bucket · iCloud public links · HTML export only</td>
+                  <td>HTML export only for now</td>
+                </tr>
+                <tr>
+                  <td>JavaScript Boosts</td>
+                  <td>Local, opt-in · CSS only</td>
+                  <td>Local and opt-in, never synced</td>
+                </tr>
+                <tr>
+                  <td>Files from Finder</td>
+                  <td>Build · drop</td>
+                  <td>Build after keyboard and undo; drop if Phase 1 runs late</td>
+                </tr>
               </tbody>
             </table>
           </div>
           <h3>Assumptions in this plan</h3>
           <ul class="prose">
-            <li>Arc's feature list comes from its macOS release notes (2021 to October 2026) and coverage of Arc Max. The 2025–2026 notes contain only fixes.</li>
+            <li>
+              Arc's feature list comes from its macOS release notes (2021 to October 2026) and coverage of Arc Max. The 2025–2026 notes contain only fixes.
+            </li>
             <li>"Missing" is based on searching the code; the app was not run for this review.</li>
             <li>Sizes are rough and assume one person familiar with the codebase.</li>
           </ul>
@@ -1023,7 +1489,10 @@
             <li><strong>Phone apps and sync to iPhone:</strong> Arc Search is a separate product. Bay syncs between Macs and accepts Handoff.</li>
             <li><strong>Windows and Linux:</strong> covered by their own ports.</li>
             <li><strong>Previews for Notion, Figma, Linear, Outlook and Confluence, and search inside folder previews:</strong> deferred until asked for.</li>
-            <li><strong>Earlier plan items that Arc never had:</strong> clipboard history, one-time codes, "Allow ads here", text from images and push notifications with the tab closed. They stay open but aren't Arc gaps.</li>
+            <li>
+              <strong>Earlier plan items that Arc never had:</strong> clipboard history, one-time codes, "Allow ads here", text from images and push
+              notifications with the tab closed. They stay open but aren't Arc gaps.
+            </li>
           </ul>
         </section>
 
@@ -1036,7 +1505,11 @@
             <li><a href="https://resources.arc.net/hc/en-us/articles/20498293324823">Arc for macOS – 2024–2026 Release Notes</a></li>
             <li><a href="https://resources.arc.net/hc/en-us/articles/44412972248471">Arc Sunset: Key Dates and What to Expect</a></li>
             <li><a href="https://tidbits.com/2023/10/06/arc-web-browser-introduces-focused-ai-features/">TidBITS: Arc introduces focused AI features</a></li>
-            <li><a href="https://seraphicsecurity.com/learn/ai-browser/arc-max-ai-add-on-features-pros-cons-and-migrating-to-dia-browser/">Seraphic Security: Arc Max features</a></li>
+            <li>
+              <a href="https://seraphicsecurity.com/learn/ai-browser/arc-max-ai-add-on-features-pros-cons-and-migrating-to-dia-browser/"
+                >Seraphic Security: Arc Max features</a
+              >
+            </li>
           </ul>
         </section>
       </main>
@@ -1045,7 +1518,6 @@
     <footer>
       <div class="wrap">Bay · Arc feature gaps · 25 October 2026</div>
     </footer>
-
 
     <script>
       (function () {
