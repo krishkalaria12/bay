@@ -6,6 +6,10 @@ import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { showToast } from "../layout/splitActions";
 import { isInternalTab } from "../pages";
+import { saveLibraryMedia } from "../library/state";
+import { chooseEasel, libraryWindow } from "../library/actions";
+import { webLink } from "../library/model";
+import { engineProfile } from "../../store/model";
 import { captureScript } from "./captureScript";
 import { captureName } from "./geometry";
 
@@ -14,7 +18,7 @@ import { captureName } from "./geometry";
 // (CaptureLayer.tsx). Capture Full Page saves the whole page to Downloads at once.
 
 /** What was taken, in the page's CSS px from the viewport's top-left, with the viewport's size then. */
-export type CaptureArea = { left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number };
+export type CaptureArea = { x?: number; y?: number; left: number; top: number; width: number; height: number; viewportWidth: number; viewportHeight: number };
 
 export type CaptureSession =
   | { phase: "selecting" | "shooting"; url: string }
@@ -103,7 +107,7 @@ export function onCaptureMessage(tabId: string, data: unknown) {
   const { x, y, width, height, left, top, viewportWidth, viewportHeight } = m;
   if (![x, y, width, height, left, top, viewportWidth, viewportHeight].every(finite)) return setSession(tabId, null);
   if ((width as number) < 1 || (height as number) < 1 || (viewportWidth as number) < 1) return setSession(tabId, null);
-  const area = { left, top, width, height, viewportWidth, viewportHeight } as CaptureArea;
+  const area = { x, y, left, top, width, height, viewportWidth, viewportHeight } as CaptureArea;
   void shoot(tabId, { clip: [x as number, y as number, width as number, height as number], beyond: m.beyond === true }, area);
 }
 
@@ -145,6 +149,32 @@ export async function copyCapture(tabId: string) {
   closeCapture(tabId);
   if (copied) showToast(windowId, "Copied Capture", undefined, { icon: "doc.on.doc" });
   else showToast(windowId, "Couldn’t Copy the Capture", undefined, { icon: "camera.viewfinder" });
+}
+
+/** Explicit saves retain a copy outside Chromium's temporary capture cache. */
+export async function captureToLibrary(tabId: string, toEasel = false) {
+  const session = readyOf(tabId);
+  const tab = useBrowser.getState().tabs[tabId];
+  if (!session || !tab || !libraryWindow(tab.windowId)) return;
+  const area = session.area;
+  const source = webLink(session.url)
+    ? {
+        url: session.url,
+        title: tab.customTitle || tab.title,
+        profileId: engineProfile(tab.spaceId),
+        ...(area
+          ? { clip: [area.x ?? area.left, area.y ?? area.top, area.width, area.height], viewportWidth: area.viewportWidth, viewportHeight: area.viewportHeight }
+          : {}),
+      }
+    : undefined;
+  const media = await saveLibraryMedia(session.image, session.name, source);
+  if (!media) return showToast(tab.windowId, "Couldn't Save Capture", "Bay couldn't save the image to Library.", { icon: "camera.viewfinder" });
+  if (toEasel) {
+    if (await chooseEasel(media, tab.windowId)) closeCapture(tabId);
+  } else {
+    closeCapture(tabId);
+    showToast(tab.windowId, "Saved to Library", undefined, { icon: "books.vertical" });
+  }
 }
 
 export async function saveCapture(tabId: string) {

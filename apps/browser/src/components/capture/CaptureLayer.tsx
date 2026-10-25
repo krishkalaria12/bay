@@ -8,7 +8,18 @@ import { PromptButton } from "../layout/controls";
 import { IconButton, useHover } from "../primitives";
 import { CAPTURE_BAR_HEIGHT, MARKUP_COLORS, MARKUP_WIDTHS } from "./constants";
 import { placeCapture, type Box } from "./geometry";
-import { applyMarkup, closeCapture, copyCapture, retakeCapture, saveCapture, setMarkingUp, shareCapture, useCapture, type CaptureSession } from "./state";
+import {
+  applyMarkup,
+  captureToLibrary,
+  closeCapture,
+  copyCapture,
+  retakeCapture,
+  saveCapture,
+  setMarkingUp,
+  shareCapture,
+  useCapture,
+  type CaptureSession,
+} from "./state";
 
 type Ready = Extract<CaptureSession, { phase: "ready" | "markup" }>;
 
@@ -117,13 +128,21 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
           shadowOffset={[0, 6]}
           style={{ height: CAPTURE_BAR_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 4, gap: 2 }}
         >
-          <BarButton icon="doc.on.doc" title="Copy" tooltip="Copy (⌘C)" onPress={() => void copyCapture(tabId)} />
-          <BarButton icon="arrow.down.circle" title="Save" tooltip="Save to Downloads" onPress={() => void saveCapture(tabId)} />
+          <BarButton compact={pane.width < 740} icon="doc.on.doc" title="Copy" tooltip="Copy (⌘C)" onPress={() => void copyCapture(tabId)} />
+          <BarButton compact={pane.width < 740} icon="books.vertical" title="Library" tooltip="Save to Library" onPress={() => void captureToLibrary(tabId)} />
+          <BarButton
+            compact={pane.width < 740}
+            icon="scribble.variable"
+            title="Easel"
+            tooltip="Add to Easel"
+            onPress={() => void captureToLibrary(tabId, true)}
+          />
+          <BarButton compact={pane.width < 740} icon="arrow.down.circle" title="Save" tooltip="Save to Downloads" onPress={() => void saveCapture(tabId)} />
           <View ref={share} collapsable={false}>
-            <BarButton icon="square.and.arrow.up" title="Share" tooltip="Share" onPress={openShare} />
+            <BarButton compact={pane.width < 740} icon="square.and.arrow.up" title="Share" tooltip="Share" onPress={openShare} />
           </View>
-          <BarButton icon="pencil.tip.crop.circle" title="Mark Up" tooltip="Mark Up" onPress={() => setMarkingUp(tabId, true)} />
-          <BarButton icon="arrow.counterclockwise" title="Retake" tooltip="Retake" onPress={() => retakeCapture(tabId)} />
+          <BarButton compact={pane.width < 740} icon="pencil.tip.crop.circle" title="Mark Up" tooltip="Mark Up" onPress={() => setMarkingUp(tabId, true)} />
+          <BarButton compact={pane.width < 740} icon="arrow.counterclockwise" title="Retake" tooltip="Retake" onPress={() => retakeCapture(tabId)} />
           <View
             style={{
               width: StyleSheet.hairlineWidth,
@@ -132,7 +151,15 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
               backgroundColor: theme.dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.12)",
             }}
           />
-          <Text style={{ fontSize: 11, color: theme.textSecondary, fontVariant: ["tabular-nums"], marginHorizontal: 4 }}>
+          <Text
+            style={{
+              fontSize: 11,
+              color: theme.textSecondary,
+              fontVariant: ["tabular-nums"],
+              marginHorizontal: 4,
+              display: pane.width < 480 ? "none" : "flex",
+            }}
+          >
             {session.image.width} × {session.image.height}
           </Text>
           <IconButton icon="xmark" size={12} box={28} radius={8} tooltip="Close (esc)" onPress={() => closeCapture(tabId)} />
@@ -142,7 +169,7 @@ function CaptureResult({ tabId, session, pane }: { tabId: string; session: Ready
   );
 }
 
-function BarButton({ icon, title, tooltip, onPress }: { icon: string; title: string; tooltip: string; onPress: () => void }) {
+function BarButton({ icon, title, tooltip, onPress, compact }: { icon: string; title: string; tooltip: string; onPress: () => void; compact?: boolean }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
   return (
@@ -161,7 +188,7 @@ function BarButton({ icon, title, tooltip, onPress }: { icon: string; title: str
             }}
           >
             <Symbol name={icon} size={13} color={theme.icon} style={{ width: 16, height: 16 }} />
-            <Text style={{ fontSize: 12.5, fontWeight: "500", color: theme.textPrimary }}>{title}</Text>
+            {!compact && <Text style={{ fontSize: 12.5, fontWeight: "500", color: theme.textPrimary }}>{title}</Text>}
           </View>
         )}
       </Pressable>
