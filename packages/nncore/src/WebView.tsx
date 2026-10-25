@@ -199,6 +199,19 @@ export type WebViewProps = ViewProps & {
   onExternalApp?: (request: ExternalAppRequest) => void;
 };
 
+export type CaptureOptions = {
+  /** x, y, width, height in CSS px from the document's top-left. */
+  clip?: [number, number, number, number];
+  /** The clip reaches past the viewport. */
+  beyond?: boolean;
+  fullPage?: boolean;
+  /** The page's pixels per CSS px: the screen's scale times the zoom. */
+  pixelRatio?: number;
+};
+
+/** A PNG in the temporary folder, with its size in pixels. */
+export type CapturedImage = { path: string; width: number; height: number };
+
 export type WebViewHandle = {
   loadUrl(url: string, options?: { userInitiated?: boolean }): Promise<void>;
   goBack(): Promise<void>;
@@ -222,6 +235,8 @@ export type WebViewHandle = {
   capturePicture(scale: number): Promise<{ data: string; frame: [number, number, number, number] } | null>;
   /** The page's viewport as a base64 PNG at its device scale (null after 3 s). */
   captureScreenshot(): Promise<string | null>;
+  /** Capture's image: an area of the page, its whole length or its viewport, as a PNG file (null after 20 s). */
+  captureImage(options: CaptureOptions): Promise<CapturedImage | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
   downloadImage(url: string, maxPixels: number): Promise<FaviconImage | null>;
 
@@ -393,6 +408,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       navigationEntries: async () => (await call([], (n) => n.navigationEntries())).map((e) => ({ ...e, url: toAppUrl(e.url) })),
       capturePicture: (scale) => call(null, (n) => n.capturePicture(scale)),
       captureScreenshot: () => call(null, (n) => n.captureScreenshot()),
+      captureImage: (options) => call(null, (n) => n.captureImage(options)),
       downloadImage: (url, maxPixels) => call(null, (n) => n.downloadImage(url, maxPixels)),
       downloadFavicon: (url) => call(null, (n) => n.downloadFavicon(url)),
       mediaCommand: (action, seconds) => call(undefined, (n) => n.mediaCommand(action, seconds)),

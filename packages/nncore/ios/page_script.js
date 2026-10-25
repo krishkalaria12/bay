@@ -932,6 +932,38 @@
   addEventListener("resize", hideSelection);
   addEventListener("pagehide", hideSelection);
 
+  // MARK: Capture — ⌘⇧ and a drag on the page starts Capture where it was pressed, as Arc's: the app puts its own
+  // selection in the page, which goes on with the drag (apps/browser components/capture/captureScript.ts). Until then
+  // the page gets neither the press nor the click it ends in (⌘⇧-click on a link would open it).
+  if (isTop) {
+    let swallowClick = false;
+    const swallow = (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    addEventListener(
+      "mousedown",
+      (e) => {
+        swallowClick = false;
+        if (!e.isTrusted || e.button !== 0 || !e.metaKey || !e.shiftKey || e.altKey || e.ctrlKey) return;
+        swallow(e);
+        swallowClick = true;
+        send("captureGesture", { x: e.clientX, y: e.clientY });
+      },
+      true,
+    );
+    for (const type of ["click", "auxclick"])
+      addEventListener(
+        type,
+        (e) => {
+          if (!swallowClick) return;
+          swallowClick = false;
+          swallow(e);
+        },
+        true,
+      );
+  }
+
   // MARK: Scroll direction, for the toolbar that tucks away while you read (tabs on top). From the page's real scroll
   // (the document, or an element scroller filling most of the window), not wheel deltas, and only while the user is
   // scrolling (wheel, keys, a press or a scrollbar drag in the last second): scroll restoration or a chat scrolling

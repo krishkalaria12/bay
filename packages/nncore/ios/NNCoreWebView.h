@@ -80,6 +80,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)evaluate:(NSString *)code completion:(void (^)(NSString *_Nullable json))completion;
 - (void)capturePicture:(double)scale completion:(void (^)(NSDictionary<NSString *, id> *_Nullable picture))completion;
 - (void)captureScreenshot:(void (^)(NSString *_Nullable png))completion;
+- (void)captureImage:(NSDictionary<NSString *, id> *)options completion:(void (^)(NSDictionary<NSString *, id> *_Nullable image))completion;
 - (void)navigationEntries:(void (^)(NSArray<NSDictionary<NSString *, id> *> *entries))completion;
 - (void)downloadFavicon:(NSString *)url name:(nullable NSString *)name
              completion:(void (^)(NSDictionary<NSString *, id> *_Nullable result))completion

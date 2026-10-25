@@ -264,6 +264,9 @@ public class CefModule: Module {
       AsyncFunction("captureScreenshot") { (view: CefWebView, promise: Promise) in
         view.browser.captureScreenshot { promise.resolve($0) }
       }.runOnQueue(.main)
+      AsyncFunction("captureImage") { (view: CefWebView, options: [String: Any], promise: Promise) in
+        view.browser.captureImage(options) { promise.resolve($0) }
+      }.runOnQueue(.main)
       AsyncFunction("downloadFavicon") { (view: CefWebView, url: String, promise: Promise) in
         view.browser.downloadFavicon(url, name: nil) { promise.resolve($0) }
       }.runOnQueue(.main)
