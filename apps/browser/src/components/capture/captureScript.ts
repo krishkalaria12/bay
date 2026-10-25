@@ -158,9 +158,10 @@ const cancel = () => {
   uninstall();
   send({ type: "cancel" });
 };
-const fullPage = () => {
+// ⌥-click: Capture in Portrait instead.
+const fullPage = (e) => {
   uninstall();
-  send({ type: "fullPage" });
+  send({ type: "fullPage", portrait: !!(e && e.altKey) });
 };
 
 // MARK: Input

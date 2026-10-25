@@ -28,7 +28,7 @@ export function placeCapture(from: Box, pane: { width: number; height: number })
 }
 
 /** A capture's file name: the page's title (else its host) and when, as macOS names screenshots. */
-export function captureName(title: string, url: string, at: Date, fullPage = false): string {
+export function captureName(title: string, url: string, at: Date, kind: boolean | "portrait" = false): string {
   let host = "";
   try {
     host = new URL(url).host;
@@ -43,5 +43,8 @@ export function captureName(title: string, url: string, at: Date, fullPage = fal
   const two = (n: number) => String(n).padStart(2, "0");
   const date = `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}`;
   const time = `${two(at.getHours())}.${two(at.getMinutes())}.${two(at.getSeconds())}`;
-  return `${base}${fullPage ? " (Full Page)" : ""} ${date} at ${time}`;
+  let label = "";
+  if (kind === "portrait") label = " (Portrait)";
+  else if (kind) label = " (Full Page)";
+  return `${base}${label} ${date} at ${time}`;
 }

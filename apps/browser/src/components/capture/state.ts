@@ -1,5 +1,5 @@
 import type { CapturedImage } from "@bay/nncore";
-import { copyCaptureImage, revealFile, saveCaptureImage, shareCaptureImage } from "@bay/shell";
+import { copyCaptureImage, portraitCaptureImage, revealFile, saveCaptureImage, shareCaptureImage } from "@bay/shell";
 import { PixelRatio } from "react-native";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
@@ -10,6 +10,7 @@ import { saveLibraryMedia } from "../library/state";
 import { chooseEasel, libraryWindow } from "../library/actions";
 import { webLink } from "../library/model";
 import { engineProfile } from "../../store/model";
+import { themeFor, themeKey } from "../../lib/theme";
 import { captureScript } from "./captureScript";
 import { captureName } from "./geometry";
 
@@ -101,7 +102,7 @@ export function onCaptureMessage(tabId: string, data: unknown) {
   if (m.type === "cancel") return setSession(tabId, null);
   if (m.type === "fullPage") {
     setSession(tabId, null);
-    return void captureFullPage(tabId);
+    return void (m.portrait === true ? capturePortrait(tabId) : captureFullPage(tabId));
   }
   if (m.type !== "capture") return;
   const { x, y, width, height, left, top, viewportWidth, viewportHeight } = m;
@@ -224,6 +225,32 @@ export async function captureFullPage(tabId: string) {
   const now = useBrowser.getState().tabs[tabId] ?? tab;
   const saved = await saveCaptureImage(image.path, captureName(now.customTitle || now.title, now.url, new Date(), true));
   savedToast(tab.windowId, saved, "Saved Full Page Capture");
+}
+
+/**
+ * Capture in Portrait, as Arc's Portrait Mode: the page as it's shown, at 2×, framed on its space's colours. It's
+ * copied, and saved to Downloads and the Library.
+ */
+export async function capturePortrait(tabId: string) {
+  const tab = capturableTab(tabId);
+  const web = webviews.get(tabId);
+  if (!tab || !web) return;
+  showToast(tab.windowId, "Capturing in Portrait…", undefined, { icon: "camera.viewfinder", key: "capture", sticky: true });
+  const failed = () => showToast(tab.windowId, "Couldn’t Capture the Page", "The page didn’t paint in time.", { icon: "camera.viewfinder", key: "capture" });
+  const shot = await web.captureImage({ pixelRatio: 2 * (tab.zoom ?? 1) });
+  if (!shot) return failed();
+  const s = useBrowser.getState();
+  const theme = themeFor(themeKey(s, tab.windowId, tab.spaceId));
+  const own = s.spaces[tab.spaceId]?.theme?.colors ?? [];
+  const framed = await portraitCaptureImage(shot.path, own.length ? own : [theme.accent, theme.windowTint[1]], theme.dark);
+  if (!framed) return failed();
+  const now = useBrowser.getState().tabs[tabId] ?? tab;
+  const name = captureName(now.customTitle || now.title, now.url, new Date(), "portrait");
+  await copyCaptureImage(framed.path);
+  const source = webLink(now.url) ? { url: now.url, title: now.customTitle || now.title, profileId: engineProfile(now.spaceId) } : undefined;
+  if (libraryWindow(tab.windowId)) void saveLibraryMedia(framed, name, source);
+  const saved = await saveCaptureImage(framed.path, name);
+  savedToast(tab.windowId, saved, "Copied Portrait Capture");
 }
 
 let started = false;

@@ -23,7 +23,7 @@ import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
 import { Favicon, useHover } from "../primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../layout/controls";
 import { toggleDeveloperMode } from "../developer/devMode";
-import { captureFullPage, startCapture } from "../capture/state";
+import { captureFullPage, capturePortrait, startCapture } from "../capture/state";
 import { useIsDeveloperTab } from "../developer/sites";
 import { patchPage, setPopover, usePage, usePages } from "../layout/pageState";
 import { showToast } from "../layout/splitActions";
@@ -182,6 +182,7 @@ export function SiteControls({
     items.push(
       { id: "markdown", title: "Copy Markdown Link", symbol: "link" },
       { id: "captureFullPage", title: "Capture Full Page", symbol: "camera" },
+      { id: "capturePortrait", title: "Capture in Portrait", symbol: "photo.on.rectangle" },
       { separator: true },
       { id: "manage", title: "Manage Extensions…" },
       { id: "store", title: "Chrome Web Store…" },
@@ -197,6 +198,9 @@ export function SiteControls({
     } else if (choice === "captureFullPage") {
       close();
       void captureFullPage(tabId);
+    } else if (choice === "capturePortrait") {
+      close();
+      void capturePortrait(tabId);
     } else if (choice === "markdown") {
       copyText(markdownLink(tab.customTitle || tab.title, url));
       showToast(tab.windowId, "Copied Markdown Link", undefined, { icon: "link" });

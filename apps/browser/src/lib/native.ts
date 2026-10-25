@@ -211,6 +211,7 @@ const PAGE_COMMANDS = [
   "savePage",
   "capture",
   "captureFullPage",
+  "capturePortrait",
   "emailPageLocation",
   "printWithSystemDialog",
   "stop",

@@ -78,6 +78,13 @@ const DEFS: ActionDef[] = [
     keywords: ["full page screenshot", "screenshot", "scrolling screenshot"],
     needs: page,
   },
+  {
+    command: "capturePortrait",
+    title: "Capture in Portrait",
+    icon: "photo.on.rectangle",
+    keywords: ["portrait mode", "screenshot", "framed screenshot", "pretty screenshot"],
+    needs: page,
+  },
   { command: "zoomIn", title: "Zoom In", icon: "plus.magnifyingglass", hint: "⌘+", needs: page },
   { command: "zoomOut", title: "Zoom Out", icon: "minus.magnifyingglass", hint: "⌘-", needs: page },
   { command: "zoomReset", title: "Actual Size", icon: "1.magnifyingglass", hint: "⌘0", keywords: ["reset zoom"], needs: page },
