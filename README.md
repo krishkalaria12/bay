@@ -42,7 +42,12 @@ Bay's own: the window, sidebar, command bar, menus and animations.
 - **Command bar.** One place for addresses, searches, open tabs and the ones put away (⌘L, or ⌘T for a
   new tab).
 - **Capture.** ⇧⌘2 lights up the part of the page under the pointer. Click it, or drag over any area, then copy,
-  save, share or mark up the picture. Capture Full Page saves the whole page to Downloads.
+  save to Library, add to an Easel, share or mark up the picture. Capture Full Page saves the whole page to Downloads.
+- **Easels.** Local whiteboards for captures, images, links, text and drawings. Move and resize objects, pan and
+  zoom, undo edits, or make a capture live. Create one with ⌃⇧E or “New Easel” in the command bar. Export as PNG
+  or a self-contained HTML file. Closing its pinned tab keeps the Easel in Library.
+- **Library.** The books button at the foot of the sidebar gathers saved media, downloads, Easels, Spaces and
+  archived tabs. Hover it to drag recent files, or type “Open Library” in the command bar.
 - **Previews.** Hover a folder, a Gmail or GitHub tab, or a calendar to see what's inside without
   opening it.
 
