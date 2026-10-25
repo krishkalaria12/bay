@@ -747,7 +747,7 @@
                   <td>16</td>
                   <td>Share Quote: highlighted text as a card image and link</td>
                   <td>Nov 2023</td>
-                  <td>Copies a link to the highlight</td>
+                  <td>Implemented: copies a themed quote card and highlight link; offers the macOS share sheet</td>
                   <td class="c"><span class="chip m">M</span></td>
                   <td class="c">4</td>
                 </tr>
@@ -903,16 +903,20 @@
             <div class="item">
               <h4>16 · Share Quote <span class="chip m">M</span></h4>
               <p>
-                Bay's selection popover already copies a link to the highlighted text. Add "Share Quote": render the quote, page title and site in the space's
-                colours as an image, put the image and the text-fragment link on the pasteboard, and offer the share sheet. Done in the shell, needing no
-                server.
+                Implemented in the selection popover. "Share Quote" copies the selected text, page title and site as a card in the space's colours, together
+                with a link to the highlighted passage. The confirmation offers "Share…" to open the macOS share sheet with both the card and link. Rendering
+                stays local and needs no server. Selections over 4,000 characters are rejected rather than truncated.
               </p>
               <dl class="facts">
                 <dt>Where</dt>
-                <dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, shell image rendering</dd>
+                <dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, <code>packages/shell/ios/QuoteCard.swift</code></dd>
               </dl>
               <ul class="checks">
                 <li>Pasting into Messages gives the card image; pasting into a text field gives the link, which opens scrolled to the quote.</li>
+                <li>
+                  Native rendering and plain/rich text paste checks: <code>python3 packages/shell/scripts/test-quote-card.py</code>. App integration:
+                  <code>node apps/browser/scripts/share-quote-test.mjs &lt;Debug Bay.app&gt;</code>.
+                </li>
               </ul>
             </div>
 

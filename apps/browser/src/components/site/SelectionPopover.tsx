@@ -6,7 +6,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { defaultSearchEngine } from "../../store/settings";
 import { useHover } from "../primitives";
-import { searchSelection, setPageSelection, usePageSelection, type ClickModifiers, type PageSelection } from "./selection";
+import { searchSelection, setPageSelection, shareSelectionQuote, usePageSelection, type ClickModifiers, type PageSelection } from "./selection";
 import { SELECTION_POPOVER_GAP, SELECTION_POPOVER_HEIGHT, SELECTION_SHOW_DELAY_MS } from "./constants";
 
 export function SelectionPopover({ tabId, zoom }: { tabId: string; zoom: number }) {
@@ -73,8 +73,50 @@ function Bar({ tabId, selection, zoom, area }: { tabId: string; selection: PageS
         <VisualEffect material="menu" cornerRadius={10} style={StyleSheet.absoluteFill} />
         <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: theme.dark ? "rgba(38,36,37,0.72)" : "rgba(252,251,252,0.7)" }} />
         <SearchButton tabId={tabId} text={selection.text} />
+        <ShareQuoteButton tabId={tabId} />
       </Surface>
     </Animated.View>
+  );
+}
+
+function ShareQuoteButton({ tabId }: { tabId: string }) {
+  const theme = useTheme();
+  const available = useBrowser((s) => /^https?:/.test(s.tabs[tabId]?.url ?? ""));
+  const { hovered, hoverProps } = useHover();
+  const [busy, setBusy] = useState(false);
+  if (!available) return null;
+  return (
+    <View {...hoverProps} tooltip="Copy the selected text as a card and link">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Share Quote"
+        accessibilityState={{ disabled: busy, busy }}
+        disabled={busy}
+        onPress={() => {
+          setBusy(true);
+          void shareSelectionQuote(tabId).finally(() => setBusy(false));
+        }}
+      >
+        {({ pressed }) => (
+          <View
+            style={{
+              height: SELECTION_POPOVER_HEIGHT - 6,
+              paddingHorizontal: 8,
+              borderRadius: 7,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              opacity: busy ? 0.5 : 1,
+              backgroundColor:
+                pressed || hovered ? (theme.dark ? `rgba(255,255,255,${pressed ? 0.12 : 0.07})` : `rgba(0,0,0,${pressed ? 0.1 : 0.06})`) : undefined,
+            }}
+          >
+            <Symbol name="quote.bubble" size={12} weight="medium" color={theme.icon} style={{ width: 16, height: 16 }} />
+            <Text style={{ fontSize: 13, fontWeight: "500", color: theme.textPrimary }}>Share Quote</Text>
+          </View>
+        )}
+      </Pressable>
+    </View>
   );
 }
 
