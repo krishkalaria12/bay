@@ -1,8 +1,9 @@
 import { LibraryButton } from "./library/LibraryButton";
-import { ContextMenuArea, FadeLabel, Symbol, WindowDragRegion } from "@bay/shell";
+import { ContextMenuArea, FadeLabel, MouseArea, Symbol, WindowDragRegion } from "@bay/shell";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { cycleSpace } from "../lib/actions";
 import { ThemeScope, useTheme } from "../lib/theme";
 import { layout } from "../lib/constants";
 import { everySlowly } from "../lib/slowTimers";
@@ -105,110 +106,114 @@ export function Sidebar() {
   return (
     <DragProvider>
       {(ghost: Ghost | null, controller) => (
-        <View
-          ref={(v) => {
-            controller.root = v;
-          }}
-          style={{ width, height: "100%" }}
-        >
+        // A mouse's side buttons page between spaces here, as Arc's did for mice without a trackpad (over the page
+        // they stay Back and Forward).
+        <MouseArea onSideButton={(button) => cycleSpace(windowId, button === "back" ? -1 : 1)} style={{ width, height: "100%" }}>
           <View
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              top: header - glowRoom,
-              bottom: (docked ? newTabDock : 0) + playerHeight + footer,
-              overflow: paging ? "hidden" : "visible",
+            ref={(v) => {
+              controller.root = v;
             }}
-            onLayout={(e) => setRoom({ available: e.nativeEvent.layout.height + (docked ? newTabDock : 0), list: listHeight.current })}
+            style={{ width, height: "100%" }}
           >
-            {pages.map((page) => (
-              <SidebarPage
-                key={page.id}
-                spaceId={page.id}
-                slot={page.slot}
-                width={width}
-                current={page.id === current}
-                resting={!!page.resting}
-                docked={docked}
-                glowRoom={glowRoom}
-                ghost={ghost}
-                rows={page.id === current ? undefined : Math.ceil(available / (metrics.rowHeight + layout.rowGap)) + 1}
-                geometryRef={page.id === current ? geometry : undefined}
-                onListHeight={onListHeight}
-                onScrollView={(v) => {
-                  scroll.current = v;
-                  controller.scroll = v;
-                }}
-                onScrollY={(y) => {
-                  scrollY.current = y;
-                  controller.scrollY = y;
-                  dismissHover();
-                }}
-              />
-            ))}
-          </View>
-
-          {playerTab ? (
-            <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: (docked ? newTabDock : 8) + footer }}>
-              <SidebarPlayer tabId={playerTab} />
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: header - glowRoom,
+                bottom: (docked ? newTabDock : 0) + playerHeight + footer,
+                overflow: paging ? "hidden" : "visible",
+              }}
+              onLayout={(e) => setRoom({ available: e.nativeEvent.layout.height + (docked ? newTabDock : 0), list: listHeight.current })}
+            >
+              {pages.map((page) => (
+                <SidebarPage
+                  key={page.id}
+                  spaceId={page.id}
+                  slot={page.slot}
+                  width={width}
+                  current={page.id === current}
+                  resting={!!page.resting}
+                  docked={docked}
+                  glowRoom={glowRoom}
+                  ghost={ghost}
+                  rows={page.id === current ? undefined : Math.ceil(available / (metrics.rowHeight + layout.rowGap)) + 1}
+                  geometryRef={page.id === current ? geometry : undefined}
+                  onListHeight={onListHeight}
+                  onScrollView={(v) => {
+                    scroll.current = v;
+                    controller.scroll = v;
+                  }}
+                  onScrollY={(y) => {
+                    scrollY.current = y;
+                    controller.scrollY = y;
+                    dismissHover();
+                  }}
+                />
+              ))}
             </View>
-          ) : null}
 
-          {docked ? (
-            <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: DOCKED_BOTTOM + footer }}>
-              <NewTabRow windowId={windowId} />
-            </View>
-          ) : null}
-
-          <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
-            {update ? (
-              <View style={{ height: UPDATE_ROW_HEIGHT, paddingHorizontal: layout.sidebarInset, justifyContent: "flex-end" }}>
-                <UpdateRow />
+            {playerTab ? (
+              <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: (docked ? newTabDock : 8) + footer }}>
+                <SidebarPlayer tabId={playerTab} />
               </View>
             ) : null}
-            {spaces ? <SpaceSwitcher windowId={windowId} /> : null}
-            <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
-              <LibraryButton windowId={windowId} />
-            </View>
-          </View>
 
-          <View style={{ height: header }}>
-            <WindowDragRegion style={StyleSheet.absoluteFill} />
-            {addressBar ? (
-              <>
-                <SidebarHeaderTools width={width} />
-                {field ? <SidebarAddressRow /> : null}
-              </>
-            ) : (
-              // Box-none: the header's empty space is the drag region's (it moves the window), not the row's.
-              <View
-                pointerEvents="box-none"
-                style={{
-                  height: layout.sidebarHeader,
-                  flexDirection: "row",
-                  alignItems: "flex-start",
-                  paddingLeft: profileX,
-                  paddingRight: 7,
-                  paddingTop: 27 - 17,
-                }}
-              >
-                <View pointerEvents="none" style={{ flex: 1 }} />
+            {docked ? (
+              <View style={{ position: "absolute", left: layout.sidebarInset, right: layout.sidebarInset, bottom: DOCKED_BOTTOM + footer }}>
+                <NewTabRow windowId={windowId} />
               </View>
-            )}
-          </View>
+            ) : null}
 
-          <ResizeHandle windowId={windowId} />
-          {/* Nothing pinned: the drag's pin target, over room the sidebar already has, so no row moves. */}
-          {ghost && !ghost.landing && nothingPinned ? (
-            field ? (
-              <PinDropZone top={SIDEBAR_FIELD.top} height={metrics.addressHeight} cover />
-            ) : (
-              <PinDropZone top={layout.pinnedTop - PIN_BAND - 3} height={PIN_BAND} cover={false} />
-            )
-          ) : null}
-          {ghost ? <DragGhost ghost={ghost} /> : null}
-        </View>
+            <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: footer }}>
+              {update ? (
+                <View style={{ height: UPDATE_ROW_HEIGHT, paddingHorizontal: layout.sidebarInset, justifyContent: "flex-end" }}>
+                  <UpdateRow />
+                </View>
+              ) : null}
+              {spaces ? <SpaceSwitcher windowId={windowId} /> : null}
+              <View style={{ position: "absolute", left: layout.sidebarInset, bottom: SIDEBAR_FOOTER_DOWNLOADS.bottom }}>
+                <LibraryButton windowId={windowId} />
+              </View>
+            </View>
+
+            <View style={{ height: header }}>
+              <WindowDragRegion style={StyleSheet.absoluteFill} />
+              {addressBar ? (
+                <>
+                  <SidebarHeaderTools width={width} />
+                  {field ? <SidebarAddressRow /> : null}
+                </>
+              ) : (
+                // Box-none: the header's empty space is the drag region's (it moves the window), not the row's.
+                <View
+                  pointerEvents="box-none"
+                  style={{
+                    height: layout.sidebarHeader,
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    paddingLeft: profileX,
+                    paddingRight: 7,
+                    paddingTop: 27 - 17,
+                  }}
+                >
+                  <View pointerEvents="none" style={{ flex: 1 }} />
+                </View>
+              )}
+            </View>
+
+            <ResizeHandle windowId={windowId} />
+            {/* Nothing pinned: the drag's pin target, over room the sidebar already has, so no row moves. */}
+            {ghost && !ghost.landing && nothingPinned ? (
+              field ? (
+                <PinDropZone top={SIDEBAR_FIELD.top} height={metrics.addressHeight} cover />
+              ) : (
+                <PinDropZone top={layout.pinnedTop - PIN_BAND - 3} height={PIN_BAND} cover={false} />
+              )
+            ) : null}
+            {ghost ? <DragGhost ghost={ghost} /> : null}
+          </View>
+        </MouseArea>
       )}
     </DragProvider>
   );
