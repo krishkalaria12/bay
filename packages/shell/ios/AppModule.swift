@@ -7,7 +7,7 @@ public class AppModule: Module {
     Name("BayApp")
     // The JS/native contract: NATIVE_API_VERSION in apps/browser/src/nativeApi.tsx, which a JS bundle checks before it
     // loads the app. Bump both together whenever JS starts needing native code that older builds lack.
-    Constant("apiVersion") { () -> Int in 10 }
+    Constant("apiVersion") { () -> Int in 11 }
     Events("onNotificationResponse", "onScriptCommand", "onUpdatePending")
 
     OnCreate {
@@ -264,6 +264,52 @@ public class AppModule: Module {
       return flags.isEmpty ? listed : [flags] + listed
       #else
       return []
+      #endif
+    }.runOnQueue(.main)
+
+    // A mouse's side or middle button (AppKit's buttonNumber) pressed and released at a point in the window's content
+    // (from its top-left), delivered to the view there as AppKit would: what it hit.
+    AsyncFunction("devOtherMouse") { (windowId: String, x: Double, y: Double, button: Int) -> String? in
+      #if DEBUG
+      guard let content = WindowManager.shared.windows[windowId]?.contentView, let frame = content.superview,
+            let number = CGMouseButton(rawValue: UInt32(button)) else { return nil }
+      let local = NSPoint(x: x, y: content.isFlipped ? y : content.bounds.height - y)
+      guard let hit = frame.hitTest(content.convert(local, to: frame)) else { return nil }
+      for type in [CGEventType.otherMouseDown, .otherMouseUp] {
+        guard let cg = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: .zero, mouseButton: number),
+              let event = NSEvent(cgEvent: cg) else { return nil }
+        if type == .otherMouseDown { hit.otherMouseDown(with: event) } else { hit.otherMouseUp(with: event) }
+      }
+      return String(describing: type(of: hit))
+      #else
+      return nil
+      #endif
+    }.runOnQueue(.main)
+
+    // Modifier keys going down or up as the flags event the window server sends ("option", or none), posted to the
+    // app's queue so its monitors see it.
+    AsyncFunction("devPostFlags") { (windowId: String, modifiers: [String]) -> Bool in
+      #if DEBUG
+      guard let window = WindowManager.shared.windows[windowId] else { return false }
+      let names: [String: NSEvent.ModifierFlags] = ["command": .command, "shift": .shift, "option": .option, "control": .control]
+      guard let event = NSEvent.keyEvent(
+        with: .flagsChanged, location: .zero, modifierFlags: NSEvent.ModifierFlags(modifiers.compactMap { names[$0] }),
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "",
+        charactersIgnoringModifiers: "", isARepeat: false, keyCode: modifiers.contains("option") ? 58 : 0) else { return false }
+      NSApp.postEvent(event, atStart: false)
+      return true
+      #else
+      return false
+      #endif
+    }.runOnQueue(.main)
+
+    // Little Bay from any app, as a test sees it: whether the menu bar button and the shortcut are there, and the Dock
+    // menu's titles. `action`: "click" clicks the menu bar button; "dock" chooses the Dock menu's Show/Hide item.
+    AsyncFunction("devLittleBay") { (action: String?) -> [String: Any] in
+      #if DEBUG
+      return LittleBayAccess.devState(action)
+      #else
+      return [:]
       #endif
     }.runOnQueue(.main)
 

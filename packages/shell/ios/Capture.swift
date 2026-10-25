@@ -37,6 +37,12 @@ public class CaptureModule: Module {
       CaptureFiles.share(path: path, name: name, windowId: windowId, anchor: anchor)
     }.runOnQueue(.main)
 
+    // Capture in Portrait (Arc's Portrait Mode): the picture in a rounded frame with a soft shadow, on a gradient of
+    // `colors` (the space's), as a new PNG: its path and size in pixels.
+    AsyncFunction("portraitImage") { (path: String, colors: [String], dark: Bool) -> [String: Any]? in
+      CapturePortrait.render(path: path, colors: colors, dark: dark)
+    }.runOnQueue(.main)
+
     View(CaptureCanvasView.self) {
       Events("onMarkupChange")
       Prop("path") { (view: CaptureCanvasView, path: String) in view.load(path) }
@@ -88,6 +94,67 @@ enum CaptureFiles {
     let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Bay Captures", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir.appendingPathComponent(UUID().uuidString).appendingPathExtension("png")
+  }
+}
+
+enum CapturePortrait {
+  static func render(path: String, colors: [String], dark: Bool) -> [String: Any]? {
+    guard let data = FileManager.default.contents(atPath: path),
+          let source = CGImageSourceCreateWithData(data as CFData, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { return nil }
+    let w = CGFloat(image.width), h = CGFloat(image.height)
+    // In the picture's pixels: a margin of a tenth of its shorter side, corners and shadow to match.
+    let pad = (min(w, h) * 0.1).rounded()
+    let radius = (min(w, h) * 0.025).rounded()
+    let size = (width: Int(w + pad * 2), height: Int(h + pad * 2))
+    let info = CGImageAlphaInfo.premultipliedLast.rawValue
+    let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+    guard
+      let cg = CGContext(
+        data: nil, width: size.width, height: size.height, bitsPerComponent: 8, bytesPerRow: 0, space: image.colorSpace ?? sRGB,
+        bitmapInfo: info)
+        ?? CGContext(data: nil, width: size.width, height: size.height, bitsPerComponent: 8, bytesPerRow: 0, space: sRGB, bitmapInfo: info)
+    else { return nil }
+    let canvas = CGRect(x: 0, y: 0, width: size.width, height: size.height)
+
+    // The backdrop: the space's colours top-left to bottom-right; one colour runs from lighter to darker.
+    var stops = colors.compactMap { NSColor(hex: $0)?.usingColorSpace(.sRGB) }
+    if stops.isEmpty { stops = [dark ? NSColor(white: 0.18, alpha: 1) : NSColor(white: 0.92, alpha: 1)] }
+    if stops.count == 1, let only = stops.first {
+      stops = [only.blended(withFraction: 0.35, of: .white) ?? only, only.blended(withFraction: 0.2, of: .black) ?? only]
+    }
+    let locations = stops.indices.map { CGFloat($0) / CGFloat(stops.count - 1) }
+    if let gradient = CGGradient(colorsSpace: sRGB, colors: stops.map(\.cgColor) as CFArray, locations: locations) {
+      cg.drawLinearGradient(gradient, start: CGPoint(x: 0, y: canvas.height), end: CGPoint(x: canvas.width, y: 0), options: [])
+    }
+
+    let frame = CGRect(x: pad, y: pad, width: w, height: h)
+    let shape = CGPath(roundedRect: frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+    // Its shadow, then the page clipped to the rounded frame, then a hairline rim.
+    cg.saveGState()
+    cg.setShadow(offset: CGSize(width: 0, height: -pad * 0.12), blur: pad * 0.5, color: NSColor.black.withAlphaComponent(dark ? 0.55 : 0.3).cgColor)
+    cg.addPath(shape)
+    cg.setFillColor(NSColor.white.cgColor)
+    cg.fillPath()
+    cg.restoreGState()
+    cg.saveGState()
+    cg.addPath(shape)
+    cg.clip()
+    cg.draw(image, in: frame)
+    cg.restoreGState()
+    cg.addPath(shape)
+    cg.setStrokeColor(NSColor.white.withAlphaComponent(dark ? 0.18 : 0.45).cgColor)
+    cg.setLineWidth(max(1, radius * 0.08))
+    cg.strokePath()
+
+    let file = CaptureFiles.temporaryPNG()
+    guard let out = cg.makeImage(),
+          let destination = CGImageDestinationCreateWithURL(file as CFURL, UTType.png.identifier as CFString, 1, nil)
+    else { return nil }
+    CGImageDestinationAddImage(destination, out, nil)
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    return ["path": file.path, "width": size.width, "height": size.height]
   }
 }
 

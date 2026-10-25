@@ -11,7 +11,8 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
   # Auto-updates (Updater.swift).
   s.dependency 'Sparkle', '~> 2.9'
-  s.frameworks     = 'AppKit', 'LocalAuthentication', 'ServiceManagement', 'UniformTypeIdentifiers', 'UserNotifications', 'CoreImage', 'EventKit', 'Security', 'NaturalLanguage', 'SwiftUI'
+  # Carbon: Little Bay's global shortcut (LittleBayAccess.swift), a hot key that needs no Accessibility permission.
+  s.frameworks     = 'AppKit', 'Carbon', 'LocalAuthentication', 'ServiceManagement', 'UniformTypeIdentifiers', 'UserNotifications', 'CoreImage', 'EventKit', 'Security', 'NaturalLanguage', 'SwiftUI'
   # Page translation (TranslateModule.swift): new in macOS 15, weakly linked for 14.
   s.weak_frameworks = 'Translation'
   s.source_files   = '**/*.{h,m,swift}'

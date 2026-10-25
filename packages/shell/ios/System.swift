@@ -129,6 +129,13 @@ public class SystemModule: Module {
     AsyncFunction("menuShortcuts") { () -> [[String: Any]] in MainMenu.shortcutList() }.runOnQueue(.main)
 
     AsyncFunction("recordShortcut") { (promise: Promise) in ShortcutRecorder.shared.record(promise) }.runOnQueue(.main)
+
+    // MARK: Little Bay from any app
+
+    AsyncFunction("setLittleBayMenuBarItem") { (on: Bool) in LittleBayAccess.setMenuBarItem(on) }.runOnQueue(.main)
+    AsyncFunction("setLittleBayHotKey") { (keyCode: Int?, modifiers: [String]) -> String in
+      LittleBayAccess.setHotKey(keyCode: keyCode, modifiers: modifiers)
+    }.runOnQueue(.main)
     AsyncFunction("cancelRecording") { ShortcutRecorder.shared.finish(nil) }.runOnQueue(.main)
   }
 }
@@ -160,7 +167,8 @@ final class ShortcutRecorder {
       if flags.contains(.shift) { mods.append("shift") }
       if flags.contains(.command) { mods.append("command") }
       if flags.contains(.function), let scalar = key.unicodeScalars.first, scalar.value < 0xF700 { mods.append("function") }
-      self.finish(["key": key, "modifiers": mods])
+      // The key's code too: a global shortcut (LittleBayAccess) registers by key, not character.
+      self.finish(["key": key, "modifiers": mods, "keyCode": Int(event.keyCode)])
       return nil
     }
   }
@@ -179,8 +187,9 @@ public class FileDragModule: Module {
     Name("BayFileDrag")
 
     View(FileDragView.self) {
-      Events("onMiddleClick")
+      Events("onMiddleClick", "onSideButton")
       Prop("path") { (view: FileDragView, path: String?) in view.path = path }
+      Prop("hearsSideButtons") { (view: FileDragView, on: Bool) in view.hearsSideButtons = on }
     }
   }
 }
@@ -188,9 +197,15 @@ public class FileDragModule: Module {
 final class FileDragView: ExpoView, NSDraggingSource {
   var path: String?
   let onMiddleClick = EventDispatcher()
+  // A mouse's side buttons (AppKit's 3 and 4, Back and Forward), for an area that listens (the sidebar's spaces).
+  let onSideButton = EventDispatcher()
+  var hearsSideButtons = false
   private var downAt: NSPoint?
 
   override func otherMouseUp(with event: NSEvent) {
+    if hearsSideButtons, event.buttonNumber == 3 || event.buttonNumber == 4 {
+      return onSideButton(["button": event.buttonNumber == 3 ? "back" : "forward"])
+    }
     guard event.buttonNumber == 2 else { return super.otherMouseUp(with: event) }
     let flags = event.modifierFlags
     onMiddleClick(["shiftKey": flags.contains(.shift), "altKey": flags.contains(.option), "metaKey": flags.contains(.command)])

@@ -8,7 +8,11 @@ const Capture = requireNativeModule<{
   copyImage(path: string): Promise<boolean>;
   saveImage(path: string, name: string): Promise<string | null>;
   shareImage(path: string, name: string, windowId: string | null, anchor: number[] | null): Promise<void>;
+  portraitImage(path: string, colors: string[], dark: boolean): Promise<{ path: string; width: number; height: number } | null>;
 }>("BayCapture");
+
+/** Capture in Portrait: the picture framed, with a shadow, on a gradient of `colors` (hex), as a new PNG. */
+export const portraitCaptureImage = (path: string, colors: string[], dark: boolean) => Capture.portraitImage(path, colors, dark);
 
 /** The picture on the clipboard. */
 export const copyCaptureImage = (path: string) => Capture.copyImage(path);

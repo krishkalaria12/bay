@@ -446,13 +446,57 @@ public class ShellModule: Module {
       if quiet() { emit("screenLocked") }
     }))
     var controlDown = false
-    flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-      let down = event.modifierFlags.contains(.control)
+    // Option held on its own shows the hidden sidebar, as Arc's did; letting go puts it back. Only after a beat, so
+    // ⌥ on the way to a shortcut (⌥⌘…) or a character (⌥e) shows nothing, nor while typing or a field is being edited.
+    var optionPending: DispatchWorkItem?
+    var optionShown = false
+    // Option, and nothing else, down now (as the flags events last said).
+    var optionAlone = false
+    var lastKeyAt = Date.distantPast
+    let releaseOption = {
+      optionPending?.cancel()
+      optionPending = nil
+      if optionShown { emit("optionReleased") }
+      optionShown = false
+    }
+    flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown]) { [weak self] event in
+      guard event.type == .flagsChanged else {
+        if event.type == .keyDown { lastKeyAt = Date() }
+        // Used with a key or a click: not a hold to look. The sidebar already out stays while the key does.
+        optionPending?.cancel()
+        optionPending = nil
+        return event
+      }
+      let flags = event.modifierFlags.intersection([.command, .option, .control, .shift, .function, .capsLock])
+      let down = flags.contains(.control)
       if controlDown && !down { emit("controlReleased") }
       controlDown = down
+      optionAlone = flags == .option
+      guard optionAlone else {
+        releaseOption()
+        return event
+      }
+      let typing = Date().timeIntervalSince(lastKeyAt) < ShellModule.optionTypingPause || NSApp.keyWindow?.firstResponder is NSText
+      guard optionPending == nil, !optionShown, !typing,
+            let windowId = WindowManager.shared.id(of: event.window) ?? WindowManager.shared.keyWindowId else { return event }
+      let show = DispatchWorkItem {
+        optionPending = nil
+        guard optionAlone else { return }
+        optionShown = true
+        self?.sendEvent("onAppEvent", ["type": "optionHeld", "windowId": windowId])
+      }
+      optionPending = show
+      DispatchQueue.main.asyncAfter(deadline: .now() + ShellModule.optionHoldDelay, execute: show)
       return event
     }
+    sidebarObservers.append((workspace, workspace.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+      releaseOption()
+    }))
   }
+
+  // How long Option is held alone before the sidebar shows, and how long after a key it still counts as typing.
+  static let optionHoldDelay = 0.2
+  static let optionTypingPause = 1.0
 
   static var isDark: Bool {
     NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

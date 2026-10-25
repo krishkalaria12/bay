@@ -297,6 +297,8 @@ enum MainMenu {
       cmd("Reopen Closed Tab", "reopenClosedTab", "t", [.command, .shift]),
       cmd("Reopen Closed Window", "reopenClosedWindow"),
       cmd("Open File…", "openFile", "o"),
+      // The meeting on now, or about to start (JS titles it with the event's name, and disables it when there's none).
+      cmd("Join Meeting", "joinMeeting", "j", [.command, .control]),
       .separator(),
       cmd("Open Command Bar", "focusCommandBar", "l"),
       cmd("Open Command Bar", "focusCommandBar", functionKey(NSF5FunctionKey), .control).hiddenShortcut(),
@@ -314,6 +316,8 @@ enum MainMenu {
       cmd("Capture", "capture", "2", [.command, .shift]),
       cmd("Capture", "capture", "@").hiddenShortcut(),
       cmd("Capture Full Page", "captureFullPage"),
+      // ⌥: Arc's Portrait Mode, the page framed on the space's colours.
+      cmd("Capture in Portrait", "capturePortrait", "", .option).alternate(),
       cmd("Share…", "share"),
       cmd("Email Page Location", "emailPageLocation", "i", [.command, .shift]),
       cmd("Print…", "print", "p"),
@@ -790,6 +794,7 @@ enum MainMenu {
     let small = CommandItem("New Little Bay Window", "newLittleBay")
     small.windowless = true
     menu.addItem(small)
+    if let littleBays = LittleBayAccess.dockItem() { menu.addItem(littleBays) }
     return menu
   }
 }

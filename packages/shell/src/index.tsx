@@ -15,6 +15,8 @@ export type BrowserCommand =
   | "newWindow"
   | "newIncognitoWindow"
   | "newLittleBay"
+  | "joinMeeting"
+  | "capturePortrait"
   | "toggleOpenLinksInLittleBay"
   | "removeFromSplit"
   | "togglePinRow"
@@ -141,6 +143,9 @@ export type AppEvent =
   | { type: "resignActive" }
   | { type: "screenLocked" }
   | { type: "controlReleased" }
+  // Option held on its own (and let go): the hidden sidebar shows while it is.
+  | { type: "optionHeld"; windowId: string }
+  | { type: "optionReleased" }
   | { type: "switcherKey"; key: "escape" | "next" | "previous" }
   | { type: "switcherMouseUp" };
 
