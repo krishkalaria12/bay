@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bay Feature Gaps</title>
+    <title>Bay · Arc feature gaps</title>
     <meta
       name="description"
       content="What Bay is missing, the areas to re-test and fix, and what to build next, in phases with exit criteria, risks and open decisions."
@@ -566,20 +566,21 @@
       }
     </style>
   </head>
-  <body>
+    <body>
     <a class="skip" href="#content">Skip to content</a>
 
     <header class="top">
       <div class="wrap">
         <div class="topbar"><span class="eyebrow">Bay · Plan</span><button class="theme-toggle" id="themeToggle" type="button">Light / dark</button></div>
-        <h1>What Bay is missing, and what to build next</h1>
+        <h1>What Arc has that Bay doesn't</h1>
         <p class="lede">
-          A gap review of Bay's code against what people expect from a sidebar browser on the Mac. It lists what Bay already covers, the gaps the code has no
-          answer for, the areas to re-test and fix, and the build order in phases.
+          Every feature Arc for macOS shipped from 2021 to its sunset notice, checked against Bay's code. The plan lists what Bay already matches, the gaps
+          left, the things to re-test, and the order to build them in.
         </p>
         <div class="meta">
-          <span>Checked against <code>main</code> at <code>12e254d7</code></span>
-          <span>13 October 2026</span>
+          <span>Checked against <code>main</code> at <code>6f52d921</code></span>
+          <span>25 October 2026</span>
+          <span>Source: Arc's macOS release notes, 2021–2026</span>
           <span>Sizes are estimates: S a day or two, M about a week, L more</span>
         </div>
       </div>
@@ -590,19 +591,20 @@
         <h2>Contents</h2>
         <ol>
           <li><a href="#summary">Summary</a></li>
+          <li><a href="#sunset">Arc's sunset</a></li>
           <li><a href="#have">Already in Bay</a></li>
           <li><a href="#missing">What's missing</a></li>
-          <li><a href="#fixes">Fixes</a></li>
+          <li><a href="#retest">Re-test</a></li>
           <li><a href="#phases">Phases</a></li>
-          <li class="sub"><a href="#p0">0 · Fix sweep · Done</a></li>
-          <li class="sub"><a href="#p1">1 · Quick wins · Done</a></li>
-          <li class="sub"><a href="#p2">2 · Organising</a></li>
-          <li class="sub"><a href="#p3">3 · Command bar & autofill</a></li>
-          <li class="sub"><a href="#p4">4 · Media</a></li>
-          <li class="sub"><a href="#p5">5 · Bigger bets</a></li>
+          <li class="sub"><a href="#p1">1 · Before Arc shuts down</a></li>
+          <li class="sub"><a href="#p2">2 · Keyboard & undo</a></li>
+          <li class="sub"><a href="#p3">3 · Boosts</a></li>
+          <li class="sub"><a href="#p4">4 · Sharing</a></li>
+          <li class="sub"><a href="#p5">5 · Arc Max, on device</a></li>
           <li><a href="#risks">Risks</a></li>
           <li><a href="#decisions">Decisions needed</a></li>
           <li><a href="#out">Not in this plan</a></li>
+          <li><a href="#sources">Sources</a></li>
         </ol>
       </nav>
 
@@ -611,65 +613,107 @@
           <h2 id="summary-h">Summary</h2>
           <div class="prose">
             <p>
-              Bay already covers most of what a sidebar browser needs. The review found <strong>17 gaps</strong> and <strong>14 areas to re-test</strong>. The
-              gaps fall into three kinds: small missing pieces around tabs, media and downloads; two organising features that Arc users rely on (folders inside
-              folders, and rules for links from other apps); and a few larger builds (site tweaks, text in images, notifications with the tab closed) that need
-              a decision before work starts.
+              Bay already matches most of Arc: spaces with themes and profiles, favorites, pinned tabs and nested folders, auto cleanup, Peek, Split View,
+              Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
+              folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>.
             </p>
+            <p>The gaps are of four kinds:</p>
+            <ul>
+              <li><strong>Small habits Arc users will miss on day one.</strong> Unread counts on favorites, opening Little Bay from any app, mouse buttons that switch spaces, Shift-Return for the top result. Ten items, mostly S.</li>
+              <li><strong>Keyboard and undo.</strong> Moving around the sidebar from the keyboard, ⌘Z for any sidebar edit, and files from Finder in the sidebar.</li>
+              <li><strong>Boosts.</strong> Arc's way to restyle or zap parts of a site. Bay has no answer except uBlock's cosmetic filters. One large build.</li>
+              <li><strong>Sharing and Arc Max.</strong> Shared folders, Share Quote, Easel links, and the "tidy" AI features. Each needs a decision before work starts.</li>
+            </ul>
             <p>
-              The order below fixes first, then ships the small wins, then the features that change how people organise their tabs, and leaves the uncertain
-              work for last behind a research gate.
+              Phase 1 is sized to land before <strong>22 December 2026</strong>, when Arc stops opening. The later phases don't depend on that date.
             </p>
           </div>
-          <div class="callout ok">
+        </section>
+
+        <section id="sunset" aria-labelledby="sunset-h">
+          <h2 id="sunset-h">Arc's sunset</h2>
+          <div class="callout warn prose">
             <p>
-              <strong>Phases 0 and 1 are done.</strong> Completed on 14 October 2026. The shutdown fix, browser regressions and all six quick wins are
-              implemented. Idle tabs now use a two-hour threshold, and Settings › Tabs has a seeded keep-awake list. Validation and recurring release checks are
-              recorded directly in each phase below. Emoji, unit and currency answers in phase 3 are also done, with an enabled-by-default Calculator toggle and
-              larger answer rows.
+              The Browser Company announced on 22 October 2026 that Arc will be sunset. New accounts stopped that day. On <strong>23 November</strong> Arc
+              starts showing sunset reminders. On <strong>22 December</strong> Arc for macOS and Windows stops working, sign-in ends and all Arc services are
+              turned off. The official path is to move to Dia.
             </p>
+            <p>
+              That gives Bay 58 days during which every Arc user is choosing a browser. Bay's Arc importer reads <code>StorableSidebar.json</code> straight
+              from disk (<code>packages/import/ios/Core/Discovery.swift</code>), so it should keep working after Arc stops opening, as long as the files stay
+              on disk. Re-test it against a profile from Arc's final build (see <a href="#retest">Re-test</a>).
+            </p>
+          </div>
+          <div class="prose">
+            <p>Arc removed some features itself before the end. They are not gaps:</p>
+            <ul>
+              <li>Ask on Page, removed from Arc Max on 28 August 2025.</li>
+              <li>Arc Notes, phased out in April 2024. Bay's command bar already opens new notes in Notion, Confluence, Google Docs and Word.</li>
+              <li>Reader Mode, turned off on 6 June 2024.</li>
+              <li>GitHub previews, replaced by GitHub Live Folders in May 2024. Bay has both.</li>
+              <li>The Recent Tab indicator (removed February 2024) and the iCloud sidebar sync (replaced by Arc Sync, June 2024).</li>
+            </ul>
           </div>
         </section>
 
         <section id="have" aria-labelledby="have-h">
           <h2 id="have-h">Already in Bay</h2>
-          <p class="prose">These are done, so nobody plans them again. Each was confirmed in the code on <code>main</code>.</p>
+          <p class="prose">These Arc features are matched in the code on <code>main</code>, so nobody plans them again.</p>
           <ul class="have">
+            <li>Spaces with an icon, colour theme (gradient, intensity, grain) and profile</li>
+            <li>Swipe between spaces; space switcher in the sidebar's foot</li>
+            <li>Favorites as tiles (Essentials), shared between spaces on one profile</li>
+            <li>Pinned tabs and folders, nested five deep</li>
+            <li>Custom names and emoji icons for tabs and folders</li>
+            <li>Fold a space's pinned section</li>
+            <li>Back to Pinned URL, Replace Pin, Edit Pinned Page</li>
+            <li>Today's tabs cleaned up after a time set per space</li>
+            <li>Clear inactive tabs; Recently Cleaned in the command bar</li>
+            <li>Archived tabs, searchable, in the Library</li>
+            <li>Multi-select tabs: copy links, copy as Markdown, group</li>
+            <li>Drag a tab out into a new window</li>
+            <li>Sidebar on either side, auto-hide, or tabs on top</li>
+            <li>Optional toolbar with full URL</li>
+            <li>Peek for links from pinned tabs, then keep it or split it</li>
+            <li>Split View, horizontal and vertical, several panes</li>
+            <li>Little Bay for links from other apps, with Move to Space</li>
+            <li>Link rules by URL and source app (Air Traffic Control)</li>
+            <li>Command bar with actions, site shortcuts and bangs</li>
+            <li>Paste and Go; forget a suggestion</li>
+            <li>Calculator, units, currency and emoji answers</li>
+            <li>Command bar integrations: New Linear Issue, Google Meet, FigJam, Notion, Confluence, Google Docs and more</li>
+            <li>⌃Tab recent tab switcher across spaces</li>
+            <li>Supercopy: ⇧⌘C copies a link without trackers</li>
+            <li>Copy URL as Markdown; link to highlighted text</li>
+            <li>Capture an element, an area or the full page, with markup</li>
+            <li>Easels with live captures; export as PNG or HTML</li>
+            <li>Library: media, downloads, Easels, spaces, archive</li>
+            <li>Previews for folders, Gmail, GitHub and Calendar</li>
+            <li>GitHub live folders</li>
+            <li>Live calendar: next meeting, time to it, Join</li>
+            <li>Automatic picture in picture, off per site</li>
+            <li>Sidebar player for every playing tab, with Pause All</li>
+            <li>Share This Tab Instead during a call</li>
+            <li>Camera, microphone and screen-share badges on tabs</li>
+            <li>Developer Mode for localhost, with inspector</li>
+            <li>Site Controls: permissions, zoom, translate</li>
+            <li>Battery Saver; sleeping tabs; sites kept awake</li>
+            <li>Cast; Task Manager</li>
             <li>Private windows</li>
-            <li>Close Tabs Above/Below (Left/Right with tabs on top)</li>
-            <li>Put Tab to Sleep from the tab menu</li>
-            <li>Pop-up blocker that can open the pop-up or always allow the site</li>
-            <li>Open at Login</li>
-            <li>Prompt for a page that stops responding</li>
-            <li>Link status bubble at the page's foot</li>
-            <li>Dock menu</li>
-            <li>Screen-share picker</li>
-            <li>Translate page, with the language named</li>
-            <li>Per-extension site access</li>
-            <li>1Password's desktop app connection</li>
-            <li>Extension side panels</li>
-            <li>Import from Arc, Chrome, Safari, Firefox, Zen, Dia, Helium and more</li>
-            <li>Reopen closed tab (⇧⌘T)</li>
-            <li>Check for Updates</li>
-            <li>App icon picker in Settings › Appearance</li>
-            <li>Sidebar on either side, or tabs on top</li>
-            <li>Toolbar that hides while scrolling</li>
-            <li>Peek for links from pinned tabs</li>
-            <li>Split View, and Split with Current Tab</li>
-            <li>Picture in picture for a page's own windows</li>
-            <li>Calculator in the command bar</li>
-            <li>Per-site zoom</li>
-            <li>Cast</li>
-            <li>Task manager</li>
-            <li>Replace Pin with Current Page, and Back to Pinned URL</li>
             <li>Custom keyboard shortcuts</li>
+            <li>Import from Arc, keeping folder trees</li>
+            <li>Encrypted sync across Macs</li>
+            <li>AppleScript; Handoff from iPhone</li>
+            <li>App icon picker; haptics toggle</li>
+            <li>Automatic updates; What's New row in the sidebar</li>
           </ul>
         </section>
 
         <section id="missing" aria-labelledby="missing-h">
           <h2 id="missing-h">What's missing</h2>
           <p class="prose">
-            "Missing" means the code on <code>main</code> has nothing for it. Searching the repo found no implementation. The app was not run for this review.
+            "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
+            not run for this review. The date is when Arc shipped the feature.
           </p>
           <div class="table-wrap">
             <table class="gaps">
@@ -678,229 +722,64 @@
               </caption>
               <thead>
                 <tr>
+                  <th scope="col">#</th>
                   <th scope="col">Gap</th>
+                  <th scope="col">Arc</th>
                   <th scope="col">Today in Bay</th>
-                  <th scope="col">Where it lands</th>
                   <th scope="col">Size</th>
                   <th scope="col">Phase</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>Sites kept awake</td>
-                  <td>Idle tabs sleep after 30 min; only pinned and kept tabs are spared</td>
-                  <td><code>lib/tabLifecycle.ts</code>, Settings › Tabs</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>Copy File / Copy Path on downloads</td>
-                  <td>Only Show in Finder</td>
-                  <td><code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code></td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>Extensions in private windows</td>
-                  <td>No per-extension "Allow in Private"</td>
-                  <td><code>settings/panes/Extensions.tsx</code>, engine</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>Every playing tab, with Pause All</td>
-                  <td>The sidebar player shows one session</td>
-                  <td><code>media/SidebarPlayer.tsx</code>, <code>media/state.ts</code></td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>Fold a space</td>
-                  <td>Folders fold; a space's pinned section can't</td>
-                  <td><code>sidebar/SpaceTitle.tsx</code></td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>Density (Comfortable / Compact)</td>
-                  <td>One row size</td>
-                  <td><code>sidebar/tokens.ts</code>, Settings › Appearance</td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">1</td>
-                </tr>
-                <tr>
-                  <td>Folders inside folders</td>
-                  <td>Done: five levels, recursive sidebar, move undo, nested import and sync</td>
-                  <td><code>store/types.ts</code>, <code>FolderBlock.tsx</code>, sync, import</td>
-                  <td class="c"><span class="chip l">L</span></td>
-                  <td class="c">2</td>
-                </tr>
-                <tr>
-                  <td>Rules for links from other apps</td>
-                  <td>Done: ordered rules by URL and source app, routed to a space, Little Bay or a new window, synced</td>
-                  <td><code>lib/externalLinkRules.ts</code>, <code>settings/panes/LinkRules.tsx</code>, <code>sync/linkRules.ts</code></td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">2</td>
-                </tr>
-                <tr>
-                  <td>Clipboard history in the command bar</td>
-                  <td>None</td>
-                  <td><code>packages/core/src/suggest.ts</code>, shell</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">3</td>
-                </tr>
-                <tr>
-                  <td>Emoji, units and currency in the command bar</td>
-                  <td>Done: top-row answers, Return to copy, calculator toggle and larger answer rows</td>
-                  <td><code>packages/core/src</code>, <code>omnibox/CalculationAnswer.tsx</code>, Settings › Search</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">3</td>
-                </tr>
-                <tr>
-                  <td>One-time codes offered in the code box</td>
-                  <td>None</td>
-                  <td><code>site/Autofill.tsx</code>, engine autofill</td>
-                  <td class="c"><span class="chip l">L</span></td>
-                  <td class="c">3</td>
-                </tr>
-                <tr>
-                  <td>"Allow ads here" when a page breaks</td>
-                  <td>None</td>
-                  <td>Content blocker, Site Controls</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">3</td>
-                </tr>
-                <tr>
-                  <td>Speed and subtitles on the floating video</td>
-                  <td>Done: speed menu, subtitles menu and the chosen subtitles drawn in the window, YouTube's included</td>
-                  <td><code>bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code>, <code>page_script.js</code></td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">4</td>
-                </tr>
-                <tr>
-                  <td>Live streams labelled Live</td>
-                  <td>Done: Live or "5m behind" in the floating video and the sidebar and mini players, a click jumps to live</td>
-                  <td><code>media/state.ts</code>, player views, <code>page_script.js</code></td>
-                  <td class="c"><span class="chip s">S</span></td>
-                  <td class="c">4</td>
-                </tr>
-                <tr>
-                  <td>Site tweaks and Zap (hide an element)</td>
-                  <td>Only the ad blocker's cosmetic filters</td>
-                  <td>Site Controls, content blocker, sync</td>
-                  <td class="c"><span class="chip l">L</span></td>
-                  <td class="c">5</td>
-                </tr>
-                <tr>
-                  <td>Copy text from images</td>
-                  <td>None</td>
-                  <td>Context menu, shell (Vision)</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">5</td>
-                </tr>
-                <tr>
-                  <td>Site notifications with the tab closed</td>
-                  <td>Notifications only while the tab is open</td>
-                  <td>Engine (push messaging)</td>
-                  <td class="c"><span class="chip risk">Unknown</span></td>
-                  <td class="c">5</td>
-                </tr>
+                <tr><td>1</td><td>Unread counts on favorites</td><td>Mar 2022</td><td>Tiles show away, media and capture badges; no counts</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>2</td><td>Little Bay from any app (shortcut and menu bar button)</td><td>Aug 2021</td><td>⌥⌘N works only with Bay in front</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>3</td><td>Little Bay windows put away after six hours</td><td>Nov 2023</td><td>They stay open until closed</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>4</td><td>Mouse buttons 4 and 5 switch spaces</td><td>Mar 2022</td><td>Only the middle button is handled</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>5</td><td>Option shows the hidden sidebar</td><td>May 2021</td><td>Hover the edge only</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>6</td><td>Arrow showing the current tab is scrolled out of view</td><td>Jul 2023</td><td>None</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>7</td><td>Shift-Return opens the top result (Instant Links)</td><td>Feb 2024</td><td>Return always searches</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>8</td><td>⌃⌘J joins the meeting that's on now</td><td>Jun 2024</td><td>Join buttons in the meeting alert only</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>9</td><td>Portrait capture of a tab</td><td>Dec 2023</td><td>Element, area and full page</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>10</td><td>JSON viewer in Developer Mode</td><td>Dec 2023</td><td>Raw JSON</td><td class="c"><span class="chip s">S</span></td><td class="c">1</td></tr>
+                <tr><td>11</td><td>Move around the sidebar from the keyboard</td><td>Jun 2021</td><td>None</td><td class="c"><span class="chip m">M</span></td><td class="c">2</td></tr>
+                <tr><td>12</td><td>⌘Z for any sidebar edit</td><td>Jun 2021</td><td>⌘Z undoes folder moves; ⇧⌘T reopens tabs</td><td class="c"><span class="chip m">M</span></td><td class="c">2</td></tr>
+                <tr><td>13</td><td>Files and folders from Finder in the sidebar</td><td>Jun 2021</td><td>None</td><td class="c"><span class="chip m">M</span></td><td class="c">2</td></tr>
+                <tr><td>14</td><td>Boosts: zap, colours, fonts, custom CSS</td><td>Jul 2022, v2 May 2023</td><td>Only uBlock's cosmetic filters</td><td class="c"><span class="chip l">L</span></td><td class="c">3</td></tr>
+                <tr><td>15</td><td>Boosts with JavaScript, kept on one Mac</td><td>Jul 2022; sync off Sep 2024</td><td>None</td><td class="c"><span class="chip m">M</span></td><td class="c">3</td></tr>
+                <tr><td>16</td><td>Share Quote: highlighted text as a card image and link</td><td>Nov 2023</td><td>Copies a link to the highlight</td><td class="c"><span class="chip m">M</span></td><td class="c">4</td></tr>
+                <tr><td>17</td><td>Share a folder, split or selection as a link</td><td>Oct 2023</td><td>Copy All Links, as text or Markdown</td><td class="c"><span class="chip m">M</span></td><td class="c">4</td></tr>
+                <tr><td>18</td><td>Share an Easel as a web page</td><td>Jun 2022</td><td>Export as a PNG or HTML file</td><td class="c"><span class="chip l">L</span></td><td class="c">4</td></tr>
+                <tr><td>19</td><td>Tidy Tab Titles: short names for pinned tabs</td><td>Oct 2023</td><td>Rename by hand</td><td class="c"><span class="chip m">M</span></td><td class="c">5</td></tr>
+                <tr><td>20</td><td>Tidy Downloads: readable file names</td><td>Oct 2023</td><td>Server's file name</td><td class="c"><span class="chip s">S</span></td><td class="c">5</td></tr>
+                <tr><td>21</td><td>Tidy Tabs: group today's tabs by topic</td><td>Feb 2024</td><td>Clean up by age; meeting groups</td><td class="c"><span class="chip m">M</span></td><td class="c">5</td></tr>
+                <tr><td>22</td><td>5-Second Previews: Shift-hover a link for a summary</td><td>Oct 2023</td><td>Hover card for tabs; Peek for links</td><td class="c"><span class="chip m">M</span></td><td class="c">5</td></tr>
               </tbody>
             </table>
           </div>
         </section>
 
-        <section id="fixes" aria-labelledby="fixes-h">
-          <h2 id="fixes-h">Fixes</h2>
+        <section id="retest" aria-labelledby="retest-h">
+          <h2 id="retest-h">Re-test</h2>
           <p class="prose">
-            Browsers built on the same parts commonly break in these places. None is known to be broken in Bay. Each is a check: run it, and fix what fails.
-            They make up Phase 0.
+            Arc did these, and Bay's code suggests it does too, but the search couldn't prove it. Each is a check: run it, and add a gap if it fails.
           </p>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th scope="col">#</th>
-                  <th scope="col">Area</th>
-                  <th scope="col">How to check</th>
+                  <th scope="col">Arc behaviour</th>
+                  <th scope="col">How to check in Bay</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>1</td>
-                  <td>Shortcuts on other keyboard layouts</td>
-                  <td>On AZERTY, ⌘Z undoes and doesn't close a tab. On German, ⌘[ and ⌘] go back and forward. On Dvorak, shortcuts follow the key's letter.</td>
-                </tr>
-                <tr>
-                  <td>2</td>
-                  <td>Extension popups that close themselves</td>
-                  <td>Bitwarden's popup goes away after Fill, as in Chrome (<code>window.close()</code> from a popup).</td>
-                </tr>
-                <tr>
-                  <td>3</td>
-                  <td>Password managers right after launch</td>
-                  <td>1Password, Bitwarden and NordPass buttons work on the first click after launch, and after the app has been idle.</td>
-                </tr>
-                <tr>
-                  <td>4</td>
-                  <td>Passkey prompts from extensions</td>
-                  <td>
-                    Bitwarden's passkey prompt opens once, closes after a pick, and GitHub's "Continue with passkey" finishes, also on a page left open a while.
-                  </td>
-                </tr>
-                <tr>
-                  <td>5</td>
-                  <td>Extension pages at every launch</td>
-                  <td>No welcome or changelog page opens again on relaunch. Removing an extension also removes its data.</td>
-                </tr>
-                <tr>
-                  <td>6</td>
-                  <td>A helper app quitting</td>
-                  <td>Quitting a password manager's desktop helper while its extension is connected doesn't take Bay down.</td>
-                </tr>
-                <tr>
-                  <td>7</td>
-                  <td>Sign-ins through quit, update and crash</td>
-                  <td>
-                    A site that keeps you signed in with a session cookie (YouTube's chosen account, for one) is still signed in after ⌘Q, an update and a Force
-                    Quit.
-                  </td>
-                </tr>
-                <tr>
-                  <td>8</td>
-                  <td>Leaving a call</td>
-                  <td>⌘W on a Meet tab, or ⌘Q during a call, leaves the call for the others at once.</td>
-                </tr>
-                <tr>
-                  <td>9</td>
-                  <td>Google's service icons</td>
-                  <td>Drive, Calendar, Gmail and Maps show their own icons in the sidebar, not Google's G.</td>
-                </tr>
-                <tr>
-                  <td>10</td>
-                  <td>Horizontal scroll vs. swipe</td>
-                  <td>Scrolling a carousel or a wide table sideways doesn't go back or forward.</td>
-                </tr>
-                <tr>
-                  <td>11</td>
-                  <td>Keys on a page</td>
-                  <td>Arrow keys, Home and End on a page (or a video that seeks with them) don't play the error sound.</td>
-                </tr>
-                <tr>
-                  <td>12</td>
-                  <td>Waking a sleeping tab</td>
-                  <td>A tab that slept comes back scrolled to where it was.</td>
-                </tr>
-                <tr>
-                  <td>13</td>
-                  <td>Icons behind a bot check</td>
-                  <td>Sites that check for bots first (Cloudflare's page, for one) end up with their own icon, not a letter.</td>
-                </tr>
-                <tr>
-                  <td>14</td>
-                  <td>Dragging a tab out</td>
-                  <td>A tab dragged past the window's edge opens in a new window without reloading, including from a window that fills its screen.</td>
-                </tr>
+                <tr><td>R1</td><td>Import works after Arc stops</td><td>Import a profile saved by Arc 1.170 with Arc quit and its account signed out. Spaces, nested folders, favorites and pinned tabs arrive.</td></tr>
+                <tr><td>R2</td><td>A restored tab returns to its own space (Nov 2023)</td><td>Restore a tab from the Library's archive while another space is in front. It opens in the space it came from.</td></tr>
+                <tr><td>R3</td><td>Switching spaces returns to that space's last tab (Aug 2023)</td><td>Select a tab in Work, go to Home, come back. The same tab is selected.</td></tr>
+                <tr><td>R4</td><td>Duplicate keeps history (Aug 2023)</td><td>Duplicate a tab three pages deep. Back works in the copy.</td></tr>
+                <tr><td>R5</td><td>⌘-click Back opens in a new tab (Aug 2023)</td><td>⌘-click and middle-click Back and Forward. Each opens the entry in a new tab.</td></tr>
+                <tr><td>R6</td><td>Google Meet floats with call controls (Jul 2023)</td><td>Leave a Meet tab during a call. The floating window shows mute, camera and leave, and moves and resizes.</td></tr>
+                <tr><td>R7</td><td>The sidebar dims when the window isn't in front (Oct 2023)</td><td>Click into another app. The sidebar dims, and brightens again on return.</td></tr>
               </tbody>
             </table>
           </div>
@@ -908,951 +787,265 @@
 
         <section id="phases" aria-labelledby="phases-h">
           <h2 id="phases-h">Phases</h2>
-          <ol class="flow" aria-label="Phase order">
-            <li>
-              <a href="#p0"><span class="n">Phase 0</span><strong>Fix sweep</strong>Done · 14 checks</a>
-            </li>
-            <li>
-              <a href="#p1"><span class="n">Phase 1</span><strong>Quick wins</strong>Done · 6 items</a>
-            </li>
-            <li>
-              <a href="#p2"><span class="n">Phase 2</span><strong>Organising</strong>Nested folders, link rules</a>
-            </li>
-            <li>
-              <a href="#p3"><span class="n">Phase 3</span><strong>Command bar & autofill</strong>Clipboard, codes, ads</a>
-            </li>
-            <li>
-              <a href="#p4"><span class="n">Phase 4</span><strong>Media</strong>Floating video</a>
-            </li>
-            <li class="gate">
-              <a href="#p5"><span class="n">Phase 5</span><strong>Bigger bets</strong>Research gate first</a>
-            </li>
+          <ol class="flow">
+            <li><a href="#p1"><span class="n">Phase 1</span><strong>Before Arc shuts down</strong>10 small items</a></li>
+            <li><a href="#p2"><span class="n">Phase 2</span><strong>Keyboard &amp; undo</strong>3 items</a></li>
+            <li><a href="#p3"><span class="n">Phase 3</span><strong>Boosts</strong>Site tweaks</a></li>
+            <li class="gate"><a href="#p4"><span class="n">Phase 4</span><strong>Sharing</strong>Decision first</a></li>
+            <li class="gate"><a href="#p5"><span class="n">Phase 5</span><strong>Arc Max, on device</strong>Research gate</a></li>
           </ol>
           <p class="prose">
-            Phases 1, 3 and 4 don't depend on each other and can run side by side. Phase 2 comes before anything else that changes the sidebar's data, because
-            nested folders change the stored and synced shape.
+            Phase 1 has a date: 22 December. Phases 2 and 3 don't depend on each other and can run side by side. Phases 4 and 5 start only after their
+            decisions are made. Phase 3 comes before Boost sharing in Phase 4.
           </p>
 
-          <!-- Phase 0 -->
-          <article class="phase" id="p0" aria-labelledby="p0-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 0</span>
-              <h3 id="p0-h">Fix sweep</h3>
-              <span class="chip s">Done</span>
-            </div>
-            <p class="goal">Run the 14 checks under <a href="#fixes">Fixes</a> on a release build and fix what fails, before new features land on top.</p>
-            <div class="callout ok">
-              <p>
-                <strong>Done · 14 October 2026.</strong> The implementation and automated audit are complete. Fixed the multi-window shutdown crash that
-                interrupted cookie saving. All reachable regressions pass; external setup checks remain listed below for release sign-off.
-              </p>
-            </div>
-            <details>
-              <summary>Validation and recurring release checks</summary>
-              <p>
-                The 14 checks under <a href="#fixes">Fixes</a> are the recurring release checklist. Local fixtures use isolated profiles. Release fixtures use
-                bundled production JavaScript; Debug fixtures use the native event harness.
-              </p>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">#</th>
-                      <th scope="col">Completed audit and regression evidence</th>
-                      <th scope="col">Real-site release check</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>1</td>
-                      <td>
-                        Twelve synthetic translated-character shortcut cases passed across five focus contexts. The corrected real-action suite passed 26
-                        checks, including AZERTY Undo without closing, Dvorak new/close and German bracket navigation.
-                      </td>
-                      <td>Actual AZERTY, German and Dvorak input sources, including German Option-generated bracket combinations.</td>
-                    </tr>
-                    <tr>
-                      <td>2</td>
-                      <td>
-                        Native popup <code>window.close()</code> removed its target and cleared the overlay state. Reopening and host dismissal also passed.
-                      </td>
-                      <td>Bitwarden Fill with a saved login.</td>
-                    </tr>
-                    <tr>
-                      <td>3</td>
-                      <td>
-                        Native-messaging startup fixture passed. Source inspection confirmed Chromium&#x27;s background-page readiness path and native-host
-                        preparation.
-                      </td>
-                      <td>First clicks and idle recovery for 1Password, Bitwarden and NordPass.</td>
-                    </tr>
-                    <tr>
-                      <td>4</td>
-                      <td>Source inspection confirmed the real Chromium WebAuthn path and native window integration. No runtime pass claimed.</td>
-                      <td>Bitwarden and GitHub passkey completion, picker dismissal and an idle page.</td>
-                    </tr>
-                    <tr>
-                      <td>5</td>
-                      <td>
-                        Source inspection confirmed version-change gating and Chromium&#x27;s registrar/data-deleter uninstall path. No runtime pass claimed.
-                      </td>
-                      <td>Repeated launches of installed managers, welcome/changelog behavior and storage removal.</td>
-                    </tr>
-                    <tr>
-                      <td>6</td>
-                      <td>A framed native helper echoed, exited and generated <code>onDisconnect</code>; Bay and the engine remained alive.</td>
-                      <td>A real connected password-manager desktop helper quitting.</td>
-                    </tr>
-                    <tr>
-                      <td>7</td>
-                      <td>
-                        A quick multi-window quit exposed an activation crash that interrupted cookie saving. The activation helper now rejects closing and
-                        unregistered Browsers. The release regression checks short-delay cookie saving, a cookie written during <code>beforeunload</code>,
-                        multiple profiles and restoration after forced termination.
-                      </td>
-                      <td>
-                        Real site&#x27;s session sign-in and YouTube account selection through update. Immediate SIGKILL cannot guarantee writes that have not
-                        reached disk.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>8</td>
-                      <td>Source inspection confirmed immediate tab teardown and Chromium&#x27;s close-all-browsers quit path. No call pass claimed.</td>
-                      <td>Meet with a second participant, using Cmd-W and Cmd-Q.</td>
-                    </tr>
-                    <tr>
-                      <td>9</td>
-                      <td>Gmail, Calendar and Drive have bundled fallback icons; the native favicon path was reviewed. No real-service pass claimed.</td>
-                      <td>Signed-in Drive, Calendar, Gmail and Maps icons.</td>
-                    </tr>
-                    <tr>
-                      <td>10</td>
-                      <td>Native horizontal and vertical scrolling retained renderer ownership and did not navigate history.</td>
-                      <td>Physical trackpad checks on representative carousels and wide tables, including their edges.</td>
-                    </tr>
-                    <tr>
-                      <td>11</td>
-                      <td>
-                        Page, text-field and DevTools shortcut routing passed. The current harness does not measure the error beep or send unhandled plain keys
-                        through the page&#x27;s <code>keyDown</code> path.
-                      </td>
-                      <td>Audible arrow/Home/End checks on a page and video player.</td>
-                    </tr>
-                    <tr>
-                      <td>12</td>
-                      <td>The Release fixture restored the sleeping page at scroll position 2300.</td>
-                      <td>Representative real pages with their own scroll containers.</td>
-                    </tr>
-                    <tr>
-                      <td>13</td>
-                      <td>A favicon inserted after the initial page load reached the Release sidebar cache as a decoded image and replaced the fallback.</td>
-                      <td>A real bot challenge.</td>
-                    </tr>
-                    <tr>
-                      <td>14</td>
-                      <td>
-                        Native tear-offs from normal and acted full-screen windows preserved tab ID, CDP target, document nonce, scroll position, unsaved input
-                        and one HTTP document request. The Release live-transfer check also passed.
-                      </td>
-                      <td>A physical drag from a real macOS full-screen Space.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p>
-                The release sweep passed three consecutive runs. Quick multi-window quit retains session cookies in both profiles, including cookies written
-                during beforeunload, and forced termination restores committed cookies. The regression rejects fatal logs so a shutdown crash cannot count as a
-                successful quit.
-              </p>
-              <h4>Release checks requiring external setup</h4>
-              <p>These checks remain for release sign-off. They are unverified checks, not confirmed product failures.</p>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">ID</th>
-                      <th scope="col">Checks</th>
-                      <th scope="col">Required setup</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>P0-M01</td>
-                      <td>Physical layouts and page-key sounds, checks 1 and 11</td>
-                      <td>Requires changing actual macOS input sources and observing audio feedback. Synthetic events cannot establish either result.</td>
-                    </tr>
-                    <tr>
-                      <td>P0-M02</td>
-                      <td>Commercial managers, extension passkeys, welcome pages and desktop helper, checks 2 through 6</td>
-                      <td>
-                        Requires disposable manager accounts, configured vaults/passkeys and their desktop apps. Local extension/helper fixtures cover the
-                        integration paths.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>P0-M03</td>
-                      <td>Real sign-ins and update restart, check 7</td>
-                      <td>
-                        Requires a signed-in session-cookie account and an update candidate. The local fixture covers clean/unclean restarts and profile
-                        isolation.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>P0-M04</td>
-                      <td>Meet departure, check 8</td>
-                      <td>Requires an authenticated Meet call and a second participant to observe departure.</td>
-                    </tr>
-                    <tr>
-                      <td>P0-M05</td>
-                      <td>Service icons and bot checks, checks 9 and 13</td>
-                      <td>Requires signed-in service pages and a real challenge. A delayed favicon fixture passed.</td>
-                    </tr>
-                    <tr>
-                      <td>P0-M06</td>
-                      <td>Physical gestures and full-screen tear-off, checks 10 and 14</td>
-                      <td>Hidden tests use native synthesized gestures and acted full screen to avoid changing the user&#x27;s desktop Space.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </details>
-            <dl class="facts">
-              <dt>Depends on</dt>
-              <dd>Nothing</dd>
-              <dt>Setup</dt>
-              <dd>
-                A release build. Bitwarden, 1Password and NordPass installed. A keyboard set to AZERTY, German and Dvorak in turn. A Google Meet call with a
-                second participant.
-              </dd>
-            </dl>
-            <ul>
-              <li>Record each check as pass or fail, with steps for each failure.</li>
-              <li>Fix the failures at the narrowest layer (app, shell or engine patch), each with a regression test where the harness can reach it.</li>
-              <li>Add the passing checks to the release checklist so they stay passing.</li>
-            </ul>
-            <h4 class="exit">Exit criteria</h4>
-            <ul class="checks">
-              <li>All 14 checks pass, or the failures that remain are filed with a reason they wait.</li>
-              <li>The release checklist lists the checks.</li>
-            </ul>
-          </article>
-
-          <!-- Phase 1 -->
           <article class="phase" id="p1" aria-labelledby="p1-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 1</span>
-              <h3 id="p1-h">Quick wins</h3>
-              <span class="chip s">Done</span>
-            </div>
-            <p class="goal">Small, contained items. Each one can ship alone.</p>
-            <div class="callout ok">
-              <p>
-                <strong>Done · 14 October 2026.</strong> All six items are implemented and validated through unit and native fixtures. Settings and space state
-                persist and sync. Remaining checks needing real service sessions, external paste destinations or a second Mac are recorded below.
-              </p>
-            </div>
-            <details>
-              <summary>Implementation and validation</summary>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">Item</th>
-                      <th scope="col">Implemented behavior</th>
-                      <th scope="col">Verification</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Sites kept awake</td>
-                      <td>
-                        Settings &gt; Tabs manages a normalized host list seeded with WhatsApp, Telegram, Slack, Discord, Gmail and Spotify. The tab menu
-                        toggles Keep This Site Awake. Both active and inactive spaces use a two-hour idle threshold. Critical pressure considers these sites
-                        after ordinary eligible tabs. All pinned containers and kept tabs stay protected. Battery Saver also respects the list.
-                      </td>
-                      <td>
-                        Lifecycle tests cover normal/warning/critical pressure, sweep budgets, late preference changes, inactive spaces, manual sleep and pinned
-                        rows/folders/groups. Settings persistence and sync round-trip the list, including an explicitly empty list.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Download copying</td>
-                      <td>
-                        Copy File and Copy Path appear in the downloads palette, download popover and Downloads page menus. Copy File writes a native file URL
-                        to the pasteboard on the main queue. Missing files leave existing clipboard contents intact and report failure.
-                      </td>
-                      <td>
-                        AppKit file-URL round trips passed for spaces, Unicode and punctuation, with missing/relative/empty-path preservation checks. Finder and
-                        third-party paste destinations remain manual acceptance.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Private extensions</td>
-                      <td>
-                        Allow in Private Windows uses Chrome&#x27;s existing incognito preference. Both split and spanning extensions work when enabled. The
-                        setting respects capability and management restrictions. Native actions, states and panels enforce access, and popup activation checks
-                        revocation after asynchronous replies.
-                      </td>
-                      <td>
-                        Native acceptance passed default-off behavior, content scripts, toolbar/menu visibility, correct popup profile and permission revocation
-                        for both manifest modes.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>All media tabs</td>
-                      <td>
-                        The sidebar shows +N for additional playing/paused tabs in the window. Its list has per-tab play/pause, mute and Go to Tab, plus Pause
-                        All. It includes other spaces and dismissed mini-players.
-                      </td>
-                      <td>
-                        Three real same-host audio tabs passed native clicks for +2, Pause All, every row&#x27;s independent play/pause/mute, and Go to Tab.
-                        Chromium audio state confirmed the changes. Snapshots were inspected.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Fold a space</td>
-                      <td>
-                        Clicking the title folds pinned rows, folders and groups. The menu is on the ellipsis and right-click. Today&#x27;s tabs and Essential
-                        tiles remain visible. The state persists with the space and syncs.
-                      </td>
-                      <td>
-                        Native title clicks hide the pinned content; folding survives relaunch. Session and sync tests preserve the state and handle older
-                        profile records. Snapshots were inspected.
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Density</td>
-                      <td>
-                        Comfortable preserves the existing 36-point rows and 16-point icons. Compact uses 30-point rows and 14-point icons, with smaller pins
-                        and address fields. Layout, animation, reveal and drag geometry follow the same metrics. Changing density cancels an active drag.
-                      </td>
-                      <td>
-                        Native row measurements changed 36 to 30 points. Both densities, folded content and relaunch were checked visually. Geometry,
-                        persistence and sync tests passed.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p>
-                Comfortable preserves the existing 36-point rows and 16-point icons. Compact uses 30-point rows and 14-point icons. Both active and inactive
-                spaces use a two-hour idle threshold.
-              </p>
-              <h4>Recurring release checks</h4>
-              <ul>
-                <li>
-                  Leave WhatsApp Web in the background for two hours. It remains live. Test the seeded Telegram, Slack, Discord, Gmail and Spotify entries and a
-                  custom host. Under critical memory pressure, ordinary eligible tabs sleep before these sites.
-                </li>
-                <li>
-                  From the downloads palette, download popover and Downloads page, Copy File and paste into Finder, Slack or Mail. Copy Path pastes the full
-                  path. A missing file reports failure and leaves the existing clipboard intact.
-                </li>
-                <li>
-                  In Settings &gt; Extensions, Allow in Private Windows starts off. Test enabling and revoking it for both split and spanning extensions. Their
-                  scripts, toolbar actions and popups follow the preference.
-                </li>
-                <li>
-                  Play media in three tabs. The sidebar shows +2. The list&#x27;s Pause All pauses all three. Each row&#x27;s play/pause, mute and Go to Tab act
-                  on that row&#x27;s tab.
-                </li>
-                <li>
-                  Click the space title to fold its pinned rows and folders. Today&#x27;s tabs and Essential tiles remain visible. Right-click and the ellipsis
-                  open the space menu. The fold survives relaunch and sync.
-                </li>
-                <li>
-                  Switch between Comfortable and Compact in Settings &gt; Appearance. Rows, icons, pins and address fields resize together without vertical text
-                  clipping. Test dragging, scrolling to a tab, groups and folders in both densities.
-                </li>
-              </ul>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">ID</th>
-                      <th scope="col">Check</th>
-                      <th scope="col">Required setup</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>P1-M01</td>
-                      <td>Two-hour WhatsApp and other seeded sites</td>
-                      <td>The lifecycle clock and policy were tested deterministically; a real two-hour service session was not observed.</td>
-                    </tr>
-                    <tr>
-                      <td>P1-M02</td>
-                      <td>Finder, Slack and Mail file paste</td>
-                      <td>File URLs and clipboard preservation were tested through AppKit; the external destination workflows were not driven.</td>
-                    </tr>
-                    <tr>
-                      <td>P1-M03</td>
-                      <td>Two-device sync</td>
-                      <td>Persistence and adapter round trips passed locally. A second Mac was not available.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </details>
-            <details>
-              <summary>Passed gates and reproducible checks</summary>
-              <p>
-                Engine, Release and Debug builds passed. Typecheck, lint, formatting, React compiler, shader checks and all repository test suites passed. The
-                browser suite has 247 passing tests. The final combined native acceptance passed 8/8 checks. Independent reviews found no required corrections.
-              </p>
-              <p>
-                Start Metro for Debug fixtures. The scripts print evidence directories containing JSON results, logs and snapshots. Retain those with real-site
-                release results.
-              </p>
-              <pre style="overflow-x: auto"><code>pnpm typecheck
-pnpm test
-pnpm lint
-pnpm fmt:check
-pnpm compiler:check
-pnpm shaders:check
-
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-scripts/agent/engine-build --as phase01
-scripts/agent/build-app --as dev --config Release
-scripts/agent/build-app --as dev --config Debug
-
-node --no-warnings apps/browser/scripts/phase0-sweep.mjs apps/browser/build-dev/Build/Products/Release/Bay.app /tmp/bay-release-sweep
-node packages/nncore/scripts/acceptance.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app /tmp/bay-release-native extension-popup-and-panel startup-native-messaging extension-configure extension-private-windows quit-cancelled private-release
-node apps/browser/scripts/shortcuts-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app
-node apps/browser/scripts/space-swipe-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app --only=&#x27;web page horizontal&#x27;
-node apps/browser/scripts/phase0-drag-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app /tmp/bay-release-drag
-node apps/browser/scripts/density-fold-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app
-node apps/browser/scripts/media-sessions-test.mjs apps/browser/build-dev/Build/Products/Debug/Bay.app --keep-data</code></pre>
-            </details>
+            <div class="phase-head"><span class="phase-num">Phase 1</span><h3 id="p1-h">Before Arc shuts down</h3><span class="chip s">10 × S</span></div>
+            <p class="goal">Small habits Arc users will reach for in their first week. Each one ships alone. Land them before Arc's reminders start on 23 November if possible, and before 22 December at the latest.</p>
 
             <div class="item">
-              <h4>Sites kept awake, and a longer idle timer <span class="chip s">S</span></h4>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>
-                  <code>POLICY.idleMs</code> is 30 minutes. Pinned and kept tabs are spared, and so are tabs that play audio, capture, show picture in picture
-                  or are picking a screen to share.
-                </dd>
-                <dt>Implemented</dt>
-                <dd>
-                  Settings › Tabs has "Always keep these sites awake", seeded with WhatsApp, Telegram, Slack, Discord, Gmail and Spotify. The tab menu toggles
-                  Keep This Site Awake. Both active and inactive spaces use a two-hour idle threshold. These hosts and their subdomains stay awake unless memory
-                  is critical, when they sleep after other eligible tabs. Pinned containers and kept tabs remain protected.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>A WhatsApp Web tab left alone for two hours is still live when you switch to it.</li>
-                <li>Under critical memory pressure, kept-awake sites sleep only after every other tab.</li>
-              </ul>
+              <h4>1 · Unread counts on favorites <span class="chip s">S</span></h4>
+              <p>Arc badged Slack, X, Google Calendar and Gmail favorites with their counts. Read the count from the page title ("Inbox (3)", "(2) Slack") and from favicon badges, and draw it on the Essentials tile. Keep a short list of title patterns per site, and fall back to a dot when a site only changes its favicon.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>sidebar/PinnedGrid.tsx</code>, <code>media/TabBadges.tsx</code>, <code>lib/siteIcons.ts</code></dd></dl>
+              <ul class="checks"><li>A Gmail favorite shows the inbox count and clears when it reaches zero, also while asleep after its last count.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Copy File and Copy Path on downloads <span class="chip s">S</span></h4>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>Download rows offer Show in Finder (<code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code>, <code>pages/DownloadsPage.tsx</code>).</dd>
-                <dt>Implemented</dt>
-                <dd>
-                  Copy File and Copy Path are available in <code>DownloadsPanel.tsx</code>, <code>Downloads.tsx</code> and <code>pages/DownloadsPage.tsx</code>.
-                  The shell writes a native file URL to <code>NSPasteboard</code> on the main queue. Missing files report failure and preserve the existing
-                  clipboard.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>Copy File, then ⌘V in Finder, copies the download. Copy Path pastes its full path.</li>
-              </ul>
+              <h4>2 · Little Bay from any app <span class="chip s">S</span></h4>
+              <p>Arc had a menu bar button for Little Arc. Add an optional menu bar item and a global shortcut (default ⌥⌘N, settable, off until chosen) that open a Little Bay window with the command bar focused, even when Bay is in the background.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/AppModule.swift</code> (status item, global hot key), <code>littleBay/actions.ts</code>, Settings › Links</dd></dl>
+              <ul class="checks"><li>From Finder, the shortcut opens Little Bay ready to type. Clicking the menu bar item does the same. Turning it off unregisters the key.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Extensions in private windows <span class="chip s">S</span></h4>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>Settings › Extensions sets each extension's site access. It has no private-window switch.</dd>
-                <dt>Implemented</dt>
-                <dd>
-                  Each supported extension has Allow in Private Windows, off by default, backed by Chrome's incognito-enabled preference through nncore. Both
-                  split and spanning modes work when allowed. Scripts, toolbar actions, popups and panels follow the preference, including revocation.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>An extension that is switched on runs in a private window. Switched off, it doesn't.</li>
-              </ul>
+              <h4>3 · Little Bay windows put away after six hours <span class="chip s">S</span></h4>
+              <p>Arc closed idle Little Arc windows after six hours and kept their links in the archive, filtered as Little Arc. Do the same with a setting for the time, and add "Show/Hide All Little Bay Windows" to the Dock menu.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>littleBay/</code>, <code>lib/tabLifecycle.ts</code>, <code>packages/shell/ios/DockSelection.swift</code>, Library archive filter</dd></dl>
+              <ul class="checks"><li>A Little Bay left alone for six hours closes, and its page is in the Library's archive under Little Bay.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Every playing tab, with Pause All <span class="chip s">S</span></h4>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd><code>media/state.ts</code> tracks a session for each tab. The sidebar player shows one.</dd>
-                <dt>Implemented</dt>
-                <dd>
-                  The player shows "+N" when the window has multiple playing or paused sessions. The list includes tabs in other spaces and dismissed
-                  mini-players. Each row has play/pause, per-tab mute and Go to Tab; Pause All pauses the playing sessions in that window.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>With three tabs playing, Pause All pauses all three, and each row's controls act on its own tab.</li>
-              </ul>
+              <h4>4 · Mouse buttons 4 and 5 switch spaces <span class="chip s">S</span></h4>
+              <p>Arc let mice without a trackpad cycle spaces with the side buttons. Bay handles only the middle button (AppKit's <code>buttonNumber</code> 2). Map the side buttons (<code>buttonNumber</code> 3 and 4) to Previous and Next Space when the pointer is over the sidebar, and keep Back and Forward over the page.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/System.swift</code> (<code>otherMouseUp</code>), <code>layout/spacePager.ts</code></dd></dl>
+              <ul class="checks"><li>Over the sidebar the side buttons switch spaces with the swipe animation; over a page they go back and forward.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Fold a space <span class="chip s">S</span></h4>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>Pinned folders can fold (<code>PinnedFolder.collapsed</code>). The space as a whole can't.</dd>
-                <dt>Implemented</dt>
-                <dd>
-                  Clicking the space name folds pinned rows, folders and groups. Today's tabs and Essential tiles remain visible. The menu is on the ellipsis
-                  and right-click. Folded state persists with the space and syncs.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>Folding hides the pinned section, survives a relaunch, and leaves today's tabs in view.</li>
-              </ul>
+              <h4>5 · Option shows the hidden sidebar <span class="chip s">S</span></h4>
+              <p>With the sidebar auto-hidden, holding Option slides it in, and releasing slides it out. A setting turns it off. The shell already watches modifier changes for ⌃Tab, so this adds Option to that monitor.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/ShellModule.swift</code> (<code>flagsChanged</code>), <code>layout/useSidebarDock.ts</code></dd></dl>
+              <ul class="checks"><li>Holding Option alone shows the sidebar; Option as part of a shortcut or while typing doesn't.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Density <span class="chip s">S</span></h4>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>Row sizes are fixed in <code>sidebar/tokens.ts</code>.</dd>
-                <dt>Implemented</dt>
-                <dd>
-                  Settings › Appearance has Comfortable, preserving the existing 36-point rows and 16-point icons, and Compact with 30-point rows and 14-point
-                  icons. Pins and address fields resize with the rows. Layout, reveal, animation and drag geometry share the same metrics; changing density
-                  cancels an active drag.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>Switching density resizes rows, pins and the address field at once, with no clipped text in either size.</li>
-              </ul>
+              <h4>6 · Current tab out of view <span class="chip s">S</span></h4>
+              <p>When the selected tab is scrolled out of the sidebar, show a small marker at the top or bottom edge. Clicking it scrolls to the tab.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>components/Sidebar.tsx</code>, <code>sidebar/geometry.ts</code></dd></dl>
+              <ul class="checks"><li>With forty tabs, the marker shows at the edge nearest the tab and disappears once the tab is in view, in both densities.</li></ul>
             </div>
 
+            <div class="item">
+              <h4>7 · Shift-Return opens the top result <span class="chip s">S</span></h4>
+              <p>Arc's Instant Links skipped the results page. Shift-Return in the command bar sends the query through DuckDuckGo's "\" redirect (first result) using Bay's bang support, with no AI and no new service. The hint shows in the Return keycap.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>omnibox/open.ts</code>, <code>omnibox/bangs.ts</code>, <code>omnibox/Keycaps.tsx</code></dd></dl>
+              <ul class="checks"><li>"bay browser github" with Shift-Return lands on the repository, not a results page. Private windows behave the same.</li></ul>
+            </div>
+
+            <div class="item">
+              <h4>8 · ⌃⌘J joins the meeting on now <span class="chip s">S</span></h4>
+              <p>Add Join Meeting to the menus with ⌃⌘J, using the same path as the alert's Join button. It is disabled when no meeting is on.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>packages/shell/ios/Menus.swift</code>, <code>live/MeetingAlert.tsx</code></dd></dl>
+              <ul class="checks"><li>Two minutes before a Meet event, ⌃⌘J opens the call in the space set for it.</li></ul>
+            </div>
+
+            <div class="item">
+              <h4>9 · Portrait capture <span class="chip s">S</span></h4>
+              <p>Arc's Portrait Mode made a neat screenshot of the page in a phone-shaped frame with the theme behind it. Add "Capture in Portrait" to the command bar and Option-click on Capture Full Page.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>components/capture/</code>, <code>developer/screenshot.ts</code></dd></dl>
+              <ul class="checks"><li>The image is saved to Downloads and the Library, at 2× scale, framed in the space's colours.</li></ul>
+            </div>
+
+            <div class="item">
+              <h4>10 · JSON viewer in Developer Mode <span class="chip s">S</span></h4>
+              <p>Arc installed the JSON Formatter extension when Developer Mode was turned on. Bay can do better with no extension: format <code>application/json</code> responses on dev tabs with folding, a raw toggle and copy path.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>components/developer/</code>, engine page script</dd></dl>
+              <ul class="checks"><li>A localhost JSON endpoint shows formatted with folding; Raw shows the original bytes; non-dev tabs are unchanged.</li></ul>
+            </div>
             <h4 class="exit">Exit criteria</h4>
-            <ul class="checks">
-              <li>
-                All six items are implemented, with unit and native fixture checks passing. External setup checks are recorded above for release sign-off.
-              </li>
-            </ul>
+            <ul><li>All ten shipped in a release before 22 December, each with a native or unit check where the harness reaches it.</li></ul>
           </article>
 
-          <!-- Phase 2 -->
           <article class="phase" id="p2" aria-labelledby="p2-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 2</span>
-              <h3 id="p2-h">Organising</h3>
-            </div>
-            <p class="goal">The two features that change how people arrange their tabs and links.</p>
+            <div class="phase-head"><span class="phase-num">Phase 2</span><h3 id="p2-h">Keyboard &amp; undo</h3><span class="chip m">2 × M</span><span class="chip m">1 × M</span></div>
+            <p class="goal">Arc's sidebar could be driven without a mouse, and almost every edit could be undone.</p>
 
             <div class="item">
-              <h4>Folders inside folders <span class="chip l">L</span> <span class="chip s">Done</span></h4>
-              <p>
-                Implemented 15 October 2026. Native Debug fixtures cover nesting, empty-folder ordering, drag and drop, ⌘Z, page text Undo and restart. Import
-                and sync tests cover tree order, migration and older clients' flat records. See
-                <a href="screenshots/nested-folders.png">the nested folders screenshot</a>. Two physical Macs with different released builds have not been
-                exercised.
-              </p>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>
-                  <code>PinnedFolder</code> in <code>store/types.ts</code> has no parent, so folders are one level deep. The Arc importer
-                  (<code>packages/import/ios/Core/ArcSidebar.swift</code>, <code>flatTabs</code>) flattens Arc's subfolders into one folder.
-                </dd>
-                <dt>Implemented</dt>
-                <dd>
-                  Add a parent to folders, capped at five levels. Render them recursively in <code>FolderBlock.tsx</code>. Let drag and drop in
-                  <code>sidebar/dnd.tsx</code> drop into and out of a nested folder. Show "Move to Folder" as a tree. Keep subfolders in the Arc import. Migrate
-                  stored state and the sync schema, so that a device on an older version still shows the tabs, flattened.
-                </dd>
-                <dt>Compatibility</dt>
-                <dd>Older devices read the tabs as flat pinned groups; updated devices retain the folder tree.</dd>
-              </dl>
-              <ul class="checks">
-                <li>An Arc import with subfolders arrives with the same structure.</li>
-                <li>Dragging a tab or a folder between levels works, and ⌘Z undoes it.</li>
-                <li>Sync round-trips nested folders between two Macs. An older build still sees every tab.</li>
-                <li>Existing installs migrate with no change to what they show.</li>
-              </ul>
+              <h4>11 · Move around the sidebar from the keyboard <span class="chip m">M</span></h4>
+              <p>⌘. focuses the sidebar. Arrow keys move between rows and into folders, Return opens, Space peeks, ⌫ closes, ⌃⌘R renames, Escape returns to the page. The focused row has a visible ring separate from the selection, and VoiceOver reads it.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>components/Sidebar.tsx</code>, <code>sidebar/state.ts</code>, <code>sidebar/entries.ts</code></dd></dl>
+              <ul class="checks"><li>Every row type (favorite, pinned, folder, group, live folder, split) can be reached and opened from the keyboard alone.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Rules for links from other apps <span class="chip m">M</span> <span class="chip s">Done</span></h4>
-              <p>
-                Implemented 24 October 2026 as Arc-style link routing (<code>5f2ff798</code>). Unit tests cover matching, source apps, ordering, deleted spaces
-                and sync; <code>test:links</code> drives the native app with links from other apps and Peek's Open as Tab.
-              </p>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>
-                  Settings › Links had one choice for links from Slack, Discord or Mail: Little Bay, or a new tab (<code>openLinksInLittleBay</code>).
-                </dd>
-                <dt>Implemented</dt>
-                <dd>
-                  <code>lib/externalLinkRules.ts</code> matches each incoming link against an ordered list of rules. As in Arc, new rules match a URL that
-                  contains or equals some text; rules saved with a <code>*</code> host or path pattern keep working. A rule can be limited to the sending app's
-                  bundle ID, which the macOS app delegate reads from the Apple Event. It opens the link in a chosen space, the most recent space, Little Bay or a
-                  new window. The first match wins; anything unmatched goes to the default in Settings › Links, which replaces the old toggle. Rules are added,
-                  edited and reordered in <code>settings/panes/LinkRules.tsx</code> and synced as one ordered list (<code>sync/linkRules.ts</code>), with
-                  spaces mapped by sync profile.
-                </dd>
-                <dt>Planned</dt>
-                <dd>
-                  An ordered list of rules. Each has an address pattern (a host or path with <code>*</code>, such as <code>github.com/acme/*</code>) and,
-                  optionally, the app the link came from. Each rule opens matching links in a chosen space, in Little Bay or in a new window. The first match
-                  wins, and anything unmatched follows today's choice. Rules are added, edited and reordered in Settings › Links, and synced.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>With a rule for <code>linear.app/*</code> going to Work, a Linear link clicked in Slack opens in Work, whichever space is in front.</li>
-                <li>A link that matches no rule behaves as it does today.</li>
-              </ul>
+              <h4>12 · ⌘Z for any sidebar edit <span class="chip m">M</span></h4>
+              <p>Generalise the folder-move undo into one stack per window for sidebar edits: close, clear, move, pin, unpin, rename, icon, theme. ⌘Z applies when focus isn't in a text field or page editor, the same rule the folder undo already follows.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>lib/folderUndo.ts</code> to a general stack, <code>store/organize.ts</code>, <code>sidebar/clear.ts</code></dd></dl>
+              <ul class="checks"><li>Clear, then ⌘Z, brings every cleared tab back in place. Undo never fires while typing in a page.</li></ul>
             </div>
 
+            <div class="item">
+              <h4>13 · Files and folders from Finder <span class="chip m">M</span></h4>
+              <p>Dragging a file or folder from Finder into the pinned section keeps it there. A file opens in a tab (PDFs, images, HTML) or with its app. A folder expands in place to show its files. Rows can be dragged into a page to upload. Synced as a bookmark-style path, shown as missing on a Mac without the file.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>store/types.ts</code>, <code>sidebar/dnd.tsx</code>, sync schema, security-scoped bookmarks in the shell</dd></dl>
+              <ul class="checks"><li>A dropped PDF opens from the sidebar after relaunch. Dragging it into Gmail attaches it. A second Mac shows the row as unavailable.</li></ul>
+            </div>
             <h4 class="exit">Exit criteria</h4>
-            <ul class="checks">
-              <li>Both features are shipped, the migration has been tested on a copy of a real profile, and sync is tested across two Macs.</li>
-            </ul>
+            <ul><li>Keyboard pass with VoiceOver on; undo covers every listed edit; file rows survive relaunch and sync.</li></ul>
           </article>
 
-          <!-- Phase 3 -->
           <article class="phase" id="p3" aria-labelledby="p3-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 3</span>
-              <h3 id="p3-h">Command bar & autofill</h3>
-            </div>
-            <p class="goal">Make the command bar answer more, without leaving it, and fill one-time codes.</p>
+            <div class="phase-head"><span class="phase-num">Phase 3</span><h3 id="p3-h">Boosts</h3><span class="chip l">L</span><span class="chip m">M</span></div>
+            <p class="goal">Change how a site looks without writing code, and with code if you want. Arc users who relied on Boosts will have no other way to keep them.</p>
 
             <div class="item">
-              <h4>Clipboard history <span class="chip m">M</span></h4>
-              <dl class="facts">
-                <dt>Today</dt>
-                <dd>None.</dd>
-                <dt>Build</dt>
-                <dd>
-                  Opt-in in Settings › Privacy. The shell watches the pasteboard's change count and keeps the most recent text and links on this Mac only. It
-                  skips anything marked concealed or transient (password managers mark theirs) and anything copied in a private window. Type "clipboard" in the
-                  command bar, or use a shortcut, to list it. Return pastes the item, and an item can be deleted.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>A password copied from 1Password never shows. Clearing history empties it, and it never syncs.</li>
-              </ul>
+              <h4>14 · Zap, colours, fonts and custom CSS <span class="chip l">L</span></h4>
+              <p>A Boost belongs to a host and lives in Site Controls. The editor offers: Zap (click elements to hide them, stored as selectors), a colour tint, a font, page zoom, and a CSS field. Bay's theme colours are exposed as CSS variables, as Arc did, so a Boost can match the sidebar. Each Boost toggles on and off per site; a global switch turns all off. CSS Boosts sync.</p>
+              <dl class="facts"><dt>Where</dt><dd>New <code>lib/boosts.ts</code>, <code>site/SiteControls.tsx</code>, engine content-script injection at document start, <code>sync/</code></dd><dt>Reuses</dt><dd>The Capture element picker for Zap</dd></dl>
+              <ul class="checks"><li>Zapping an element on a news site hides it on reload and on a second Mac. Turning the Boost off restores the page without reload.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Emoji, units and currency <span class="chip m">M</span> <span class="chip s">Done</span></h4>
-              <p>
-                Implemented 16 October 2026 in <code>bac4b54a</code>. Core tests and native fixtures cover top-row answers, Return to copy, unit conversions,
-                live currency rates and the Calculator toggle. The larger answer rows were checked in light and dark mode, in the palette and narrow dropdown,
-                with keyboard scrolling through mixed-height results.
-              </p>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd><code>packages/core/src/calculator.ts</code> does arithmetic and functions. <code>emojiData.ts</code> already feeds the icon picker.</dd>
-                <dt>Implemented</dt>
-                <dd>
-                  <code>suggest.ts</code> puts emoji by name ("emoji heart"), local unit conversions ("5 km in mi", "350 f to c") and currency conversions ("100
-                  usd in inr") first. Return copies the answer. SuperCalculator's unit and currency source files are vendored with their MIT license. Calculator
-                  and currency rows show a larger answer beneath the expression, a copy icon and Return hint; currency rows also show the rate source and date.
-                </dd>
-                <dt>Setting</dt>
-                <dd>
-                  Settings › Search › Command bar › Calculator defaults to on. Turning it off hides arithmetic, unit and currency answers and prevents new
-                  currency lookups. The choice persists and syncs. Emoji search remains available.
-                </dd>
-                <dt>Rates</dt>
-                <dd>
-                  Frankfurter, with ExchangeRate-API and Fawaz Ahmed as fallbacks. Valid dated rates are cached in memory for one hour, and concurrent requests
-                  for the same pair share a lookup. Failed requests never substitute hardcoded or expired rates. Arithmetic, units and emoji work offline.
-                </dd>
-                <dt>History</dt>
-                <dd>
-                  The history page uses Legend List in <code>6746b4ea</code>. A native fixture with 5,000 entries verified virtualization, selection and
-                  removal.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>Each kind shows as the top row with its answer, and Return copies it.</li>
-                <li>The Calculator toggle defaults to on, and an explicit off choice survives persistence and sync.</li>
-                <li>Light and dark layouts, narrow rows and keyboard scrolling were checked in the native app.</li>
-              </ul>
+              <h4>15 · JavaScript Boosts, kept on one Mac <span class="chip m">M</span></h4>
+              <p>A JS field that runs in the page's isolated world. Arc stopped syncing JS Boosts in September 2024 after a security report and made users re-enable each one per device. Bay starts there: JS Boosts never sync, are off by default, and show a warning when first turned on.</p>
+              <dl class="facts"><dt>Where</dt><dd>Same as 14, isolated world script, excluded from the sync schema</dd></dl>
+              <ul class="checks"><li>A JS Boost runs only on its host, only on the Mac where it was turned on, and never in private windows unless allowed.</li></ul>
             </div>
-
-            <div class="item">
-              <h4>One-time codes <span class="chip l">L</span></h4>
-              <dl class="facts">
-                <dt>Today</dt>
-                <dd>
-                  Autofill covers passwords, cards and addresses (<code>site/Autofill.tsx</code>, engine <code>nn_autofill.cc</code>). It doesn't cover codes.
-                </dd>
-                <dt>Build</dt>
-                <dd>
-                  When a field asks for a code (<code>autocomplete="one-time-code"</code>, or a field the heuristics recognise), offer the newest code from the
-                  last few minutes, and Return puts it in. There are two sources. Messages needs Full Disk Access to read <code>chat.db</code>, so it's asked
-                  for only when switched on. Gmail can reuse the Google connection the calendar preview already has (<code>live/googleAuth.ts</code>), if its
-                  scopes allow. Skip numbers from security notices, and prefer the newest code.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>A code texted or mailed to you is offered under the code box within seconds, and only on the site that asked.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>"Allow ads here" when a page breaks <span class="chip m">M</span></h4>
-              <dl class="facts">
-                <dt>Today</dt>
-                <dd>uBlock Origin is built in. Nothing notices when blocking breaks a page.</dd>
-                <dt>Build</dt>
-                <dd>
-                  If a page where the blocker acted is reloaded three times in twenty seconds, offer "Allow Ads Here" in the corner. It adds the site to the
-                  blocker's allow list, and Site Controls can take it back.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>Three quick reloads offer the prompt once. Accepting reloads the page unblocked, and Site Controls shows the exception.</li>
-              </ul>
-            </div>
-
             <h4 class="exit">Exit criteria</h4>
-            <ul class="checks">
-              <li>The four items are shipped. Clipboard history and codes are opt-in, and both are covered in the privacy page's copy.</li>
-            </ul>
+            <ul><li>Boosts are created, toggled, synced (CSS only) and removed; a security review of injection is complete.</li></ul>
           </article>
 
-          <!-- Phase 4 -->
-          <article class="phase" id="p4" aria-labelledby="p4-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 4</span>
-              <h3 id="p4-h">Media</h3>
-            </div>
-            <p class="goal">Bring the floating video up to the controls people reach for.</p>
+          <article class="phase gate" id="p4" aria-labelledby="p4-h">
+            <div class="phase-head"><span class="phase-num">Phase 4</span><h3 id="p4-h">Sharing</h3><span class="chip gate">Decision first</span></div>
+            <p class="goal">Arc shared things through its own servers, which are being turned off. Bay has none. Decide <a href="#decisions">how to host</a> before starting items 17 and 18.</p>
 
             <div class="item">
-              <h4>Speed and subtitles on the floating video <span class="chip m">M</span> <span class="chip s">Done</span></h4>
-              <p>
-                Implemented 24 October 2026. <code>apps/browser/scripts/pip-media-test.mjs</code> drives both menus in the native app, and the choices were
-                checked on YouTube: a TED talk's 60-odd subtitle tracks listed, English chosen and drawn in the window, subtitles off, and 1.5× in YouTube's
-                own player. The window's look was not checked on screen, since test instances keep it invisible.
-              </p>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>
-                  Bay's PiP window (<code>engine/chromium/src/chrome/browser/bay/pip/nn_pip_window.cc</code>, <code>NNCorePictureInPicture.mm</code>) left out
-                  Chrome's captions control. The page script already reported <code>playbackRate</code>.
-                </dd>
-                <dt>Implemented</dt>
-                <dd>
-                  The speed button (its title is the rate) sits beside back to tab and the subtitles button beside close, drawn as AppKit views over Chrome's
-                  and fading with its controls, which the window now announces (<code>BayPictureInPictureControlsDidChange</code>); the origin leaves room for
-                  them. The page script reports the video in Picture in Picture (rate, subtitle tracks, the current cue) and applies the choices: a
-                  track's mode, or YouTube's player for its own subtitles and speed. Chrome's window shows only the video's frames, so the chosen subtitles'
-                  text is drawn over it, above the controls when they show.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>On YouTube, the speed and subtitle choices made in the floating window carry back to the page.</li>
-              </ul>
+              <h4>16 · Share Quote <span class="chip m">M</span></h4>
+              <p>Bay's selection popover already copies a link to the highlighted text. Add "Share Quote": render the quote, page title and site in the space's colours as an image, put the image and the text-fragment link on the pasteboard, and offer the share sheet. Done in the shell, needing no server.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, shell image rendering</dd></dl>
+              <ul class="checks"><li>Pasting into Messages gives the card image; pasting into a text field gives the link, which opens scrolled to the quote.</li></ul>
             </div>
 
             <div class="item">
-              <h4>Live streams labelled Live <span class="chip s">S</span> <span class="chip s">Done</span></h4>
-              <p>
-                Implemented 24 October 2026. Unit tests cover how far behind a stream falls and its labels; the native test covers a stream whose end
-                moves, behind and back. Checked on YouTube (Lofi Girl: Live, "4m behind" after seeking back 5 minutes, back to Live) and Twitch (Live).
-              </p>
-              <dl class="facts">
-                <dt>Before</dt>
-                <dd>A live stream showed a countdown or a time that didn't mean anything.</dd>
-                <dt>Implemented</dt>
-                <dd>
-                  As planned, with two sites' quirks: YouTube pads a live video's duration an hour past the edge, so its player gives the edge; Twitch's
-                  seekable range ends decades ahead, so an end more than a day away is not an edge. Live replaces the time and seek bar in the sidebar and
-                  mini players, and sits at the bottom left of the floating video.
-                </dd>
-                <dt>Planned</dt>
-                <dd>
-                  When a video's duration is infinite, or its seekable range keeps moving, the floating video and the sidebar player say Live. Behind the live
-                  edge, they say how far behind ("5m behind"), and a click jumps back to live.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>A YouTube or Twitch live stream shows Live, and "behind" after seeking back.</li>
-              </ul>
+              <h4>17 · Share a folder, split or selection as a link <span class="chip m">M</span></h4>
+              <p>Recommended without a server: compress the titles and links into the fragment of a link on the Bay website (<code>bay.krishkalaria.in/share#…</code>). The fragment never reaches the server. The page lists the links in any browser and has "Add to Bay", which opens a <code>bay://</code> link that imports it as a folder.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>sidebar/menus.ts</code>, <code>apps/web</code> share page, URL scheme handler in <code>AppDelegate.swift</code></dd></dl>
+              <ul class="checks"><li>A 30-tab folder shared to Chrome lists every link; "Add to Bay" recreates it with nested folders.</li></ul>
             </div>
 
+            <div class="item">
+              <h4>18 · Share an Easel as a web page <span class="chip l">L</span></h4>
+              <p>Easels hold images, so they don't fit in a link. This needs storage somewhere: a hosted bucket with unlisted links, or the user's own iCloud Drive public link. Until decided, the HTML export stays the way to share.</p>
+              <dl class="facts"><dt>Where</dt><dd><code>library/export.ts</code>, plus whatever host is chosen</dd></dl>
+            </div>
             <h4 class="exit">Exit criteria</h4>
-            <ul class="checks">
-              <li>Both items are shipped and checked on YouTube, Twitch and one site with its own player.</li>
-            </ul>
+            <ul><li>Share Quote shipped; collection links shipped if the fragment approach is chosen; Easel hosting either decided or recorded as out of scope.</li></ul>
           </article>
 
-          <!-- Phase 5 -->
           <article class="phase gate" id="p5" aria-labelledby="p5-h">
-            <div class="phase-head">
-              <span class="phase-num">Phase 5</span>
-              <h3 id="p5-h">Bigger bets</h3>
-              <span class="chip gate">Research gate</span>
-            </div>
-            <p class="goal">Each needs a short spike and a go / no-go note before it's built.</p>
-
-            <div class="item">
-              <h4>Site tweaks and Zap <span class="chip l">L</span></h4>
-              <dl class="facts">
-                <dt>Today</dt>
-                <dd>Only the ad blocker's cosmetic filters change pages (<code>NNCoreContentBlocker.mm</code>).</dd>
-                <dt>Build</dt>
-                <dd>
-                  First, Zap: pick an element on the page and hide it for that site. Reuse the developer inspector's picker
-                  (<code>developer/inspectorScript.ts</code>), and store the rule as a cosmetic filter for each space. Then site tweaks: a site's own CSS (and
-                  later, perhaps, JS), edited from Site Controls, switched on and off per site, and synced.
-                </dd>
-                <dt>Spike answers</dt>
-                <dd>Can cosmetic rules be added at runtime without rebuilding the blocker's lists? Should user JS ship at all, given the security cost?</dd>
-              </dl>
-              <ul class="checks">
-                <li>A zapped element stays hidden after reloads and on other pages of the site. Site Controls lists it and can undo it.</li>
-              </ul>
+            <div class="phase-head"><span class="phase-num">Phase 5</span><h3 id="p5-h">Arc Max, on device</h3><span class="chip gate">Research gate</span></div>
+            <p class="goal">Arc Max's lasting features were the small "tidy" ones. Build them on Apple's on-device model so nothing leaves the Mac, if the research spike shows the quality is good enough.</p>
+            <div class="callout">
+              <p><strong>Research spike first (S):</strong> run 200 real tab titles, 100 download names and 20 sets of today's tabs through the on-device model. Go ahead only if the results are better than the originals most of the time and fast enough to feel instant.</p>
             </div>
 
             <div class="item">
-              <h4>Copy text from images <span class="chip m">M</span></h4>
-              <dl class="facts">
-                <dt>Today</dt>
-                <dd>None.</dd>
-                <dt>Build</dt>
-                <dd>
-                  Start with a context-menu item, Copy Text from Image, that runs Vision text recognition in the shell on the image's pixels. Selectable text
-                  over images, and ⌘F finding words in images, come later if the first step earns it.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>Right-clicking a screenshot of text copies its words, on this Mac, with nothing sent anywhere.</li>
-              </ul>
+              <h4>19 · Tidy Tab Titles <span class="chip m">M</span></h4>
+              <p>When a tab is pinned, suggest a short name ("Inbox – Gmail" becomes "Gmail"). The original stays one click away as Reset Name, which Bay already has.</p>
             </div>
-
             <div class="item">
-              <h4>Site notifications with the tab closed <span class="chip risk">Unknown</span></h4>
-              <dl class="facts">
-                <dt>Today</dt>
-                <dd>Notifications work while the site's tab is open (<code>lib/webNotifications.ts</code>).</dd>
-                <dt>Spike answers</dt>
-                <dd>
-                  Chromium's web push relies on Google's push service, which ungoogled builds take out. Can Bay's engine receive push at all? If it can't, the
-                  choices are to run its own push relay, or to keep chosen sites' service workers alive in the background.
-                </dd>
-              </dl>
-              <ul class="checks">
-                <li>The spike ends in a written decision: build (with which approach) or drop.</li>
-              </ul>
+              <h4>20 · Tidy Downloads <span class="chip s">S</span></h4>
+              <p>Offer a readable name for downloads like <code>IMG_20261024_8812.pdf</code>, based on the page and file. Applied only when accepted, never to files the user named.</p>
             </div>
-
+            <div class="item">
+              <h4>21 · Tidy Tabs <span class="chip m">M</span></h4>
+              <p>A button over today's tabs groups them by topic into Bay's tab groups, with ⌘Z to undo (needs item 12). Pinned tabs and existing groups are left alone.</p>
+            </div>
+            <div class="item">
+              <h4>22 · 5-Second Previews <span class="chip m">M</span></h4>
+              <p>Shift-hover a link to load it in the background and show a short summary card with Open, Peek and Copy. Uses the Peek loader and the on-device model.</p>
+            </div>
+            <dl class="facts"><dt>Where</dt><dd>New shell module for Foundation Models; <code>sidebar/</code>, <code>DownloadsPanel.tsx</code>, <code>layout/usePeek.ts</code></dd><dt>Availability</dt><dd>macOS 26 with Apple Intelligence on. Hidden elsewhere.</dd></dl>
             <h4 class="exit">Exit criteria</h4>
-            <ul class="checks">
-              <li>Each bet has a go / no-go note. The ones that go have been planned as their own phase.</li>
-            </ul>
+            <ul><li>Spike passed and recorded; each feature off by default, reversible, and invisible on Macs without the model.</li></ul>
           </article>
         </section>
 
         <section id="risks" aria-labelledby="risks-h">
           <h2 id="risks-h">Risks</h2>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Risk</th>
-                  <th scope="col">Affects</th>
-                  <th scope="col">Mitigation</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Web push may not work in an ungoogled engine at all</td>
-                  <td>Phase 5</td>
-                  <td>Research gate before any build; drop it if there's no clean path</td>
-                </tr>
-                <tr>
-                  <td>Nested folders change stored and synced data</td>
-                  <td>Phase 2</td>
-                  <td>Migrate stored state; older devices see the tabs flattened; test on a copy of a real profile</td>
-                </tr>
-                <tr>
-                  <td>Clipboard history can catch secrets</td>
-                  <td>Phase 3</td>
-                  <td>Opt-in, local only, skips concealed and transient types and private windows, easy to clear</td>
-                </tr>
-                <tr>
-                  <td>One-time codes need Full Disk Access and Gmail scopes</td>
-                  <td>Phase 3</td>
-                  <td>Each source off until switched on; explain the permission where it's asked for</td>
-                </tr>
-                <tr>
-                  <td>Keeping more tabs awake costs memory</td>
-                  <td>Phase 1</td>
-                  <td>Kept-awake sites still sleep under critical pressure, last; the list is short by default</td>
-                </tr>
-                <tr>
-                  <td>User JS in site tweaks is a security surface</td>
-                  <td>Phase 5</td>
-                  <td>Ship CSS and Zap first; JS only after a separate decision</td>
-                </tr>
-                <tr>
-                  <td>Currency rates need a network source</td>
-                  <td>Phase 3</td>
-                  <td>Implemented: live providers with fallbacks, one-hour memory cache, source and date shown, no hardcoded or expired-rate fallback</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="grid2">
+            <div class="card"><h3>Time to the sunset</h3><p>58 days to 22 December. If Phase 1 slips, ship the items that are done; the import and the features already matched matter more than any single gap.</p></div>
+            <div class="card"><h3>Boost injection</h3><p>Boosts run in every matching page. Arc had a security problem here in September 2024. Keep JS local and opt-in, inject in an isolated world, and review before release.</p></div>
+            <div class="card"><h3>Global shortcut clashes</h3><p>⌥⌘N is used by other apps. The global shortcut must be settable, start off, and say when the key is taken.</p></div>
+            <div class="card"><h3>Unread counts are fragile</h3><p>Sites change their title formats. Keep the patterns in one place with tests, and fall back to a dot instead of a wrong number.</p></div>
+            <div class="card"><h3>On-device model reach</h3><p>Bay supports macOS 14, but the model needs macOS 26 with Apple Intelligence. Phase 5 reaches only part of the users; a cloud model would break Bay's privacy stance.</p></div>
+            <div class="card"><h3>Links in fragments</h3><p>Very large folders make long links, and anyone holding the link can read it. Cap the size and say so in the share sheet.</p></div>
           </div>
         </section>
 
         <section id="decisions" aria-labelledby="decisions-h">
           <h2 id="decisions-h">Decisions needed</h2>
-          <ol class="prose">
-            <li>
-              <strong>The idle sleep timer, decided.</strong> Two hours for active and inactive spaces, with a configurable keep-awake host list. Under critical
-              memory pressure, eligible keep-awake sites sleep last.
-            </li>
-            <li>
-              <strong>Where link rules can send links.</strong> A space, Little Bay and a new window are proposed. Is a specific profile or window also needed?
-            </li>
-            <li>
-              <strong>How older synced devices see nested folders, decided.</strong> Flattened pinned groups keep every tab visible; updated devices retain the
-              tree.
-            </li>
-            <li>
-              <strong>The currency rates source, decided.</strong> Frankfurter with ExchangeRate-API and Fawaz Ahmed fallbacks. Currency needs a network
-              connection; arithmetic, units and emoji stay offline. The Calculator toggle defaults to on.
-            </li>
-            <li><strong>The scope of site tweaks.</strong> CSS and Zap only, or JS as well.</li>
-            <li><strong>Whether to read Messages</strong> for codes, given the Full Disk Access prompt.</li>
-          </ol>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Decision</th><th scope="col">Options</th><th scope="col">Recommendation</th></tr></thead>
+              <tbody>
+                <tr><td>AI for the tidy features</td><td>On-device only · cloud opt-in · skip Phase 5</td><td>On-device only, behind the research spike</td></tr>
+                <tr><td>Sharing collections</td><td>Fragment links on the Bay site · a hosted service · none</td><td>Fragment links: no server, no stored data</td></tr>
+                <tr><td>Sharing Easels</td><td>Hosted bucket · iCloud public links · HTML export only</td><td>HTML export only for now</td></tr>
+                <tr><td>JavaScript Boosts</td><td>Local, opt-in · CSS only</td><td>Local and opt-in, never synced</td></tr>
+                <tr><td>Files from Finder</td><td>Build · drop</td><td>Build after keyboard and undo; drop if Phase 1 runs late</td></tr>
+              </tbody>
+            </table>
+          </div>
           <h3>Assumptions in this plan</h3>
           <ul class="prose">
-            <li>
-              "Missing" comes from searching the code on <code>main</code>. The app wasn't run, so a feature that exists under an unexpected name may be listed
-              by mistake. Check before starting each item.
-            </li>
-            <li>Sizes are rough estimates for one person who knows the codebase.</li>
-            <li>The fixes are areas to check, not confirmed bugs.</li>
+            <li>Arc's feature list comes from its macOS release notes (2021 to October 2026) and coverage of Arc Max. The 2025–2026 notes contain only fixes.</li>
+            <li>"Missing" is based on searching the code; the app was not run for this review.</li>
+            <li>Sizes are rough and assume one person familiar with the codebase.</li>
           </ul>
         </section>
 
         <section id="out" aria-labelledby="out-h">
           <h2 id="out-h">Not in this plan</h2>
           <ul class="prose">
-            <li>AI assistant features in the browser</li>
-            <li>A built-in mail client</li>
-            <li>An iPhone app</li>
-            <li>The Windows port, which has its own plan</li>
+            <li><strong>Features Arc removed:</strong> Ask on Page, Arc Notes, Reader Mode, People Cards, the Recent Tab indicator.</li>
+            <li><strong>Arc account extras:</strong> membership cards, Gift Arc and referral-locked icons.</li>
+            <li><strong>Phone apps and sync to iPhone:</strong> Arc Search is a separate product. Bay syncs between Macs and accepts Handoff.</li>
+            <li><strong>Windows and Linux:</strong> covered by their own ports.</li>
+            <li><strong>Previews for Notion, Figma, Linear, Outlook and Confluence, and search inside folder previews:</strong> deferred until asked for.</li>
+            <li><strong>Earlier plan items that Arc never had:</strong> clipboard history, one-time codes, "Allow ads here", text from images and push notifications with the tab closed. They stay open but aren't Arc gaps.</li>
+          </ul>
+        </section>
+
+        <section id="sources" aria-labelledby="sources-h">
+          <h2 id="sources-h">Sources</h2>
+          <ul class="prose">
+            <li><a href="https://resources.arc.net/hc/en-us/articles/20498463803799">Arc for macOS – 2021 Release Notes</a></li>
+            <li><a href="https://resources.arc.net/hc/en-us/articles/20498417809815">Arc for macOS – 2022 Release Notes</a></li>
+            <li><a href="https://resources.arc.net/hc/en-us/articles/20498377604887">Arc for macOS – 2023 Release Notes</a></li>
+            <li><a href="https://resources.arc.net/hc/en-us/articles/20498293324823">Arc for macOS – 2024–2026 Release Notes</a></li>
+            <li><a href="https://resources.arc.net/hc/en-us/articles/44412972248471">Arc Sunset: Key Dates and What to Expect</a></li>
+            <li><a href="https://tidbits.com/2023/10/06/arc-web-browser-introduces-focused-ai-features/">TidBITS: Arc introduces focused AI features</a></li>
+            <li><a href="https://seraphicsecurity.com/learn/ai-browser/arc-max-ai-add-on-features-pros-cons-and-migrating-to-dia-browser/">Seraphic Security: Arc Max features</a></li>
           </ul>
         </section>
       </main>
     </div>
 
     <footer>
-      <div class="wrap">Bay · feature gaps plan · checked against <code>main</code> at <code>12e254d7</code>, 13 October 2026</div>
+      <div class="wrap">Bay · Arc feature gaps · 25 October 2026</div>
     </footer>
+
 
     <script>
       (function () {
