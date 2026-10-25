@@ -235,3 +235,7 @@ export const chromeBookmarkEdit = (profile, ops) => {
 export const extensionAnswers = { actionStates: async () => ({}), sidePanelUrl: async () => null };
 export const extensionActionStates = (browserId, ids) => extensionAnswers.actionStates(browserId, ids);
 export const extensionSidePanelUrl = (browserId, extensionId) => extensionAnswers.sidePanelUrl(browserId, extensionId);
+
+// Library assets: a test can replace the importer to simulate an unavailable file.
+export const libraryImages = { retain: async (path) => ({ path: `/data/Library Media/${path.split("/").pop()}`, width: 640, height: 480 }) };
+export const retainLibraryImage = (path) => libraryImages.retain(path);
