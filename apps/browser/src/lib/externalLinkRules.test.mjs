@@ -136,11 +136,15 @@ test("routing defaults preserve saved choices and most recent excludes private a
   S().hydrate({});
   assert.deepEqual(defaultLinkDestination(S().settings), { kind: "littleBay" });
   S().hydrate({ settings: { openLinksInLittleBay: false } });
-  assert.deepEqual(defaultLinkDestination(S().settings), { kind: "space", spaceId: "default" });
+  assert.deepEqual(defaultLinkDestination(S().settings), { kind: "mostRecentSpace" });
   const work = S().createSpace({ name: "Work" });
-  S().createWindow({ spaceId: work });
+  const main = S().createWindow({ spaceId: work });
   S().createWindow({ incognito: true });
   S().createWindow({ small: true });
+  assert.equal(mostRecentSpace(S()), work);
+  S().switchSpace(main, "default");
+  assert.equal(mostRecentSpace(S()), "default");
+  S().switchSpace(main, work);
   assert.equal(mostRecentSpace(S()), work);
   S().updateSettings({ externalLinkDefault: { kind: "mostRecentSpace" } });
   assert.deepEqual(defaultLinkDestination(S().settings), { kind: "mostRecentSpace" });

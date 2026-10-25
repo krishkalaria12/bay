@@ -101,12 +101,9 @@ export function normalizeLinkDestination(input: unknown): LinkDestination | null
   return { kind: "space", spaceId: target.spaceId, ...(target.syncProfileId ? { syncProfileId: target.syncProfileId } : {}) };
 }
 
-export function defaultLinkDestination(settings: {
-  externalLinkDefault: LinkDestination | null;
-  openLinksInLittleBay: boolean;
-  defaultSpaceId: string;
-}): LinkDestination {
-  return settings.externalLinkDefault ?? (settings.openLinksInLittleBay ? { kind: "littleBay" } : { kind: "space", spaceId: settings.defaultSpaceId });
+// With no saved choice, links open in the Space you're in rather than the default Space new windows use.
+export function defaultLinkDestination(settings: { externalLinkDefault: LinkDestination | null; openLinksInLittleBay: boolean }): LinkDestination {
+  return settings.externalLinkDefault ?? (settings.openLinksInLittleBay ? { kind: "littleBay" } : { kind: "mostRecentSpace" });
 }
 
 export function normalizeExternalLinkRules(input: unknown): ExternalLinkRule[] {

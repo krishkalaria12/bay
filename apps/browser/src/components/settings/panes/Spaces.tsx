@@ -48,7 +48,7 @@ export function SpacesPane() {
 
       <SectionHeader title="New windows open with" />
       <Group>
-        <Row settingId={SETTINGS.defaultSpaceId.id} title={SETTINGS.defaultSpaceId.title} description="Used for new windows and links opened from other apps.">
+        <Row settingId={SETTINGS.defaultSpaceId.id} title={SETTINGS.defaultSpaceId.title} description="Used for new windows.">
           <PopUp
             value={defaultId}
             options={spaces.map((p) => ({ value: p.id, title: p.name }))}
