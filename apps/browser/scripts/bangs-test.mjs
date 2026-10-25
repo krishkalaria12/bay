@@ -40,6 +40,10 @@ async function type(text) {
 async function key(key, mods = {}) {
   await run(`${driver}.key(${JSON.stringify(key)},${JSON.stringify(mods)});return true;`);
 }
+// Exercise AppKit's field editor, which the JS driver's key() bypasses.
+async function nativeTab(shift = false) {
+  assert.equal(await run(`return globalThis.expo.modules.BayApp.devPostKey("w1", "\\t", 48, ${JSON.stringify(shift ? ["shift"] : [])});`), true);
+}
 const bar = () => run(`return ${driver}.state();`);
 async function opened(url, before, background = false) {
   const s = await until(`opened ${url}`, async () => {
@@ -87,9 +91,16 @@ try {
     await open();
     await type("yt");
     assert.equal((await bar()).tabScope.name, "YouTube");
-    await key("Tab");
+    const beforeTab = await bar();
+    await nativeTab(true);
+    await until("Shift-Tab moves up without entering scope", async () => {
+      const s = await bar();
+      return !s.scope && s.selected === (beforeTab.selected + beforeTab.items.length - 1) % beforeTab.items.length;
+    });
+    await nativeTab();
     await until("YouTube scope", async () => (await bar()).scope?.name === "YouTube");
-    await type("funny cats");
+    await run('return nn.shell.devTypeKeys("w1", "funny cats", 25);');
+    await until("query typed into the native field", async () => (await bar()).typed === "funny cats");
     assert.equal((await bar()).scopeColor, "#D90000");
     for (const appearance of ["light", "dark"]) {
       await run(`nn.store.getState().updateSettings({appearance:${JSON.stringify(appearance)}});return true;`);
@@ -105,7 +116,7 @@ try {
     assert.ok(result.id);
     await open();
     await type("work");
-    await key("Tab");
+    await nativeTab();
     await until("custom scope", async () => (await bar()).scope?.name === "Work docs");
     await type("release notes");
     const before = await state();
