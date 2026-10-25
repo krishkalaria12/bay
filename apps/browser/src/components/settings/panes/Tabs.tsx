@@ -44,6 +44,12 @@ export function TabsPane() {
           title={SETTINGS.autoPictureInPicture.title}
           description="A video or call you're watching pops out when you switch tabs or leave the window, and returns when you come back."
         />
+        <SettingToggle
+          setting="unreadBadges"
+          settingId={SETTINGS.unreadBadges.id}
+          title={SETTINGS.unreadBadges.title}
+          description="Gmail, Slack, X, Discord and other sites that put a count in their title show it on their tile, also while asleep."
+        />
       </Group>
 
       <SectionHeader title="Tab groups" />

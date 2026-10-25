@@ -63,6 +63,12 @@ export const SETTINGS = {
     title: "Always keep these sites awake",
     words: "sleep memory idle whatsapp telegram slack discord gmail spotify",
   },
+  unreadBadges: {
+    id: "tabs.unreadBadges",
+    pane: "tabs",
+    title: "Show unread counts on favorites",
+    words: "badge notification count gmail slack x discord unread",
+  },
   previews: { id: "tabs.previews", pane: "tabs", title: "Previews", words: "hover folders groups gmail github calendar" },
   cleanUpInactiveTabsAfterHours: { id: "tabs.cleanUpInactiveTabsAfterHours", pane: "tabs", title: "Clean up", words: "archive inactive close unused tabs" },
   syncFolder: { id: "sync.syncFolder", pane: "sync", title: "Sync folder", words: "icloud drive" },

@@ -59,6 +59,8 @@ export type Settings = {
   previewFolders: boolean;
   previewGmail: boolean;
   previewGithub: boolean;
+  // Arc's badges on favorites: the count a pinned tile's page puts in its title (lib/unreadBadges.ts).
+  unreadBadges: boolean;
   sidebarWidth: number;
   // Which side of the window the sidebar docks on; the page takes the other. The window buttons stay at the top left.
   sidebarPosition: "left" | "right";
@@ -123,6 +125,7 @@ export const DEFAULT_SETTINGS: Settings = {
   previewFolders: true,
   previewGmail: true,
   previewGithub: true,
+  unreadBadges: true,
   sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
   batterySaver: true,

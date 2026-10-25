@@ -19,6 +19,7 @@ import { openTabMenu } from "./menus";
 import { registerRow } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
+import { UnreadBadge } from "./UnreadBadge";
 import { clickMods } from "./TabRow";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { MIN_PINNED_TILE, PINNED_BADGE_SPRING, PINNED_GLASS_RIM, PINNED_SELECTION_STROKE, PINNED_TILE_GAP } from "./constants";
@@ -207,6 +208,8 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
             </View>
           </Pressable>
         </Animated.View>
+        {/* Away from its pinned page the top right is the way back, and the count moves to the top left. */}
+        <UnreadBadge tabId={tabId} corner={away ? "left" : "right"} />
         <NextMeetingBadge tabId={tabId} />
         {playing || tab.muted ? (
           <View pointerEvents="none" style={{ position: "absolute", bottom: 3, right: 4 }}>
