@@ -34,7 +34,16 @@ export const onCalendarChanged = () => ({ remove() {} });
 export const keychainGet = () => Promise.resolve(null);
 export const keychainSet = () => Promise.resolve(true);
 export const keychainDelete = () => Promise.resolve(true);
-export const confirm = () => Promise.resolve({ confirmed: false, suppressed: false });
+export const shellDialogAnswers = {
+  confirm: async () => ({ confirmed: false, suppressed: false }),
+  openTextFile: async () => null,
+  prompt: async () => null,
+  saveTextFile: async () => null,
+};
+export const confirm = (...args) => shellDialogAnswers.confirm(...args);
+export const openTextFile = (...args) => shellDialogAnswers.openTextFile(...args);
+export const prompt = (...args) => shellDialogAnswers.prompt(...args);
+export const saveTextFile = (...args) => shellDialogAnswers.saveTextFile(...args);
 export const onWindowEvent = () => ({ remove() {} });
 export const focusedWindows = [];
 export const sidebarMoveUndoCalls = [];
@@ -255,3 +264,6 @@ export const retainLibraryImage = (path) => libraryImages.retain(path);
 
 export const sidebarKeyboardCalls = [];
 export const setSidebarKeyboard = (windowId, active) => (sidebarKeyboardCalls.push({ windowId, active }), Promise.resolve());
+// Boosts: what the app last sent the engine.
+export const engineBoostCalls = [];
+export const setBoosts = (boosts) => (engineBoostCalls.push(boosts), Promise.resolve());

@@ -10,3 +10,6 @@ Bay builds on and ships third-party software under its own licenses, including:
 - uBlock Origin (GPL-3.0), bundled as a separate extension, with the changes packages/nncore/scripts/ubo.sh makes
 - Sparkle (MIT)
 - React Native and React Native macOS (MIT)
+- Zen Browser (MPL-2.0): Boosts' element selector builder (apps/browser/src/components/boosts/pickerScript.ts ›
+  selectorFor) and Focus rules (apps/browser/src/lib/boosts.ts › focusCss) follow Zen's ZenSelectorComponent and
+  ZenBoostStyles (https://github.com/zen-browser/desktop); those parts stay under the MPL-2.0

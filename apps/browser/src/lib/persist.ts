@@ -6,6 +6,7 @@ import type { BrowserWindow, ClosedTab, Tab } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
 import { normalizeLocalFiles } from "../store/localFiles";
 import { startLibrary } from "../components/library/state";
+import { startBoosts } from "../components/boosts/state";
 import { startFavicons } from "./favicons";
 import { startBookmarks } from "./bookmarks";
 import { startHistory } from "./history";
@@ -257,6 +258,7 @@ export function startPersistence() {
   const session = loadSession();
   useBrowser.getState().hydrate(session ?? {});
   startLibrary();
+  startBoosts();
 
   const lastSources = new Map<string, unknown[]>();
   const lastJson = new Map<string, string>();

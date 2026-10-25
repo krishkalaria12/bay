@@ -37,6 +37,8 @@ import {
 import { APP_SCOPE, SYNC_AFTER_EDIT_MS, SYNC_CYCLE_MS, SYNC_DOC, SYNC_JOURNAL_FILE, SYNC_STATE_FILE } from "./constants";
 import { linkRulesAdapter, resolveLinkRuleSpaces } from "./linkRules";
 import { localFilesAdapter } from "./localFiles";
+import { boostsAdapter } from "./boosts";
+import { useBoosts } from "../components/boosts/state";
 
 export type DataType = "bookmarks" | "history" | "tabs" | "pinned" | "passwords" | "settings";
 
@@ -247,7 +249,7 @@ function appAdapters(retiring: boolean): Adapter[] {
   const id = doc.deviceId!;
   if (retiring) return [deviceAdapter(id, deviceName, true)];
   return [
-    ...(doc.types.settings ? [settingsAdapter, linkRulesAdapter(() => doc.profiles)] : []),
+    ...(doc.types.settings ? [settingsAdapter, linkRulesAdapter(() => doc.profiles), boostsAdapter] : []),
     profilesAdapter(() => Object.fromEntries(Object.entries(doc.profiles).filter(([, l]) => l.enabled))),
     deviceAdapter(id, deviceName),
   ];
@@ -559,6 +561,10 @@ export function startSync() {
       s.localFiles !== prev.localFiles
     )
       scheduleSync();
+  });
+  // Boosts (Settings' type): their own store.
+  useBoosts.subscribe((s, prev) => {
+    if (doc.enabled && !running && s.boosts !== prev.boosts) scheduleSync();
   });
   if (__DEV__) {
     (globalThis as { nnSync?: object }).nnSync = {
