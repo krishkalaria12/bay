@@ -13,9 +13,14 @@ with tempfile.TemporaryDirectory() as temporary:
     (temporary / "libsecret").mkdir()
     (temporary / "libsecret/secret.h").write_text(r'''
 #pragma once
-struct GError {};
-using gchar = char;
-enum { SECRET_SCHEMA_NONE, SECRET_SCHEMA_ATTRIBUTE_STRING };
+#include <gio/gio.h>
+using SecretItem = GObject;
+struct SecretService;
+enum SecretSearchFlags {
+  SECRET_SEARCH_NONE = 0, SECRET_SEARCH_ALL = 1 << 1,
+  SECRET_SEARCH_UNLOCK = 1 << 2, SECRET_SEARCH_LOAD_SECRETS = 1 << 3
+};
+enum { SECRET_SCHEMA_NONE = 0, SECRET_SCHEMA_ATTRIBUTE_STRING = 0 };
 #define SECRET_COLLECTION_DEFAULT "default"
 struct SecretSchemaAttribute { const char *name; int type; };
 struct SecretSchema {
@@ -26,11 +31,14 @@ struct SecretSchema {
   void *reserved1, *reserved2, *reserved3, *reserved4, *reserved5, *reserved6, *reserved7;
 };
 extern "C" {
-int secret_password_store_sync(const SecretSchema *, const char *, const char *, const char *, void *, GError **, ...);
-char *secret_password_lookup_sync(const SecretSchema *, void *, GError **, ...);
-int secret_password_clear_sync(const SecretSchema *, void *, GError **, ...);
+int secret_password_store_sync(const SecretSchema *, const char *, const char *, const char *, GCancellable *, GError **, ...);
+char *secret_password_lookup_sync(const SecretSchema *, GCancellable *, GError **, ...);
+int secret_password_clear_sync(const SecretSchema *, GCancellable *, GError **, ...);
 void secret_password_free(char *);
-void g_error_free(GError *);
+GHashTable *secret_attributes_build(const SecretSchema *, ...);
+GList *secret_service_search_sync(SecretService *, const SecretSchema *, GHashTable *, SecretSearchFlags, GCancellable *, GError **);
+gboolean secret_item_get_locked(SecretItem *);
+gboolean secret_item_delete_sync(SecretItem *, GCancellable *, GError **);
 }
 ''')
     sources = [sync / path for path in [
@@ -48,11 +56,11 @@ void g_error_free(GError *);
         ["pkg-config", "--cflags", "--libs", "openssl"], text=True))
     flags += shlex.split(subprocess.check_output(
         ["pkg-config", "--cflags", "nss"], text=True))
+    flags += shlex.split(subprocess.check_output(
+        ["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
     if sys.platform == "darwin":
         flags += ["-DBAY_SYNC_LINUX_TEST", "-DBAY_IMPORT_LINUX_TEST"]
     else:
-        flags += shlex.split(subprocess.check_output(
-            ["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
         # Use standalone SQLite rather than Chromium's vendored header.
         flags += ["-DBAY_IMPORT_LINUX_TEST", "-ldl"]
     binary = temporary / "service-test"

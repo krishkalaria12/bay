@@ -13,7 +13,20 @@
 
 namespace {
 bool available = false;
-std::map<std::string, std::string> secrets;
+struct Secret {
+  std::string value;
+  bool locked = false;
+};
+std::multimap<std::string, Secret> secrets;
+bool allowUnlock = true;
+bool searchError = false;
+bool deleteError = false;
+bool allowDelete = true;
+std::vector<std::string> unlockRequests;
+void serviceError(GError **error) {
+  g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                      "Fake Secret Service failure");
+}
 std::string secretKey(va_list args) {
   std::string account, profile;
   while (const char *name = va_arg(args, const char *)) {
@@ -28,47 +41,129 @@ std::string secretKey(va_list args) {
 } // namespace
 extern "C" {
 int secret_password_store_sync(const SecretSchema *, const char *, const char *,
-                               const char *value, void *, GError **error, ...) {
+                               const char *value, GCancellable *,
+                               GError **error, ...) {
   va_list args;
   va_start(args, error);
   auto key = secretKey(args);
   va_end(args);
   if (!available) {
-    *error = new GError;
-    return 0;
-  }
-  secrets[key] = value;
-  return 1;
-}
-char *secret_password_lookup_sync(const SecretSchema *, void *, GError **error,
-                                  ...) {
-  va_list args;
-  va_start(args, error);
-  auto key = secretKey(args);
-  va_end(args);
-  if (!available) {
-    *error = new GError;
-    return nullptr;
-  }
-  if (!secrets.count(key))
-    return nullptr;
-  return ::strdup(secrets[key].c_str());
-}
-int secret_password_clear_sync(const SecretSchema *, void *, GError **error,
-                               ...) {
-  va_list args;
-  va_start(args, error);
-  auto key = secretKey(args);
-  va_end(args);
-  if (!available) {
-    *error = new GError;
+    serviceError(error);
     return 0;
   }
   secrets.erase(key);
+  secrets.emplace(key, Secret{value});
   return 1;
 }
+char *secret_password_lookup_sync(const SecretSchema *, GCancellable *,
+                                  GError **error, ...) {
+  va_list args;
+  va_start(args, error);
+  auto key = secretKey(args);
+  va_end(args);
+  if (!available) {
+    serviceError(error);
+    return nullptr;
+  }
+  auto matches = secrets.equal_range(key);
+  for (auto it = matches.first; it != matches.second; ++it) {
+    if (!it->second.locked)
+      return ::strdup(it->second.value.c_str());
+  }
+  return nullptr;
+}
+int secret_password_clear_sync(const SecretSchema *, GCancellable *,
+                               GError **error, ...) {
+  va_list args;
+  va_start(args, error);
+  auto key = secretKey(args);
+  va_end(args);
+  if (!available) {
+    serviceError(error);
+    return 0;
+  }
+  // Like libsecret clear_sync, silently skip locked matches.
+  bool removed = false;
+  auto matches = secrets.equal_range(key);
+  for (auto it = matches.first; it != matches.second;) {
+    if (it->second.locked) {
+      ++it;
+    } else {
+      it = secrets.erase(it);
+      removed = true;
+    }
+  }
+  return removed;
+}
+GHashTable *secret_attributes_build(const SecretSchema *schema, ...) {
+  assert(std::string(schema->name) == "app.bay.SyncKey");
+  auto *attributes =
+      g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  va_list args;
+  va_start(args, schema);
+  while (const char *name = va_arg(args, const char *)) {
+    auto *value = va_arg(args, const char *);
+    g_hash_table_insert(attributes, g_strdup(name), g_strdup(value));
+  }
+  va_end(args);
+  return attributes;
+}
+GList *secret_service_search_sync(SecretService *, const SecretSchema *schema,
+                                  GHashTable *attributes,
+                                  SecretSearchFlags flags, GCancellable *,
+                                  GError **error) {
+  assert(std::string(schema->name) == "app.bay.SyncKey");
+  assert(!(flags & SECRET_SEARCH_LOAD_SECRETS));
+  assert(g_hash_table_size(attributes) == 2);
+  const auto *account =
+      static_cast<const char *>(g_hash_table_lookup(attributes, "account"));
+  const auto *profile =
+      static_cast<const char *>(g_hash_table_lookup(attributes, "profile"));
+  assert(account && profile);
+  if (!available || searchError) {
+    serviceError(error);
+    return nullptr;
+  }
+  auto matches = secrets.equal_range(std::string(profile) + ":" + account);
+  GList *items = nullptr;
+  for (auto it = matches.first; it != matches.second; ++it) {
+    if (it->second.locked && (flags & SECRET_SEARCH_UNLOCK)) {
+      unlockRequests.push_back(it->first);
+      if (allowUnlock)
+        it->second.locked = false;
+      // libsecret returns still-locked matches without a search error on
+      // denial.
+    }
+    auto *item = G_OBJECT(g_object_new(G_TYPE_OBJECT, nullptr));
+    g_object_set_data(item, "secret", &it->second);
+    items = g_list_append(items, item);
+    if (!(flags & SECRET_SEARCH_ALL))
+      break;
+  }
+  return items;
+}
+gboolean secret_item_get_locked(SecretItem *item) {
+  return static_cast<Secret *>(g_object_get_data(item, "secret"))->locked;
+}
+gboolean secret_item_delete_sync(SecretItem *item, GCancellable *,
+                                 GError **error) {
+  if (deleteError) {
+    serviceError(error);
+    return false;
+  }
+  if (!allowDelete || secret_item_get_locked(item))
+    return false;
+  auto *secret = g_object_get_data(item, "secret");
+  for (auto it = secrets.begin(); it != secrets.end(); ++it) {
+    if (&it->second == secret) {
+      secrets.erase(it);
+      return true;
+    }
+  }
+  assert(false);
+  return false;
+}
 void secret_password_free(char *value) { std::free(value); }
-void g_error_free(GError *value) { delete value; }
 }
 namespace bay::sync {
 Bytes recoveryKitPreviewPNG(const Bytes &, const std::string &, unsigned) {
@@ -179,6 +274,66 @@ int main(int argc, char **argv) {
   call("forget", {"a"});
   assert(secrets.empty());
   assert(call("unlock", {"a"}) == false);
+  // Already-forgotten accounts succeed without requesting any unlock.
+  auto unlockCount = unlockRequests.size();
+  call("forget", {"missing"});
+  assert(unlockRequests.size() == unlockCount);
+
+  // A locked stored key must either be deleted or produce a keychain error.
+  assert(call("createPhrase", {"a"}) == true);
+  const auto key = first + ":a";
+  secrets.find(key)->second.locked = true;
+  allowUnlock = false;
+  auto denied = Json::parse(InvokeEnvelope("forget", "[\"a\"]"));
+  assert(denied["error"]["code"] == "keychain");
+  assert(call("folderInfo")["keyStorage"] == "locked");
+  assert(secrets.count(key) == 1);
+  assert(!loadSecret("a"));
+  secrets.find(key)->second.locked = false;
+  assert(loadSecret("a")); // The refusal must not have claimed revocation.
+
+  // Both a false return without GError and a service error must propagate.
+  allowDelete = false;
+  assert(Json::parse(InvokeEnvelope("forget", "[\"a\"]"))["error"]["code"] ==
+         "keychain");
+  assert(loadSecret("a"));
+  allowDelete = true;
+  deleteError = true;
+  assert(Json::parse(InvokeEnvelope("forget", "[\"a\"]"))["error"]["code"] ==
+         "keychain");
+  assert(loadSecret("a"));
+  deleteError = false;
+  searchError = true;
+  assert(Json::parse(InvokeEnvelope("forget", "[\"a\"]"))["error"]["code"] ==
+         "keychain");
+  assert(loadSecret("a"));
+  searchError = false;
+  available = false;
+  assert(Json::parse(InvokeEnvelope("forget", "[\"a\"]"))["error"]["code"] ==
+         "keychain");
+  available = true;
+
+  // Remove all matching duplicates, including locked ones, without touching
+  // another account or profile or loading any secret during the search.
+  const auto saved = secrets.find(key)->second.value;
+  secrets.find(key)->second.locked = true;
+  secrets.emplace(key, Secret{saved});
+  secrets.emplace(first + ":b", Secret{saved, true});
+  secrets.emplace(second + ":a", Secret{saved, true});
+  allowUnlock = true;
+  unlockRequests.clear();
+  call("forget", {"a"});
+  assert(secrets.count(key) == 0);
+  assert(unlockRequests == std::vector<std::string>{key});
+  assert(secrets.find(first + ":b")->second.locked);
+  assert(secrets.find(second + ":a")->second.locked);
+  for (auto &entry : secrets)
+    entry.second.locked = false;
+  assert(!loadSecret("a"));
+  assert(call("unlock", {"a"}) == false);
+  assert(loadSecret("b"));
+  SetDataDirectory(second);
+  assert(loadSecret("a"));
   std::cout << "Service session fallback, account isolation, recovery, and "
-               "persistent key checks passed\n";
+               "persistent key revocation checks passed\n";
 }
