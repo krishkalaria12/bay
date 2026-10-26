@@ -50,7 +50,7 @@ void createPrivateDirectory(const std::filesystem::path &path);
 // falling back to a process-only key when Secret Service is unavailable.
 Bytes protect(const Bytes &plain);
 Bytes unprotect(const Bytes &sealed);
-#if defined(__linux__)
+#if defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
 void SetSecretNamespace(std::string directory);
 std::string GetSecretNamespace();
 #endif

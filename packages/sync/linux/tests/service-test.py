@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Compile real Linux crypto/key store/service with a fake Secret Service API."""
 import pathlib
+import shlex
+import sys
 import subprocess
 import tempfile
 
@@ -36,9 +38,26 @@ void g_error_free(GError *);
         "windows/SyncVault.cpp", "windows/SyncService.cpp", "windows/RecoveryKit.cpp",
         "windows/vendor/qrcodegen.cpp", "linux/tests/Service.cpp",
     ]]
+    # The shared service links the real import reader. macOS exercises Linux
+    # service policy and POSIX crypto with fake desktop/keyring edges only.
+    sources += [root / "packages/import" / path for path in [
+        "windows/Secrets.cpp", "windows/Readers.cpp", "linux/ChromiumSecrets.cpp",
+        "linux/SecretService.cpp", "linux/FirefoxNSS.cpp",
+    ]]
+    flags = shlex.split(subprocess.check_output(
+        ["pkg-config", "--cflags", "--libs", "openssl"], text=True))
+    flags += shlex.split(subprocess.check_output(
+        ["pkg-config", "--cflags", "nss"], text=True))
+    if sys.platform == "darwin":
+        flags += ["-DBAY_SYNC_LINUX_TEST", "-DBAY_IMPORT_LINUX_TEST"]
+    else:
+        flags += shlex.split(subprocess.check_output(
+            ["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
+        # Use standalone SQLite rather than Chromium's vendored header.
+        flags += ["-DBAY_IMPORT_LINUX_TEST", "-ldl"]
     binary = temporary / "service-test"
     subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-Wno-missing-field-initializers", "-pthread", "-I", str(temporary),
                     "-I", str(root / "engine/chromium/src/chrome/browser/bay/data/vendor"),
-                    *map(str, sources), "-lcrypto", "-o", str(binary)], check=True)
+                    *map(str, sources), "-lsqlite3", *flags, "-o", str(binary)], check=True)
     subprocess.run([str(binary), str(temporary)], check=True)

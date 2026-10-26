@@ -1,30 +1,61 @@
 // Copyright 2026 Bay. Apache-2.0.
 #include "data_services.h"
 #include "packages/sync/windows/SyncCrypto.h"
+#include "packages/sync/windows/SyncService.h"
 
+#include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <map>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 
-#if !defined(_WIN32) && !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
+#if !defined(_WIN32) && (!defined(__linux__) || defined(BAY_SYNC_PORTABLE_TEST))
 // The service test uses the shipped CNG/Credential Manager implementation on
-// Windows. macOS tests never substitute a persistent or plaintext secret store.
+// Windows. macOS tests never access a real secret store.
 namespace bay::sync {
-bool saveSecret(const std::string&, const Bytes&) {
+#if defined(BAY_IMPORT_LINUX_TEST)
+// Process-only fixture credentials, never persisted or shared with the desktop.
+std::map<std::string, Bytes> testSecrets;
+bool saveSecret(const std::string &account, const Bytes &value) {
+  testSecrets[account] = value;
+  return true;
+}
+std::optional<Bytes> loadSecret(const std::string &account) {
+  auto found = testSecrets.find(account);
+  return found == testSecrets.end() ? std::nullopt
+                                    : std::optional<Bytes>(found->second);
+}
+void deleteSecret(const std::string &account) {
+  auto found = testSecrets.find(account);
+  if (found != testSecrets.end()) {
+    erase(found->second);
+    testSecrets.erase(found);
+  }
+}
+#else
+bool saveSecret(const std::string &, const Bytes &) {
   throw Failure("unsupported",
                 "Windows credentials are unavailable in this test");
 }
-std::optional<Bytes> loadSecret(const std::string&) {
+std::optional<Bytes> loadSecret(const std::string &) {
   throw Failure("unsupported",
                 "Windows credentials are unavailable in this test");
 }
-void deleteSecret(const std::string&) {
+void deleteSecret(const std::string &) {
   throw Failure("unsupported",
                 "Windows credentials are unavailable in this test");
 }
-}  // namespace bay::sync
+#endif
+} // namespace bay::sync
+#endif
+
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+#include "packages/import/linux/ChromiumSecrets.h"
+#include "packages/import/windows/SQLite.h"
+#include <openssl/evp.h>
 #endif
 
 namespace {

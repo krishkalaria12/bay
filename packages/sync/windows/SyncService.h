@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,13 +13,16 @@ using ProfileResolver =
         const std::string &)>;
 void SetDataDirectory(std::string directory);
 void SetProfileResolver(ProfileResolver resolver);
+using PasswordDecryptor =
+    std::function<std::optional<std::string>(const std::string &)>;
+void SetPasswordDecryptor(PasswordDecryptor decryptor);
 // Host-only continuation after an asynchronous native save dialog.
 // Returns a contract envelope and catches all exceptions before Chromium.
 std::uint64_t RecoveryKeyGeneration() noexcept;
 std::string SaveRecoveryKitToPath(const std::string &format,
                                   const std::string &path,
                                   std::uint64_t expectedGeneration);
-#if defined(__linux__)
+#if defined(__linux__) || defined(BAY_SYNC_LINUX_TEST)
 void copyRecoveryPhraseText(const std::string &text);
 void revealSyncFolder(const std::filesystem::path &path);
 void writeRecoveryKitFile(const std::filesystem::path &path,

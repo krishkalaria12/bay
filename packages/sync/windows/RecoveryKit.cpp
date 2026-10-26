@@ -127,7 +127,9 @@ unsigned recoveryQRSize(const Bytes &entropy) {
   return static_cast<unsigned>(qrCode(entropy).getSize());
 }
 } // namespace detail
-#if (!defined(_WIN32) && !defined(__linux__)) || defined(BAY_SYNC_PORTABLE_TEST)
+#if (!defined(_WIN32) && !defined(__linux__) &&                                \
+     !defined(BAY_SYNC_LINUX_TEST)) ||                                         \
+    defined(BAY_SYNC_PORTABLE_TEST)
 Bytes recoveryKitPreviewPNG(const Bytes &, const std::string &, unsigned) {
   throw Failure("unsupported", "Recovery preview rendering requires Windows");
 }

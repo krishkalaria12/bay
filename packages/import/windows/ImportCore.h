@@ -161,6 +161,12 @@ using ImportWriter =
                        const SensitiveImport &)>;
 void SetImportWriter(ImportWriter writer);
 Json readEnginePasswords(const Path &root, const Path &profile);
+// The owning browser supplies its current encryptor, including desktop/portal
+// providers. This never looks up another browser's Safe Storage item.
+using EnginePasswordDecryptor =
+    std::function<std::optional<std::string>(const std::string &)>;
+Json readEnginePasswords(const Path &profile,
+                         const EnginePasswordDecryptor &decrypt);
 inline constexpr char kModuleName[] = "BayImport";
 const std::vector<std::string> &MethodNames();
 bool RequiresUIThread(const std::string &method);

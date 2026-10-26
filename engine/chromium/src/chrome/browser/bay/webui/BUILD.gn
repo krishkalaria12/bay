@@ -78,6 +78,8 @@ source_set("impl") {
     "//chrome/browser/profiles/keep_alive",
     "//chrome/browser/resource_coordinator",
     "//chrome/browser/ui",
+    "//chrome/browser/ui:browser_init_state",
+    "//chrome/browser/ui/browser_window:create_browser_window",
     "//chrome/browser/ui/navigator",
     "//chrome/browser/ui/tab_sharing",
     "//chrome/browser/ui/tabs:tab_model",
@@ -142,8 +144,11 @@ source_set("impl") {
       ":document_store",
       ":secret_storage_linux",
       ":shell_clipboard",
+      ":sync_ui_linux",
       ":window_button_layout_linux",
       "//components/input",
+      "//components/os_crypt/async/browser",
+      "//components/os_crypt/async/common",
       "//ui/base",
       "//ui/content_accelerators",
       "//ui/events",
@@ -694,9 +699,7 @@ if (is_win || is_linux) {
 }
 
 if (is_linux) {
-  # D1 supplies the asynchronous adapter independently of D2's import gate.
-  # When data services are enabled on Linux, own this alongside ShellUI and
-  # dispatch its chooseFolder/saveRecoveryKit before the data worker routing.
+  # NativeHost owns the asynchronous picker adapter on the UI sequence.
   source_set("sync_ui_linux") {
     sources = [
       "sync_ui_linux.cc",
@@ -705,7 +708,7 @@ if (is_linux) {
     deps = [
       ":webui",
       "//base",
-      "//chrome/browser/bay/data:sync_services",
+      "//chrome/browser/bay/data:data_services",
       "//chrome/browser/ui/browser_window",
       "//content/public/browser",
       "//ui/shell_dialogs",
@@ -719,7 +722,9 @@ if (is_linux) {
     ]
     deps = [
       ":sync_ui_linux",
+      ":webui",
       "//base/test:test_support",
+      "//chrome/browser/bay/data:data_services",
       "//chrome/browser/ui:test_support",
       "//chrome/common:constants",
       "//chrome/test:test_support_unit",

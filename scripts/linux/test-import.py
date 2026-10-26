@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Run Linux import service fixtures with fake keyring access on macOS.
+"""Run Linux import/sync service fixtures with fake keyring access.
 
 This exercises portable service behavior, not Linux integration. Production uses
 BoringSSL; this fixture build reuses the existing OpenSSL test crypto adapter.
-No real profile, secret service, desktop operation or Linux binary is used.
+No real profile, secret service or desktop operation is used. macOS produces
+Mac executables; --services-only also runs directly on Linux.
 """
+import argparse
 from pathlib import Path
 import shlex
 import shutil
@@ -16,13 +18,22 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def main():
-    if sys.platform != "darwin":
-        raise RuntimeError("This portable fixture runner requires macOS; Linux native checks run in stage 2")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--services-only", action="store_true",
+                        help="skip the macOS-only NSS fixture generator")
+    args = parser.parse_args()
+    if sys.platform not in ("darwin", "linux"):
+        raise RuntimeError("This fixture runner requires macOS or Linux")
+    if sys.platform == "linux" and not args.services_only:
+        raise RuntimeError("Use --services-only on Linux; the NSS fixture generator is macOS-only")
     compiler = shutil.which("c++")
     if not compiler or not shutil.which("pkg-config"):
         raise RuntimeError("Install a C++17 compiler and pkg-config with OpenSSL, GIO and NSS headers")
     flags = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "openssl"], text=True))
     flags += shlex.split(subprocess.check_output(["pkg-config", "--cflags", "nss"], text=True))
+    if sys.platform == "linux":
+        flags += shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
+        flags += ["-ldl"]
     sources = [
         "packages/import/windows/ImportService.cpp",
         "packages/import/windows/BrowserDiscovery.cpp",
@@ -52,9 +63,13 @@ def main():
             ("data", [data / "data_services.cc", data / "tests/Services.cpp"]),
         ):
             binary = Path(directory) / (name + "-tests")
-            subprocess.run([compiler, "-std=c++17", "-DBAY_IMPORT_LINUX_TEST", "-pthread",
+            sync_sources = [] if name == "service" else [
+                REPO / "packages/sync/windows" / source for source in
+                ("SyncService.cpp", "SyncVault.cpp", "RecoveryKit.cpp", "vendor/qrcodegen.cpp")
+            ]
+            subprocess.run([compiler, "-std=c++17", "-DBAY_IMPORT_LINUX_TEST", "-DBAY_SYNC_PORTABLE_TEST", "-pthread",
                             "-I" + str(data / "vendor"), "-I" + str(data), "-I" + str(REPO),
-                            *[str(REPO / source) for source in sources], *map(str, tests),
+                            *[str(REPO / source) for source in sources], *map(str, sync_sources), *map(str, tests),
                             "-lsqlite3", *flags, "-o", str(binary)], cwd=REPO, check=True)
             subprocess.run([str(binary), str(Path(directory) / (name + "-home"))], cwd=directory, check=True)
         gio = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "gio-2.0"], text=True))
@@ -64,7 +79,8 @@ def main():
                             str(REPO / "packages/import/linux/tests" / source),
                             *gio, "-o", str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
-        subprocess.run([sys.executable, str(REPO / "packages/import/linux/tests/run-fixtures.py")], check=True)
+        if not args.services_only:
+            subprocess.run([sys.executable, str(REPO / "packages/import/linux/tests/run-fixtures.py")], check=True)
 
 
 if __name__ == "__main__":

@@ -4,9 +4,7 @@
 #include <mutex>
 #include <utility>
 #include "packages/import/windows/ImportCore.h"
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
 #include "packages/sync/windows/SyncService.h"
-#endif
 
 namespace bay::data {
 namespace {
@@ -142,6 +140,9 @@ void Configure(std::string directory, ProfileResolver resolve_profile) {
 }
 void SetEventSink(EventSink sink) {
   importer::SetEventSink(std::move(sink));
+}
+void SetPasswordDecryptor(PasswordDecryptor decryptor) {
+  sync::SetPasswordDecryptor(std::move(decryptor));
 }
 void SetEngineCall(EngineCall engine_call) {
   if (!engine_call) {

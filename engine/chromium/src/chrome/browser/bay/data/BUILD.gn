@@ -5,6 +5,7 @@
 assert(is_win || is_linux)
 
 if (is_linux) {
+  import("//build/config/features.gni")
   import("//build/config/linux/pkg_config.gni")
   import("//build/config/ui.gni")
 
@@ -28,12 +29,17 @@ static_library("data_services") {
     "packages/import/windows/SQLite.h",
     "packages/import/windows/Secrets.cpp",
     "packages/import/windows/Sessions.cpp",
+
+    # Sync dispatch reads engine passwords through the importer in this target.
+    "packages/sync/windows/SyncService.cpp",
     "vendor/nlohmann/json.hpp",
   ]
   configs -= [ "//build/config/compiler:no_exceptions" ]
   configs += [ "//build/config/compiler:exceptions" ]
   include_dirs = [ "vendor" ]
-  deps = [ ":sync_services" ]
+
+  # Native picker adapters use the host-only sync recovery continuation API.
+  public_deps = [ ":sync_services" ]
   if (is_win) {
     defines = [
       "NOMINMAX",
@@ -69,7 +75,7 @@ static_library("data_services") {
       "//build/config/linux:glib",
       "//build/linux:gio_config",
     ]
-    deps += [
+    deps = [
       "//third_party/boringssl",
       "//third_party/sqlite",
     ]
@@ -85,7 +91,6 @@ static_library("sync_services") {
     "packages/sync/windows/RecoveryKitInternal.h",
     "packages/sync/windows/SyncCrypto.cpp",
     "packages/sync/windows/SyncCrypto.h",
-    "packages/sync/windows/SyncService.cpp",
     "packages/sync/windows/SyncService.h",
     "packages/sync/windows/SyncVault.cpp",
     "packages/sync/windows/SyncVault.h",
@@ -116,8 +121,6 @@ static_library("sync_services") {
       "uuid.lib",
     ]
   } else if (is_linux) {
-    # The shared sync sources use the C++17 UTF-8 std::string path interface.
-    cflags_cc = [ "-fno-char8_t" ]
     sources += [
       "packages/sync/linux/RecoveryKitLinux.cpp",
       "packages/sync/linux/SyncCryptoLinux.cpp",

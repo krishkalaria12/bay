@@ -69,6 +69,16 @@ Bytes decrypt(const Bytes &value, const ChromiumSecretContext &context) {
   throw Failure("unsupported", "Linux browser secret context requires Linux");
 #endif
 }
+Bytes decrypt(const Bytes &value, const EnginePasswordDecryptor &decryptor) {
+  auto plain = decryptor(std::string(value.begin(), value.end()));
+  if (!plain)
+    throw Failure("locked", "The browser could not decrypt a saved password");
+  Bytes result(plain->begin(), plain->end());
+  volatile char *bytes = plain->data();
+  for (std::size_t i = 0; i < plain->size(); ++i)
+    bytes[i] = 0;
+  return result;
+}
 } // namespace
 std::string encodeBase64(const Bytes &bytes) {
   static const char alphabet[] =
@@ -206,20 +216,13 @@ Json chromiumLogins(const Path &profile, const ChromiumSecretContext &context,
                     const std::atomic_bool &cancelled, int &blocked) {
   return chromiumLoginsImpl(profile, context, cancelled, blocked);
 }
-Json readEnginePasswords(const Path &root, const Path &profile) {
-  if (!std::filesystem::exists(profile / "Login Data"))
+template <class Key> Json enginePasswords(const Path &profile, const Key &key) {
+  if (!std::filesystem::exists(profile / "Login Data") &&
+      !std::filesystem::exists(profile / "Login Data For Account"))
     return Json::array();
-  auto key = chromiumKey(root);
   std::atomic_bool cancelled{false};
   int blocked = 0;
-  Json items;
-  try {
-    items = chromiumLogins(profile, key, cancelled, blocked);
-  } catch (...) {
-    bay::sync::erase(key);
-    throw;
-  }
-  bay::sync::erase(key);
+  auto items = chromiumLoginsImpl(profile, key, cancelled, blocked);
   if (blocked)
     return nullptr;
   Json out = Json::array();
@@ -230,6 +233,20 @@ Json readEnginePasswords(const Path &root, const Path &profile) {
                    {"password", item["password"]},
                    {"created", item.value("created", 0.0)}});
   return out;
+}
+Json readEnginePasswords(const Path &root, const Path &profile) {
+  if (!std::filesystem::exists(profile / "Login Data") &&
+      !std::filesystem::exists(profile / "Login Data For Account"))
+    return Json::array();
+  auto key = chromiumKey(root);
+  WipeSecretBytes wipe{key};
+  return enginePasswords(profile, key);
+}
+Json readEnginePasswords(const Path &profile,
+                         const EnginePasswordDecryptor &decryptor) {
+  if (!decryptor)
+    return nullptr;
+  return enginePasswords(profile, decryptor);
 }
 template <class Key>
 SensitiveImport chromiumAutofillImpl(const Path &profile, const Key &key,
