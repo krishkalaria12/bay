@@ -55,6 +55,12 @@ export function TabsPane() {
       <SectionHeader title="Tab groups" />
       <Group>
         <SettingToggle setting="autoGroupMeetingTabs" settingId={SETTINGS.autoGroupMeetingTabs.id} title={SETTINGS.autoGroupMeetingTabs.title} />
+        <SettingToggle
+          setting="tidyTabTitles"
+          settingId={SETTINGS.tidyTabTitles.id}
+          title={SETTINGS.tidyTabTitles.title}
+          description={'When you pin a tab, suggest a shorter name ("Inbox – Gmail" becomes "Gmail"). The original title stays one click away as Reset Name.'}
+        />
       </Group>
 
       <AwakeSites />

@@ -63,6 +63,7 @@ export const SETTINGS = {
   extendWebsiteColor: { id: "tabs.extendWebsiteColor", pane: "tabs", title: "Extend website color into tab bar", words: "colour tint" },
   autoPictureInPicture: { id: "tabs.autoPictureInPicture", pane: "tabs", title: "Automatic Picture in Picture", words: "pip video call" },
   autoGroupMeetingTabs: { id: "tabs.autoGroupMeetingTabs", pane: "tabs", title: "Automatically group tabs for meetings", words: "tab groups" },
+  tidyTabTitles: { id: "tabs.tidyTabTitles", pane: "tabs", title: "Tidy tab titles when pinning", words: "tidy short name rename pinned arc max" },
   awakeSites: {
     id: "tabs.awakeSites",
     pane: "tabs",

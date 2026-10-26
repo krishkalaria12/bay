@@ -2,6 +2,7 @@ import { folderInsertionBeforeId, folderTabIds, withFolderPlacementUndo } from "
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { autoGroupName } from "./groupNames";
+import { tidyTabTitle } from "../lib/tidyTabTitle";
 import { leaveGroups, orderSections, placeBlock, syncGroupOrder } from "./groups";
 import {
   activeTabId,
@@ -412,6 +413,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
   const movingSet = new Set(moving);
 
   const tabs = { ...s.tabs };
+  const tidyEnabled = !!s.settings?.tidyTabTitles;
   for (const id of moving) {
     const t = tabs[id]!;
     // A tab into a group leaves the Pinned section; one placed with no word on it keeps its row.
@@ -420,7 +422,13 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     if (t.pinned === p.pinned && !!t.pinnedRow === row && t.folderId === folderId) continue;
     const pinnedUrl = p.pinned || row ? (pinnedPage(t) ? t.pinnedUrl : t.url || null) : null;
     const { pinnedRow: _, folderId: _f, ...rest } = t;
-    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
+    const wasRow = !!t.pinnedRow;
+    let extra: { customTitle?: string | null } = {};
+    if (tidyEnabled && row && !wasRow && !t.customTitle) {
+      const short = tidyTabTitle(t.title, t.url);
+      if (short && short !== t.title) extra = { customTitle: short };
+    }
+    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}), ...extra };
   }
   const rest = w.tabIds.filter((id) => !movingSet.has(id));
   let at: number;
