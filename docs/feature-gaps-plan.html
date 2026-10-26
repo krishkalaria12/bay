@@ -615,10 +615,10 @@
               Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
               folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>. The ten small
               ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2), Boosts (Phase 3), Share Quote and collection link sharing are implemented and
-              listed under <a href="#have">Already in Bay</a>; <strong>5 gaps</strong> remain.
-
+              listed under <a href="#have">Already in Bay</a>. Easel web sharing is also implemented behind an environment flag that is off by default;
+              <strong>4 gaps</strong> remain.
             </p>
-            <p>The gaps left are <strong>sharing and Arc Max</strong>: Easel links, and the "tidy" AI features. Each needs a decision before work starts.</p>
+            <p>The gaps left are <strong>Arc Max</strong>: the "tidy" AI features. Each needs a decision before work starts.</p>
             <p>Phase 1 landed before Arc's sunset reminders start on 23 November. The phases left don't depend on Arc's dates.</p>
           </div>
         </section>
@@ -731,9 +731,8 @@
           <h2 id="missing-h">What's missing</h2>
           <p class="prose">
             "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
-            not run for this review. The date is when Arc shipped the feature. Gaps 1–17 are implemented and moved to <a href="#have">Already in Bay</a>; the
-            numbers of the rest are unchanged.
-
+            not run for this review. The date is when Arc shipped the feature. Gaps 1–17 are implemented; item 18 is implemented behind a flag. They moved to
+            <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
           </p>
           <div class="table-wrap">
             <table class="gaps">
@@ -751,15 +750,6 @@
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>18</td>
-                  <td>Share an Easel as a web page</td>
-                  <td>Jun 2022</td>
-                  <td>Export as a PNG or HTML file</td>
-                  <td class="c"><span class="chip l">L</span></td>
-
-                  <td class="c">4</td>
-                </tr>
                 <tr>
                   <td>19</td>
                   <td>Tidy Tab Titles: short names for pinned tabs</td>
@@ -878,9 +868,8 @@
             </li>
           </ol>
           <p class="prose">
-            Phases 1–3, Share Quote and collection link sharing are implemented. The remaining work in Phases 4 and 5 starts only after their decisions are
-            made.
-
+            Phases 1–3, Share Quote and collection link sharing are implemented. Easel web sharing is done behind a flag. The remaining work in Phase 5 starts
+            only after its decisions are made.
           </p>
 
           <article class="phase gate" id="p4" aria-labelledby="p4-h">
@@ -894,21 +883,9 @@
               <a href="#have">Already in Bay</a>; it stays off until its R2 host is provisioned.
             </p>
 
-            <div class="item">
-              <h4>18 · Share an Easel as a web page <span class="chip l">L</span></h4>
-              <p>
-                Easels hold images, so they don't fit in a link. This needs storage somewhere: a hosted bucket with unlisted links, or the user's own iCloud
-                Drive public link. Until decided, the HTML export stays the way to share.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>library/export.ts</code>, plus whatever host is chosen</dd>
-              </dl>
-            </div>
             <h4 class="exit">Exit criteria</h4>
             <ul>
-              <li>Deploy the collection share page; Easel hosting either decided or recorded as out of scope.</li>
-
+              <li>Deploy the collection share page; provision Easel R2 storage and deploy its opt-in Worker.</li>
             </ul>
           </article>
 
