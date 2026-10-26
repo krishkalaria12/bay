@@ -82,7 +82,12 @@ python -m unittest discover -s engine/chromium -p 'test_*.py' -v
 K8's stage 1 Linux import fixtures also run on macOS:
 
 ```sh
-python3 scripts/linux/test-import.py
+python3 scripts/linux/test-import.py # Mac, including NSS fixture generation
+# Linux or Mac, without the Mac-only NSS generator:
+python3 scripts/linux/test-import.py --services-only
+python3 packages/sync/linux/tests/service-test.py
+bash packages/sync/scripts/check-linux-crypto.sh
+python3 packages/sync/linux/tests/recovery-kit-test.py
 python3 scripts/windows/test-native.py
 ```
 
@@ -92,11 +97,26 @@ discovery, import consent/cache behavior, native data envelopes, fake libsecret
 and KWallet protocols, CBC formats and NSS `key4.db` reading. The NSS fixture
 keeps another initialized profile alive to check isolation. It never opens a
 real browser profile or keyring, configures GN, or builds/runs a Linux binary.
-The second command checks the existing shared reader and sync compatibility
-fixtures. D1's BoringSSL sync backend is merged. Linux still needs the sync
-advertisement, UI dispatch and password-reader wiring recorded as the K8
-follow-up in `linux-work-split.md`; the data target does not advertise BaySync
-on Linux yet.
+The sync service fixture compiles the Linux crypto and key-store policy with a fake
+Secret Service, including session-only recovery and stale export refusal. On macOS
+it uses explicit Linux test defines and produces a Mac executable. The crypto check
+uses OpenSSL by default; set `BORINGSSL_ROOT` and `BORINGSSL_CRYPTO_LIBRARY` to test
+the pinned production library. The final command checks shared reader and sync
+compatibility fixtures. Linux sync advertisement, coordinator authority, UI dispatch
+and password-reader wiring are source-complete. The browser supplies its current
+OSCrypt encryptor, including desktop v11 and portal v12 providers; absent keys
+produce an incomplete read rather than deleting synced passwords. CI runs the
+services-only data facade fixtures on Linux, including fake desktop/portal providers.
+Full native linking and real desktop keyring/picker execution remain unverified.
+
+Verification on 26 Oct 2026 also generated a scratch Linux x64 GN graph for the
+affected data/WebUI targets, passed their header dependency checks, and built the
+generated `native_host.mojom-webui.js` resource. Thirteen host, test and data source
+units passed Linux x64 release and DCHECK syntax checks with the pinned sysroot
+and existing Mac-generated configuration headers. These checks establish the
+affected graph and source compatibility, not a linked Linux browser or executed
+native UI tests. Portable fixture execution and the web build/typechecks passed;
+live keyring, portal and picker behavior still need a Linux desktop.
 
 Once the Linux engine tree is prepared and GN-generated, build and run the
 native helper tests on Linux:
@@ -110,6 +130,7 @@ autoninja -C out/Release_GN_x64 \
   chrome/browser/bay/webui:shell_ui_options_unittests \
   chrome/browser/bay/webui:notifications_unittests \
   chrome/browser/bay/webui:native_host_unittests \
+  chrome/browser/bay/webui:sync_ui_linux_unittests \
   chrome/browser/bay/webui:frame_linux_unittests \
   chrome/browser/bay/webui:window_button_layout_linux_unittests \
   chrome/browser/bay/webui:quit_shortcut_linux_unittests \
@@ -123,7 +144,7 @@ autoninja -C out/Release_GN_x64 \
   chrome/browser/bay/webui:autostart_linux_unittests \
   chrome/browser/bay/webui:app_services_linux_unittests \
   chrome/browser/bay/webui:window_placement_unittests
-for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests frame_linux_unittests window_button_layout_linux_unittests quit_shortcut_linux_unittests secret_storage_linux_unittests keychain_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests default_browser_unittests autostart_linux_unittests app_services_linux_unittests window_placement_unittests; do
+for test in pip_platform_unittests external_apps_linux_unittests runtime_unittests page_security_unittests shell_ui_options_unittests notifications_unittests native_host_unittests sync_ui_linux_unittests frame_linux_unittests window_button_layout_linux_unittests quit_shortcut_linux_unittests secret_storage_linux_unittests keychain_unittests document_store_unittests shell_files_unittests shell_appearance_unittests shell_clipboard_unittests default_browser_unittests autostart_linux_unittests app_services_linux_unittests window_placement_unittests; do
   out/Release_GN_x64/$test || break
 done
 ```

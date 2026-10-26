@@ -1,7 +1,7 @@
 # Linux port: work split
 
 How the rest of the [Linux port plan](linux-port-plan.html) splits between three developers, **K**, **D** and **A**, so all three can work in parallel.
-Written 23 Oct 2026, against `feat/linux` at `398b8d0e`. Status updated 24 Oct 2026: K1–K4, K8–K9, D1, A2 and A3 are source-complete. Linux sync integration remains a K8 follow-up before stage 2. Keep assignments with their current owners.
+Written 23 Oct 2026, against `feat/linux` at `398b8d0e`. Status updated 26 Oct 2026: K1–K4, K8–K9, D1, A2, A3 and the K8 Linux sync integration follow-up are source-complete. Linux native linking and desktop acceptance remain stage 2 work. Keep assignments with their current owners.
 
 The work runs in two stages:
 
@@ -14,7 +14,7 @@ The code split follows ownership, so each person mostly works in their own files
 - **D** owns sync crypto and the sync key store.
 - **A** owns the web UI gaps, packaging and CI.
 
-Sizes are rough: S = 1, M = 2, L = 3, XL = 5. K has completed the estimated 32 stage 1 points, D has completed 5 and A has completed 11. The remaining Linux sync integration follow-up is unestimated. These totals follow the item estimates below. In stage 2, D runs 10 points of testing, A runs 9 points and adds 2 points of CI, and K handles engine, host, import and keychain fixes as needed.
+Sizes are rough: S = 1, M = 2, L = 3, XL = 5. K has completed the estimated 32 stage 1 points, D has completed 5 and A has completed 11. The Linux sync integration follow-up completed on 26 Oct 2026 was not included in these estimates. These totals follow the item estimates below. In stage 2, D runs 10 points of testing, A runs 9 points and adds 2 points of CI, and K handles engine, host, import and keychain fixes as needed.
 
 A takes the former D4 and D5 as A2 and A3, plus the former K7 as A4. K takes the former D2 as K8 and the former A1, originally D3, as K9. K1–K4, K6 and D1 keep their identifiers; K7 remains the former CI task now owned by A4.
 
@@ -109,17 +109,17 @@ Use these agreements so ownership changes do not block implementation:
 
 - [x] **K9 · BayKeychain (M = 2), previously A1 and D3.** Code complete 24 Oct 2026. A document-owned shared service dispatches `get`, `set` and `delete` to Windows Credential Manager or Linux libsecret, with per-user connected-account credentials separate from Safe Storage and sync keys. Both Linux host roles advertise the module and methods. Missing credentials, locked/unavailable stores, argument validation, worker ordering and teardown have fake-backend test coverage. Changed Linux sources and tests pass release/DCHECK syntax checks; native test execution and real keyring checks remain stage 2 work.
 
-- [ ] **K8 follow-up · Linux sync integration.** D1's sources are merged, but Linux still omits BaySync from `data_services.cc` and `NativeHost` advertisement/dispatch. Own and dispatch `SyncUI` before worker calls, wire the Linux password reader into `SyncService.cpp`, and update the tests that currently require Linux sync to be unavailable. This is remaining code work, not runtime validation.
+- [x] **K8 follow-up · Linux sync integration.** Source-complete 26 Oct 2026. The data facade configures and advertises BaySync, and NativeHost routes its methods with coordinator-only mutation and password-read authority. Each Linux host owns `SyncUI` on the UI sequence, before worker dispatch, with native picker cancellation on teardown. Password sync uses the loaded-profile resolver, existing importer and Chromium's current encryptor for basic-store, desktop and portal formats; an incomplete decryption remains `null` so reconciliation cannot treat it as deletion. Regression coverage includes module dispatch, encrypted vault round trips, profile rejection, password fixtures, worker routing and picker lifecycle. Linux-target source checks and portable fixture execution do not establish Linux linkage or desktop behavior.
 
 ### D: sync crypto and key store
 
-- [x] **D1 · Sync crypto and key store (L+M = 5).** Source-complete and merged into `feat/linux`, verified 24 Oct 2026. Linux feature wiring remains in the explicit K8 follow-up above; native and desktop validation remain stage 2 work.
+- [x] **D1 · Sync crypto and key store (L+M = 5).** Source-complete and merged into `feat/linux`, verified 24 Oct 2026. Linux feature wiring is complete in the K8 follow-up above; native and desktop validation remain stage 2 work.
   - Split `packages/sync/windows/SyncCrypto.cpp` into backends: CNG on Windows, BoringSSL on Linux.
   - The Linux backend must match `tests/golden.json` byte for byte.
   - `SyncKeyStore` on libsecret. With no Secret Service, ask for the recovery phrase each session and never write the key to disk.
   - A Linux version of `RecoveryKitWindows.cpp`.
   - `newDeviceId` and `deviceName` as snapshots.
-  - **23 Oct 2026:** D1 sources and portable checks were implemented on `feat/linux-d-sync`. **24 Oct 2026 verification:** implementation commit `ca1e9b95` landed on `feat/linux` through merge `d2b5cf60`; the source milestone is complete. Crypto uses the exact Chromium BoringSSL pin and matches the golden envelope. Fake Secret Service tests cover memory-only sessions and recovery; recovery exports have private files and an asynchronous picker adapter. K8 has opened the import bridge; the remaining Linux sync advertisement, `SyncUI` dispatch and password-reader integration are tracked as the K8 follow-up above. Chromium-dependent syntax and native tests need the stage 2 checkout/sysroot; no engine or desktop runtime checks have run. Details and commands are in the dated Phase 6 progress in the plan.
+  - **23 Oct 2026:** D1 sources and portable checks were implemented on `feat/linux-d-sync`. **24 Oct 2026 verification:** implementation commit `ca1e9b95` landed on `feat/linux` through merge `d2b5cf60`; the source milestone is complete. Crypto uses the exact Chromium BoringSSL pin and matches the golden envelope. Fake Secret Service tests cover memory-only sessions and recovery; recovery exports have private files and an asynchronous picker adapter. K8 has opened the import bridge; Linux sync advertisement, `SyncUI` dispatch and password-reader integration were completed by the K8 follow-up on 26 Oct 2026. Chromium-dependent syntax and native tests need the stage 2 checkout/sysroot; no engine or desktop runtime checks have run. Details and commands are in the dated Phase 6 progress in the plan.
 
 ### A: UI and shipping
 
@@ -185,8 +185,8 @@ A during stage 2:
 | T1 engine build     | K4                                        | The build needs the layer and branding patches                                                                |
 | A3 final layout     | K4                                        | Binary name and paths; until then, use the names agreed up front                                              |
 | K2 UI side          | K2 snapshot field in `nativeContracts.ts` | Agree the field before coding against it                                                                      |
-| K8 sync follow-up   | D1, now merged                            | Advertise and dispatch sync, own its UI adapter and connect Linux password reading before stage 2              |
+| K8 sync follow-up   | D1, now merged                            | Complete: sync dispatch, UI ownership and browser-backed password decryption; native acceptance remains        |
 | A4 CI               | T1                                        | CI builds the app from the archived engine                                                                    |
 | Beta (Phase 8 exit) | T8 and A4                                 | Every Mac test script has a Linux CI run, and the prerelease channel has no known crash for one release cycle |
 
-All three developers can start their stage 1 work in parallel using the agreed names above. K8's remaining sync integration can use D1's merged Linux backend; final Linux linking remains a stage 2 check. K9 can use a fake secret backend independently of D1, and A3 uses fixture archives until T1 provides the real engine archive.
+All three developers can start their stage 1 work in parallel using the agreed names above. K8's sync integration now uses D1's merged Linux backend; final Linux linking remains a stage 2 check. K9 can use a fake secret backend independently of D1, and A3 uses fixture archives until T1 provides the real engine archive.

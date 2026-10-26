@@ -2330,12 +2330,14 @@ python3 scripts/engine.py --platform linux archive   <span class="c"># bay-engin
               names are host snapshots; device IDs remain freshly generated local UUIDs.
             </p>
             <p class="prose">
-              <code>//chrome/browser/bay/data:sync_services</code> and <code>//chrome/browser/bay/webui:sync_ui_linux</code> are independent Linux targets; the
-              package overlay copies the Linux sources. K8 has opened the import bridge, but Linux sync integration remains code work. The host must advertise
-              and dispatch BaySync, own <code>SyncUI</code> and dispatch it before routing sync calls to workers; the adapter is not dispatched by the current
-              Linux host. Password reading in <code>SyncService.cpp</code> still throws instead of calling the Linux importer. The work split records these gaps
-              as a K8 follow-up before stage 2. No engine build, desktop launch or live keyring test has run. Chromium-dependent rendering, clipboard and picker
-              release/DCHECK syntax and native tests await a Chromium checkout and sysroot.
+              <strong>Linux sync integration, 26 Oct 2026.</strong> The data facade configures, advertises and dispatches BaySync on Linux. NativeHost enforces
+              coordinator ownership for mutations and password reads, owns <code>SyncUI</code> per document, and dispatches asynchronous native folder/recovery
+              pickers on the UI sequence before data workers. The shared sync dispatcher now lives with the importer in <code>data_services</code>, keeping the
+              native dependency graph acyclic. Password sync resolves only loaded profiles and uses the existing Linux importer; incomplete decryption returns
+              null rather than an empty or partial list that could delete another device's passwords. Regression coverage includes encrypted vault dispatch, key
+              lifecycle, profile authority, password fixtures, picker cancellation and reentrant host teardown. The Ubuntu workflow runs Linux crypto,
+              fake-keyring service and recovery-export fixtures. Full Linux engine linking, desktop launch and live keyring/picker acceptance remain stage 2
+              work.
             </p>
             <p class="prose">
               Portable checks pass: the exact Chromium 154.0.8037.58 BoringSSL pin
