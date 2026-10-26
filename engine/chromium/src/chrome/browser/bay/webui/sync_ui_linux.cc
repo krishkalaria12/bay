@@ -18,6 +18,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/base_window.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/shell_dialogs/selected_file_info.h"
 
 namespace bay {
@@ -157,7 +158,7 @@ bool SyncUI::Dispatch(const HostContext& context,
     return false;
   }
   const bool folder = method == "chooseFolder";
-  if ((folder && (args.size() > 1 || (!args.empty() && !args[0].is_null() &&
+  if ((folder && (args.size() > 1 || (!args.empty() && !args[0].is_none() &&
                                       !args[0].is_string()))) ||
       (!folder &&
        (args.size() != 1 || !args[0].is_string() ||

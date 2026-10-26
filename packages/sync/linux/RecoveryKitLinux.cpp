@@ -146,7 +146,7 @@ void copyRecoveryKitFile(const std::filesystem::path &path) {
     throw Failure("clipboard", "Recovery kit file is unavailable");
   ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
   writer.MarkAsConfidential();
-  writer.WriteFilenames(
-      {ui::FileInfo(base::FilePath(path.string()), base::FilePath())});
+  writer.WriteFilenames(ui::FileInfosToURIList(
+      {ui::FileInfo(base::FilePath(path.string()), base::FilePath())}));
 }
 } // namespace bay::sync
