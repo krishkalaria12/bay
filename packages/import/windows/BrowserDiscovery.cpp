@@ -282,6 +282,8 @@ std::vector<Browser> linuxBrowsers(const Environment &environment) {
   for (auto &product : chromiumProducts)
     add(product.id, product.name, config / product.directory, identity(product),
         false, product.rootProfile);
+  add("chromium:snap", "Chromium (Snap)",
+      home / "snap/chromium/common/chromium", "chromium");
   add("firefox", "Firefox", home / ".mozilla/firefox", "firefox", true);
   // Firefox 147+ uses XDG for new installations; existing ones keep .mozilla.
   add("firefox:xdg", "Firefox (XDG)", config / "mozilla/firefox", "firefox",
@@ -334,7 +336,8 @@ Json linuxAvailable(const fs::path &profile, bool firefox) {
   add("bookmarks", firefox ? file("places.sqlite")
                            : file("Bookmarks") || file("AccountBookmarks"));
   add("history", file(firefox ? "places.sqlite" : "History"));
-  add("passwords", file(firefox ? "logins.json" : "Login Data"));
+  add("passwords", firefox ? file("logins.json")
+                           : file("Login Data") || file("Login Data For Account"));
   add("tabs", firefox
                   ? dir("sessionstore-backups") ||
                         file("sessionstore.jsonlz4") || file("sessionstore.js")

@@ -78,6 +78,7 @@ void roots(const fs::path &temporary) {
   for (auto name : {".mozilla/firefox", "snap/firefox/common/.mozilla/firefox",
                     "xdg/mozilla/firefox", ".zen", "xdg/zen"})
     fs::create_directories(home / name);
+  put(home / "snap/chromium/common/chromium/Default/Login Data For Account");
   auto flatpak = home / ".var/app";
   for (auto name :
        {"org.chromium.Chromium/config/chromium",
@@ -92,11 +93,19 @@ void roots(const fs::path &temporary) {
   auto all = d::linuxBrowsers({home, config});
   for (auto id :
        {"chrome", "chromeBeta", "chromeDev", "chromeCanary", "chromium",
-        "brave", "vivaldi", "opera", "edge", "helium", "firefox", "firefox:xdg",
-        "firefox:snap", "zen", "zen:legacy"})
+        "chromium:snap", "brave", "vivaldi", "opera", "edge", "helium",
+        "firefox", "firefox:xdg", "firefox:snap", "zen", "zen:legacy"})
     require(!browser(all, id).root.empty(), "native root missing");
   require(browser(all, "helium").root == config / "net.imput.helium",
           "Helium directory guessed");
+  const auto &snap = browser(all, "chromium:snap");
+  require(snap.root == home / "snap/chromium/common/chromium" &&
+              snap.productId == "chromium" && !snap.firefox,
+          "Snap Chromium source path or secret identity differs");
+  auto snapProfiles = d::linuxProfiles(snap);
+  require(snapProfiles.size() == 1 &&
+              includes(snapProfiles[0]["available"], "passwords"),
+          "Snap Chromium account passwords unavailable");
   require(browser(all, "chromeBeta").productId == "chrome" &&
               browser(all, "chromeCanary").productId == "chrome",
           "branded channel secret identity differs");
@@ -113,7 +122,7 @@ void roots(const fs::path &temporary) {
     firefox += entry.productId == "firefox";
     zen += entry.productId == "zen";
   }
-  require(chromium == 4 && firefox == 5 && zen == 5,
+  require(chromium == 5 && firefox == 5 && zen == 5,
           "packaged installations missing or conflated");
   require(
       browser(all, "firefox:xdg").root == config / "mozilla/firefox" &&
@@ -295,6 +304,16 @@ void available(const fs::path &temporary) {
   require(firefox ==
               Json({"bookmarks", "history", "passwords", "tabs", "cookies"}),
           "Firefox availability changed");
+  fs::remove(root / "Login Data");
+  require(!includes(d::linuxAvailable(root, false), "passwords"),
+          "missing login databases advertised passwords");
+  put(root / "Login Data For Account");
+  require(includes(d::linuxAvailable(root, false), "passwords"),
+          "account-store-only passwords unavailable");
+  fs::remove(root / "Login Data For Account");
+  fs::create_directories(root / "Login Data For Account");
+  require(!includes(d::linuxAvailable(root, false), "passwords"),
+          "directory advertised as account password database");
   fs::remove(root / "History");
   fs::create_directories(root / "History");
   require(!includes(d::linuxAvailable(root, false), "history"),
