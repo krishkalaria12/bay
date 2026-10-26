@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Bay shared WebGL shaders plan</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --foreground: light-dark(#28242b, #ede7ef);
+        --muted-foreground: light-dark(#645c69, #b8aebe);
+        --border: light-dark(#d9d0db, #4b414f);
+        --card: light-dark(#f3edf4, #2d2531);
+        --primary: light-dark(#70485f, #e3accb);
+        --radius: 10px;
+        --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        line-height: 1.6;
+      }
+      main {
+        width: 100%;
+        max-width: 1020px;
+        margin: auto;
+        padding: 0 0 28px;
+      }
+      h1 {
+        font-size: clamp(27px, 5vw, 40px);
+        line-height: 1.14;
+        letter-spacing: -0.035em;
+        margin: 12px 0 16px;
+        font-weight: 650;
+      }
+      h2 {
+        font-size: 23px;
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+        margin: 36px 0 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 17px;
+        line-height: 1.4;
+        margin: 24px 0 8px;
+      }
+      p {
+        margin: 9px 0 14px;
+      }
+      p,
+      li {
+        max-width: 86ch;
+      }
+      .meta,
+      .note,
+      figcaption {
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+      .lead {
+        font-size: 18px;
+        max-width: 72ch;
+      }
+      a {
+        color: var(--primary);
+        text-underline-offset: 3px;
+      }
+      a:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--primary);
+        outline-offset: 4px;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px 20px;
+        margin: 22px 0 28px;
+        font-size: 14px;
+      }
+      code {
+        font: 0.87em var(--font-mono);
+        overflow-wrap: anywhere;
+      }
+      ul,
+      ol {
+        padding-left: 23px;
+        margin: 10px 0 18px;
+      }
+      li {
+        margin: 7px 0;
+      }
+      .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        margin: 15px 0 22px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        text-align: left;
+      }
+      th {
+        font-weight: 650;
+        background: var(--card);
+      }
+      th,
+      td {
+        padding: 12px 10px;
+        vertical-align: top;
+        border-bottom: 1px solid var(--border);
+      }
+      th:first-child,
+      td:first-child {
+        padding-left: 0;
+      }
+      th {
+        padding-top: 9px;
+        padding-bottom: 9px;
+      }
+      td p {
+        margin: 0;
+      }
+      details {
+        border-bottom: 1px solid var(--border);
+        padding: 12px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      details[open] summary {
+        margin-bottom: 12px;
+      }
+      .lab {
+        padding: 20px;
+        background: var(--card);
+        border-radius: var(--radius);
+        margin: 22px 0;
+      }
+      .lab-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .sample {
+        min-width: 0;
+      }
+      .sample canvas {
+        width: 100%;
+        height: 154px;
+        display: block;
+        border-radius: 8px;
+      }
+      .sample p {
+        margin: 5px 0;
+        font-size: 13px;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 10px 18px;
+        flex-wrap: wrap;
+        margin-top: 15px;
+      }
+      input[type="range"] {
+        width: 170px;
+        accent-color: var(--primary);
+      }
+      button {
+        font: inherit;
+        color: var(--foreground);
+        background: transparent;
+        border: 1px solid var(--border);
+        padding: 5px 11px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 12px;
+        margin: 24px 0;
+      }
+      .stage-number {
+        font: 600 20px var(--font-mono);
+        color: var(--primary);
+        padding-top: 2px;
+      }
+      .stage h3 {
+        margin: 0 0 8px;
+      }
+      .stage p {
+        margin: 6px 0 10px;
+      }
+      .sources {
+        font-size: 13px;
+      }
+      .sources li {
+        margin-bottom: 12px;
+      }
+      .stop {
+        border-left: 3px solid var(--primary);
+        padding-left: 17px;
+        margin: 22px 0;
+      }
+      footer {
+        margin-top: 30px;
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
+      }
+      @media (max-width: 560px) {
+        h1 {
+          font-size: 30px;
+        }
+        h2 {
+          font-size: 21px;
+        }
+        table {
+          font-size: 13px;
+        }
+        th,
+        td {
+          padding: 10px 7px;
+        }
+        .lab {
+          padding: 16px;
+        }
+        .lab-grid {
+          grid-template-columns: 1fr;
+        }
+        .sample canvas {
+          height: 130px;
+        }
+        .stage {
+          grid-template-columns: 28px 1fr;
+          gap: 9px;
+        }
+        .stage-number {
+          font-size: 16px;
+        }
+      }
+      @media print {
+        details {
+          display: block;
+        }
+        details > * {
+          display: block !important;
+        }
+        nav,
+        .controls {
+          display: none;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+        .stage,
+        table {
+          break-inside: avoid;
+        }
+        a {
+          color: inherit;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="meta">Implementation proposal · researched 26 October 2026 · plan only</p>
+        <h1>Shared shaders.<br />Grain that actually shows.</h1>
+        <p class="lead">
+          Give Windows and Linux one WebGL2 backend in <code>@bay/shaders</code>, retain macOS Metal, and restore the fine, static grain associated with Arc and
+          Ardia. Ship active effects first, then add Ardia's useful theme treatments.
+        </p>
+        <p>
+          This document selects the recommended options. Implementation begins after the desktop platform branches land. No shader implementation, benchmark
+          result, commit, or deployment is claimed here.
+        </p>
+      </header>
+      <nav aria-label="Plan sections">
+        <a href="#current">Current state</a><a href="#references">Ardia and Arc</a><a href="#decisions">Chosen decisions</a><a href="#steps">Implementation</a
+        ><a href="#tests">Acceptance</a><a href="#rollout">Rollout and stop criteria</a>
+      </nav>
+      <section id="current">
+        <h2>Objective and current state</h2>
+        <p>
+          Keep one public component contract for <code>WindowBackdrop</code>, <code>PowerUp</code>, <code>AreaLight</code>, and <code>EdgeLight</code>. Windows
+          and Linux share GLSL, color math, scheduling, and fallback code. macOS keeps its Metal renderer and native window materials. Visible grain must work
+          in solid and glass themes without becoming an idle animation.
+        </p>
+        <p class="note">
+          Inspected Bay <code>origin/main</code> at <code>82386a9d2c00377af47e2c240437e83e47b931b7</code> through <code>git show</code>, and
+          <code>origin/feat/linux</code> plus the Linux checkout at <code>d0a6acca6d5c553bb527dfd9d65dd1d8c66bf0a5</code>. These are different integration
+          states. The main checkout and Windows conflict worktree were not modified.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Verified finding</th>
+                <th>Implementation consequence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Main's shader package exports native views through <code>expo-modules-core</code>. Main has no <code>packages/platform</code>, shared
+                  <code>types.ts</code>, or shader <code>index.web.tsx</code>.
+                </td>
+                <td>
+                  Land the desktop platform and web-host prerequisites before implementing this plan. The documentation can land independently.
+                  <a data-bay-main="packages/shaders/src/index.tsx">Main native entry</a>.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  The Linux branch adds <code>src/types.ts</code>, <code>index.web.tsx</code>, and browser export conditions. Its backdrop is a CSS
+                  gradient/tint; it ignores grain and <code>tintLightness</code>. The other three effects return <code>null</code>.
+                </td>
+                <td>
+                  Extend this existing web entry rather than creating platform-specific shader packages.
+                  <a data-bay-linux="packages/shaders/src/index.web.tsx">Web fallback</a>.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Metal already mixes two stops in OKLab, hashes cells in logical points, and multiplies grain over the gradient. Native JS defaults are
+                  <code>grainOpacity=0.09</code>, <code>grainScale=1</code>. Glass mode sets <code>metalView.isHidden=true</code>.
+                </td>
+                <td>
+                  Port the existing contract and math. Add a separate static grain layer to native glass, where the current shader is hidden.
+                  <a data-bay-main="packages/shaders/ios/WindowBackdropView.swift#L33-L45">Glass path</a>,
+                  <a data-bay-main="packages/shaders/ios/WindowBackdropView.swift#L118-L134">grain math</a>.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Dark theme grain is <code>0.006</code>; light is <code>0.05</code>; custom grain maps to <code>value × 0.12</code>. The editor dial uses
+                  <code>value × 0.45</code>.
+                </td>
+                <td>
+                  The weak dark setting and the glass path explain additional grain gaps in code. Change the default and make preview intent explicit; do not
+                  assume a WebGL port alone fixes visibility. <a data-bay-main="apps/browser/src/lib/theme.ts">Theme</a>,
+                  <a data-bay-main="apps/browser/src/components/spaces/ThemeEditor.tsx">editor</a>.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Prioritize real callers</h3>
+        <ul>
+          <li>
+            <code>apps/browser/src/App.tsx</code>, <code>components/layout/SpaceSwipe.tsx</code>, and
+            <code>components/littleBay/LittleBayWindow.tsx</code> render themed backdrops. Space swipe mounts additional backdrop pages during paging.
+          </li>
+          <li>
+            <code>components/ntp/Postcard.tsx</code> renders a backdrop at 150° with grain <code>0.1</code>.
+            <code>components/spaces/ThemeEditor.tsx</code> renders the grain dial preview.
+          </li>
+          <li>
+            <code>components/onboarding/Intro.tsx</code> actively renders <code>PowerUp</code> with <code>DIA_SPECTRUM</code>, speed <code>0.8</code>, origin
+            <code>0.5</code>.
+          </li>
+          <li>
+            No app JSX callers of <code>AreaLight</code> or <code>EdgeLight</code> were found in the inspected checkout. Port and test their exports after the
+            active effects; do not add new ambient lighting to product screens just to demonstrate parity.
+          </li>
+        </ul>
+      </section>
+      <section id="references">
+        <h2>Ardia and Arc as references</h2>
+        <p>
+          Ardia was refreshed and inspected at <code>15011c4a858abfa113048a116a29457183205c06</code>. Keep it as a source-backed design and engineering
+          reference, with the demo and native application distinguished.
+        </p>
+        <ul>
+          <li>
+            <a data-ardia="apps/demo/src/shims/web/gl/sources.ts">Demo GLSL</a> manually expresses the backdrop, PowerUp, and halo.
+            <a data-ardia="apps/demo/vite.config.ts#L95-L107">Vite aliases</a> route <code>@ardia/shaders</code> to
+            <a data-ardia="apps/demo/src/shims/shaders.tsx">demo shims</a>. This is not automatic Metal transpilation or an established production Windows/Linux
+            shader backend.
+          </li>
+          <li>
+            <a data-ardia="apps/demo/src/shims/web/gl/surface.ts">GLSurface</a> uses WebGL2, low-power context attributes, premultiplied alpha, sRGB output,
+            resource cleanup, and context restoration. <a data-ardia="apps/demo/src/shims/web/gl/clock.ts">Its clock and sizing</a> cover shared scheduling,
+            hidden documents, on-screen observation, and fractional DPR changes. Reuse these approaches, adding Bay's host visibility and live accessibility
+            changes.
+          </li>
+          <li>
+            <a data-ardia="packages/shaders/ios/WindowBackdropView.swift#L191-L294">Native gradient layers</a>,
+            <a data-ardia="packages/shaders/ios/WindowBackdropView.swift#L296-L377">seeded texture tiles</a>, and
+            <a data-ardia="packages/shaders/src/index.tsx#L66-L79">ThemeSwatch</a> offer useful additions. The native source has grain, sand, denim, and tweed.
+            Its demo shader wrapper does not implement that full native theme contract.
+          </li>
+          <li>
+            Current Ardia exports backdrop, PowerUp, and ThemeSwatch. Its <a data-ardia="README.md#L161-L198">README</a> says the older AreaLight reconstruction
+            was removed. Bay's retained Metal AreaLight and EdgeLight are the reference for those ports.
+          </li>
+          <li>
+            Arc is a visual reference for fine texture, restrained color fields, and readable chrome. Arc's source is not public; this plan makes no claim about
+            its exact grain algorithm. Ardia's names and comments describe its reconstruction, not proof of Arc's implementation.
+          </li>
+        </ul>
+        <h3>Source and attribution decision</h3>
+        <p>
+          Ardia's <a data-ardia="NOTICE">NOTICE</a> and <a data-ardia="README.md#L225-L230">license section</a> distinguish its Apache-2.0 own source from the
+          GPL-3.0 distributed app/engine. Bay's <code>NOTICE</code> declares Apache-2.0. Adapt only the relevant own-source files, retain notices and
+          <a data-ardia="LICENSE.Apache-2.0">Apache license</a>, and record paths, SHA, and modifications in <code>packages/shaders/PROVENANCE.md</code> plus
+          Bay's <code>NOTICE</code> where material is copied. Do not import Ardia's engine or app distribution.
+        </p>
+        <p>
+          Bay shader comments already attribute noise/hash or SDF approaches to Dave Hoskins and Inigo Quilez; Ardia documents Dia-derived reconstruction.
+          Preserve those attributions. Before copying an additional third-party snippet, establish its file-specific source and license. If that provenance
+          cannot be established, implement the required math independently with documented references or keep that addition deferred. Repository-level Apache
+          metadata alone is not evidence for every upstream snippet.
+        </p>
+      </section>
+      <section id="decisions">
+        <h2>Chosen decisions</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Question</th>
+                <th>Selected approach</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Backend</td>
+                <td>
+                  WebGL2 and GLSL ES 3.00 on Windows/Linux; existing Metal on macOS. Handwritten ports, no translation pipeline, WebGL1 compatibility layer,
+                  WebGPU, Three.js, or new rendering framework.
+                </td>
+              </tr>
+              <tr>
+                <td>Public API</td>
+                <td>
+                  Keep existing props and defaults. Move shared public types and <code>DIA_SPECTRUM</code> into shared modules used by both entries; retain
+                  native array adapters. Use <code>@bay/platform</code> for view compatibility. Keep DOM code out of native resolution.
+                </td>
+              </tr>
+              <tr>
+                <td>Static rendering</td>
+                <td>
+                  One lazy WebGL2 producer per document renders static backdrops and copies each completed draw immediately to the component's retained 2D
+                  canvas. Redraw only on inputs, CSS size, DPR, or restoration. Coalesce editor updates to one draw per frame and retain only its latest
+                  request. No full-frame screenshot cache in v1; cache parsed colors, uniforms, and small grain tiles with bounded keys. Measure the copy cost
+                  before enabling broadly.
+                </td>
+              </tr>
+              <tr>
+                <td>Animated rendering</td>
+                <td>
+                  Direct WebGL canvases for finite animations, maximum two animated contexts per document. PowerUp and its optional halo use one effect-owned
+                  context with separate passes/regions. A third animation uses its CSS fallback. Share one RAF scheduler; do not copy full-screen animated
+                  buffers through the static producer.
+                </td>
+              </tr>
+              <tr>
+                <td>Resource sharing</td>
+                <td>
+                  Share source strings, CPU color data, and scheduling. Cache programs and uniform locations only inside their owning context. Never reuse a
+                  WebGLProgram, texture, or uniform location across contexts or windows. Static service plus two animation slots bounds steady WebGL contexts at
+                  three per document.
+                </td>
+              </tr>
+              <tr>
+                <td>Capabilities</td>
+                <td>
+                  <code>vibrancy</code> and <code>windowBackdrop</code> describe native host treatments, independent of shader support. Extend
+                  <code>capabilitiesFor</code> with an optional injected WebGL2 probe result; <code>os.web.ts</code> supplies it and pure tests fake it. Keep
+                  <code>shaders</code> true for working native modules or a successful web probe. Probe one tiny canvas lazily and release it. Every effect
+                  still handles real allocation/compile failures locally; do not gate its CSS fallback on this boolean.
+                </td>
+              </tr>
+              <tr>
+                <td>Failure behavior</td>
+                <td>
+                  Always render a usable CSS base first. Use OKLab CSS gradients when supported, ordinary gradients otherwise, plus a deterministic noise tile.
+                  Use static radial glows/outlines for decorative light fallbacks. A disabled/blocked GPU, compile failure, or lost context must never blank
+                  chrome or block onboarding.
+                </td>
+              </tr>
+              <tr>
+                <td>Quality</td>
+                <td>
+                  Cap effective DPR at 2 and each render target at 8 megapixels, preserving aspect ratio and respecting GL size limits. Grain cells remain in
+                  CSS pixels when resolution is capped. No continuous adaptive quality loop in v1. The low-power context hint is a request, not a guarantee.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Grain contract and visible defaults</h3>
+        <ul>
+          <li>
+            Preserve <code>grainOpacity</code> as strength and <code>grainScale</code> as logical points/CSS pixels per cell. Keep the native package defaults
+            <code>0.09</code> and <code>1</code>. Clamp opacity to 0–1, clamp scale to at least 0.25, and reject nonfinite geometry.
+          </li>
+          <li>
+            Set Bay's dark preset default to <code>0.09</code> and retain light <code>0.05</code>. Retain saved custom mapping <code>grain × 0.12</code> and
+            explicit caller overrides. These are selected starting values to validate in the fixture matrix, not measured perceptual thresholds.
+          </li>
+          <li>
+            Use the existing static multiply treatment for the solid gradient. Compute <code>cell = floor(topLeftCssPosition / grainScale)</code>, independently
+            of framebuffer pixels. Use a fixed seed of zero; no time uniform, random mount seed, or grain flicker. <code>AreaLight.noiseSeed</code> retains its
+            separate effect-specific meaning.
+          </li>
+          <li>
+            For native glass and Windows Mica, layer equivalent static darkening noise above the tint and below content. A black-alpha noise layer expresses the
+            same multiply attenuation without sampling the desktop. Do not cover a real native backdrop with an opaque gradient. On hosts without native
+            treatment, use the themed solid gradient.
+          </li>
+          <li>
+            Honor <code>tintLightness</code> in web tint-gradient generation. Match the native glass tint treatment rather than applying a second tint to
+            already tinted solid <code>windowTint</code> colors.
+          </li>
+          <li>
+            Change the dial's internal sample from <code>value × 0.45</code> to the same shared <code>value × 0.12</code> mapping as the window. Add a labeled
+            enlarged grain inspection sample in development tooling so it remains easy to inspect without misleading the product preview.
+          </li>
+        </ul>
+        <figure class="lab">
+          <div class="lab-grid">
+            <div class="sample">
+              <canvas id="plain" role="img" aria-label="Illustrative plum gradient without grain"></canvas>
+              <p>Without grain</p>
+            </div>
+            <div class="sample">
+              <canvas id="grain" role="img" aria-label="Illustrative plum gradient with adjustable static grain"></canvas>
+              <p>Static grain · <output id="strengthLabel">0.09</output></p>
+            </div>
+          </div>
+          <div class="controls">
+            <label for="strength">Opacity <input id="strength" type="range" min="0" max="0.45" step="0.01" value="0.09" /></label
+            ><button id="mode" type="button">Use light sample</button>
+          </div>
+          <figcaption>
+            Illustration of the chosen control semantics, rendered with deterministic CPU noise. This is not a Bay screenshot, shader parity test, or benchmark.
+          </figcaption>
+        </figure>
+        <h3>Lifecycle rules</h3>
+        <p>
+          Use <code>ResizeObserver</code>, CSS dimensions, device-pixel sizing where available, and a DPR media-query listener. Ignore zero-size/offscreen
+          targets. Pause animated drawing for hidden documents, offscreen views, minimized/occluded host windows when the bridge reports them, and window blur;
+          pause effect time instead of catching up after a long gap. CSS opacity and transforms handle space transitions without rerendering static grain.
+        </p>
+        <p>
+          Listen to reduced-motion changes while mounted. Suppress decorative PowerUp/halo motion, settle AreaLight and EdgeLight to defined still frames, and
+          remove them in forced-colors/high-contrast mode. Keep grain at zero under contrast settings; reuse Bay's <code>highContrast.ts</code> theme behavior
+          and also cover previews outside that theme path.
+        </p>
+        <p>
+          On <code>webglcontextlost</code>, call <code>event.preventDefault()</code> to allow restoration, stop dependent scheduling, and show the CSS base. On
+          restoration, recreate every program, texture, framebuffer, extension, and uniform location, then redraw current inputs without replaying finished
+          animations. Release resources, observers, subscriptions, and pending requests on unmount. Do not retry failed allocations in a render loop. These
+          requirements follow the <a href="https://registry.khronos.org/webgl/specs/latest/1.0/#5.15.2">Khronos context-loss rules</a>, which are a
+          work-in-progress specification.
+        </p>
+      </section>
+      <section id="steps">
+        <h2>Implementation sequence and exact files</h2>
+        <p>
+          Responsibilities below describe future implementation ownership. This research artifact changes no tracked source. Steps 1–5 complete shared shader
+          parity; step 6 adds the selected Ardia treatments after those gates pass.
+        </p>
+        <div class="stage">
+          <div class="stage-number">01</div>
+          <div>
+            <h3>Integrate the platform prerequisites and capture a baseline</h3>
+            <p>
+              Depend on the Windows/Linux platform stack landing on main, including <code>packages/platform</code>, <code>scripts/web.mjs</code>, Expo web
+              dependencies, browser bootstrap, and the shader web entry. Preserve both branch owners' conflict resolutions.
+            </p>
+            <p>
+              Verify <code>packages/shaders/package.json</code> browser/react-native/default conditions, <code>apps/browser/metro.config.js</code> with
+              <code>BAY_WEB=1</code>, and <code>apps/browser/tsconfig.web.json</code> module suffixes. Windows and Linux
+              <code>scripts/*/build-app.py</code> already call the same <code>@bay/browser build:web</code> on the inspected Linux branch. Do not create a
+              parallel Vite app or demo-only alias.
+            </p>
+            <p>
+              Capture before images and traces for the actual callers on macOS, Windows, and Linux. Record build SHA, hardware/GPU/driver, host Chromium
+              version, dimensions, DPR, theme, and accessibility flags. Extend the existing <code>apps/browser/scripts/perf/</code> tooling with a dedicated
+              shader runner; its current React/native benchmarks are not shader GPU measurements.
+            </p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-number">02</div>
+          <div>
+            <h3>Unify contracts and build the web renderer</h3>
+            <p>
+              Update <code>packages/shaders/src/types.ts</code>, <code>src/index.tsx</code>, and <code>src/index.web.tsx</code>; add
+              <code>src/constants.ts</code>. Remove duplicate public prop declarations while preserving native adapter prop names and export compatibility.
+            </p>
+            <p>
+              Add <code>src/web/surface.ts</code>, <code>staticRenderer.ts</code>, <code>clock.ts</code>, <code>ShaderView.tsx</code>, <code>colors.ts</code>,
+              <code>uniforms.ts</code>, <code>fallbacks.tsx</code>, and <code>sources/{common,backdrop,powerUp,areaLight,edgeLight}.ts</code>. Use typed uniform
+              descriptors and explicit premultiplied sRGB output. Implement top-left UVs, per-context program caches, allocation limits, fallback states, and
+              lifecycle rules before effect ports.
+            </p>
+            <p>
+              Update <code>packages/platform/src/capabilities.ts</code> and <code>os.web.ts</code>; add <code>shaderSupport.web.ts</code> for the bounded probe
+              and test it independently. Keep platform free of imports from <code>@bay/shaders</code>. Extend package scripts, <code>tsconfig.json</code>, and
+              add <code>tsconfig.web.json</code> if needed so both native and DOM code typecheck under their correct conditions.
+            </p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-number">03</div>
+          <div>
+            <h3>Restore backdrop grain end to end</h3>
+            <p>
+              Implement the OKLab backdrop and static grain from Bay's <code>ios/WindowBackdropView.swift</code>, with Ardia's GLSL as a porting reference. Add
+              <code>src/web/grain.ts</code> for the deterministic fallback/glass tile and common cell rules.
+            </p>
+            <p>
+              In <code>ios/WindowBackdropView.swift</code> and <code>ios/ShadersModule.swift</code>, forward grain opacity/scale into a static layer on
+              <code>WindowTreatmentView</code> as well as the Metal uniform path. Keep <code>MetalSurface.swift</code> and the macOS backend. Change defaults in
+              <code>apps/browser/src/lib/theme.ts</code> and preview mapping in <code>components/spaces/ThemeEditor.tsx</code>. Check the current
+              <code>App</code>, <code>SpaceSwipe</code>, <code>LittleBayWindow</code>, and <code>Postcard</code> callers without adding OS branches to them.
+            </p>
+            <p>
+              Finish this step when solid and glass paths expose clearly different zero/default/high grain states and resizing or dragging between monitors does
+              not change logical cell size.
+            </p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-number">04</div>
+          <div>
+            <h3>Restore the active PowerUp and halo</h3>
+            <p>
+              Port <code>ios/PowerUpView.swift</code> into <code>src/web/sources/powerUp.ts</code> and its uniform builder. Preserve palette selection, alpha,
+              speed, origin, radius, optional halo, 24 CSS-pixel blur, and finite timing. Bay's current native limits are 3.75 seconds for the band and 2
+              seconds for the halo; preserve those semantics rather than extending duration by speed.
+            </p>
+            <p>
+              Use one animation context for the band/halo, with bounded intermediate targets for band blur so the halo is not blurred accidentally. Verify
+              <code>apps/browser/src/components/onboarding/Intro.tsx</code> with its existing props. Handle live reduced motion, Skip/unmount, and failure
+              fallbacks without changing onboarding navigation or music.
+            </p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-number">05</div>
+          <div>
+            <h3>Complete the remaining exports with fidelity tests</h3>
+            <p>
+              Port Bay's <code>ios/AreaLightView.swift</code> and <code>ios/EdgeLightView.swift</code> into their GLSL modules. Preserve rounded emitter
+              geometry, palette/falloff/lift/tilt/noiseSeed/intro/replay behavior for AreaLight; preserve rect, logo cutout, light endpoints, radius, color,
+              delay, and duration for EdgeLight.
+            </p>
+            <p>
+              Translate Metal-specific selection, modulo, and reversed smoothstep behavior explicitly. Keep finite clocks and defined final frames. Test
+              null/zero-area emitters and degenerate rectangles before drawing. These effects remain fixture-only until a separate product change supplies real
+              callers.
+            </p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-number">06</div>
+          <div>
+            <h3>Add the useful Ardia treatments</h3>
+            <p>After parity acceptance, implement the selected additions below in order. Keep them separately reviewable and preserve saved theme meaning.</p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Addition</th>
+                    <th>Concrete scope and dependencies</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Shared theme swatches and richer gradients</td>
+                    <td>
+                      Add <code>ThemeSwatch</code> and optional theme color-stop inputs in <code>src/types.ts</code>, both entry points, and
+                      <code>ios/ShadersModule.swift</code>. Build <code>src/web/themeGradient.ts</code> and a native <code>ios/ThemeSwatchView.swift</code>.
+                      Reuse the same color/grain recipe for window and editor preview. Preserve the existing two-color 180° path; new custom-theme inputs
+                      support up to three colors at 135°, matching the useful Ardia approach. Wire <code>lib/theme.ts</code> and <code>ThemeEditor.tsx</code> so
+                      a middle saved color is represented rather than only the first and last.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Opt-in texture choices</td>
+                    <td>
+                      Add <code>grain</code>, <code>sand</code>, <code>denim</code>, and <code>tweed</code> as static seeded patterns following Ardia's
+                      <code>GrainLayer</code> approach. Add optional <code>texture</code> and <code>angle</code> to
+                      <code>apps/browser/src/store/types.ts</code> theme data, defaulting absent fields to grain and the legacy angle. Update
+                      <code>store/spaces.ts</code>, theme cache keys, runtime validation/persistence/sync codecs that handle <code>SpaceTheme</code>, and the
+                      editor. Verify old snapshots and unknown future texture values before enabling the selector. Add no animated texture.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Restrained glass rim</td>
+                    <td>
+                      Use Ardia's <a data-ardia="apps/demo/src/shims/web/glassRim.ts">cached rim/mask approach</a> as a reference for a static, opt-in
+                      <code>src/web/GlassRim.tsx</code>. Put the consuming wrapper in <code>apps/browser/src/components/primitives/</code>. Limit initial use to
+                      the theme preview. CSS mask/border fallback, keyboard focus visibility, and contrast modes are required. This is a rim effect, not native
+                      Liquid Glass, desktop blur, or a reason to mark <code>vibrancy</code> supported.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              No copied Arc or Dia images, textures, fonts, or compiled shader libraries. Generate Bay-owned deterministic tiles and preserve attribution for
+              adapted code.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section id="tests">
+        <h2>Acceptance tests and measurement gates</h2>
+        <p>All figures below are proposed release gates. Establish and record the baseline in step 1; no measurements have been achieved by this plan.</p>
+        <h3>Build and resolution</h3>
+        <ul>
+          <li>
+            Run <code>pnpm --filter @bay/shaders typecheck</code>, <code>pnpm --filter @bay/platform typecheck</code>,
+            <code>pnpm --filter @bay/platform test</code>, <code>pnpm typecheck:web</code>, and <code>pnpm build:web</code> after prerequisites land. Add
+            <code>@bay/shaders test:web</code> for the new real-browser fixture runner.
+          </li>
+          <li>
+            Retain <code>pnpm --filter @bay/shaders shaders:check</code> under full Xcode and perform a macOS bundle/build smoke test. Metal checks do not
+            validate GLSL.
+          </li>
+          <li>
+            Assert web bundles resolve <code>index.web.tsx</code> and contain no native shader manager calls. Assert macOS resolves the native entry and
+            initializes no DOM/WebGL code. Run actual Windows and Linux host smoke tests, not only a browser demo.
+          </li>
+          <li>
+            If public native prop types move, check <code>packages/platform/scripts/native-contracts.mjs</code> extraction, regenerate
+            <code>src/nativeContracts.ts</code> and <code>windows/NativeContracts.g.h</code> through existing scripts as required, and run
+            <code>pnpm --filter @bay/platform contracts:check</code>. Do not hand-edit generated contracts.
+          </li>
+        </ul>
+        <h3>Deterministic visual fixtures</h3>
+        <p>
+          Add <code>packages/shaders/tests/fixtures.ts</code>, <code>tests/web/</code>, and <code>scripts/check-web-shaders.mjs</code>. Reuse the repository's
+          browser-test dependency if available; otherwise add one development-only browser driver with pnpm. Build the fixture through the real Metro web
+          package path. Add fixed-time/debug controls, deterministic seed, backend identity, and frame counters. Reuse native
+          <code>MetalSurface.writeSnapshot</code> and debug snapshot hooks for comparison.
+        </p>
+        <ul>
+          <li>
+            Capture all four exports, PowerUp halo, and actual backdrop callers in light/dark, solid/glass, active/inactive, neutral/saturated colors, alpha
+            0/partial/1, and angle 0/90/135/150/180.
+          </li>
+          <li>
+            Exercise grain opacity 0/default/0.12/0.45 and scale 0.25/1/2/4 at DPR 1/1.25/1.5/2. Move across mixed-DPI monitors and change zoom without
+            remounting. Confirm logical grain size, clipping, and top-left origin stay consistent.
+          </li>
+          <li>
+            Same renderer/build, seed, dimensions, and frozen time must yield the same fixture output. Across GPU/Metal/WebGL implementations, compare
+            tolerances and perceptual structure instead of demanding identical noise hashes. For grain-disabled opaque gradient interiors, target per-channel
+            mean absolute error at most 2/255 against the reference. Inspect grain contrast, average luminance shift, cell size, and seams separately.
+          </li>
+          <li>
+            For grain at zero, require zero residual texture. For default versus zero, require a nonzero texture residual and visible distinction in 1:1 crops.
+            For higher values, require increasing texture contrast. Review ordinary window size as well as enlarged crops, without reducing text or focus-ring
+            contrast.
+          </li>
+          <li>
+            Exercise real editor updates, paging, Postcard clipping, Little Bay, onboarding replay/Skip, and later swatch/texture selection. Snapshot animated
+            effects at start, midpoint, and completion using injected time.
+          </li>
+        </ul>
+        <h3>Failure and accessibility</h3>
+        <ul>
+          <li>
+            Test unavailable WebGL2, GPU disabled/blocked, context allocation/compile/link failures, and context loss/restoration through
+            <code>WEBGL_lose_context</code>. CSS chrome stays visible; restoration recreates resources and draws the latest theme without a reload.
+          </li>
+          <li>
+            Test mount/unmount 100 times, prop updates during restoration, hidden tab, minimized window, offscreen view, zero-size host, and multiple windows.
+            Listener/context counts return to their steady baseline; no duplicate animation subscriptions remain.
+          </li>
+          <li>
+            Toggle reduced motion, <code>prefers-contrast: more</code>, and <code>forced-colors: active</code> while mounted. Decorative motion stops, contrast
+            mode removes grain, and controls/navigation remain usable. Decorative canvases are hidden from assistive technology and never intercept pointers.
+          </li>
+        </ul>
+        <h3>Performance budget</h3>
+        <ul>
+          <li>
+            Record three matched runs on at least one Windows integrated GPU and one Linux integrated GPU; include Linux Wayland and X11 correctness checks.
+            Keep CSS-only, current Metal, and WebGL results labeled separately.
+          </li>
+          <li>
+            Measure p50/p95 frame intervals, missed frames, main-thread draw/copy time, compile time, live contexts, target pixel bytes, and idle draw counters.
+            GPU timer queries are optional and only reported when supported and not disjoint; missing GPU timing is not zero cost.
+          </li>
+          <li>
+            For 30 seconds after a static scene settles, require zero shader draws and no subscribed RAF loop. Require the same for hidden/minimized effects and
+            after finite animation completion. Static redraw/copy occurs only after invalidation.
+          </li>
+          <li>
+            At 1920×1080 CSS pixels and DPR 1, target p95 total animation frame work within 16.7 ms on the selected integrated-GPU reference device. Target
+            backdrop invalidation draw-plus-copy p95 below 8 ms after warmup, and no shader-caused main-thread task over 50 ms. Measure capped high-DPI targets
+            separately.
+          </li>
+          <li>
+            Reject a rollout with more than a 10% regression in p95 interaction frame interval versus its matched CSS-only baseline, more than three steady
+            WebGL contexts per document, or monotonically growing resource counts across the 100-cycle test. If a gate fails, retain the CSS rollout path and
+            fix the responsible effect before expanding enablement. No automatic benchmarking or retry loop runs in production.
+          </li>
+        </ul>
+      </section>
+      <section id="rollout">
+        <h2>Rollout, dependencies, and stop criteria</h2>
+        <ol>
+          <li>
+            Land this plan-only HTML artifact on main. The parent owns review, commit, and push. Keep platform conflict work and product implementation out of
+            that commit.
+          </li>
+          <li>
+            After desktop platform integration, land shared contracts, renderer, fixtures, and fallback coverage behind a single development rollout switch,
+            <code>BAY_WEB_SHADERS=1</code>. Propagate it through <code>scripts/web.mjs</code>; do not add a product settings panel.
+          </li>
+          <li>
+            Enable backdrop/grain and native glass grain only after step 3's visual and static-idle checks pass. Then enable PowerUp, followed by fixture-tested
+            AreaLight/EdgeLight. Use the CSS path as the immediate web rollback; keep native grain/default changes in their own reversible commit.
+          </li>
+          <li>
+            After all parity gates pass on actual hosts, make WebGL2 the default supported web path and retain <code>BAY_WEB_SHADERS=0</code> as a build-time
+            rollback. Failure fallback remains automatic.
+          </li>
+          <li>
+            Ship ThemeSwatch/multi-stop gradients, optional textures, then the preview-only rim as separate changes after parity. Texture persistence/sync
+            compatibility is a dependency, not an unresolved decision.
+          </li>
+        </ol>
+        <div class="stop">
+          <p>
+            Stop the initial implementation when all four existing exports render or fall back correctly on Windows/Linux, active callers have visible stable
+            grain, native macOS materials/Metal still pass their checks, and visual/lifecycle/performance gates are recorded. Finish the selected additions only
+            through their explicit dependencies above. Do not expand into a new rendering engine or unrelated browser features.
+          </p>
+        </div>
+        <h3>Explicitly deferred</h3>
+        <p>
+          WebGPU, Metal-to-GLSL generation, a unified native GPU backend, real Windows/Linux Liquid Glass or screen sampling, HDR/wide-gamut parity, animated
+          grain, cursor-following lights, full-page postprocessing, particles, and unrelated browser roadmap changes. Ardia's icon-derived
+          <code>GlassGlow</code> is also deferred because it depends on a broader icon/material pipeline; the scoped glass-rim treatment covers the useful
+          immediate addition.
+        </p>
+      </section>
+      <section class="sources">
+        <h2>Primary source index</h2>
+        <ul>
+          <li>
+            Bay main <code>82386a9d</code>: <a data-bay-main="packages/shaders/src/index.tsx">native contracts</a>,
+            <a data-bay-main="packages/shaders/ios/MetalSurface.swift">Metal lifecycle and snapshots</a>,
+            <a data-bay-main="packages/shaders/ios/PowerUpView.swift">PowerUp/halo</a>,
+            <a data-bay-main="packages/shaders/ios/AreaLightView.swift">AreaLight</a>,
+            <a data-bay-main="packages/shaders/ios/EdgeLightView.swift">EdgeLight</a>.
+          </li>
+          <li>
+            Bay Linux <code>d0a6acca</code>: <a data-bay-linux="packages/shaders/package.json">export conditions</a>,
+            <a data-bay-linux="packages/platform/src/capabilities.ts">capability table</a>,
+            <a data-bay-linux="packages/platform/src/os.web.ts">host treatment probe</a>, <a data-bay-linux="apps/browser/metro.config.js">Metro</a>,
+            <a data-bay-linux="scripts/web.mjs">shared web build</a>.
+          </li>
+          <li>
+            Ardia <code>15011c4a</code>: <a data-ardia="apps/demo/src/shims/web/gl/GLView.tsx">demo component lifecycle</a>,
+            <a data-ardia="apps/demo/src/shims/web/gl/uniforms.ts">uniform builders</a>, <a data-ardia="apps/demo/src/shims/web/gl/colors.ts">color math</a>,
+            <a data-ardia="apps/demo/src/shims/web/gl/Vibrancy.tsx">simulated demo vibrancy</a>,
+            <a data-ardia="packages/shell/ios/GlassGlow.swift">deferred GlassGlow</a>.
+          </li>
+          <li>
+            <a href="https://registry.khronos.org/webgl/specs/latest/2.0/">Khronos WebGL2 editor's draft</a> and
+            <a href="https://registry.khronos.org/webgl/specs/latest/1.0/#5.15.2">context-loss handling</a>. Browser API behavior is checked against primary
+            specifications; Bay and Ardia claims above come from inspected repository source.
+          </li>
+        </ul>
+      </section>
+      <footer class="note">
+        All architecture choices are selected. Remaining work is implementation and validation against the stated gates. Source references are pinned to the
+        inspected commits; the small grain illustration is original document code.
+      </footer>
+    </main>
+    <script>
+      const roots = {
+        ardia: "https://github.com/mantrakp04/ardia/blob/15011c4a858abfa113048a116a29457183205c06/",
+        bayMain: "https://github.com/krishkalaria12/bay/blob/82386a9d2c00377af47e2c240437e83e47b931b7/",
+        bayLinux: "https://github.com/krishkalaria12/bay/blob/d0a6acca6d5c553bb527dfd9d65dd1d8c66bf0a5/",
+      };
+      for (const a of document.querySelectorAll("[data-ardia]")) a.href = roots.ardia + a.dataset.ardia;
+      for (const a of document.querySelectorAll("[data-bay-main]")) a.href = roots.bayMain + a.dataset.bayMain;
+      for (const a of document.querySelectorAll("[data-bay-linux]")) a.href = roots.bayLinux + a.dataset.bayLinux;
+      let light = false;
+      const input = document.querySelector("#strength");
+      function noise(x, y) {
+        let n = (Math.imul(x + 17, 374761393) ^ Math.imul(y + 71, 668265263)) >>> 0;
+        n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+        return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+      }
+      function draw() {
+        const strength = Number(input.value);
+        document.querySelector("#strengthLabel").value = strength.toFixed(2);
+        for (const [id, amount] of [
+          ["plain", 0],
+          ["grain", strength],
+        ]) {
+          const c = document.getElementById(id);
+          const r = c.getBoundingClientRect();
+          const d = Math.min(devicePixelRatio || 1, 2);
+          c.width = Math.max(1, Math.round(r.width * d));
+          c.height = Math.max(1, Math.round(r.height * d));
+          const ctx = c.getContext("2d");
+          if (!ctx) continue;
+          const im = ctx.createImageData(c.width, c.height);
+          const a = light ? [228, 208, 222] : [105, 66, 86],
+            b = light ? [185, 180, 206] : [48, 43, 68];
+          for (let y = 0; y < c.height; y++)
+            for (let x = 0; x < c.width; x++) {
+              const t = Math.min(1, 0.2 + (0.55 * y) / c.height + (0.25 * x) / c.width),
+                g = 1 - amount * (1 - noise(Math.floor(x / d), Math.floor(y / d))),
+                k = (y * c.width + x) * 4;
+              for (let q = 0; q < 3; q++) im.data[k + q] = (a[q] + (b[q] - a[q]) * t) * g;
+              im.data[k + 3] = 255;
+            }
+          ctx.putImageData(im, 0, 0);
+        }
+      }
+      input.addEventListener("input", draw);
+      document.querySelector("#mode").addEventListener("click", () => {
+        light = !light;
+        document.querySelector("#mode").textContent = light ? "Use dark sample" : "Use light sample";
+        draw();
+      });
+      new ResizeObserver(draw).observe(document.querySelector(".lab"));
+      draw();
+      window.addEventListener("load", () => {
+        const old = input.value;
+        input.value = "0.25";
+        input.dispatchEvent(new Event("input"));
+        const sliderWorks = document.querySelector("#strengthLabel").value === "0.25";
+        document.querySelector("#mode").click();
+        const toggleWorks = light;
+        document.querySelector("#mode").click();
+        input.value = old;
+        draw();
+        console.log(
+          JSON.stringify({
+            sliderWorks,
+            toggleWorks,
+            title: document.title,
+            sections: document.querySelectorAll("h2").length,
+            links: document.querySelectorAll("a[href]").length,
+            brokenAnchors: [...document.querySelectorAll('a[href^="#"]')].filter((a) => !document.querySelector(a.getAttribute("href"))).length,
+            horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+          }),
+        );
+      });
+    </script>
+  </body>
+</html>
