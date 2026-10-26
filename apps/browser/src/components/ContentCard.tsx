@@ -51,6 +51,8 @@ import {
 import { SiteControls } from "./site/SiteControls";
 import { ZoomPopover } from "./site/ZoomControls";
 import { SelectionPopover } from "./site/SelectionPopover";
+import { LinkPreview } from "./site/LinkPreviewCard";
+import { setLinkPreview } from "./site/linkPreview";
 import { copyLinkToSelection, searchSelection, setPageSelection, startSelectionTools, type PageSelection } from "./site/selection";
 import { startMedia, useAutoPictureInPicture } from "./media/pip";
 import { SharePicker, requestDisplayMedia } from "./media/SharePicker";
@@ -432,6 +434,7 @@ const TabPane = memo(function TabPane({
                 <CastPicker tabId={tabId} paneWidth={frame.width} />
                 <NavigationOverlays tabId={tabId} windowId={windowId} geometry={geometry} />
                 <SelectionPopover tabId={tabId} zoom={zoom} />
+                <LinkPreview tabId={tabId} />
                 <CaptureLayer tabId={tabId} />
                 <BoostEditor tabId={tabId} maxHeight={Math.max(240, frame.height - 20)} />
               </>
@@ -536,6 +539,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
           dismissPermissions(tabId);
           setPopover(tabId, null);
           setPageSelection(tabId, null);
+          setLinkPreview(tabId, null);
           patchPage(tabId, { popups: [], passwordPrompt: null, crashed: null, status: "" });
           revealToolbar(tabId);
         }
@@ -631,6 +635,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         else if (kind === "devMode") onDeveloperMessage(tabId, data);
         else if (kind === "capture") onCaptureMessage(tabId, data);
         else if (kind === "boost") onBoostMessage(tabId, data);
+        else if (kind === "linkPreview") setLinkPreview(tabId, data as { url: string; rect: { x: number; y: number; width: number; height: number } } | null);
         else if (kind === "captureGesture") onCaptureGesture(tabId, data);
       }}
       onNotificationClose={closeWebNotification}
