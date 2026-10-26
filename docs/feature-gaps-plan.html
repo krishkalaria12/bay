@@ -578,6 +578,7 @@
           <span>Phase 1 shipped on <code>main</code> at <code>f16526b6</code></span>
           <span>Phase 2 done; VoiceOver and Gmail checks before release</span>
           <span>Phase 3 (Boosts) done; a two-Mac sync check before release</span>
+          <span>Easel web sharing done; off by default until R2 is provisioned</span>
           <span>Source: Arc's macOS release notes, 2021–2026</span>
           <span>Sizes are estimates: S a day or two, M about a week, L more</span>
         </div>
@@ -612,11 +613,12 @@
               Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
               folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>. The ten small
               ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2) and Boosts (Phase 3) have shipped and are listed under
-              <a href="#have">Already in Bay</a>; <strong>7 gaps</strong> remain.
+              <a href="#have">Already in Bay</a>. Easel web sharing is also implemented behind an off-by-default environment flag;
+              <strong>6 gaps</strong> remain.
             </p>
             <p>
-              The gaps left are <strong>sharing and Arc Max</strong>: shared folders, Share Quote, Easel links, and the "tidy" AI features. Each needs a
-              decision before work starts.
+              The gaps left are <strong>sharing and Arc Max</strong>: shared folders, Share Quote, and the "tidy" AI features. Each needs a decision before work
+              starts.
             </p>
             <p>Phase 1 landed before Arc's sunset reminders start on 23 November. The phases left don't depend on Arc's dates.</p>
           </div>
@@ -650,7 +652,7 @@
 
         <section id="have" aria-labelledby="have-h">
           <h2 id="have-h">Already in Bay</h2>
-          <p class="prose">These Arc features are matched in the code on <code>main</code>, so nobody plans them again.</p>
+          <p class="prose">These Arc features are implemented in Bay, so nobody plans them again. Features behind a flag say so.</p>
           <ul class="have">
             <li>Spaces with an icon, colour theme (gradient, intensity, grain) and profile</li>
             <li>Swipe between spaces; space switcher in the sidebar's foot</li>
@@ -690,6 +692,10 @@
             <li>Capture an element, an area or the full page, with markup</li>
             <li>Capture in Portrait: the page framed on the space's colours</li>
             <li>Easels with live captures; export as PNG or HTML</li>
+            <li>
+              Share an Easel as a web page: unlisted snapshots with source links, updates and revocation. Done in code; disabled unless
+              <code>BAY_EASEL_WEB_SHARING=true</code>. R2 provisioning and the opt-in website deployment are pending; see <code>apps/web/README.md</code>.
+            </li>
             <li>Library: media, downloads, Easels, spaces, archive</li>
             <li>Previews for folders, Gmail, GitHub and Calendar</li>
             <li>GitHub live folders</li>
@@ -724,8 +730,8 @@
           <h2 id="missing-h">What's missing</h2>
           <p class="prose">
             "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
-            not run for this review. The date is when Arc shipped the feature. Gaps 1–15 (Phases 1 to 3) have shipped and moved to
-            <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
+            not run for this review. The date is when Arc shipped the feature. Gaps 1–15 (Phases 1 to 3) have shipped; item 18 is implemented behind a flag.
+            They moved to <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
           </p>
           <div class="table-wrap">
             <table class="gaps">
@@ -757,14 +763,6 @@
                   <td>Oct 2023</td>
                   <td>Copy All Links, as text or Markdown</td>
                   <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">4</td>
-                </tr>
-                <tr>
-                  <td>18</td>
-                  <td>Share an Easel as a web page</td>
-                  <td>Jun 2022</td>
-                  <td>Export as a PNG or HTML file</td>
-                  <td class="c"><span class="chip l">L</span></td>
                   <td class="c">4</td>
                 </tr>
                 <tr>
@@ -885,8 +883,8 @@
             </li>
           </ol>
           <p class="prose">
-            Phase 1 (ten small habits), Phase 2 (keyboard, undo and Finder files) and Phase 3 (Boosts) have shipped. Phases 4 and 5 start only after their
-            decisions are made.
+            Phase 1 (ten small habits), Phase 2 (keyboard, undo and Finder files) and Phase 3 (Boosts) have shipped. Easel web sharing from Phase 4 is done
+            behind a flag. The remaining items in Phases 4 and 5 need their decisions first.
           </p>
 
           <article class="phase gate" id="p4" aria-labelledby="p4-h">
@@ -896,8 +894,8 @@
               <span class="chip gate">Decision first</span>
             </div>
             <p class="goal">
-              Arc shared things through its own servers, which are being turned off. Bay has none. Decide <a href="#decisions">how to host</a> before starting
-              items 17 and 18.
+              Arc shared things through its own servers, which are being turned off. Decide <a href="#decisions">how to share collections</a> before starting
+              item 17. Easel web sharing is implemented and listed under <a href="#have">Already in Bay</a>; it stays off until its R2 host is provisioned.
             </p>
 
             <div class="item">
@@ -932,21 +930,10 @@
               </ul>
             </div>
 
-            <div class="item">
-              <h4>18 · Share an Easel as a web page <span class="chip l">L</span></h4>
-              <p>
-                Easels hold images, so they don't fit in a link. This needs storage somewhere: a hosted bucket with unlisted links, or the user's own iCloud
-                Drive public link. Until decided, the HTML export stays the way to share.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>library/export.ts</code>, plus whatever host is chosen</dd>
-              </dl>
-            </div>
             <h4 class="exit">Exit criteria</h4>
             <ul>
               <li>
-                Share Quote shipped; collection links shipped if the fragment approach is chosen; Easel hosting either decided or recorded as out of scope.
+                Share Quote shipped; collection links shipped if the fragment approach is chosen; Easel snapshot hosting provisioned and its Worker deployed.
               </li>
             </ul>
           </article>
@@ -1061,7 +1048,7 @@
                 <tr>
                   <td>Sharing Easels</td>
                   <td>Hosted bucket · iCloud public links · HTML export only</td>
-                  <td>HTML export only for now</td>
+                  <td>Done behind a flag; private R2 provisioning and opt-in deployment pending</td>
                 </tr>
               </tbody>
             </table>

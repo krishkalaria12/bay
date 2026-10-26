@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 public class EaselModule: Module {
   public func definition() -> ModuleDefinition {
     Name("BayEasel")
+    Function("isEaselWebSharingEnabled") { EaselSharing.enabled }
 
     AsyncFunction("retainLibraryImage") { (path: String) -> [String: Any]? in
       EaselFiles.retain(path)
@@ -18,6 +19,12 @@ public class EaselModule: Module {
     AsyncFunction("exportEaselHTML") { (document: String) -> String? in
       EaselFiles.exportHTML(document)
     }.runOnQueue(.main)
+    AsyncFunction("createEaselShareIdentity") { () -> [String: String] in
+      try EaselSharing.identity()
+    }
+    Function("readEaselShareRecords") { () -> String? in
+      try EaselSharing.readRecords()
+    }
 
     View(EaselCanvasView.self) {
       Events("onEaselChange", "onEaselOpenLink")
@@ -37,6 +44,7 @@ public class EaselModule: Module {
       AsyncFunction("zoomOut") { (view: EaselCanvasView) in view.zoom(by: 1 / 1.2) }.runOnQueue(.main)
       AsyncFunction("fit") { (view: EaselCanvasView) in view.fit() }.runOnQueue(.main)
       AsyncFunction("export") { (view: EaselCanvasView) -> [String: Any]? in view.export() }.runOnQueue(.main)
+      AsyncFunction("prepareShare") { (view: EaselCanvasView, title: String) -> String in try view.prepareShare(title) }.runOnQueue(.main)
       AsyncFunction("addText") { (view: EaselCanvasView, text: String) in view.addText(text) }.runOnQueue(.main)
       AsyncFunction("addLink") { (view: EaselCanvasView, url: String, title: String) in view.addLink(url, title: title) }.runOnQueue(.main)
       AsyncFunction("addImages") { (view: EaselCanvasView, paths: [String]) in view.addImages(paths) }.runOnQueue(.main)
@@ -153,7 +161,7 @@ enum EaselFiles {
   }
 }
 
-private enum EaselDrawing {
+enum EaselDrawing {
   static func number(_ item: [String: Any], _ key: String, _ fallback: CGFloat = 0) -> CGFloat {
     guard let value = item[key] as? NSNumber, value.doubleValue.isFinite else { return fallback }
     return min(10_000_000, max(-10_000_000, CGFloat(value.doubleValue)))
@@ -583,6 +591,13 @@ final class EaselCanvasView: ExpoView, NSTextFieldDelegate, NSMenuItemValidation
     let url = CaptureFiles.temporaryPNG()
     guard EaselFiles.writePNG(image, to: url) else { return nil }
     return ["path": url.path, "width": image.width, "height": image.height]
+  }
+
+  func prepareShare(_ title: String) throws -> String {
+    commitText()
+    var snapshot = document
+    snapshot["title"] = title
+    return try EaselSharing.snapshot(EaselFiles.json(snapshot))
   }
 
   // MARK: Mouse editing

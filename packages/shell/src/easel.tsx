@@ -69,6 +69,7 @@ export type EaselCanvasHandle = {
   zoomOut(): Promise<void>;
   fit(): Promise<void>;
   export(): Promise<EaselImage | null>;
+  prepareShare(title: string): Promise<string>;
   addText(text: string): Promise<void>;
   addLink(url: string, title: string): Promise<void>;
   addImages(paths: string[]): Promise<void>;
@@ -103,11 +104,17 @@ export function EaselCanvas({ onChange, onOpenLink, ...props }: EaselCanvasProps
 }
 
 const Capture = requireNativeModule<{
+  isEaselWebSharingEnabled(): boolean;
   retainLibraryImage(path: string): Promise<EaselImage | null>;
   removeLibraryImage(path: string): Promise<boolean>;
   libraryImageExists(path: string): Promise<boolean>;
   exportEaselHTML(document: string): Promise<string | null>;
+  createEaselShareIdentity(): Promise<{ id: string; key: string }>;
+  readEaselShareRecords(): string | null;
 }>("BayEasel");
+
+/** Opt-in launch flag; unset and false both keep web sharing disabled. */
+export const isEaselWebSharingEnabled = () => Capture.isEaselWebSharingEnabled();
 
 /** Copies and normalizes a local image into the app's durable Library Media folder. */
 export const retainLibraryImage = (path: string) => Capture.retainLibraryImage(path);
@@ -116,3 +123,7 @@ export const removeLibraryImage = (path: string) => Capture.removeLibraryImage(p
 export const libraryImageExists = (path: string) => Capture.libraryImageExists(path);
 /** Saves a standalone HTML canvas with embedded PNG media in Downloads. */
 export const exportEaselHTML = (document: string) => Capture.exportEaselHTML(document);
+/** Generates independent, cryptographically random public and management capabilities. */
+export const createEaselShareIdentity = () => Capture.createEaselShareIdentity();
+/** Returns null only for a missing registry; throws on read or decoding failures. */
+export const readEaselShareRecords = () => Capture.readEaselShareRecords();

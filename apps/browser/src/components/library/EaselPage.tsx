@@ -1,5 +1,15 @@
 import { WebView, type WebViewHandle } from "@bay/nncore";
-import { EaselCanvas, pickFiles, prompt, showMenu, Symbol, type EaselCanvasHandle, type EaselState, type EaselTool } from "@bay/shell";
+import {
+  EaselCanvas,
+  isEaselWebSharingEnabled,
+  pickFiles,
+  prompt,
+  showMenu,
+  Symbol,
+  type EaselCanvasHandle,
+  type EaselState,
+  type EaselTool,
+} from "@bay/shell";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useTheme } from "../../lib/theme";
@@ -14,6 +24,7 @@ import { writeEaselHTML, writeEaselPNG } from "./export";
 import { applyEaselDocument, startLibrary, updateEasel, useLibrary } from "./state";
 import { liveClipTransform } from "./liveClip";
 import { webLink, type EaselItem } from "./model";
+import { EaselShareButton } from "./EaselShareButton";
 
 export const easelCanvases = new Map<string, EaselCanvasHandle>();
 export const easelCanvasStates = new Map<string, EaselState>();
@@ -160,6 +171,7 @@ export function EaselPage({ tabId, easelId }: { tabId: string; easelId: string |
           style={{ flex: 1, minWidth: 60, fontSize: 19, fontWeight: "600", color: theme.textPrimary, padding: 4 }}
         />
         <Text style={{ fontSize: 11, color: theme.textTertiary }}>Saved on this Mac</Text>
+        {isEaselWebSharingEnabled() ? <EaselShareButton doc={doc} canvas={canvas} windowId={windowId} /> : null}
         <Button title={busy ? "Exporting…" : "Export PNG"} disabled={busy} onPress={() => void exportPNG()} />
         <IconButton icon="ellipsis" size={16} box={30} radius={8} tooltip="Easel actions" onPress={() => void more()} />
       </View>

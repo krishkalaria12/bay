@@ -15,9 +15,10 @@ export const localFiles = {
   reconnect: (...args) => localFileAnswers.reconnect(...args),
 };
 // saveDocument lands at once, or, while heldSaves.on, when a test runs the queued releases.
-export const heldSaves = { on: false, queue: [] };
+export const heldSaves = { on: false, queue: [], error: null };
 export const saveDocument = (name, contents) =>
-  new Promise((resolve) => {
+  new Promise((resolve, reject) => {
+    if (heldSaves.error) return reject(heldSaves.error);
     const land = () => (docs.set(name, contents), resolve());
     if (heldSaves.on) heldSaves.queue.push(land);
     else land();
@@ -31,9 +32,22 @@ export const requestCalendarAccess = () => Promise.resolve(false);
 export const systemCalendars = () => Promise.resolve([]);
 export const systemCalendarEvents = () => Promise.resolve([]);
 export const onCalendarChanged = () => ({ remove() {} });
-export const keychainGet = () => Promise.resolve(null);
-export const keychainSet = () => Promise.resolve(true);
-export const keychainDelete = () => Promise.resolve(true);
+export const keychainAnswers = {
+  get: async () => null,
+  set: async () => true,
+  delete: async () => true,
+};
+export const keychainGet = (...args) => keychainAnswers.get(...args);
+export const keychainSet = (...args) => keychainAnswers.set(...args);
+export const keychainDelete = (...args) => keychainAnswers.delete(...args);
+export const easelSharingAnswers = {
+  enabled: false,
+  identity: async () => ({ id: "a".repeat(32), key: "b".repeat(64) }),
+  readRecords: () => docs.get("easel-shares.json") ?? null,
+};
+export const createEaselShareIdentity = () => easelSharingAnswers.identity();
+export const isEaselWebSharingEnabled = () => easelSharingAnswers.enabled;
+export const readEaselShareRecords = () => easelSharingAnswers.readRecords();
 export const shellDialogAnswers = {
   confirm: async () => ({ confirmed: false, suppressed: false }),
   openTextFile: async () => null,

@@ -5,6 +5,7 @@ import { showToast } from "../layout/splitActions";
 import { openInternalPage, tabDestination } from "../pages/urls";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
+import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";
 
 export const easelUrl = (id: string) => `bay://easel/${encodeURIComponent(id)}`;
 export function easelIdOf(url: string): string | null {
@@ -108,13 +109,23 @@ export async function easelMenu(id: string, windowId: string) {
 export async function removeEasel(id: string) {
   const doc = useLibrary.getState().easels[id];
   if (!doc) return;
+  startEaselShares();
+  const shared = !!useEaselShares.getState().records[id];
   const { confirmed } = await confirm({
     title: `Delete “${doc.title}”?`,
-    message: "This removes the Easel from Library. Saved media stays in Library.",
+    message: shared
+      ? "This stops sharing the web page and removes the Easel from Library. Saved media stays in Library."
+      : "This removes the Easel from Library. Saved media stays in Library.",
     confirmTitle: "Delete",
     destructive: true,
   });
   if (!confirmed) return;
+  try {
+    await stopSharingEasel(id);
+  } catch (error) {
+    showToast(resolveWindowId(useBrowser.getState()) ?? "", "Couldn't Delete Easel", error instanceof Error ? error.message : String(error));
+    return;
+  }
   deleteEasel(id);
   const s = useBrowser.getState();
   s.closeTabs(
