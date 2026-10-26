@@ -964,6 +964,79 @@
       );
   }
 
+  // MARK: Link previews — Shift-hover a link for 5 seconds (Arc Max). Send the link after 5 s of hovering while Shift
+  // is held; the app shows a summary card with Open, Peek and Copy.
+  let linkPreviewTimer = null;
+  let linkPreviewTarget = null;
+  const clearLinkPreview = () => {
+    if (linkPreviewTimer) {
+      clearTimeout(linkPreviewTimer);
+      linkPreviewTimer = null;
+    }
+    linkPreviewTarget = null;
+  };
+  const armLinkPreview = (a) => {
+    clearLinkPreview();
+    const url = a && a.href;
+    if (!url || !/^https?:/i.test(url)) return;
+    linkPreviewTarget = a;
+    const r = a.getBoundingClientRect();
+    linkPreviewTimer = setTimeout(() => {
+      if (linkPreviewTarget !== a) return;
+      send("linkPreview", { url, rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
+    }, 5000);
+  };
+  const linkUnder = (node) => (node && node.closest ? node.closest("a[href]") : null);
+  document.addEventListener(
+    "mouseover",
+    (e) => {
+      if (!e.isTrusted || !e.shiftKey) return;
+      const a = linkUnder(e.target);
+      if (!a) return;
+      armLinkPreview(a);
+    },
+    true,
+  );
+  document.addEventListener(
+    "mouseout",
+    (e) => {
+      const a = linkUnder(e.target);
+      if (a && a === linkPreviewTarget) clearLinkPreview();
+    },
+    true,
+  );
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Shift") return;
+      const a = linkUnder(document.elementFromPoint?.(lastMouseX, lastMouseY) || null);
+      // Fall back to the currently hovered element tracked by mousemove.
+      const target = a || hoveredLink;
+      if (target) armLinkPreview(target);
+    },
+    true,
+  );
+  document.addEventListener(
+    "keyup",
+    (e) => {
+      if (e.key === "Shift") clearLinkPreview();
+    },
+    true,
+  );
+  let lastMouseX = 0,
+    lastMouseY = 0,
+    hoveredLink = null;
+  document.addEventListener(
+    "mousemove",
+    (e) => {
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      hoveredLink = linkUnder(e.target);
+      if (!e.shiftKey) clearLinkPreview();
+    },
+    true,
+  );
+
   // MARK: Scroll direction, for the toolbar that tucks away while you read (tabs on top). From the page's real scroll
   // (the document, or an element scroller filling most of the window), not wheel deltas, and only while the user is
   // scrolling (wheel, keys, a press or a scrollbar drag in the last second): scroll restoration or a chat scrolling
