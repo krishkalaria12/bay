@@ -1,8 +1,9 @@
 import { setSearchEngineName } from "@bay/nncore";
 import { chooseTextFragment, cleanUrl, searchUrl, withTextFragment, type SelectionContext } from "@bay/core";
-import { copyText } from "@bay/shell";
+import { copyQuoteCard, copyText, shareQuoteCard, type QuoteCard } from "@bay/shell";
 import { create } from "zustand";
 import { webviews } from "../../lib/webviews";
+import { spaceThemeKey, themeFor } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { defaultSearchEngine } from "../../store/settings";
 import { showToast } from "../layout/splitActions";
@@ -67,13 +68,66 @@ const SELECTION_CONTEXT = `(() => {
   }));
 })()`;
 
-export async function linkToSelection(tabId: string): Promise<string | null> {
+type SelectionSnapshot = { url: string; context: SelectionContext };
+
+async function readSelection(tabId: string): Promise<SelectionSnapshot | null> {
   const url = store().tabs[tabId]?.url;
   const web = webviews.get(tabId);
   if (!url || !/^https?:/.test(url) || !web) return null;
   const context = await web.evaluate<SelectionContext>(SELECTION_CONTEXT);
-  const fragment = context && !("error" in context) ? chooseTextFragment(context) : null;
+  if (store().tabs[tabId]?.url !== url || webviews.get(tabId) !== web) return null;
+  return context && !("error" in context) ? { url, context } : null;
+}
+
+function selectionLink({ url, context }: SelectionSnapshot): string | null {
+  const fragment = chooseTextFragment(context);
   return fragment ? withTextFragment(cleanUrl(url), fragment) : null;
+}
+
+export async function linkToSelection(tabId: string): Promise<string | null> {
+  const selection = await readSelection(tabId);
+  return selection ? selectionLink(selection) : null;
+}
+
+export async function shareSelectionQuote(tabId: string) {
+  const tab = store().tabs[tabId];
+  if (!tab || !/^https?:/.test(tab.url)) return;
+  const failed = (message: string) => showToast(tab.windowId, "Couldn't Share Quote", message, { icon: "quote.bubble", key: "share-quote" });
+  try {
+    // Read the quote and its fragment from the same selection, not the popover's shortened preview.
+    const selection = await readSelection(tabId);
+    if (!selection) return failed("Select text on the page and try again.");
+    const text = selection.context.selected.trim();
+    if (Array.from(text).length > 4000) return failed("Select up to 4,000 characters to fit on a card.");
+    const link = selectionLink(selection);
+    if (!link) return failed("Select text on the page and try again.");
+    const s = store();
+    const space = s.spaces[tab.spaceId];
+    const theme = themeFor(s.windows[tab.windowId]?.incognito ? "incognito:dark" : spaceThemeKey(space, s.ui.appDark));
+    const card: QuoteCard = {
+      text,
+      title: tab.title || tab.url,
+      url: link,
+      colors: Array.isArray(theme.lightPalette) ? theme.lightPalette : theme.windowTint,
+      dark: theme.dark,
+    };
+    if (!(await copyQuoteCard(card))) return failed("The card couldn't be copied. Try a shorter selection.");
+    setPageSelection(tabId, null);
+    showToast(tab.windowId, "Copied Quote", "Paste the card or its link into another app.", {
+      icon: "quote.bubble.fill",
+      key: "share-quote",
+      action: {
+        title: "Share…",
+        run: () => {
+          void shareQuoteCard(card, tab.windowId)
+            .then((shared) => !shared && failed("The share menu couldn't be opened. You can still paste the quote."))
+            .catch(() => failed("The share menu couldn't be opened. You can still paste the quote."));
+        },
+      },
+    });
+  } catch {
+    failed("The card couldn't be created. Select the text and try again.");
+  }
 }
 
 export async function copyLinkToSelection(tabId: string) {
@@ -240,5 +294,13 @@ export async function replaceInField(tabId: string, query: string, replacement: 
 }
 
 if (__DEV__) {
-  (globalThis as { nnSelection?: unknown }).nnSelection = { usePageSelection, searchSelection, linkToSelection, copyPageUrl, replaceInField, jumpToSelection };
+  (globalThis as { nnSelection?: unknown }).nnSelection = {
+    usePageSelection,
+    searchSelection,
+    shareSelectionQuote,
+    linkToSelection,
+    copyPageUrl,
+    replaceInField,
+    jumpToSelection,
+  };
 }

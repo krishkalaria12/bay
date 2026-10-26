@@ -1,4 +1,5 @@
 import { focus, openWindow } from "../../lib/actions";
+import { handleSharedCollectionUrl } from "../../lib/collectionSharing";
 import { defaultLinkDestination, matchingLinkRule } from "../../lib/externalLinkRules";
 import { useBrowser } from "../../store/browser";
 import { activeTabId, viewTabIds } from "../../store/model";
@@ -18,6 +19,7 @@ const opensInLittleBay = (url: string) => /^(https?|file):/i.test(url);
 // Incoming desktop links use the first matching route, then the configured default.
 export function openExternalUrls(urls: string[], sourceApp?: string) {
   for (const url of urls) {
+    if (handleSharedCollectionUrl(url)) continue;
     const s = store();
     const matched = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
     const target =

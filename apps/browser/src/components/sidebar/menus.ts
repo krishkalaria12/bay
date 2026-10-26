@@ -1,4 +1,5 @@
 import { boostHost } from "../../lib/boosts";
+import { shareCollection } from "../../lib/collectionSharing";
 import { openBoostEditor } from "../boosts/editor";
 import { showMenu, type MenuItem } from "@bay/shell";
 import { closeTab, moveTabToSpace, moveTabToWindow, openWindow, switchToTab, toggleMute } from "../../lib/actions";
@@ -190,6 +191,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "boost", title: "Boost This Site", symbol: "paintbrush.pointed", enabled: !!boostHost(tab.url) },
     { id: "copy", title: "Copy Address", symbol: "link", enabled: !!tab.url, ...hint("c", "shift", "command") },
     { id: "copyMd", title: "Copy Markdown Link", symbol: "m.square", enabled: !!tab.url, ...hint("c", "option", "shift", "command") },
+    ...(split && !incognito ? [{ id: "shareSplit", title: "Share Split View…", symbol: "square.and.arrow.up" }] : []),
     { id: "moveToSpace", title: "Move to Space", symbol: "square.stack.3d.up", enabled: !incognito, children: moveToSpace },
     ...(!current && active && !split?.tabIds.includes(active) ? [{ id: "split", title: "Split with Current Tab", symbol: "rectangle.split.2x1" }] : []),
     { id: "keepSiteAwake", title: "Keep This Site Awake", symbol: "sun.max", checked: keptAwake, enabled: !!site },
@@ -247,6 +249,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     openBoostEditor(tab.id);
   } else if (choice === "copy") copyUrls([tab.id], false);
   else if (choice === "copyMd") copyUrls([tab.id], true);
+  else if (choice === "shareSplit" && split) void shareCollection(windowId, { kind: "split", id: split.id });
   else if (choice.startsWith("profile:")) void moveTabToSpace(tab.id, choice.slice(8));
   else if (choice === "split") openInSplit(tab.id);
   else if (choice === "keepSiteAwake" && site) {
@@ -296,6 +299,7 @@ async function openMultiMenu(windowId: string, ids: string[]) {
     sep,
     { id: "copy", title: `Copy ${n} URLs`, symbol: "link", ...hint("c", "shift", "command") },
     { id: "copyMd", title: `Copy ${n} URLs as Markdown`, symbol: "text.badge.checkmark", ...hint("c", "option", "shift", "command") },
+    ...(!incognito ? [{ id: "share", title: "Share Items…", symbol: "square.and.arrow.up" }] : []),
     { id: "bar", title: `Add ${n} Tabs to Bookmarks Bar`, symbol: "bookmark" },
     { id: "bookmarkTo", title: `Add ${n} Tabs to Bookmarks Folder`, symbol: "folder", children: bookmarkFolderItems(windowId, "folder:") },
     sep,
@@ -313,13 +317,14 @@ async function openMultiMenu(windowId: string, ids: string[]) {
   else if (choice === "ungroup") s.removeTabsFromGroup(ids);
   else if (choice === "copy") copyUrls(ids, false);
   else if (choice === "copyMd") copyUrls(ids, true);
+  else if (choice === "share") void shareCollection(windowId, { kind: "selection", tabIds: ids });
   else if (choice === "bar") void bookmarkTabs(windowId, ids, "bar");
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, ids, choice.slice(7));
   else if (choice.startsWith("window:")) {
     const target = store().moveTabsToWindow(ids, choice === "window:new" ? null : choice.slice(7));
     if (target) switchToTab(store().windows[target]?.activeTabIds[tabs[0]!.spaceId] ?? ids[0]!);
   } else if (choice === "close") s.closeTabs(ids);
-  if (choice !== "copy" && choice !== "copyMd") store().setSelection(windowId, []);
+  if (choice !== "copy" && choice !== "copyMd" && choice !== "share") store().setSelection(windowId, []);
 }
 
 export async function openGroupMenu(windowId: string, groupId: string) {
@@ -402,6 +407,9 @@ export async function openFolderMenu(windowId: string, folderId: string) {
     ...(f.parentId ? [{ id: "moveOut", title: "Move Out of Folder", symbol: "folder.badge.minus" }] : []),
     { id: "copy", title: "Copy All Links", symbol: "link", enabled: members.length > 0 },
     { id: "copyMd", title: "Copy All Links as Markdown", symbol: "text.badge.checkmark", enabled: members.length > 0 },
+    ...(!isIncognitoSpace(f.spaceId) && !s.windows[windowId]?.incognito
+      ? [{ id: "share", title: "Share Folder…", symbol: "square.and.arrow.up", enabled: members.length > 0 }]
+      : []),
     sep,
     // Its tabs stay pinned, loose, where they were.
     { id: "delete", title: "Remove Folder", symbol: "trash" },
@@ -414,6 +422,7 @@ export async function openFolderMenu(windowId: string, folderId: string) {
   else if (choice === "collapse") s.updatePinnedFolder(folderId, { collapsed: !f.collapsed });
   else if (choice === "copy") copyUrls(members, false);
   else if (choice === "copyMd") copyUrls(members, true);
+  else if (choice === "share") void shareCollection(windowId, { kind: "folder", id: folderId });
   else if (choice === "newFolder") newPinnedFolderWith(windowId, [], folderId);
   else if (choice === "moveOut")
     withFolderMoveUndo(windowId, () => s.movePinnedFolder(folderId, firstAfterFolder(f.parentId!), s.pinnedFolders[f.parentId!]?.parentId ?? null));

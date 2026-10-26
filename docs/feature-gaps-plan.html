@@ -579,6 +579,7 @@
           <span>Phase 2 done; VoiceOver and Gmail checks before release</span>
           <span>Phase 3 (Boosts) done; a two-Mac sync check before release</span>
           <span>Easel web sharing done; off by default until R2 is provisioned</span>
+          <span>Collection link sharing done; deploy the web share page before release</span>
           <span>Source: Arc's macOS release notes, 2021–2026</span>
           <span>Sizes are estimates: S a day or two, M about a week, L more</span>
         </div>
@@ -612,13 +613,12 @@
               Bay already matches most of Arc: spaces with themes and profiles, favorites, pinned tabs and nested folders, auto cleanup, Peek, Split View,
               Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
               folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>. The ten small
-              ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2) and Boosts (Phase 3) have shipped and are listed under
-              <a href="#have">Already in Bay</a>. Easel web sharing is also implemented behind an off-by-default environment flag;
-              <strong>6 gaps</strong> remain.
+              ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2), Boosts (Phase 3) and collection link sharing are implemented and listed under
+              <a href="#have">Already in Bay</a>. Easel web sharing is also implemented behind an environment flag that is off by default;
+              <strong>5 gaps</strong> remain.
             </p>
             <p>
-              The gaps left are <strong>sharing and Arc Max</strong>: shared folders, Share Quote, and the "tidy" AI features. Each needs a decision before work
-              starts.
+              The gaps left are <strong>Share Quote and Arc Max</strong>: quote sharing and the "tidy" AI features. Each needs a decision before work starts.
             </p>
             <p>Phase 1 landed before Arc's sunset reminders start on 23 November. The phases left don't depend on Arc's dates.</p>
           </div>
@@ -689,6 +689,7 @@
             <li>⌃Tab recent tab switcher across spaces</li>
             <li>Supercopy: ⇧⌘C copies a link without trackers</li>
             <li>Copy URL as Markdown; link to highlighted text</li>
+            <li>Share a folder, split or selected tabs as a snapshot link; preview in any browser and Add to Bay with nested folders, lazy tabs and Undo</li>
             <li>Capture an element, an area or the full page, with markup</li>
             <li>Capture in Portrait: the page framed on the space's colours</li>
             <li>Easels with live captures; export as PNG or HTML</li>
@@ -730,8 +731,8 @@
           <h2 id="missing-h">What's missing</h2>
           <p class="prose">
             "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
-            not run for this review. The date is when Arc shipped the feature. Gaps 1–15 (Phases 1 to 3) have shipped; item 18 is implemented behind a flag.
-            They moved to <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
+            not run for this review. The date is when Arc shipped the feature. Gaps 1–15 and 17 are implemented; item 18 is implemented behind a flag. They
+            moved to <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
           </p>
           <div class="table-wrap">
             <table class="gaps">
@@ -753,15 +754,7 @@
                   <td>16</td>
                   <td>Share Quote: highlighted text as a card image and link</td>
                   <td>Nov 2023</td>
-                  <td>Copies a link to the highlight</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">4</td>
-                </tr>
-                <tr>
-                  <td>17</td>
-                  <td>Share a folder, split or selection as a link</td>
-                  <td>Oct 2023</td>
-                  <td>Copy All Links, as text or Markdown</td>
+                  <td>Implemented: copies a themed quote card and highlight link; offers the macOS share sheet</td>
                   <td class="c"><span class="chip m">M</span></td>
                   <td class="c">4</td>
                 </tr>
@@ -876,15 +869,15 @@
           <h2 id="phases-h">Phases</h2>
           <ol class="flow">
             <li class="gate">
-              <a href="#p4"><span class="n">Phase 4</span><strong>Sharing</strong>Decision first</a>
+              <a href="#p4"><span class="n">Phase 4</span><strong>Sharing</strong>Easel hosting decision</a>
             </li>
             <li class="gate">
               <a href="#p5"><span class="n">Phase 5</span><strong>Arc Max, on device</strong>Research gate</a>
             </li>
           </ol>
           <p class="prose">
-            Phase 1 (ten small habits), Phase 2 (keyboard, undo and Finder files) and Phase 3 (Boosts) have shipped. Easel web sharing from Phase 4 is done
-            behind a flag. The remaining items in Phases 4 and 5 need their decisions first.
+            Phases 1–3 and collection link sharing are implemented. Easel web sharing is done behind a flag. The remaining work in Phases 4 and 5 starts only
+            after its decisions are made.
           </p>
 
           <article class="phase gate" id="p4" aria-labelledby="p4-h">
@@ -894,47 +887,33 @@
               <span class="chip gate">Decision first</span>
             </div>
             <p class="goal">
-              Arc shared things through its own servers, which are being turned off. Decide <a href="#decisions">how to share collections</a> before starting
-              item 17. Easel web sharing is implemented and listed under <a href="#have">Already in Bay</a>; it stays off until its R2 host is provisioned.
+              Collection links use URL fragments and need no sharing server. Easel web sharing is implemented and listed under
+              <a href="#have">Already in Bay</a>; it stays off until its R2 host is provisioned.
             </p>
 
             <div class="item">
               <h4>16 · Share Quote <span class="chip m">M</span></h4>
               <p>
-                Bay's selection popover already copies a link to the highlighted text. Add "Share Quote": render the quote, page title and site in the space's
-                colours as an image, put the image and the text-fragment link on the pasteboard, and offer the share sheet. Done in the shell, needing no
-                server.
+                Implemented in the selection popover. "Share Quote" copies the selected text, page title and site as a card in the space's colours, together
+                with a link to the highlighted passage. The confirmation offers "Share…" to open the macOS share sheet with both the card and link. Rendering
+                stays local and needs no server. Selections over 4,000 characters are rejected rather than truncated.
               </p>
               <dl class="facts">
                 <dt>Where</dt>
-                <dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, shell image rendering</dd>
+                <dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, <code>packages/shell/ios/QuoteCard.swift</code></dd>
               </dl>
               <ul class="checks">
                 <li>Pasting into Messages gives the card image; pasting into a text field gives the link, which opens scrolled to the quote.</li>
-              </ul>
-            </div>
-
-            <div class="item">
-              <h4>17 · Share a folder, split or selection as a link <span class="chip m">M</span></h4>
-              <p>
-                Recommended without a server: compress the titles and links into the fragment of a link on the Bay website
-                (<code>bay.krishkalaria.in/share#…</code>). The fragment never reaches the server. The page lists the links in any browser and has "Add to Bay",
-                which opens a <code>bay://</code> link that imports it as a folder.
-              </p>
-              <dl class="facts">
-                <dt>Where</dt>
-                <dd><code>sidebar/menus.ts</code>, <code>apps/web</code> share page, URL scheme handler in <code>AppDelegate.swift</code></dd>
-              </dl>
-              <ul class="checks">
-                <li>A 30-tab folder shared to Chrome lists every link; "Add to Bay" recreates it with nested folders.</li>
+                <li>
+                  Native rendering and plain/rich text paste checks: <code>python3 packages/shell/scripts/test-quote-card.py</code>. App integration:
+                  <code>node apps/browser/scripts/share-quote-test.mjs &lt;Debug Bay.app&gt;</code>.
+                </li>
               </ul>
             </div>
 
             <h4 class="exit">Exit criteria</h4>
             <ul>
-              <li>
-                Share Quote shipped; collection links shipped if the fragment approach is chosen; Easel snapshot hosting provisioned and its Worker deployed.
-              </li>
+              <li>Share Quote shipped; deploy the collection share page; provision Easel R2 storage and deploy its opt-in Worker.</li>
             </ul>
           </article>
 
@@ -1039,11 +1018,6 @@
                   <td>AI for the tidy features</td>
                   <td>On-device only · cloud opt-in · skip Phase 5</td>
                   <td>On-device only, behind the research spike</td>
-                </tr>
-                <tr>
-                  <td>Sharing collections</td>
-                  <td>Fragment links on the Bay site · a hosted service · none</td>
-                  <td>Fragment links: no server, no stored data</td>
                 </tr>
                 <tr>
                   <td>Sharing Easels</td>

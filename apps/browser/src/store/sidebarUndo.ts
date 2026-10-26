@@ -50,6 +50,14 @@ export function withoutSidebarUndo<T>(action: () => T): T {
 const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
 const runtimeTabKeys = new Set(["navigation", "adoptId", "wakeAdoptId", "lastActiveAt"]);
 
+// Loading or focusing a newly added saved row does not make it a different sidebar item.
+// Preserve it if a later edit changed its placement, saved address, name, or icon.
+function sameCreatedTab(current: unknown, after: unknown): boolean {
+  if (!current || !(after as Tab | undefined)?.pinnedRow || !(after as Tab).folderId) return false;
+  const keys: (keyof Tab)[] = ["id", "createdAt", "spaceId", "pinned", "pinnedRow", "folderId", "pinnedUrl", "customTitle", "customIcon", "kept"];
+  return keys.every((key) => same((current as Tab)[key], (after as Tab)[key]));
+}
+
 function changesBetween(before: BrowserState, after: BrowserState): Change[] {
   const changes: Change[] = [];
   for (const key of RECORDS) {
@@ -65,6 +73,7 @@ function changesBetween(before: BrowserState, after: BrowserState): Change[] {
 
 // Reverse only the fields this edit changed, provided another edit has not replaced their value since.
 function reverseFields(current: unknown, before: unknown, after: unknown, key: RecordKey): unknown {
+  if (key === "tabs" && before === undefined && sameCreatedTab(current, after)) return undefined;
   if (before === undefined || after === undefined) return same(current, after) ? before : current;
   if (!current || typeof current !== "object") return current;
   const result = { ...(current as Record<string, unknown>) };
@@ -251,6 +260,7 @@ const EDIT_ACTIONS = new Set([
   "updatePinnedFolder",
   "movePinnedFolder",
   "newPinnedFolder",
+  "importSharedCollection",
   "deletePinnedFolder",
   "createGroup",
   "groupTabs",
@@ -273,7 +283,7 @@ const EDIT_ACTIONS = new Set([
 
 function editWindow(s: BrowserState, action: string, args: unknown[]): string | undefined {
   if (originWindow && s.windows[originWindow]) return originWindow;
-  if (action === "cleanUpTabs" || action === "newPinnedFolder" || action === "pinLocalFiles") return args[0] as string;
+  if (action === "cleanUpTabs" || action === "newPinnedFolder" || action === "pinLocalFiles" || action === "importSharedCollection") return args[0] as string;
   const focused = s.ui.focusedWindowId;
   if (focused && s.windows[focused]) return focused;
   const id = (Array.isArray(args[0]) ? args[0][0] : args[0]) as string;

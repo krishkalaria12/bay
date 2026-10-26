@@ -17,6 +17,7 @@ import { activated, apply, createTabsSlice, withNewTab, type TabsSlice } from ".
 import type { BrowserWindow, PinnedFolder, Tab, TabGroup } from "./types";
 import { createUiSlice, type UiSlice } from "./ui";
 import { createWindowsSlice, type WindowsSlice } from "./windows";
+import { createSharedCollectionsSlice, type SharedCollectionsSlice } from "./sharedCollections";
 
 export type BrowserState = SidebarUndoSlice &
   SpacesSlice &
@@ -24,6 +25,7 @@ export type BrowserState = SidebarUndoSlice &
   TabsSlice &
   GroupsSlice &
   FoldersSlice &
+  SharedCollectionsSlice &
   OrganizeSlice &
   SplitsSlice &
   PeeksSlice &
@@ -101,6 +103,7 @@ export const useBrowser = create<BrowserState>()(
         ...createTabsSlice(...a),
         ...createGroupsSlice(...a),
         ...createFoldersSlice(...a),
+        ...createSharedCollectionsSlice(...a),
         ...createOrganizeSlice(...a),
         ...createSplitsSlice(...a),
         ...createPeeksSlice(...a),

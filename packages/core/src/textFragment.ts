@@ -62,7 +62,17 @@ export function chooseTextFragment(context: SelectionContext): TextFragment | nu
   const last = wordsOf(blocks[blocks.length - 1]!);
   const most = blocks.length === 1 ? Math.floor(all.length / 2) : Math.min(first.length, last.length);
   let n = Math.min(RANGE_WORDS, most);
-  while (n < most && count(first.slice(0, n).join(" ")) > 1) n++;
+  if (n < most && count(first.slice(0, n).join(" ")) > 1) {
+    // Adding words cannot add occurrences. Find the same first unique prefix without searching every length.
+    let low = n + 1,
+      high = most;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (count(first.slice(0, middle).join(" ")) > 1) low = middle + 1;
+      else high = middle;
+    }
+    n = low;
+  }
   const start = first.slice(0, n).join(" ");
   const end = last.slice(-n).join(" ");
   if (count(start) <= 1 || !beforeWords.length) return { start, end };

@@ -43,6 +43,15 @@ public class CaptureModule: Module {
       CapturePortrait.render(path: path, colors: colors, dark: dark)
     }.runOnQueue(.main)
 
+    AsyncFunction("copyQuote") { (text: String, title: String, url: String, colors: [String], dark: Bool) -> Bool in
+      QuoteCard.render(text: text, title: title, url: url, colors: colors, dark: dark)?.copy() ?? false
+    }.runOnQueue(.main)
+
+    AsyncFunction("shareQuote") { (text: String, title: String, url: String, colors: [String], dark: Bool, windowId: String) -> Bool in
+      guard let card = QuoteCard.render(text: text, title: title, url: url, colors: colors, dark: dark) else { return false }
+      return CaptureFiles.shareQuote(card, windowId: windowId)
+    }.runOnQueue(.main)
+
     View(CaptureCanvasView.self) {
       Events("onMarkupChange")
       Prop("path") { (view: CaptureCanvasView, path: String) in view.load(path) }
@@ -59,6 +68,16 @@ public class CaptureModule: Module {
 
 enum CaptureFiles {
   private static var picker: NSSharingServicePicker?
+
+  static func shareQuote(_ card: QuoteCard.Card, windowId: String) -> Bool {
+    guard let view = WindowManager.shared.windows[windowId]?.contentView else { return false }
+    let image = NSPreviewRepresentingActivityItem(item: card.image, title: card.title, image: card.image, icon: nil)
+    let picker = NSSharingServicePicker(items: [image, card.url as NSURL])
+    self.picker = picker
+    let anchor = NSRect(x: view.bounds.midX - 1, y: view.isFlipped ? 40 : view.bounds.maxY - 42, width: 2, height: 2)
+    picker.show(relativeTo: anchor, of: view, preferredEdge: view.isFlipped ? .maxY : .minY)
+    return true
+  }
 
   static func unique(in dir: URL, name: String, ext: String) -> URL {
     let base = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: ".")
