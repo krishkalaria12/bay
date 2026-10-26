@@ -568,13 +568,13 @@ const PanelRow = memo(function PanelRow({
 }) {
   const theme = useTheme();
   const d = useBrowser((s) => s.downloads.find((x) => x.id === id));
+  const tidy = useTidySuggestion(d);
+  const windowId = useWindowId();
   if (!d) return null;
   const exists = d.state !== "finished" || fileExists(d.path);
   const done = d.state === "finished" && exists;
   const progress = d.total > 0 ? d.received / d.total : 0;
   const host = hostLabel(d.url);
-  const tidy = useTidySuggestion(d);
-  const windowId = useWindowId();
   return (
     <View onMouseEnter={onHover}>
       <MouseArea path={done ? d.path : null}>

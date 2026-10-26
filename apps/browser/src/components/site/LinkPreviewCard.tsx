@@ -8,6 +8,7 @@ import { copyLinkPreview, fetchLinkSummary, openLinkPreview, peekLinkPreview, se
 
 export function LinkPreview({ tabId }: { tabId: string }) {
   const preview = useLinkPreview((s) => s[tabId] ?? null);
+  const theme = useTheme();
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
   const [area, setArea] = useState({ width: 0, height: 0 });
@@ -43,19 +44,19 @@ export function LinkPreview({ tabId }: { tabId: string }) {
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill} onLayout={(e) => setArea(e.nativeEvent.layout)}>
       <Surface
         style={{ position: "absolute", left, top, width, padding: 12 }}
-        fill={hex(useTheme().panel)}
+        fill={hex(theme.panel)}
         cornerRadius={12}
-        borderColor={hex(useTheme().panelBorder)}
+        borderColor={hex(theme.panelBorder)}
         borderWidth={0.5}
         shadowColor="#000000"
         shadowOpacity={0.18}
         shadowRadius={16}
         shadowOffset={[0, 6]}
       >
-        <Text numberOfLines={2} style={{ fontSize: 13, fontWeight: "600", color: useTheme().textPrimary, marginBottom: 6 }}>
+        <Text numberOfLines={2} style={{ fontSize: 13, fontWeight: "600", color: theme.textPrimary, marginBottom: 6 }}>
           {loading ? "Loading preview…" : summary}
         </Text>
-        <Text numberOfLines={1} style={{ fontSize: 11.5, color: useTheme().textSecondary, marginBottom: 8 }}>
+        <Text numberOfLines={1} style={{ fontSize: 11.5, color: theme.textSecondary, marginBottom: 8 }}>
           {url}
         </Text>
         <View style={{ flexDirection: "row", gap: 6 }}>
