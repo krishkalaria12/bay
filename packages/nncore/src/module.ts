@@ -17,6 +17,11 @@ export type Download = {
   speed: number;
   mimeType: string;
   profile?: string;
+  /** What the server called the file. When it differs from filename, a person chose the saved name. */
+  suggestedFilename?: string;
+  /** The page that started the download, when Chromium knows it (blank for a private window's download). */
+  referrer?: string;
+  tabUrl?: string;
 };
 
 export type PermissionKind =

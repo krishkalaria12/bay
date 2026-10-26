@@ -123,6 +123,7 @@ export const useBrowser = create<BrowserState>()(
           settings.density = settings.density === "compact" ? "compact" : "comfortable";
           settings.searchShortcutMode = settings.searchShortcutMode === "duckduckgo" ? "duckduckgo" : "arc";
           settings.awakeSites = normalizeAwakeSites(Array.isArray(settings.awakeSites) ? settings.awakeSites : DEFAULT_SETTINGS.awakeSites);
+          settings.tidyDownloads = typeof settings.tidyDownloads === "boolean" ? settings.tidyDownloads : DEFAULT_SETTINGS.tidyDownloads;
           if (!spaces[settings.defaultSpaceId]) settings.defaultSpaceId = spaceOrder[0]!;
           settings.externalLinkDefault = normalizeLinkDestination(settings.externalLinkDefault);
           if (settings.externalLinkDefault?.kind === "space" && !spaces[settings.externalLinkDefault.spaceId])

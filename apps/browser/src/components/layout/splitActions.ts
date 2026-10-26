@@ -9,7 +9,7 @@ import { MAX_SPLIT_PANES } from "../../store/constants";
 const store = () => useBrowser.getState();
 
 type Toast = { id: number; title: string; message?: string } & ToastOptions;
-export type ToastOptions = { icon?: string; action?: { title: string; run(): void }; key?: string; sticky?: boolean };
+export type ToastOptions = { icon?: string; action?: { title: string; run(): void }; key?: string; sticky?: boolean; duration?: number };
 export const useToasts = create<{ toasts: Record<string, Toast | null> }>()(() => ({ toasts: {} }));
 let toastSeq = 0;
 export function showToast(windowId: string, title: string, message?: string, options?: ToastOptions) {

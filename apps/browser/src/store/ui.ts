@@ -26,6 +26,7 @@ export type UiSlice = {
   setDownloadsOpen(windowId: string, open: boolean): void;
   setFind(tabId: string, patch: Partial<FindState>): void;
   upsertDownload(d: Download): void;
+  updateDownloadFile(id: string, patch: { filename: string; path: string }): void;
   removeDownload(id: string): void;
   clearDownloads(windowId?: string): void;
   forgetDownloads(profile: string): void;
@@ -119,6 +120,10 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
       // A new download doesn't open the panel: the magnet flies its icon to the downloads button instead.
       return { downloads: exists ? s.downloads.map((x) => (x.id === d.id ? d : x)) : [d, ...s.downloads].slice(0, MAX_DOWNLOADS) };
     });
+  },
+
+  updateDownloadFile(id, patch) {
+    set((s) => ({ downloads: s.downloads.map((d) => (d.id === id ? { ...d, filename: patch.filename, path: patch.path } : d)) }));
   },
 
   removeDownload(id) {

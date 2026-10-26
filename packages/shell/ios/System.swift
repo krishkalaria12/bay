@@ -84,6 +84,51 @@ public class SystemModule: Module {
       }
     }.runOnQueue(.main)
 
+    // Tidy Downloads: rename a finished download in place, never onto another file. Returns the new path (the
+    // caller updates its download record) or nil when the name is unusable or the move failed.
+    AsyncFunction("renameFile") { (path: String, name: String) -> String? in
+      let files = FileManager.default
+      let source = URL(fileURLWithPath: path).standardizedFileURL
+      guard source.path.hasPrefix("/"), files.fileExists(atPath: source.path) else { return nil }
+      let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !clean.isEmpty, clean.utf8.count <= 200, !clean.hasPrefix("."), !clean.hasSuffix("."), !clean.hasSuffix(" "),
+        !clean.contains("/"), !clean.contains(":") else { return nil }
+      let folder = source.deletingLastPathComponent()
+      let ext = (clean as NSString).pathExtension
+      let stem = ext.isEmpty ? clean : String(clean.dropLast(ext.count + 1))
+      func target(_ suffix: String = "") -> URL {
+        let name = ext.isEmpty ? stem + suffix : stem + suffix + "." + ext
+        return folder.appendingPathComponent(name)
+      }
+      var destination = target()
+      if destination.standardizedFileURL == source { return source.path }
+      // A case-only rename on a case-insensitive volume needs a temporary stop: the target "exists" (it is the source).
+      if destination.path.lowercased() == source.path.lowercased() {
+        let temporary = folder.appendingPathComponent(".bay-rename-\(UUID().uuidString)")
+        do {
+          try files.moveItem(at: source, to: temporary)
+          try files.moveItem(at: temporary, to: destination)
+          return destination.path
+        } catch {
+          try? files.moveItem(at: temporary, to: source)
+          return nil
+        }
+      }
+      // Chromium's own disambiguation, so twice-tidied files do not replace each other.
+      var copy = 1
+      while files.fileExists(atPath: destination.path) {
+        guard copy < 1000 else { return nil }
+        destination = target(" (\(copy))")
+        copy += 1
+      }
+      do {
+        try files.moveItem(at: source, to: destination)
+        return destination.path
+      } catch {
+        return nil
+      }
+    }.runOnQueue(.main)
+
     AsyncFunction("fileIcon") { (path: String, size: Double) -> String? in
       let icon = FileManager.default.fileExists(atPath: path)
         ? NSWorkspace.shared.icon(forFile: path)

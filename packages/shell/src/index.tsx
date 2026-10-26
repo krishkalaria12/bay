@@ -510,3 +510,12 @@ const TranslationNative = requireNativeModule<TranslationModule>("BayTranslate")
 
 // Null before macOS 26, which has no translation API for apps.
 export const translation: Omit<TranslationModule, "available"> | null = TranslationNative.available ? TranslationNative : null;
+
+type TidyNamesModule = {
+  readonly available: boolean;
+  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;
+};
+const TidyNamesNative = requireNativeModule<TidyNamesModule>("BayTidyNames");
+
+// Null on Macs without Apple Intelligence, where Tidy Downloads leans on the local cleaner alone.
+export const tidyNames: Omit<TidyNamesModule, "available"> | null = TidyNamesNative.available ? TidyNamesNative : null;

@@ -17,15 +17,18 @@
 //       (Chrome's history entry; the file stays).
 //   Each control replies {error: "no such download"} for an unknown id.
 //
-// Download, the JS `Download` (packages/cef/src/module.ts) without profile:
-//   {id, url, filename, path, state: "downloading"|"finished"|"failed"|
-//    "cancelled", paused, received, total (-1 when unknown), speed (bytes/s),
-//    mimeType, dangerous, error (Chrome's interrupt reason, e.g.
-//    "NETWORK_FAILED", or null), offTheRecord, startTime (ms since the
-//    epoch)}
+// Download, the JS `Download` (packages/nncore/src/module.ts) without profile:
+//   {id, url, suggestedFilename, filename, path, referrer, tabUrl, state:
+//    "downloading"|"finished"|"failed"|"cancelled", paused, received, total
+//    (-1 when unknown), speed (bytes/s), mimeType, dangerous, error (Chrome's
+//    interrupt reason, e.g. "NETWORK_FAILED", or null), offTheRecord, startTime
+//    (ms since the epoch)}
 // id is Chrome's GUID for the download: unique across profiles and stable
 // across launches. offTheRecord marks a private window's download (its event
-// still names the original profile).
+// still names the original profile). suggestedFilename is what the server sent;
+// when it differs from filename the person chose the saved name. referrer and
+// tabUrl name the page that started the download (blank for a private one), so
+// the app can offer a readable file name from the page's title.
 //
 // Events, once something has called nn_downloads_* for the profile (call
 // nn_downloads_list at startup):

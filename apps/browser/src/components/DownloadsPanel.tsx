@@ -12,6 +12,7 @@ import { useWindowId, useWindowUi } from "../store/hooks";
 import { activeTabId, engineProfile } from "../store/model";
 import { downloadsIn } from "../store/ui";
 import { copyDownloadFile, downloadStatus, FileIcon, isOpenWhenDone, toggleOpenWhenDone, trashDownload } from "./Downloads";
+import { useTidySuggestion, tidyRename, resolveTidySuggestion, useTidyNames } from "../lib/tidyDownloads";
 import { Keycaps } from "./omnibox/Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./omnibox/PaletteActionMenu";
 import { FooterButton, useMenuPresence } from "./omnibox/PaletteContent";
@@ -212,7 +213,7 @@ function Panel({ windowId, windowWidth, windowHeight }: { windowId: string; wind
     });
 
   const openActionsMenu = (d = current()) => {
-    const actions = d ? downloadActions(d) : [];
+    const actions = d ? downloadActions(d, windowId) : [];
     const clearable = downloadsIn(useBrowser.getState(), windowId).some((x) => x.state !== "downloading");
     actions.push(
       { id: "folder", title: "Open Downloads Folder", icon: "folder", hint: d ? undefined : "↩", separator: !!d, run: () => openDownloadsFolder(windowId) },
@@ -422,9 +423,17 @@ const FIELD_KEYS = [
 // ⇧⌫ removes the selected download only while the search field is empty, so it still deletes text.
 const EMPTY_FIELD_KEYS = [...FIELD_KEYS, { key: "Backspace", shiftKey: true }];
 
-function downloadActions(d: Download): PaletteMenuAction[] {
+function downloadActions(d: Download, windowId?: string): PaletteMenuAction[] {
   const exists = d.state === "finished" && fileExists(d.path);
   const copy = { id: "copy", title: "Copy Download Link", icon: "link", hint: "⇧⌘C", run: () => copyText(d.url) };
+  // Tidy Downloads: an offer to rename, only when a suggestion has been computed for this download.
+  const tidyEntry = useTidyNames.getState().entries[d.id];
+  const tidy = tidyEntry && tidyEntry.filename === d.filename ? tidyEntry.value : null;
+  if (!tidy) void resolveTidySuggestion(d);
+  const tidyAction =
+    tidy && d.state === "finished"
+      ? [{ id: "tidy", title: `Rename to “${tidy.filename}”`, icon: "wand.and.stars", hint: "⌘K", run: () => void tidyRename(d, tidy, windowId ?? "") }]
+      : [];
   if (d.state === "downloading") {
     return [
       d.paused
@@ -436,6 +445,7 @@ function downloadActions(d: Download): PaletteMenuAction[] {
     ];
   }
   return [
+    ...tidyAction,
     ...(exists
       ? [
           { id: "open", title: "Open", icon: "arrow.up.forward.app", hint: "↩", run: () => openFile(d.path) },
@@ -563,6 +573,8 @@ const PanelRow = memo(function PanelRow({
   const done = d.state === "finished" && exists;
   const progress = d.total > 0 ? d.received / d.total : 0;
   const host = hostLabel(d.url);
+  const tidy = useTidySuggestion(d);
+  const windowId = useWindowId();
   return (
     <View onMouseEnter={onHover}>
       <MouseArea path={done ? d.path : null}>
@@ -594,6 +606,18 @@ const PanelRow = memo(function PanelRow({
               >
                 {d.filename || "Preparing…"}
               </Text>
+              {done && tidy ? (
+                <View tooltip={`Rename to “${tidy.filename}”`}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rename to ${tidy.filename}`}
+                    onPress={() => void tidyRename(d, tidy, windowId)}
+                    style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 5, opacity: 0.8 }}
+                  >
+                    <Symbol name="wand.and.stars" size={13} color={theme.accent} />
+                  </Pressable>
+                </View>
+              ) : null}
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>
                 {d.state === "downloading" ? downloadStatus(d) : host}
               </Text>
