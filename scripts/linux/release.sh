@@ -34,6 +34,7 @@ python3 "$repo/scripts/linux/build-app.py" --verify "$app" >/dev/null
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$output"
+output=$(cd "$output" && pwd)
 artifacts=()
 
 # The installed tree, shared by every format.
@@ -41,7 +42,7 @@ root="$work/root"
 mkdir -p "$root/opt/bay" "$root/usr/bin" "$root/usr/share/applications" "$root/usr/share/metainfo" \
   "$root/etc/apparmor.d" "$root/etc/bay/native-messaging-hosts" "$root/etc/bay/policies/managed" "$root/etc/bay/policies/recommended"
 cp -a "$app/." "$root/opt/bay/"
-chmod 0755 "$root/opt/bay/bay-wrapper" "$root/opt/bay/chrome_sandbox"
+chmod 0755 "$root/opt/bay/bay-wrapper" "$root/opt/bay/chrome-sandbox"
 ln -s /opt/bay/bay-wrapper "$root/usr/bin/bay"
 install -m 0644 "$packaging/bay.desktop" "$root/usr/share/applications/bay.desktop"
 install -m 0644 "$packaging/apparmor/bay" "$root/etc/apparmor.d/bay"
@@ -71,7 +72,7 @@ fi
 if want deb; then
   deb="$work/deb"
   cp -a "$root" "$deb"
-  chmod 4755 "$deb/opt/bay/chrome_sandbox"
+  chmod 4755 "$deb/opt/bay/chrome-sandbox"
   mkdir -p "$deb/DEBIAN"
   install -m 0755 "$packaging/deb/postinst" "$packaging/deb/prerm" "$deb/DEBIAN/"
   echo /etc/apparmor.d/bay >"$deb/DEBIAN/conffiles"

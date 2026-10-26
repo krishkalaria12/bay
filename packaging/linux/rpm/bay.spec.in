@@ -22,7 +22,7 @@ command bar, and built-in ad blocking.
 %install
 cp -a %{bay_root}/. %{buildroot}/
 # Only the native package installs a root-owned setuid sandbox; the shared tree stays 0755.
-chmod 4755 %{buildroot}/opt/bay/chrome_sandbox
+chmod 4755 %{buildroot}/opt/bay/chrome-sandbox
 
 %post
 if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then

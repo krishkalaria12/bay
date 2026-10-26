@@ -36,7 +36,7 @@ Each format needs its tool: `dpkg-deb` (Arch: `dpkg`), `rpmbuild` (`rpm-tools`),
 
 ## What's installed
 
-- `/opt/bay/chrome_sandbox` is setuid root in the .deb, .rpm and AUR package, the fallback for kernels without
+- `/opt/bay/chrome-sandbox` is setuid root in the .deb, .rpm and AUR package, the fallback for kernels without
   unprivileged user namespaces. Nothing turns the sandbox off.
 - `/etc/apparmor.d/bay` (`apparmor/bay`) lets `/opt/bay/bay` create user namespaces where AppArmor restricts them (Ubuntu
   23.10 and later) and confines nothing else. The AppImage can't install it, and its mount point changes each launch, so

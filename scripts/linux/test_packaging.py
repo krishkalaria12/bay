@@ -3,8 +3,10 @@ import importlib.util
 import json
 import os
 import pathlib
+import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -25,12 +27,13 @@ ELF = pathlib.Path(shutil.which("true") or "/usr/bin/true")
 
 
 def make_runtime(directory):
-    """A runtime with every file the builder requires; the executables are a real ELF so ldd can read them."""
+    """A complete runtime, using real ELF executables on Linux so ldd can read them."""
     runtime = directory / "runtime"
     (runtime / "locales").mkdir(parents=True)
     (runtime / "bay-ui").mkdir()
     for name in ("bay", "chrome_sandbox", "chrome_crashpad_handler"):
-        shutil.copy2(ELF, runtime / name)
+        # Copy bytes and mode, not macOS system-file flags that fixtures cannot inherit.
+        shutil.copy(ELF, runtime / name)
     for name, text in (("resources.pak", "pak"), ("icudtl.dat", "icu"), ("locales/en-US.pak", "en"), ("xdg-settings", "#!/bin/sh\n")):
         (runtime / name).write_text(text)
     (runtime / "bay-ui" / "native_host.mojom-webui.js").write_text("import '//resources/mojo/mojo/public/js/bindings.js';\n")
@@ -61,6 +64,17 @@ def make_web(directory):
     return directory
 
 
+def assert_sandbox_metadata(test, app):
+    manifest = build_app.web_artifacts.verify_manifest(app)
+    provenance = json.loads((app / "engine-manifest.json").read_text())
+    test.assertFalse((app / "chrome_sandbox").exists())
+    checksum = engine.sha256(app / "chrome-sandbox")
+    test.assertEqual(manifest["files"]["chrome-sandbox"], checksum)
+    test.assertNotIn("chrome_sandbox", manifest["files"])
+    test.assertEqual(provenance["files"]["runtime/chrome_sandbox"], checksum)
+    return manifest
+
+
 class BuildAppTests(unittest.TestCase):
     def setUp(self):
         self.root = pathlib.Path(tempfile.mkdtemp(prefix="bay-packaging-test-"))
@@ -77,7 +91,16 @@ class BuildAppTests(unittest.TestCase):
         build_app.stage(extracted, self.web, app)
         for name in ("bay", "bay-wrapper", "bay-ui/index.html", "bay-ui/native_host.mojom-webui.js", "engine-manifest.json"):
             self.assertTrue((app / name).is_file(), name)
-        self.assertEqual(build_app.web_artifacts.verify_manifest(app)["platform"], "linux")
+        self.assertEqual(assert_sandbox_metadata(self, app)["platform"], "linux")
+        self.assertEqual((app / "engine-manifest.json").read_bytes(), (extracted / "manifest.json").read_bytes())
+        build_app.fetch.verify(extracted, engine.artifact_id("linux"), platform="linux")
+
+    def test_staged_verification_detects_changed_installed_sandbox(self):
+        app = self.root / "app"
+        build_app.stage(self.engine, self.web, app)
+        (app / "chrome-sandbox").write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "checksum mismatch: chrome-sandbox"):
+            build_app.web_artifacts.verify_manifest(app)
 
     def test_rejects_a_runtime_that_does_not_match_its_manifest(self):
         (self.engine / "runtime/resources.pak").write_text("changed")
@@ -102,7 +125,7 @@ class BuildAppTests(unittest.TestCase):
             build_app.extract(self.root / "evil.tar.zst", self.root / "out")
         self.assertFalse((self.root / "outside").exists())
 
-    @unittest.skipUnless(shutil.which("cc"), "needs a C compiler to make a binary with a missing library")
+    @unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("cc"), "needs Linux ELF tools and a C compiler")
     def test_refuses_an_app_with_an_unresolved_library(self):
         library, program = self.root / "libgone.so", self.root / "uses-gone"
         subprocess.run(["cc", "-shared", "-fPIC", "-x", "c", "-", "-o", library], input=b"int gone(void){return 0;}", check=True)
@@ -118,6 +141,62 @@ class BuildAppTests(unittest.TestCase):
 RELEASE = HERE / "release.sh"
 
 
+class AppImageInvocationTests(unittest.TestCase):
+    """Check the real release script's paths and payload with an argument-checking tool, not a real AppImage build."""
+
+    def test_relative_output_resolves_once_and_preserves_sandbox_metadata(self):
+        with tempfile.TemporaryDirectory(prefix="bay-appimage-invocation-") as directory:
+            root = pathlib.Path(directory)
+            runtime = make_runtime(root / "engine")
+            # A portable package must clear inherited setuid bits, even on an input with them set.
+            (runtime / "chrome_sandbox").chmod(0o4755)
+            write_manifest(root / "engine")
+            app = root / "app"
+            build_app.stage(root / "engine", make_web(root / "web"), app)
+            tools = root / "tools"
+            tools.mkdir()
+            appimagetool = tools / "appimagetool"
+            appimagetool.write_text(f"#!{sys.executable}\n" + '''import json, pathlib, shutil, sys
+appdir, image = map(pathlib.Path, sys.argv[-2:])
+assert image.parent.resolve() == pathlib.Path.cwd(), (image, pathlib.Path.cwd())
+shutil.copytree(appdir / "opt/bay", image.parent / "payload")
+image.write_text(json.dumps({"cwd": str(pathlib.Path.cwd()), "image": str(image)}))
+pathlib.Path(str(image) + ".zsync").write_text("fixture zsync")
+''')
+            appimagetool.chmod(0o755)
+            (tools / "zsyncmake").write_text("#!/bin/sh\nexit 0\n")
+            (tools / "zsyncmake").chmod(0o755)
+            if sys.platform == "darwin":
+                # BSD install lacks -D. Adapt that option only, leaving the real release script intact.
+                install = tools / "install"
+                install.write_text('''#!/bin/sh
+if [ "$1" = -Dm ]; then
+  mkdir -p "$(dirname "$4")"
+  shift
+  set -- -m "$@"
+fi
+exec ''' + shlex.quote(shutil.which("install")) + ''' "$@"
+''')
+                install.chmod(0o755)
+            result = subprocess.run([RELEASE, "--app", app, "--version", "1.3.0", "--output", "dist/linux-release",
+                                     "--formats", "appimage"], cwd=root, capture_output=True, text=True,
+                                    env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"], "BAY_GPG_KEY": ""})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            output = root / "dist/linux-release"
+            image = output / "Bay-1.3.0-x86_64.AppImage"
+            invocation = json.loads(image.read_text())
+            self.assertEqual(pathlib.Path(invocation["cwd"]), output.resolve())
+            self.assertEqual(pathlib.Path(invocation["image"]).resolve(), image.resolve())
+            self.assertTrue(pathlib.Path(str(image) + ".zsync").is_file())
+            payload = output / "payload"
+            assert_sandbox_metadata(self, payload)
+            self.assertEqual((payload / "chrome-sandbox").stat().st_mode & 0o7777, 0o755)
+            for line in (output / "SHA256SUMS").read_text().splitlines():
+                checksum, name = line.split()
+                self.assertEqual(engine.sha256(output / name), checksum)
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "package formats require Linux/GNU tools")
 class ReleaseTests(unittest.TestCase):
     """release.sh on a staged fixture app. Formats whose tool isn't installed are skipped, not faked."""
 
@@ -151,11 +230,15 @@ class ReleaseTests(unittest.TestCase):
                      "usr/share/icons/hicolor/scalable/apps/bay.svg", "etc/apparmor.d/bay", "etc/bay/native-messaging-hosts"):
             self.assertIn(f"bay-1.3.0/{name}", members)
         self.assertEqual(members["bay-1.3.0/usr/bin/bay"].linkname, "/opt/bay/bay-wrapper")
-        self.assertFalse(members["bay-1.3.0/opt/bay/chrome_sandbox"].mode & 0o4000, "a tarball never ships a setuid sandbox")
+        self.assertNotIn("bay-1.3.0/opt/bay/chrome_sandbox", members)
+        self.assertEqual(members["bay-1.3.0/opt/bay/chrome-sandbox"].mode, 0o755, "a tarball never ships a setuid sandbox")
         self.assertTrue(all(member.uid == 0 and member.gid == 0 for member in members.values()))
         metainfo = tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz").extractfile("bay-1.3.0/usr/share/metainfo/in.krishkalaria.bay.metainfo.xml").read()
         self.assertIn(b'<release version="1.3.0" date="2026-10-15" />', metainfo, "dated from release-notes/1.3.0.md")
         self.assertIn("bay-1.3.0-linux-x64.tar.xz", (output / "SHA256SUMS").read_text())
+        with tarfile.open(output / "bay-1.3.0-linux-x64.tar.xz") as tar:
+            tar.extractall(output, members=[member for member in tar if member.name.startswith("bay-1.3.0/opt/bay/")], filter="data")
+        assert_sandbox_metadata(self, output / "bay-1.3.0/opt/bay")
 
     @unittest.skipUnless(shutil.which("desktop-file-validate") and shutil.which("appstreamcli"), "needs desktop-file-utils and appstream")
     def test_desktop_entry_and_metainfo_validate(self):
@@ -183,8 +266,9 @@ class ReleaseTests(unittest.TestCase):
         shutil.copy2(output / "bay-1.3.0-linux-x64.tar.xz", aur)
         subprocess.run(["makepkg", "-f", "--nodeps", "--noconfirm"], cwd=aur, check=True, capture_output=True)
         members = self.listing(next(aur.glob("bay-bin-1.3.0-1-x86_64.pkg.tar.*")))
-        sandbox = members["opt/bay/chrome_sandbox"]
-        self.assertEqual((sandbox.mode & 0o7777, sandbox.uid), (0o4755, 0))
+        self.assertNotIn("opt/bay/chrome_sandbox", members)
+        sandbox = members["opt/bay/chrome-sandbox"]
+        self.assertEqual((sandbox.mode & 0o7777, sandbox.uid, sandbox.gid), (0o4755, 0, 0))
 
     @unittest.skipUnless(shutil.which("dpkg-deb"), "needs dpkg-deb")
     def test_deb_installs_a_setuid_sandbox_and_its_scripts(self):
@@ -192,7 +276,11 @@ class ReleaseTests(unittest.TestCase):
         self.release("deb", output)
         deb = output / "bay_1.3.0_amd64.deb"
         contents = subprocess.run(["dpkg-deb", "--contents", deb], check=True, capture_output=True, text=True).stdout
-        self.assertRegex(contents, r"-rwsr-xr-x root/root .* \./opt/bay/chrome_sandbox")
+        self.assertRegex(contents, r"-rwsr-xr-x root/root .* \./opt/bay/chrome-sandbox")
+        self.assertNotIn("./opt/bay/chrome_sandbox", contents)
+        unpacked = output / "unpacked"
+        subprocess.run(["dpkg-deb", "--extract", deb, unpacked], check=True)
+        assert_sandbox_metadata(self, unpacked / "opt/bay")
         self.assertEqual(subprocess.run(["dpkg-deb", "--field", deb, "Version"], capture_output=True, text=True).stdout.strip(), "1.3.0")
 
     @unittest.skipUnless(shutil.which("rpmbuild") and shutil.which("rpm"), "needs rpmbuild")
@@ -200,7 +288,8 @@ class ReleaseTests(unittest.TestCase):
         output = self.root / "rpm"
         self.release("rpm", output)
         listing = subprocess.run(["rpm", "-qlvp", output / "bay-1.3.0-1.x86_64.rpm"], check=True, capture_output=True, text=True).stdout
-        self.assertRegex(listing, r"-rwsr-xr-x .* root +root .* /opt/bay/chrome_sandbox")
+        self.assertRegex(listing, r"-rwsr-xr-x .* root +root .* /opt/bay/chrome-sandbox")
+        self.assertNotIn("/opt/bay/chrome_sandbox", listing)
 
     @unittest.skipUnless(shutil.which("appimagetool") and shutil.which("zsyncmake"), "needs appimagetool and zsyncmake")
     def test_appimage_and_its_zsync_file(self):

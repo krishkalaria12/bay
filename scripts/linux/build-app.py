@@ -72,6 +72,9 @@ def stage(engine_directory, web_directory, destination):
         raise ValueError(f"{destination} already exists; use a fresh output directory to avoid stale runtime files")
     # All verification finishes before creating the app directory.
     shutil.copytree(runtime, destination)
+    # Chromium builds chrome_sandbox but discovers an installed sibling named chrome-sandbox.
+    # Rename only the app copy, before hashing it; the engine manifest remains archive provenance.
+    (destination / "chrome_sandbox").rename(destination / "chrome-sandbox")
     shutil.copytree(web_directory, destination / "bay-ui", dirs_exist_ok=True)
     # The generated Mojo bindings belong to the engine revision and win over any stale ones in a web export.
     shutil.copytree(runtime / "bay-ui", destination / "bay-ui", dirs_exist_ok=True)

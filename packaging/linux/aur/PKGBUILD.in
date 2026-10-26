@@ -17,5 +17,5 @@ sha256sums=('@SHA256@')
 
 package() {
   cp -a "bay-${pkgver}/." "${pkgdir}/"
-  chmod 4755 "${pkgdir}/opt/bay/chrome_sandbox"
+  chmod 4755 "${pkgdir}/opt/bay/chrome-sandbox"
 }
