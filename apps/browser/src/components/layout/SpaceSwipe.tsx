@@ -11,11 +11,12 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./spacePager";
 
-export function SpaceSwipe({ children }: { children: ReactNode }) {
+// `swipes` false keeps the children mounted without the swipe area: the peek has one only while it's out.
+export function SpaceSwipe({ children, swipes = true }: { children: ReactNode; swipes?: boolean }) {
   return (
     <View style={{ height: "100%" }}>
       {children}
-      <SpaceSwipeArea surface="sidebar" style={StyleSheet.absoluteFill} />
+      {swipes ? <SpaceSwipeArea surface="sidebar" style={StyleSheet.absoluteFill} /> : null}
     </View>
   );
 }

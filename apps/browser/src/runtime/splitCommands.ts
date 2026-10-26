@@ -1,3 +1,4 @@
+import type { LocationCommandEffects } from "./locationCommands";
 import type { BrowserStore } from "../store/browser";
 import { MAX_SPLIT_PANES } from "../store/constants";
 import { isIncognitoSpace } from "../store/model";
@@ -130,7 +131,7 @@ export function parseSplitCommand(value: unknown): SplitCommand {
   }
 }
 
-export function executeSplitCommand(store: BrowserStore, command: SplitCommand): string | null {
+export function executeSplitCommand(store: BrowserStore, command: SplitCommand, effects?: LocationCommandEffects): string | null {
   const s = store.getState();
   switch (command.method) {
     case "createSplit":
@@ -182,9 +183,14 @@ export function executeSplitCommand(store: BrowserStore, command: SplitCommand):
       requireCommandWindow(s, command.windowId);
       if (!s.reopenPeek(command.windowId)) store.getState().reopenClosed(command.windowId);
       break;
+    case "keepPeek": {
+      requireCommandWindow(s, command.windowId);
+      const destination = s.keepPeek(command.windowId) ?? null;
+      if (destination) effects?.focusWindow(destination);
+      return destination;
+    }
     case "toggleTabLayout":
     case "closePeek":
-    case "keepPeek":
     case "splitPeek":
       requireCommandWindow(s, command.windowId);
       s[command.method](command.windowId);

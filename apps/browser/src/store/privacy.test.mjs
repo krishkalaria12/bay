@@ -253,7 +253,7 @@ test("favicons: incognito icons stay in memory and in their own profile; nothing
   const [normalTab] = tabsOf(normal);
   const [privateTab] = tabsOf(incognito);
   const privateProfile = S().windows[incognito].spaceId;
-  const handle = (uri) => ({ downloadFavicon: () => Promise.resolve({ uri, width: 32, height: 32 }) });
+  const handle = (uri) => ({ downloadFavicon: () => Promise.resolve({ uri, width: 32, height: 32 }), setBoostStyle: () => Promise.resolve() });
   webviews.set(normalTab, handle("data:image/png;base64,SITE"));
   webviews.set(privateTab, handle("data:image/png;base64,AAAA"));
 

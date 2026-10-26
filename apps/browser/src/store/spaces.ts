@@ -230,6 +230,11 @@ export const createSpacesSlice =
           ...s.settings,
           defaultSpaceId: s.settings.defaultSpaceId === id ? fallback : s.settings.defaultSpaceId,
           neverTranslateSites: without(s.settings.neverTranslateSites ?? {}, [id]),
+          externalLinkRules: s.settings.externalLinkRules.filter((rule) => !(rule.destination.kind === "space" && rule.destination.spaceId === id)),
+          externalLinkDefault:
+            s.settings.externalLinkDefault?.kind === "space" && s.settings.externalLinkDefault.spaceId === id
+              ? { kind: "space" as const, spaceId: fallback }
+              : s.settings.externalLinkDefault,
         };
         const engine = engineIdOf(s.spaces[id]!);
         // Another space shares its sign-ins: the profile, and its bookmarks, stay theirs.

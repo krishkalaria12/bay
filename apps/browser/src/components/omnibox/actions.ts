@@ -11,6 +11,15 @@ import type { Tab } from "../../store/types";
 import { isInternalTab } from "../pages/urls";
 import { splitOf } from "../../store/splits";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../littleBay/menu";
+import { boostHost } from "../../lib/boosts";
+import { libraryAvailable } from "../library/availability";
+import { boostsAvailable, boostsForHost, useBoosts } from "../boosts/state";
+
+const siteHasBoosts = (url: string | undefined) => {
+  const host = boostHost(url);
+  return !!host && boostsForHost(useBoosts.getState(), host).length > 0;
+};
+const siteBoostsOn = (url: string) => useBoosts.getState().on && boostsForHost(useBoosts.getState(), boostHost(url)).some((b) => b.enabled);
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
 
@@ -21,7 +30,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "spaces";
+  needs?: "page" | "site" | "tab" | "spaces" | "boost" | "boosted";
   available?: (context: Context) => boolean;
 };
 
@@ -69,6 +78,56 @@ const DEFS: ActionDef[] = [
   },
   { command: "print", title: "Print", icon: "printer", hint: "⌘P", needs: page },
   { command: "share", title: "Share", icon: "square.and.arrow.up", needs: page, available: () => isMac },
+  {
+    command: "capture",
+    title: "Capture",
+    icon: "camera.viewfinder",
+    hint: "⇧⌘2",
+    keywords: ["screenshot", "screen capture", "snip", "capture element", "capture area"],
+    needs: page,
+  },
+  {
+    command: "captureFullPage",
+    title: "Capture Full Page",
+    icon: "camera",
+    keywords: ["full page screenshot", "screenshot", "scrolling screenshot"],
+    needs: page,
+  },
+  {
+    command: "capturePortrait",
+    title: "Capture in Portrait",
+    icon: "photo.on.rectangle",
+    keywords: ["portrait mode", "screenshot", "framed screenshot", "pretty screenshot"],
+    needs: page,
+  },
+  {
+    command: "newBoost",
+    title: "Boost This Site",
+    icon: "paintbrush.pointed",
+    keywords: ["new boost", "boost", "customize site", "restyle", "custom css", "site colors", "change font", "dark mode for site"],
+    needs: "boost",
+  },
+  {
+    command: "zapElements",
+    title: "Zap Elements",
+    icon: "bolt",
+    keywords: ["zap", "hide element", "remove element", "block element", "boost"],
+    needs: "boost",
+  },
+  {
+    command: "editBoost",
+    title: "Edit Boost",
+    icon: "paintbrush.pointed.fill",
+    keywords: ["boost", "edit boost"],
+    needs: "boosted",
+  },
+  {
+    command: "toggleSiteBoosts",
+    title: ({ tab }) => (tab && siteBoostsOn(tab.url) ? "Turn Off Boosts for This Site" : "Turn On Boosts for This Site"),
+    icon: "paintbrush.pointed",
+    keywords: ["boost", "disable boost", "enable boost"],
+    needs: "boosted",
+  },
   { command: "zoomIn", title: "Zoom In", icon: "plus.magnifyingglass", hint: "⌘+", needs: page },
   { command: "zoomOut", title: "Zoom Out", icon: "minus.magnifyingglass", hint: "⌘-", needs: page },
   { command: "zoomReset", title: "Actual Size", icon: "1.magnifyingglass", hint: "⌘0", keywords: ["reset zoom"], needs: page },
@@ -95,6 +154,8 @@ const DEFS: ActionDef[] = [
     keywords: ["toggle sidebar", "hide sidebar", "show sidebar", "focus mode"],
   },
   { command: "toggleBookmarksBar", title: "Toggle Bookmarks Bar", icon: "menubar.rectangle", hint: "⇧⌘B", keywords: ["bookmarks bar"] },
+  { command: "newEasel", title: "New Easel", icon: "scribble.variable", hint: "⌃⇧E", keywords: ["whiteboard", "canvas", "create easel"] },
+  { command: "openLibrary", title: "Open Library", icon: "books.vertical", keywords: ["media", "captures", "easels", "archived tabs", "library"] },
   { command: "downloads", title: "Downloads", icon: "arrow.down.circle", hint: "⇧⌘J", keywords: ["show downloads", "dl"] },
   { command: "showHistory", title: "History", icon: "clock", hint: "⌘Y", keywords: ["show history"] },
   { command: "manageBookmarks", title: "Bookmarks", icon: "book", hint: "⌥⌘B", keywords: ["manage bookmarks", "show bookmarks"] },
@@ -181,10 +242,14 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
   for (const d of defs) {
     if (!capabilities.menuBar && w?.kind === "small" && LITTLE_BAY_DISABLED_COMMANDS.includes(d.command)) continue;
     if (d.available && !d.available(c)) continue;
+    if ((d.command === "newEasel" || d.command === "openLibrary") && !libraryAvailable()) continue;
+    if ((d.needs === "boost" || d.needs === "boosted") && !boostsAvailable()) continue;
     if (d.needs === "page" && !tab?.url) continue;
     if (d.needs === "tab" && !tab) continue;
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
     if (d.needs === "spaces" && w?.incognito) continue;
+    if (d.needs === "boost" && !boostHost(tab?.url)) continue;
+    if (d.needs === "boosted" && !siteHasBoosts(tab?.url)) continue;
     out.push({
       id: actionId(d),
       title: typeof d.title === "string" ? d.title : d.title(c),

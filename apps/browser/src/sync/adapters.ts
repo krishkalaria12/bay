@@ -1,3 +1,4 @@
+import { withoutSidebarUndo } from "../store/sidebarUndo";
 import { addHistoryVisits, deleteHistoryUrls, deletePassword, savePassword } from "@bay/nncore";
 import { assignPositions, SyncNative, type Adapter, type Extraction, type SavedLogin } from "@bay/sync";
 import { bookmarkUuidFor, ensureRoots, isBookmarkUuid } from "../store/bookmarks";
@@ -20,6 +21,7 @@ export const SYNCED_SETTINGS = [
   "warnBeforeQuitting",
   "warnBeforeClosingWindow",
   "searchEngine",
+  "searchShortcutMode",
   "customSearchUrl",
   "customSearchEngines",
   "searchSuggestions",
@@ -35,8 +37,11 @@ export const SYNCED_SETTINGS = [
   "cmdClickCreatesTabGroup",
   "optShiftClickOpensInGroup",
   "autoGroupMeetingTabs",
+  "tidyTabTitles",
+  "tidyTabs",
   "cleanUpInactiveTabsAfterHours",
   "awakeSites",
+  "tidyDownloads",
   "mutedSites",
   "autoPictureInPicture",
   "noAutoPictureInPictureSites",
@@ -67,7 +72,10 @@ export const settingsAdapter: Adapter = {
       if (!record || !("v" in record) || !(SYNCED_SETTINGS as readonly string[]).includes(name)) continue;
       if (name === "awakeSites" && !Array.isArray(record.v)) continue;
       if (name === "density" && record.v !== "comfortable" && record.v !== "compact") continue;
+      if (name === "searchShortcutMode" && record.v !== "arc" && record.v !== "duckduckgo") continue;
       if (name === "calculatorEnabled" && typeof record.v !== "boolean") continue;
+      if (name === "tidyDownloads" && typeof record.v !== "boolean") continue;
+      if (name === "tidyTabs" && typeof record.v !== "boolean") continue;
       patch[name] = record.v;
     }
     if (Object.keys(patch).length) store().updateSettings(patch as Partial<Settings>);
@@ -100,7 +108,9 @@ export function profilesAdapter(links: () => Record<string, { syncId: string }>)
       for (const [id, { syncId }] of linked()) {
         const record = visible.get(`prof:${syncId}`) as ProfileRecord | undefined;
         if (!record || !changed.has(`prof:${syncId}`)) continue;
-        store().updateSpace(id, { name: record.n, color: record.c, icon: record.i, ...(typeof record.f === "boolean" ? { folded: record.f } : {}) });
+        withoutSidebarUndo(() =>
+          store().updateSpace(id, { name: record.n, color: record.c, icon: record.i, ...(typeof record.f === "boolean" ? { folded: record.f } : {}) }),
+        );
       }
     },
   };

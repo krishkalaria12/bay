@@ -3,6 +3,19 @@ import { nativeContracts } from "../../../packages/platform/src/nativeContracts.
 export const docs = new Map();
 export const readDocument = (name) => docs.get(name) ?? null;
 export const writeDocument = (name, contents) => docs.set(name, contents);
+// Native file access is opt-in for each test. A synced path by itself has no grant.
+export const localFileAnswers = {
+  inspect: async () => ({ status: "inaccessible" }),
+  list: async () => ({ access: { status: "inaccessible" }, entries: [] }),
+  open: async () => ({ status: "inaccessible" }),
+  reconnect: async () => null,
+};
+export const localFiles = {
+  inspect: (...args) => localFileAnswers.inspect(...args),
+  list: (...args) => localFileAnswers.list(...args),
+  open: (...args) => localFileAnswers.open(...args),
+  reconnect: (...args) => localFileAnswers.reconnect(...args),
+};
 // saveDocument lands at once, or, while heldSaves.on, when a test runs the queued releases.
 export const heldSaves = { on: false, queue: [], error: null };
 export const saveDocument = (name, contents) =>
@@ -22,10 +35,32 @@ export const systemCalendarEvents = () => Promise.resolve([]);
 export const calendarChangedListeners = new Set();
 export const onCalendarChanged = (listener) => (calendarChangedListeners.add(listener), { remove: () => calendarChangedListeners.delete(listener) });
 export const emitCalendarChanged = () => calendarChangedListeners.forEach((listener) => listener());
-export const keychainGet = () => Promise.resolve(null);
-export const keychainSet = () => Promise.resolve(true);
-export const keychainDelete = () => Promise.resolve(true);
-export const confirm = () => Promise.resolve({ confirmed: false, suppressed: false });
+export const keychainAnswers = {
+  get: async () => null,
+  set: async () => true,
+  delete: async () => true,
+};
+export const keychainGet = (...args) => keychainAnswers.get(...args);
+export const keychainSet = (...args) => keychainAnswers.set(...args);
+export const keychainDelete = (...args) => keychainAnswers.delete(...args);
+export const easelSharingAnswers = {
+  enabled: false,
+  identity: async () => ({ id: "a".repeat(32), key: "b".repeat(64) }),
+  readRecords: () => docs.get("easel-shares.json") ?? null,
+};
+export const createEaselShareIdentity = () => easelSharingAnswers.identity();
+export const isEaselWebSharingEnabled = () => easelSharingAnswers.enabled;
+export const readEaselShareRecords = () => easelSharingAnswers.readRecords();
+export const shellDialogAnswers = {
+  confirm: async () => ({ confirmed: false, suppressed: false }),
+  openTextFile: async () => null,
+  prompt: async () => null,
+  saveTextFile: async () => null,
+};
+export const confirm = (...args) => shellDialogAnswers.confirm(...args);
+export const openTextFile = (...args) => shellDialogAnswers.openTextFile(...args);
+export const prompt = (...args) => shellDialogAnswers.prompt(...args);
+export const saveTextFile = (...args) => shellDialogAnswers.saveTextFile(...args);
 export const windowEventListeners = new Set();
 export const onWindowEvent = (listener) => (windowEventListeners.add(listener), { remove: () => windowEventListeners.delete(listener) });
 export const emitWindowEvent = (event) => windowEventListeners.forEach((listener) => listener(event));
@@ -64,6 +99,8 @@ export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);
 export const iconTheme = () => Promise.resolve(null);
 export const cancelDownload = () => Promise.resolve();
+export const renameFile = (path, _name) => Promise.resolve(path);
+export const onDownload = () => ({ remove() {} });
 export const deletedProfileData = [];
 export const profileDataLeft = new Map();
 export const deleteProfileData = (profile) => (deletedProfileData.push(profile), Promise.resolve(profileDataLeft.get(profile) ?? []));
@@ -292,7 +329,6 @@ export const extensionAnswers = { actionStates: async () => ({}), sidePanelUrl: 
 export const extensionActionStates = (browserId, ids) => extensionAnswers.actionStates(browserId, ids);
 export const extensionSidePanelUrl = (browserId, extensionId) => extensionAnswers.sidePanelUrl(browserId, extensionId);
 
-export const prompt = () => Promise.resolve(null);
 export const copyText = () => {};
 
 // Synchronous desktop caption snapshot; tests can change it before subscribing or publish an app event.
@@ -312,3 +348,16 @@ export const hapticTick = () => {};
 export const dragPreview = Object.fromEntries(
   ["begin", "page", "update", "cancel", "placeholder", "end"].map((method) => [method, (...args) => tabDragNative.calls.push([method, ...args])]),
 );
+
+export const openWindow = () => Promise.resolve();
+// Library assets: a test can replace the importer to simulate an unavailable file.
+export const libraryImages = { retain: async (path) => ({ path: `/data/Library Media/${path.split("/").pop()}`, width: 640, height: 480 }) };
+export const retainLibraryImage = (path) => libraryImages.retain(path);
+
+export const sidebarKeyboardCalls = [];
+export const setSidebarKeyboard = (windowId, active) => (sidebarKeyboardCalls.push({ windowId, active }), Promise.resolve());
+// Boosts: what the app last sent the engine.
+export const engineBoostCalls = [];
+export const setBoosts = (boosts) => (engineBoostCalls.push(boosts), Promise.resolve());
+
+export const tidyNames = null;

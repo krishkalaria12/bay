@@ -180,6 +180,8 @@ class RuntimeConnection final
     }
     last_request_id_ = *request_id;
     request->Set("clientId", id_);
+    if (!window_id.empty())
+      request->Set("originWindowId", window_id);
     const auto token = ID();
     runtime_->Queue(*this, token, *request_id,
                     RuntimeCommandResultKind(*command), std::move(callback));

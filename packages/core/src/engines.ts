@@ -1,3 +1,4 @@
+import { BANG_PLACEHOLDER, isValidBangTemplate } from "./bangs.ts";
 import { hostOf, searchUrlFor } from "./omnibox.ts";
 
 export type SearchEngine = {
@@ -160,8 +161,10 @@ export function validateEngine(input: EngineInput, engines: readonly SearchEngin
   if (!name) return "Enter a name.";
   if (!keyword) return "Enter a shortcut.";
   if (/\s/.test(keyword)) return "The shortcut can't contain spaces.";
+  if (keyword.includes("!")) return "Enter the shortcut without !, for example yt for !yt.";
   if (!/^https?:\/\/[^/?#\s]+/i.test(url)) return "Enter a URL that starts with http:// or https://.";
   if (!url.includes("%s")) return "The URL must contain %s where the search terms go.";
+  if (!isValidBangTemplate(url.split("%s").join(BANG_PLACEHOLDER))) return "Use a fixed website address, with %s only in the path, query or fragment.";
   if (engines.some((e) => e.id !== ignoreId && e.keyword.toLowerCase() === keyword)) return `“${keyword}” is already used by another search engine.`;
   return null;
 }

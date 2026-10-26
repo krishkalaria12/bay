@@ -1,8 +1,19 @@
-import { forwardRef, useCallback, useLayoutEffect, useRef, type ComponentRef, type ComponentType, type CSSProperties, type ForwardedRef } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type ComponentRef,
+  type ComponentType,
+  type CSSProperties,
+  type ForwardedRef,
+} from "react";
 import { ActivityIndicator, Image, Text, type TextStyle } from "react-native";
 import { View, type ViewProps } from "@bay/platform";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
 import type { MiddleClickEvent, MouseAreaProps } from "./system";
+import type { LocalFilesAreaProps } from "./localFiles";
 import { fluentSymbol, svgSymbol } from "./symbols.web";
 
 type ViewRef = ComponentRef<typeof View>;
@@ -250,6 +261,98 @@ const PlainView = forwardRef<ViewRef, ViewProps & { profile?: string; neighbours
 const DragRegion = forwardRef<ViewRef, ViewProps>(function DragRegion(props, ref) {
   return <Box {...props} ref={ref} css={{ WebkitAppRegion: "drag" }} />;
 });
+/** Until these canvases have DOM implementations, show their limit and reject edits explicitly. */
+function unavailableCanvas(name: string) {
+  return forwardRef<object, ViewProps>(function UnavailableCanvas({ style }, ref) {
+    useImperativeHandle(
+      ref,
+      () =>
+        new Proxy(
+          {},
+          {
+            get(_target, method) {
+              if (method === "then" || typeof method !== "string") return undefined;
+              return async () => {
+                throw new Error(`${name} is unavailable in this Bay host`);
+              };
+            },
+          },
+        ),
+      [],
+    );
+    return (
+      <View style={style} accessibilityRole="alert">
+        <Text style={{ margin: 24 }}>{name} is unavailable in this Bay host.</Text>
+      </View>
+    );
+  });
+}
+
+function LocalFilesArea({
+  dropEnabled,
+  rootPath: _rootPath,
+  relativePath: _relativePath,
+  onFilesDropped: _onFilesDropped,
+  onFilesDropError,
+  onDropActive,
+  onActivate,
+  onContextMenu,
+  ...props
+}: LocalFilesAreaProps) {
+  const configure = useCallback(
+    (element: HTMLElement) => {
+      const click = (event: MouseEvent) => {
+        if (event.button === 0) onActivate?.();
+      };
+      const key = (event: KeyboardEvent) => {
+        if (!onActivate || event.target !== element || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        onActivate();
+      };
+      const context = (event: MouseEvent) => {
+        if (!onContextMenu) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu();
+      };
+      // Browser File objects carry no native access grant. A picker can reconnect a
+      // file; a drop must not turn untrusted path metadata into a native grant.
+      const over = (event: DragEvent) => {
+        if (!dropEnabled) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+        onDropActive?.({ nativeEvent: { active: true } });
+      };
+      const leave = () => onDropActive?.({ nativeEvent: { active: false } });
+      const drop = (event: DragEvent) => {
+        if (!dropEnabled) return;
+        event.preventDefault();
+        event.stopPropagation();
+        leave();
+        onFilesDropError?.({ nativeEvent: { message: "Dropping local files is unavailable in this Bay host. Use the file picker to reconnect." } });
+      };
+      element.addEventListener("click", click);
+      element.addEventListener("keydown", key);
+      element.addEventListener("contextmenu", context);
+      element.addEventListener("dragover", over);
+      element.addEventListener("dragleave", leave);
+      element.addEventListener("drop", drop);
+      return () => {
+        element.removeEventListener("click", click);
+        element.removeEventListener("keydown", key);
+        element.removeEventListener("contextmenu", context);
+        element.removeEventListener("dragover", over);
+        element.removeEventListener("dragleave", leave);
+        element.removeEventListener("drop", drop);
+      };
+    },
+    [dropEnabled, onFilesDropError, onDropActive, onActivate, onContextMenu],
+  );
+  // Rendering and keyboard activation work with the native LocalFiles commands.
+  // Native drag grants require a separate host adapter, so no fake file URL is emitted.
+  return <Box {...props} configure={configure} />;
+}
+
 const views: Record<string, unknown> = {
   BaySymbol: Symbol,
   BayFadeLabel: FadeLabel,
@@ -266,6 +369,9 @@ const views: Record<string, unknown> = {
   BayShell: DragRegion,
   BayContextMenuArea: ContextMenuArea,
   BayFileDrag: MouseArea,
+  BayCapture: unavailableCanvas("Capture Mark Up"),
+  BayEasel: unavailableCanvas("Easel canvas"),
+  BayLocalFiles: LocalFilesArea,
 };
 export function requireNativeViewManager<P extends object>(name: string): ComponentType<P> {
   const component = views[name];

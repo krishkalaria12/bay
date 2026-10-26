@@ -16,8 +16,9 @@ export type UpdaterState =
       pending: PendingUpdate | null;
     };
 
-/** An update waiting for the user: found (Sparkle shows it on install), or downloaded and installing on a restart. */
-export type PendingUpdate = { version: string; ready: boolean };
+/** An update waiting for the user: found (Sparkle shows it on install), downloading (nothing to do yet), or
+ * downloaded and installing on a restart. */
+export type PendingUpdate = { version: string; ready: boolean; downloading?: boolean };
 
 export type AppIcon = { id: string; name: string; preview: string | null };
 

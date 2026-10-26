@@ -1,11 +1,13 @@
 import type { StateCreator } from "zustand";
 import type { BrowserProjection } from "../runtime/projection";
+import { matchingLinkRule } from "../lib/externalLinkRules";
 import type { BrowserState } from "./browser";
 import { IDLE_LIVE, activeTabId, findLast, listIds, makeTab, pinnedFirst, pinnedPage, spaceListKey, withList } from "./model";
 import { insertionIndex } from "./openers";
 import { groupWithOpener } from "./organize";
 import { splitOf } from "./splits";
 import { activated, apply, removeTabs } from "./tabs";
+import { mainWindowFor, mostRecentSpace } from "./small";
 
 // Arc's Peek: a link from a pinned tab or a favourite opens over that tab's page, in a card, instead of as a tab of its
 // own. The peek's page is a store tab (a page, live state, an engine browser) that no list holds, marked `peekOf` its
@@ -27,7 +29,7 @@ export type PeeksSlice = {
   openPeek(fromId: string, url: string, adoptId?: string): string | undefined;
   closePeek(windowId: string): void;
   /** Open as Tab: the peek becomes a tab after its opener, shown. */
-  keepPeek(windowId: string): void;
+  keepPeek(windowId: string): string | undefined;
   /** Open in Split View: the peek becomes a tab beside its opener, in one split. */
   splitPeek(windowId: string): void;
   /** Reopen Closed Tab: the window's last closed peek, when nothing closed there since. */
@@ -161,9 +163,22 @@ export const createPeeksSlice: StateCreator<BrowserState, [], [], PeeksSlice> = 
   },
 
   keepPeek(windowId) {
-    const [next, peek] = listPeek(get(), windowId, false);
+    const state = get();
+    const current = state.peeks[windowId];
+    const tab = current && state.tabs[current.tabId];
+    const route = tab && !state.windows[windowId]?.incognito ? matchingLinkRule(state.settings.externalLinkRules, tab.url)?.destination : undefined;
+    const [next, peek] = listPeek(state, windowId, false);
     if (!peek) return;
     set(apply(next, activated(next, peek.tabId, windowId)));
+    if (route?.kind === "littleBay" && tab) return get().createWindow({ small: true, tabIds: [peek.tabId], spaceId: tab.spaceId });
+    if (route?.kind === "newWindow") return get().moveTabsToWindow([peek.tabId], null);
+    const spaceId = route?.kind === "mostRecentSpace" ? mostRecentSpace(state) : route?.kind === "space" ? route.spaceId : undefined;
+    if (!spaceId || !state.spaces[spaceId] || spaceId === tab?.spaceId) return windowId;
+    const target = mainWindowFor(state, spaceId) ?? windowId;
+    // Hand the page to its destination window before switching profiles, so the opener's window stays in its Space.
+    if (target !== windowId) get().moveTabsToWindow([peek.tabId], target);
+    get().moveTabToSpace(peek.tabId, spaceId);
+    return target;
   },
 
   splitPeek(windowId) {

@@ -5,6 +5,7 @@ import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import { NativeSyntheticEvent } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
+import type { EngineBoostStyle } from "./native";
 
 export type NavigationState = {
   url: string;
@@ -30,8 +31,12 @@ export type NowPlaying = {
   timestamp: number;
   hasVideo: boolean;
   actions: string[];
+  /** An endless video, or one whose seekable end keeps moving (a live stream that can be rewound). */
+  live: boolean;
+  /** Seconds behind a live stream's end, at `timestamp`. */
+  liveBehind: number;
 };
-export type MediaCommand = "play" | "pause" | "toggle" | "next" | "previous" | "seekBy" | "seekTo" | "stop";
+export type MediaCommand = "play" | "pause" | "toggle" | "next" | "previous" | "seekBy" | "seekTo" | "seekToLive" | "stop";
 export type MediaAccess = { camera: boolean; microphone: boolean; screen: boolean };
 
 export type OpenDisposition = "foreground" | "background" | "window" | "popup" | "incognito" | "current" | "split";
@@ -196,6 +201,19 @@ export type WebViewProps = ViewProps & {
   onExternalApp?: (request: ExternalAppRequest) => void;
 };
 
+export type CaptureOptions = {
+  /** x, y, width, height in CSS px from the document's top-left. */
+  clip?: [number, number, number, number];
+  /** The clip reaches past the viewport. */
+  beyond?: boolean;
+  fullPage?: boolean;
+  /** The page's pixels per CSS px: the screen's scale times the zoom. */
+  pixelRatio?: number;
+};
+
+/** A PNG in the temporary folder, with its size in pixels. */
+export type CapturedImage = { path: string; width: number; height: number };
+
 export type WebViewHandle = {
   loadUrl(url: string, options?: { userInitiated?: boolean }): Promise<void>;
   goBack(): Promise<void>;
@@ -206,6 +224,8 @@ export type WebViewHandle = {
   stopLoading(): Promise<void>;
   focus(): Promise<void>;
   setMuted(muted: boolean): Promise<void>;
+  // Palette and per-host tints, ready for the renderer to select when each document starts.
+  setBoostStyle(style: EngineBoostStyle): Promise<void>;
   zoomStep(direction: 1 | -1 | 0): Promise<void>;
   find(text: string, forward: boolean, findNext: boolean): Promise<void>;
   stopFinding(clearSelection: boolean): Promise<void>;
@@ -219,6 +239,8 @@ export type WebViewHandle = {
   capturePicture(scale: number): Promise<{ data: string; frame: [number, number, number, number] } | null>;
   /** The page's viewport as a base64 PNG at its device scale (null after 3 s). */
   captureScreenshot(): Promise<string | null>;
+  /** Capture's image: an area of the page, its whole length or its viewport, as a PNG file (null after 20 s). */
+  captureImage(options: CaptureOptions): Promise<CapturedImage | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
   downloadImage(url: string, maxPixels: number): Promise<FaviconImage | null>;
 
@@ -325,7 +347,8 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onExternalApp: (e) => [e],
 };
 
-export type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard"> & {
+export type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavicon" | "resolvePasswordPrompt" | "discard" | "setBoostStyle"> & {
+  setBoostStyle?(descriptor: string): Promise<void>;
   evaluate(code: string): Promise<string | null>;
   downloadFavicon(url: string): Promise<FaviconImage | null>;
   loadUrl(url: string, userInitiated?: boolean): Promise<void>;
@@ -369,6 +392,8 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       stopLoading: () => call(undefined, (n) => n.stopLoading()),
       focus: () => call(undefined, (n) => n.focus()),
       setMuted: (muted) => call(undefined, (n) => n.setMuted(muted)),
+      // Builds before Boosts have no such call: nothing to style.
+      setBoostStyle: (style) => call(undefined, (n) => n.setBoostStyle?.(JSON.stringify(style)) ?? Promise.resolve()),
       zoomStep: (direction) => call(undefined, (n) => n.zoomStep(direction)),
       find: (text, forward, findNext) => call(undefined, (n) => n.find(text, forward, findNext)),
       stopFinding: (clear) => call(undefined, (n) => n.stopFinding(clear)),
@@ -388,6 +413,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       navigationEntries: async () => (await call([], (n) => n.navigationEntries())).map((e) => ({ ...e, url: toAppUrl(e.url) })),
       capturePicture: (scale) => call(null, (n) => n.capturePicture(scale)),
       captureScreenshot: () => call(null, (n) => n.captureScreenshot()),
+      captureImage: (options) => call(null, (n) => n.captureImage(options)),
       downloadImage: (url, maxPixels) => call(null, (n) => n.downloadImage(url, maxPixels)),
       downloadFavicon: (url) => call(null, (n) => n.downloadFavicon(url)),
       mediaCommand: (action, seconds) => call(undefined, (n) => n.mediaCommand(action, seconds)),

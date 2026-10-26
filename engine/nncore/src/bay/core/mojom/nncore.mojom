@@ -4,12 +4,30 @@
 
 module nncore.mojom;
 
+// A Boost (Arc's): one site's look, as the app built it (apps/browser/src/lib/boosts.ts).
+struct NNBoost {
+  // The site's host, without "www." (a document's host matches it with or without).
+  string host;
+  // Zaps, focus, fonts, case, size and colours: a user-origin sheet, so its !important
+  // rules win over the page's own.
+  string user_css;
+  // The Boost's own CSS, as an author sheet after the page's.
+  string css;
+  // The Boost's JavaScript, run once the document's DOM is in (DOMContentLoaded) in its own
+  // isolated world; empty for none. Never sent to private profiles' renderers unless the
+  // Boost allows it.
+  string script;
+};
+
 // Browser → a renderer process, channel-associated: sent when the process launches, before
 // any frame exists in it (as Chrome's RendererConfiguration), and again when it changes.
 interface NNRendererConfig {
   // Evaluated at document start in every frame's main world as an expression returning
   // function(post); empty: none.
   SetPageScript(string script);
+  // Every Boost that's on; replaces the last list. The main frame of a matching document
+  // gets its sheets at document start, and frames already showing one are restyled at once.
+  SetBoosts(array<NNBoost> boosts);
 };
 
 // A frame → the browser (frame-associated).
@@ -29,4 +47,9 @@ interface NNPage {
   // post("result", json) answers. Null: no answer (no script context, an exception, the
   // frame went first).
   Evaluate(string code, bool user_gesture) => (string? json);
+  // Serialized EngineBoostStyle {palette, sites}: the tab's space palette CSS and every
+  // boosted host's winning tint CSS. The renderer chooses the committed document's host
+  // and inserts user-origin sheets while a Boost is on for it. Kept across navigation;
+  // empty clears the descriptor.
+  SetBoostStyle(string css);
 };

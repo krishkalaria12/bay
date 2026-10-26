@@ -7,6 +7,7 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { activeTabId } from "../../store/model";
 import { showToast } from "../layout/splitActions";
 import { inspectorScript } from "./inspectorScript";
+import { JSON_VIEWER_SCRIPT } from "./jsonViewerScript";
 import { isDeveloperUrl, isLocalDevSite, siteKey } from "./sites";
 
 // Developer Mode, as Arc and yab have it: a site you build gets its whole address over the page, an inspector and
@@ -82,6 +83,11 @@ export const toggleInspecting = (tabId: string) => setInspecting(tabId, !useDeve
 export function onDeveloperMessage(tabId: string, data: unknown) {
   const message = data && typeof data === "object" ? (data as { type?: unknown; text?: unknown }) : null;
   const tab = useBrowser.getState().tabs[tabId];
+  // The JSON viewer's key: its path ($.items[0].id) on the clipboard.
+  if (message?.type === "copyJsonPath" && tab && typeof message.text === "string" && isDeveloperUrl(useBrowser.getState(), tab.url)) {
+    copyText(message.text.slice(0, 2_000));
+    return showToast(tab.windowId, "Copied Path", message.text.slice(0, 120), { icon: "curlybraces" });
+  }
   if (!message || !tab || !useDeveloperUi.getState().inspecting[tabId]) return;
   if (message.type === "exit") return setInspecting(tabId, false);
   if (message.type === "copy" && typeof message.text === "string") {
@@ -115,6 +121,17 @@ export function startDeveloperMode() {
     }
     const keys = Object.keys(offers);
     if (keys.length !== Object.keys(ui.offers).length || keys.some((k) => ui.offers[k] !== offers[k])) useDeveloperUi.setState({ offers });
+
+    // A JSON response on a site in Developer Mode is shown as a tree (jsonViewerScript.ts): once loaded, or once its
+    // site is turned on. Other tabs are left as they are.
+    const sitesChanged = s.settings.developerSites !== prev.settings.developerSites;
+    if (s.live !== prev.live || sitesChanged) {
+      for (const [tabId, live] of Object.entries(s.live)) {
+        const loaded = prev.live[tabId]?.isLoading && !live.isLoading;
+        const turnedOn = sitesChanged && !live.isLoading && !isDeveloperUrl(prev, s.tabs[tabId]?.url ?? "");
+        if ((loaded || turnedOn) && isDeveloperUrl(s, s.tabs[tabId]?.url ?? "")) void webviews.get(tabId)?.evaluate(JSON_VIEWER_SCRIPT);
+      }
+    }
 
     for (const tabId of Object.keys(ui.inspecting)) {
       const tab = s.tabs[tabId];

@@ -19,7 +19,8 @@ import { clickTab, commitRename, endRename, startRename, tabTitle } from "./acti
 import { useDragItem } from "./dnd";
 import { dismissHover, useRowHover } from "./hover";
 import { openTabMenu } from "./menus";
-import { registerRow, useSidebarUi } from "./state";
+import { SidebarKeyboardRowView } from "./keyboardFocus";
+import { useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
@@ -91,7 +92,7 @@ export function TabRow({ tabId }: { tabId: string }) {
   const loading = !!(flags & LOADING);
   // The shown tab of a site in Developer Mode: outlined, as its bar is hatched.
   const developer = useBrowser((s) => active && isDeveloperTab(s, tabId));
-  const renaming = useSidebarUi((u) => u.renaming?.kind === "tab" && u.renaming.id === tabId);
+  const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "tab" && u.renaming.id === tabId);
   const { hovered, hoverProps } = useRowHover(windowId, renaming ? null : { kind: "tab", id: tabId });
   if (!tab) return null;
   const title = tabTitle(tab);
@@ -100,7 +101,13 @@ export function TabRow({ tabId }: { tabId: string }) {
   const border = selected && !active ? 0.5 : 0;
 
   return (
-    <View ref={(v) => registerRow(windowId, tabId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}>
+    <SidebarKeyboardRowView
+      rowId={`t:${tabId}`}
+      legacyId={tabId}
+      label={title}
+      {...hoverProps}
+      onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
+    >
       <MouseArea onMiddleClick={() => void closeTab(tabId)}>
         <ContextMenuArea
           onContextMenu={() => {
@@ -177,7 +184,7 @@ export function TabRow({ tabId }: { tabId: string }) {
           </Pressable>
         </ContextMenuArea>
       </MouseArea>
-    </View>
+    </SidebarKeyboardRowView>
   );
 }
 
@@ -247,10 +254,11 @@ export const SplitRowItem = memo(function SplitRowItem({
   const spaceId = usePageSpaceId();
   const active = useBrowser((s) => tabIds.includes(s.windows[windowId]?.activeTabIds[spaceId] ?? ""));
   const { hovered, hoverProps } = useRowHover(windowId, null);
+  const title = useBrowser((s) => tabIds.map((id) => (s.tabs[id] ? tabTitle(s.tabs[id]!) : "")).join(", "));
   if (tabIds.length < 2) return null;
   return (
     <Animated.View ref={ref} style={style} {...handle}>
-      <View ref={(v) => registerRow(windowId, `s:${splitId}`, v)} {...hoverProps}>
+      <SidebarKeyboardRowView rowId={`s:${splitId}`} legacyId={`s:${splitId}`} label={`Split view, ${title}`} {...hoverProps}>
         <ActiveHighlight active={active} tabIds={tabIds} borderWidth={1} />
         <Surface
           fill={hex(!active && hovered ? theme.tabHover : "rgba(0,0,0,0)")}
@@ -264,7 +272,7 @@ export const SplitRowItem = memo(function SplitRowItem({
             </View>
           ))}
         </Surface>
-      </View>
+      </SidebarKeyboardRowView>
     </Animated.View>
   );
 });
@@ -274,6 +282,7 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
   const theme = useTheme();
   const tab = useTab(tabId);
   const active = useIsActiveTab(tabId);
+  const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "tab" && u.renaming.id === tabId);
   const { hovered, hoverProps } = useRowHover(windowId, { kind: "tab", id: tabId });
   if (!tab) return null;
   return (
@@ -291,12 +300,21 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
             }}
           >
             <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} />
-            <FadeLabel
-              text={tabTitle(tab)}
-              fontSize={12}
-              color={active ? theme.tabSelectedText : theme.textTab}
-              style={{ flex: 1, height: 16, marginLeft: 5 }}
-            />
+            {renaming ? (
+              <RenameField
+                initial={tab.customTitle ?? tab.title}
+                placeholder={tab.title || "Tab name"}
+                color={theme.textPrimary}
+                onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
+              />
+            ) : (
+              <FadeLabel
+                text={tabTitle(tab)}
+                fontSize={12}
+                color={active ? theme.tabSelectedText : theme.textTab}
+                style={{ flex: 1, height: 16, marginLeft: 5 }}
+              />
+            )}
           </View>
         </Pressable>
       </ContextMenuArea>

@@ -3204,7 +3204,7 @@ try {
 
   await check("content-blocked-count", async () => {
     // B8: the blocked count counts what extensions' rules stopped, as Chrome's action count does: a blocked image and a
-    // script sent to the extension's stand-in (uBlock Origin Lite answers most ad scripts so), each once.
+    // script sent to the extension's stand-in (uBlock Origin answers most ad scripts so), each once.
     return withPopupExtension({}, async () => {
       const tab = await freshTab(`${base}/nn-ads`);
       try {
@@ -3384,7 +3384,8 @@ try {
   // MARK: Content blocker
 
   await check("content-blocker", async () => {
-    // The built-in uBlock Origin Lite, loaded as a component extension and driven through its runtime messages.
+    // The built-in uBlock Origin, loaded as a component extension and driven through its messaging, with its bundled
+    // lists on from a fresh profile.
     const state = await until(
       "the blocker's state",
       async () => {
@@ -3393,14 +3394,23 @@ try {
       },
       30000,
     );
+    const enabledLists = state.lists.filter((l) => l.enabled).length;
+    if (state.lists.length < 20 || enabledLists < 5 || !(state.stats.networkFilters > 20000))
+      throw new Error(
+        `uBlock Origin has no bundled lists on a fresh profile: ${state.lists.length} lists, ${enabledLists} on, ${state.stats.networkFilters} network filters`,
+      );
+    // Cookie banners are blocked by default (there's no setting for it): EasyList's and uBO's cookie notice lists are on.
+    const cookieLists = ["fanboy-cookiemonster", "ublock-cookies-easylist"];
+    const cookiesOff = cookieLists.filter((id) => !state.lists.find((l) => l.id === id)?.enabled);
+    if (cookiesOff.length) throw new Error(`cookie notice lists off on a fresh profile: ${cookiesOff}`);
     await cef(`setContentBlockerAllowed("allowed.test", true)`);
     const allowed = await cef(`isContentBlockerAllowed("allowed.test")`);
     await cef(`setContentBlockerAllowed("allowed.test", false)`);
-    return { enabled: state.enabled, lists: state.lists.length, version: state.version, allowed };
+    return { enabled: state.enabled, lists: state.lists.length, on: enabledLists, networkFilters: state.stats.networkFilters, version: state.version, allowed };
   });
 
   await check("content-blocker-fails-closed", async () => {
-    // A change whose read fails (uBOL's service worker waking up, its page reloading) changes nothing and reports the
+    // A change whose read fails (uBO's background page not answering, its page reloading) changes nothing and reports the
     // error: devContentBlockerFailNextMessage fails the next call's first message, here the read of the enabled lists.
     const enabled = async () =>
       (await cef(`getContentBlocker()`)).lists
@@ -3438,8 +3448,8 @@ try {
       ? await until("the profile's tab", () => evalApp(`return nn.store.getState().windows[${JSON.stringify(ownWindow)}]?.tabIds[0] ?? null`))
       : await evalApp(`return nn.store.getState().newTab(${JSON.stringify(mainWindow)}, { url: "${firstPage}" })`);
     try {
-      // Chrome reads an extension's rulesets from disk after loading it, and a profile loaded just now must not show a
-      // page before they're in force (NNCore holds its navigations): none of the first page's ads goes out.
+      // A profile loaded just now must not show a page before uBlock Origin is ready in it (NNCore holds its
+      // navigations): none of the first page's ads goes out.
       await until(
         "the first page",
         () =>
@@ -3469,7 +3479,7 @@ try {
           ).result.value;
           return { fetch: r, reached: adServed.slice(before).some((s) => url.includes(s.split("?")[0])) };
         };
-        // The release smoke test's ad script as a <script>: uBOL answers it with its stand-in (an adsbygoogle that does
+        // The release smoke test's ad script as a <script>: uBO answers it with its stand-in (an adsbygoogle that does
         // nothing), so it "loads" without the request leaving the browser. CEF failed the stand-in's load instead
         // (ERR_BLOCKED_BY_CLIENT on the extension's web_accessible_resources), which the smoke test took as "blocked".
         const script = async () => {
@@ -3509,15 +3519,15 @@ try {
   };
 
   await check("content-blocker-blocks", async () => {
-    // A page's ad requests never reach the ad server: a block rule fails them, and uBOL sends some (gpt.js) to its
+    // A page's ad requests never reach the ad server: a block rule fails them, and uBO sends some (gpt.js) to its
     // stand-in script instead, so check the server, not the fetch. Allowing the site lets them through; turning it back
     // off blocks them again. The hosts are mapped to the fixture server.
     return contentBlockerRounds(undefined);
   });
 
   await check("content-blocker-profile", async () => {
-    // The same in a profile made now (the release smoke test's page is in its Work profile): uBOL loads into every
-    // profile, and its rulesets must block there from its very first page, and follow Personal's allow-list.
+    // The same in a profile made now (the release smoke test's page is in its Work profile): uBO loads into every
+    // profile, and must block there from its very first page, and follow Personal's allow-list.
     const id = await evalApp(`return nn.store.getState().createProfile({ name: "Blocker" })`);
     if (!id) throw new Error("no profile made");
     return { profile: id, ...(await contentBlockerRounds(id)) };
@@ -3525,8 +3535,8 @@ try {
 
   await check("content-blocker-held", async () => {
     // The hold itself, made certain: the next profile's blocker loads 1.5 s late (devContentBlockerDelayNextLoad), so
-    // its first page asks to load long before the rules are in force. NNCore holds it until they are (an explicit
-    // signal from Chrome's ruleset load, not a timer): it loads after the delay, and none of its ads goes out.
+    // its first page asks to load long before uBO is ready. NNCore holds it until it is (the host releases the hold
+    // once µBlock.isReadyPromise settles, not a timer): it loads after the delay, and none of its ads goes out.
     const delay = 1500;
     await cef(`devContentBlockerDelayNextLoad(${delay})`);
     const id = await evalApp(`return nn.store.getState().createProfile({ name: "Held" })`);
@@ -3556,7 +3566,7 @@ try {
 
   await check("content-blocker-private", async () => {
     // A private window's first page, and the first page of the next one after the first's profile went (released with
-    // its last window): uBOL, a component extension, runs in private windows on its profile's rules.
+    // its last window): uBO, a component extension (incognito: spanning), runs in private windows on its profile's rules.
     const origin = `http://adpage.test:${server.address().port}`;
     const out = [];
     for (const step of ["first", "after-release"]) {
@@ -3586,7 +3596,7 @@ try {
 
   await check("internal-pages-not-history", async () => {
     // The host's own pages never reach a profile's history or the omnibox: the content blocker's hidden page
-    // (chrome-extension://<uBOL>/manifest.json, opened in every profile it loads into), extension popups and side
+    // (chrome-extension://<uBO>/blank.html, opened in every profile it loads into), extension popups and side
     // panels. A page the user visits does, an extension's page opened as a tab too (an options page: Chrome records
     // chrome-extension: URLs, CanAddURLToHistory, as extension-windows-hidden opens one).
     const userOpened = (u) => /^chrome-extension:\/\/[a-p]{32}\/options\.html/.test(u);
@@ -5986,9 +5996,9 @@ process.stdin.on("data", (chunk) => {
   });
 
   await check("content-blocker-restored", async () => {
-    // A tab the app restores at launch asks for ads as it loads: the content blocker loads into Personal as the app
-    // starts, after Chrome has loaded the profile, and NNCore holds Personal's navigations until its rulesets are in
-    // force, so none of the restored page's ads goes out.
+    // A tab the app restores at launch asks for ads as it loads. Personal isn't held at launch: its first pages race
+    // uBlock Origin's start (it is ready about 0.35 s after the engine), as in Chrome with uBO, so they're counted, not
+    // failed. Once uBO is ready, the restored tab's next page sends no ads.
     const windowId = await appUp("app-blocker-restored.out.log");
     const tag = `restored-${Date.now()}`;
     const url = `http://adpage.test:${server.address().port}/adfirst?${tag}`;
@@ -6005,10 +6015,28 @@ process.stdin.on("data", (chunk) => {
     const relaunched = Date.now();
     const tab = await restored(tag);
     await until("the restored page loaded", () => loaded(tab.id), 20000);
+    const loadedAfterMs = Date.now() - relaunched;
+    if (beforeQuit.length) throw new Error(`ads went out before the quit: ${JSON.stringify(beforeQuit)}`);
+    await until("the blocker's state", async () => ((await cef(`getContentBlocker()`))?.stats?.ready ? true : null), 30000);
+    const racedAtLaunch = adsServedFor(tag).length;
+    const again = `${tag}-ready`;
+    const pagesBefore = adServed.filter((s) => s.startsWith("adpage.test") && s.endsWith(`?${again}`)).length;
+    await evalApp(
+      `nn.store.getState().navigate(${JSON.stringify(tab.id)}, ${JSON.stringify(`http://adpage.test:${server.address().port}/adfirst?${again}`)}, { userInitiated: true }); return true`,
+    );
+    await until(
+      "the restored tab's next page",
+      () =>
+        evalApp(`const s = nn.store.getState(); const t = s.tabs[${JSON.stringify(tab.id)}];
+      return t?.url?.endsWith(${JSON.stringify(`?${again}`)}) && t.title === "Ad first" && !s.live[${JSON.stringify(tab.id)}]?.isLoading ? true : null`),
+      20000,
+    );
     await sleep(500);
-    const afterLaunch = adsServedFor(tag).slice(beforeQuit.length);
-    if (beforeQuit.length || afterLaunch.length) throw new Error(`ads went out: ${JSON.stringify({ beforeQuit, afterLaunch })}`);
-    return { restored: tab.url, loadedAfterMs: Date.now() - relaunched - 500 };
+    const documents = adServed.filter((s) => s.startsWith("adpage.test") && s.endsWith(`?${again}`)).length - pagesBefore;
+    if (documents < 1) throw new Error("the next page's document never reached the server");
+    const afterReady = adsServedFor(again);
+    if (afterReady.length) throw new Error(`ads went out once uBlock Origin was ready: ${JSON.stringify(afterReady)}`);
+    return { restored: tab.url, loadedAfterMs, racedAtLaunch, nextDocuments: documents };
   });
 
   await check("closed-tabs-own-lists", async () => {

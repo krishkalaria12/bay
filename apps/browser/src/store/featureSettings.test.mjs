@@ -12,6 +12,53 @@ const { configureSyncStore } = await import("../sync/store.ts");
 configureSyncStore(useBrowser);
 const S = () => useBrowser.getState();
 
+test("search shortcuts default to Arc for older sessions and normalize invalid saved modes", () => {
+  S().hydrate({ settings: { searchEngine: "bing" } });
+  assert.equal(S().settings.searchShortcutMode, "arc");
+  for (const searchShortcutMode of ["invalid", "", null, false, 1, {}, []]) {
+    S().hydrate({ settings: { searchShortcutMode, searchEngine: "bing" } });
+    assert.equal(S().settings.searchShortcutMode, "arc");
+    assert.equal(S().settings.searchEngine, "bing");
+  }
+});
+
+test("both shortcut modes and custom overrides survive persistence and sync without changing the default engine", () => {
+  for (const searchShortcutMode of ["duckduckgo", "arc"]) {
+    stub.docs.clear();
+    const stop = startPersistence();
+    S().setSearchEngine("bing");
+    const added = S().addCustomEngine({ name: "My YouTube", keyword: "yt", url: "https://www.youtube.com/results?search_query=%s" });
+    assert.ok("id" in added);
+    const custom = S().settings.customSearchEngines;
+    S().updateSettings({ searchShortcutMode });
+    assert.equal(S().settings.searchEngine, "bing");
+    assert.deepEqual(S().settings.customSearchEngines, custom);
+    const settings = settingsAdapter.extract().values;
+    assert.deepEqual(settings.get("set:searchShortcutMode"), { v: searchShortcutMode });
+    flushPersistence();
+    stop();
+    S().hydrate(loadSession());
+    assert.equal(S().settings.searchShortcutMode, searchShortcutMode);
+    assert.equal(S().settings.searchEngine, "bing");
+    assert.deepEqual(S().settings.customSearchEngines, custom);
+    S().hydrate({});
+    settingsAdapter.apply(settings, new Set(settings.keys()));
+    assert.equal(S().settings.searchShortcutMode, searchShortcutMode);
+    assert.equal(S().settings.searchEngine, "bing");
+    assert.deepEqual(S().settings.customSearchEngines, custom);
+  }
+});
+
+test("invalid synced shortcut modes preserve the current choice", () => {
+  S().hydrate({ settings: { searchShortcutMode: "duckduckgo" } });
+  for (const v of ["invalid", "", null, false, 1, {}, [], undefined]) {
+    settingsAdapter.apply(new Map([["set:searchShortcutMode", { v }]]), new Set(["set:searchShortcutMode"]));
+    assert.equal(S().settings.searchShortcutMode, "duckduckgo");
+  }
+  settingsAdapter.apply(new Map([["set:searchShortcutMode", { v: "arc" }]]), new Set(["set:searchShortcutMode"]));
+  assert.equal(S().settings.searchShortcutMode, "arc");
+});
+
 test("calculator defaults on, and an explicit off choice survives persistence and sync", () => {
   S().hydrate({ settings: { searchSuggestions: false } });
   assert.equal(S().settings.calculatorEnabled, true);

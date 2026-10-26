@@ -310,7 +310,7 @@ export function SplitToast({ windowId }: { windowId: string }) {
           }),
         );
       },
-      toast.action ? 4000 : 2600,
+      toast.duration ?? (toast.action ? 4000 : 2600),
     );
     return () => clearTimeout(timer);
   }, [toast?.id]);

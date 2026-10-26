@@ -2,13 +2,15 @@ import { Pressable, View, isMac } from "@bay/platform";
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@bay/nncore";
 import { ContextMenuArea, MouseArea, openFile, revealFile, Symbol } from "@bay/shell";
 import { useState } from "react";
-import { FlatList, StyleSheet, Text } from "react-native";
+import { LegendList } from "@legendapp/list/react-native";
+import { StyleSheet, Text } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { downloadsIn } from "../../store/ui";
 import { openUrl } from "../bookmarks/actions";
 import { downloadMenu, downloadStatus, FileIcon } from "../Downloads";
+import { useTidySuggestion, tidyRename } from "../../lib/tidyDownloads";
 import { IconButton, useHover } from "../primitives";
 import { Button, useFormColors } from "../settings/controls";
 import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
@@ -41,11 +43,17 @@ export function DownloadsPage({ tabId }: { tabId: string }) {
           title={query ? "No search results found" : "Files you download appear here"}
         />
       ) : (
-        <FlatList
+        <LegendList
+          style={{ flex: 1 }}
           data={shown}
           keyExtractor={(d) => d.id}
-          contentContainerStyle={{ alignItems: "center", paddingTop: 8, paddingBottom: 40, gap: 8 }}
-          renderItem={({ item }) => <DownloadCard d={item} windowId={windowId} />}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: 40, gap: 8 }}
+          // Rows sit at the list's full width: each card centres in its own.
+          renderItem={({ item }) => (
+            <View style={{ alignItems: "center" }}>
+              <DownloadCard d={item} windowId={windowId} />
+            </View>
+          )}
         />
       )}
     </View>
@@ -60,6 +68,7 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
   const exists = d.state !== "finished" || fileState !== false;
   const done = d.state === "finished" && fileState === true;
   const progress = d.total > 0 ? d.received / d.total : 0;
+  const tidy = useTidySuggestion(d);
   return (
     <View {...hoverProps} style={{ width: PAGE_WIDTH - 32, maxWidth: "100%" }}>
       <MouseArea path={done ? d.path : null}>
@@ -120,7 +129,10 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
                 <Button title="Cancel" onPress={() => void cancelDownload(d.id)} />
               </View>
             ) : done ? (
-              <Button title={isMac ? "Show in Finder" : "Show in File Explorer"} onPress={() => void revealFile(d.path)} />
+              <>
+                {tidy ? <Button title="Tidy Name" onPress={() => void tidyRename(d, tidy, windowId)} /> : null}
+                <Button title={isMac ? "Show in Finder" : "Show in File Explorer"} onPress={() => void revealFile(d.path)} />
+              </>
             ) : null}
             <IconButton icon="ellipsis" size={13} box={26} radius={6} onPress={() => void downloadMenu(d, windowId)} tooltip="More actions" />
             {d.state !== "downloading" && (

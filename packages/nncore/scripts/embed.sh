@@ -38,14 +38,13 @@ if ! [[ -f "$stamp" && "$(cat "$stamp")" == "$want" && -d "$frameworks/Chromium 
   echo "$want" > "$stamp"
 fi
 
-# The built-in content blocker (uBlock Origin Lite, pinned in ubol.sh, which installs it once) → Resources/Extensions,
-# with the fingerprint NNCoreContentBlocker.mm compares its writable copy with.
-"$here/ubol.sh"
-ubol="$repo/packages/nncore/vendor/ubol/ext"
-if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ] && [ -f "$ubol/manifest.json" ]; then
+# The built-in content blocker (uBlock Origin, pinned in ubo.sh, which installs it once) → Resources/Extensions,
+# where it loads from. Nothing else stays there.
+"$here/ubo.sh"
+ubo="$repo/packages/nncore/vendor/ubo/ext"
+if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ] && [ -f "$ubo/manifest.json" ]; then
   extensions="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Extensions"
   mkdir -p "$extensions"
-  rsync -a --delete "$ubol/" "$extensions/ublock-lite/"
-  (cd "$extensions/ublock-lite" && find . -type f ! -path './_metadata/*' -print0 | LC_ALL=C sort -z \
-    | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1) > "$extensions/ublock-lite.fingerprint"
+  find "$extensions" -mindepth 1 -maxdepth 1 ! -name ublock -exec rm -rf {} +
+  rsync -a --delete "$ubo/" "$extensions/ublock/"
 fi

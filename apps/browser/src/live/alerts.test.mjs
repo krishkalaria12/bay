@@ -23,7 +23,7 @@ const event = (id) => ({
 });
 
 test("meeting alerts start once, stop calendar and timer updates, and restart", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   const browser = createBrowserStore();
   const savedLive = useLive.getState();
   const savedCalendar = useCalendar.getState();
@@ -64,7 +64,7 @@ test("meeting alerts start once, stop calendar and timer updates, and restart", 
 });
 
 test("meeting alert startup rolls back earlier native listeners when registration fails", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   const browser = createBrowserStore();
   const appBefore = appEventListeners.size;
   const windowsBefore = windowEventListeners.size;
@@ -86,7 +86,7 @@ test("meeting alert startup rolls back earlier native listeners when registratio
 });
 
 test("meeting alert stop attempts every cleanup and releases ownership after a cleanup fails", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   const browser = createBrowserStore();
   const appBefore = appEventListeners.size;
   const windowsBefore = windowEventListeners.size;
@@ -101,7 +101,7 @@ test("meeting alert stop attempts every cleanup and releases ownership after a c
   });
   const stop = startMeetingAlerts(browser);
   stop();
-  assert.equal(warning.mock.callCount(), 1);
+  assert.equal(warning.mock.callCount(), 2);
   assert.equal(appEventListeners.size, appBefore);
   assert.equal(windowEventListeners.size, windowsBefore);
   registration.mock.restore();

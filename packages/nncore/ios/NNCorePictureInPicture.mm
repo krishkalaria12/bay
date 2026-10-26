@@ -18,6 +18,16 @@ constexpr CGFloat kButtonMargin = 12, kButtonSize = 28;
 // white at 17 % just inside the edge.
 constexpr CGFloat kCornerRadius = 6;
 constexpr CGFloat kRimAlpha = 0.17;
+// Our controls beside Chrome's: speed after back to tab, subtitles before close (29 pt wide), 6 pt apart, the speed
+// at most 42 pt wide (Chrome's origin keeps clear of them: kBayPipAppButtonsWidth). Live sits at the bottom left,
+// above Chrome's progress bar (5 pt high, 9 pt from the bottom) unless Chrome hides it for an endless video.
+constexpr CGFloat kButtonGap = 6, kCloseWidth = 29, kSpeedMaxWidth = 42;
+constexpr CGFloat kLiveHeight = 20, kAboveProgressBar = 9 + 5 + 8;
+// Chrome's controls fade over 200 ms, ease-in-out (BayControlsFadeAnimation).
+constexpr NSTimeInterval kControlsFade = 0.2;
+// Closer than this to a live stream's end is live (apps/browser media/state.ts LIVE_EDGE_SECONDS).
+constexpr double kLiveEdge = 30;
+constexpr double kRates[] = {0.5, 0.75, 1, 1.25, 1.5, 1.75, 2};
 
 NSString *const kKeepOnTopDefault = @"NNPictureInPictureKeepOnTop";
 const void *const kControllerKey = &kControllerKey;
@@ -68,6 +78,22 @@ BOOL ScreenAt(CGFloat x, CGFloat y) {
   for (NSScreen *screen in NSScreen.screens)
     if (NSPointInRect(NSMakePoint(x, y), screen.frame)) return YES;
   return NO;
+}
+
+NSString *RateTitle(double rate) { return [NSString stringWithFormat:@"%g×", rate]; }
+
+// "45s behind", "5m behind", "1h 5m behind".
+NSString *BehindTitle(double seconds) {
+  const long s = lround(seconds), h = s / 3600, m = s % 3600 / 60;
+  if (s < 60) return [NSString stringWithFormat:@"%lds behind", s];
+  if (!h) return [NSString stringWithFormat:@"%ldm behind", m];
+  return m ? [NSString stringWithFormat:@"%ldh %ldm behind", h, m] : [NSString stringWithFormat:@"%ldh behind", h];
+}
+
+// The page's last report for the video in Picture in Picture, by view: it can come before the window does.
+NSMapTable<NNCoreWebView *, NSDictionary *> *PendingStates() {
+  static NSMapTable *states = [NSMapTable weakToStrongObjectsMapTable];
+  return states;
 }
 
 }
@@ -168,9 +194,131 @@ typedef NS_ENUM(NSInteger, NNPiPEdge) { NNPiPEdgeNone = 0, NNPiPEdgeLeft = -1, N
 
 @end
 
-// Holds the stash handle over Chrome's views; the resting window shows nothing of ours.
+// Our controls among Chrome's, drawn as its corner buttons are: a rounded square of white at 9 % (13 % under the
+// pointer when it does something) with a white glyph, or a title.
+@interface NNPiPButton : NNPiPControl
+@property (nonatomic, copy) NSString *symbol;
+@property (nonatomic, copy) NSString *title;
+// A red dot before the title (Live).
+@property (nonatomic) BOOL dot;
+- (CGFloat)fittingWidth;
+@end
+
+@implementation NNPiPButton
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  if ((self = [super initWithFrame:frame])) self.wantsLayer = YES;
+  return self;
+}
+
+- (void)setHovered:(BOOL)hovered {
+  [super setHovered:hovered];
+  self.needsDisplay = YES;
+}
+
+- (void)setSymbol:(NSString *)symbol {
+  if ([symbol isEqual:_symbol]) return;
+  _symbol = [symbol copy];
+  self.needsDisplay = YES;
+}
+
+- (void)setTitle:(NSString *)title {
+  if ([title isEqual:_title]) return;
+  _title = [title copy];
+  self.needsDisplay = YES;
+}
+
+- (void)setDot:(BOOL)dot {
+  _dot = dot;
+  self.needsDisplay = YES;
+}
+
+- (void)cursorUpdate:(NSEvent *)event {
+  [self.onClick ? NSCursor.pointingHandCursor : NSCursor.arrowCursor set];
+}
+
+- (NSDictionary *)titleAttributes {
+  return @{NSFontAttributeName : [NSFont systemFontOfSize:12 weight:NSFontWeightMedium], NSForegroundColorAttributeName : NSColor.whiteColor};
+}
+
+- (CGFloat)fittingWidth {
+  if (!_title) return kButtonSize;
+  return MAX(kButtonSize, ceil([_title sizeWithAttributes:[self titleAttributes]].width) + 10 + (_dot ? 11 : 0));
+}
+
+- (void)drawRect:(NSRect)dirty {
+  NSRect bounds = self.bounds;
+  [[NSColor colorWithWhite:1 alpha:self.hovered && self.onClick ? 0x21 / 255.0 : 0x17 / 255.0] setFill];
+  [[NSBezierPath bezierPathWithRoundedRect:bounds xRadius:6 yRadius:6] fill];
+  if (_symbol) {
+    NSImageSymbolConfiguration *config = [[NSImageSymbolConfiguration configurationWithPointSize:13 weight:NSFontWeightRegular]
+        configurationByApplyingConfiguration:[NSImageSymbolConfiguration configurationWithPaletteColors:@[ NSColor.whiteColor ]]];
+    NSImage *image = [[NSImage imageWithSystemSymbolName:_symbol accessibilityDescription:nil] imageWithSymbolConfiguration:config];
+    NSSize size = image.size;
+    [image drawInRect:NSMakeRect(round(NSMidX(bounds) - size.width / 2), round(NSMidY(bounds) - size.height / 2), size.width, size.height)];
+    return;
+  }
+  NSDictionary *attributes = [self titleAttributes];
+  NSSize size = [_title sizeWithAttributes:attributes];
+  CGFloat x = round(NSMidX(bounds) - (size.width + (_dot ? 11 : 0)) / 2);
+  if (_dot) {
+    [[NSColor colorWithSRGBRed:1 green:0.23 blue:0.19 alpha:1] setFill];
+    [[NSBezierPath bezierPathWithOvalInRect:NSMakeRect(x, round(NSMidY(bounds) - 3), 6, 6)] fill];
+    x += 11;
+  }
+  [_title drawAtPoint:NSMakePoint(x, round(NSMidY(bounds) - size.height / 2)) withAttributes:attributes];
+}
+
+@end
+
+// The chosen subtitles' text, which Chrome's window doesn't draw: white on black at 60 %, centred near the bottom.
+@interface NNPiPCaption : NSView
+@property (nonatomic, readonly) NSTextField *label;
+@end
+
+@implementation NNPiPCaption
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  if ((self = [super initWithFrame:frame])) {
+    self.wantsLayer = YES;
+    self.layer.backgroundColor = [NSColor colorWithWhite:0 alpha:0.6].CGColor;
+    self.layer.cornerRadius = 4;
+    _label = [NSTextField wrappingLabelWithString:@""];
+    _label.textColor = NSColor.whiteColor;
+    _label.alignment = NSTextAlignmentCenter;
+    [self addSubview:_label];
+  }
+  return self;
+}
+
+- (BOOL)isFlipped { return YES; }
+- (NSView *)hitTest:(NSPoint)point { return nil; }
+
+// Its size for a window of `size`, the text scaled with the window.
+- (NSSize)fitWindow:(NSSize)size {
+  _label.font = [NSFont systemFontOfSize:MIN(MAX(round(size.height * 0.055), 11), 22) weight:NSFontWeightMedium];
+  _label.preferredMaxLayoutWidth = floor(size.width * 0.9) - 16;
+  NSSize text = _label.fittingSize;
+  _label.frame = NSMakeRect(8, 3, text.width, text.height);
+  return NSMakeSize(text.width + 16, text.height + 6);
+}
+
+@end
+
+// Holds the stash handle and our controls over Chrome's views; the resting window shows nothing of ours but the
+// subtitles.
 @interface NNPiPOverlay : NSView
 @property (nonatomic, readonly) NNPiPHandle *handle;
+// Speed, subtitles and Live, shown and hidden with Chrome's controls.
+@property (nonatomic, readonly) NSView *controls;
+@property (nonatomic, readonly) NNPiPButton *speed;
+@property (nonatomic, readonly) NNPiPButton *subtitles;
+@property (nonatomic, readonly) NNPiPButton *live;
+@property (nonatomic, readonly) NNPiPCaption *caption;
+// Chrome hides its progress bar for an endless video, and Live takes its place.
+@property (nonatomic) BOOL endless;
+@property (nonatomic, readonly) BOOL controlsVisible;
+- (void)setControlsVisible:(BOOL)visible animate:(BOOL)animate;
 @end
 
 @interface NNPiPController : NSObject
@@ -180,11 +328,19 @@ typedef NS_ENUM(NSInteger, NNPiPEdge) { NNPiPEdgeNone = 0, NNPiPEdgeLeft = -1, N
 @property (nonatomic, readonly) NNPiPOverlay *overlay;
 @property (nonatomic, readonly) NNPiPEdge stashedEdge;
 @property (nonatomic) BOOL keepOnTop;
+// The page's report on the video (page_script.js › Picture in Picture): speed, subtitles, Live.
+@property (nonatomic, copy) NSDictionary *state;
 - (void)setVideoFrame:(NSString *)frameId;
+- (NSString *)videoFrame;
 - (void)roundCorners;
 - (void)backToTab;
 - (void)unstash;
 - (NSMenu *)menu;
+- (NSMenu *)speedMenu;
+- (NSMenu *)subtitlesMenu;
+// Asks the page for a speed ("rate"), subtitles (a track's index, -1 for off) or its live edge ("live").
+- (void)act:(NSString *)action value:(double)value;
+- (void)jumpToLive;
 @end
 
 @implementation NNPiPOverlay
@@ -194,6 +350,24 @@ typedef NS_ENUM(NSInteger, NNPiPEdge) { NNPiPEdgeNone = 0, NNPiPEdgeLeft = -1, N
     self.wantsLayer = YES;
     self.layer.zPosition = 100;  // Keep above Chrome’s compositor layers.
     self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _caption = [[NNPiPCaption alloc] initWithFrame:NSZeroRect];
+    _caption.hidden = YES;
+    [self addSubview:_caption];
+    _controls = [[NSView alloc] initWithFrame:self.bounds];
+    _controls.wantsLayer = YES;
+    _controls.alphaValue = 0;
+    _controls.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self addSubview:_controls];
+    _speed = [[NNPiPButton alloc] initWithFrame:NSZeroRect];
+    _speed.title = RateTitle(1);
+    _speed.toolTip = @"Playback Speed";
+    _subtitles = [[NNPiPButton alloc] initWithFrame:NSZeroRect];
+    _subtitles.symbol = @"captions.bubble";
+    _subtitles.toolTip = @"Subtitles";
+    _subtitles.hidden = YES;
+    _live = [[NNPiPButton alloc] initWithFrame:NSZeroRect];
+    _live.hidden = YES;
+    for (NSView *control in @[ _speed, _subtitles, _live ]) [_controls addSubview:control];
     _handle = [[NNPiPHandle alloc] initWithFrame:NSZeroRect];
     _handle.hidden = YES;
     _handle.alphaValue = 0;
@@ -207,7 +381,36 @@ typedef NS_ENUM(NSInteger, NNPiPEdge) { NNPiPEdgeNone = 0, NNPiPEdgeLeft = -1, N
 - (NSView *)hitTest:(NSPoint)point {
   NSPoint local = [self convertPoint:point fromView:self.superview];
   if (!_handle.hidden && NSPointInRect(local, _handle.frame)) return _handle;
+  if (_controlsVisible)
+    for (NNPiPButton *control in @[ _speed, _subtitles, _live ])
+      if (!control.hidden && NSPointInRect(local, control.frame)) return control;
   return nil;  // Everything else is Chrome's.
+}
+
+- (void)setEndless:(BOOL)endless {
+  if (endless == _endless) return;
+  _endless = endless;
+  self.needsLayout = YES;
+}
+
+- (void)setControlsVisible:(BOOL)visible animate:(BOOL)animate {
+  if (visible == _controlsVisible) return;
+  _controlsVisible = visible;
+  [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+    context.duration = animate ? kControlsFade : 0;
+    context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    self->_controls.animator.alphaValue = visible ? 1 : 0;
+    // The subtitles make way for the controls at the bottom.
+    self->_caption.animator.frame = [self captionFrame];
+  }];
+}
+
+- (NSRect)captionFrame {
+  NSSize size = self.bounds.size;
+  NSSize caption = [_caption fitWindow:size];
+  CGFloat bottom = size.height - kButtonMargin;
+  if (_controlsVisible) bottom = _live.hidden ? size.height - kAboveProgressBar : NSMinY(_live.frame) - kButtonGap;
+  return NSMakeRect(round((size.width - caption.width) / 2), bottom - caption.height, caption.width, caption.height);
 }
 
 - (void)layout {
@@ -215,6 +418,10 @@ typedef NS_ENUM(NSInteger, NNPiPEdge) { NNPiPEdgeNone = 0, NNPiPEdgeLeft = -1, N
   NSSize size = self.bounds.size;
   _handle.frame = _handle.edge == NNPiPEdgeLeft ? NSMakeRect(size.width - kPeek, 0, kPeek, size.height)
                                                  : NSMakeRect(0, 0, kPeek, size.height);
+  _speed.frame = NSMakeRect(kButtonMargin + kButtonSize + kButtonGap, kButtonMargin, MIN(_speed.fittingWidth, kSpeedMaxWidth), kButtonSize);
+  _subtitles.frame = NSMakeRect(size.width - kButtonMargin - kCloseWidth - kButtonGap - kButtonSize, kButtonMargin, kButtonSize, kButtonSize);
+  _live.frame = NSMakeRect(kButtonMargin, size.height - (_endless ? kButtonMargin : kAboveProgressBar) - kLiveHeight, _live.fittingWidth, kLiveHeight);
+  _caption.frame = [self captionFrame];
 }
 
 @end
@@ -258,6 +465,18 @@ typedef NS_ENUM(NSInteger, NNPiPEdge) { NNPiPEdgeNone = 0, NNPiPEdgeLeft = -1, N
                                               object:window
                                                queue:nil
                                           usingBlock:^(NSNotification *) { [weakSelf detach]; }]];
+    // Our controls show and hide with Chrome's (chrome/browser/bay/pip/nn_pip_mac.h).
+    [_observers addObject:[center addObserverForName:@"BayPictureInPictureControlsDidChange"
+                                              object:window
+                                               queue:nil
+                                          usingBlock:^(NSNotification *note) {
+                                            [weakSelf.overlay setControlsVisible:[note.userInfo[@"visible"] boolValue]
+                                                                         animate:[note.userInfo[@"animate"] boolValue]];
+                                          }]];
+    // Chrome showed its controls before we were here if the pointer is already over the window.
+    [_overlay setControlsVisible:NSPointInRect(NSEvent.mouseLocation, window.frame) animate:NO];
+    _overlay.speed.onClick = ^{ [weakSelf showSpeedMenu]; };
+    _overlay.subtitles.onClick = ^{ [weakSelf showSubtitlesMenu]; };
     self.keepOnTop = KeepOnTop();
   }
   return self;
@@ -274,6 +493,75 @@ typedef NS_ENUM(NSInteger, NNPiPEdge) { NNPiPEdgeNone = 0, NNPiPEdgeLeft = -1, N
 }
 
 - (void)setVideoFrame:(NSString *)frameId { _frameId = [frameId copy]; }
+- (NSString *)videoFrame { return _frameId; }
+
+// MARK: Speed, subtitles and Live
+
+- (void)setState:(NSDictionary *)state {
+  _state = [state copy];
+  NNPiPOverlay *overlay = _overlay;
+  overlay.speed.title = RateTitle([state[@"rate"] doubleValue] ?: 1);
+  NSArray *tracks = state[@"tracks"];
+  const BOOL on = [state[@"selected"] integerValue] >= 0;
+  overlay.subtitles.hidden = !tracks.count;
+  overlay.subtitles.symbol = on ? @"captions.bubble.fill" : @"captions.bubble";
+  NSString *cue = on ? state[@"cue"] : nil;
+  overlay.caption.hidden = !cue.length;
+  overlay.caption.label.stringValue = cue ?: @"";
+  const double behind = [state[@"behind"] doubleValue];
+  const BOOL live = [state[@"live"] boolValue], atEdge = behind < kLiveEdge;
+  overlay.live.hidden = !live;
+  overlay.live.title = atEdge ? @"Live" : BehindTitle(behind);
+  overlay.live.dot = atEdge;
+  overlay.live.toolTip = atEdge ? nil : @"Jump to Live";
+  __weak NNPiPController *weakSelf = self;
+  overlay.live.onClick = nil;
+  if (live && !atEdge) overlay.live.onClick = ^{ [weakSelf jumpToLive]; };
+  overlay.endless = [state[@"endless"] boolValue];
+  overlay.needsLayout = YES;
+}
+
+- (void)act:(NSString *)action value:(double)value {
+  [self.view pictureInPictureAction:action value:value inFrame:_frameId];
+}
+
+- (NSMenu *)speedMenu {
+  NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+  const double rate = [_state[@"rate"] doubleValue] ?: 1;
+  for (double option : kRates) {
+    NSMenuItem *item = [menu addItemWithTitle:RateTitle(option) action:@selector(chooseRate:) keyEquivalent:@""];
+    item.target = self;
+    item.representedObject = @(option);
+    item.state = fabs(option - rate) < 0.01 ? NSControlStateValueOn : NSControlStateValueOff;
+  }
+  return menu;
+}
+
+- (NSMenu *)subtitlesMenu {
+  NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+  const NSInteger selected = [_state[@"selected"] integerValue];
+  NSArray *titles = [@[ @"Off" ] arrayByAddingObjectsFromArray:_state[@"tracks"] ?: @[]];
+  for (NSUInteger i = 0; i < titles.count; i++) {
+    NSString *title = [titles[i] length] ? titles[i] : [NSString stringWithFormat:@"Track %lu", (unsigned long)i];
+    NSMenuItem *item = [menu addItemWithTitle:title action:@selector(chooseSubtitles:) keyEquivalent:@""];
+    item.target = self;
+    item.representedObject = @((NSInteger)i - 1);
+    item.state = (NSInteger)i - 1 == selected ? NSControlStateValueOn : NSControlStateValueOff;
+    if (i == 0 && titles.count > 1) [menu addItem:NSMenuItem.separatorItem];
+  }
+  return menu;
+}
+
+// Just below the button, as a pop-up button's.
+- (void)popUp:(NSMenu *)menu under:(NSView *)button {
+  [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0, NSHeight(button.bounds) + 4) inView:button];
+}
+
+- (void)showSpeedMenu { [self popUp:[self speedMenu] under:_overlay.speed]; }
+- (void)showSubtitlesMenu { [self popUp:[self subtitlesMenu] under:_overlay.subtitles]; }
+- (void)chooseRate:(NSMenuItem *)item { [self act:@"rate" value:[item.representedObject doubleValue]]; }
+- (void)chooseSubtitles:(NSMenuItem *)item { [self act:@"subtitles" value:[item.representedObject integerValue]]; }
+- (void)jumpToLive { [self act:@"live" value:0]; }
 
 // Chrome's window is square and transparent: clipping its content view rounds everything it shows (video, controls,
 // the fades), and the shadow, which macOS takes from the window's alpha, follows once invalidated.
@@ -642,6 +930,8 @@ bool Attach(NNCoreWebView *view, NSString *host, NSString *frameId) {
     controller.view = view;
     controller.host = host;
     [controller setVideoFrame:frameId];
+    NSDictionary *pending = [PendingStates() objectForKey:view];
+    controller.state = [pending[@"frame"] isEqual:frameId] ? pending[@"state"] : @{};
     [controller roundCorners];
     // A hidden test instance shows nothing on the owner's screen (the engine hides it as Chrome opens it).
     if (nncore_host::Background()) {
@@ -660,8 +950,19 @@ bool Attach(NNCoreWebView *view, NSString *host, NSString *frameId) {
 
 }
 
+void StateChanged(NNCoreWebView *view, NSString *frameId, NSDictionary *state) {
+  [PendingStates() setObject:@{@"frame" : frameId, @"state" : state} forKey:view];
+  for (NSWindow *window in NSApp.windows) {
+    NNPiPController *controller = [NNPiPController forWindow:window];
+    if (controller.view == view && [controller.videoFrame isEqual:frameId]) controller.state = state;
+  }
+}
+
 void VideoChanged(NNCoreWebView *view, NSString *host, NSString *frameId, bool active) {
-  if (!active) return;
+  if (!active) {
+    [PendingStates() removeObjectForKey:view];
+    return;
+  }
   __block int tries = 0;
   __block void (^look)(void);
   __weak NNCoreWebView *weakView = view;
@@ -707,11 +1008,22 @@ void VideoChanged(NNCoreWebView *view, NSString *host, NSString *frameId, bool a
       @"stashed" : @(controller.stashedEdge),
       @"host" : controller.host ?: @"",
       @"backToTab" : @(controller.view != nil),
+      @"controls" : @(controller.overlay.controlsVisible),
+      @"speed" : controller.overlay.speed.title ?: @"",
+      @"subtitles" : controller.overlay.subtitles.hidden ? @"" : controller.overlay.subtitles.symbol,
+      @"caption" : controller.overlay.caption.hidden ? @"" : controller.overlay.caption.label.stringValue,
+      @"live" : controller.overlay.live.hidden ? @"" : controller.overlay.live.title,
+      @"liveFrame" : NSStringFromRect(controller.overlay.live.frame),
+      @"speedFrame" : NSStringFromRect(controller.overlay.speed.frame),
+      @"subtitlesFrame" : NSStringFromRect(controller.overlay.subtitles.frame),
+      @"captionFrame" : NSStringFromRect(controller.overlay.caption.frame),
     }];
   }
   return list;
 }
 
+// "speedMenu" / "subtitlesMenu" (their titles, ✓ before the chosen one), "rate:<rate>", "subtitles:<index, -1 off>",
+// "live" (as their menus and Live do), "showControls" / "hideControls" (as Chrome tells us).
 // "selftest" (packages/cef's BAY_PIP_SELFTEST: rounding, stash at both edges, the handle, the saved place,
 // Keep on Top, Back to Tab → $BAY_DATA_DIR/pip-selftest.json), "close" or "backToTab" (Chrome's own buttons
 // clicked → pip-button-selftest.json), "menu" (our menu's titles), on the newest styled window.
@@ -723,6 +1035,17 @@ void VideoChanged(NNCoreWebView *view, NSString *host, NSString *frameId, bool a
   if ([action isEqual:@"selftest"]) [controller runSelfTest];
   else if ([@[ @"close", @"backToTab" ] containsObject:action]) [controller runButtonSelfTest:action];
   else if ([action isEqual:@"menu"]) return [[controller.menu.itemArray valueForKey:@"title"] componentsJoinedByString:@"|"];
+  else if ([action isEqual:@"speedMenu"] || [action isEqual:@"subtitlesMenu"]) {
+    NSMenu *menu = [action isEqual:@"speedMenu"] ? controller.speedMenu : controller.subtitlesMenu;
+    NSMutableArray *titles = [NSMutableArray array];
+    for (NSMenuItem *item in menu.itemArray)
+      if (!item.separatorItem) [titles addObject:item.state == NSControlStateValueOn ? [@"✓" stringByAppendingString:item.title] : item.title];
+    return [titles componentsJoinedByString:@"|"];
+  } else if ([action hasPrefix:@"rate:"]) [controller act:@"rate" value:[action substringFromIndex:5].doubleValue];
+  else if ([action hasPrefix:@"subtitles:"]) [controller act:@"subtitles" value:[action substringFromIndex:10].integerValue];
+  else if ([action isEqual:@"live"]) [controller jumpToLive];
+  else if ([action isEqual:@"showControls"] || [action isEqual:@"hideControls"])
+    [controller.overlay setControlsVisible:[action isEqual:@"showControls"] animate:NO];
   else return @"";
   return @"started";
 }

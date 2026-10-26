@@ -18,7 +18,7 @@ test("every registered desktop native module and view has a written contract", (
       }
     }
   }
-  assert.equal(registered.size, 27);
+  assert.equal(registered.size, 31);
 });
 test("injected native stubs reject wrong method and constant shapes", () => {
   assert.throws(() => assertNativeStub("BayApp", { apiVersion: "8" }, { partial: true }), /apiVersion must be number/);

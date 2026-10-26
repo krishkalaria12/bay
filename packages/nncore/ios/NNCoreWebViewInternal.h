@@ -15,6 +15,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)emit:(NSString *)name payload:(NSDictionary<NSString *, id> *)payload;
 // Leaves video Picture in Picture in one frame (a frame id from the page script), else the main frame's.
 - (void)exitPictureInPictureInFrame:(nullable NSString *)frameId;
+// The Picture in Picture window's speed ("rate"), subtitles (a track's index, -1 for off) or Live ("live") choice, for
+// the video in that frame (page_script.js › Picture in Picture).
+- (void)pictureInPictureAction:(NSString *)action value:(double)value inFrame:(nullable NSString *)frameId;
 // The window is about to close: its tabs on their way to another window (prepareTransfer) move to a hidden window
 // first, where their new views take them, instead of closing with its Browser.
 + (void)keepTransfersOfWindow:(NSWindow *)window;

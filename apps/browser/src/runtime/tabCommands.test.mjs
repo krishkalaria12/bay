@@ -205,3 +205,26 @@ test("a New Tab page shown by Back keeps its page in the tab until the page goes
   store.getState().navigate(tabId, "https://c.example/");
   assert.equal(store.getState().tabs[tabId].newTabHistory, undefined);
 });
+
+test("syncInternalPage handles Library and derives an Easel title from library data", async () => {
+  const { useLibrary } = await import("../components/library/state.ts");
+  const { store, windowId, tabId } = setup({ url: "bay://library" });
+  run(store, { method: "syncInternalPage", tabId });
+  assert.equal(store.getState().tabs[tabId].title, "Library");
+  const spaceId = store.getState().windows[windowId].spaceId;
+  const prior = useLibrary.getState();
+  try {
+    useLibrary.setState({ easels: { "easel one": { id: "easel one", spaceId, title: "Project notes" } } });
+    store.getState().navigate(tabId, "bay://easel/easel%20one");
+    run(store, { method: "syncInternalPage", tabId });
+    assert.equal(store.getState().tabs[tabId].title, "Project notes");
+    useLibrary.setState({ easels: { "easel one": { id: "easel one", spaceId: "other", title: "Hidden" } } });
+    run(store, { method: "syncInternalPage", tabId });
+    assert.equal(store.getState().tabs[tabId].title, "Easel");
+    store.getState().navigate(tabId, "bay://easel/%E0%A4%A");
+    run(store, { method: "syncInternalPage", tabId });
+    assert.equal(store.getState().tabs[tabId].title, "Easel");
+  } finally {
+    useLibrary.setState(prior);
+  }
+});

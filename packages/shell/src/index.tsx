@@ -14,13 +14,23 @@ import {
 export * from "./system";
 export * from "./app";
 export * from "./live";
+export * from "./capture";
+export * from "./easel";
+export * from "./localFiles";
 
 export type BrowserCommand =
+  | "focusSidebar"
+  | "sidebarKey"
+  | "sidebarBlur"
   | "undoPinnedFolderMove"
+  | "openLibrary"
+  | "newEasel"
   | "newTab"
   | "newWindow"
   | "newIncognitoWindow"
   | "newLittleBay"
+  | "joinMeeting"
+  | "capturePortrait"
   | "toggleOpenLinksInLittleBay"
   | "removeFromSplit"
   | "togglePinRow"
@@ -115,6 +125,12 @@ export type BrowserCommand =
   | "autofill"
   | "openFile"
   | "savePage"
+  | "capture"
+  | "captureFullPage"
+  | "newBoost"
+  | "editBoost"
+  | "zapElements"
+  | "toggleSiteBoosts"
   | "emailPageLocation"
   | "printWithSystemDialog"
   | "stop"
@@ -165,6 +181,9 @@ export type AppEvent =
   | { type: "resignActive" }
   | { type: "screenLocked" }
   | { type: "controlReleased" }
+  // Option held on its own (and let go): the hidden sidebar shows while it is.
+  | { type: "optionHeld"; windowId: string }
+  | { type: "optionReleased" }
   | { type: "switcherKey"; key: "escape" | "next" | "previous" }
   | { type: "switcherMouseUp" };
 
@@ -257,6 +276,9 @@ const Shell = requireNativeModule<{
   setSwitcherCapture(active: boolean): Promise<void>;
   startDictation(): void;
   pickFiles(): Promise<string[]>;
+  fontFamilies?(): string[];
+  saveTextFile?(name: string, contents: string): Promise<boolean>;
+  openTextFile?(extensions: string[]): Promise<string | null>;
   readDocument(name: string): string | null;
   writeDocument(name: string, contents: string): void;
   saveDocument(name: string, contents: string): Promise<void>;
@@ -265,7 +287,7 @@ const Shell = requireNativeModule<{
   closeWindow(id: string): Promise<void>;
   focusWindow(id: string): Promise<void>;
   setTrafficLightsCenter(id: string, center: [number, number] | null): Promise<void>;
-  setTrafficLightsOnHover(id: string, on: boolean): Promise<void>;
+  setTrafficLightsMode(id: string, mode: TrafficLightsMode): Promise<void>;
   dragPreviewBegin?(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;
   dragPreviewPage?(base64: string, frame: Rect4): Promise<void>;
   dragPreviewUpdate?(shape: DragPreviewShape, point: [number, number]): Promise<void>;
@@ -284,6 +306,8 @@ const Shell = requireNativeModule<{
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
+  focusSidebarRow?(windowId: string, tag: number): Promise<void>;
+  setSidebarKeyboard?(windowId: string, active: boolean): Promise<void>;
   setSidebarMoveUndo?(windowId: string, available: boolean, focus: boolean): Promise<void>;
   setMenuBookmarks(bookmarks: Pick<MenuState, MenuBookmarkKey>): Promise<void>;
   replyToTerminate(ok: boolean): Promise<void>;
@@ -302,6 +326,10 @@ export const writeDocument = (name: string, contents: string) => nativeDocumentW
 export const saveDocument = (name: string, contents: string) => nativeDocumentSave(name, contents, () => Shell.saveDocument(name, contents));
 export const removeDocument = (name: string) => nativeDocumentWrite(name, null, () => Shell.removeDocument(name));
 
+export const focusSidebarRow = (windowId: string, tag: number) => Shell.focusSidebarRow?.(windowId, tag) ?? Promise.resolve();
+
+export const setSidebarKeyboard = (windowId: string, active: boolean) => Shell.setSidebarKeyboard?.(windowId, active) ?? Promise.resolve();
+
 /** Claims sidebar focus only after a move; ordinary text/page focus retains its own Undo. */
 export const setSidebarMoveUndo = (windowId: string, available: boolean, focus = false) =>
   Shell.setSidebarMoveUndo?.(windowId, available, focus) ?? Promise.resolve();
@@ -309,6 +337,9 @@ export const setSidebarMoveUndo = (windowId: string, available: boolean, focus =
 export const startDictation = () => Shell.startDictation();
 export const setSwitcherCapture = (active: boolean) => void Shell.setSwitcherCapture(active);
 export const pickFiles = () => Shell.pickFiles();
+export const fontFamilies = (): string[] => Shell.fontFamilies?.() ?? [];
+export const saveTextFile = (name: string, contents: string) => Shell.saveTextFile?.(name, contents) ?? Promise.resolve(false);
+export const openTextFile = (extensions: string[] = []) => Shell.openTextFile?.(extensions) ?? Promise.resolve(null);
 
 export function copyText(text: string) {
   Shell.copyText(text);
@@ -346,8 +377,13 @@ export const focusWindow = (id: string) => Shell.focusWindow(id);
 export const setWindowTitle = (id: string, title: string) => Shell.setWindowTitle(id, title);
 export const setTrafficLightsCenter = (id: string, center: [number, number] | null) =>
   capabilities.trafficLights ? Shell.setTrafficLightsCenter(id, center) : Promise.resolve();
-/** The window's buttons shown only while the pointer is over the window's top (always in full screen). */
-export const setTrafficLightsOnHover = (id: string, on: boolean) => (capabilities.trafficLights ? Shell.setTrafficLightsOnHover(id, on) : Promise.resolve());
+/**
+ * The window buttons: "shown"; "hover", only while the pointer is over the window's top (Zen's, with the page under
+ * them); "hidden" (Arc's with the sidebar closed, shown with its peek).
+ */
+export type TrafficLightsMode = "shown" | "hover" | "hidden";
+export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode) =>
+  capabilities.trafficLights ? Shell.setTrafficLightsMode(id, mode) : Promise.resolve();
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›
@@ -541,3 +577,13 @@ const TranslationNative = requireOptionalNativeModule<TranslationModule>("BayTra
 
 // Null before macOS 26, which has no translation API for apps.
 export const translation: Omit<TranslationModule, "available"> | null = TranslationNative?.available ? TranslationNative : null;
+
+type TidyNamesModule = {
+  readonly available: boolean;
+  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;
+};
+const TidyNamesNative = requireOptionalNativeModule<TidyNamesModule>("BayTidyNames");
+
+// Null without Apple Intelligence, where Tidy Downloads uses the local cleaner alone.
+export const tidyNames: Omit<TidyNamesModule, "available"> | null =
+  TidyNamesNative && nativeSnapshot("BayTidyNames", "available", [], () => TidyNamesNative.available) ? TidyNamesNative : null;

@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/functional/callback.h"
 #include "content/public/browser/render_frame_host_receiver_set.h"
@@ -37,6 +38,23 @@ namespace nncore {
 void SetPageScript(const std::string& script);
 const std::string& GetPageScript();
 void SendPageScript(content::RenderProcessHost* host);
+
+// Boosts (mojom::NNBoost), as the app sets them: every renderer gets the list at launch and
+// again when it changes. `script` goes only to renderers of regular profiles, or to private
+// ones too with `script_in_private`; `invert` darkens the site's pages (Chrome's forced dark
+// mode, NNContentBrowserClient's web preferences).
+struct Boost {
+  std::string host;
+  std::string user_css;
+  std::string css;
+  std::string script;
+  bool script_in_private = false;
+  bool invert = false;
+};
+void SetBoosts(std::vector<Boost> boosts);
+void SendBoosts(content::RenderProcessHost* host);
+// Whether the page `contents` shows has a Boost on that inverts it.
+bool BoostInverts(content::WebContents* contents);
 
 // From NNContentBrowserClient.
 void RegisterPageChannelBinders(content::RenderFrameHost& render_frame_host,
@@ -76,11 +94,16 @@ class PageChannel : public content::WebContentsObserver,
 
   static std::string FrameId(content::RenderFrameHost* frame);
 
+  // Serialized EngineBoostStyle {palette, sites}: sent to the main frame now, before
+  // each document commits, and on BFCache restore. The renderer selects the host tint.
+  void SetBoostStyle(const std::string& descriptor);
+
   // mojom::NNPageHost:
   void Post(const std::string& kind, const std::string& json) override;
 
   // content::WebContentsObserver:
   void PrimaryPageChanged(content::Page& page) override;
+  void ReadyToCommitNavigation(content::NavigationHandle* navigation) override;
 
  private:
   friend class content::WebContentsUserData<PageChannel>;
@@ -92,6 +115,7 @@ class PageChannel : public content::WebContentsObserver,
   content::RenderFrameHostReceiverSet<mojom::NNPageHost> receivers_;
   mojo::AssociatedRemote<mojom::NNPage> main_page_;
   content::GlobalRenderFrameHostId main_page_frame_;
+  std::string boost_style_;
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
 

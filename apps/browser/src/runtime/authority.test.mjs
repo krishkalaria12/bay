@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { createBrowserAuthority } from "./authority.ts";
 import { createBrowserProjector } from "./projection.ts";
 import { setAppUrlOpener } from "../store/tabs.ts";
+import { sidebarUndoWindow } from "../store/sidebarUndo.ts";
 
 const request = (requestId, command, extra = {}) => ({ epoch: "epoch-1", clientId: "window-1", requestId, command, ...extra });
 
@@ -363,4 +364,26 @@ test("retired authority rejects a late service reply without replay", async () =
   assert.equal(active(), false);
   complete();
   await assert.rejects(reply, { code: "closed" });
+});
+
+test("service actions record undo for the authenticated origin, not the focused window", async () => {
+  const store = createBrowserStore();
+  const origin = store.getState().createWindow();
+  const focused = store.getState().createWindow();
+  store.getState().setFocusedWindow(focused);
+  const seen = [];
+  const authority = createBrowserAuthority({
+    epoch: "epoch-1",
+    store,
+    executeAsync: async () => {
+      seen.push(sidebarUndoWindow());
+      await Promise.resolve();
+      seen.push(sidebarUndoWindow());
+      return null;
+    },
+  });
+  await authority.dispatch(request(1, { method: "serviceAction", action: "calendarRefresh", args: [] }, { originWindowId: origin }));
+  // The synchronous reducer step sees the origin; later IO does not inherit it.
+  assert.deepEqual(seen, [origin, undefined]);
+  authority.close();
 });

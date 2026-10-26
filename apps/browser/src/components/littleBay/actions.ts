@@ -1,11 +1,12 @@
 import { focus, openWindow } from "../../lib/actions";
-import { matchingLinkRule } from "../../lib/externalLinkRules";
+import { defaultLinkDestination, matchingLinkRule } from "../../lib/externalLinkRules";
 import { browserRead } from "../../store/read";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../../runtime/commands";
 import { navigate, newTab } from "../../runtime/tabActions";
 import { closeWindow, createWindow } from "../../runtime/windowActions";
 import { viewTabIds } from "../../store/model";
-import { isSmall, mainWindowFor } from "../../store/small";
+import { isSmall, mainWindowFor, mostRecentSpace } from "../../store/small";
+import { handleSharedCollectionUrl } from "../../lib/collectionSharing";
 
 const store = () => browserRead.getState();
 
@@ -16,16 +17,18 @@ export async function openLittleBay(url?: string, spaceId?: string): Promise<str
 
 const opensInLittleBay = (url: string) => /^(https?|file):/i.test(url);
 
-// Only incoming desktop links use these rules. Page navigation and explicit tab commands keep their behavior.
+// Incoming desktop links use the first matching route, then the configured default.
 export async function openExternalUrls(urls: string[], sourceApp?: string) {
   for (const url of urls) {
+    if (handleSharedCollectionUrl(url)) continue;
     const s = store();
-    const spaceId = s.settings.defaultSpaceId;
-    const target = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
-    if (target?.kind === "space" && s.spaces[target.spaceId]) await openLinksInMainWindow([url], target.spaceId);
-    else if (target?.kind === "littleBay") await openLittleBay(url, spaceId);
-    else if (target?.kind === "newWindow") focus(await openWindow({ url, spaceId }));
-    else if (s.settings.openLinksInLittleBay && urls.length === 1 && opensInLittleBay(url)) await openLittleBay(url, spaceId);
+    const matched = matchingLinkRule(s.settings.externalLinkRules, url, sourceApp)?.destination;
+    const target =
+      matched?.kind === "space" && !s.spaces[matched.spaceId] ? defaultLinkDestination(s.settings) : (matched ?? defaultLinkDestination(s.settings));
+    const spaceId =
+      target.kind === "space" && s.spaces[target.spaceId] ? target.spaceId : target.kind === "mostRecentSpace" ? mostRecentSpace(s) : s.settings.defaultSpaceId;
+    if (target.kind === "littleBay" && opensInLittleBay(url)) await openLittleBay(url, spaceId);
+    else if (target.kind === "newWindow") focus(await openWindow({ url, spaceId }));
     else await openLinksInMainWindow([url], spaceId);
   }
 }

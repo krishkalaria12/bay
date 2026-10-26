@@ -123,3 +123,16 @@ test("split commands reject private and missing references without mutating", ()
   }
   assert.ok(s().splits[split]);
 });
+
+test("keepPeek returns and focuses the destination selected by link rules", async () => {
+  const { store, s, windowId, a } = setup();
+  s().updateSettings({ externalLinkRules: [{ id: "route", pattern: "news.com", matchType: "contains", destination: { kind: "newWindow" } }] });
+  run(store, { method: "openPeek", fromTabId: a, url: "https://news.com/story" });
+  const focused = [];
+  const authority = createBrowserAuthority({ epoch: "peek", store, effects: { focusWindow: (id) => focused.push(id) } });
+  const reply = await authority.dispatch({ epoch: "peek", clientId: "w", requestId: 1, command: { method: "keepPeek", windowId } });
+  assert.notEqual(reply.value, windowId);
+  assert.ok(reply.commit.state.windows[reply.value]);
+  assert.deepEqual(focused, [reply.value]);
+  authority.close();
+});

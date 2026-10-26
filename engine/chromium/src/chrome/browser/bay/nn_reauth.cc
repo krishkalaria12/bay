@@ -12,9 +12,18 @@
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
+#include "build/build_config.h"
 #include "chrome/browser/bay/nn_engine.h"
+#include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
 #include "components/device_reauth/device_authenticator.h"
+
+#if BUILDFLAG(IS_MAC)
+#include <Security/Security.h>
+
+#include "base/apple/scoped_cftyperef.h"
+#include "base/command_line.h"
+#include "components/os_crypt/common/os_crypt_switches.h"
+#endif
 
 namespace bay {
 namespace {
@@ -24,9 +33,50 @@ bool HiddenTestInstance() {
   return background && !strcmp(background, "1");
 }
 
+#if BUILDFLAG(IS_MAC)
+// Whether this code is signed for distribution: a Mac App Store or Developer ID
+// signature, as every shipped build is. Any API failure counts as signed, so the
+// test grant fails closed.
+bool SignedForDistribution() {
+  base::apple::ScopedCFTypeRef<SecCodeRef> self;
+  if (SecCodeCopySelf(kSecCSDefaultFlags, self.InitializeInto()) !=
+      errSecSuccess) {
+    return true;
+  }
+  base::apple::ScopedCFTypeRef<SecRequirementRef> distribution;
+  if (SecRequirementCreateWithString(
+          CFSTR("anchor apple generic and "
+                "(certificate leaf[field.1.2.840.113635.100.6.1.9] exists or "
+                "certificate 1[field.1.2.840.113635.100.6.2.6] exists and "
+                "certificate leaf[field.1.2.840.113635.100.6.1.13] exists)"),
+          kSecCSDefaultFlags, distribution.InitializeInto()) != errSecSuccess) {
+    return true;
+  }
+  return SecCodeCheckValidity(self.get(), kSecCSDefaultFlags,
+                              distribution.get()) == errSecSuccess;
+}
+
+// BAY_TEST_REAUTH counts only in a build that isn't signed for distribution
+// (Debug, ad hoc) and on Chrome's mock keychain, where the real Safe Storage key
+// can't be read: whatever data dir it points at, nothing saved by the real app
+// decrypts. A shipped build never honours it.
+bool TestGrantHonoured() {
+  static const bool honoured =
+      !SignedForDistribution() &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          os_crypt::switches::kUseMockKeychain);
+  return honoured;
+}
+#else
+bool TestGrantHonoured() {
+  // Other hosts have no mock-keychain isolation for this test grant.
+  return false;
+}
+#endif
+
 bool TestGrant() {
   const char* grant = getenv("BAY_TEST_REAUTH");
-  return grant && !strcmp(grant, "granted");
+  return grant && !strcmp(grant, "granted") && TestGrantHonoured();
 }
 
 const char* Histogram(device_reauth::DeviceAuthSource source) {

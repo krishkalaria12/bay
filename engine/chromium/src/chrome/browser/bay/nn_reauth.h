@@ -10,7 +10,9 @@
 // A hidden test instance (BAY_BACKGROUND=1 in the process's environment)
 // never shows the prompt: each request is logged and reported as event
 // "reauth.requested" {purpose, granted}, and is granted only when
-// BAY_TEST_REAUTH=granted. Nothing a caller passes can skip the prompt.
+// BAY_TEST_REAUTH=granted in a build that isn't signed for distribution and runs
+// on Chrome's mock keychain (a shipped build always denies it). Nothing a caller
+// passes can skip the prompt.
 
 #ifndef CHROME_BROWSER_BAY_NN_REAUTH_H_
 #define CHROME_BROWSER_BAY_NN_REAUTH_H_

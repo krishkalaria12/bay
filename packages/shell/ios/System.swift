@@ -84,6 +84,51 @@ public class SystemModule: Module {
       }
     }.runOnQueue(.main)
 
+    // Tidy Downloads: rename a finished download in place, never onto another file. Returns the new path (the
+    // caller updates its download record) or nil when the name is unusable or the move failed.
+    AsyncFunction("renameFile") { (path: String, name: String) -> String? in
+      let files = FileManager.default
+      let source = URL(fileURLWithPath: path).standardizedFileURL
+      guard source.path.hasPrefix("/"), files.fileExists(atPath: source.path) else { return nil }
+      let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !clean.isEmpty, clean.utf8.count <= 200, !clean.hasPrefix("."), !clean.hasSuffix("."), !clean.hasSuffix(" "),
+        !clean.contains("/"), !clean.contains(":") else { return nil }
+      let folder = source.deletingLastPathComponent()
+      let ext = (clean as NSString).pathExtension
+      let stem = ext.isEmpty ? clean : String(clean.dropLast(ext.count + 1))
+      func target(_ suffix: String = "") -> URL {
+        let name = ext.isEmpty ? stem + suffix : stem + suffix + "." + ext
+        return folder.appendingPathComponent(name)
+      }
+      var destination = target()
+      if destination.standardizedFileURL == source { return source.path }
+      // A case-only rename on a case-insensitive volume needs a temporary stop: the target "exists" (it is the source).
+      if destination.path.lowercased() == source.path.lowercased() {
+        let temporary = folder.appendingPathComponent(".bay-rename-\(UUID().uuidString)")
+        do {
+          try files.moveItem(at: source, to: temporary)
+          try files.moveItem(at: temporary, to: destination)
+          return destination.path
+        } catch {
+          try? files.moveItem(at: temporary, to: source)
+          return nil
+        }
+      }
+      // Chromium's own disambiguation, so twice-tidied files do not replace each other.
+      var copy = 1
+      while files.fileExists(atPath: destination.path) {
+        guard copy < 1000 else { return nil }
+        destination = target(" (\(copy))")
+        copy += 1
+      }
+      do {
+        try files.moveItem(at: source, to: destination)
+        return destination.path
+      } catch {
+        return nil
+      }
+    }.runOnQueue(.main)
+
     AsyncFunction("fileIcon") { (path: String, size: Double) -> String? in
       let icon = FileManager.default.fileExists(atPath: path)
         ? NSWorkspace.shared.icon(forFile: path)
@@ -129,6 +174,13 @@ public class SystemModule: Module {
     AsyncFunction("menuShortcuts") { () -> [[String: Any]] in MainMenu.shortcutList() }.runOnQueue(.main)
 
     AsyncFunction("recordShortcut") { (promise: Promise) in ShortcutRecorder.shared.record(promise) }.runOnQueue(.main)
+
+    // MARK: Little Bay from any app
+
+    AsyncFunction("setLittleBayMenuBarItem") { (on: Bool) in LittleBayAccess.setMenuBarItem(on) }.runOnQueue(.main)
+    AsyncFunction("setLittleBayHotKey") { (keyCode: Int?, modifiers: [String]) -> String in
+      LittleBayAccess.setHotKey(keyCode: keyCode, modifiers: modifiers)
+    }.runOnQueue(.main)
     AsyncFunction("cancelRecording") { ShortcutRecorder.shared.finish(nil) }.runOnQueue(.main)
   }
 }
@@ -160,7 +212,8 @@ final class ShortcutRecorder {
       if flags.contains(.shift) { mods.append("shift") }
       if flags.contains(.command) { mods.append("command") }
       if flags.contains(.function), let scalar = key.unicodeScalars.first, scalar.value < 0xF700 { mods.append("function") }
-      self.finish(["key": key, "modifiers": mods])
+      // The key's code too: a global shortcut (LittleBayAccess) registers by key, not character.
+      self.finish(["key": key, "modifiers": mods, "keyCode": Int(event.keyCode)])
       return nil
     }
   }
@@ -179,8 +232,9 @@ public class FileDragModule: Module {
     Name("BayFileDrag")
 
     View(FileDragView.self) {
-      Events("onMiddleClick")
+      Events("onMiddleClick", "onSideButton")
       Prop("path") { (view: FileDragView, path: String?) in view.path = path }
+      Prop("hearsSideButtons") { (view: FileDragView, on: Bool) in view.hearsSideButtons = on }
     }
   }
 }
@@ -188,9 +242,15 @@ public class FileDragModule: Module {
 final class FileDragView: ExpoView, NSDraggingSource {
   var path: String?
   let onMiddleClick = EventDispatcher()
+  // A mouse's side buttons (AppKit's 3 and 4, Back and Forward), for an area that listens (the sidebar's spaces).
+  let onSideButton = EventDispatcher()
+  var hearsSideButtons = false
   private var downAt: NSPoint?
 
   override func otherMouseUp(with event: NSEvent) {
+    if hearsSideButtons, event.buttonNumber == 3 || event.buttonNumber == 4 {
+      return onSideButton(["button": event.buttonNumber == 3 ? "back" : "forward"])
+    }
     guard event.buttonNumber == 2 else { return super.otherMouseUp(with: event) }
     let flags = event.modifierFlags
     onMiddleClick(["shiftKey": flags.contains(.shift), "altKey": flags.contains(.option), "metaKey": flags.contains(.command)])
@@ -222,6 +282,7 @@ final class FileDragView: ExpoView, NSDraggingSource {
   }
 
   func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-    context == .outsideApplication ? [.copy, .generic] : []
+    // Chromium pages are inside Bay too. They need .copy to accept a file URL as an upload.
+    context == .outsideApplication ? [.copy, .generic] : .copy
   }
 }

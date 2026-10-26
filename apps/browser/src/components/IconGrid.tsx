@@ -1,7 +1,8 @@
 import { Pressable, TextInput, View } from "@bay/platform";
 import { Symbol } from "@bay/shell";
 import { useMemo, useRef, useState } from "react";
-import { FlatList, Text } from "react-native";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { Text } from "react-native";
 import { onEscapeKey } from "../lib/escapeKey";
 import { SYMBOL_PREFIX } from "../lib/constants";
 import { useTheme } from "../lib/theme";
@@ -50,12 +51,12 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
   });
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState(EMOJI_GROUPS[0]!.id);
-  const list = useRef<FlatList<Row>>(null);
+  const list = useRef<LegendListRef>(null);
   const q = query.trim().toLowerCase();
   const browsing = tab === "emoji" && !q;
 
-  // The rows, and each one's offset (rows are fixed-height): a category's header is where the bar jumps to.
-  const { data, offsets, groupAt } = useMemo(() => {
+  // The rows, and where each category's header is (rows are fixed-height): where the bar jumps to.
+  const { data, groupAt } = useMemo(() => {
     let data: Row[];
     const groupAt: { id: string; y: number }[] = [];
     if (tab === "symbols") {
@@ -81,14 +82,12 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
         ),
       ]);
     }
-    const offsets: number[] = [];
     let y = 0;
     for (const row of data) {
-      offsets.push(y);
       if ("header" in row) groupAt.push({ id: row.key, y });
       y += "header" in row ? HEADER : cell;
     }
-    return { data, offsets, groupAt };
+    return { data, groupAt };
   }, [tab, q, symbols, columns, cell]);
 
   const jump = (id: string) => {
@@ -120,16 +119,15 @@ export function IconGrid({ symbols, current, onChoose, onEscape, columns, cell, 
           style={{ flex: 1, fontSize: 13, marginLeft: 6, color: theme.textPrimary, paddingVertical: 0 }}
         />
       </View>
-      <FlatList
+      <LegendList
         ref={list}
         key={`${tab}:${columns}`}
         data={data}
         keyExtractor={(row) => row.key}
         style={{ height: cell * rows + (browsing ? HEADER : 0) }}
         showsVerticalScrollIndicator={false}
-        initialNumToRender={rows + 2}
-        windowSize={5}
-        getItemLayout={(_, index) => ({ length: "header" in data[index]! ? HEADER : cell, offset: offsets[index]!, index })}
+        getItemType={(row) => ("header" in row ? "header" : "icons")}
+        getFixedItemSize={(row) => ("header" in row ? HEADER : cell)}
         scrollEventThrottle={32}
         onScroll={
           browsing

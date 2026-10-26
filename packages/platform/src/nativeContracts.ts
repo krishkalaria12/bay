@@ -82,6 +82,27 @@ export const nativeContracts = {
           "maxArgs": 0,
           "signature": "pickFiles(): Promise<string[]>;"
         },
+        "fontFamilies": {
+          "async": true,
+          "optional": true,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "fontFamilies?(): Promise<string[]>;"
+        },
+        "saveTextFile": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "saveTextFile?(name: string, contents: string): Promise<boolean>;"
+        },
+        "openTextFile": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "openTextFile?(extensions: string[]): Promise<string | null>;"
+        },
         "readDocument": {
           "async": true,
           "optional": false,
@@ -138,12 +159,12 @@ export const nativeContracts = {
           "maxArgs": 2,
           "signature": "setTrafficLightsCenter(id: string, center: [number, number] | null): Promise<void>;"
         },
-        "setTrafficLightsOnHover": {
+        "setTrafficLightsMode": {
           "async": true,
           "optional": false,
           "minArgs": 2,
           "maxArgs": 2,
-          "signature": "setTrafficLightsOnHover(id: string, on: boolean): Promise<void>;"
+          "signature": "setTrafficLightsMode(id: string, mode: TrafficLightsMode): Promise<void>;"
         },
         "dragPreviewBegin": {
           "async": true,
@@ -270,6 +291,20 @@ export const nativeContracts = {
           "minArgs": 1,
           "maxArgs": 1,
           "signature": "setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;"
+        },
+        "focusSidebarRow": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "focusSidebarRow?(windowId: string, tag: number): Promise<void>;"
+        },
+        "setSidebarKeyboard": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "setSidebarKeyboard?(windowId: string, active: boolean): Promise<void>;"
         },
         "setSidebarMoveUndo": {
           "async": true,
@@ -417,6 +452,22 @@ export const nativeContracts = {
           "minArgs": 3,
           "maxArgs": 3,
           "signature": "translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;"
+        }
+      },
+      "events": [],
+      "constants": {
+        "available": "boolean"
+      }
+    },
+    "BayTidyNames": {
+      "source": "shell/src/index.tsx",
+      "methods": {
+        "suggest": {
+          "async": true,
+          "optional": false,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;"
         }
       },
       "events": [],
@@ -748,6 +799,13 @@ export const nativeContracts = {
           "maxArgs": 1,
           "signature": "moveToTrash(path: string): Promise<boolean>;"
         },
+        "renameFile": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "renameFile?(path: string, name: string): Promise<string | null>;"
+        },
         "fileIcon": {
           "async": true,
           "optional": false,
@@ -781,7 +839,7 @@ export const nativeContracts = {
           "optional": false,
           "minArgs": 0,
           "maxArgs": 0,
-          "signature": "recordShortcut(): Promise<{ key: string; modifiers: ShortcutModifier[] } | null>;"
+          "signature": "recordShortcut(): Promise<RecordedShortcut | null>;"
         },
         "cancelRecording": {
           "async": true,
@@ -789,6 +847,20 @@ export const nativeContracts = {
           "minArgs": 0,
           "maxArgs": 0,
           "signature": "cancelRecording(): Promise<void>;"
+        },
+        "setLittleBayMenuBarItem": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setLittleBayMenuBarItem(on: boolean): Promise<void>;"
+        },
+        "setLittleBayHotKey": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "setLittleBayHotKey(keyCode: number | null, modifiers: ShortcutModifier[]): Promise<HotKeyStatus>;"
         }
       },
       "events": [],
@@ -854,6 +926,160 @@ export const nativeContracts = {
           "minArgs": 1,
           "maxArgs": 1,
           "signature": "delete(account: string): Promise<boolean>;"
+        }
+      },
+      "events": [],
+      "constants": {}
+    },
+    "BayCapture": {
+      "source": "shell/src/capture.tsx",
+      "methods": {
+        "copyImage": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "copyImage(path: string): Promise<boolean>;"
+        },
+        "saveImage": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "saveImage(path: string, name: string): Promise<string | null>;"
+        },
+        "shareImage": {
+          "async": true,
+          "optional": false,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "shareImage(path: string, name: string, windowId: string | null, anchor: number[] | null): Promise<void>;"
+        },
+        "portraitImage": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "portraitImage(path: string, colors: string[], dark: boolean): Promise<{ path: string; width: number; height: number } | null>;"
+        },
+        "copyQuote": {
+          "async": true,
+          "optional": false,
+          "minArgs": 5,
+          "maxArgs": 5,
+          "signature": "copyQuote(text: string, title: string, url: string, colors: string[], dark: boolean): Promise<boolean>;"
+        },
+        "shareQuote": {
+          "async": true,
+          "optional": false,
+          "minArgs": 6,
+          "maxArgs": 6,
+          "signature": "shareQuote(text: string, title: string, url: string, colors: string[], dark: boolean, windowId: string): Promise<boolean>;"
+        }
+      },
+      "events": [],
+      "constants": {}
+    },
+    "BayEasel": {
+      "source": "shell/src/easel.tsx",
+      "methods": {
+        "isEaselWebSharingEnabled": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "isEaselWebSharingEnabled(): Promise<boolean>;"
+        },
+        "retainLibraryImage": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "retainLibraryImage(path: string): Promise<EaselImage | null>;"
+        },
+        "removeLibraryImage": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "removeLibraryImage(path: string): Promise<boolean>;"
+        },
+        "libraryImageExists": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "libraryImageExists(path: string): Promise<boolean>;"
+        },
+        "exportEaselHTML": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "exportEaselHTML(document: string): Promise<string | null>;"
+        },
+        "createEaselShareIdentity": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "createEaselShareIdentity(): Promise<{ id: string; key: string }>;"
+        },
+        "readEaselShareRecords": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "readEaselShareRecords(): Promise<string | null>;"
+        }
+      },
+      "events": [],
+      "constants": {}
+    },
+    "BayLocalFiles": {
+      "source": "shell/src/localFiles.tsx",
+      "methods": {
+        "inspect": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "inspect(rootPath: string, relativePath: string): Promise<LocalFileAccess>;"
+        },
+        "list": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "list(rootPath: string, relativePath: string): Promise<LocalFileListing>;"
+        },
+        "open": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "open(rootPath: string, relativePath: string): Promise<LocalFileAccess>;"
+        },
+        "reconnect": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "reconnect(rootPath: string, kind: \"file\" | \"folder\" | null): Promise<LocalFileDescriptor | null>;"
+        },
+        "devDrop": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "devDrop?(windowId: string, paths: string[]): Promise<Record<string, unknown>>;"
+        },
+        "devUpload": {
+          "async": true,
+          "optional": true,
+          "minArgs": 5,
+          "maxArgs": 5,
+          "signature": "devUpload?(windowId: string, rootPath: string, relativePath: string, x: number, y: number): Promise<Record<string, unknown>>;"
         }
       },
       "events": [],
@@ -973,6 +1199,13 @@ export const nativeContracts = {
           "minArgs": 1,
           "maxArgs": 1,
           "signature": "setAutoPictureInPicture?(enabled: boolean): Promise<void>;"
+        },
+        "setBoosts": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setBoosts?(boosts: EngineBoost[]): Promise<void>;"
         },
         "setSearchEngineName": {
           "async": true,
@@ -1990,6 +2223,18 @@ export const nativeContracts = {
       "source": "shell/src/system.tsx",
       "props": "NativeMouseAreaProps"
     },
+    "BayCapture": {
+      "source": "shell/src/capture.tsx",
+      "props": "NativeMarkupProps"
+    },
+    "BayEasel": {
+      "source": "shell/src/easel.tsx",
+      "props": "NativeEaselProps"
+    },
+    "BayLocalFiles": {
+      "source": "shell/src/localFiles.tsx",
+      "props": "LocalFilesAreaProps"
+    },
     "BaySwipe": {
       "source": "nncore/src/swipe.tsx",
       "props": "NativeProps"
@@ -2023,14 +2268,14 @@ export const nativeContracts = {
       "WebViewHost": "{\n  mount(tag: number, windowId: string, props: EmbeddedTabProps): Promise<EmbeddedTab>;\n  update(tag: number, props: EmbeddedTabProps): Promise<void>;\n  call(tag: number, method: string, args: unknown[]): Promise<unknown>;\n  unmount(tag: number): Promise<void>;\n}"
     },
     "shell/src/index.tsx": {
-      "BrowserCommand": "| \"undoPinnedFolderMove\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
+      "BrowserCommand": "| \"focusSidebar\"\n  | \"sidebarKey\"\n  | \"sidebarBlur\"\n  | \"undoPinnedFolderMove\"\n  | \"openLibrary\"\n  | \"newEasel\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"joinMeeting\"\n  | \"capturePortrait\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"capture\"\n  | \"captureFullPage\"\n  | \"newBoost\"\n  | \"editBoost\"\n  | \"zapElements\"\n  | \"toggleSiteBoosts\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
       "CommandEvent": "{\n  command: BrowserCommand;\n  arg: string | null;\n  windowId: string | null;\n}",
       "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }\n  // Windows' shared runtime: openWindow named this open utility window again, with these options.\n  | { type: \"opened\"; id: string; options: OpenWindowOptions }\n  | ({ type: \"state\"; id: string } & WindowState)",
       "WindowState": "{\n  maximized: boolean;\n  fullscreen: boolean;\n  /** Ephemeral native state, never restored from a session. */\n  minimized?: boolean;\n  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */\n  size?: [number, number];\n}",
       "WindowButton": "\"minimize\" | \"maximize\" | \"close\"",
       "WindowButtonLayout": "{ left: readonly WindowButton[]; right: readonly WindowButton[] }",
       "WindowCaption": "{ maximize: [number, number, number, number] | null; dark: boolean }",
-      "AppEvent": "| { type: \"reopen\" }\n  | { type: \"willQuit\" }\n  | { type: \"quitCancelled\" }\n  | { type: \"appearance\"; dark: boolean }\n  | { type: \"windowButtonLayout\"; layout: WindowButtonLayout }\n  | { type: \"quitWarningSuppressed\" }\n  | { type: \"resignActive\" }\n  | { type: \"screenLocked\" }\n  | { type: \"controlReleased\" }\n  | { type: \"switcherKey\"; key: \"escape\" | \"next\" | \"previous\" }\n  | { type: \"switcherMouseUp\" }",
+      "AppEvent": "| { type: \"reopen\" }\n  | { type: \"willQuit\" }\n  | { type: \"quitCancelled\" }\n  | { type: \"appearance\"; dark: boolean }\n  | { type: \"windowButtonLayout\"; layout: WindowButtonLayout }\n  | { type: \"quitWarningSuppressed\" }\n  | { type: \"resignActive\" }\n  | { type: \"screenLocked\" }\n  | { type: \"controlReleased\" }\n  // Option held on its own (and let go): the hidden sidebar shows while it is.\n  | { type: \"optionHeld\"; windowId: string }\n  | { type: \"optionReleased\" }\n  | { type: \"switcherKey\"; key: \"escape\" | \"next\" | \"previous\" }\n  | { type: \"switcherMouseUp\" }",
       "ShellEvents": "{\n  onCommand: (e: CommandEvent) => void;\n  onOpenURLs: (e: { urls: string[]; sourceApp?: string }) => void;\n  onWindowEvent: (e: WindowEvent) => void;\n  onAppEvent: (e: AppEvent) => void;\n}",
       "MenuItem": "| { separator: true }\n  | {\n      id: string;\n      title: string;\n      symbol?: string;\n      swatch?: string;\n      key?: string;\n      modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\")[];\n      // Web hosts: the trailing hint, filled in from key and modifiers.\n      shortcut?: string;\n      enabled?: boolean;\n      checked?: boolean;\n      children?: MenuItem[];\n    }",
       "OpenWindowOptions": "{\n  frame?: [number, number, number, number] | null;\n  incognito?: boolean;\n  title?: string;\n  focus?: boolean;\n  kind?: \"browser\" | \"small\" | \"settings\" | \"import\" | \"taskManager\";\n  profile?: string;\n  // Restored size without a screen position; the compositor places the window.\n  maximized?: boolean;\n  // Little Bay also opens at its remembered size, centred on the active screen.\n  size?: [number, number];\n  // Settings: the pane to show, and the space it is about.\n  pane?: string;\n  spaceId?: string;\n}",
@@ -2040,6 +2285,7 @@ export const nativeContracts = {
       "ConfirmOptions": "{\n  title: string;\n  message?: string;\n  confirmTitle?: string;\n  cancelTitle?: string;\n  destructive?: boolean;\n  suppression?: string;\n  windowId?: string;\n}",
       "PromptOptions": "{\n  title: string;\n  message?: string;\n  value?: string;\n  placeholder?: string;\n  confirmTitle?: string;\n  windowId?: string;\n}",
       "WindowProfileProps": "ViewProps & {\n  profile: string;\n  neighbours: string[];\n}",
+      "TrafficLightsMode": "\"shown\" | \"hover\" | \"hidden\"",
       "Rect4": "[number, number, number, number]",
       "DragPreviewShape": "\"hidden\" | \"pill\" | \"card\"",
       "MenuBookmarkKey": "\"bookmarkFolders\" | \"recentBookmarks\" | \"bookmarksBar\" | \"otherBookmarks\"",
@@ -2053,11 +2299,12 @@ export const nativeContracts = {
       "IconTheme": "{ kind: \"blur\" } | { kind: \"template\"; fill: string; stroke?: string }",
       "DockSelectionProps": "ViewProps & {\n  image?: string;\n  emoji?: string;\n  theme?: IconTheme[\"kind\"];\n  fill?: string;\n  stroke?: string;\n  cornerRadius?: number;\n  strokeWidth?: number;\n  iconSize?: number;\n  dark: boolean;\n  glass?: boolean;\n}",
       "InlineWrite": "0 | 1 | 2",
-      "TranslationModule": "{\n  readonly available: boolean;\n  userLanguages(): string[];\n  languageName(identifier: string): string;\n  detect(text: string): Promise<string | null>;\n  status(source: string, target: string): Promise<\"installed\" | \"supported\" | \"unsupported\">;\n  supportedLanguages(): Promise<string[]>;\n  prepare(source: string, target: string): Promise<void>;\n  translate(source: string, target: string, texts: string[]): Promise<string[]>;\n  translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;\n}"
+      "TranslationModule": "{\n  readonly available: boolean;\n  userLanguages(): string[];\n  languageName(identifier: string): string;\n  detect(text: string): Promise<string | null>;\n  status(source: string, target: string): Promise<\"installed\" | \"supported\" | \"unsupported\">;\n  supportedLanguages(): Promise<string[]>;\n  prepare(source: string, target: string): Promise<void>;\n  translate(source: string, target: string, texts: string[]): Promise<string[]>;\n  translateBlocks(source: string, target: string, blocks: string[][]): Promise<(string[] | null)[]>;\n}",
+      "TidyNamesModule": "{\n  readonly available: boolean;\n  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;\n}"
     },
     "shell/src/app.ts": {
       "UpdaterState": "| { available: false; managedBy?: \"packageManager\" }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      pending: PendingUpdate | null;\n    }",
-      "PendingUpdate": "{ version: string; ready: boolean }",
+      "PendingUpdate": "{ version: string; ready: boolean; downloading?: boolean }",
       "AppIcon": "{ id: string; name: string; preview: string | null }",
       "NotificationPermission": "\"granted\" | \"denied\" | \"notDetermined\" | \"provisional\"",
       "NotificationOptions": "{\n  id?: string;\n  title: string;\n  body?: string;\n  subtitle?: string;\n  silent?: boolean;\n  icon?: string;\n  tabId?: string;\n  windowId?: string;\n  origin?: string;\n  dismissible?: boolean;\n  data?: Record<string, unknown>;\n}",
@@ -2077,9 +2324,12 @@ export const nativeContracts = {
       "MenuShortcut": "{\n  id: string;\n  title: string;\n  path: string[];\n  key: string;\n  modifiers: ShortcutModifier[];\n  defaultKey: string;\n  defaultModifiers: ShortcutModifier[];\n  remappable: boolean;\n}",
       "ShortcutModifier": "\"control\" | \"option\" | \"shift\" | \"command\" | \"function\"",
       "LaunchAtLoginStatus": "\"enabled\" | \"requiresApproval\" | \"notRegistered\" | \"notFound\"",
+      "RecordedShortcut": "{ key: string; modifiers: ShortcutModifier[]; keyCode: number }",
+      "HotKeyStatus": "\"ok\" | \"off\" | \"taken\"",
       "MiddleClickEvent": "{ shiftKey: boolean; altKey: boolean; metaKey: boolean }",
-      "MouseAreaProps": "ViewProps & {\n  path?: string | null;\n  onMiddleClick?: (e: MiddleClickEvent) => void;\n}",
-      "NativeMouseAreaProps": "Omit<MouseAreaProps, \"onMiddleClick\"> & { onMiddleClick?: (e: { nativeEvent: MiddleClickEvent }) => void }"
+      "SideButton": "\"back\" | \"forward\"",
+      "MouseAreaProps": "ViewProps & {\n  path?: string | null;\n  onMiddleClick?: (e: MiddleClickEvent) => void;\n  /** A mouse's side buttons (3 and 4) released over the area or anything in it that doesn't take them. */\n  onSideButton?: (button: SideButton) => void;\n}",
+      "NativeMouseAreaProps": "Omit<MouseAreaProps, \"onMiddleClick\" | \"onSideButton\"> & {\n  onMiddleClick?: (e: { nativeEvent: MiddleClickEvent }) => void;\n  onSideButton?: (e: { nativeEvent: { button: SideButton } }) => void;\n  hearsSideButtons?: boolean;\n}"
     },
     "shell/src/live.ts": {
       "CalendarAuthorization": "\"fullAccess\" | \"writeOnly\" | \"denied\" | \"restricted\" | \"notDetermined\"",
@@ -2087,8 +2337,37 @@ export const nativeContracts = {
       "CalendarParticipant": "{ name: string; email: string; status: \"accepted\" | \"declined\" | \"tentative\" | \"pending\"; me: boolean }",
       "SystemCalendarEvent": "{\n  id: string;\n  occurrence: string;\n  calendarId: string;\n  color: string;\n  title: string;\n  start: number;\n  end: number;\n  allDay: boolean;\n  location: string;\n  notes: string;\n  url: string;\n  cancelled: boolean;\n  declined: boolean;\n  organizer: CalendarParticipant | null;\n  attendees: CalendarParticipant[];\n}"
     },
+    "shell/src/capture.tsx": {
+      "QuoteCard": "{ text: string; title: string; url: string; colors: string[]; dark: boolean }",
+      "MarkupTool": "\"pen\" | \"highlighter\" | \"arrow\" | \"rect\" | \"oval\" | \"text\"",
+      "MarkupState": "{ canUndo: boolean; canRedo: boolean; marks: number }",
+      "MarkupCanvasHandle": "{\n  undo(): Promise<void>;\n  redo(): Promise<void>;\n  clear(): Promise<void>;\n  /** The picture with its marks, as a new PNG. */\n  export(): Promise<{ path: string; width: number; height: number } | null>;\n}",
+      "MarkupCanvasProps": "ViewProps & {\n  ref?: Ref<MarkupCanvasHandle>;\n  path: string;\n  tool: MarkupTool;\n  color: string;\n  /** The pen's width in points. */\n  lineWidth: number;\n  onChange?: (state: MarkupState) => void;\n}",
+      "NativeMarkupProps": "Omit<MarkupCanvasProps, \"onChange\"> & { onMarkupChange?: (e: { nativeEvent: MarkupState }) => void }"
+    },
+    "shell/src/easel.tsx": {
+      "EaselSource": "{\n  url: string;\n  title: string;\n  clip?: number[];\n  viewportWidth?: number;\n  viewportHeight?: number;\n  profileId?: string;\n  [key: string]: unknown;\n}",
+      "EaselItem": "{\n  id: string;\n  kind: \"image\" | \"text\" | \"link\" | \"pen\" | \"rect\" | \"ellipse\" | \"arrow\";\n  x: number;\n  y: number;\n  width: number;\n  height: number;\n  color?: string;\n  lineWidth?: number;\n  fontSize?: number;\n  text?: string;\n  url?: string;\n  path?: string;\n  /** Pen and arrow points relative to the item's top-left, in world units. */\n  points?: number[][];\n  source?: EaselSource;\n  live?: boolean;\n  [key: string]: unknown;\n}",
+      "EaselDocument": "{\n  id: string;\n  title: string;\n  background: string;\n  items: EaselItem[];\n  createdAt: number;\n  updatedAt: number;\n  spaceId: string;\n  nativeEditId?: string;\n  [key: string]: unknown;\n}",
+      "EaselTool": "\"select\" | \"hand\" | \"pen\" | \"text\" | \"rect\" | \"ellipse\" | \"arrow\"",
+      "EaselImage": "{ path: string; width: number; height: number }",
+      "EaselState": "{\n  document: string;\n  canUndo: boolean;\n  canRedo: boolean;\n  selection: string[];\n  zoom: number;\n  tool?: EaselTool;\n  /** Screen coordinates are (world - viewport.x/y) * viewport.zoom. */\n  viewport: { x: number; y: number; zoom: number };\n}",
+      "EaselCanvasHandle": "{\n  undo(): Promise<void>;\n  redo(): Promise<void>;\n  selectAll(): Promise<void>;\n  deleteSelection(): Promise<void>;\n  duplicateSelection(): Promise<void>;\n  bringToFront(): Promise<void>;\n  sendToBack(): Promise<void>;\n  zoomIn(): Promise<void>;\n  zoomOut(): Promise<void>;\n  fit(): Promise<void>;\n  export(): Promise<EaselImage | null>;\n  prepareShare(title: string): Promise<string>;\n  addText(text: string): Promise<void>;\n  addLink(url: string, title: string): Promise<void>;\n  addImages(paths: string[]): Promise<void>;\n  focus(): Promise<void>;\n}",
+      "EaselCanvasProps": "ViewProps & {\n  ref?: Ref<EaselCanvasHandle>;\n  document: string;\n  tool: EaselTool;\n  color: string;\n  lineWidth: number;\n  dark: boolean;\n  onChange?: (state: EaselState) => void;\n  onOpenLink?: (url: string) => void;\n}",
+      "NativeEaselProps": "Omit<EaselCanvasProps, \"onChange\" | \"onOpenLink\"> & {\n  onEaselChange?: (event: { nativeEvent: EaselState }) => void;\n  onEaselOpenLink?: (event: { nativeEvent: { url: string } }) => void;\n}"
+    },
+    "shell/src/localFiles.tsx": {
+      "LocalFileDescriptor": "{ path: string; name: string; kind: \"file\" | \"folder\" }",
+      "LocalFileStatus": "\"available\" | \"missing\" | \"inaccessible\"",
+      "LocalFileAccess": "{\n  status: LocalFileStatus;\n  path?: string;\n  name?: string;\n  kind?: \"file\" | \"folder\";\n  url?: string;\n  browserReadable?: boolean;\n}",
+      "LocalFileEntry": "LocalFileDescriptor & { relativePath: string }",
+      "LocalFileListing": "{ access: LocalFileAccess; entries: LocalFileEntry[] }",
+      "LocalFilesAreaProps": "ViewProps & {\n  dropEnabled?: boolean;\n  rootPath?: string;\n  relativePath?: string;\n  onFilesDropped?: (event: { nativeEvent: { files: LocalFileDescriptor[] } }) => void;\n  onFilesDropError?: (event: { nativeEvent: { message: string } }) => void;\n  onDropActive?: (event: { nativeEvent: { active: boolean } }) => void;\n  /** A click that did not become a drag, or VoiceOver's press. */\n  onActivate?: () => void;\n  onContextMenu?: () => void;\n}"
+    },
     "nncore/src/native.ts": {
-      "Result": "T | { error: string }"
+      "Result": "T | { error: string }",
+      "EngineBoost": "{ host: string; userCss: string; css: string; script: string; scriptInPrivate: boolean; invert: boolean }",
+      "EngineBoostStyle": "{ palette: string; sites: Record<string, string> }"
     },
     "nncore/src/chromeUI.ts": {
       "DeviceChooser": "{\n  id: number;\n  browserId: number;\n  open: boolean;\n  title: string;\n  okLabel: string;\n  cancelLabel: string;\n  noOptionsText: string;\n  scanningText: string;\n  refreshing: boolean;\n  canRefresh: boolean;\n  adapterOff: boolean;\n  unauthorized: boolean;\n  bothButtonsEnabled: boolean;\n  showSignal: boolean;\n  options: { name: string; connected: boolean; paired: boolean; signal: number }[];\n}",
@@ -2126,8 +2405,8 @@ export const nativeContracts = {
     "nncore/src/WebView.tsx": {
       "NavigationState": "{\n  url: string;\n  title: string;\n  canGoBack: boolean;\n  canGoForward: boolean;\n  isLoading: boolean;\n  themeColor: string | null;\n  themeColorSource: \"meta\" | \"header\" | \"background\" | null;\n}",
       "MediaState": "{ playing: boolean; muted: boolean }",
-      "NowPlaying": "{\n  title: string;\n  artist: string;\n  album: string;\n  artwork: string | null;\n  playbackState: \"playing\" | \"paused\" | \"none\";\n  position: number;\n  duration: number | null;\n  playbackRate: number;\n  timestamp: number;\n  hasVideo: boolean;\n  actions: string[];\n}",
-      "MediaCommand": "\"play\" | \"pause\" | \"toggle\" | \"next\" | \"previous\" | \"seekBy\" | \"seekTo\" | \"stop\"",
+      "NowPlaying": "{\n  title: string;\n  artist: string;\n  album: string;\n  artwork: string | null;\n  playbackState: \"playing\" | \"paused\" | \"none\";\n  position: number;\n  duration: number | null;\n  playbackRate: number;\n  timestamp: number;\n  hasVideo: boolean;\n  actions: string[];\n  /** An endless video, or one whose seekable end keeps moving (a live stream that can be rewound). */\n  live: boolean;\n  /** Seconds behind a live stream's end, at `timestamp`. */\n  liveBehind: number;\n}",
+      "MediaCommand": "\"play\" | \"pause\" | \"toggle\" | \"next\" | \"previous\" | \"seekBy\" | \"seekTo\" | \"seekToLive\" | \"stop\"",
       "MediaAccess": "{ camera: boolean; microphone: boolean; screen: boolean }",
       "OpenDisposition": "\"foreground\" | \"background\" | \"window\" | \"popup\" | \"incognito\" | \"current\" | \"split\"",
       "OpenWindowRequest": "{\n  url: string;\n  disposition: OpenDisposition;\n  adoptId?: string;\n  userGesture?: boolean;\n  /** The new tab's navigation is a form's POST. */\n  postBody?: boolean;\n}",
@@ -2154,13 +2433,15 @@ export const nativeContracts = {
       "AutofillPromptAnswer": "\"accept\" | \"decline\" | \"dismiss\"",
       "ExtensionActionResult": "\"none\" | \"popup\" | \"sidePanel\"",
       "WebViewProps": "ViewProps & {\n  url?: string;\n  profile?: string;\n  adoptId?: string;\n  /** The app's id for the tab: its browser keeps it while moving between views, and Chrome's tab strips name the\n   *  tab by it (`StripTab.key`, tabStrip.ts). */\n  transferKey?: string;\n  standalone?: boolean;\n  /** An extension's popup or side panel page (implies `standalone`): Chrome's own extension view, bound to the\n   *  window it shows in, so the page's current window and active tab are that window's (chrome.windows,\n   *  chrome.tabs). Without it, a standalone page's current window is a hidden one. */\n  extensionHost?: \"popup\" | \"sidePanel\";\n  visible?: boolean;\n  warm?: boolean;\n  pageBackgroundColor?: string;\n  autoPictureInPicture?: boolean;\n  /** Arc's Peek: a link the user clicks to another site doesn't navigate the page; it comes to `onPeekLink`. */\n  peekLinks?: boolean;\n  onNavigationChange?: (state: NavigationState) => void;\n  onProgress?: (progress: number) => void;\n  onFavicon?: (url: string, candidates: string[]) => void;\n  onMedia?: (state: MediaState) => void;\n  onNowPlaying?: (state: NowPlaying | null) => void;\n  onMediaAccess?: (access: MediaAccess) => void;\n  onOpenWindow?: (request: OpenWindowRequest) => void;\n  onPopupBlocked?: (popup: BlockedPopup) => void;\n  onFindResult?: (result: FindResult) => void;\n  onFullscreen?: (fullscreen: boolean) => void;\n  onStatus?: (text: string) => void;\n  onPeekLink?: (url: string) => void;\n  onCrashed?: (info: CrashInfo) => void;\n  onUnresponsive?: () => void;\n  onResponsive?: () => void;\n  onLoadError?: (error: LoadError) => void;\n  onSecurity?: (info: SecurityInfo) => void;\n  onZoom?: (zoom: ZoomState) => void;\n  onContentBlocked?: (state: ContentBlockedState) => void;\n  onDownloadNavigation?: (navigation: DownloadNavigation) => void;\n  onNotification?: (notification: WebNotification) => void;\n  onNotificationClose?: (id: string) => void;\n  onPictureInPicture?: (state: PictureInPictureState) => void;\n  onActivateRequest?: (request: ActivateRequest) => void;\n  onDisplayMediaRequest?: (request: DisplayMediaRequest) => void;\n  onWindowClose?: () => void;\n  onCommand?: (command: PageCommand) => void;\n  onPageFocus?: () => void;\n  onPageMessage?: (kind: string, data: unknown) => void;\n  onReady?: (browserId: number, chromeTabId: number) => void;\n  onDiscarded?: (url: string) => void;\n  onPasswordPrompt?: (prompt: PasswordPrompt) => void;\n  /** An offer to save an address or card (`prompt`), or null once offer `id` went (answered, or Chrome closed it). */\n  onAutofillPrompt?: (prompt: AutofillPrompt | null, id: number) => void;\n  onExternalApp?: (request: ExternalAppRequest) => void;\n}",
-      "WebViewHandle": "{\n  loadUrl(url: string, options?: { userInitiated?: boolean }): Promise<void>;\n  goBack(): Promise<void>;\n  goForward(): Promise<void>;\n  goToOffset(offset: number): Promise<void>;\n  reload(): Promise<void>;\n  forceReload(): Promise<void>;\n  stopLoading(): Promise<void>;\n  focus(): Promise<void>;\n  setMuted(muted: boolean): Promise<void>;\n  zoomStep(direction: 1 | -1 | 0): Promise<void>;\n  find(text: string, forward: boolean, findNext: boolean): Promise<void>;\n  stopFinding(clearSelection: boolean): Promise<void>;\n  print(): Promise<void>;\n  runPageCommand(name: \"savePage\" | \"systemPrint\" | \"caretBrowsing\"): Promise<void>;\n  showDevTools(panel?: string): Promise<void>;\n  executeJavaScript(code: string): Promise<void>;\n  evaluate<T = unknown>(code: string): Promise<T | null>;\n  navigationEntries(): Promise<NavigationEntry[]>;\n  /** The page as painted: a base64 JPEG and the view's frame in its window from the top-left (null after 1 s). */\n  capturePicture(scale: number): Promise<{ data: string; frame: [number, number, number, number] } | null>;\n  /** The page's viewport as a base64 PNG at its device scale (null after 3 s). */\n  captureScreenshot(): Promise<string | null>;\n  downloadFavicon(url: string): Promise<FaviconImage | null>;\n  downloadImage(url: string, maxPixels: number): Promise<FaviconImage | null>;\n\n  mediaCommand(action: MediaCommand, seconds?: number): Promise<void>;\n  requestPictureInPicture(): Promise<boolean>;\n  exitPictureInPicture(): Promise<void>;\n\n  getSecurityInfo(): Promise<SecurityInfo | null>;\n  openBlockedPopup(id: string, always?: boolean): Promise<void>;\n  clearSiteData(): Promise<{ cookies: number | false; storage: boolean }>;\n\n  resolvePasswordPrompt(answer: PasswordPromptAnswer, edits?: { username?: string; password?: string }): Promise<void>;\n  resolveAutofillPrompt(id: number, answer: AutofillPromptAnswer): Promise<void>;\n  executeExtensionAction(extensionId: string): Promise<ExtensionActionResult | null>;\n\n  resolveDisplayMedia(id: string, sourceId: string | null): Promise<void>;\n  mediaCaptureSourceId(): Promise<string | null>;\n  notificationAction(id: string, action: \"click\" | \"close\"): Promise<void>;\n\n  resolveUnresponsive(terminate: boolean): Promise<void>;\n  discard(options?: { unload?: boolean }): Promise<DiscardOutcome>;\n  setFrozen(frozen: boolean): Promise<void>;\n}",
+      "CaptureOptions": "{\n  /** x, y, width, height in CSS px from the document's top-left. */\n  clip?: [number, number, number, number];\n  /** The clip reaches past the viewport. */\n  beyond?: boolean;\n  fullPage?: boolean;\n  /** The page's pixels per CSS px: the screen's scale times the zoom. */\n  pixelRatio?: number;\n}",
+      "CapturedImage": "{ path: string; width: number; height: number }",
+      "WebViewHandle": "{\n  loadUrl(url: string, options?: { userInitiated?: boolean }): Promise<void>;\n  goBack(): Promise<void>;\n  goForward(): Promise<void>;\n  goToOffset(offset: number): Promise<void>;\n  reload(): Promise<void>;\n  forceReload(): Promise<void>;\n  stopLoading(): Promise<void>;\n  focus(): Promise<void>;\n  setMuted(muted: boolean): Promise<void>;\n  // Palette and per-host tints, ready for the renderer to select when each document starts.\n  setBoostStyle(style: EngineBoostStyle): Promise<void>;\n  zoomStep(direction: 1 | -1 | 0): Promise<void>;\n  find(text: string, forward: boolean, findNext: boolean): Promise<void>;\n  stopFinding(clearSelection: boolean): Promise<void>;\n  print(): Promise<void>;\n  runPageCommand(name: \"savePage\" | \"systemPrint\" | \"caretBrowsing\"): Promise<void>;\n  showDevTools(panel?: string): Promise<void>;\n  executeJavaScript(code: string): Promise<void>;\n  evaluate<T = unknown>(code: string): Promise<T | null>;\n  navigationEntries(): Promise<NavigationEntry[]>;\n  /** The page as painted: a base64 JPEG and the view's frame in its window from the top-left (null after 1 s). */\n  capturePicture(scale: number): Promise<{ data: string; frame: [number, number, number, number] } | null>;\n  /** The page's viewport as a base64 PNG at its device scale (null after 3 s). */\n  captureScreenshot(): Promise<string | null>;\n  /** Capture's image: an area of the page, its whole length or its viewport, as a PNG file (null after 20 s). */\n  captureImage(options: CaptureOptions): Promise<CapturedImage | null>;\n  downloadFavicon(url: string): Promise<FaviconImage | null>;\n  downloadImage(url: string, maxPixels: number): Promise<FaviconImage | null>;\n\n  mediaCommand(action: MediaCommand, seconds?: number): Promise<void>;\n  requestPictureInPicture(): Promise<boolean>;\n  exitPictureInPicture(): Promise<void>;\n\n  getSecurityInfo(): Promise<SecurityInfo | null>;\n  openBlockedPopup(id: string, always?: boolean): Promise<void>;\n  clearSiteData(): Promise<{ cookies: number | false; storage: boolean }>;\n\n  resolvePasswordPrompt(answer: PasswordPromptAnswer, edits?: { username?: string; password?: string }): Promise<void>;\n  resolveAutofillPrompt(id: number, answer: AutofillPromptAnswer): Promise<void>;\n  executeExtensionAction(extensionId: string): Promise<ExtensionActionResult | null>;\n\n  resolveDisplayMedia(id: string, sourceId: string | null): Promise<void>;\n  mediaCaptureSourceId(): Promise<string | null>;\n  notificationAction(id: string, action: \"click\" | \"close\"): Promise<void>;\n\n  resolveUnresponsive(terminate: boolean): Promise<void>;\n  discard(options?: { unload?: boolean }): Promise<DiscardOutcome>;\n  setFrozen(frozen: boolean): Promise<void>;\n}",
       "DiscardOutcome": "\"discarded\" | \"already\" | \"refused\" | \"unsupported\"",
       "Evt": "(e: NativeSyntheticEvent<T>) => void",
       "NativeEvents": "{\n  onNavigationChange: NavigationState;\n  onProgress: { progress: number };\n  onFavicon: { url: string; urls: string[] };\n  onMedia: MediaState;\n  onNowPlaying: { state: NowPlaying | null };\n  onMediaAccess: MediaAccess;\n  onOpenWindow: OpenWindowRequest;\n  onPopupBlocked: BlockedPopup;\n  onFindResult: FindResult;\n  onFullscreen: { fullscreen: boolean };\n  onStatus: { text: string };\n  onPeekLink: { url: string };\n  onCrashed: CrashInfo;\n  onUnresponsive: object;\n  onResponsive: object;\n  onLoadError: LoadError;\n  onSecurity: SecurityInfo;\n  onZoom: ZoomState;\n  onContentBlocked: ContentBlockedState;\n  onDownloadNavigation: DownloadNavigation;\n  onNotification: WebNotification;\n  onNotificationClose: { id: string };\n  onPictureInPicture: PictureInPictureState;\n  onActivateRequest: ActivateRequest;\n  onDisplayMediaRequest: DisplayMediaRequest;\n  onWindowClose: object;\n  onCommand: PageCommand;\n  onPageFocus: object;\n  onPageMessage: { kind: string; data: unknown };\n  onReady: { browserId: number; tabId?: number };\n  onDiscarded: { url: string };\n  onPasswordPrompt: PasswordPrompt;\n  onAutofillPrompt: AutofillPrompt | { id: number; closed: true };\n  onExternalApp: ExternalAppRequest;\n}",
       "Handlers": "keyof NativeEvents",
       "NativeProps": "Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> }",
-      "NativeHandle": "Omit<WebViewHandle, \"evaluate\" | \"loadUrl\" | \"downloadFavicon\" | \"resolvePasswordPrompt\" | \"discard\"> & {\n  evaluate(code: string): Promise<string | null>;\n  downloadFavicon(url: string): Promise<FaviconImage | null>;\n  loadUrl(url: string, userInitiated?: boolean): Promise<void>;\n  resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;\n  discard(unload: boolean): Promise<DiscardOutcome>;\n}"
+      "NativeHandle": "Omit<WebViewHandle, \"evaluate\" | \"loadUrl\" | \"downloadFavicon\" | \"resolvePasswordPrompt\" | \"discard\" | \"setBoostStyle\"> & {\n  setBoostStyle?(descriptor: string): Promise<void>;\n  evaluate(code: string): Promise<string | null>;\n  downloadFavicon(url: string): Promise<FaviconImage | null>;\n  loadUrl(url: string, userInitiated?: boolean): Promise<void>;\n  resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;\n  discard(unload: boolean): Promise<DiscardOutcome>;\n}"
     },
     "nncore/src/NativeWebView.tsx": {},
     "sync/src/native.ts": {

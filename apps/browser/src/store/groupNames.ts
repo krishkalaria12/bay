@@ -27,7 +27,7 @@ function hostLabel(host: string): string {
   return parts.length > 2 && second.length <= 3 && parts.at(-1)!.length <= 2 ? parts.at(-3)! : second;
 }
 
-const tidyHost = (host: string) => {
+export const tidyHost = (host: string) => {
   const label = hostLabel(host);
   return label ? label[0]!.toUpperCase() + label.slice(1) : "";
 };

@@ -27,7 +27,17 @@ import {
   PANEL_WINDOW_MARGIN,
 } from "./omnibox/constants";
 
-export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth: number; windowHeight?: number }) {
+type NavigationInsets = { left?: number; right?: number; top?: number };
+
+export function CommandPanel({
+  windowWidth,
+  windowHeight = 800,
+  navigationInsets,
+}: {
+  windowWidth: number;
+  windowHeight?: number;
+  navigationInsets?: NavigationInsets;
+}) {
   const theme = useTheme();
   const windowId = useWindowId();
   const panel = useBrowserRead((s) => (s.windowUi[windowId] ?? DEFAULT_WINDOW_UI).panel);
@@ -49,6 +59,7 @@ export function CommandPanel({ windowWidth, windowHeight = 800 }: { windowWidth:
         tabId={shown.tabId}
         width={windowWidth}
         height={windowHeight}
+        navigationInsets={navigationInsets}
         initialText={shown.initialText}
         closing={!session}
         onClosed={() => setLast(null)}
@@ -110,6 +121,7 @@ function CenteredPalette({
   tabId,
   width: windowWidth,
   height: windowHeight,
+  navigationInsets,
   initialText,
   closing,
   onClosed,
@@ -118,6 +130,7 @@ function CenteredPalette({
   tabId: string;
   width: number;
   height: number;
+  navigationInsets?: NavigationInsets;
   initialText: string;
   closing: boolean;
   onClosed: () => void;
@@ -162,12 +175,9 @@ function CenteredPalette({
   const maxHeight = Math.max(160, Math.min(620, windowHeight - 56));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={closing ? "none" : "box-none"} accessibilityViewIsModal={!closing}>
-      <Animated.View style={[StyleSheet.absoluteFill, dimStyle]}>
-        <Pressable
-          accessibilityLabel="Dismiss search"
-          onPress={dismiss}
-          style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }]}
-        />
+      <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { backgroundColor: theme.dark ? "#00000012" : "#00000006" }, dimStyle]}>
+        {/* Navigation keeps its clicks: activating a tab also closes the palette. */}
+        <Pressable accessibilityLabel="Dismiss search" onPress={dismiss} style={[StyleSheet.absoluteFill, navigationInsets]} />
       </Animated.View>
       <Animated.View style={[{ position: "absolute", width, left: (windowWidth - width) / 2, top: Math.max(16, (windowHeight - height) / 2) }, appearStyle]}>
         <PaletteSurface>

@@ -13,13 +13,14 @@ import { useBrowserRead as useBrowser } from "../../store/read";
 import { useIsActiveTab, useTab, useTabLive, useWindowId } from "../../store/hooks";
 import { awayFromPin } from "../../store/organize";
 import { NextMeetingBadge } from "../live/NextMeetingBadge";
-import { clickTab, startRename } from "./actions";
+import { clickTab, startRename, tabTitle } from "./actions";
 import { useDragController, useDragItem, useDropPins } from "./dnd";
 import { dismissHover, useRowHover } from "./hover";
 import { openTabMenu } from "./menus";
-import { registerRow } from "./state";
+import { SidebarKeyboardRowView } from "./keyboardFocus";
 import { TabIcon } from "./TabIcon";
 import { TabBadges } from "../media/TabBadges";
+import { UnreadBadge } from "./UnreadBadge";
 import { clickMods } from "./TabRow";
 import { useSidebarMetrics, useSidebarTokens } from "./tokens";
 import { MIN_PINNED_TILE, PINNED_BADGE_SPRING, PINNED_GLASS_RIM, PINNED_SELECTION_STROKE, PINNED_TILE_GAP } from "./constants";
@@ -115,7 +116,13 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
 
   return (
     <Animated.View ref={ref} style={style} {...handle}>
-      <View ref={(v) => registerRow(windowId, tabId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}>
+      <SidebarKeyboardRowView
+        rowId={`t:${tabId}`}
+        legacyId={tabId}
+        label={tabTitle(tab)}
+        {...hoverProps}
+        onDoubleClick={() => void startRename(windowId, { kind: "tab", id: tabId })}
+      >
         <MouseArea onMiddleClick={() => void closeTab(tabId)}>
           <ContextMenuArea
             onContextMenu={() => {
@@ -210,13 +217,15 @@ const PinnedTile = memo(function PinnedTile({ tabId, width }: { tabId: string; w
             </View>
           </Pressable>
         </Animated.View>
+        {/* Away from its pinned page the top right is the way back, and the count moves to the top left. */}
+        <UnreadBadge tabId={tabId} corner={away ? "left" : "right"} />
         <NextMeetingBadge tabId={tabId} />
         {playing || tab.muted ? (
           <View pointerEvents="none" style={{ position: "absolute", bottom: 3, right: 4 }}>
             <Symbol name={tab.muted ? "speaker.slash.fill" : "speaker.wave.2.fill"} size={8} color={theme.textSecondary} style={{ width: 12, height: 10 }} />
           </View>
         ) : null}
-      </View>
+      </SidebarKeyboardRowView>
     </Animated.View>
   );
 });

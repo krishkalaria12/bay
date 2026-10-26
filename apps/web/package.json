@@ -8,12 +8,14 @@
     "preview": "astro preview",
     "astro": "astro",
     "typecheck": "astro check",
-    "preview:cf": "astro build && wrangler dev",
-    "deploy": "astro build && wrangler deploy"
+    "test": "node --experimental-strip-types --test worker/*.test.mjs",
+    "preview:cf": "astro build && wrangler dev --env ''",
+    "deploy": "astro build && wrangler deploy --env ''"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.1",
     "@astrojs/sitemap": "^3.7.4",
+    "@bay/core": "file:../../packages/core",
     "@fontsource/caveat": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.3.0",

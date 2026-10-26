@@ -16,6 +16,7 @@ import { useSidebarWidth } from "./sidebar/tokens";
 import { showToast } from "./layout/splitActions";
 import { reportBrowserCommand } from "../runtime/commands";
 import { removeDownload } from "../runtime/windowUiActions";
+import { tidyRename, resolveTidySuggestion } from "../lib/tidyDownloads";
 
 // MARK: Formatting
 
@@ -71,6 +72,7 @@ export async function downloadMenu(d: Download, windowId: string) {
   const current = useBrowser.getState().downloads.find((item) => item.id === d.id);
   if (!current || current.path !== d.path || current.state !== d.state) return;
   d = current;
+  const tidy = d.state === "finished" ? await resolveTidySuggestion(d) : null;
   const items: MenuItem[] =
     d.state === "downloading"
       ? [
@@ -83,6 +85,7 @@ export async function downloadMenu(d: Download, windowId: string) {
           { id: "reveal", title: isMac ? "Show in Finder" : "Show in File Explorer", enabled: exists },
           { id: "copyFile", title: "Copy File", enabled: exists },
           { id: "copyPath", title: "Copy Path", enabled: d.state === "finished" && !!d.path },
+          ...(tidy ? [{ id: "tidy", title: `Rename to “${tidy.filename}”` }] : []),
         ];
   items.push(
     { separator: true },
@@ -107,6 +110,7 @@ export async function downloadMenu(d: Download, windowId: string) {
     }
   }
   if (choice === "copyPath") copyText(d.path);
+  if (choice === "tidy" && tidy) void tidyRename(d, tidy, windowId);
   if (choice === "copy") copyText(d.url);
   if (choice === "page") openInternalPage("downloads", windowId);
   if (choice === "trash") reportBrowserCommand(trashDownload(windowId, d));

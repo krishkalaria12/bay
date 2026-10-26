@@ -5,6 +5,7 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
@@ -12,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "bay/core/nn_page_channel.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -580,7 +582,7 @@ base::ListValue EngineServices::SupportedMethods() const {
     methods.Append(std::string("BayCEF.") + method.facade);
   for (const char* method :
        {"getPasswordAutofill", "setPasswordAutofill", "getAutofillSettings",
-        "setAutofillSettings", "exportPasswords"})
+        "setAutofillSettings", "exportPasswords", "setBoosts"})
     methods.Append(std::string("BayCEF.") + method);
   methods.Append("BayChromeUI.changeCaptureSource");
   methods.Append("BayChromeUI.showAutofillSuggestions");
@@ -648,6 +650,40 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
   }
   if (module != "BayCEF")
     return false;
+  if (method == "setBoosts") {
+    const auto* value = At(args, 0);
+    if (!value || !value->is_list()) {
+      invalid();
+      return true;
+    }
+    std::vector<nncore::Boost> boosts;
+    for (const auto& raw : value->GetList()) {
+      const auto* entry = raw.GetIfDict();
+      const auto* host = entry ? entry->FindString("host") : nullptr;
+      const auto* user_css = entry ? entry->FindString("userCss") : nullptr;
+      const auto* css = entry ? entry->FindString("css") : nullptr;
+      const auto* script = entry ? entry->FindString("script") : nullptr;
+      const auto script_in_private = entry ? entry->FindBool("scriptInPrivate")
+                                            : std::nullopt;
+      const auto invert = entry ? entry->FindBool("invert") : std::nullopt;
+      if (!host || host->empty() || !user_css || !css || !script ||
+          !script_in_private.has_value() || !invert.has_value()) {
+        invalid();
+        return true;
+      }
+      nncore::Boost boost;
+      boost.host = base::ToLowerASCII(*host);
+      boost.user_css = *user_css;
+      boost.css = *css;
+      boost.script = *script;
+      boost.script_in_private = *script_in_private;
+      boost.invert = *invert;
+      boosts.push_back(std::move(boost));
+    }
+    nncore::SetBoosts(std::move(boosts));
+    std::move(response).Run(Success());
+    return true;
+  }
   if (method == "exportPasswords") {
     const auto* profile = Text(args, 0);
     if (!profile) {

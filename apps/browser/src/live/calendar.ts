@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { hasServiceClient, requestService } from "../runtime/serviceClient";
+import { everySlowly } from "../lib/slowTimers";
 import type { CalendarEvent } from "./meetings";
 import { live, updateCalendarSettings, useLive } from "./store";
 import { CALENDAR_HORIZON_MS } from "./constants";
@@ -156,8 +157,15 @@ export function startCalendar(): () => void {
       if (scope.active) void refreshCalendar();
     });
     disposers.push(() => changed.remove());
-    const interval = setInterval(() => void refreshCalendar(), 5 * 60_000);
-    disposers.push(() => clearInterval(interval));
+    // Only while connected: connecting refreshes on its own.
+    disposers.push(
+      everySlowly({
+        every: 5 * 60_000,
+        run: () => void refreshCalendar(),
+        needed: calendarConnected,
+        watch: (changed) => useCalendar.subscribe((s, prev) => s.access !== prev.access && changed()),
+      }),
+    );
     disposers.push(
       useLive.subscribe((s, prev) => {
         if (s.calendar.hiddenCalendarIds !== prev.calendar.hiddenCalendarIds) void refreshCalendar();

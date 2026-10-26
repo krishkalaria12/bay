@@ -26,6 +26,10 @@ void HoldNavigationsForRulesets(Profile* profile, const std::string& extension_i
 // `reason`: its pages load without the extension's rules.
 void ReleaseNavigationHold(Profile* profile, const std::string& reason);
 
+// Ends `profile`'s hold now because the extension is ready (the host knows: one without rulesets,
+// as uBlock Origin, blocks through webRequest once started), logged as a success.
+void ReleaseNavigationHoldReady(Profile* profile);
+
 // For CreateThrottlesForNavigation: adds the throttle that holds a navigation, only while its
 // profile is held.
 void MaybeAddNavigationHoldThrottle(content::NavigationThrottleRegistry& registry);

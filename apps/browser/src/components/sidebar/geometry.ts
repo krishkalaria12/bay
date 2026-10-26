@@ -117,6 +117,18 @@ function folderRowSpan(s: BrowserState, windowId: string, spaceId: string, folde
   return { top, height: ROW };
 }
 
+/**
+ * Where the window's tab is when it's scrolled out of the sidebar's view (Arc's overflow indicator): "above" or
+ * "below", or null while any of it shows. `row` is in the list's content (from its top, glow room included), `top`
+ * the list's scroll offset; rows under the header's glow room (`glowRoom`) are hidden.
+ */
+export function offscreenSide(row: { y: number; height: number }, top: number, viewport: number, glowRoom: number): "above" | "below" | null {
+  if (viewport <= 0) return null;
+  if (row.y + row.height <= top + glowRoom) return "above";
+  if (row.y >= top + viewport) return "below";
+  return null;
+}
+
 /** Closed folders can keep selected children mounted; their measured frames are not visible drop targets. */
 export function folderDragItemVisible(s: BrowserState, windowId: string, item: { kind: string; parentGroup?: string; tabIds: readonly string[] }): boolean {
   let parent = item.parentGroup ? s.pinnedFolders[item.parentGroup] : undefined;

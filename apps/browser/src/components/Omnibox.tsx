@@ -1,7 +1,7 @@
 import { TextInput, View, modKey } from "@bay/platform";
-import { displayUrl, hostOf, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
+import { customBangTable, displayUrl, hostOf, joinBangTables, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
@@ -12,6 +12,8 @@ import { showToast } from "./layout/splitActions";
 import { useWindowId, useWindowSpaceId } from "../store/hooks";
 import { defaultSearchEngine, searchEngines } from "../store/settings";
 import { runBarAction } from "./omnibox/actions";
+import { createBangSubmitter, loadBangs, mayBeBang, topResultUrl } from "./omnibox/bangs";
+import { scopeColorFor, scopeColorsFor } from "./omnibox/scopeColors";
 import { traceOmnibox, useOmniboxDriver } from "./omnibox/devDriver";
 import { dispositionFor, openFromBar, openInBackground, restoreFromBar, switchFromBar, type Disposition } from "./omnibox/open";
 import { clipboardPasteAction, pasteMenuItem, pasteTarget, readClipboard } from "./omnibox/paste";
@@ -88,6 +90,7 @@ export function Omnibox({
   const spaceId = useWindowSpaceId();
   const engine = useBrowserRead((s) => defaultSearchEngine(s.settings));
   const engines = useBrowserRead((s) => searchEngines(s.settings));
+  const bangsEnabled = useBrowserRead((s) => s.settings.searchShortcutMode === "duckduckgo");
   const searchTemplates = engines.map((e) => e.url);
   const currentUrl = useBrowserRead((s) => s.tabs[tabId]?.url ?? "");
   const currentTitle = useBrowserRead((s) => s.tabs[tabId]?.customTitle || s.tabs[tabId]?.title || "");
@@ -103,12 +106,22 @@ export function Omnibox({
   const [suppressCompletion, setSuppressCompletion] = useState(true);
   const [selected, setSelected] = useState(palette && !newTab && !!currentUrl && initialText === currentUrl ? -1 : 0);
   const [scope, setScope] = useState<SearchScope | null>(null);
+  const scopeColor = useBrowser((s) => (!bangsEnabled ? scopeColorFor(scope, s, spaceId) : null));
+  const scopeColors = scopeColorsFor(scopeColor);
   const [arrowed, setArrowed] = useState<{ typed: string; index: number; text: string } | null>(null);
   const scopeFrom = useRef("");
   const [pendingSelection, setPendingSelection] = useState<Selection | null>(initial ? { start: 0, end: initial.length } : null);
   const selection = useRef<Selection>({ start: 0, end: typed.length });
   const input = useRef<TextInput>(null);
   const root = useRef<View>(null);
+  const [bangEnter] = useState(() =>
+    createBangSubmitter(async () => {
+      const bundled = await loadBangs();
+      const custom = customBangTable(searchEngines(useBrowser.getState().settings).filter((e) => e.custom));
+      return joinBangTables([custom, bundled]);
+    }),
+  );
+  useEffect(() => () => bangEnter.cancel(), [bangEnter, bangsEnabled, engines]);
 
   const { items: suggested, completion } = useSuggestions({
     text: typed,
@@ -140,7 +153,10 @@ export function Omnibox({
   // ⇧⌫ forgets the selected history row once it was picked from the list, not while it's the typed match.
   const canForget = palette && forgettable(current, searchTemplates) && (!edited || selectedIndex > 0);
   const canScope = !scope && edited && !!typed.trim() && !/\s/.test(typed.trim());
-  const tabScope = canScope ? scopeFor(typedValue, windowId) : null;
+  // A shortcut typed in full ("yt") wins over the history its letters complete to; else the completed host scopes.
+  const tabScope = canScope ? (scopeFor(typed, windowId) ?? scopeFor(typedValue, windowId)) : null;
+  // ⇧↩ on a search opens its first result (Arc's Instant Links); on an address or a page it's a new window, as ever.
+  const topResult = scope || (bangsEnabled && mayBeBang(typed)) ? null : topResultUrl(current);
 
   // Apply selection imperatively; RN macOS can restore a stale caret when its selection prop clears.
   useLayoutEffect(() => {
@@ -151,6 +167,7 @@ export function Omnibox({
   }, [pendingSelection]);
 
   const reset = () => {
+    bangEnter.cancel();
     setTyped("");
     setEdited(false);
     setScope(null);
@@ -172,7 +189,10 @@ export function Omnibox({
     }
   }
 
-  const dismiss = () => onCancel?.();
+  const dismiss = () => {
+    bangEnter.cancel();
+    onCancel?.();
+  };
   const closeMenu = () => {
     setMenu(null);
     requestAnimationFrame(() => input.current?.focus());
@@ -185,8 +205,10 @@ export function Omnibox({
   const background = (url: string) => {
     void openInBackground(url, tabId).catch(openingFailed);
   };
-  const go = (url: string, disposition: Disposition = "current") => {
+  const go = (url: string, disposition: Disposition = "current", background = false) => {
+    bangEnter.cancel();
     if (!url) return;
+    if (background) return void openInBackground(url, tabId).catch(openingFailed);
     const result =
       palette && newTab && disposition !== "newWindow"
         ? dispatchBrowserCommand({ method: "submitNewTab", windowId, url })
@@ -194,33 +216,49 @@ export function Omnibox({
     void result.catch(openingFailed);
   };
 
-  const choose = (s: Suggestion | undefined, disposition: Disposition = "current") => {
+  const choose = (s: Suggestion | undefined, disposition: Disposition = "current", byEnter = false, background = false) => {
+    bangEnter.cancel();
     // Opt-in telemetry records the suggestion kind only, never its text.
     if (s || !scope) trackSuggestionChosen(s);
+    const typedSearch = !s || (byEnter && selectedIndex === 0 && (s.kind === "page" || (s.kind === "search" && !s.bang && !s.suggested)));
+    if (bangsEnabled && !scope && typedSearch) {
+      const text = edited ? value : initialText || value;
+      if (mayBeBang(text)) {
+        const fallback = s && "url" in s ? s.url : resolveInput(text, engine.url);
+        const sessionId = useBrowser.getState().windowUi[windowId]?.panel.sessionId;
+        bangEnter.submit(text, (url) => {
+          const state = useBrowser.getState();
+          const panel = state.windowUi[windowId]?.panel;
+          if (!panel?.open || panel.sessionId !== sessionId || state.settings.searchShortcutMode !== "duckduckgo") return;
+          go(url ?? fallback, disposition, background);
+        });
+        return;
+      }
+    }
     if (!s) {
       if (scope) return;
       const text = edited ? value : initialText || value;
-      return go(resolveInput(text, engine.url), disposition);
+      return go(resolveInput(text, engine.url), disposition, background);
     }
     switch (s.kind) {
       case "page":
         if (s.tabId) {
-          if (palette && newTab && disposition !== "current") return go(s.url, disposition);
+          if (background || (palette && newTab && disposition !== "current")) return go(s.url, disposition, background);
           void switchFromBar(s.tabId, s.url, tabId, disposition).catch(openingFailed);
           return;
         }
-        if (s.cleanedId && disposition === "current") {
+        if (s.cleanedId && disposition === "current" && !background) {
           const url = s.url;
           void restoreFromBar(s.cleanedId, tabId).then((restored) => restored || go(url), openingFailed);
           return;
         }
-        return go(s.url, disposition);
+        return go(s.url, disposition, background);
       case "search":
       case "create":
-        return go(s.url, disposition);
+        return go(s.url, disposition, background);
       case "calc":
       case "emoji":
-        if (s.kind === "calc" && disposition !== "current") return go(s.url, disposition);
+        if (s.kind === "calc" && disposition !== "current") return go(s.url, disposition, background);
         copyText(s.value);
         setTyped(s.value);
         setSuppressCompletion(true);
@@ -259,8 +297,11 @@ export function Omnibox({
     // Past either end it wraps around, as the actions menu does: ↑ on the first row goes to the last.
     const next = (Math.max(selectedIndex + delta, -1) + items.length) % items.length;
     setSelected(next);
-    // Arrowing through results fills the field with the row, as Chrome's omnibox; the top row is what was typed.
-    const text = !idle && next > 0 ? fillText(items[next], dropdown) : null;
+    // Arrowing through results fills the field with the row, as Chrome's omnibox. The top row is usually what was typed
+    // or its inline completion, so it keeps the field as typed unless it's a page the field doesn't spell out.
+    const top = items[0];
+    const topFills = !shownCompletion && top?.kind === "page" && top.url !== resolveInput(typed, engine.url);
+    const text = !idle && (next > 0 || topFills) ? fillText(items[next], dropdown) : null;
     setArrowed(text === null ? null : { typed, index: next, text });
     if (text !== null) setPendingSelection({ start: text.length, end: text.length });
     else if (preview !== null) setPendingSelection({ start: typed.length, end: typedValue.length });
@@ -296,6 +337,7 @@ export function Omnibox({
   const onKeyDown = (e: { nativeEvent: { key: string; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; ctrlKey?: boolean } }) => {
     const { key, altKey, shiftKey, ctrlKey } = e.nativeEvent;
     const metaKey = modKey(e.nativeEvent);
+    bangEnter.cancel();
     if (key === "Escape") {
       if (menu) return closeMenu();
       if (scope) return leaveScope(false);
@@ -325,11 +367,13 @@ export function Omnibox({
     if (key === "Backspace" && scope && !typed) return leaveScope(true);
     if (key === "Enter") {
       if (metaKey && shiftKey) return forceSearch();
-      if (ctrlKey && !/[\s./:]/.test(typed.trim()) && typed.trim()) return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
+      if (ctrlKey && !(bangsEnabled && mayBeBang(typed)) && !/[\s./:]/.test(typed.trim()) && typed.trim())
+        return go(`https://www.${typed.trim()}.com`, shiftKey ? "newWindow" : "current");
       // ↩ already opens a new tab from the new tab panel; ⌘↩ opens it behind the current one.
-      if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return background(current.url);
-      if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent));
-      return choose(current);
+      if (palette && newTab && metaKey && !altKey && !shiftKey && current && "url" in current) return choose(current, "newTab", true, true);
+      if (shiftKey && !metaKey && !altKey && topResult) return go(topResult);
+      if (metaKey || altKey || shiftKey) return choose(current, dispositionFor(e.nativeEvent), true);
+      return choose(current, "current", true);
     }
   };
 
@@ -349,6 +393,7 @@ export function Omnibox({
     if (choice === "pasteAndGo" && paste) return go(pasteTarget(paste));
     if (choice === "copy" || choice === "cut") copyText(value.slice(start, end));
     if (choice === "cut" || choice === "paste") {
+      bangEnter.cancel();
       const insert = choice === "paste" ? (await readClipboard()).replace(/\s*\n\s*/g, " ") : "";
       const next = value.slice(0, start) + insert + value.slice(end);
       setTyped(next);
@@ -378,6 +423,7 @@ export function Omnibox({
       if (!change.stale) selection.current = { start: change.inline.typed.length, end: next.length };
       return;
     }
+    bangEnter.cancel();
     keyAt.current = Date.now();
     setEdited(true);
     setTyped(change.typed);
@@ -389,7 +435,7 @@ export function Omnibox({
     type: onChangeText,
     clear: reset,
     key: (key, mods) => onKeyDown({ nativeEvent: { key, ...mods } }),
-    submit: () => choose(current),
+    submit: () => choose(current, "current", true),
     measure: () => new Promise((resolve) => root.current?.measureInWindow((x, y, width, height) => resolve({ x, y, width, height }))),
     state: () => ({
       typed,
@@ -399,6 +445,7 @@ export function Omnibox({
       suggested: completion,
       selected: selectedIndex,
       scope,
+      scopeColor,
       scopeFrom: scopeFrom.current,
       tabScope,
       items,
@@ -437,7 +484,7 @@ export function Omnibox({
       placeholderTextColor={theme.placeholder}
       selectionColor={theme.selection}
       enableFocusRing={false}
-      onSubmitEditing={() => choose(current)}
+      onSubmitEditing={() => choose(current, "current", true)}
       submitBehavior={palette ? "submit" : "blurAndSubmit"}
       onBlur={palette ? undefined : onCancel}
       keyDownEvents={scope && !typed ? SCOPE_KEYS : canForget ? FORGET_KEYS : BASE_KEYS}
@@ -464,6 +511,7 @@ export function Omnibox({
       trailing={tabScope ? `Search ${tabScope.name}  ⇥` : null}
       dropdown={dropdown}
       actions={rowActions}
+      selectionColors={scopeColors}
     />
   );
 
@@ -476,7 +524,7 @@ export function Omnibox({
           field={
             <ContextMenuArea captureDescendants style={{ flex: 1 }} onContextMenu={() => void onContextMenu()}>
               <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
-                {scope ? <ScopeChip scope={scope} large /> : null}
+                {scope ? <ScopeChip scope={scope} large colors={scopeColors} /> : null}
                 {field}
               </View>
             </ContextMenuArea>
@@ -492,7 +540,9 @@ export function Omnibox({
           onRowMenu={openRowMenu}
           onHover={setSelected}
           onChoose={choose}
-          onSubmit={() => choose(current)}
+          onSubmit={() => choose(current, "current", true)}
+          onTopResult={topResult ? () => go(topResult) : undefined}
+          selectionColors={scopeColors}
         />
       </View>
     );
@@ -504,7 +554,7 @@ export function Omnibox({
         <ContextMenuArea captureDescendants onContextMenu={() => void onContextMenu()}>
           <View style={{ flexDirection: "row", alignItems: "center", height: 44, paddingLeft: 13, paddingRight: 9, gap: 9 }}>
             <View style={{ width: 18, alignItems: "center" }}>{leadingIcon}</View>
-            {scope && <ScopeChip scope={scope} large={false} />}
+            {scope && <ScopeChip scope={scope} large={false} colors={scopeColors} />}
             {field}
             {currentUrl ? (
               <IconButton

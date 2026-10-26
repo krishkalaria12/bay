@@ -3,6 +3,9 @@ import type { BrowserProjection } from "../../runtime/projection";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
 import { activeTabId, favoriteTabIds, pinnedPage, viewTabIds } from "../../store/model";
+import { live, profileFolders } from "../../live/store";
+import { folderRows } from "../../live/rows";
+import type { SidebarKeyboardRow } from "./keyboardModel";
 import { splitIndex, stableList } from "../../store/structure";
 
 // The Essentials (tiles), the Pinned section's rows and folders ("t:" and "f:" entries), the pinned groups, and the
@@ -210,4 +213,76 @@ function insertEmptyFolders(s: BrowserProjection, entries: string[], emptyIds: s
       break;
     }
   }
+}
+
+/** The settled visible rows, in the same order as SidebarPage, FolderBlock, GroupBlock and LiveFolders. */
+export function sidebarKeyboardRows(s: BrowserProjection, windowId: string, liveState = live(), extensions: SidebarKeyboardRow[] = []): SidebarKeyboardRow[] {
+  const w = s.windows[windowId];
+  if (!w) return [];
+  const active = activeTabId(s, windowId);
+  const out: SidebarKeyboardRow[] = [];
+  const { tiles, pinned, pinnedGroups, list } = sidebarEntries(s, windowId);
+  const append = (entry: string, parentId?: string) => {
+    const id = entry.slice(2);
+    if (entry.startsWith("f:")) {
+      const folder = s.pinnedFolders[id];
+      if (!folder) return;
+      out.push({ id: entry, kind: "folder", tabIds: folderTabIds(s, id), parentId, collapsed: folder.collapsed });
+      if (!folder.collapsed) folderEntries(s, id).forEach((child) => append(child, entry));
+      // A collapsed ancestor renders the active leaf directly, bypassing hidden child headers.
+      else if (active && folderTabIds(s, id).includes(active)) append(`t:${active}`, entry);
+    } else if (entry.startsWith("g:")) {
+      const group = s.groups[id];
+      if (!group) return;
+      out.push({ id: entry, kind: "group", tabIds: [...group.tabIds], parentId, collapsed: group.collapsed });
+      groupEntries(s, id)
+        .filter((child) => !group.collapsed || child === `t:${active}` || (child.startsWith("s:") && s.splits[child.slice(2)]?.tabIds.includes(active ?? "")))
+        .forEach((child) => append(child, entry));
+    } else if (entry.startsWith("s:")) {
+      const tabIds = (s.splits[id]?.tabIds ?? []).filter((tabId) => s.tabs[tabId] && !pinnedPage(s.tabs[tabId]!));
+      if (tabIds.length >= 2) out.push({ id: entry, kind: "split", tabIds, parentId });
+    } else if (s.tabs[id]) out.push({ id: entry, kind: "tab", tabIds: [id], parentId });
+  };
+  tiles.forEach((id) => append(`t:${id}`));
+  if (!s.spaces[w.spaceId]?.folded) {
+    pinned.forEach((entry) => append(entry));
+    out.push(...extensions);
+    pinnedGroups.forEach((id) => append(`g:${id}`));
+  }
+  for (const folderId of w.incognito ? [] : profileFolders(liveState, w.spaceId)) {
+    const folder = liveState.folders[folderId]!;
+    const header = `livefolder|${folderId}`;
+    const items = liveState.items[folderId] ?? [];
+    const activeItem = active && s.tabs[active]?.liveItem?.folderId === folderId ? s.tabs[active]?.liveItem?.itemId : undefined;
+    const itemTabs = (itemId: string) =>
+      viewTabIds(s, windowId).filter((id) => s.tabs[id]?.liveItem?.folderId === folderId && s.tabs[id]?.liveItem?.itemId === itemId);
+    out.push({ id: header, kind: "liveFolder", tabIds: [], folderId, item: items[0], collapsed: folder.collapsed });
+    const appendItem = (item: (typeof items)[number], parentId: string) => {
+      if (!liveState.completing[folderId]?.includes(item.id))
+        out.push({ id: `live|${folderId}|${item.id}`, kind: "liveItem", tabIds: itemTabs(item.id), folderId, item, parentId });
+    };
+    for (const row of folderRows(folder, items, liveState.showAll)) {
+      if (
+        folder.collapsed &&
+        !(row.kind === "item" && row.item.id === activeItem) &&
+        !(row.kind === "stack" && row.items.some((item) => item.id === activeItem))
+      )
+        continue;
+      if (row.kind === "item") appendItem(row.item, header);
+      else if (row.kind === "stack") {
+        const stackId = `stack|${folderId}|${row.id}`;
+        const collapsed = liveState.expandedStacks[row.id] === false;
+        out.push({ id: stackId, kind: "stack", tabIds: [], folderId, item: row.items[0], section: row.id, collapsed, parentId: header });
+        if (!collapsed) row.items.forEach((item) => appendItem(item, stackId));
+      } else if (row.kind === "more")
+        out.push({ id: `more|${folderId}|${row.section}`, kind: "more", tabIds: [], folderId, section: row.section, parentId: header });
+    }
+    for (const id of viewTabIds(s, windowId)) {
+      const tab = s.tabs[id]!;
+      if (tab.liveItem?.folderId === folderId && !items.some((item) => item.id === tab.liveItem!.itemId) && (!folder.collapsed || id === active))
+        append(`t:${id}`, header);
+    }
+  }
+  list.forEach((entry) => append(entry));
+  return out;
 }

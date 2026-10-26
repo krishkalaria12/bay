@@ -1,0 +1,149 @@
+---
+import "../styles/global.css";
+import { Image } from "astro:assets";
+import appIcon from "../assets/app-icon.png";
+import { downloadLink, site } from "../site";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'none'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="theme-color" content="#edeef1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="A collection of links shared from Bay. Preview them here or add them to your browser." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Shared collection | Bay</title>
+  </head>
+  <body class="min-h-dvh">
+    <header class="mx-auto flex h-20 max-w-3xl items-center justify-between gap-4 px-5">
+      <a href="/" class="flex items-center gap-2 text-[21px] font-bold tracking-tight" aria-label="Bay home">
+        <Image src={appIcon} alt="" width={30} height={30} loading="eager" />
+        Bay
+      </a>
+      <a href={site.downloadUrl} {...downloadLink} class="btn-ghost text-sm" rel="noreferrer">Download Bay for Mac</a>
+    </header>
+
+    <main class="mx-auto max-w-3xl px-5 pt-10 pb-16 sm:pt-16">
+      <p class="mb-3 text-sm font-medium text-muted">Shared from Bay</p>
+      <h1 id="share-title" class="text-[clamp(2rem,6vw,3rem)] leading-[1.1] font-bold tracking-[-0.04em] break-words">
+        A collection of links
+      </h1>
+      <p id="share-summary" class="mt-4 text-base leading-relaxed text-muted">Preview the links here, or save a copy in Bay.</p>
+
+      <div class="mt-7 flex flex-wrap items-center gap-2">
+        <button id="share-import" type="button" class="btn" disabled>Add to Bay</button>
+        <button id="share-copy" type="button" class="btn-ghost" disabled>Copy shared link</button>
+      </div>
+      <p id="share-copy-status" class="mt-2 min-h-6 text-sm text-muted" role="status"></p>
+
+      <section class="card mt-6 overflow-hidden" aria-label="Shared links">
+        <div id="share-state" class="px-6 py-8 text-base leading-relaxed text-muted" role="status">Opening shared collection…</div>
+        <div id="share-contents" class="share-contents px-4 py-3 sm:px-6" hidden></div>
+      </section>
+
+      <noscript>
+        <p class="mt-4 text-base text-muted">Enable JavaScript to open this shared collection. Its contents are read in your browser.</p>
+      </noscript>
+
+      <aside class="mt-7 max-w-xl text-sm leading-relaxed text-muted" aria-label="About this shared collection">
+        <p>This is a snapshot. Changes to the original collection will not appear here.</p>
+        <p class="mt-2">Anyone with this link can read its contents. The collection stays in the link and is decoded in your browser.</p>
+        <p class="mt-2">Add to Bay saves a copy as a folder. You need <a href={site.downloadUrl} {...downloadLink} class="underline underline-offset-2" rel="noreferrer">Bay for Mac</a> installed.</p>
+      </aside>
+    </main>
+
+    <script>
+      import "../scripts/share";
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  #share-import:disabled,
+  #share-copy:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .share-contents ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .share-contents .share-folder {
+    padding-block: 0.75rem;
+  }
+
+  .share-folder-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.25rem 0.5rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .share-folder-title::before {
+    content: "";
+    width: 0.8rem;
+    height: 0.6rem;
+    flex-shrink: 0;
+    border: 1.5px solid var(--color-muted);
+    border-radius: 2px;
+    box-shadow: -2px -3px 0 -1px white, -2px -3px 0 0 var(--color-muted);
+  }
+
+  .share-contents .share-folder > ul {
+    margin: 0.5rem 0 0 0.85rem;
+    padding-left: 0.85rem;
+    border-left: 1px solid var(--color-line);
+  }
+
+  .share-link {
+    display: block;
+    padding: 0.8rem 0.5rem;
+    border-radius: 0.5rem;
+    overflow-wrap: anywhere;
+  }
+
+  .share-link:hover {
+    background: var(--color-paper);
+  }
+
+  .share-link-title {
+    display: block;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    font-weight: 500;
+  }
+
+  .share-link-url,
+  .share-folder-empty {
+    display: block;
+    margin-top: 0.2rem;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .share-folder-empty {
+    padding: 0.5rem;
+  }
+
+  @media (max-width: 480px) {
+    .share-contents .share-folder > ul {
+      margin-left: 0.3rem;
+      padding-left: 0.5rem;
+    }
+  }
+</style>

@@ -2,6 +2,18 @@ export type Frame = [number, number, number, number];
 export type WindowSize = [number, number];
 export type WindowPlacement = { size?: WindowSize; maximized?: boolean };
 
+// Only bookmark-style metadata belongs in JS. Security-scoped grants live in the native shell on this Mac.
+export type LocalFilePin = {
+  id: string;
+  spaceId: string;
+  path: string;
+  name: string;
+  kind: "file" | "folder";
+  createdAt: number;
+  order: number;
+  expanded: boolean;
+};
+
 export type SpaceColor = "plum" | "blue" | "purple" | "pink" | "red" | "orange" | "yellow" | "green" | "neutral";
 
 // A space's own theme, from the theme editor: its colours (one to three, a gradient), how strongly they tint the

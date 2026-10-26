@@ -4,7 +4,7 @@ import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect } from "react";
 import { batchedUpdates } from "@bay/platform";
-import { Extrapolation, interpolate, makeMutable, useAnimatedStyle, type SharedValue } from "@bay/platform/motion";
+import { Easing, Extrapolation, interpolate, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -22,7 +22,7 @@ function restPages(current: string | null, order: readonly string[]): PagerPage[
 
 // The native controller (NNPager) tracks, settles and selects; JS only commits its selections.
 class SpacePager {
-  // The absolute profile index, written only by the native controller's frames.
+  // The absolute profile index, written by the native controller's frames; by JS only with no surface to hold one.
   readonly pos: SharedValue<number>;
   // pages: the current profile's neighbours to keep warm; ack: the newest native sequence JS has handled.
   readonly state = create<{ pages: PagerPage[] | null; ack: number }>(() => ({ pages: null, ack: 0 }));
@@ -45,6 +45,9 @@ class SpacePager {
       const was = prev.windows[windowId];
       if (w.spaceId !== was?.spaceId || w.incognito !== was?.incognito || s.spaceOrder !== prev.spaceOrder) {
         this.state.setState({ pages: this.warmPages() });
+        // No surface (the sidebar closed, its peek showing) means no native controller to move the pages: they slide
+        // here, as its would.
+        if (!this.surfaces && this.index() >= 0) this.pos.set(withTiming(this.index(), { duration: 250, easing: Easing.out(Easing.cubic) }));
       }
       if (!this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
     });

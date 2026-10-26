@@ -1,3 +1,4 @@
+import { decodeSharedCollection } from "@bay/core";
 import type { BrowserState, BrowserStore } from "../store/browser";
 import { isIncognitoSpace } from "../store/model";
 import type { GroupPlacement, TabPlacement } from "../store/organize";
@@ -34,10 +35,12 @@ export type OrganizeCommand =
   | { method: "moveGroup"; groupId: string; placement: GroupPlacement }
   | { method: "newTabInGroup"; groupId: string; url?: string }
   | { method: "newPinnedFolder"; windowId: string; options?: NewFolderOptions }
+  | { method: "addSharedCollection"; windowId: string; token: string; spaceId?: string }
   | { method: "updatePinnedFolder"; folderId: string; patch: FolderPatch }
   | { method: "movePinnedFolder"; folderId: string; beforeId: string | null; parentId?: string | null }
   | { method: "deletePinnedFolder"; folderId: string }
   | { method: "undoPinnedFolderMove" }
+  | { method: "undoSidebarEdit"; windowId: string }
   | { method: "setSelection"; windowId: string; tabIds: string[] }
   | { method: "placeTabs"; tabIds: string[]; placement: TabPlacement }
   | { method: "pinTabs" | "pinRows"; tabIds: string[]; pinned: boolean }
@@ -62,10 +65,12 @@ export const ORGANIZE_COMMAND_METHODS = [
   "moveGroup",
   "newTabInGroup",
   "newPinnedFolder",
+  "addSharedCollection",
   "updatePinnedFolder",
   "movePinnedFolder",
   "deletePinnedFolder",
   "undoPinnedFolderMove",
+  "undoSidebarEdit",
   "setSelection",
   "placeTabs",
   "pinTabs",
@@ -152,6 +157,16 @@ export function parseOrganizeCommand(value: unknown): OrganizeCommand {
           beforeId: commandText,
         }),
       };
+    case "addSharedCollection": {
+      fields("windowId", "token", "spaceId");
+      const token = commandText(c.token, 16_000);
+      try {
+        decodeSharedCollection(token);
+      } catch {
+        return invalidCommand("invalid shared collection");
+      }
+      return { method: c.method, windowId: windowId(), token, ...(c.spaceId !== undefined ? { spaceId: commandText(c.spaceId) } : {}) };
+    }
     case "updatePinnedFolder":
       fields("folderId", "patch");
       return {
@@ -171,6 +186,9 @@ export function parseOrganizeCommand(value: unknown): OrganizeCommand {
     case "deletePinnedFolder":
       fields("folderId");
       return { method: c.method, folderId: folderId() };
+    case "undoSidebarEdit":
+      fields("windowId");
+      return { method: c.method, windowId: windowId() };
     case "undoPinnedFolderMove":
       fields();
       return { method: c.method };
@@ -306,6 +324,12 @@ export function executeOrganizeCommand(store: BrowserStore, command: OrganizeCom
       if (o.tabIds) sameSpace(spaceId, requireCommandTabs(s, o.tabIds));
       return created(s.newPinnedFolder(command.windowId, command.options));
     }
+    case "addSharedCollection": {
+      const window = requireCommandWindow(s, command.windowId);
+      if (window.incognito || window.kind === "small") return invalidCommand("window cannot hold pinned folders");
+      requireCommandSpace(s, command.spaceId ?? window.spaceId);
+      return created(s.importSharedCollection(command.windowId, decodeSharedCollection(command.token), command.spaceId));
+    }
     case "updatePinnedFolder":
       requireCommandFolder(s, command.folderId);
       s.updatePinnedFolder(command.folderId, command.patch);
@@ -320,6 +344,10 @@ export function executeOrganizeCommand(store: BrowserStore, command: OrganizeCom
     case "deletePinnedFolder":
       requireCommandFolder(s, command.folderId);
       s.deletePinnedFolder(command.folderId);
+      break;
+    case "undoSidebarEdit":
+      requireCommandWindow(s, command.windowId);
+      s.undoSidebarEdit(command.windowId);
       break;
     case "undoPinnedFolderMove":
       s.undoPinnedFolderMove();

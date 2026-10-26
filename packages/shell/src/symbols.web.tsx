@@ -57,6 +57,19 @@ const paths: Record<string, string> = {
   "xmark.circle": "m9 9 6 6m0-6-6 6M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
   ellipsis: "M4 12h.01M12 12h.01M20 12h.01",
   "line.3.horizontal": "M3 6h18M3 12h18M3 18h18",
+  "line.3.horizontal.decrease": "M3 6h18M6 12h12M10 18h4",
+  "arrow.uturn.forward": "M15 4l6 6-6 6M21 10H10a6 6 0 0 0 0 12",
+  "camera.viewfinder":
+    "M3 7V5a2 2 0 0 1 2-2h2m10 0h2a2 2 0 0 1 2 2v2m0 10v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M8 9h1.5l1-1.5h3l1 1.5H16a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1m6 3.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
+  curlybraces: "M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1m8 0h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1",
+  "hand.draw": "M3 16c2-4 4-4 5 0s3 4 5 0 3-4 5 0 2 2 3 1",
+  highlighter: "m9 11-6 6v3h9l3-3m7-5-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4",
+  "pencil.tip": "M12 3 7 15h10L12 3M7 15l2 6h6l2-6M12 3v6",
+  "pencil.tip.crop.circle": "M12 6 9 14h6l-3-8m-3 8 1 3h4l1-3m7-2a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
+  "photo.on.rectangle": "M7 3h12a2 2 0 0 1 2 2v10M3 7h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1m-1 11 5-5 4 4 2-2 5 5m-5-9h.01",
+  rectangle: "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2",
+  scope: "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0M12 2v4m0 12v4M2 12h4m12 0h4m-8 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
+  "scribble.variable": "M4 15c2-6 4-9 6-6s-4 10-1 10 5-12 8-10-2 8 3 8",
   magnifyingglass: "M16 16 22 22M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
   globe: "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0M2 12h20M12 2c6 6 6 14 0 20-6-6-6-14 0-20",
   house: "m2 11 10-9 10 9M5 9v13h5v-7h4v7h5V9",
@@ -295,6 +308,7 @@ const aliases: Record<string, string> = {
   "globe.americas": "globe",
   puzzlepiece: "puzzlepiece.extension",
   "lock.open.trianglebadge.exclamationmark": "lock.open",
+  "circle.slash": "nosign",
 };
 /** Inline paths are local resources and work in previews without Windows' icon font. */
 export function svgSymbol(name: string) {

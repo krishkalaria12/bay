@@ -19,6 +19,8 @@ const report = (overrides = {}) => ({
   timestamp: Date.now(),
   hasVideo: false,
   actions: ["play", "pause"],
+  live: false,
+  liveBehind: 0,
   ...overrides,
 });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 3));
@@ -191,4 +193,32 @@ test("muting a media-list row only mutes that tab, even with another session on 
     [second, false],
   ]);
   for (const id of [first, second]) webviews.delete(id);
+});
+
+test("a live stream reads Live at its end, and how far behind once it falls back", () => {
+  const now = Date.now();
+  const live = report({ live: true, liveBehind: 4, duration: 5400, timestamp: now });
+  assert.equal(media.liveBehindOf(live, now + 60_000), 0, "playing at 1× near the end stays live");
+  assert.equal(media.liveBehindOf(report({ liveBehind: 400, timestamp: now }), now), 0, "a video that isn't live is never behind");
+  const paused = { ...live, playbackState: "paused" };
+  assert.equal(media.liveBehindOf(paused, now + 20_000), 0, "paused briefly, still within the live edge");
+  assert.equal(Math.round(media.liveBehindOf(paused, now + 300_000)), 304, "paused, it falls behind by the time paused");
+  assert.equal(Math.round(media.liveBehindOf({ ...live, playbackRate: 0.5 }, now + 120_000)), 64, "at half speed, half as fast");
+  assert.equal(media.formatBehind(45), "45s behind");
+  assert.equal(media.formatBehind(304), "5m behind");
+  assert.equal(media.formatBehind(3600), "1h behind");
+  assert.equal(media.formatBehind(3900), "1h 5m behind");
+});
+
+test("jumping to live sends the page there and reads Live at once", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://live.com" });
+  const tab = S().windows[w].activeTabIds[S().windows[w].spaceId];
+  const sent = [];
+  webviews.set(tab, { mediaCommand: async (action) => void sent.push(action) });
+  media.setNowPlaying(tab, report({ live: true, liveBehind: 600 }));
+  media.seekToLive(tab, M().sessions[tab]);
+  assert.deepEqual(sent, ["seekToLive"]);
+  assert.equal(media.liveBehindOf(M().sessions[tab]), 0);
+  webviews.delete(tab);
 });

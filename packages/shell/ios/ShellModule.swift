@@ -1,5 +1,6 @@
 import AppKit
 import ExpoModulesCore
+import UniformTypeIdentifiers
 
 public enum OpenURLInbox {
   struct Batch {
@@ -226,9 +227,9 @@ public class ShellModule: Module {
     AsyncFunction("setTrafficLightsCenter") { (id: String, center: [Double]?) in
       WindowManager.shared.setTrafficLightsCenter(id: id, center: center.flatMap { $0.count == 2 ? NSPoint(x: $0[0], y: $0[1]) : nil })
     }.runOnQueue(.main)
-    // Shown only while the pointer is over the window's top (true); always shown in full screen.
-    AsyncFunction("setTrafficLightsOnHover") { (id: String, on: Bool) in
-      WindowManager.shared.setTrafficLightsOnHover(id: id, on: on)
+    // "shown", "hover" (only while the pointer is over the window's top) or "hidden"; always shown in full screen.
+    AsyncFunction("setTrafficLightsMode") { (id: String, mode: String) in
+      WindowManager.shared.setTrafficLightsMode(id: id, mode: mode)
     }.runOnQueue(.main)
     AsyncFunction("focusWindow") { (id: String) in WindowManager.shared.focus(id: id) }.runOnQueue(.main)
     // The dragged tab's picture under the pointer (DragPreview). Rects and points are in the source window from its
@@ -315,6 +316,13 @@ public class ShellModule: Module {
       MenuState.current = MenuState(state)
       MainMenu.refresh()
     }.runOnQueue(.main)
+    AsyncFunction("focusSidebarRow") { (windowId: String, tag: Int) in
+      guard let row = self.appContext?.findView(withTag: tag, ofType: NSView.self) else { return }
+      SidebarMoveUndoView.focusRow(windowId: windowId, row: row)
+    }.runOnQueue(.main)
+    AsyncFunction("setSidebarKeyboard") { (windowId: String, active: Bool) in
+      SidebarMoveUndoView.setKeyboard(windowId: windowId, active: active)
+    }.runOnQueue(.main)
     AsyncFunction("setSidebarMoveUndo") { (windowId: String, available: Bool, focus: Bool) in
       SidebarMoveUndoView.set(windowId: windowId, available: available, focus: focus)
     }.runOnQueue(.main)
@@ -368,6 +376,40 @@ public class ShellModule: Module {
       panel.canChooseDirectories = false
       panel.begin { response in
         promise.resolve(response == .OK ? panel.urls.map(\.absoluteString) : [])
+      }
+    }.runOnQueue(.main)
+
+    // The Mac's font families, for a Boost's font menu.
+    Function("fontFamilies") { () -> [String] in NSFontManager.shared.availableFontFamilies }
+
+    // A text file the user saves (a Boost's export): true once written.
+    AsyncFunction("saveTextFile") { (name: String, contents: String, promise: Promise) in
+      let panel = NSSavePanel()
+      panel.nameFieldStringValue = name
+      panel.canCreateDirectories = true
+      panel.begin { response in
+        guard response == .OK, let url = panel.url else { return promise.resolve(false) }
+        do {
+          try contents.write(to: url, atomically: true, encoding: .utf8)
+          promise.resolve(true)
+        } catch {
+          promise.resolve(false)
+        }
+      }
+    }.runOnQueue(.main)
+
+    // One text file the user opens (a Boost to import), up to a megabyte; nil if cancelled or unreadable.
+    AsyncFunction("openTextFile") { (extensions: [String], promise: Promise) in
+      let panel = NSOpenPanel()
+      panel.allowsMultipleSelection = false
+      panel.canChooseDirectories = false
+      if !extensions.isEmpty { panel.allowedContentTypes = extensions.compactMap { UTType(filenameExtension: $0) } }
+      panel.begin { response in
+        guard response == .OK, let url = panel.url,
+          let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 1_000_000,
+          let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return promise.resolve(nil) }
+        promise.resolve(text)
       }
     }.runOnQueue(.main)
 
@@ -446,13 +488,57 @@ public class ShellModule: Module {
       if quiet() { emit("screenLocked") }
     }))
     var controlDown = false
-    flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-      let down = event.modifierFlags.contains(.control)
+    // Option held on its own shows the hidden sidebar, as Arc's did; letting go puts it back. Only after a beat, so
+    // ⌥ on the way to a shortcut (⌥⌘…) or a character (⌥e) shows nothing, nor while typing or a field is being edited.
+    var optionPending: DispatchWorkItem?
+    var optionShown = false
+    // Option, and nothing else, down now (as the flags events last said).
+    var optionAlone = false
+    var lastKeyAt = Date.distantPast
+    let releaseOption = {
+      optionPending?.cancel()
+      optionPending = nil
+      if optionShown { emit("optionReleased") }
+      optionShown = false
+    }
+    flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown]) { [weak self] event in
+      guard event.type == .flagsChanged else {
+        if event.type == .keyDown { lastKeyAt = Date() }
+        // Used with a key or a click: not a hold to look. The sidebar already out stays while the key does.
+        optionPending?.cancel()
+        optionPending = nil
+        return event
+      }
+      let flags = event.modifierFlags.intersection([.command, .option, .control, .shift, .function, .capsLock])
+      let down = flags.contains(.control)
       if controlDown && !down { emit("controlReleased") }
       controlDown = down
+      optionAlone = flags == .option
+      guard optionAlone else {
+        releaseOption()
+        return event
+      }
+      let typing = Date().timeIntervalSince(lastKeyAt) < ShellModule.optionTypingPause || NSApp.keyWindow?.firstResponder is NSText
+      guard optionPending == nil, !optionShown, !typing,
+            let windowId = WindowManager.shared.id(of: event.window) ?? WindowManager.shared.keyWindowId else { return event }
+      let show = DispatchWorkItem {
+        optionPending = nil
+        guard optionAlone else { return }
+        optionShown = true
+        self?.sendEvent("onAppEvent", ["type": "optionHeld", "windowId": windowId])
+      }
+      optionPending = show
+      DispatchQueue.main.asyncAfter(deadline: .now() + ShellModule.optionHoldDelay, execute: show)
       return event
     }
+    sidebarObservers.append((workspace, workspace.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+      releaseOption()
+    }))
   }
+
+  // How long Option is held alone before the sidebar shows, and how long after a key it still counts as typing.
+  static let optionHoldDelay = 0.2
+  static let optionTypingPause = 1.0
 
   static var isDark: Bool {
     NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

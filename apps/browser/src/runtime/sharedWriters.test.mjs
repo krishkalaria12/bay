@@ -25,6 +25,7 @@ const ALLOWED = {
   "live/engine.ts": "coordinator Live services",
   "live/alerts.ts": "coordinator meeting alerts",
   "live/meetingGroups.ts": "coordinator meeting groups",
+  "live/store.ts": "coordinator Live folder undo; window mutations dispatch liveUpdate service",
   "telemetry/usage.ts": "coordinator telemetry",
   "components/extensions/searchEngines.ts": "store parameter defaults to the legacy singleton",
   // Window modules whose writes run only without the shared runtime (pageFactsInCoordinator).

@@ -1,4 +1,6 @@
 import { reportBrowserCommand } from "../runtime/commands";
+import { withSidebarUndoWindow } from "../store/sidebarUndo";
+import { joinMeetingNow } from "../live/alerts";
 import { closeWindow as closeNativeWindow, copyText, openExternalURL, pickFiles, prompt, setAppearance, sharePage, type CommandEvent } from "@bay/shell";
 import { markdownLink } from "@bay/core";
 import { activeTabId, bookmarkSpaceId, resolveWindowId, viewTabIds } from "../store/model";
@@ -19,12 +21,15 @@ import { openManageExtensions, openPinDialog, openWebStore } from "../components
 import { requestAutofill } from "../components/site/Autofill";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
+import { captureFullPage, capturePortrait, startCapture } from "../components/capture/state";
+import { canBoost, openBoostEditor, siteBoosts, startPicking, toggleSiteBoosts } from "../components/boosts/editor";
+import { newEasel, openLibrary } from "../components/library/actions";
 import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
 import { shownPeek } from "../store/peeks";
 import { isSmall, mainWindowFor } from "../store/small";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
-import { closeGroup, pinRows, undoPinnedFolderMove } from "../runtime/organizeActions";
+import { closeGroup, pinRows, undoSidebarEdit } from "../runtime/organizeActions";
 import { updateSettings } from "../runtime/settingsActions";
 import { closePeek, focusPane, keepPeek, removeTabFromSplit, reopenPeekOrClosed, toggleTabLayout } from "../runtime/splitActions";
 import { activate, cycle, duplicateTab, moveTab, navigate, newTab, togglePin } from "../runtime/tabActions";
@@ -33,7 +38,11 @@ import { browserRead } from "../store/read";
 import { addBookmark, addBookmarkFolder } from "../runtime/bookmarkActions";
 import { dismissCommandPanel, openCommandPanel, setFind, toggleDownloads } from "../runtime/windowUiActions";
 
-export function runCommand({ command, arg, windowId: requested }: CommandEvent) {
+export function runCommand(event: CommandEvent) {
+  return withSidebarUndoWindow(event.windowId ?? undefined, () => dispatchCommand(event));
+}
+
+function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
   const s = browserRead.getState();
 
   if (isUtilityWindowId(requested)) {
@@ -47,14 +56,18 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
   if (command === "newTab" && requested && s.windows[requested]) return openNewTabPanel(requested);
 
   switch (command) {
-    case "undoPinnedFolderMove":
-      return reportBrowserCommand(undoPinnedFolderMove());
+    case "undoPinnedFolderMove": {
+      const id = resolveWindowId(s, requested);
+      return id ? reportBrowserCommand(undoSidebarEdit(id)) : undefined;
+    }
     case "newWindow":
       return reportBrowserCommand(openWindow({ spaceId: arg ?? undefined }));
     case "newIncognitoWindow":
       return reportBrowserCommand(openWindow({ incognito: true }));
     case "newLittleBay":
       return reportBrowserCommand(openLittleBay());
+    case "joinMeeting":
+      return void joinMeetingNow();
     case "toggleOpenLinksInLittleBay":
       return reportBrowserCommand(updateSettings({ openLinksInLittleBay: !s.settings.openLinksInLittleBay }));
     case "reopenClosedWindow":
@@ -137,6 +150,22 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
       return void web?.runPageCommand("systemPrint");
     case "savePage":
       return void web?.runPageCommand("savePage");
+    case "capture":
+      return page ? void startCapture(page.id) : undefined;
+    case "captureFullPage":
+      return page ? void captureFullPage(page.id) : undefined;
+    case "capturePortrait":
+      return page ? void capturePortrait(page.id) : undefined;
+    case "newBoost":
+      return page && canBoost(page.id) ? openBoostEditor(page.id, { fresh: siteBoosts(page.id).length > 0 }) : undefined;
+    case "editBoost":
+      return page && canBoost(page.id) ? openBoostEditor(page.id) : undefined;
+    case "zapElements":
+      if (!page || !canBoost(page.id)) return;
+      openBoostEditor(page.id);
+      return startPicking(page.id, "zap");
+    case "toggleSiteBoosts":
+      return page ? toggleSiteBoosts(page.id) : undefined;
     case "caretBrowsing":
       return void web?.runPageCommand("caretBrowsing");
     case "emailPageLocation":
@@ -250,6 +279,10 @@ export function runCommand({ command, arg, windowId: requested }: CommandEvent) 
     }
     case "toggleMute":
       return page ? toggleMute(page.id) : undefined;
+    case "newEasel":
+      return newEasel(windowId);
+    case "openLibrary":
+      return openLibrary(windowId, arg ?? undefined);
     case "downloads":
       return reportBrowserCommand(toggleDownloads(windowId));
     case "cast":
@@ -290,6 +323,9 @@ const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
   "print",
   "printWithSystemDialog",
   "savePage",
+  "capture",
+  "captureFullPage",
+  "capturePortrait",
   "caretBrowsing",
   "emailPageLocation",
   "stop",

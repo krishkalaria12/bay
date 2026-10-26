@@ -2,7 +2,7 @@ import { View, isMac, shortcutLabel } from "@bay/platform";
 import { Text } from "react-native";
 import { useTheme } from "../../lib/theme";
 
-export function Keycaps({ hint }: { hint: string }) {
+export function Keycaps({ hint, color }: { hint: string; color?: string }) {
   const theme = useTheme();
   const label = shortcutLabel(hint);
   const keys = isMac
@@ -22,10 +22,10 @@ export function Keycaps({ hint }: { hint: string }) {
             borderRadius: 5,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: theme.dark ? "#FFFFFF12" : "#00000009",
+            backgroundColor: color ? `${color}18` : theme.dark ? "#FFFFFF12" : "#00000009",
           }}
         >
-          <Text style={{ fontSize: 12, color: theme.textSecondary }}>{key}</Text>
+          <Text style={{ fontSize: 12, color: color ?? theme.textSecondary }}>{key}</Text>
         </View>
       ))}
     </View>

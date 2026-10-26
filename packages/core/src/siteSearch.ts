@@ -1,14 +1,14 @@
 import { engineHost, searchUrl, type SearchEngine } from "./engines.ts";
 import { hostOf, searchUrlFor } from "./omnibox.ts";
 
-export type SiteSearch = { host: string; name: string; url: string };
+export type SiteSearch = { host: string; name: string; url: string; keyword?: string };
 
 export const POPULAR_SITE_SEARCHES: readonly SiteSearch[] = [
-  { host: "youtube.com", name: "YouTube", url: "https://www.youtube.com/results?search_query=%s" },
-  { host: "wikipedia.org", name: "Wikipedia", url: "https://en.wikipedia.org/w/index.php?search=%s" },
-  { host: "github.com", name: "GitHub", url: "https://github.com/search?q=%s" },
-  { host: "amazon.com", name: "Amazon", url: "https://www.amazon.com/s?k=%s" },
-  { host: "reddit.com", name: "Reddit", url: "https://www.reddit.com/search/?q=%s" },
+  { host: "youtube.com", name: "YouTube", keyword: "yt", url: "https://www.youtube.com/results?search_query=%s" },
+  { host: "wikipedia.org", name: "Wikipedia", keyword: "w", url: "https://en.wikipedia.org/w/index.php?search=%s" },
+  { host: "github.com", name: "GitHub", keyword: "gh", url: "https://github.com/search?q=%s" },
+  { host: "amazon.com", name: "Amazon", keyword: "a", url: "https://www.amazon.com/s?k=%s" },
+  { host: "reddit.com", name: "Reddit", keyword: "r", url: "https://www.reddit.com/search/?q=%s" },
   { host: "x.com", name: "X", url: "https://x.com/search?q=%s" },
   { host: "twitter.com", name: "X", url: "https://x.com/search?q=%s" },
   { host: "stackoverflow.com", name: "Stack Overflow", url: "https://stackoverflow.com/search?q=%s" },
@@ -71,7 +71,12 @@ export function findScope(text: string, { engines, sites = POPULAR_SITE_SEARCHES
     if (e.keyword.toLowerCase() === host || eHost === host || (t.length >= 3 && t === siteLabel(eHost))) return engineScope(e);
   }
   for (const s of sites) {
-    if (s.host === host || host.endsWith(`.${s.host}`) || (t === host && t.length >= 3 && s.host.split(".").length === 2 && siteLabel(s.host) === t)) {
+    if (
+      s.keyword === t ||
+      s.host === host ||
+      host.endsWith(`.${s.host}`) ||
+      (t === host && t.length >= 3 && s.host.split(".").length === 2 && siteLabel(s.host) === t)
+    ) {
       return { kind: "site", name: s.name, host: s.host, url: s.url };
     }
   }
