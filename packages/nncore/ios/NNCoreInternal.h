@@ -100,6 +100,7 @@ extern NSNotificationName const NNCoreWindowSeenDidChange;
 // Asked of the engine (stage 2, A0); used with respondsToSelector:.
 @interface NNCoreProfile (Pending)
 - (nullable NSString *)loadComponentExtension:(NSString *)path;
+- (void)releaseNavigationHoldReady;
 @end
 
 namespace nncore_host {

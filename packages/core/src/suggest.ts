@@ -1,4 +1,5 @@
 import { calculate } from "./calculator.ts";
+import { findBang, type BangMatch, type BangTable } from "./bangs.ts";
 import { parseCurrency, type CurrencyAnswer } from "./currency.ts";
 import { findEmoji } from "./emoji.ts";
 import { BUILT_IN_ENGINES, searchUrl, type SearchEngine } from "./engines.ts";
@@ -28,7 +29,7 @@ export type Suggestion =
       bookmarked?: boolean;
       visited?: boolean;
     }
-  | { kind: "search"; query: string; url: string; engine: string; suggested?: boolean }
+  | { kind: "search"; query: string; url: string; engine: string; suggested?: boolean; bang?: true }
   | { kind: "calc"; expression: string; value: string; url: string; detail?: string }
   | { kind: "emoji"; value: string; name: string }
   | { kind: "action"; id: string; title: string; icon?: string; hint?: string }
@@ -54,6 +55,7 @@ export type SuggestOptions = {
   currentTabId?: string;
   currentUrl?: string;
   scope?: SearchScope | null;
+  bangs?: BangTable | null;
   currency?: CurrencyAnswer | null;
   calculatorEnabled?: boolean;
 };
@@ -355,6 +357,9 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   const q = query.toLowerCase();
   const tokens = q.split(/\s+/).filter(Boolean);
 
+  const bang = scope ? null : findBang(query, options.bangs);
+  if (bang) return bangSuggestions(bang, source, options, limit);
+
   if (!scope && query.startsWith("?")) {
     const text = query.slice(1).trim();
     if (!text) return { items: [], completion: "" };
@@ -471,6 +476,19 @@ export function buildSuggestions(raw: string, source: SuggestionSource, options:
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));
   out.push(...pageRows);
   return { items: out.items, completion: answer || emoji.length ? "" : completion };
+}
+
+function bangSuggestions(match: BangMatch, source: SuggestionSource, options: SuggestOptions, limit: number): SuggestionResult {
+  const { bang, query } = match;
+  const out = new Output(limit);
+  if (!query) {
+    out.push({ kind: "page", url: bang.home, title: bang.name, favicon: null });
+    return { items: out.items, completion: "" };
+  }
+  out.push({ kind: "search", query, url: match.url, engine: bang.name, bang: true });
+  const scope: SearchScope = { kind: "site", name: bang.name, host: hostOf(bang.home), url: bang.template };
+  out.push(...buildSuggestions(query, source, { ...options, scope, remote: [], bangs: null }).items.slice(1));
+  return { items: out.items, completion: "" };
 }
 
 type Site = { origin: string; prefix: boolean; visits: number; lastVisit: number; bookmarked: boolean; favicon: string | null };

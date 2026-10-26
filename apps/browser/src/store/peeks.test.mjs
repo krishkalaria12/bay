@@ -94,6 +94,109 @@ test("Open as Tab lists the peek where its opener's links go and shows it", () =
   assert.deepEqual(order(w), ["mail", "news", "a", "b"]);
 });
 
+test("Open as Tab routes a Peek to the matching Space and its existing window", () => {
+  const { w, mail } = setup();
+  const work = S().createSpace({ name: "Work" });
+  const target = S().createWindow({ spaceId: work, url: "https://work.com" });
+  S().setFocusedWindow(w);
+  S().updateSettings({
+    externalLinkRules: [{ id: "reports", matchType: "contains", pattern: "report=weekly", destination: { kind: "space", spaceId: work } }],
+  });
+  const id = S().openPeek(mail, "https://docs.com/report?report=weekly", "tab:7");
+  assert.equal(S().keepPeek(w), target);
+  assert.equal(S().peeks[w], undefined);
+  assert.equal(S().tabs[id].spaceId, work);
+  assert.equal(S().tabs[id].windowId, target);
+  assert.equal(S().tabs[id].peekOf, undefined);
+  assert.equal(S().tabs[id].adoptId, undefined, "a different profile cannot reuse the opener's page");
+  assert.ok(S().tabs[id].navigation);
+  assert.equal(model.activeTabId(S(), target), id);
+  assert.equal(model.activeTabId(S(), w), mail);
+  assert.ok(!order(w).includes("docs.com/report?report=weekly"));
+});
+
+test("Peek routing uses its current URL, first-match priority and no desktop sender", () => {
+  const { w, mail } = setup();
+  const work = S().createSpace({ name: "Work" });
+  S().updateSettings({
+    externalLinkRules: [
+      { id: "source", pattern: "docs.com", matchType: "contains", sourceApp: "com.apple.mail", destination: { kind: "newWindow" } },
+      { id: "exact", pattern: "https://docs.com/final#report", matchType: "equals", destination: { kind: "space", spaceId: work } },
+      { id: "fallback", pattern: "docs.com", matchType: "contains", destination: { kind: "newWindow" } },
+    ],
+  });
+  const id = S().openPeek(mail, "https://docs.com/initial");
+  S().navigated(id, { url: "https://docs.com/final#report", title: "Final report" }, {});
+  const count = S().windowOrder.length;
+  assert.equal(S().keepPeek(w), w);
+  assert.equal(S().tabs[id].spaceId, work);
+  assert.equal(S().windowOrder.length, count);
+});
+
+test("explicit Peek split stays beside its opener, while Open as Tab honors Little Bay and new windows", () => {
+  for (const kind of ["littleBay", "newWindow", "mostRecentSpace"]) {
+    const { w, mail } = setup();
+    S().updateSettings({ externalLinkRules: [{ id: "route", matchType: "contains", pattern: "news.com", destination: { kind } }] });
+    const id = S().openPeek(mail, "https://news.com");
+    S().splitPeek(w);
+    assert.deepEqual(splitOf(S(), mail)?.tabIds, [mail, id]);
+    const next = S().openPeek(mail, "https://news.com/story");
+    const target = S().keepPeek(w);
+    assert.equal(S().peeks[w], undefined);
+    if (kind === "mostRecentSpace") {
+      assert.equal(target, w);
+      assert.equal(S().tabs[next].spaceId, S().tabs[mail].spaceId);
+    } else {
+      assert.notEqual(target, w);
+      assert.equal(S().windows[target].kind ?? "main", kind === "littleBay" ? "small" : "main");
+      assert.equal(S().tabs[model.activeTabId(S(), target)].url, "https://news.com/story");
+    }
+    assert.equal(S().closedPeeks[w], undefined, "opening is not recorded as closing the Peek");
+  }
+});
+
+test("private Peeks never route into regular Spaces", () => {
+  setup();
+  const w = S().createWindow({ incognito: true, url: "https://private.com" });
+  const from = model.activeTabId(S(), w);
+  S().updateSettings({ externalLinkRules: [{ id: "route", pattern: "news.com", matchType: "contains", destination: { kind: "space", spaceId: "default" } }] });
+  const id = S().openPeek(from, "https://news.com/private");
+  assert.equal(S().keepPeek(w), w);
+  assert.equal(S().tabs[id].spaceId, S().windows[w].spaceId);
+});
+
+test("routing a Peek to Little Bay transfers the same live page and preserves its state", () => {
+  const { w, mail } = setup();
+  S().updateSettings({ externalLinkRules: [{ id: "route", matchType: "contains", pattern: "news.com", destination: { kind: "littleBay" } }] });
+  const id = S().openPeek(mail, "https://news.com/post-result");
+  S().updateLive(id, { title: "POST response", scrollY: 420 });
+  const live = S().live[id];
+  const target = S().keepPeek(w);
+  assert.equal(model.activeTabId(S(), target), id);
+  assert.equal(S().tabs[id].windowId, target);
+  assert.equal(S().tabs[id].navigation.url, "https://news.com/post-result");
+  assert.equal(S().live[id], live);
+  assert.equal(S().windows[target].kind, "small");
+  assert.equal(model.activeTabId(S(), w), mail);
+  assert.ok(!model.listIds(S(), "default").includes(id));
+});
+
+test("Little Bay cannot adopt pinned pages, multiple tabs, or another profile", () => {
+  const { w, mail, a, b } = setup();
+  const pinned = S().createWindow({ small: true, tabIds: [mail] });
+  assert.equal(S().tabs[mail].windowId, w);
+  assert.notEqual(model.activeTabId(S(), pinned), mail);
+  const multiple = S().createWindow({ small: true, tabIds: [a, b] });
+  assert.equal(S().tabs[a].windowId, w);
+  assert.equal(S().tabs[b].windowId, w);
+  assert.ok(![a, b].includes(model.activeTabId(S(), multiple)));
+  const work = S().createSpace({ name: "Work" });
+  const other = S().createWindow({ small: true, spaceId: work, tabIds: [a] });
+  assert.equal(S().tabs[a].spaceId, "default");
+  assert.equal(S().tabs[a].windowId, w);
+  assert.notEqual(model.activeTabId(S(), other), a);
+});
+
 test("Open in Split View puts the peek beside its opener", () => {
   const { w, mail } = setup();
   const id = S().openPeek(mail, "https://news.com");

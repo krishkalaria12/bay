@@ -18,6 +18,7 @@ import { browserRead } from "../../store/read";
 import { activeTabId, bookmarkSpaceId, pinnedPage, viewTabIds } from "../../store/model";
 import { groupOf, selectedTabIds } from "../../store/organize";
 import { folderDepth, MAX_FOLDER_DEPTH } from "../../store/folders";
+import { withSidebarUndoWindow } from "../../store/sidebarUndo";
 import type { Tab } from "../../store/types";
 import { measureRow, setSidebarUi, sidebarUi, type Target } from "./state";
 import { updateSpace } from "../../runtime/spaceActions";
@@ -80,7 +81,7 @@ export async function startRename(windowId: string, target: Target) {
         confirmTitle: "Update",
         windowId,
       });
-      if (name !== null) await updateTabDetails(tab.id, { customTitle: name });
+      if (name !== null) await withSidebarUndoWindow(windowId, () => updateTabDetails(tab.id, { customTitle: name }));
       return;
     }
     const group = groupOf(s, tab.id);
@@ -96,13 +97,15 @@ export async function startRename(windowId: string, target: Target) {
 }
 
 export function commitRename(target: Target, text: string) {
-  const name = text.trim();
-  if (target.kind === "tab") {
-    const tab = store().tabs[target.id];
-    if (tab) reportBrowserCommand(updateTabDetails(tab.id, { customTitle: name && name !== tab.title ? name : null }));
-  } else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { name }));
-  else reportBrowserCommand(updateGroup(target.id, { name }));
-  endRename(target);
+  return withSidebarUndoWindow(sidebarUi().renaming?.windowId, () => {
+    const name = text.trim();
+    if (target.kind === "tab") {
+      const tab = store().tabs[target.id];
+      if (tab) reportBrowserCommand(updateTabDetails(tab.id, { customTitle: name && name !== tab.title ? name : null }));
+    } else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { name }));
+    else reportBrowserCommand(updateGroup(target.id, { name }));
+    endRename(target);
+  });
 }
 
 export function endRename(target: Target) {
@@ -115,13 +118,15 @@ export async function openIconPicker(windowId: string, target: Target) {
   setSidebarUi({ iconPicker: { windowId, ...target, anchor }, hover: null });
 }
 
-export function setIcon(target: Target, icon: string | null) {
-  if (target.kind === "tab") reportBrowserCommand(updateTabDetails(target.id, { customIcon: icon }));
-  // A live folder's header row ("livefolder|<id>").
-  else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
-  else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { icon }));
-  else if (target.kind === "space") reportBrowserCommand(updateSpace(target.id, { icon }));
-  else reportBrowserCommand(updateGroup(target.id, { icon }));
+export function setIcon(target: Target & { windowId?: string }, icon: string | null) {
+  return withSidebarUndoWindow(target.windowId, () => {
+    if (target.kind === "tab") reportBrowserCommand(updateTabDetails(target.id, { customIcon: icon }));
+    // A live folder's header row ("livefolder|<id>").
+    else if (target.kind === "live") updateFolder(target.id.split("|")[1] ?? "", { icon });
+    else if (target.kind === "folder") reportBrowserCommand(updatePinnedFolder(target.id, { icon }));
+    else if (target.kind === "space") reportBrowserCommand(updateSpace(target.id, { icon }));
+    else reportBrowserCommand(updateGroup(target.id, { icon }));
+  });
 }
 
 export async function newGroupWithSelection(windowId: string, ids = selectedTabIds(store(), windowId)) {

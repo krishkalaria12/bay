@@ -55,6 +55,8 @@ import {
 import { SiteControls } from "./site/SiteControls";
 import { ZoomPopover } from "./site/ZoomControls";
 import { SelectionPopover } from "./site/SelectionPopover";
+import { LinkPreview } from "./site/LinkPreviewCard";
+import { setLinkPreview } from "./site/linkPreview";
 import { copyLinkToSelection, searchSelection, setPageSelection, startSelectionTools, type PageSelection } from "./site/selection";
 import { startMedia, useAutoPictureInPicture } from "./media/pip";
 import { SharePicker, requestDisplayMedia } from "./media/SharePicker";
@@ -77,6 +79,10 @@ import { DevBar } from "./developer/DevBar";
 import { DEV_BAR_HEIGHT } from "./developer/constants";
 import { DeveloperOffer } from "./developer/DeveloperOffer";
 import { onDeveloperMessage, startDeveloperMode } from "./developer/devMode";
+import { CaptureLayer } from "./capture/CaptureLayer";
+import { closeCaptureOnEscape, onCaptureGesture, onCaptureMessage, startCaptures } from "./capture/state";
+import { BoostEditor } from "./boosts/BoostEditor";
+import { closeBoostEditorOnEscape, onBoostMessage } from "./boosts/editor";
 import { useIsDeveloperTab } from "./developer/sites";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
 import { closePeek, openPeek } from "../runtime/splitActions";
@@ -133,6 +139,7 @@ export function ContentCard() {
   useEffect(startMedia, []);
   useEffect(startSelectionTools, []);
   useEffect(startDeveloperMode, []);
+  useEffect(startCaptures, []);
   useEffect(startPeeks, []);
 
   // The tabs whose page is in this window. Recomputed only when tabs change, not on every store update (page
@@ -438,6 +445,9 @@ const TabPane = memo(function TabPane({
                 <CastPicker tabId={tabId} paneWidth={frame.width} />
                 <NavigationOverlays tabId={tabId} windowId={windowId} geometry={geometry} />
                 <SelectionPopover tabId={tabId} zoom={zoom} />
+                <LinkPreview tabId={tabId} />
+                <CaptureLayer tabId={tabId} />
+                <BoostEditor tabId={tabId} maxHeight={Math.max(240, frame.height - 20)} />
               </>
             )}
           </Animated.View>
@@ -533,6 +543,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
           dismissPermissions(tabId);
           setPopover(tabId, null);
           setPageSelection(tabId, null);
+          setLinkPreview(tabId, null);
           patchPage(tabId, { popups: [], passwordPrompt: null, crashed: null, status: "" });
           revealToolbar(tabId);
         }
@@ -626,6 +637,8 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         else if (command === "escape") {
           // Esc in a page closes the theme editor over it; in a peek's page, the peek; in Little Bay's, Little Bay.
           const t = tab();
+          if (closeCaptureOnEscape(tabId)) return;
+          if (closeBoostEditorOnEscape(tabId)) return;
           if (t && closeThemeEditorOnEscape(t.windowId)) return;
           if (t?.peekOf) reportBrowserCommand(closePeek(t.windowId));
           else closeLittleBayOnEscape(tabId);
@@ -635,6 +648,10 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         if (kind === "selection") setPageSelection(tabId, data as PageSelection | null);
         else if (kind === "scroll") noteScroll(tabId, data);
         else if (kind === "devMode") onDeveloperMessage(tabId, data);
+        else if (kind === "capture") onCaptureMessage(tabId, data);
+        else if (kind === "boost") onBoostMessage(tabId, data);
+        else if (kind === "linkPreview") setLinkPreview(tabId, data as { url: string; rect: { x: number; y: number; width: number; height: number } } | null);
+        else if (kind === "captureGesture") onCaptureGesture(tabId, data);
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {

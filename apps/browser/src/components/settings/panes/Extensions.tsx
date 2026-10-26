@@ -12,6 +12,7 @@ import { engineProfile, resolveWindowId } from "../../../store/model";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";
 import { addFromWebStore, configure, loadUnpacked, refreshExtensions, removeExtension, setEnabled, setPinned, useExtensionList } from "../../extensions/state";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, Toggle } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { SETTINGS_WINDOW_ID } from "../windows";
 
@@ -83,7 +84,7 @@ export function ExtensionsPane() {
 
       <SectionHeader title="Add extensions" />
       <Group>
-        <Row title="Chrome Web Store" description="Browse the store; its Add to Bay button installs here.">
+        <Row settingId={SETTINGS.chromeWebStore.id} title={SETTINGS.chromeWebStore.title} description="Browse the store; its Add to Bay button installs here.">
           <Button
             title="Open Web Store"
             onPress={() => {
@@ -92,13 +93,17 @@ export function ExtensionsPane() {
             }}
           />
         </Row>
-        <Row title="Add from a link" description="Paste a Chrome Web Store link or extension ID.">
+        <Row settingId={SETTINGS.addExtensionLink.id} title={SETTINGS.addExtensionLink.title} description="Paste a Chrome Web Store link or extension ID.">
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <TextField value={link} onChangeText={setLink} placeholder="chromewebstore.google.com/detail/…" onSubmit={addLink} style={{ width: 210 }} />
             <Button title="Add" disabled={!link.trim()} onPress={addLink} />
           </View>
         </Row>
-        <Row title="Load unpacked extension" description="For developers: load an extension folder with a manifest.json.">
+        <Row
+          settingId={SETTINGS.loadUnpackedExtension.id}
+          title={SETTINGS.loadUnpackedExtension.title}
+          description="For developers: load an extension folder with a manifest.json."
+        >
           <Button
             title="Choose Folder…"
             onPress={() => {

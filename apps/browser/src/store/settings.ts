@@ -15,7 +15,7 @@ import type { BrowserState } from "./browser";
 import { layout } from "../lib/constants";
 import { DEFAULT_AWAKE_SITES, normalizeAwakeSites } from "../lib/awakeSites";
 import { DEFAULT_SPACE_ID } from "./constants";
-import { normalizeExternalLinkRules, type ExternalLinkRule } from "../lib/externalLinkRules";
+import { normalizeExternalLinkRules, normalizeLinkDestination, type ExternalLinkRule, type LinkDestination } from "../lib/externalLinkRules";
 
 export type SearchEngineId = string;
 
@@ -26,11 +26,13 @@ export type Settings = {
   // What a window shows when Bay opens: a blank new tab (its tabs waiting in the sidebar), or the tab it showed.
   launchTab: "newTab" | "lastTab";
   searchEngine: SearchEngineId;
+  searchShortcutMode: "arc" | "duckduckgo";
   customSearchUrl: string;
   customSearchEngines: CustomSearchEngine[];
   extensionSearchEngines: ExtensionSearchEngine[];
   searchSuggestions: boolean;
   calculatorEnabled: boolean;
+  tidyDownloads: boolean;
   commandBarPreference: "website" | "search";
 
   tabLayout: "sidebar" | "top";
@@ -44,6 +46,12 @@ export type Settings = {
   cmdClickCreatesTabGroup: boolean;
   optShiftClickOpensInGroup: boolean;
   autoGroupMeetingTabs: boolean;
+  // Arc Max's "Tidy Tab Titles": suggest a short name for a tab when it is pinned.
+  // Off by default; reversible via Reset Name. macOS 26 with Apple Intelligence in Arc;
+  // Bay ships a heuristic that runs everywhere.
+  tidyTabTitles: boolean;
+  // Arc Max's "Tidy Tabs": group today's tabs by topic on demand.
+  tidyTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
   awakeSites: string[];
   mutedSites: string[];
@@ -58,9 +66,13 @@ export type Settings = {
   previewFolders: boolean;
   previewGmail: boolean;
   previewGithub: boolean;
+  // Arc's badges on favorites: the count a pinned tile's page puts in its title (lib/unreadBadges.ts).
+  unreadBadges: boolean;
   sidebarWidth: number;
   // Which side of the window the sidebar docks on; the page takes the other. The window buttons stay at the top left.
   sidebarPosition: "left" | "right";
+  // Holding Option alone slides the hidden sidebar out, as Arc's did (App.tsx › SidebarPeek).
+  showSidebarOnOption: boolean;
   batterySaver: boolean;
   extensionSidePanelWidth: number;
 
@@ -80,11 +92,20 @@ export type Settings = {
   shortcuts: Record<string, string[]>;
 
   openLinksInLittleBay: boolean;
+  externalLinkDefault: LinkDestination | null;
   externalLinkRules: ExternalLinkRule[];
   // Arc's Peek: a link a pinned tab or a favourite opens in front shows over its page (store/peeks.ts).
   peekLinksFromPinnedTabs: boolean;
   littleBaySize: [number, number];
+  // Little Bay from any app (components/littleBay/access.ts), as Little Arc's: a shortcut (a key's code and its
+  // modifiers; null is off) and a menu bar button. Both are this Mac's, off until chosen.
+  littleBayShortcut: LittleBayShortcut | null;
+  littleBayMenuBarItem: boolean;
+  // A Little Bay left alone this long is put away, its page in the Library's archive (littleBay/putAway.ts); null never.
+  littleBayPutAwayAfterHours: number | null;
 };
+
+export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
 
 export const DEFAULT_SETTINGS: Settings = {
   warnBeforeQuitting: false,
@@ -92,11 +113,13 @@ export const DEFAULT_SETTINGS: Settings = {
   restoreSession: true,
   launchTab: "newTab",
   searchEngine: "google",
+  searchShortcutMode: "arc",
   customSearchUrl: "",
   customSearchEngines: [],
   extensionSearchEngines: [],
   searchSuggestions: true,
   calculatorEnabled: true,
+  tidyDownloads: false,
   commandBarPreference: "website",
   tabLayout: "sidebar",
   hideToolbarWhileScrolling: true,
@@ -109,6 +132,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cmdClickCreatesTabGroup: false,
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
+  tidyTabTitles: false,
+  tidyTabs: false,
   // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
   cleanUpInactiveTabsAfterHours: 12,
   awakeSites: [...DEFAULT_AWAKE_SITES],
@@ -120,8 +145,10 @@ export const DEFAULT_SETTINGS: Settings = {
   previewFolders: true,
   previewGmail: true,
   previewGithub: true,
+  unreadBadges: true,
   sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
+  showSidebarOnOption: true,
   batterySaver: true,
   extensionSidePanelWidth: 360,
   showFullUrl: false,
@@ -133,10 +160,15 @@ export const DEFAULT_SETTINGS: Settings = {
   addressBar: "sidebar",
   defaultSpaceId: DEFAULT_SPACE_ID,
   shortcuts: {},
-  openLinksInLittleBay: false,
+  openLinksInLittleBay: true,
+  externalLinkDefault: null,
   externalLinkRules: [],
   peekLinksFromPinnedTabs: true,
   littleBaySize: [900, 640],
+  littleBayShortcut: null,
+  littleBayMenuBarItem: false,
+  // Arc's: six hours.
+  littleBayPutAwayAfterHours: 6,
 };
 
 type LegacySettings = Partial<Settings> & {
@@ -240,6 +272,14 @@ export const createSettingsSlice: StateCreator<BrowserState, [], [], SettingsSli
       settings: {
         ...s.settings,
         ...patch,
+        ...("externalLinkDefault" in patch
+          ? {
+              externalLinkDefault: normalizeLinkDestination(patch.externalLinkDefault),
+              openLinksInLittleBay: patch.externalLinkDefault ? patch.externalLinkDefault.kind === "littleBay" : s.settings.openLinksInLittleBay,
+            }
+          : "openLinksInLittleBay" in patch
+            ? { externalLinkDefault: null }
+            : {}),
         ...("externalLinkRules" in patch ? { externalLinkRules: normalizeExternalLinkRules(patch.externalLinkRules) } : {}),
         ...("awakeSites" in patch ? { awakeSites: Array.isArray(patch.awakeSites) ? normalizeAwakeSites(patch.awakeSites) : s.settings.awakeSites } : {}),
       },

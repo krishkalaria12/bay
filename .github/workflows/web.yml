@@ -7,10 +7,12 @@ on:
     branches: [main]
     paths:
       - "apps/web/**"
+      - "packages/core/**"
       - ".github/workflows/web.yml"
   pull_request:
     paths:
       - "apps/web/**"
+      - "packages/core/**"
       - ".github/workflows/web.yml"
   workflow_dispatch:
 

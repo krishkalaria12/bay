@@ -16,6 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)setTrafficLightsCenter:(nullable NSValue *)center inWindow:(NSWindow *)window;
 
+// nil means no matching visible page or unavailable host; callers retain editor focus conservatively.
++ (nullable NSNumber *)focusedPageEditableInWindow:(NSWindow *)window;
+
 + (void)closeWindow:(NSWindow *)window;
 
 + (void)showProfile:(NSString *)profile inWindow:(NSWindow *)window;

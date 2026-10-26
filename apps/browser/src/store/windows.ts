@@ -11,6 +11,7 @@ import {
   navigationTo,
   newId,
   pinnedFirst,
+  pinnedPage,
   resolveWindowId,
   sharesProfile,
   spaceListKey,
@@ -112,7 +113,9 @@ function pageTo(t: Tab, windowId: string): Tab {
  */
 export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): BrowserState {
   const target = s.windows[targetId];
-  if (!target || isSmallWindow(target)) return s;
+  if (!target) return s;
+  const small = isSmallWindow(target);
+  if (small && (ids.length !== 1 || listIds(s, targetId).length || s.tabs[ids[0]!]?.spaceId !== target.spaceId)) return s;
   const moving = ids
     .map((id) => s.tabs[id])
     .filter(
@@ -120,6 +123,7 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
         !!t && t.windowId !== targetId && isIncognitoSpace(t.spaceId) === target.incognito && (!target.incognito || t.spaceId === target.spaceId),
     );
   if (!moving.length) return s;
+  if (small && (moving.length !== 1 || pinnedPage(moving[0]!) || moving[0]!.peekOf)) return s;
   const movingIds = new Set(moving.map((t) => t.id));
 
   // A Little Bay page leaves its window for its space's list, at the list's end.
@@ -137,6 +141,13 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
     next,
     littles.map((t) => t.windowId).filter((w) => !next.tabLists[w]),
   );
+
+  if (small) {
+    const tab = moving[0]!;
+    const from = tabListKey(next, next.tabs[tab.id]!);
+    next = withList(withList(next, { key: from, tabIds: listIds(next, from).filter((id) => id !== tab.id) }), { key: targetId, tabIds: [tab.id] });
+    next = { ...next, groups: leaveGroups(next.groups, movingIds), splits: removeFromSplits(next.splits, movingIds) };
+  }
 
   const tabs = { ...next.tabs };
   for (const t of moving) tabs[t.id] = pageTo(next.tabs[t.id]!, targetId);
@@ -169,8 +180,8 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     const small = !!o.small && !o.incognito;
     const spaceId = o.incognito ? incognitoSpaceId(id) : o.spaceId && s.spaces[o.spaceId] ? o.spaceId : small ? littleBayProfile(s) : s.settings.defaultSpaceId;
     let next = withWindow(s, small ? smallWindow(id, spaceId) : emptyWindow(id, spaceId, !!o.incognito, o.frame ?? null));
-    if (o.tabIds?.length && !small) next = moveTabsInto(next, o.tabIds, id);
-    const shown = o.tabIds?.length && !small ? findLast(o.tabIds, (t) => next.tabs[t]?.windowId === id) : undefined;
+    if (o.tabIds?.length) next = moveTabsInto(next, o.tabIds, id);
+    const shown = o.tabIds?.length ? findLast(o.tabIds, (t) => next.tabs[t]?.windowId === id) : undefined;
     if (shown) next = apply(next, activated(next, shown, id));
     else next = withNewTab(next, id, { url: o.url, adoptId: o.adoptId })[0];
     const focused = s.ui.focusedWindowId;

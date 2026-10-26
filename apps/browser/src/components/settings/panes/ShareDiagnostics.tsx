@@ -5,13 +5,14 @@ import { useTheme } from "../../../lib/theme";
 import { setSharing, useTelemetry } from "../../../telemetry/client";
 import { SHARING_COPY, WHATS_SENT } from "../../../telemetry/copy";
 import { Button, Group, Row, SectionHeader, Sheet, Toggle } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 
 export function ShareDiagnosticsSection() {
   const sharing = useTelemetry((s) => s.sharing);
   return (
     <>
-      <SectionHeader title="Crash reports and usage" />
+      <SectionHeader settingId={SETTINGS.diagnostics.id} title={SETTINGS.diagnostics.title} />
       <Group>
         <Row title={SHARING_COPY.toggle} description={SHARING_COPY.summary}>
           <Toggle value={sharing} onChange={(on) => setSharing(on, "settings")} />

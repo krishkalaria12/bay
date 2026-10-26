@@ -1,5 +1,8 @@
 import {
   buildSuggestions,
+  findBang,
+  customBangTable,
+  joinBangTables,
   createCurrencyConverter,
   createSuggestFetcher,
   engineById,
@@ -12,7 +15,7 @@ import {
   type SearchScope,
   type SuggestionResult,
 } from "@bay/core";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { bookmarksByUrl } from "../../store/bookmarks";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
@@ -24,6 +27,7 @@ type Bookmarks = DeepReadonly<import("../../store/types").Bookmarks>;
 type ClosedTab = DeepReadonly<import("../../store/types").ClosedTab>;
 type HistoryEntry = DeepReadonly<import("../../store/types").HistoryEntry>;
 import { currentBarActions } from "./actions";
+import { mayBeBang, useBangs } from "./bangs";
 import { NO_HISTORY } from "../../store/constants";
 import { SUGGEST_WARM_SLICE_MS } from "./constants";
 
@@ -137,6 +141,7 @@ export function useSuggestions({
   const preference = useBrowser((s) => s.settings.commandBarPreference);
   const suggestionsOn = useBrowser((s) => s.settings.searchSuggestions);
   const calculatorEnabled = useBrowser((s) => s.settings.calculatorEnabled);
+  const bangsEnabled = useBrowser((s) => s.settings.searchShortcutMode === "duckduckgo");
 
   const tabs = Object.values(allTabs).filter((t) => t.spaceId === spaceId);
   const bookmarkRows = profileBookmarks(bookmarks, bookmarkProfile);
@@ -170,15 +175,23 @@ export function useSuggestions({
       clearTimeout(timer);
     };
   }, [active, calculatorEnabled, scope, query, convertCurrency]);
+  const bundledBangs = useBangs(active && bangsEnabled && !scope && query.includes("!"));
+  const customBangs = useMemo(() => customBangTable(engines.filter((e) => e.custom)), [engines]);
+  const bangs = useMemo(
+    () => (bangsEnabled ? joinBangTables(bundledBangs ? [customBangs, bundledBangs] : [customBangs]) : null),
+    [bangsEnabled, customBangs, bundledBangs],
+  );
+  const bang = useMemo(() => (bangs ? findBang(query, bangs) : null), [bangs, query]);
+  const pendingBang = bangsEnabled && !bundledBangs && mayBeBang(query);
   const fromEngine = suggestEngine(scope, engines, engine);
   useEffect(() => {
     const q = query.replace(/^\?/, "").trim();
-    if (!active || !suggestionsOn || !q || /^[a-z][a-z0-9+.-]*:\/\//i.test(q) || scope?.kind === "history") {
+    if (!active || !suggestionsOn || !q || /^[a-z][a-z0-9+.-]*:\/\//i.test(q) || scope?.kind === "history" || bang || (!scope && pendingBang)) {
       fetcher.cancel();
       return;
     }
     fetcher.request(fromEngine, q, (list) => setRemote({ text: query, list }));
-  }, [active, suggestionsOn, query, fromEngine, scope, fetcher]);
+  }, [active, suggestionsOn, query, bang, pendingBang, fromEngine, scope, fetcher]);
   useEffect(() => () => fetcher.cancel(), [fetcher]);
 
   if (!active || !query) return EMPTY;
@@ -195,5 +208,6 @@ export function useSuggestions({
     remoteFirst,
     currency,
     calculatorEnabled,
+    bangs,
   });
 }

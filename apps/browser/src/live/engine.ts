@@ -2,8 +2,9 @@ import { onWindowEvent } from "@bay/shell";
 import { hasServiceClient, requestService, sendService } from "../runtime/serviceClient";
 import { useBrowser, type BrowserStore } from "../store/browser";
 import { activeTabId, pinnedPage, viewTabIds } from "../store/model";
+import { everySlowly } from "../lib/slowTimers";
 import { SOURCES } from "./sources";
-import { applyFetch, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./store";
+import { applyFetch, bindLiveStoreBrowser, createFolder, finishCompleting, live, markRead, removeFolder, setStatus, useLive } from "./store";
 import { LiveError, type CompletionState, type LiveFolderKind, type LiveItem, type LiveSourceId, type PullRequestSection } from "./types";
 import { COMPLETION_MS, REFRESH_INTERVAL_MS, STALE_ON_FOCUS_MS } from "./constants";
 
@@ -13,7 +14,9 @@ let owner: BrowserStore = useBrowser;
 export function bindLiveBrowser(browser: BrowserStore): () => void {
   const previous = owner;
   owner = browser;
+  const release = bindLiveStoreBrowser(browser);
   return () => {
+    release();
     if (owner === browser) owner = previous;
   };
 }
@@ -244,10 +247,16 @@ export function startLiveEngine(browser: BrowserStore = useBrowser): () => void 
       return !!f && (!st?.lastFetch || Date.now() - st.lastFetch >= maxAge);
     };
     later(scope, () => live().folderOrder.forEach((id) => void refreshFolder(id)), 2500);
-    const interval = setInterval(() => {
-      for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
-    }, 30_000);
-    disposers.push(() => clearInterval(interval));
+    disposers.push(
+      everySlowly({
+        every: 30_000,
+        run: () => {
+          for (const id of live().folderOrder) if (due(id, REFRESH_INTERVAL_MS[live().folders[id]!.kind])) void refreshFolder(id);
+        },
+        needed: () => live().folderOrder.length > 0,
+        watch: (changed) => useLive.subscribe((s, prev) => s.folderOrder !== prev.folderOrder && changed()),
+      }),
+    );
     const focus = onWindowEvent((e) => {
       if (scope.active && e.type === "focus") for (const id of live().folderOrder) if (due(id, STALE_ON_FOCUS_MS)) void refreshFolder(id);
     });

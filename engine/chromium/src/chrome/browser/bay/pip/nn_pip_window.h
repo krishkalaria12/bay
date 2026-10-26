@@ -7,7 +7,9 @@
 //   as 28 pt rounded squares with 1 pt line glyphs, the origin centred in
 //   13 pt, a bare play/pause glyph and a 5 pt progress bar that seeks; no skip,
 //   time, mute, captions or minimize controls (the keyboard shortcuts stay).
-//   Controls fade in 200 ms, ease-in-out.
+//   Controls fade in 200 ms, ease-in-out. The app adds speed, subtitles and
+//   Live over them (packages/nncore/ios/NNCorePictureInPicture.mm), told when
+//   they show and hide.
 // - The window shows at once and fades out in Core Animation (100 ms from the
 //   close button, 70 ms otherwise); a new window opens where the last one was
 //   left, sized to the new video and kept on screen.
@@ -66,6 +68,8 @@ class BayVideoOverlayWindow : public VideoOverlayWindowViews {
   // The fade that hides the window, for the next Hide() only.
   base::TimeDelta nn_hide_fade_;
   base::OneShotTimer nn_hide_timer_;
+  // Whether the app was last told the controls show.
+  bool nn_controls_visible_ = false;
 };
 
 // Called by VideoOverlayWindowViews::Create (the hook).

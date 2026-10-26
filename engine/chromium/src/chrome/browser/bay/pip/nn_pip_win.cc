@@ -55,3 +55,9 @@ void ResetBayPictureInPictureFade(gfx::NativeWindow window) {
   window->layer()->GetAnimator()->StopAnimating();
   window->layer()->SetOpacity(1.f);
 }
+
+void NotifyBayPictureInPictureControls(gfx::NativeWindow window,
+                                       bool visible,
+                                       bool animate) {
+  // Windows uses Chrome's own controls; there is no separate host overlay.
+}

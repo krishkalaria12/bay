@@ -585,8 +585,8 @@ async function makeTemplate(side) {
     await app.pageState("id=seed", 30_000, (s) => s.fcp);
     // Leave just the seeded tab.
     await app.run(`const s = nn.store.getState(); const w = ${WINDOW};
-      const keep = s.windows[w].tabIds.find((id) => s.tabs[id].url.includes("id=seed"));
-      for (const id of s.windows[w].tabIds) if (id !== keep) nn.store.getState().closeTab(id);
+      const keep = Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId).find((id) => s.tabs[id].url.includes("id=seed"));
+      for (const id of Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId)) if (id !== keep) nn.store.getState().closeTab(id);
       for (const id of s.windowOrder) if (id !== w) nn.store.getState().closeWindow(id);
       nn.store.getState().activate(keep); return keep;`);
     await sleep(4000);
@@ -673,7 +673,9 @@ async function openTabs(app, from, to, kind = "static") {
 }
 
 async function tabIds(app) {
-  return app.run(`const s = nn.store.getState(); return s.windows[${WINDOW}].tabIds.map((id) => [id, s.tabs[id].url]);`);
+  return app.run(
+    `const s = nn.store.getState(); const w = ${WINDOW}; return Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId).map((id) => [id, s.tabs[id].url]);`,
+  );
 }
 
 // A new window: command → on screen (CGWindowList: alpha > 0), → on screen with its content (on screen, and the
@@ -781,8 +783,8 @@ async function sessionRun(side, i, parts) {
     // Close all but the first tab; memory once the renderers are gone.
     if (has("memory")) {
       r.processes.tabs20 = usage(app.pid).length;
-      await app.run(`const s = nn.store.getState(); const w = ${WINDOW}; const keep = s.windows[w].tabIds.find((id) => s.tabs[id].url.includes("id=seed"));
-        nn.store.getState().activate(keep); for (const id of s.windows[w].tabIds) if (id !== keep) nn.store.getState().closeTab(id); return true;`);
+      await app.run(`const s = nn.store.getState(); const w = ${WINDOW}; const keep = Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId).find((id) => s.tabs[id].url.includes("id=seed"));
+        nn.store.getState().activate(keep); for (const id of Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId)) if (id !== keep) nn.store.getState().closeTab(id); return true;`);
       await sleep(30_000);
       r.memory.closed = footprint(usage(app.pid));
       r.processes.closed = r.memory.closed.processes;
@@ -811,7 +813,7 @@ async function throttleRun(side) {
     await app.pageState("id=seed", 30_000, (s) => s.fcp);
     await openTabs(app, 0, 4, "anim");
     await app.run(
-      `const s = nn.store.getState(); const w = ${WINDOW}; nn.store.getState().activate(s.windows[w].tabIds.find((id) => s.tabs[id].url.includes("id=seed"))); return true;`,
+      `const s = nn.store.getState(); const w = ${WINDOW}; nn.store.getState().activate(Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId).find((id) => s.tabs[id].url.includes("id=seed"))); return true;`,
     );
     await sleep(12_000);
     const read = async () => {
@@ -859,8 +861,8 @@ async function churnRun(side) {
     rounds.push(measure());
     for (let round = 0; round < 5; round++) {
       await openTabs(app, round * 10, round * 10 + 10);
-      await app.run(`const s = nn.store.getState(); const w = ${WINDOW}; const keep = s.windows[w].tabIds.find((id) => s.tabs[id].url.includes("id=seed"));
-        nn.store.getState().activate(keep); for (const id of s.windows[w].tabIds) if (id !== keep) nn.store.getState().closeTab(id); return true;`);
+      await app.run(`const s = nn.store.getState(); const w = ${WINDOW}; const keep = Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId).find((id) => s.tabs[id].url.includes("id=seed"));
+        nn.store.getState().activate(keep); for (const id of Object.keys(s.tabs).filter((id) => s.tabs[id].spaceId === s.windows[w].spaceId)) if (id !== keep) nn.store.getState().closeTab(id); return true;`);
       await sleep(15_000);
       rounds.push(measure());
     }

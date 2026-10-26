@@ -1,3 +1,4 @@
+import { withSidebarUndoWindow } from "../store/sidebarUndo";
 import { createBrowserStore, type BrowserStore } from "../store/browser";
 import { createBrowserProjector, type BrowserProjection } from "./projection";
 import type { LocationCommandEffects } from "./locationCommands";
@@ -5,7 +6,7 @@ import { executeBrowserCommand, parseBrowserCommand, type BrowserCommand } from 
 export type { BrowserCommand } from "./userCommands";
 
 export type BrowserCommit = Readonly<{ epoch: string; revision: number; state: BrowserProjection }>;
-export type CommandRequest = Readonly<{ epoch: string; clientId: string; requestId: number; command: BrowserCommand }>;
+export type CommandRequest = Readonly<{ epoch: string; clientId: string; requestId: number; originWindowId?: string; command: BrowserCommand }>;
 export type CommandReply = Readonly<{ clientId: string; requestId: number; commit: BrowserCommit; value: unknown }>;
 
 type AuthorityErrorCode = "invalid_request" | "stale_epoch" | "request_conflict" | "request_expired" | "closed";
@@ -112,13 +113,15 @@ export function createBrowserAuthority({
     try {
       if (closed) throw new AuthorityError("closed", "authority is closed");
       const request = record(input);
-      keys(request, ["epoch", "clientId", "requestId", "command"]);
+      keys(request, ["epoch", "clientId", "requestId", "command", "originWindowId"]);
       if (request.epoch !== epoch) throw new AuthorityError("stale_epoch", "authority epoch has changed");
       const clientId = text(request.clientId);
       const requestId = request.requestId;
       if (typeof requestId !== "number" || !Number.isSafeInteger(requestId) || requestId < 1) return invalid("request id must be a positive safe integer");
+      // Native stamps this after validating the renderer envelope and origin policy.
+      const originWindowId = request.originWindowId === undefined ? undefined : text(request.originWindowId);
       const command = parseBrowserCommand(request.command);
-      const fingerprint = JSON.stringify(command);
+      const fingerprint = JSON.stringify({ command, originWindowId });
       let client = clients.get(clientId);
       if (!client) {
         client = { lastRequestId: 0, replies: new Map() };
@@ -137,12 +140,13 @@ export function createBrowserAuthority({
         command.method === "serviceAction"
           ? enqueue(() => {
               if (!executeAsync) throw new AuthorityError("invalid_request", "Service owner is unavailable");
-              return executeAsync(command, () => !closed);
+              // Service reducers record undo synchronously, before their first await.
+              return withSidebarUndoWindow(originWindowId, () => executeAsync(command, () => !closed));
             }).then(async ({ value }) => {
               const result = await value;
               return enqueue(() => result);
             })
-          : enqueue(() => executeBrowserCommand(store, command, effects));
+          : enqueue(() => withSidebarUndoWindow(originWindowId, () => executeBrowserCommand(store, command, effects)));
       const reply = action.then(({ commit, value }) => Object.freeze({ clientId, requestId, commit, value }));
       client.replies.set(requestId, { fingerprint, reply });
       // Retain recent replies, but never re-execute an evicted request. Sequence

@@ -1,3 +1,23 @@
+diff --git a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm b/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
+index 18bbe64f657a36596563b3eb6d135284e28c674a..1b5cfe3d0f66aea53f0171e390670beb465ce487 100644
+--- a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
++++ b/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
+@@ -236,6 +236,15 @@ - (BOOL)control:(NSControl *)control textView:(NSTextView *)fieldEditor doComman
+ {
+   id<RCTBackedTextInputDelegate> textInputDelegate = [_backedTextInputView textInputDelegate];
+   BOOL commandHandled = NO;
++  // [Bay: plain Tab can go straight to the field editor instead of performKeyEquivalent:.
++  // Let registered key handlers consume it before AppKit traverses to another control.
++  if (commandSelector == @selector(insertTab:) || commandSelector == @selector(insertBacktab:)) {
++    NSEvent *event = NSApp.currentEvent;
++    if (event.type == NSEventTypeKeyDown && event.keyCode == 48 && !fieldEditor.hasMarkedText) {
++      return ![textInputDelegate textInputShouldHandleKeyEvent:event];
++    }
++  }
++  // Bay]
+   // enter/return
+   if (commandSelector == @selector(insertNewline:) || commandSelector == @selector(insertNewlineIgnoringFieldEditor:)) {
+     [self textFieldDidEndEditingOnExit];
 diff --git a/Libraries/Text/TextInput/RCTBaseTextInputView.mm b/Libraries/Text/TextInput/RCTBaseTextInputView.mm
 index cac171e70c9fa225cdec45b205086342a0d50f06..3e63c9761e540e6450448b5241fe55b9980e64dc 100644
 --- a/Libraries/Text/TextInput/RCTBaseTextInputView.mm

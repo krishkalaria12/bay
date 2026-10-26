@@ -25,11 +25,17 @@ import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId,
 import { splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/layout/history";
 import type { Bookmarks, BookmarkNode } from "../store/types";
+import { startTidyDownloadOffers } from "./tidyDownloads";
 import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/urls";
 import { sidebarMenuState } from "../components/sidebar/commands";
 import { openWindow as createWindow } from "./actions";
 import { openExternalUrls } from "../components/littleBay/actions";
+import { startLittleBayAccess } from "../components/littleBay/access";
+import { startLittleBayPutAway } from "../components/littleBay/putAway";
+import { meetingToJoin } from "../live/alerts";
+import { useCalendar } from "../live/calendar";
+import { everySlowly } from "./slowTimers";
 import { LITTLE_BAY_DISABLED_COMMANDS } from "../components/littleBay/menu";
 import { runCommand } from "./commands";
 import { startSidebarMoveUndoSync } from "./folderUndo";
@@ -65,6 +71,10 @@ export function startNativeSync({
     stops.push(startSidebarMoveUndoSync());
     stops.push(startWindowCloseGuard());
     startExtensionsBridge();
+    if (store === useBrowser) {
+      startLittleBayAccess();
+      startLittleBayPutAway();
+    }
   }
   const urls = onOpenURLs(openExternalUrls);
   const downloads = onDownload((d) => store.getState().upsertDownload(d));
@@ -72,6 +82,7 @@ export function startNativeSync({
     () => urls.remove(),
     () => downloads.remove(),
   );
+  stops.push(startTidyDownloadOffers(store));
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   void setAppearance(store.getState().settings.appearance);
@@ -210,6 +221,19 @@ export function startNativeSync({
       if (capabilities.menuBar && e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
     }),
   );
+  stops.push(
+    useCalendar.subscribe((c, prev) => {
+      if (capabilities.menuBar && c.events !== prev.events) menuTimer ??= setTimeout(syncMenu, 120);
+    }),
+  );
+  stops.push(
+    everySlowly({
+      every: 30_000,
+      run: () => void (menuTimer ??= setTimeout(syncMenu, 120)),
+      needed: () => capabilities.menuBar && useCalendar.getState().events.length > 0,
+      watch: (changed) => useCalendar.subscribe(changed),
+    }),
+  );
   if (!shared)
     void windowIds().then((ids) => {
       if (disposed) return;
@@ -263,6 +287,13 @@ const PAGE_COMMANDS = [
   "javaScriptConsole",
   "inspectElements",
   "savePage",
+  "capture",
+  "captureFullPage",
+  "capturePortrait",
+  "newBoost",
+  "editBoost",
+  "zapElements",
+  "toggleSiteBoosts",
   "emailPageLocation",
   "printWithSystemDialog",
   "stop",
@@ -285,6 +316,8 @@ const WINDOW_COMMANDS = [
   "moveTabToWindow",
   "toggleSidebar",
   "downloads",
+  "newEasel",
+  "openLibrary",
   "mergeAllWindows",
   "switchSpace",
   "nextSpace",
@@ -377,6 +410,9 @@ export function menuState(s: BrowserState): MenuState {
   }
 
   if (!s.settings.openLinksInLittleBay) titles.toggleOpenLinksInLittleBay = "Open Links from Other Apps in Little Bay";
+  const meeting = meetingToJoin();
+  if (meeting) titles.joinMeeting = `Join “${meeting.title || "Untitled event"}”`;
+  else disabled.push("joinMeeting");
 
   const sidebar = sidebarMenuState(s, windowId);
   disabled.push(...sidebar.disabled);

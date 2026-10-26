@@ -12,13 +12,16 @@
       "GlassEffectModule",
       "SystemModule",
       "FileDragModule",
+      "LocalFilesModule",
       "AppModule",
       "CalendarModule",
       "KeychainModule",
       "DockSelectionModule",
       "InlineCompletionModule",
       "TranslateModule",
-      "WindowProfileModule"
+      "WindowProfileModule",
+      "CaptureModule",
+      "EaselModule"
     ]
   }
 }

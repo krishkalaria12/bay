@@ -65,6 +65,7 @@ chromium win chromium-bay-lifecycle.patch
 chromium win chromium-bay-extension-hooks.patch
 chromium win chromium-bay-notifications-win.patch
 chromium win chromium-bay-frame-win.patch
+chromium all chromium-injected-author-sheet-order.patch
 
 layer all engine/chromium
 layer all engine/nncore

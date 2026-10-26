@@ -75,7 +75,8 @@ export const FAVICON_FLUSH_MS = 16;
 
 // MARK: Tabs (tabLifecycle.ts, tabPictures.ts, windowClose.ts)
 
-export const LIFECYCLE_SWEEP_MS = 15_000;
+// On the slow timers' grid (slowTimers.ts); the policies it applies are measured in minutes.
+export const LIFECYCLE_SWEEP_MS = 30_000;
 export const FREEZE_SWEEP_MS = 30_000;
 export const LIFECYCLE_EVAL_TIMEOUT_MS = 2_000;
 export const PICTURE_SETTLE_MS = 1500;

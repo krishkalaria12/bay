@@ -1,3 +1,4 @@
+import { useLibrary } from "../components/library/state";
 import type { LocationCommandEffects } from "./locationCommands";
 import type { BrowserStore } from "../store/browser";
 import { isIncognitoSpace, wake } from "../store/model";
@@ -144,7 +145,16 @@ export function executeTabCommand(store: BrowserStore, command: TabCommand, effe
       const url = tabDestination(tab);
       const page = internalPageOf(url);
       if (page) {
-        s.updateTab(tab.id, { url, title: INTERNAL_PAGES[page].title, favicon: null });
+        let title = INTERNAL_PAGES[page].title;
+        if (page === "easel") {
+          const match = /^bay:\/\/easel\/([^/?#]+)/i.exec(url);
+          try {
+            const id = match ? decodeURIComponent(match[1]!) : "";
+            const easel = useLibrary.getState().easels[id];
+            if (easel?.spaceId === tab.spaceId) title = easel.title;
+          } catch {}
+        }
+        s.updateTab(tab.id, { url, title, favicon: null });
         s.updateLive(tab.id, { isLoading: false, progress: 0, canGoBack: false, canGoForward: false });
       }
       break;

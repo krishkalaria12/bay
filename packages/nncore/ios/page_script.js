@@ -99,6 +99,57 @@
       );
     return absolute([...art].sort((a, b) => size(b) - size(a))[0].src);
   };
+  // YouTube's player, which knows more than its video element: subtitles, and where a live stream's end is.
+  const youTubePlayer = (v) => {
+    const player = v.closest(".html5-video-player");
+    return player && typeof player.getOption === "function" && typeof player.setOption === "function" ? player : null;
+  };
+  // YouTube pads a live video's duration an hour past the live edge, so its seekable end never moves: the edge is
+  // its player's, in the player's own time.
+  const youTubeLive = (m) => {
+    const player = youTubePlayer(m);
+    try {
+      if (!player || !player.getVideoData?.()?.isLive) return null;
+      const { seekableEnd: end, current } = player.getProgressState();
+      return isFinite(end) && isFinite(current) ? { player, end, behind: end - current } : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // A live stream: an endless duration, or a seekable range whose end keeps moving with the clock (a live stream
+  // that can be rewound, as Twitch's is). How far behind is measured from that end.
+  const liveSeen = new WeakMap();
+  const seekableEnd = (m) => (m.seekable && m.seekable.length ? m.seekable.end(m.seekable.length - 1) : NaN);
+  const isLive = (m) => {
+    if (m.duration === Infinity || liveSeen.get(m) === true || youTubeLive(m)) return true;
+    const end = seekableEnd(m);
+    if (!isFinite(end)) return false;
+    const seen = liveSeen.get(m);
+    const elapsed = seen ? (Date.now() - seen.at) / 1000 : 0;
+    // A new stream in the element, or a minute without the end keeping up: measure again from here.
+    if (!seen || end < seen.end || elapsed > 60) liveSeen.set(m, { end, at: Date.now() });
+    else if (elapsed >= 2 && end - seen.end >= elapsed / 2) liveSeen.set(m, true);
+    return liveSeen.get(m) === true;
+  };
+  // The live edge, unless the seekable end is a placeholder: Twitch's reaches 2^30 s, decades ahead, where no stream
+  // that can be rewound goes.
+  const liveEdge = (m) => {
+    const end = seekableEnd(m);
+    return end - m.currentTime < 86400 ? end : NaN;
+  };
+  const liveBehind = (m) => {
+    const behind = youTubeLive(m)?.behind ?? liveEdge(m) - m.currentTime;
+    return isFinite(behind) ? Math.max(0, Math.round(behind)) : 0;
+  };
+  const goLive = (m) => {
+    const youTube = youTubeLive(m);
+    const end = liveEdge(m);
+    if (youTube) youTube.player.seekTo(youTube.end, true);
+    else if (isFinite(end)) m.currentTime = Math.max(m.seekable.start(m.seekable.length - 1), end - 2);
+    else return;
+    if (m.paused) m.play().catch(() => {});
+  };
   let lastNowPlaying = "";
   const reportNowPlaying = later(() => {
     const el = pickMedia();
@@ -120,7 +171,9 @@
         playbackRate: positionState?.playbackRate ?? el.playbackRate,
         hasVideo: el.tagName === "VIDEO" && el.videoWidth > 0,
         actions: [...actions.keys()],
+        live: isLive(el),
       };
+      state.liveBehind = state.live ? liveBehind(el) : 0;
     }
     const json = serialize(state && { ...state, position: Math.round(state.position) });
     if (json === lastNowPlaying) return;
@@ -131,6 +184,13 @@
   const onMediaEvent = (e) => {
     const m = e.target;
     if (!(m instanceof HTMLMediaElement)) return;
+    // Playing is when a live stream's end is seen moving.
+    if (e.type === "timeupdate") {
+      if (liveSeen.get(m) !== true && isLive(m)) reportNowPlaying();
+      return;
+    }
+    // Another stream in the same element (YouTube's next video) is measured again.
+    if (e.type === "emptied") liveSeen.delete(m);
     if (blockAutoplay && e.type === "play" && !(navigator.userActivation && navigator.userActivation.hasBeenActive)) {
       m.pause();
       return;
@@ -138,12 +198,27 @@
     if (e.type === "play" || e.type === "playing") active = m;
     // Unmuting a playing video is when it's first heard.
     const firstHeard = hear(m);
+    if (m === document.pictureInPictureElement) reportPip();
     reportAudible();
     if (e.type !== "volumechange" || firstHeard) reportNowPlaying();
   };
-  document.addEventListener("enterpictureinpicture", () => send("pip", { active: true, kind: "video" }), true);
-  document.addEventListener("leavepictureinpicture", () => send("pip", { active: false, kind: "video" }), true);
-  const mediaEvents = ["play", "playing", "pause", "ended", "volumechange", "emptied", "seeked", "ratechange", "loadedmetadata"];
+  document.addEventListener(
+    "enterpictureinpicture",
+    (e) => {
+      send("pip", { active: true, kind: "video" });
+      watchPip(e.target);
+    },
+    true,
+  );
+  document.addEventListener(
+    "leavepictureinpicture",
+    () => {
+      send("pip", { active: false, kind: "video" });
+      unwatchPip();
+    },
+    true,
+  );
+  const mediaEvents = ["play", "playing", "pause", "ended", "volumechange", "emptied", "seeked", "ratechange", "loadedmetadata", "timeupdate"];
   for (const e of mediaEvents) document.addEventListener(e, onMediaEvent, true);
   const play = HTMLMediaElement.prototype.play;
   HTMLMediaElement.prototype.play = function () {
@@ -273,8 +348,131 @@
       case "enterpictureinpicture":
         call("enterpictureinpicture");
         break;
+      case "seekToLive":
+        if (el) goLive(el);
+        break;
     }
     reportNowPlaying();
+  };
+
+  // MARK: Picture in Picture — what the floating window's speed, subtitles and Live controls show, and the choices
+  // made there (NNCorePictureInPicture.mm). Chrome's window shows only the video's frames, so the subtitles it draws
+  // come from here: the chosen track's cues, or YouTube's own subtitles from its player.
+  let pipVideo = null;
+  let pipCues = null;
+  let pipTimer = 0;
+  let lastPip = "";
+  const youTubeTracks = (player) => {
+    const listed = player.getOption("captions", "tracklist");
+    if (isArray(listed) && listed.length) return listed.map((t) => ({ label: t.displayName || t.languageName || t.languageCode, track: t }));
+    const response = typeof player.getPlayerResponse === "function" ? player.getPlayerResponse() : null;
+    const tracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    if (!isArray(tracks)) return [];
+    return tracks.map((t) => ({
+      label: t.name?.simpleText || t.name?.runs?.map((r) => r.text).join("") || t.languageCode,
+      track: { languageCode: t.languageCode, ...(t.kind ? { kind: t.kind } : {}), ...(t.vssId ? { vss_id: t.vssId } : {}) },
+    }));
+  };
+  const sameYouTubeTrack = (a, b) =>
+    !!b?.languageCode && (a.vss_id && b.vss_id ? a.vss_id === b.vss_id : a.languageCode === b.languageCode && (a.kind || "") === (b.kind || ""));
+  const textTracks = (v) => [...v.textTracks].filter((t) => t.kind === "subtitles" || t.kind === "captions");
+  const subtitlesOf = (v) => {
+    const player = youTubePlayer(v);
+    if (player) {
+      try {
+        const list = youTubeTracks(player);
+        const current = player.getOption("captions", "track");
+        return { player, list, tracks: list.map((t) => t.label), selected: list.findIndex((t) => sameYouTubeTrack(t.track, current)) };
+      } catch {}
+    }
+    const list = textTracks(v);
+    return { list, tracks: list.map((t, i) => t.label || t.language || `Track ${i + 1}`), selected: list.findIndex((t) => t.mode === "showing") };
+  };
+  const cueText = (subtitles) => {
+    if (subtitles.selected < 0) return "";
+    if (subtitles.player) {
+      const lines = subtitles.player.querySelectorAll(".ytp-caption-window-container .caption-visual-line");
+      return [...lines]
+        .map((line) => line.textContent.trim())
+        .filter(Boolean)
+        .join("\n");
+    }
+    const cues = subtitles.list[subtitles.selected].activeCues;
+    return [...(cues || [])]
+      .map((cue) => (typeof cue.getCueAsHTML === "function" ? cue.getCueAsHTML().textContent : cue.text || "").trim())
+      .filter(Boolean)
+      .join("\n");
+  };
+  const reportPip = later(() => {
+    const v = document.pictureInPictureElement;
+    if (!v || v !== pipVideo) return;
+    const subtitles = subtitlesOf(v);
+    const live = isLive(v);
+    const state = {
+      rate: v.playbackRate,
+      tracks: subtitles.tracks,
+      selected: subtitles.selected,
+      cue: cueText(subtitles),
+      live,
+      endless: v.duration === Infinity,
+      behind: live ? liveBehind(v) : 0,
+    };
+    const json = serialize(state);
+    if (json === lastPip) return;
+    lastPip = json;
+    send("pipState", state);
+  }, 50);
+  const cuesWatched = new WeakSet();
+  const watchTracks = () => {
+    for (const t of pipVideo ? pipVideo.textTracks : []) {
+      if (cuesWatched.has(t)) continue;
+      cuesWatched.add(t);
+      t.addEventListener("cuechange", reportPip);
+    }
+    reportPip();
+  };
+  function watchPip(v) {
+    if (!(v instanceof HTMLVideoElement)) return;
+    unwatchPip();
+    pipVideo = v;
+    lastPip = "";
+    for (const type of ["addtrack", "removetrack", "change"]) v.textTracks.addEventListener(type, watchTracks);
+    watchTracks();
+    // YouTube's subtitles are its own elements, and a live stream falls further behind while paused.
+    const player = youTubePlayer(v);
+    if (player) {
+      pipCues = new MutationObserver(reportPip);
+      pipCues.observe(player, { subtree: true, childList: true, characterData: true });
+    }
+    pipTimer = setInterval(reportPip, 1000);
+  }
+  function unwatchPip() {
+    if (!pipVideo) return;
+    for (const type of ["addtrack", "removetrack", "change"]) pipVideo.textTracks.removeEventListener(type, watchTracks);
+    pipCues?.disconnect();
+    clearInterval(pipTimer);
+    pipVideo = pipCues = null;
+  }
+  handlers.pip = ({ action, value }) => {
+    const v = document.pictureInPictureElement;
+    if (!v || v !== pipVideo) return;
+    if (action === "rate" && typeof value === "number" && value >= 0.25 && value <= 4) {
+      const player = youTubePlayer(v);
+      if (player && typeof player.setPlaybackRate === "function") player.setPlaybackRate(value);
+      else v.playbackRate = value;
+    } else if (action === "subtitles" && typeof value === "number") {
+      const { player, list } = subtitlesOf(v);
+      const chosen = list[value];
+      if (!player) {
+        for (const t of list) t.mode = t === chosen ? "showing" : "disabled";
+      } else if (chosen) {
+        player.loadModule?.("captions");
+        player.setOption("captions", "track", chosen.track);
+      } else {
+        player.unloadModule?.("captions");
+      }
+    } else if (action === "live") goLive(v);
+    reportPip();
   };
 
   // MARK: Password reveal — an eye button in a focused password field the user
@@ -733,6 +931,111 @@
   addEventListener("scroll", hideSelection, { passive: true, capture: true });
   addEventListener("resize", hideSelection);
   addEventListener("pagehide", hideSelection);
+
+  // MARK: Capture — ⌘⇧ and a drag on the page starts Capture where it was pressed, as Arc's: the app puts its own
+  // selection in the page, which goes on with the drag (apps/browser components/capture/captureScript.ts). Until then
+  // the page gets neither the press nor the click it ends in (⌘⇧-click on a link would open it).
+  if (isTop) {
+    let swallowClick = false;
+    const swallow = (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    addEventListener(
+      "mousedown",
+      (e) => {
+        swallowClick = false;
+        if (!e.isTrusted || e.button !== 0 || !e.metaKey || !e.shiftKey || e.altKey || e.ctrlKey) return;
+        swallow(e);
+        swallowClick = true;
+        send("captureGesture", { x: e.clientX, y: e.clientY });
+      },
+      true,
+    );
+    for (const type of ["click", "auxclick"])
+      addEventListener(
+        type,
+        (e) => {
+          if (!swallowClick) return;
+          swallowClick = false;
+          swallow(e);
+        },
+        true,
+      );
+  }
+
+  // MARK: Link previews — Shift-hover a link for 5 seconds (Arc Max). Send the link after 5 s of hovering while Shift
+  // is held; the app shows a summary card with Open, Peek and Copy.
+  let linkPreviewTimer = null;
+  let linkPreviewTarget = null;
+  const clearLinkPreview = () => {
+    if (linkPreviewTimer) {
+      clearTimeout(linkPreviewTimer);
+      linkPreviewTimer = null;
+    }
+    linkPreviewTarget = null;
+  };
+  const armLinkPreview = (a) => {
+    clearLinkPreview();
+    const url = a && a.href;
+    if (!url || !/^https?:/i.test(url)) return;
+    linkPreviewTarget = a;
+    const r = a.getBoundingClientRect();
+    linkPreviewTimer = setTimeout(() => {
+      if (linkPreviewTarget !== a) return;
+      send("linkPreview", { url, rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
+    }, 5000);
+  };
+  const linkUnder = (node) => (node && node.closest ? node.closest("a[href]") : null);
+  document.addEventListener(
+    "mouseover",
+    (e) => {
+      if (!e.isTrusted || !e.shiftKey) return;
+      const a = linkUnder(e.target);
+      if (!a) return;
+      armLinkPreview(a);
+    },
+    true,
+  );
+  document.addEventListener(
+    "mouseout",
+    (e) => {
+      const a = linkUnder(e.target);
+      if (a && a === linkPreviewTarget) clearLinkPreview();
+    },
+    true,
+  );
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Shift") return;
+      const a = linkUnder(document.elementFromPoint?.(lastMouseX, lastMouseY) || null);
+      // Fall back to the currently hovered element tracked by mousemove.
+      const target = a || hoveredLink;
+      if (target) armLinkPreview(target);
+    },
+    true,
+  );
+  document.addEventListener(
+    "keyup",
+    (e) => {
+      if (e.key === "Shift") clearLinkPreview();
+    },
+    true,
+  );
+  let lastMouseX = 0,
+    lastMouseY = 0,
+    hoveredLink = null;
+  document.addEventListener(
+    "mousemove",
+    (e) => {
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      hoveredLink = linkUnder(e.target);
+      if (!e.shiftKey) clearLinkPreview();
+    },
+    true,
+  );
 
   // MARK: Scroll direction, for the toolbar that tucks away while you read (tabs on top). From the page's real scroll
   // (the document, or an element scroller filling most of the window), not wheel deltas, and only while the user is

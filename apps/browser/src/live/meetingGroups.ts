@@ -11,7 +11,8 @@ import { activeTabId, pinnedPage } from "../store/model";
 import { groupOf } from "../store/organize";
 import { connectCalendar, useCalendar } from "./calendar";
 import { eventForCall, isCalendarUrl, meetingOf, relatedLinks, type CalendarEvent } from "./meetings";
-import { live, setMeetingGroup, updateCalendarSettings, type MeetingGroup } from "./store";
+import { everySlowly } from "../lib/slowTimers";
+import { live, setMeetingGroup, updateCalendarSettings, useLive, type MeetingGroup } from "./store";
 import { MEETING_CLEANUP_IDLE_MS, MEETING_FALLBACK_TITLE } from "./constants";
 
 type MeetingTarget = { groupId: string; add: boolean } | { meeting: Omit<MeetingGroup, "groupId"> };
@@ -123,8 +124,14 @@ export function startMeetingGroups(browser: BrowserStore = useBrowser): () => vo
         }
       }),
     );
-    const timer = setInterval(() => tick(browser.getState(), Date.now(), browser), 20_000);
-    cleanups.push(() => clearInterval(timer));
+    cleanups.push(
+      everySlowly({
+        every: 30_000,
+        run: () => tick(browser.getState(), Date.now(), browser),
+        needed: () => Object.keys(live().meetingGroups).length > 0,
+        watch: (changed) => useLive.subscribe((s, prev) => s.meetingGroups !== prev.meetingGroups && changed()),
+      }),
+    );
   } catch (error) {
     stop();
     throw error;

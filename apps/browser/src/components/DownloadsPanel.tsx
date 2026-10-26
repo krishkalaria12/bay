@@ -15,6 +15,7 @@ import { useWindowId, useWindowUi } from "../store/hooks";
 import { activeTabId, engineProfile } from "../store/model";
 import { downloadsIn } from "../store/ui";
 import { copyDownloadFile, downloadStatus, FileIcon, isOpenWhenDone, toggleOpenWhenDone, trashDownload } from "./Downloads";
+import { useTidySuggestion, tidyRename, resolveTidySuggestion, useTidyNames } from "../lib/tidyDownloads";
 import { Keycaps } from "./omnibox/Keycaps";
 import { PaletteActionMenu, type PaletteMenuAction } from "./omnibox/PaletteActionMenu";
 import { FooterButton, useMenuPresence } from "./omnibox/PaletteContent";
@@ -458,6 +459,14 @@ const EMPTY_FIELD_KEYS = [...FIELD_KEYS, { key: "Backspace", shiftKey: true }];
 
 function downloadActions(windowId: string, d: Download, exists: boolean): PaletteMenuAction[] {
   const copy = { id: "copy", title: "Copy Download Link", icon: "link", hint: "⇧⌘C", run: () => copyText(d.url) };
+  // Tidy Downloads: an offer to rename, only when a suggestion has been computed for this download.
+  const tidyEntry = useTidyNames.getState().entries[d.id];
+  const tidy = tidyEntry && tidyEntry.filename === d.filename ? tidyEntry.value : null;
+  if (!tidy) void resolveTidySuggestion(d);
+  const tidyAction =
+    tidy && d.state === "finished"
+      ? [{ id: "tidy", title: `Rename to “${tidy.filename}”`, icon: "wand.and.stars", hint: "⌘K", run: () => void tidyRename(d, tidy, windowId ?? "") }]
+      : [];
   if (d.state === "downloading") {
     return [
       d.paused
@@ -469,6 +478,7 @@ function downloadActions(windowId: string, d: Download, exists: boolean): Palett
     ];
   }
   return [
+    ...tidyAction,
     ...(exists
       ? [
           { id: "open", title: "Open", icon: "arrow.up.forward.app", hint: "↩", run: () => openFile(d.path) },
@@ -592,6 +602,8 @@ const PanelRow = memo(function PanelRow({
   const theme = useTheme();
   const d = useBrowser((s) => s.downloads.find((x) => x.id === id));
   const fileState = useFileExists(d?.path, d?.state === "finished");
+  const tidy = useTidySuggestion(d);
+  const windowId = useWindowId();
   if (!d) return null;
   const exists = d.state !== "finished" || fileState !== false;
   const done = d.state === "finished" && fileState === true;
@@ -628,6 +640,18 @@ const PanelRow = memo(function PanelRow({
               >
                 {d.filename || "Preparing…"}
               </Text>
+              {done && tidy ? (
+                <View tooltip={`Rename to “${tidy.filename}”`}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rename to ${tidy.filename}`}
+                    onPress={() => void tidyRename(d, tidy, windowId)}
+                    style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 5, opacity: 0.8 }}
+                  >
+                    <Symbol name="wand.and.stars" size={13} color={theme.accent} />
+                  </Pressable>
+                </View>
+              ) : null}
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>
                 {d.state === "downloading" ? downloadStatus(d) : host}
               </Text>

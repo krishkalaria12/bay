@@ -19,6 +19,7 @@ import {
 } from "../../../sync/engine";
 import { SpaceBadge } from "../../spaces/icons";
 import { Button, Group, Row, SectionHeader, Toggle, useFormColors } from "../controls";
+import { SETTINGS } from "../definitions";
 import { folderLabel, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
 
 export function SyncPane() {
@@ -127,7 +128,7 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
             </>
           )}
         </Row>
-        <Row title="Sync folder" description={info ? folderLabel(info) : " "}>
+        <Row settingId={SETTINGS.syncFolder.id} title={SETTINGS.syncFolder.title} description={info ? folderLabel(info) : " "}>
           <Button title="Choose…" onPress={() => void chooseSyncFolder()} />
         </Row>
         {noICloud ? (
@@ -218,7 +219,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
           )}
           <Button title="Advanced…" onPress={() => void advanced()} />
         </Row>
-        <Row title="Sync folder" description={info ? folderLabel(info) : " "} />
+        <Row settingId={SETTINGS.syncFolder.id} title={SETTINGS.syncFolder.title} description={info ? folderLabel(info) : " "} />
       </Group>
       {error && status !== "updated" ? (
         <View style={{ flexDirection: "row", gap: 6, marginTop: 8, paddingHorizontal: 2 }}>
@@ -249,7 +250,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
         ))}
       </Group>
 
-      <SectionHeader title="What Syncs" />
+      <SectionHeader settingId={SETTINGS.syncContents.id} title={SETTINGS.syncContents.title} />
       <Group>
         {DATA_TYPES.map((t) => (
           <Row key={t.id} title={t.title} description={t.description}>
@@ -258,7 +259,7 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
         ))}
       </Group>
 
-      <SectionHeader title="Devices" />
+      <SectionHeader settingId={SETTINGS.syncDevices.id} title={SETTINGS.syncDevices.title} />
       <Group>
         {devices.length ? (
           devices.map((d) => (

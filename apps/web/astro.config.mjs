@@ -12,7 +12,7 @@ export default defineConfig({
   integrations: [
     react(),
     sitemap({
-      filter: (page) => !/\/(og|404)\/?$/.test(page),
+      filter: (page) => !/\/(og|404|share)\/?$/.test(page),
       // Every page is rebuilt together, so the build's date is each page's last change.
       lastmod: new Date(),
     }),

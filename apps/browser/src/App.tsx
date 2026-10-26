@@ -1,7 +1,7 @@
 import { View } from "@bay/platform";
 import { WindowBackdrop } from "@bay/shaders";
-import { setTrafficLightsOnHover, Surface, WindowDragRegion } from "@bay/shell";
-import { useEffect, useState } from "react";
+import { onAppEvent, setTrafficLightsMode, Surface, WindowDragRegion, type TrafficLightsMode } from "@bay/shell";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "@bay/platform/motion";
 import { CommandPanel } from "./components/CommandPanel";
@@ -35,6 +35,7 @@ import { SidebarSiteControls } from "./components/sidebar/SidebarSiteControls";
 import { useSidebarWidth } from "./components/sidebar/tokens";
 import { hex, ThemeScope, useTheme } from "./lib/theme";
 import { layout } from "./lib/constants";
+import { useEffectEvent } from "./lib/useEffectEvent";
 import { useBrowserRead as useBrowser } from "./store/read";
 import { useSidebarOpen, useWindowId, WindowContext } from "./store/hooks";
 
@@ -72,17 +73,16 @@ function BrowserWindow() {
   const showStrip = sidebarOpen && topTabs;
   // The sidebar on the window's right (Appearance › Sidebar): the page on its left, the window buttons where they are.
   const right = useSidebarOnRight();
-  // The page has no toolbar to hold the window buttons then (or with the sidebar closed): it runs up under them, and
-  // they show only while the pointer is over the window's top, as Zen has it.
   const addressInSidebar = useAddressBarInSidebar();
-  const buttonsOnHover = (right || !sidebarOpen) && addressInSidebar && !fullscreen;
   // Windows' caption buttons sit at the other corner: over the page there when it has no toolbar to hold them.
   const captionOnHover = !topTabs && addressInSidebar && (!right || !showSidebar);
   const captionHeight = showStrip ? TOP_STRIP_HEIGHT : layout.cardTop + layout.toolbarHeight;
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
+  const [peekOut, setPeekOut] = useState(false);
+  const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, right, topTabs, peekOut });
   useEffect(() => {
-    void setTrafficLightsOnHover(windowId, buttonsOnHover);
-  }, [windowId, buttonsOnHover]);
+    void setTrafficLightsMode(windowId, lights);
+  }, [windowId, lights]);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);
@@ -148,7 +148,8 @@ function BrowserWindow() {
           <TopTabStrip width={width} hidden={fullscreen} />
         </View>
       )}
-      {!sidebarOpen && (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} />)}
+      {!sidebarOpen &&
+        (topTabs ? <TopStripPeek windowWidth={width} enabled={!fullscreen} /> : <SidebarPeek enabled={!fullscreen} right={right} onOut={setPeekOut} />)}
       {!fullscreen && <CaptionButtons windowId={windowId} height={captionHeight} glyphCenter={captionCenter} onHover={captionOnHover} />}
       <ExtensionOverlays />
       <DownloadMagnet />
@@ -159,17 +160,86 @@ function BrowserWindow() {
       <SidebarOverlays windowWidth={width} />
       {!fullscreen && <SidebarSiteControls windowWidth={width} windowHeight={size.height} />}
       <DownloadsPanel windowWidth={width} windowHeight={size.height} />
-      <CommandPanel windowWidth={width} windowHeight={size.height} />
+      <CommandPanel
+        windowWidth={width}
+        windowHeight={size.height}
+        navigationInsets={{
+          left: showSidebar && !right && !fullscreen ? sidebarWidth : 0,
+          right: showSidebar && right && !fullscreen ? sidebarWidth : 0,
+          top: showStrip && !fullscreen ? TOP_STRIP_HEIGHT : 0,
+        }}
+      />
       <ThemeEditorHost />
       <OnboardingOverlay />
     </View>
   );
 }
 
-function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
+// The page has no toolbar to hold the window buttons with the address bar in the sidebar: it runs up under them. With
+// the sidebar on the right they show only while the pointer is over the window's top, as Zen has it; with it closed on
+// the left, only with its peek, as Arc has it, so they never sit over the page's corner.
+function trafficLightsMode(o: {
+  addressInSidebar: boolean;
+  fullscreen: boolean;
+  sidebarOpen: boolean;
+  right: boolean;
+  topTabs: boolean;
+  peekOut: boolean;
+}): TrafficLightsMode {
+  if (!o.addressInSidebar || o.fullscreen) return "shown";
+  if (!o.sidebarOpen && !o.right && !o.topTabs) return o.peekOut ? "shown" : "hidden";
+  return o.right || !o.sidebarOpen ? "hover" : "shown";
+}
+
+// DEV: the peek's show, by window, as the pointer reaching the window's edge does (nnPeek(windowId)), and whether
+// it's out (nnPeekOut(windowId)).
+const devPeeks = new Map<string, () => void>();
+const devPeeksOut = new Map<string, boolean>();
+if (__DEV__) {
+  (globalThis as { nnPeek?: unknown }).nnPeek = (windowId: string) => devPeeks.get(windowId)?.();
+  (globalThis as { nnPeekOut?: unknown }).nnPeekOut = (windowId: string) => devPeeksOut.get(windowId) ?? false;
+}
+
+function SidebarPeek({ enabled, right, onOut }: { enabled: boolean; right: boolean; onOut: (out: boolean) => void }) {
   const theme = useTheme();
-  const sidebarWidth = useSidebarWidth(useWindowId());
+  const windowId = useWindowId();
+  const sidebarWidth = useSidebarWidth(windowId);
   const { slide, live, show, hide } = usePeek(enabled);
+  useEffect(() => {
+    if (!__DEV__) return;
+    devPeeks.set(windowId, show);
+    return () => void devPeeks.delete(windowId);
+  }, [windowId, show]);
+  // Holding Option shows it, as Arc's did, and letting go hides it unless the pointer has gone into it meanwhile.
+  const pointerIn = useRef(false);
+  const heldOut = useRef(false);
+  const optionOn = useBrowser((s) => s.settings.showSidebarOnOption);
+  const optionEvent = useEffectEvent((type: string, from?: string) => {
+    if (type === "optionHeld" && from === windowId && optionOn && enabled) {
+      heldOut.current = true;
+      show();
+    } else if (type === "optionReleased" && heldOut.current) {
+      heldOut.current = false;
+      if (!pointerIn.current) hide();
+    }
+  });
+  useEffect(() => {
+    const sub = onAppEvent((e) => optionEvent(e.type, "windowId" in e ? e.windowId : undefined));
+    return () => sub.remove();
+  }, []);
+  const enter = () => {
+    pointerIn.current = true;
+    show();
+  };
+  const leave = () => {
+    pointerIn.current = false;
+    hide();
+  };
+  useEffect(() => {
+    onOut(live);
+    if (__DEV__) devPeeksOut.set(windowId, live);
+    return () => onOut(false);
+  }, [live, onOut]);
   const slideStyle = useAnimatedStyle(() => {
     "worklet";
     const p = slide.get();
@@ -191,8 +261,8 @@ function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
       ) : null}
       <Animated.View
         pointerEvents={live ? "auto" : "none"}
-        onMouseEnter={live ? show : undefined}
-        onMouseLeave={live ? hide : undefined}
+        onMouseEnter={live ? enter : undefined}
+        onMouseLeave={live ? leave : undefined}
         style={[
           {
             position: "absolute",
@@ -216,7 +286,10 @@ function SidebarPeek({ enabled, right }: { enabled: boolean; right: boolean }) {
           shadowOffset={[0, 6]}
           style={{ flex: 1, overflow: "hidden" }}
         >
-          <Sidebar />
+          {/* Swipes between spaces as the docked sidebar does, while it's out. */}
+          <SpaceSwipe swipes={live}>
+            <Sidebar />
+          </SpaceSwipe>
         </Surface>
       </Animated.View>
     </>

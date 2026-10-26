@@ -1,7 +1,7 @@
 // Copyright 2026 Bay. Apache-2.0.
 //
-// The macOS side of Dia's video Picture in Picture window: where the user last
-// left it, and its Core Animation fade out.
+// Platform support for the video Picture in Picture window: remembered bounds,
+// its close fade, and telling the host when its controls show.
 
 #ifndef CHROME_BROWSER_BAY_PIP_NN_PIP_PLATFORM_H_
 #define CHROME_BROWSER_BAY_PIP_NN_PIP_PLATFORM_H_
@@ -25,5 +25,12 @@ void SaveBayPictureInPictureBounds(const gfx::Rect& bounds);
 void FadeOutBayPictureInPicture(gfx::NativeWindow window,
                                       base::TimeDelta duration);
 void ResetBayPictureInPictureFade(gfx::NativeWindow window);
+
+// The controls showed or hid by Chrome's rules. On macOS the app's overlay
+// follows via BayPictureInPictureControlsDidChange, with the NSWindow as the
+// object and {visible, animate} as NSNumbers. Other hosts use Chrome's controls.
+void NotifyBayPictureInPictureControls(gfx::NativeWindow window,
+                                       bool visible,
+                                       bool animate);
 
 #endif  // CHROME_BROWSER_BAY_PIP_NN_PIP_PLATFORM_H_

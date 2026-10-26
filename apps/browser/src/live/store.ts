@@ -1,6 +1,8 @@
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import { create } from "zustand";
 import { sendService } from "../runtime/serviceClient";
+import { useBrowser, type BrowserStore } from "../store/browser";
+import { registerSidebarUndo, sidebarUndoWindow } from "../store/sidebarUndo";
 import type { CompletedItem, CompletionState, FolderStatus, LiveAccount, LiveFolder, LiveFolderKind, LiveItem, LiveSourceId } from "./types";
 import { LIVE_DOC, MAX_COMPLETED_ITEMS, MAX_KNOWN_ITEMS } from "./constants";
 
@@ -212,9 +214,37 @@ export function createFolder(spaceId: string, kind: LiveFolderKind, sources?: Li
   return id;
 }
 
-export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>) {
+let browserOwner: BrowserStore = useBrowser;
+export function bindLiveStoreBrowser(browser: BrowserStore): () => void {
+  const previous = browserOwner;
+  browserOwner = browser;
+  return () => {
+    if (browserOwner === browser) browserOwner = previous;
+  };
+}
+
+type LiveFolderUndo = { id: string; before: Partial<LiveFolder>; after: Partial<LiveFolder> };
+// Restores only the fields a later edit has not changed again.
+registerSidebarUndo("liveFolder", (value) => {
+  const { id, before, after } = value as LiveFolderUndo;
+  const current = useLive.getState().folders[id];
+  if (!current) return;
+  const restore: Partial<LiveFolder> = {};
+  for (const key of ["name", "icon"] as const) if (key in before && (current[key] ?? null) === after[key]) Object.assign(restore, { [key]: before[key] });
+  setLive({ folders: { ...useLive.getState().folders, [id]: { ...current, ...restore } } });
+});
+
+export function updateFolder(id: string, patch: Partial<Omit<LiveFolder, "id" | "spaceId" | "kind">>, originWindowId?: string) {
   if (sendService("liveUpdate", [id, patch])) return;
+  const before = useLive.getState().folders[id];
   setLive((s) => (s.folders[id] ? { folders: { ...s.folders, [id]: { ...s.folders[id]!, ...patch } } } : {}));
+  const fields = (["name", "icon"] as const).filter((key) => before && patch[key] !== undefined && before[key] !== patch[key]);
+  const windowId = originWindowId ?? sidebarUndoWindow() ?? browserOwner.getState().ui.focusedWindowId;
+  if (before && windowId && fields.length) {
+    const pick = (folder: Partial<LiveFolder>) => Object.fromEntries(fields.map((key) => [key, folder[key] ?? null]));
+    const data: LiveFolderUndo = { id, before: pick(before), after: pick(patch) };
+    browserOwner.getState().pushSidebarUndo(windowId, { kind: "liveFolder", data });
+  }
 }
 
 const without = <T>(record: Record<string, T>, key: string) => {

@@ -2,6 +2,7 @@ import { capabilities } from "@bay/platform";
 import { openWindow } from "@bay/shell";
 import { create } from "zustand";
 import { TASK_MANAGER_WINDOW_ID } from "../taskManager/window";
+import type { SettingId } from "./definitions";
 
 export const SETTINGS_WINDOW_ID = "settings";
 export const IMPORT_WINDOW_ID = "import";
@@ -30,9 +31,9 @@ type Nav = {
   spaceId: string | null;
   back: { pane: SettingsPane; spaceId: string | null }[];
   forward: { pane: SettingsPane; spaceId: string | null }[];
-  // A setting chosen in the sidebar's search, by its row's title: its pane scrolls to it and marks it for a moment.
-  highlight: string | null;
-  go(pane: SettingsPane, spaceId?: string | null, highlight?: string | null): void;
+  // A setting chosen in the sidebar's search, by ID: its pane scrolls to it and marks it for a moment.
+  highlight: SettingId | null;
+  go(pane: SettingsPane, spaceId?: string | null, highlight?: SettingId | null): void;
   goBack(): void;
   goForward(): void;
 };

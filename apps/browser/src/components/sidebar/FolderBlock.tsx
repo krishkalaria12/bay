@@ -16,7 +16,8 @@ import { FOLDER_INDENT } from "./constants";
 import { folderEntries, useFolderEntries } from "./entries";
 import { dismissHover, useRowHover } from "./hover";
 import { openFolderMenu } from "./menus";
-import { registerRow, useSidebarUi } from "./state";
+import { SidebarKeyboardRowView } from "./keyboardFocus";
+import { useSidebarUi } from "./state";
 import { TabIcon } from "./TabIcon";
 import { RenameField, TabRowItem } from "./TabRow";
 import { useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
@@ -118,7 +119,7 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
   const tokens = useSidebarTokens();
   const folder = useBrowser((s) => s.pinnedFolders[folderId]);
   const empty = useBrowser((s) => !folderEntries(s, folderId).length);
-  const renaming = useSidebarUi((u) => u.renaming?.kind === "folder" && u.renaming.id === folderId);
+  const renaming = useSidebarUi((u) => u.renaming?.windowId === windowId && u.renaming.kind === "folder" && u.renaming.id === folderId);
   const dropInto = useDropInto() === folderId;
   // A closed folder peeks its tabs on hover (Arc's folder previews); an open one shows them already.
   const { hovered, hoverProps } = useRowHover(windowId, collapsed && !renaming && !empty ? { kind: "folder", id: folderId } : null);
@@ -128,7 +129,13 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
   const label = folder.name || "New Folder";
 
   return (
-    <View ref={(v) => registerRow(windowId, folderId, v)} {...hoverProps} onDoubleClick={() => void startRename(windowId, target)}>
+    <SidebarKeyboardRowView
+      rowId={`f:${folderId}`}
+      legacyId={folderId}
+      label={`${label}, ${collapsed ? "collapsed" : "expanded"}`}
+      {...hoverProps}
+      onDoubleClick={() => void startRename(windowId, target)}
+    >
       <ContextMenuArea
         onContextMenu={() => {
           dismissHover();
@@ -182,6 +189,6 @@ function FolderHeader({ folderId, windowId, collapsed, open }: { folderId: strin
           )}
         </Pressable>
       </ContextMenuArea>
-    </View>
+    </SidebarKeyboardRowView>
   );
 }

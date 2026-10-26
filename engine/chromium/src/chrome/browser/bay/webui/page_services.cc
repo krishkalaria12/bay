@@ -19,6 +19,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "bay/core/nn_devtools_call.h"
+#include "bay/core/nn_page_channel.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -300,7 +301,15 @@ bool DispatchPageMethod(content::WebContents* contents,
                         const std::string& command,
                         const base::ListValue& params,
                         PageResponse& callback) {
-  if (command == "getSecurityInfo") {
+  if (command == "setBoostStyle") {
+    if (params.empty() || !params[0].is_string()) {
+      std::move(callback).Run(Failure("Boost style descriptor required"));
+      return true;
+    }
+    nncore::PageChannel::GetOrCreate(contents)->SetBoostStyle(
+        params[0].GetString());
+    std::move(callback).Run(Success());
+  } else if (command == "getSecurityInfo") {
     std::move(callback).Run(
         Success(base::Value(GetPageSecurityInfo(contents))));
   } else if (command == "captureScreenshot") {

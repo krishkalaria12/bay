@@ -10,12 +10,133 @@ pnpm install
 pnpm dev          # http://localhost:4321
 pnpm build        # static site in dist/
 pnpm typecheck
+pnpm test         # Worker contract, validation, auth and concurrent R2 mutation tests
 pnpm preview:cf   # the built site on Cloudflare's runtime, http://localhost:8787
 pnpm run deploy   # build and deploy to Cloudflare (run `pnpm exec wrangler login` once first)
 ```
 
-It deploys as a static Cloudflare Worker (`wrangler.jsonc`, no script) on the custom domain bay.krishkalaria.in.
+It deploys as a Cloudflare Worker on the custom domain bay.krishkalaria.in. Astro still builds static
+assets into `dist/`. Only `/easel/*` and `/api/easels/*` run `worker/index.ts` first; other requests use
+the existing asset handling, redirects and 404 page. The Worker also falls back to the `ASSETS` binding.
 `public/_headers` caches Astro's fingerprinted `/_astro/*` files for a year.
+
+## Shared Easels
+
+Implemented but disabled by default until R2 is provisioned. `BAY_EASEL_WEB_SHARING` must be the exact
+string `true` to enable it. Unset, `false`, and all other values keep it off. The default website
+deployment has `BAY_EASEL_WEB_SHARING=false`, no R2 binding, and returns 404 for all Easel routes.
+The app reads the same launch environment variable in both Debug and Release builds; when it is off,
+the Share Easel button is hidden and publishing makes no requests or credentials. Existing shared
+Easels retain their management records; enable sharing before revoking or deleting one.
+
+To opt in locally after the server is ready, launch the app with `BAY_EASEL_WEB_SHARING=true`, for example
+`open -n --env BAY_EASEL_WEB_SHARING=true --env BAY_DATA_DIR="$HOME/Library/Application Support/Bay Dev" /path/to/Bay.app`.
+Building with this environment variable does not enable an app launched without it.
+
+The native app renders an Easel to a flattened PNG, then publishes a read-only snapshot with its
+clickable source list. The Worker does not render native documents or accept local paths, item IDs,
+profile data, auth metadata or arbitrary extra fields. Shared pages have no scripts or analytics,
+use `no-store`, `noindex, nofollow` and a restrictive CSP, and do not send referrers to sources.
+The snapshot title, image, background and source links are public to anyone holding its URL.
+Stopping sharing removes the stored content and makes the public URL return 404.
+
+### Provision and deploy
+
+Run these commands from `apps/web` after installing this folder's existing dependencies. They change
+your Cloudflare account; local development and tests below do not require provisioning a bucket.
+
+```bash
+pnpm exec wrangler login
+pnpm exec wrangler r2 bucket create bay-easels
+pnpm exec wrangler r2 bucket dev-url disable bay-easels
+pnpm test
+pnpm exec tsc -p worker/tsconfig.json
+pnpm typecheck
+pnpm build
+pnpm exec wrangler deploy --env easels
+```
+
+The opt-in `easels` environment in `wrangler.jsonc` sets `BAY_EASEL_WEB_SHARING=true` and binds that
+bucket as `EASELS`. It updates the same `bay-web` Worker and inherits the static assets and domain.
+Plain `pnpm run deploy` keeps sharing disabled and does not require R2. Keep the bucket private:
+do not enable its public `r2.dev` URL or attach an R2 custom domain. The Worker is the only public
+reader, and never exposes R2 metadata. Ownership is a SHA-256 hash of the private bearer key in
+R2 custom metadata. There is no shared server secret to configure. Keep tombstone objects permanently;
+do not configure lifecycle expiration for `easels/` or manually delete revoked objects, since their
+continued presence prevents an old or in-flight publication from restoring a stopped share.
+
+The `EASEL_MUTATIONS` rate limit binding is configured for 10 PUT/DELETE requests per 60 seconds per
+`CF-Connecting-IP`. Namespace `1001` must be reserved for this limiter within the Cloudflare account;
+choose another positive integer in `wrangler.jsonc` if it is already used. Cloudflare's binding is
+approximate and per-location, rather than a strict global quota. No extra rate-limit provisioning
+command is required. Missing client IPs share the `local` key during local development.
+
+### Local runtime and checks
+
+```bash
+pnpm test
+pnpm exec tsc -p worker/tsconfig.json
+pnpm build
+pnpm exec wrangler dev --env easels --local --port 8787
+```
+
+Wrangler serves the Worker and static assets at `http://localhost:8787` and emulates a private local R2
+bucket, persisting under `.wrangler/state/`. Do not use `--remote` or add `remote: true` to the binding
+when testing locally. `pnpm preview:cf` uses the default disabled environment without R2.
+`pnpm dev` runs Astro alone and does not serve the Easel API. Tests use Node's
+native test runner and TypeScript stripping with a fake R2 that checks conditional writes atomically.
+They exercise concurrent initial publication/update/revoke and are not a deployed Cloudflare test.
+To bundle without publishing, run `pnpm exec wrangler deploy --env '' --dry-run` for the default disabled site
+or `pnpm exec wrangler deploy --env easels --dry-run` for the opt-in sharing configuration after `pnpm build`.
+
+### Native publishing contract
+
+The native client generates the public ID from 16 cryptographically random bytes as 32 lowercase hex
+characters and a separate private key from 32 cryptographically random bytes as 64 lowercase hex
+characters. Keep the key locally. The public ID alone never authorizes an update or revoke.
+
+`PUT /api/easels/<id>` uses `Authorization: Bearer <key>` and `Content-Type: application/json`:
+
+```json
+{
+  "version": 1,
+  "revision": 1,
+  "title": "Weekend ideas",
+  "background": "#f1e5cc",
+  "image": { "data": "data:image/png;base64,...", "width": 1200, "height": 800 },
+  "links": [{ "title": "A source", "url": "https://example.com/article" }]
+}
+```
+
+`revision` is a positive safe integer reserved durably on the client before each upload, increasing
+even when an upload fails or times out. The client adds it to the native renderer's payload. The
+Worker rejects older revisions and different content at the same revision with 409; an identical
+retry of the current revision succeeds without rewriting. This prevents delayed uploads overwriting
+newer snapshots. The management key stays in macOS Keychain; the local registry contains only the
+public ID, revision, and last successful publish time. Registry read errors block mutations.
+
+`image` may be `null`; `links` may be empty. Width and height must be positive integers matching
+the PNG's IHDR dimensions, at most 16,384 per side and 33,000,000 total pixels. The Worker verifies
+PNG framing and base64, but does not decode pixels.
+Sources must be absolute HTTP(S) URLs without embedded credentials, whitespace or backslashes.
+Every object accepts only its documented fields. The UTF-8 JSON body limit is 16 MiB including base64;
+the Worker counts streamed bytes even without a truthful `Content-Length`. Publication returns 200
+only after R2 confirms persistence. The native client derives the URL as
+`https://bay.krishkalaria.in/easel/<id>/`; the server does not return credentials or a public object URL.
+
+`GET` and `HEAD /easel/<id>/` return the shared snapshot, or 404 for a missing/revoked share.
+`DELETE /api/easels/<id>` with the same bearer key atomically replaces the content with a permanent
+owner-bound tombstone and returns 204. Repeating DELETE with that key returns 204, including when
+the ID had never been published. A revoked ID cannot be published again and returns 410 to its owner.
+After successful DELETE, the native client clears those share credentials; its next share uses a new
+ID/key pair. Mutations from a different owner return 403 without writing, including on tombstones.
+R2 conditional creates/updates ensure competing requests cannot claim another owner's ID or resurrect
+a revoked snapshot. Repeated contention may return 409; rate limits return 429 with `Retry-After: 60`.
+Storage or binding failures return a safe 503. All errors are plain text. Cross-origin browser mutation
+Origins are rejected; native requests omit Origin, and no wildcard CORS is enabled.
+
+References: [R2 conditional operations](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations),
+[Workers rate limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/).
 
 ## Visitor and download analytics
 

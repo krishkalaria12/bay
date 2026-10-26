@@ -1,37 +1,21 @@
 import { showMenu, type MenuItem } from "@bay/shell";
-import { create } from "zustand";
 import { closeTab } from "../../lib/actions";
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as commands from "../../runtime/splitActions";
 import type { UserPaneOptions } from "../../runtime/splitCommands";
 import { navigate } from "../../runtime/tabActions";
 import { useBrowser as legacyBrowser } from "../../store/browser";
-import { activeTabId } from "../../store/model";
+import { activeTabId, isIncognitoSpace } from "../../store/model";
 import { browserRead } from "../../store/read";
 import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
 import { MAX_SPLIT_PANES } from "../../store/constants";
 import { openNewTabPanel } from "../../lib/newTab";
 import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
+import { shareCollection } from "../../lib/collectionSharing";
+import { showToast } from "./toasts";
+export { showToast, hideToast, hideKeyedToast, useToasts, type ToastOptions } from "./toasts";
 
 const store = () => browserRead.getState();
-
-type Toast = { id: number; title: string; message?: string } & ToastOptions;
-export type ToastOptions = { icon?: string; action?: { title: string; run(): void }; key?: string; sticky?: boolean };
-export const useToasts = create<{ toasts: Record<string, Toast | null> }>()(() => ({ toasts: {} }));
-let toastSeq = 0;
-export function showToast(windowId: string, title: string, message?: string, options?: ToastOptions) {
-  useToasts.setState((s) => {
-    const current = s.toasts[windowId];
-    const id = options?.key && current?.key === options.key ? current.id : ++toastSeq;
-    return { toasts: { ...s.toasts, [windowId]: { id, title, message, ...options } } };
-  });
-}
-export function hideToast(windowId: string, id: number) {
-  useToasts.setState((s) => (s.toasts[windowId]?.id === id ? { toasts: { ...s.toasts, [windowId]: null } } : s));
-}
-export function hideKeyedToast(windowId: string, key: string) {
-  useToasts.setState((s) => (s.toasts[windowId]?.key === key ? { toasts: { ...s.toasts, [windowId]: null } } : s));
-}
 
 const maxedOut = (windowId: string) => showToast(windowId, "Cannot Add New Pane", `Split View can show up to ${MAX_SPLIT_PANES} tabs at once.`);
 
@@ -154,12 +138,17 @@ export async function showSplitMenu(tabId: string) {
     },
     { separator: true },
     { id: "remove", title: "Remove from Split View", symbol: "rectangle.portrait.and.arrow.right" },
+    ...(!isIncognitoSpace(tab.spaceId) && !s.windows[tab.windowId]?.incognito
+      ? [{ id: "share", title: "Share Split View…", symbol: "square.and.arrow.up" }]
+      : []),
     { id: "separate", title: "Separate All Tabs", symbol: "rectangle.split.3x1" },
     { separator: true },
     { id: "close", title: "Close Pane", symbol: "xmark" },
   ];
   const choice = await showMenu(items);
   switch (choice) {
+    case "share":
+      return void shareCollection(tab.windowId, { kind: "split", id: split.id });
     case "add":
       return reportBrowserCommand(openSplitPane(tab.windowId, { anchorTabId: tabId, side: horizontal ? "right" : "bottom" }));
     case "bottom":

@@ -29,6 +29,12 @@ enum ChromeWindows {
     return host.perform(NSSelectorFromString("rootViewOfWindow:"), with: window)?.takeUnretainedValue() as? NSView
   }
 
+  static func focusedPageEditable(in window: NSWindow) -> Bool? {
+    let selector = NSSelectorFromString("focusedPageEditableInWindow:")
+    guard let host, host.responds(to: selector) else { return nil }
+    return (host.perform(selector, with: window)?.takeUnretainedValue() as? NSNumber)?.boolValue
+  }
+
   static func close(_ window: NSWindow) {
     host?.perform(NSSelectorFromString("closeWindow:"), with: window)
   }

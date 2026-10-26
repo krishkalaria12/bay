@@ -81,6 +81,26 @@ export function useTicker(active: boolean, ms = 500) {
   }, [active, ms]);
 }
 
+/** Closer than this to a live stream's end is live (NNCorePictureInPicture.mm's kLiveEdge). */
+export const LIVE_EDGE_SECONDS = 30;
+
+/** How far behind its end a live stream plays now, 0 when live: paused, or slower than 1×, it falls behind. */
+export function liveBehindOf(session: Session, now = Date.now()): number {
+  const elapsed = Math.max(0, (now - session.timestamp) / 1000);
+  const behind = session.liveBehind + elapsed * (1 - (isPlaying(session) ? session.playbackRate || 1 : 0));
+  return session.live && behind >= LIVE_EDGE_SECONDS ? behind : 0;
+}
+
+/** "45s behind", "5m behind", "1h 5m behind". */
+export function formatBehind(seconds: number): string {
+  const s = Math.round(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (s < 60) return `${s}s behind`;
+  if (!h) return `${m}m behind`;
+  return m ? `${h}h ${m}m behind` : `${h}h behind`;
+}
+
 export function formatTime(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);
@@ -128,6 +148,11 @@ export function skip(tabId: string, session: Session, seconds: number) {
   setNowPlaying(tabId, { ...session, position, timestamp: now });
   if (session.actions.includes("seekto")) mediaCommand(tabId, "seekTo", position);
   else mediaCommand(tabId, "seekBy", seconds);
+}
+
+export function seekToLive(tabId: string, session: Session) {
+  setNowPlaying(tabId, { ...session, liveBehind: 0, timestamp: Date.now() });
+  mediaCommand(tabId, "seekToLive");
 }
 
 export function seekTo(tabId: string, session: Session, seconds: number) {
@@ -247,5 +272,5 @@ useBrowser.subscribe((s, prev) => {
 });
 
 if (typeof __DEV__ !== "undefined" && __DEV__) {
-  (globalThis as { nnMedia?: unknown }).nnMedia = { useMedia, mediaCommand, setNowPlaying, togglePictureInPicture, inPictureInPicture };
+  (globalThis as { nnMedia?: unknown }).nnMedia = { useMedia, mediaCommand, setNowPlaying, togglePictureInPicture, inPictureInPicture, seekToLive };
 }

@@ -64,7 +64,7 @@ native_stamp() {
     git ls-files -co --exclude-standard -- \
       apps/browser/macos apps/browser/app.json apps/browser/react-native.config.js \
       'packages/*/ios/*' 'packages/*/expo-module.config.json' packages/shell/docktile \
-      packages/nncore/scripts/embed.sh packages/nncore/scripts/stage-framework.sh packages/nncore/scripts/ubol.sh \
+      packages/nncore/scripts/embed.sh packages/nncore/scripts/stage-framework.sh packages/nncore/scripts/ubo.sh \
       packages/nncore/scripts/signing engine/nncore/src/bay/core/public patches pnpm-lock.yaml
     echo apps/browser/macos/Pods/Manifest.lock
   ) | python3 -c '

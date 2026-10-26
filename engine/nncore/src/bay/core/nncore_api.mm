@@ -15,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -1004,6 +1005,37 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
   nncore::StopCasting(dialogId, base::SysNSStringToUTF8(routeId));
 }
 
++ (void)setBoosts:(NSArray<NSDictionary<NSString*, id>*>*)boosts {
+  auto text = [](NSDictionary* boost, NSString* key) {
+    id value = boost[key];
+    return [value isKindOfClass:NSString.class]
+               ? base::SysNSStringToUTF8((NSString*)value)
+               : std::string();
+  };
+  auto flag = [](NSDictionary* boost, NSString* key) {
+    id value = boost[key];
+    return [value isKindOfClass:NSNumber.class] && [(NSNumber*)value boolValue];
+  };
+  std::vector<nncore::Boost> list;
+  for (NSDictionary* boost in boosts) {
+    if (![boost isKindOfClass:NSDictionary.class]) {
+      continue;
+    }
+    nncore::Boost entry;
+    entry.host = base::ToLowerASCII(text(boost, @"host"));
+    if (entry.host.empty()) {
+      continue;
+    }
+    entry.user_css = text(boost, @"userCss");
+    entry.css = text(boost, @"css");
+    entry.script = text(boost, @"script");
+    entry.script_in_private = flag(boost, @"scriptInPrivate");
+    entry.invert = flag(boost, @"invert");
+    list.push_back(std::move(entry));
+  }
+  nncore::SetBoosts(std::move(list));
+}
+
 + (void)setAutoPictureInPicture:(BOOL)enabled {
   g_auto_picture_in_picture = enabled;
   for (Profile* profile : g_browser_process->profile_manager()->GetLoadedProfiles()) {
@@ -1331,6 +1363,12 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
 - (void)releaseNavigationHold:(NSString*)reason {
   if (_profile) {
     nncore::ReleaseNavigationHold(_profile.get(), base::SysNSStringToUTF8(reason));
+  }
+}
+
+- (void)releaseNavigationHoldReady {
+  if (_profile) {
+    nncore::ReleaseNavigationHoldReady(_profile.get());
   }
 }
 
@@ -2403,6 +2441,13 @@ TabSharingInfoBarDelegate* TabSharingDelegateFor(content::WebContents* contents,
   if (_contents) {
     nncore::PageChannel::GetOrCreate(_contents)->CallPage(
         base::SysNSStringToUTF8(kind), base::SysNSStringToUTF8(json));
+  }
+}
+
+- (void)setBoostStyle:(NSString*)css {
+  if (_contents) {
+    nncore::PageChannel::GetOrCreate(_contents)->SetBoostStyle(
+        css ? base::SysNSStringToUTF8(css) : std::string());
   }
 }
 

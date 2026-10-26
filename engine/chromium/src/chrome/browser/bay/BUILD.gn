@@ -98,6 +98,7 @@ source_set("bay") {
     "//components/favicon_base",
     "//components/history/core/browser",
     "//components/keyed_service/core",
+    "//components/os_crypt/common:switches",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
     "//components/prefs",
@@ -133,10 +134,14 @@ source_set("bay") {
       "nn_external_apps.mm",
       "pip/nn_pip_mac.mm",
     ]
+
+    # Downloads quarantine, external apps, Picture in Picture, and the
+    # distribution signature check for reauthentication.
     frameworks = [
       "QuartzCore.framework",
       "AppKit.framework",
       "CoreServices.framework",
+      "Security.framework",
     ]
   } else if (is_win) {
     sources += [

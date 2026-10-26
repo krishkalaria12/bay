@@ -9,7 +9,22 @@ import { useTab } from "../../store/hooks";
 import { Favicon, useHover } from "../primitives";
 import { useArtwork } from "./artwork";
 import { useMarqueeGroup, Marquee } from "./Marquee";
-import { formatTime, hasTrackControls, hostOf, isPlaying, mediaCommand, positionOf, seekTo, skip, useSession, useTicker, type Session } from "./state";
+import {
+  formatBehind,
+  formatTime,
+  hasTrackControls,
+  hostOf,
+  isPlaying,
+  liveBehindOf,
+  mediaCommand,
+  positionOf,
+  seekTo,
+  seekToLive,
+  skip,
+  useSession,
+  useTicker,
+  type Session,
+} from "./state";
 import {
   MINI_PLAYER_ART,
   MINI_PLAYER_CONTROLS_WIDTH,
@@ -223,6 +238,7 @@ function TimeBar({ tabId, session, tokens }: { tabId: string; session: Session; 
   const duration = session.duration;
   const shownPosition = drag !== null && duration ? drag * duration : positionOf(session);
   const label: TextStyle = { fontSize: 10, fontVariant: ["tabular-nums"], color: tokens.secondary };
+  if (session.live) return <LiveLabel tabId={tabId} session={session} tokens={tokens} fontSize={10} />;
   return (
     <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
       <Text style={label}>{formatTime(shownPosition)}</Text>
@@ -243,6 +259,31 @@ function TimeBar({ tabId, session, tokens }: { tabId: string; session: Session; 
         </>
       ) : (
         <View style={{ flex: 1 }} />
+      )}
+    </View>
+  );
+}
+
+/** A live stream's place in place of its time: Live at the end, else how far behind, which jumps back to live. */
+export function LiveLabel({ tabId, session, tokens, fontSize }: { tabId: string; session: Session; tokens: MediaTokens; fontSize: number }) {
+  // Paused, or slower than 1×, it falls further behind.
+  useTicker(true, 1000);
+  const { hovered, hoverProps } = useHover();
+  const behind = liveBehindOf(session);
+  const text: TextStyle = { fontSize, fontWeight: "600", fontVariant: ["tabular-nums"], color: behind && hovered ? tokens.label : tokens.secondary };
+  return (
+    <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+      {behind ? (
+        <View {...hoverProps}>
+          <Pressable onPress={() => seekToLive(tabId, session)} tooltip="Jump to Live">
+            <Text style={text}>{formatBehind(behind)}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          <View style={{ width: 6, height: 6, borderRadius: 3, marginRight: 5, backgroundColor: "#FF3B30" }} />
+          <Text style={text}>Live</Text>
+        </>
       )}
     </View>
   );

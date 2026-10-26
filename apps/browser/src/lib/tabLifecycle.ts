@@ -13,6 +13,7 @@ import { activeTabId, engineProfile, inPinnedContainer, isIncognitoSpace } from 
 import { shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
+import { everySlowly } from "./slowTimers";
 import { webviews } from "./webviews";
 import { FREEZE_SWEEP_MS, LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
 import { siteKeptAwake } from "./awakeSites";
@@ -397,13 +398,20 @@ export function startTabLifecycle() {
       () => {},
     );
 
-  setInterval(() => {
-    track(store());
-    void sweep();
-  }, LIFECYCLE_SWEEP_MS);
-  setInterval(() => {
-    if (useLifecycle.getState().batterySaver) void freezeBusyTabs();
-  }, FREEZE_SWEEP_MS);
+  everySlowly({
+    every: LIFECYCLE_SWEEP_MS,
+    run: () => {
+      track(store());
+      void sweep();
+    },
+  });
+  // Only while Battery Saver is on: no timer otherwise.
+  everySlowly({
+    every: FREEZE_SWEEP_MS,
+    run: () => void freezeBusyTabs(),
+    needed: () => useLifecycle.getState().batterySaver,
+    watch: (changed) => useLifecycle.subscribe(changed),
+  });
 
   if (__DEV__) {
     (globalThis as { nnLifecycle?: unknown }).nnLifecycle = {

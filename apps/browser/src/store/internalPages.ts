@@ -1,8 +1,10 @@
 import type { Tab } from "./types";
 
-export type InternalPageId = "history" | "bookmarks" | "downloads";
+export type InternalPageId = "history" | "bookmarks" | "downloads" | "library" | "easel";
 
 export const INTERNAL_PAGES: Record<InternalPageId, { title: string }> = {
+  library: { title: "Library" },
+  easel: { title: "Easel" },
   history: { title: "History" },
   bookmarks: { title: "Bookmarks" },
   downloads: { title: "Downloads" },

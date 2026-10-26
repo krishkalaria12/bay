@@ -83,11 +83,18 @@ base::DictValue Describe(DownloadItem* item) {
     name = path.BaseName();
   }
   const int64_t total = item->GetTotalBytes();
+  const bool off_the_record = IsOffTheRecord(item);
   return base::DictValue()
       .Set("id", item->GetGuid())
       .Set("url", item->GetOriginalUrl().spec())
+      // What the server called the file. When the saved name differs, a person chose it; Tidy Downloads leaves it alone.
+      .Set("suggestedFilename", item->GetSuggestedFilename())
       .Set("filename", name.AsUTF8Unsafe())
       .Set("path", path.AsUTF8Unsafe())
+      // The page that started the download, for a readable name in the app. Private downloads keep no page URLs,
+      // as their quarantine reference does.
+      .Set("referrer", off_the_record ? "" : item->GetReferrerUrl().spec())
+      .Set("tabUrl", off_the_record ? "" : item->GetTabUrl().spec())
       .Set("state", StateName(*item))
       .Set("paused", item->IsPaused())
       .Set("received", static_cast<double>(item->GetReceivedBytes()))

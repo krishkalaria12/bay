@@ -8,6 +8,9 @@ import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
 import { openInternalPage } from "../../pages/urls";
 import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
+import { SETTINGS } from "../definitions";
+import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
+import { openLibrary } from "../../library/actions";
 
 export function AdvancedPane() {
   const theme = useTheme();
@@ -28,37 +31,50 @@ export function AdvancedPane() {
     <View>
       <SectionHeader title="Browsing" />
       <Group>
-        <Row title="Show full URL in the address bar" description="Instead of the site alone.">
+        <Row settingId={SETTINGS.showFullUrl.id} title={SETTINGS.showFullUrl.title} description="Instead of the site alone.">
           <Toggle value={settings.showFullUrl} onChange={(v) => reportBrowserCommand(updateSettings({ showFullUrl: v }))} />
         </Row>
-        <Row title="Warn before moving tabs between spaces" description="Some site data doesn't come along.">
+        <Row
+          settingId={SETTINGS.warnBeforeMovingTabsToSpace.id}
+          title={SETTINGS.warnBeforeMovingTabsToSpace.title}
+          description="Some site data doesn't come along."
+        >
           <Toggle value={settings.warnBeforeMovingTabsToSpace} onChange={(v) => reportBrowserCommand(updateSettings({ warnBeforeMovingTabsToSpace: v }))} />
         </Row>
-        <Row title="Show the Import bookmarks button" description="On an empty bookmarks bar.">
+        <Row settingId={SETTINGS.showBookmarksImport.id} title={SETTINGS.showBookmarksImport.title} description="On an empty bookmarks bar.">
           <Toggle value={!settings.hideBookmarksBarImport} onChange={(v) => reportBrowserCommand(updateSettings({ hideBookmarksBarImport: !v }))} />
         </Row>
       </Group>
 
+      <SectionHeader title="Websites" />
+      <Group>
+        <BoostsRow />
+      </Group>
+
       <SectionHeader title="Performance" />
       <Group>
-        <Row title="Battery Saver" description="On battery or in Low Power Mode, pause background tabs that keep the processor busy.">
+        <Row
+          settingId={SETTINGS.batterySaver.id}
+          title={SETTINGS.batterySaver.title}
+          description="On battery or in Low Power Mode, pause background tabs that keep the processor busy."
+        >
           <Toggle value={settings.batterySaver} onChange={(v) => reportBrowserCommand(updateSettings({ batterySaver: v }))} />
         </Row>
       </Group>
 
       <SectionHeader title="Data" />
       <Group>
-        <Row title="History" description="Every page you visited, by day.">
+        <Row settingId={SETTINGS.history.id} title={SETTINGS.history.title} description="Every page you visited, by day.">
           <Button title="Show History" onPress={() => openInternalPage("history")} />
         </Row>
-        <Row title="Downloads" description="Files you downloaded, with where they're saved.">
+        <Row settingId={SETTINGS.downloads.id} title={SETTINGS.downloads.title} description="Files you downloaded, with where they're saved.">
           <Button title="Show Downloads" onPress={() => openInternalPage("downloads")} />
         </Row>
       </Group>
 
       <SectionHeader title="Web engine" />
       <Group>
-        <Row title="Chromium" description={info ? "NNCore" : undefined}>
+        <Row settingId={SETTINGS.chromium.id} title={SETTINGS.chromium.title} description={info ? "NNCore" : undefined}>
           <Text selectable style={{ fontSize: 13, color: theme.textSecondary }}>
             {info?.chromiumVersion ?? "…"}
           </Text>
@@ -75,5 +91,24 @@ export function AdvancedPane() {
         />
       </Group>
     </View>
+  );
+}
+
+// Every Boost on or off at once (Arc's Boosts; each site's are in Site Controls and Library › Boosts).
+function BoostsRow() {
+  const on = useBoosts((s) => s.on);
+  const count = useBoosts((s) => Object.keys(s.boosts).length);
+  useEffect(() => startBoosts(), []);
+  return (
+    <Row
+      settingId={SETTINGS.boosts.id}
+      title={SETTINGS.boosts.title}
+      description={`Your changes to how sites look${count ? ` (${count} ${count === 1 ? "Boost" : "Boosts"})` : ""}. Off shows every site as it is.`}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Button title="Show Boosts" onPress={() => openLibrary(null, "boosts")} />
+        <Toggle value={on} onChange={setBoostsOn} />
+      </View>
+    </Row>
   );
 }

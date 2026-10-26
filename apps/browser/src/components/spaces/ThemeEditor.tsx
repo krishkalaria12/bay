@@ -22,6 +22,7 @@ import { hex, SPACE_COLORS, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useSidebarOpen, useWindowId } from "../../store/hooks";
+import { withSidebarUndoWindow } from "../../store/sidebarUndo";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { useHover } from "../primitives";
@@ -128,7 +129,7 @@ function ThemeEditor({ request }: { request: Request }) {
         <View ref={keys} focusable enableFocusRing={false} keyDownEvents={[{ key: "Escape" }]} onKeyDown={close} style={{ padding: THEME_EDITOR_PAD }}>
           <ThemeControls
             look={{ color: space.color, theme: space.theme ? { ...space.theme, colors: [...space.theme.colors] } : null, followSite: space.followSite }}
-            onChange={(next) => reportBrowserCommand(updateSpace(request.spaceId, next))}
+            onChange={(next) => withSidebarUndoWindow(request.windowId, () => reportBrowserCommand(updateSpace(request.spaceId, next)))}
           />
         </View>
       </Surface>
@@ -268,7 +269,7 @@ function wheel(width: number) {
 
 // The dotted field over the colour wheel, a dot for each colour, the first one large. A press or a drag anywhere
 // brings the first colour to the pointer (held to the wheel's edge), and the others follow it.
-function ColorField({ colors, width, onMoveFirst }: { colors: string[]; width: number; onMoveFirst(color: string): void }) {
+export function ColorField({ colors, width, onMoveFirst }: { colors: string[]; width: number; onMoveFirst(color: string): void }) {
   const theme = useTheme();
   const { height, radius, cx, cy, dotAt } = wheel(width);
   const field = useRef<View>(null);

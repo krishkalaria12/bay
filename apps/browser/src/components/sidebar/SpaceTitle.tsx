@@ -1,15 +1,16 @@
 import { Pressable, View } from "@bay/platform";
 import { ContextMenuArea, Surface, Symbol } from "@bay/shell";
 import { Text } from "react-native";
+import Animated, { useAnimatedStyle } from "@bay/platform/motion";
 import { hex, useTheme } from "../../lib/theme";
-import { useBrowserRead as useBrowser } from "../../store/read";
+import { browserRead, useBrowserRead as useBrowser } from "../../store/read";
 import { useHover } from "../primitives";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { openSpaceMenu } from "../spaces/SpaceSwitcher";
+import { useFold } from "./Fold";
 import { useSidebarMetrics, useSidebarTokens, withAlpha } from "./tokens";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { updateSpace } from "../../runtime/spaceActions";
-import { browserRead } from "../../store/read";
 
 /** The title folds the pinned section; its menu lives on the ellipsis and right-click. */
 export function SpaceTitle({ windowId, spaceId }: { windowId: string; spaceId: string }) {
@@ -19,6 +20,9 @@ export function SpaceTitle({ windowId, spaceId }: { windowId: string; spaceId: s
   const name = useBrowser((s) => s.spaces[spaceId]?.name);
   const folded = useBrowser((s) => !!s.spaces[spaceId]?.folded);
   const { hovered, hoverProps } = useHover();
+  // The chevron turns with the pinned section folding under it.
+  const { open } = useFold(folded);
+  const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${(open.get() - 1) * 90}deg` }] }));
   if (name === undefined) return null;
   const menu = () => void openSpaceMenu(windowId, spaceId);
 
@@ -42,7 +46,9 @@ export function SpaceTitle({ windowId, spaceId }: { windowId: string; spaceId: s
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: theme.textPrimary }}>
               {name}
             </Text>
-            <Symbol name={folded ? "chevron.right" : "chevron.down"} size={9} color={theme.textSecondary} style={{ width: 12, height: 12 }} />
+            <Animated.View style={chevron}>
+              <Symbol name="chevron.down" size={9} color={theme.textSecondary} style={{ width: 12, height: 12 }} />
+            </Animated.View>
           </Pressable>
           <Pressable onPress={menu} accessibilityLabel={`${name} menu`} tooltip="Space menu">
             {({ pressed }) => (

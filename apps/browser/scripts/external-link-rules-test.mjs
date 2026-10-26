@@ -29,7 +29,7 @@ const until = async (description, body) => {
 };
 const tab = (path) =>
   run(
-    `const s=nn.store.getState(); const t=Object.values(s.tabs).find(t=>t.url===${JSON.stringify(address(path))}); return t ? {id:t.id,spaceId:t.spaceId,windowId:t.windowId,kind:s.windows[t.windowId]?.kind??"main"} : null;`,
+    `const s=nn.store.getState(); const t=Object.values(s.tabs).find(t=>t.url===${JSON.stringify(address(path))}||t.url===${JSON.stringify(new URL(address(path)).href)}); return t ? {id:t.id,spaceId:t.spaceId,windowId:t.windowId,kind:s.windows[t.windowId]?.kind??"main"} : null;`,
   );
 const send = (paths, sourceApp) =>
   run(`nn.externalLinks.openExternalUrls(${JSON.stringify(paths.map(address))},${JSON.stringify(sourceApp) ?? "undefined"}); return true;`);
@@ -76,7 +76,7 @@ try {
     assert.notEqual(quick.windowId, window.windowId);
     return { quick, window };
   });
-  await report.check("unmatched and missing-space links use defaults; batches stay in main windows", async () => {
+  await report.check("unmatched and missing-space links use defaults, including batches", async () => {
     await send(["/unmatched/main"]);
     assert.equal((await tab("/unmatched/main")).kind, "main");
     assert.equal((await tab("/unmatched/main")).spaceId, "default");
@@ -89,7 +89,7 @@ try {
     assert.equal((await tab("/missing/fallback")).kind, "small");
     await send(["/unmatched/batch-a", "/unmatched/batch-b"]);
     for (const path of ["/unmatched/batch-a", "/unmatched/batch-b"]) {
-      assert.equal((await tab(path)).kind, "main");
+      assert.equal((await tab(path)).kind, "small");
       assert.equal((await tab(path)).spaceId, "default");
     }
     return {
@@ -98,9 +98,85 @@ try {
       batch: [await tab("/unmatched/batch-a"), await tab("/unmatched/batch-b")],
     };
   });
+  await report.check("contains and exact routes include queries, fragments and Unicode paths", async () => {
+    await send([
+      "/reports/weekly?view=board#today",
+      "/reports/weekly?view=list#today",
+      "/reports/weekly?view=board#tomorrow",
+      "/café/page",
+      "/legacy-café/page",
+    ]);
+    assert.equal((await tab("/reports/weekly?view=board#today")).spaceId, "work");
+    assert.equal((await tab("/reports/weekly?view=list#today")).kind, "small");
+    assert.equal((await tab("/reports/weekly?view=board#tomorrow")).kind, "small");
+    assert.equal((await tab("/café/page")).spaceId, "work");
+    assert.equal((await tab("/legacy-café/page")).spaceId, "work");
+  });
+  await report.check("most recent and explicit default Spaces route independently of the browser default", async () => {
+    await run(
+      'const s=nn.store.getState();s.switchSpace("w1","work");s.setFocusedWindow("w1");s.updateSettings({externalLinkDefault:{kind:"mostRecentSpace"}});return true;',
+    );
+    await send(["/recent/rule", "/unmatched/recent"]);
+    assert.equal((await tab("/recent/rule")).spaceId, "work");
+    assert.equal((await tab("/unmatched/recent")).spaceId, "work");
+    await run('nn.store.getState().updateSettings({externalLinkDefault:{kind:"space",spaceId:"work"}});return true;');
+    await send(["/unmatched/chosen"]);
+    assert.equal((await tab("/unmatched/chosen")).spaceId, "work");
+    assert.equal(await run("return nn.store.getState().settings.defaultSpaceId"), "default");
+  });
+  await report.check("Peek Open as Tab follows routing through the keyboard command", async () => {
+    const target = await run('return nn.store.getState().createWindow({spaceId:"work"})');
+    const peek = await run(
+      `const s=nn.store.getState();s.activate("intro","w1");s.setFocusedWindow("w1");return s.openPeek("intro",${JSON.stringify(address("/work/peek"))});`,
+    );
+    await sleep(300);
+    await run('nn.runCommand({command:"openFile",windowId:"w1"});return true;');
+    assert.equal((await tab("/work/peek")).windowId, target);
+    assert.equal((await tab("/work/peek")).spaceId, "work");
+    assert.equal(await run("return nn.store.getState().windows.w1.spaceId"), "default");
+    assert.equal(await run("return nn.store.getState().peeks.w1??null"), null);
+    assert.equal(await run(`return nn.store.getState().tabs[${JSON.stringify(peek)}].peekOf??null`), null);
+    const livePeek = await run(
+      `const s=nn.store.getState();s.activate("intro","w1");return s.openPeek("intro",${JSON.stringify(address("/quick/peek-live"))});`,
+    );
+    const page = await app.page("/quick/peek-live");
+    try {
+      await page.eval('window.atcLiveMarker="preserved"');
+      await run('nn.runCommand({command:"openFile",windowId:"w1"});return true;');
+      await until("Little Bay transfer", `const s=nn.store.getState();return s.windows[s.tabs[${JSON.stringify(livePeek)}]?.windowId]?.kind==="small";`);
+      assert.equal((await tab("/quick/peek-live")).id, livePeek);
+      assert.equal(await page.eval("window.atcLiveMarker"), "preserved", "routing preserves the live page instead of reloading the URL");
+    } finally {
+      page.close();
+    }
+  });
+  await report.check("deleting a Space removes local and synced routes and repairs its routing default", async () => {
+    await run(
+      `const s=nn.store.getState();const id=s.createSpace({name:"Temporary"});s.updateSettings({externalLinkDefault:{kind:"space",spaceId:id},externalLinkRules:[...s.settings.externalLinkRules,{id:"deleted-local",matchType:"contains",pattern:"deleted-local",destination:{kind:"space",spaceId:id}},{id:"deleted-synced",matchType:"contains",pattern:"deleted-synced",destination:{kind:"space",spaceId:id,syncProfileId:"temporary-profile"}}]});s.deleteSpace(id);return true;`,
+    );
+    assert.equal(await run('return nn.store.getState().settings.externalLinkRules.some(r=>r.id.startsWith("deleted-"))'), false);
+    assert.deepEqual(await run("return nn.store.getState().settings.externalLinkDefault"), { kind: "space", spaceId: "default" });
+  });
+  await report.check("rule editor validates empty text and saves Contains rules through native typing", async () => {
+    await run('nn.openSettings("links");return true;');
+    await sleep(700);
+    await run("nn.linkRules.showRuleEditor();return true;");
+    await sleep(300);
+    const before = await run("return nn.store.getState().settings.externalLinkRules.length");
+    await run(`return nn.shell.devTypeKeys("settings",${JSON.stringify("editor-café?view=board#today\r")},15);`);
+    const saved = await run("return nn.store.getState().settings.externalLinkRules.at(-1)");
+    assert.equal(saved.matchType, "contains");
+    assert.equal(saved.pattern, "editor-café?view=board#today");
+    assert.equal(await run("return nn.store.getState().settings.externalLinkRules.length"), before + 1);
+    await run("nn.linkRules.showRuleEditor();return true;");
+    await sleep(300);
+    await run(`return nn.shell.devTypeKeys("settings",${JSON.stringify("\r")},15);`);
+    assert.equal(await run("return nn.store.getState().settings.externalLinkRules.length"), before + 1);
+    await run(`return nn.shell.devTypeKeys("settings",${JSON.stringify("\u001b")},15);`);
+  });
   await report.check("ordered rules persist across Debug app restart and appear in Links settings", async () => {
     await run(
-      `nn.store.getState().updateSettings({externalLinkRules:${JSON.stringify(fixture.settings.externalLinkRules)},openLinksInLittleBay:false}); return true;`,
+      `nn.store.getState().updateSettings({externalLinkRules:${JSON.stringify(fixture.settings.externalLinkRules)},externalLinkDefault:{kind:"mostRecentSpace"}}); return true;`,
     );
     await until(
       "saved rules",
@@ -109,9 +185,11 @@ try {
     await app.quit();
     app = await launch(appPath, { data });
     assert.deepEqual(await run("return nn.store.getState().settings.externalLinkRules"), fixture.settings.externalLinkRules);
+    assert.deepEqual(await run("return nn.store.getState().settings.externalLinkDefault"), { kind: "mostRecentSpace" });
     await send(["/work/restored"]);
     assert.equal((await tab("/work/restored")).spaceId, "work");
     await run('nn.openSettings("links"); return true;');
+    await sleep(700);
     await until("Links settings screenshot", `return nn.shell.devSnapshotWindow("settings",${JSON.stringify(join(scratch, "links-settings.png"))});`);
     return { rules: fixture.settings.externalLinkRules.map((r) => r.id), screenshot: join(scratch, "links-settings.png") };
   });
@@ -120,7 +198,7 @@ try {
   await pages.close();
   writeFileSync(
     join(scratch, "results.json"),
-    JSON.stringify({ passed: !report.failed.length && report.results.length === 5, failures: report.failed, scratch }, null, 2),
+    JSON.stringify({ passed: !report.failed.length && report.results.length === 10, failures: report.failed, scratch }, null, 2),
   );
 }
 process.exitCode = report.summary() ? 0 : 1;

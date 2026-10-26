@@ -44,7 +44,7 @@ export function formatShortcut({ key, modifiers }: Combo): string {
   return shortcutLabel(mods + name);
 }
 
-const comboId = (c: Combo) => (c.key ? `${[...c.modifiers].sort().join("+")}+${c.key.toLowerCase()}` : "");
+export const comboId = (c: Combo) => (c.key ? `${[...c.modifiers].sort().join("+")}+${c.key.toLowerCase()}` : "");
 
 export function ShortcutsPane() {
   const theme = useTheme();
@@ -167,7 +167,7 @@ export function ShortcutsPane() {
   );
 }
 
-function ShortcutField({
+export function ShortcutField({
   combo,
   remappable,
   recording,

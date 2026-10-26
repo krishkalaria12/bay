@@ -24,6 +24,7 @@ import type { LiveAccount, LiveSourceId } from "../../../live/types";
 import { useBrowserRead as useBrowser } from "../../../store/read";
 import { Favicon } from "../../primitives";
 import { Button, Group, Row, SectionHeader, Sheet, TextField } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 
@@ -42,7 +43,8 @@ export function LiveFoldersPane() {
   return (
     <View>
       <SectionHeader
-        title="Live folders"
+        settingId={SETTINGS.liveFolders.id}
+        title={SETTINGS.liveFolders.title}
         description="Right-click empty space in the sidebar and choose New Live Folder to add one. Live folders refresh every few minutes; items open as tabs that stay in the folder."
       />
       {folders.length ? (

@@ -56,6 +56,7 @@ public class CefModule: Module {
     AsyncFunction("forgetOpenedURL") { (id: Int) in }.runOnQueue(.main)
     AsyncFunction("setDisplayMediaPicker") { (enabled: Bool) in NNCoreWebView.setDisplayMediaPicker(enabled) }.runOnQueue(.main)
     AsyncFunction("setAutoPictureInPicture") { (enabled: Bool) in NNCoreWebView.setAutoPictureInPictureEnabled(enabled) }.runOnQueue(.main)
+    AsyncFunction("setBoosts") { (boosts: [[String: Any]]) in NNCoreWebView.setBoosts(boosts) }.runOnQueue(.main)
     AsyncFunction("displayMediaSources") { NNCoreHost.displayMediaSources }.runOnQueue(.main)
     AsyncFunction("listTasks") { (promise: Promise) in NNCoreServices.tasks { promise.resolve($0) } }.runOnQueue(.main)
     AsyncFunction("killTask") { (id: Int64, promise: Promise) in NNCoreServices.killTask(id) { promise.resolve($0) } }.runOnQueue(.main)
@@ -240,6 +241,7 @@ public class CefModule: Module {
       AsyncFunction("stopLoading") { (view: CefWebView) in view.browser.stopLoading() }.runOnQueue(.main)
       AsyncFunction("focus") { (view: CefWebView) in view.browser.focusPage() }.runOnQueue(.main)
       AsyncFunction("setMuted") { (view: CefWebView, muted: Bool) in view.browser.setMuted(muted) }.runOnQueue(.main)
+      AsyncFunction("setBoostStyle") { (view: CefWebView, css: String) in view.browser.setBoostStyle(css) }.runOnQueue(.main)
       AsyncFunction("zoomStep") { (view: CefWebView, direction: Int) in view.browser.zoomStep(direction) }.runOnQueue(.main)
       AsyncFunction("find") { (view: CefWebView, text: String, forward: Bool, findNext: Bool) in
         view.browser.find(text, forward: forward, findNext: findNext)
@@ -263,6 +265,9 @@ public class CefModule: Module {
       }.runOnQueue(.main)
       AsyncFunction("captureScreenshot") { (view: CefWebView, promise: Promise) in
         view.browser.captureScreenshot { promise.resolve($0) }
+      }.runOnQueue(.main)
+      AsyncFunction("captureImage") { (view: CefWebView, options: [String: Any], promise: Promise) in
+        view.browser.captureImage(options) { promise.resolve($0) }
       }.runOnQueue(.main)
       AsyncFunction("downloadFavicon") { (view: CefWebView, url: String, promise: Promise) in
         view.browser.downloadFavicon(url, name: nil) { promise.resolve($0) }

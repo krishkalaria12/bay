@@ -49,7 +49,7 @@ test("meeting watchers group authority tabs synchronously and reuse their call g
 });
 
 test("meeting cleanup closes only the authority group and stops its timer", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   const { browser, windowId, stop, global, reads } = setup(t);
   const call = browser.getState().newTab(windowId, { url: "https://meet.google.com/abc-defg-hij" });
   browser.getState().newTab(windowId);
@@ -57,7 +57,7 @@ test("meeting cleanup closes only the authority group and stops its timer", (t) 
   const old = Date.now() - MEETING_CLEANUP_IDLE_MS - 60_000;
   browser.setState((s) => ({ tabs: { ...s.tabs, [call]: { ...s.tabs[call], lastActiveAt: old } } }));
   setMeetingGroup({ ...live().meetingGroups[group.id], endedAt: old });
-  t.mock.timers.tick(20_000);
+  t.mock.timers.tick(30_000);
   assert.equal(browser.getState().groups[group.id], undefined);
   assert.equal(browser.getState().tabs[call], undefined);
   assert.strictEqual(useBrowser.getState(), global);
@@ -90,7 +90,9 @@ test("stopping meeting groups ignores an outstanding calendar alert confirmation
 
 test("meeting group startup detaches its subscription when timer creation fails", (t) => {
   const saved = useLive.getState();
-  useLive.setState({ meetingGroups: {} });
+  useLive.setState({
+    meetingGroups: { pending: { groupId: "pending", callTabId: "pending", title: "Meeting", occurrence: null, start: null, end: null, endedAt: null } },
+  });
   t.after(() => useLive.setState(saved, true));
   const browser = createBrowserStore();
   const windowId = browser.getState().createWindow();
@@ -104,7 +106,7 @@ test("meeting group startup detaches its subscription when timer creation fails"
     };
   });
   const failure = new Error("timer unavailable");
-  const timer = t.mock.method(globalThis, "setInterval", () => {
+  const timer = t.mock.method(globalThis, "setTimeout", () => {
     throw failure;
   });
   assert.throws(

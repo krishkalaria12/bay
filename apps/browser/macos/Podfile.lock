@@ -2730,7 +2730,7 @@ SPEC CHECKSUMS:
   BayImport: e7f9c76f61adf95710efb440bcf650c73529557e
   BayNNCore: abdda5b6c69bd9dedb3e49454b7f2e1835cbaa1f
   BayShaders: 13aef8d6438fa4fbc5f378700c2b4f01e8a3a93e
-  BayShell: 3327891fd32ab6fa69dbd7b9d1ae12e318f21a09
+  BayShell: 195025e37bdfcd468e764569f00cd49697166dcb
   BaySync: 84b8bfd48ed2dcd93c85bf4fb39bd006e34f5f3f
   boost: cea1d4f90a3a59537f3deb03ff5656489d7133dd
   DoubleConversion: d31b1eb37f6d6f456530c4fd9124b857d6889cab

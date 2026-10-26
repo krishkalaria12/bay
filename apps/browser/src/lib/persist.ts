@@ -4,6 +4,9 @@ import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } fr
 import { inPinnedContainer, isIncognitoSpace, makeTab, newId, snapshotTab } from "../store/model";
 import type { BrowserWindow, ClosedTab, Tab, TabSnapshot } from "../store/types";
 import { isolateSavedSpaces } from "../store/spaces";
+import { normalizeLocalFiles } from "../store/localFiles";
+import { startLibrary } from "../components/library/state";
+import { startBoosts } from "../components/boosts/state";
 import { createFaviconService, startFavicons } from "./favicons";
 import { createBookmarksService, startBookmarks } from "./bookmarks";
 import { createHistoryService, startHistory } from "./history";
@@ -41,6 +44,7 @@ const DOCS: Doc[] = [
       s.tabLists,
       s.groups,
       s.pinnedFolders,
+      s.localFiles,
       s.splits,
       s.closedTabs,
       s.closedWindows,
@@ -74,6 +78,7 @@ const DOCS: Doc[] = [
         ),
         groups: Object.values(s.groups).filter((g) => !isIncognitoSpace(g.spaceId)),
         pinnedFolders: Object.values(s.pinnedFolders),
+        localFiles: Object.values(normalizeLocalFiles(s.localFiles, s.spaces)),
         splits: Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))),
         // The store keeps private windows out of these lists; filter again so nothing private is ever written.
         closedTabs: s.closedTabs.filter((c) => publicTab(c.tab)),
@@ -121,6 +126,7 @@ type SessionV2 = {
   tabLists?: BrowserState["tabLists"];
   groups: BrowserState["groups"][string][];
   pinnedFolders?: BrowserState["pinnedFolders"][string][];
+  localFiles?: BrowserState["localFiles"][string][];
   parkedPins?: Record<
     string,
     {
@@ -259,6 +265,7 @@ export function loadSession(): HydrateData | null {
     tabLists: session.tabLists ?? {},
     groups: byId(session.groups),
     pinnedFolders: byId(session.pinnedFolders),
+    localFiles: normalizeLocalFiles({ ...session.localFiles }, spaces),
     splits: byId(session.splits),
     closedTabs: session.closedTabs,
     closedWindows: session.closedWindows,
@@ -311,6 +318,8 @@ export type PersistenceOwner = {
 export function restoreBrowserSession(store: BrowserStore) {
   const session = loadSession();
   store.getState().hydrate(session ?? {});
+  startLibrary();
+  startBoosts();
   return session;
 }
 

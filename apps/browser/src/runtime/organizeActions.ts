@@ -22,6 +22,7 @@ export const updatePinnedFolder = (folderId: string, patch: FolderPatch) => disp
 export const movePinnedFolder = (folderId: string, beforeId: string | null, parentId?: string | null) =>
   dispatchBrowserCommand({ method: "movePinnedFolder", folderId, beforeId, parentId });
 export const deletePinnedFolder = (folderId: string) => dispatchBrowserCommand({ method: "deletePinnedFolder", folderId });
+export const undoSidebarEdit = (windowId: string) => dispatchBrowserCommand({ method: "undoSidebarEdit", windowId });
 export const undoPinnedFolderMove = () => dispatchBrowserCommand({ method: "undoPinnedFolderMove" });
 
 export const setSelection = (windowId: string, tabIds: string[]) => dispatchBrowserCommand({ method: "setSelection", windowId, tabIds });

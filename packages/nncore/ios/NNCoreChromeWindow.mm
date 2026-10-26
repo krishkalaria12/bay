@@ -243,7 +243,7 @@ bool IsReservedKey(NSEvent *event) {
   NSString *key = event.charactersIgnoringModifiers.lowercaseString;
   if ((mods & NSEventModifierFlagControl) && event.keyCode == 48) return true;  // ⌃Tab, ⌃⇧Tab
   if (!(mods & NSEventModifierFlagCommand) || (mods & (NSEventModifierFlagControl | NSEventModifierFlagOption))) return false;
-  return [@[ @"t", @"w", @"n", @"q" ] containsObject:key];
+  return [@[ @"t", @"w", @"n", @"q", @"." ] containsObject:key];
 }
 
 }  // namespace
@@ -535,9 +535,9 @@ NSNotificationName const NNCoreWindowSeenDidChange = @"NNCoreWindowSeenDidChange
 
 namespace {
 
-// A tab Chrome made in a window of its own (chrome.windows.create) while the app shows no page to announce it through:
-// offered to the app (tab:<id>) through the extensions module, which opens it in a window of its profile. Its URL
-// first, as -[NNCoreWebView openedTab:…] waits for it.
+// A tab Chrome made while the app shows no page to announce it through (in a window of its own, from
+// chrome.windows.create, or before the app's first page): offered to the app (tab:<id>) through the extensions module,
+// which opens it in a window of its profile. Its URL first, as -[NNCoreWebView openedTab:…] waits for it.
 void AnnounceStrayTab(NNCoreTab *tab, int tries) {
   if (tab.closed) return;
   NSString *url = tab.url;
@@ -715,18 +715,12 @@ NSMapTable<NNCoreProfile *, NNCoreWindowController *> *StandaloneWindows() {
     // A page's popup, target=_blank or ⌘-click: placed by the app's opener rules.
     [openerView openedTab:tab adoptId:[NNCoreTabs offerTab:tab] disposition:nncore_host::AppDisposition(disposition)];
   } else {
-    // A tab Chrome made on its own (an extension's tabs.create): the app takes Chrome's place for it, through a view
-    // of this window; with none, through the extensions module (the app opens the URL itself).
+    // A tab Chrome made on its own (an extension's tabs.create, a DevTools page): the app takes Chrome's place for it,
+    // through a view of this window; with none (just after launch), through the extensions module, which adopts the
+    // live tab rather than loading its URL again.
     NNCoreWebView *view = [self anyShownViewForProfile:tab.profile] ?: [self anyView];
-    if (view) {
-      [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:@"foreground"];
-    } else if (NNCoreServices.extensionsHandler) {
-      NNCoreServices.extensionsHandler(@"tabs", @{
-        @"action" : @"open", @"url" : tab.url ?: @"", @"profile" : nncore_host::ProfileName(tab.profile), @"active" : @YES,
-        @"window" : NSNull.null, @"extensionId" : @""
-      });
-      [tab closeNow];
-    }
+    if (view) [view openedTab:tab adoptId:[NNCoreTabs offerTab:tab prefix:@"tab"] disposition:@"foreground"];
+    else AnnounceStrayTab(tab, 0);
   }
 }
 
@@ -1074,6 +1068,19 @@ NSView *NNWindowRootView(NSWindow *window) {
 
 + (void (^)(NSWindow *, NSWindow *))swappedHandler {
   return gSwapped;
+}
+
++ (NSNumber *)focusedPageEditableInWindow:(NSWindow *)window {
+  NNCoreWindowController *controller = [NNCoreWindowController forNSWindow:window];
+  NSResponder *focused = window.firstResponder;
+  if (!controller || ![focused isKindOfClass:NSView.class]) return nil;
+  for (NNCoreProfile *profile in nncore_host::LoadedProfiles()) {
+    for (NNCoreTab *tab in [controller.coreWindow tabsForProfile:profile]) {
+      NNCoreWebView *view = [NNCoreTabs viewForTab:tab];
+      if (view.visible && [(NSView *)focused isDescendantOf:tab.view]) return @(tab.focusedEditable);
+    }
+  }
+  return nil;
 }
 
 + (void)closeWindow:(NSWindow *)window {
@@ -1505,6 +1512,11 @@ NSEvent *Key(NSWindow *window, NSEventType type, NSEventModifierFlags flags, NSS
     if (!close) return nil;
     NSRect r = [close convertRect:close.bounds toView:nil];
     return [NSString stringWithFormat:@"%.1f,%.1f,%.1f,%.1f", r.origin.x, r.origin.y, r.size.width, r.size.height];
+  }
+  // "lightsState": the close button's opacity and whether it's hidden ("0.00,1"), as the shell fades it.
+  if ([action isEqualToString:@"lightsState"]) {
+    NSButton *close = [window standardWindowButton:NSWindowCloseButton];
+    return close ? [NSString stringWithFormat:@"%.2f,%d", close.alphaValue, close.hidden] : nil;
   }
   if ([action isEqualToString:@"cover"] || [action isEqualToString:@"uncover"]) {
     // Tests: one of the app's own windows right above this one, a little larger, as an owner's window covering it

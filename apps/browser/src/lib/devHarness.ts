@@ -31,6 +31,10 @@ export function startDevHarness() {
 
   const nn = {
     store: useBrowser,
+    sidebarUi: useSidebarUi,
+    get sidebarKeyboard(): typeof import("../components/sidebar/keyboard") & { model: typeof import("../components/sidebar/keyboardModel") } {
+      return { ...require("../components/sidebar/keyboard"), model: require("../components/sidebar/keyboardModel") };
+    },
     actions,
     runCommand,
     get externalLinks(): typeof import("../components/littleBay/actions") {
@@ -42,6 +46,9 @@ export function startDevHarness() {
     webviews,
     shell,
     omnibox: omniboxDrivers,
+    get bangs(): typeof import("../components/omnibox/bangs") {
+      return require("../components/omnibox/bangs");
+    },
     pages: pagesDrivers,
     pageState: usePages,
     openSettings,
@@ -128,6 +135,49 @@ export function startDevHarness() {
     // the pages (and takes the keyboard).
     get developer(): typeof import("../components/developer/devMode") {
       return require("../components/developer/devMode");
+    },
+    // Boosts: the store, the editor and the model (scripts/boosts-test.mjs).
+    get boosts(): {
+      state: typeof import("../components/boosts/state");
+      editor: typeof import("../components/boosts/editor");
+      model: typeof import("./boosts");
+    } {
+      return { state: require("../components/boosts/state"), editor: require("../components/boosts/editor"), model: require("./boosts") };
+    },
+    // Capture's sessions and actions (scripts/capture-test.mjs).
+    get library(): {
+      state: typeof import("../components/library/state");
+      actions: typeof import("../components/library/actions");
+      canvases: typeof import("../components/library/EaselPage").easelCanvases;
+      canvasStates: typeof import("../components/library/EaselPage").easelCanvasStates;
+    } {
+      return {
+        state: require("../components/library/state"),
+        actions: require("../components/library/actions"),
+        canvases: require("../components/library/EaselPage").easelCanvases,
+        canvasStates: require("../components/library/EaselPage").easelCanvasStates,
+      };
+    },
+    get capture(): typeof import("../components/capture/state") {
+      return require("../components/capture/state");
+    },
+    // Arc's small habits (scripts/arc-gaps-test.mjs): unread counts, Little Bay from any app and put away, ⌃⌘J.
+    get arcGaps(): {
+      unread: typeof import("./unreadBadges");
+      littleBayAccess: typeof import("../components/littleBay/access");
+      putAway: typeof import("../components/littleBay/putAway");
+      alerts: typeof import("../live/alerts");
+      calendar: typeof import("../live/calendar").useCalendar;
+      menuState: typeof import("./native").menuState;
+    } {
+      return {
+        unread: require("./unreadBadges"),
+        littleBayAccess: require("../components/littleBay/access"),
+        putAway: require("../components/littleBay/putAway"),
+        alerts: require("../live/alerts"),
+        calendar: require("../live/calendar").useCalendar,
+        menuState: require("./native").menuState,
+      };
     },
     // Hovering moves nothing but a HoverSlot's contents (scripts/hover-shift-test.mjs).
     get hoverShift(): typeof import("./hoverShift") {

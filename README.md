@@ -31,22 +31,44 @@ Bay's own: the window, sidebar, command bar, menus and animations.
 **From Arc, kept**
 
 - **Sidebar.** Favorites as tiles on top, pinned tabs under them, today's tabs below. It can sit on
-  either side, auto-hide, or turn into a top tab bar.
+  either side, auto-hide, or turn into a top tab bar. Hold Option to see a hidden sidebar, and use a mouse's side
+  buttons over it to change space. Favorites show unread counts from Gmail, Slack, X and other sites.
 - **Spaces.** Each has its own icon, colour theme and profile, so sign-ins stay apart. Swipe between them.
-- **Pinned tabs and folders.** Kept open a click away, and never closed by tidying.
+- **Pinned tabs and folders.** Kept open a click away, and never closed by tidying. ⌘. focuses the sidebar;
+  arrows move through its rows and folders, Return opens, Space peeks, and Escape returns to the page.
+- **Sidebar undo.** ⌘Z reverses closes, clearing, moves, pinning, names, icons and themes in the window where
+  you edited them. Page editors and text fields keep their own Undo.
+- **Finder files.** Drop files or folders into the pinned section. Folders expand in place; PDFs, images and
+  HTML open in tabs. Drag a file row into a website to upload it. Synced pins ask for local access on another Mac.
 - **Old tabs put away.** Unused tabs leave after a time you choose for each space, say twelve hours for
   work and a week for home. They stay one search away.
 - **Peek.** A link opens over the page. Keep it as a tab or move it beside the page.
 - **Split View.** Two or more tabs side by side in one tab.
-- **Little Bay.** Links from Slack, Mail or Discord open in a small window of their own.
+- **Little Bay.** Links from Slack, Mail or Discord open in a small window of their own. Open one from any app
+  with a shortcut or the menu bar (Settings › Links). Windows left alone are put away after six hours, into the
+  Library's archive.
 - **Command bar.** One place for addresses, searches, open tabs and the ones put away (⌘L, or ⌘T for a
-  new tab).
+  new tab). ⇧↩ on a search opens its top result.
+- **Capture.** ⇧⌘2 lights up the part of the page under the pointer. Click it, or drag over any area, then copy,
+  save to Library, add to an Easel, share or mark up the picture. Capture Full Page saves the whole page to Downloads,
+  and Capture in Portrait frames the page on your space's colours.
+- **Easels.** Local whiteboards for captures, images, links, text and drawings. Move and resize objects, pan and
+  zoom, undo edits, or make a capture live. Create one with ⌃⇧E or “New Easel” in the command bar. Export as PNG
+  or a self-contained HTML file. Closing its pinned tab keeps the Easel in Library.
+- **Library.** The books button at the foot of the sidebar gathers saved media, downloads, Easels, Spaces and
+  archived tabs. Hover it to drag recent files, or type “Open Library” in the command bar.
 - **Previews.** Hover a folder, a Gmail or GitHub tab, or a calendar to see what's inside without
-  opening it.
+  opening it. ⌃⌘J joins the meeting that's on now.
+- **Boosts.** Change how a site looks: tint it from a colour wheel or your space's colours, invert it, pick a font,
+  size and case, zap away what you don't want (or keep one part alone with Focus), and add your own CSS, live as you
+  edit. Boost This Site is in Site Controls, the command bar and a tab's menu; Library › Boosts lists them all.
+  Boosts sync; a Boost's JavaScript stays on the Mac where you turned it on, off in private windows unless you allow it.
+- **Developer Mode.** Local servers get the full address, an inspector and DevTools a click away. JSON responses
+  show as a tree you can fold, with the raw text a click away.
 
 **Bay's own**
 
-- **Ad blocking built in**, with uBlock Origin Lite.
+- **Ad blocking built in**, with uBlock Origin.
 - **Chrome extensions** from the Chrome Web Store, with their toolbar buttons and side panels.
 - **Import** from Arc (spaces, pinned tabs, folders, favorites), Chrome, Safari, Firefox, Dia, Brave,
   Opera and Helium: bookmarks, history and passwords too.
@@ -54,7 +76,9 @@ Bay's own: the window, sidebar, command bar, menus and animations.
   key.
 - **⌃Tab** switches between your most recent tabs, across spaces.
 - **Picture in picture** that follows a video when you switch tabs, and media controls in the sidebar.
+- **Touch ID** before saved passwords or card numbers show, or passwords are exported.
 - **Passkeys** from Touch ID, your phone or a security key.
+- **Sits still.** Idles under half a percent of CPU with a tab open.
 - **Updates** arrive on their own through Sparkle.
 
 <table>
@@ -85,12 +109,16 @@ A Mac with Apple silicon, running macOS 14 Sonoma or later.
 | ⌘T | New tab (command bar) |
 | ⌘L | Command bar for the current tab |
 | ⌘W / ⇧⌘T | Close tab / reopen it |
+| ⌘. | Focus sidebar, then use arrow keys |
+| ⌘Z | Undo a sidebar edit |
 | ⌘S | Auto-hide the sidebar |
 | ⇧⌘S | Tabs in the sidebar or along the top |
 | ⌘[ / ⌘] | Back / forward |
 | ⌘R / ⇧⌘R | Reload / reload without the cache |
 | ⌘1 – ⌘8 | Select a tab |
 | ⌃Tab | Switch between recent tabs |
+| ⇧↩ | Open a search's top result (command bar) |
+| ⌃⌘J | Join the meeting that's on now |
 | ⌃⇧= | Add a split pane |
 | ⌥⇧⌘I | Send feedback |
 
@@ -228,10 +256,12 @@ Most are for tests and hidden instances rather than normal use.
 |---|---|
 | `BAY_DATA_DIR` | The app's data directory. A test instance gets its own, so it never touches your real profile |
 | `BAY_BACKGROUND` | `1` launches without taking focus, for smoke tests |
-| `BAY_REMOTE_DEBUGGING_PORT` | The port DevTools attaches to |
+| `BAY_REMOTE_DEBUGGING_PORT` | The port DevTools attaches to. Like `BAY_CHROMIUM_SWITCHES` and the app's arguments, it only reaches Chrome on a scratch `BAY_DATA_DIR` or an ad hoc build, never on your real profile |
+| `BAY_TEST_REAUTH` | `granted` answers Touch ID prompts in a hidden instance of a Debug or ad hoc build on a scratch profile. Shipped builds always ask |
 | `BAY_JS_LOCATION` | Metro URL the native side loads the bundle from |
 | `BAY_RELEASE_NOTES` | `1` shows the after-update notes even when the version matches |
 | `BAY_ALLOW_AUDIO`, `BAY_ALLOW_OCCLUSION` | Let a hidden instance play sound and be treated as occluded |
+| `BAY_PA_RECLAIM=fixed`, `BAY_CPU_HEALTH_SAMPLING=on`, `BAY_DISK_CHECK_SECONDS=5`, `BAY_BLUETOOTH_POLL_ON_DEMAND=off`, `BAY_HYBRID_SCAN_ON_DEMAND=off` | Put back one of Chrome's idle timers that Bay slows down, to compare idle cost |
 | `BAY_IMPORT_SOURCE_DIR`, `BAY_IMPORT_SAFARI_HOME`, `BAY_IMPORT_TEST_SECRET` | Point the importer at fixture folders and a test Safe Storage key instead of the real Keychain |
 
 ### The icon
@@ -274,8 +304,8 @@ Bay is open source under the [Apache License 2.0](LICENSE). You may use, modify 
 including commercially, as long as you keep the copyright and license notices, state the files you
 changed, and pass on the [NOTICE](NOTICE) file. Contributions are accepted under the same license.
 
-Bay builds on Chromium, the Chromium Embedded Framework and ungoogled-chromium, and ships uBlock Origin
-Lite, Sparkle and React Native, each under its own license. [NOTICE](NOTICE) lists them, and
+Bay builds on Chromium, the Chromium Embedded Framework and ungoogled-chromium, and ships uBlock Origin,
+Sparkle and React Native, each under its own license. [NOTICE](NOTICE) lists them, and
 `chrome://credits` in the app has Chromium's full list.
 
 Bay is an independent browser. It isn't affiliated with or endorsed by The Browser Company, makers of

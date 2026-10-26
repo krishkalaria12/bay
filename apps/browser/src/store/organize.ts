@@ -3,6 +3,7 @@ import type { StateCreator } from "zustand";
 import type { BrowserProjection, DeepReadonly } from "../runtime/projection";
 import type { BrowserState } from "./browser";
 import { autoGroupName } from "./groupNames";
+import { tidyTabTitle } from "../lib/tidyTabTitle";
 import { leaveGroups, orderSections, placeBlock, syncGroupOrder } from "./groups";
 import {
   activeTabId,
@@ -60,6 +61,10 @@ export type OrganizeSlice = {
   newTabInGroup(groupId: string, url?: string): string;
   moveGroupToBookmarksBar(groupId: string): void;
 
+  /** Groups today's tabs by topic into tab groups. Pinned tabs and existing groups are left alone. */
+  tidyTabs(windowId?: string): number;
+  /** Alias for tidyTabs. */
+  tidyTodayTabs(windowId?: string): number;
   /** Cleans up the tabs of the space the window shows, or of `spaceId`. */
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; spaceId?: string }): number;
   /** The automatic clean up (Arc's archive): every window's spaces, each after its own time. */
@@ -421,6 +426,7 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
   const movingSet = new Set(moving);
 
   const tabs = { ...s.tabs };
+  const tidyEnabled = !!s.settings?.tidyTabTitles;
   for (const id of moving) {
     const t = tabs[id]!;
     // A tab into a group leaves the Pinned section; one placed with no word on it keeps its row.
@@ -429,7 +435,13 @@ export function placing(s: BrowserState, ids: string[], p: TabPlacement): Browse
     if (t.pinned === p.pinned && !!t.pinnedRow === row && t.folderId === folderId) continue;
     const pinnedUrl = p.pinned || row ? (pinnedPage(t) ? t.pinnedUrl : t.url || null) : null;
     const { pinnedRow: _, folderId: _f, ...rest } = t;
-    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}) };
+    const wasRow = !!t.pinnedRow;
+    let extra: { customTitle?: string | null } = {};
+    if (tidyEnabled && row && !wasRow && !t.customTitle) {
+      const short = tidyTabTitle(t.title, t.url);
+      if (short && short !== t.title) extra = { customTitle: short };
+    }
+    tabs[id] = { ...rest, pinned: p.pinned, pinnedUrl, ...(row ? { pinnedRow: true } : {}), ...(folderId ? { folderId } : {}), ...extra };
   }
   const rest = w.tabIds.filter((id) => !movingSet.has(id));
   let at: number;
@@ -471,6 +483,65 @@ export function forgetClosedPrivateWindows(s: BrowserState): Partial<BrowserStat
   const mutes = gone(s.privateSiteMutes);
   if (!cleaned.length && !mutes.length) return null;
   return { privateCleanedTabs: without(s.privateCleanedTabs, cleaned), privateSiteMutes: without(s.privateSiteMutes, mutes) };
+}
+
+function hostOfTab(tab: Tab): string {
+  try {
+    return new URL(tab.url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function tidyTodayTabsImpl(get: () => BrowserState, set: (patch: Partial<BrowserState>) => void, windowId?: string): number {
+  const s = get();
+  const resolved = windowId ?? s.ui.focusedWindowId ?? s.windowOrder[0];
+  if (!resolved) return 0;
+  const w = s.windows[resolved];
+  if (!w) return 0;
+  const actualWindowId = resolved;
+  const spaceId = w.spaceId;
+  const view = viewTabIds(s, actualWindowId, spaceId);
+  const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
+  const candidates = view.filter((id) => {
+    const t = s.tabs[id];
+    if (!t || !t.url) return false;
+    if (pinnedPage(t)) return false;
+    if (grouped.has(id)) return false;
+    return true;
+  });
+
+  const clusters = new Map<string, string[]>();
+  const leftovers: string[] = [];
+  for (const id of candidates) {
+    const host = hostOfTab(s.tabs[id]!);
+    if (!host) {
+      leftovers.push(id);
+      continue;
+    }
+    const list = clusters.get(host) ?? [];
+    list.push(id);
+    clusters.set(host, list);
+  }
+
+  let next = s;
+  const created: string[] = [];
+  for (const ids of clusters.values()) {
+    if (ids.length < 2) {
+      leftovers.push(...ids);
+      continue;
+    }
+    const [state, id] = withGroup(next, ids, { pinned: false });
+    next = state;
+    if (id) created.push(id);
+  }
+  if (leftovers.length >= 2) {
+    const [state, id] = withGroup(next, leftovers, { pinned: false, name: "Other" });
+    next = state;
+    if (id) created.push(id);
+  }
+  if (created.length) set(next);
+  return created.length;
 }
 
 export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSlice> = (set, get) => ({
@@ -650,6 +721,14 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
       if (t?.url) get().addBookmark({ spaceId, url: t.url, title: t.customTitle || t.title || t.url, favicon: t.favicon, parentId: folder });
     }
     set(closingGroup(get(), groupId));
+  },
+
+  tidyTabs(windowId) {
+    return tidyTodayTabsImpl(get, set, windowId);
+  },
+
+  tidyTodayTabs(windowId) {
+    return tidyTodayTabsImpl(get, set, windowId);
   },
 
   cleanUpTabs(windowId, options = {}) {

@@ -31,3 +31,9 @@ export function littleBayProfile(s: BrowserState | ReadonlySmallState): string {
   const main = mainWindowFor(s);
   return main ? s.windows[main]!.spaceId : s.settings.defaultSpaceId;
 }
+
+// Utility windows, Little Bay and private windows never change the most recent regular Space.
+export function mostRecentSpace(s: BrowserState | ReadonlySmallState): string {
+  const main = mainWindowFor(s);
+  return main ? s.windows[main]!.spaceId : s.settings.defaultSpaceId;
+}

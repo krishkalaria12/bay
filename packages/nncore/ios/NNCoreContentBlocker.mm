@@ -1,46 +1,41 @@
-// The built-in content blocker on NNCore: uBlock Origin Lite (MV3), driven by its own runtime messages. The extension
-// loads as a component extension into each profile, and the app talks to it from one of its pages
-// (chrome-extension://<id>/manifest.json) opened in a hidden window of ours, where evaluate: runs with the
-// extension's APIs. A change is one evaluation that reads and writes inside the page, and any failed read aborts it:
-// the error goes back to the caller and nothing is written.
 #import "NNCoreServices.h"
 #import "NNCoreInternal.h"
-
-#import <CommonCrypto/CommonDigest.h>
-#include <sys/clonefile.h>
-#include <sys/stat.h>
 
 #include <utility>
 
 namespace {
-NSString *ExtensionId() { return @"bnjeokpoejhioagiokhkhmdogkhbnbki"; }
-// +devFailNextMessage: the next call's first message to the extension fails.
+NSString *ExtensionId() { return @"fajbdaomknpkicfjcpipdmcpoamdmilh"; }
 bool gFailNextMessage = false;
-// +devDelayNextLoad: the next profile's load of the extension waits that long (ms), its pages held.
 double gDelayNextLoadMs = 0;
-}  // namespace
+}
 
-// The extension's page in one profile. Calls wait until its document has loaded (again, after a reload), then run one
-// at a time in order, so one read-modify-write never interleaves with another. When the page goes (closed, its renderer
-// gone, the extension reloaded under it), the calls waiting fail and the next call opens a new page.
 @interface NNContentBlockerPage : NSObject <NNCoreTabDelegate>
 @property(readonly) NNCoreTab *tab;
+@property(readonly) NSString *origin;
 @property(readonly) BOOL dead;
 @end
 
 @implementation NNContentBlockerPage {
-  NSMutableArray<NSArray *> *_calls;  // [script, completion]
+  NSMutableArray<NSArray *> *_calls;
+  void (^_inflight)(id value, NSString *error);
+  BOOL _started;
   BOOL _loaded;
   BOOL _busy;
 }
 
-- (instancetype)initWithTab:(NNCoreTab *)tab {
+- (instancetype)initWithTab:(NNCoreTab *)tab origin:(NSString *)origin {
   if ((self = [super init])) {
     _tab = tab;
+    _origin = origin;
     _calls = [NSMutableArray array];
+    _started = tab.loading;
     tab.delegate = self;
   }
   return self;
+}
+
+- (BOOL)onOwnPage {
+  return !_dead && [_tab.url hasPrefix:_origin];
 }
 
 - (void)run:(NSString *)script completion:(void (^)(id value, NSString *error))completion {
@@ -49,14 +44,23 @@ double gDelayNextLoadMs = 0;
   [self next];
 }
 
+- (void)leftOwnPage {
+  [self fail:[@"not the extension page: " stringByAppendingString:_tab.url ?: @""]];
+}
+
 - (void)next {
   if (_dead || !_loaded || _busy || !_calls.count) return;
+  if (!self.onOwnPage) return [self leftOwnPage];
   NSArray *call = _calls.firstObject;
   [_calls removeObjectAtIndex:0];
-  void (^completion)(id, NSString *) = call[1];
+  _inflight = call[1];
   _busy = YES;
   [_tab evaluate:call[0]
       completion:^(NSString *json) {
+        void (^completion)(id, NSString *) = self->_inflight;
+        if (!completion) return;
+        if (!self.onOwnPage) return [self leftOwnPage];
+        self->_inflight = nil;
         self->_busy = NO;
         NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
         NSDictionary *answer = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -65,7 +69,6 @@ double gDelayNextLoadMs = 0;
                                                                               : nil;
         id value = error || answer[@"value"] == NSNull.null ? nil : answer[@"value"];
         completion(value, error);
-        if ([error containsString:@"context invalidated"]) [self fail:error];
         [self next];
       }];
 }
@@ -75,13 +78,28 @@ double gDelayNextLoadMs = 0;
   _dead = YES;
   NSArray<NSArray *> *calls = _calls;
   _calls = nil;
-  for (NSArray *call in calls) ((void (^)(id, NSString *))call[1])(nil, error);
-  [_tab closeNow];
+  void (^inflight)(id, NSString *) = _inflight;
+  _inflight = nil;
+  NNCoreTab *tab = _tab;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [tab closeNow];
+    if (inflight) inflight(nil, error);
+    for (NSArray *call in calls) ((void (^)(id, NSString *))call[1])(nil, error);
+  });
 }
 
 - (void)tabDidChangeLoading:(NNCoreTab *)tab {
-  _loaded = !tab.loading;
+  _started = _started || tab.loading;
+  _loaded = _started && !tab.loading;
   [self next];
+}
+
+- (void)tabDidChangeURL:(NNCoreTab *)tab {
+  if (tab.url.length && !self.onOwnPage) [self leftOwnPage];
+}
+
+- (void)tabDidCommitDocument:(NNCoreTab *)tab {
+  if (!self.onOwnPage) [self leftOwnPage];
 }
 
 - (void)tabWillClose:(NNCoreTab *)tab {
@@ -93,14 +111,25 @@ double gDelayNextLoadMs = 0;
 }
 
 - (void)tab:(NNCoreTab *)tab didFailLoad:(NSString *)url code:(int)code description:(NSString *)text {
-  if (code != -3) [self fail:text];  // ERR_ABORTED: another load (a reload) replaced it
+  if (code != -3) [self fail:text];
 }
 
 @end
 
-namespace {
+@interface NNContentBlockerOp : NSObject
+@property(copy) NSString *profile;
+@property(copy) NSString *expression;
+@property(copy) void (^completion)(id value, NSString *error);
+@property int attemptsLeft;
+@property BOOL failNext;
+@property NSTimeInterval deadline;
+@property NSUInteger attempt;
+@end
 
-NSString *ExtensionPath();
+@implementation NNContentBlockerOp
+@end
+
+namespace {
 
 NSString *ScriptWith(NSString *format, NSArray *args) {
   NSMutableString *out = [NSMutableString string];
@@ -114,9 +143,6 @@ NSString *ScriptWith(NSString *format, NSArray *args) {
   }
   return out;
 }
-
-constexpr int kModeNone = 0;
-constexpr int kModeOptimal = 2;
 
 NSString *const kProfile = @"";
 
@@ -139,130 +165,46 @@ NNContentBlockerPage *PageFor(NSString *profile, NNCoreProfile *p) {
   NNContentBlockerPage *page = Pages()[profile];
   if (page.tab.closed) [page fail:@"closed"];
   if (page && !page.dead) return page;
-  // A window of our own that nobody sees: no controller, so nothing routes or reports its tab.
   NNCoreWindow *window = PageWindows()[profile];
   if (!window) {
     PageWindows()[profile] = window = [[NNCoreWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300)];
-    // The extension's page is ours, not the user's: never in history or the omnibox.
     if ([window respondsToSelector:@selector(setInternal:)]) window.internal = YES;
   }
-  NNCoreTab *tab = [window openTab:[NSString stringWithFormat:@"chrome-extension://%@/manifest.json", ExtensionId()] profile:p foreground:YES];
-  return Pages()[profile] = tab ? [[NNContentBlockerPage alloc] initWithTab:tab] : nil;
+  NSString *origin = [NSString stringWithFormat:@"chrome-extension://%@/", ExtensionId()];
+  NNCoreTab *tab = [window openTab:[origin stringByAppendingString:@"blank.html"] profile:p foreground:YES];
+  return Pages()[profile] = tab ? [[NNContentBlockerPage alloc] initWithTab:tab origin:origin] : nil;
 }
 
-// MARK: The extension
-
-// The fingerprint embed.sh wrote next to the bundled copy; builds from before it walk the copy instead.
-NSString *Fingerprint(NSString *dir) {
-  NSString *stamped = [NSString stringWithContentsOfFile:[dir stringByAppendingString:@".fingerprint"]
-                                                encoding:NSUTF8StringEncoding
-                                                   error:nil];
-  stamped = [stamped stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-  if (stamped.length) return stamped;
-  NSData *manifest = [NSData dataWithContentsOfFile:[dir stringByAppendingPathComponent:@"manifest.json"]];
-  if (!manifest) return nil;
-  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
-  CC_SHA256(manifest.bytes, (CC_LONG)manifest.length, digest);
-  NSMutableString *fingerprint = [NSMutableString string];
-  for (unsigned char byte : digest) [fingerprint appendFormat:@"%02x", byte];
-  unsigned long long files = 0, bytes = 0;
-  NSDirectoryEnumerator<NSURL *> *entries = [NSFileManager.defaultManager enumeratorAtURL:[NSURL fileURLWithPath:dir]
-                                                               includingPropertiesForKeys:@[ NSURLFileSizeKey ]
-                                                                                  options:0
-                                                                             errorHandler:nil];
-  for (NSURL *entry in entries) {
-    if ([entry.lastPathComponent isEqualToString:@"_metadata"]) {
-      [entries skipDescendants];
-      continue;
-    }
-    NSNumber *size;
-    [entry getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
-    files++;
-    bytes += size.unsignedLongLongValue;
-  }
-  [fingerprint appendFormat:@"-%llu-%llu", files, bytes];
-  return fingerprint;
-}
-
-NSString *WritableCopy(NSString *bundled) {
-  NSFileManager *fm = NSFileManager.defaultManager;
-  NSString *dir = [[NNCoreHost.dataDirectory stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Built-in Extensions"];
-  NSString *copy = [dir stringByAppendingPathComponent:@"ublock-lite"];
-  NSString *stampPath = [dir stringByAppendingPathComponent:@"ublock-lite.source"];
-  NSString *fingerprint = Fingerprint(bundled);
-  NSString *stamp = [NSString stringWithContentsOfFile:stampPath encoding:NSUTF8StringEncoding error:nil];
-  if (fingerprint && [stamp isEqualToString:fingerprint] &&
-      [fm fileExistsAtPath:[copy stringByAppendingPathComponent:@"manifest.json"]])
-    return copy;
-
-  NSError *error;
-  if (![fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:&error]) {
-    NSLog(@"[blocker] %@: %@", dir, error);
-    return nil;
-  }
-  for (NSString *name in [fm contentsOfDirectoryAtPath:dir error:nil])
-    if ([name hasPrefix:@".ublock-lite"]) [fm removeItemAtPath:[dir stringByAppendingPathComponent:name] error:nil];
-  NSString *staging = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@".ublock-lite-%d", getpid()]];
-  bool cloned = clonefile(bundled.fileSystemRepresentation, staging.fileSystemRepresentation, 0) == 0;
-  if (!cloned) [fm removeItemAtPath:staging error:nil];
-  if (!cloned && ![fm copyItemAtPath:bundled toPath:staging error:&error]) {
-    NSLog(@"[blocker] copying %@: %@", bundled, error);
-    [fm removeItemAtPath:staging error:nil];
-    return nil;
-  }
-  NSDirectoryEnumerator<NSString *> *entries = [fm enumeratorAtPath:staging];
-  for (NSString *entry = @""; entry; entry = entries.nextObject) {
-    NSString *path = [staging stringByAppendingPathComponent:entry];
-    struct stat info;
-    if (lstat(path.fileSystemRepresentation, &info) == 0 && !S_ISLNK(info.st_mode) && !(info.st_mode & S_IWUSR))
-      chmod(path.fileSystemRepresentation, info.st_mode | S_IWUSR);
-  }
-  [fm removeItemAtPath:[staging stringByAppendingPathComponent:@"_metadata"] error:nil];
-
-  NSString *old = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@".ublock-lite-old-%d", getpid()]];
-  bool hadCopy = [fm fileExistsAtPath:copy];
-  if ((hadCopy && ![fm moveItemAtPath:copy toPath:old error:&error]) || ![fm moveItemAtPath:staging toPath:copy error:&error]) {
-    NSLog(@"[blocker] installing %@: %@", copy, error);
-    [fm removeItemAtPath:staging error:nil];
-    return nil;
-  }
-  if (hadCopy) [fm removeItemAtPath:old error:nil];
-  [fingerprint writeToFile:stampPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
-  return copy;
+NSString *BundledExtension() {
+  NSString *bundled = [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"Extensions/ublock"];
+  return [NSFileManager.defaultManager fileExistsAtPath:[bundled stringByAppendingPathComponent:@"manifest.json"]] ? bundled : nil;
 }
 
 NSString *gExtensionPath;
-dispatch_group_t Preparing() {
-  static dispatch_group_t group = dispatch_group_create();
-  return group;
-}
 
 void StartPreparing() {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    dispatch_group_async(Preparing(), dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-      NSString *bundled = [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"Extensions/ublock-lite"];
-      if ([NSFileManager.defaultManager fileExistsAtPath:[bundled stringByAppendingPathComponent:@"manifest.json"]])
-        gExtensionPath = WritableCopy(bundled);
+    gExtensionPath = BundledExtension();
+    NSString *oldCopies = [[NNCoreHost.dataDirectory stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Built-in Extensions"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+      if ([NSFileManager.defaultManager fileExistsAtPath:oldCopies]) [NSFileManager.defaultManager removeItemAtPath:oldCopies error:nil];
     });
   });
 }
 
 NSString *ExtensionPath() {
   StartPreparing();
-  dispatch_group_wait(Preparing(), DISPATCH_TIME_FOREVER);
   return gExtensionPath;
 }
 
 void FollowDefault(NSArray<NSString *> *profiles, void (^done)(NSString *error));
+void WhenDefaultSettled(void (^then)(void));
 
-// Loads the extension into a profile (once), then `then`.
 void LoadIntoProfile(NSString *profile, void (^then)(NSString *error)) {
   then = [then copy];
-  // The writable copy is made on a background queue at launch (thousands of files the first time): wait for it
-  // there, never on the main thread.
   StartPreparing();
-  dispatch_group_notify(Preparing(), dispatch_get_main_queue(), ^{
+  void (^load)(void) = ^{
     if ([LoadedProfiles() containsObject:profile]) return then(nil);
     nncore_host::WithProfile(profile, ^(NNCoreProfile *p) {
       if ([LoadedProfiles() containsObject:profile]) return then(nil);
@@ -274,77 +216,218 @@ void LoadIntoProfile(NSString *profile, void (^then)(NSString *error)) {
         return then(@"not loaded");
       }
       [LoadedProfiles() addObject:profile];
-      if (profile.length) FollowDefault(@[ profile ], ^(NSString *) {});
       then(nil);
     });
+  };
+  if (NSThread.isMainThread) load();
+  else dispatch_async(dispatch_get_main_queue(), load);
+}
+
+NSString *const kOffDirective = @"/^(?:bay-blocking-off|)/";
+
+bool gDefaultSettled = false;
+bool gLaunching = true;
+constexpr double kSettleAfterLaunchSeconds = 1.5;
+
+bool SettleWithoutPage() {
+  const char *pagelessSettle = getenv("BAY_BLOCKER_PAGELESS_SETTLE");
+  return !(pagelessSettle && !strcmp(pagelessSettle, "off"));
+}
+
+constexpr int kAttempts = 40;
+constexpr double kRetryMs = 250;
+constexpr double kOpSeconds = 20;
+
+NSString *const kPrelude =
+    @"let failing = %@;"
+     "const offDirective = %@;"
+     "const extensionOrigin = %@;"
+     "const deadline = Date.now() + %@;"
+     "const left = () => Math.max(0, deadline - Date.now());"
+     "let expired = false;"
+     "const withDeadline = (promise, what) => new Promise((resolve, reject) => {"
+     "  const timer = setTimeout(() => { expired = true; reject(new Error(`${what}: timed out`)); }, left());"
+     "  promise.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });"
+     "});"
+     "const ready = () => new Promise((resolve, reject) => {"
+     "  const look = () => {"
+     "    const ublock = chrome.extension.getBackgroundPage()?.µBlock;"
+     "    if (ublock?.isReadyPromise) return ublock.isReadyPromise.then(resolve, reject);"
+     "    if (left() === 0) return reject(new Error('uBlock Origin never started'));"
+     "    setTimeout(look, 10);"
+     "  };"
+     "  look();"
+     "});"
+     "const loadScript = (src) => new Promise((resolve, reject) => {"
+     "  const element = document.createElement('script');"
+     "  element.src = src;"
+     "  element.onload = resolve;"
+     "  element.onerror = () => reject(new Error(`${src} didn't load`));"
+     "  document.head.append(element);"
+     "});"
+     "const client = () => self.vAPI?.messaging ? Promise.resolve()"
+     "  : ['js/vapi.js', 'js/vapi-common.js', 'js/vapi-client.js'].reduce((p, src) => p.then(() => loadScript(src)), Promise.resolve());"
+     "const send = (message) => {"
+     "  if (expired) return Promise.reject(new Error(`${message.what}: timed out`));"
+     "  if (failing) { failing = false; return Promise.reject(new Error(`${message.what}: failed (dev)`)); }"
+     "  return client().then(() => {"
+     "    if (expired) throw new Error(`${message.what}: timed out`);"
+     "    return vAPI.messaging.send('dashboard', message);"
+     "  }).then((reply) => {"
+     "    if (reply === undefined) throw new Error(`${message.what}: no reply`);"
+     "    return reply;"
+     "  });"
+     "};"
+     "const trusted = () => send({what: 'getWhitelist'}).then((t) => {"
+     "  if (!t || !Array.isArray(t.whitelist)) throw new Error('getWhitelist: no answer');"
+     "  return t;"
+     "});"
+     "const lists = () => send({what: 'getLists'}).then((l) => {"
+     "  if (!l || !l.available || typeof l.available !== 'object') throw new Error('getLists: no answer');"
+     "  return l;"
+     "});"
+     "const selected = (l) => Object.keys(l.available).filter((k) => l.available[k] && l.available[k].off !== true);"
+     "const covers = (directive, host) => !directive.includes('/') && (host === directive || host.endsWith('.' + directive));"
+     "const sameSet = (a, b) => [...a].sort().join('\\n') === [...b].sort().join('\\n');"
+     "const storageCall = (name, arg) => expired ? Promise.reject(new Error(`storage ${name}: timed out`))"
+     "  : new Promise((resolve, reject) => chrome.storage.local[name](arg, (v) =>"
+     "    chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(v || {})));"
+     "const local = {get: (k) => storageCall('get', k), set: (v) => storageCall('set', v), remove: (k) => storageCall('remove', k)};"
+     "const reloadLists = () => send({what: 'reloadAllFilters'}).then(() => local.remove('bayReloadPending'));"
+     "const applyLists = (toSelect) => local.set({bayReloadPending: true})"
+     "  .then(() => send({what: 'applyFilterListSelection', toSelect})).then(reloadLists);"
+     "const settlePending = () => local.get('bayReloadPending').then((b) => b.bayReloadPending ? reloadLists() : null);"
+     "Promise.resolve().then(() => { if (location.origin !== extensionOrigin) throw new Error(`not the extension page: ${location.href}`); })"
+     ".then(() => withDeadline(ready(), 'uBlock Origin'))"
+     ".then(() => withDeadline(settlePending().then(() => (%@)), 'the call'))"
+     ".then((v) => post('result', JSON.stringify({value: v === undefined ? null : v})),"
+     "(e) => post('result', JSON.stringify({error: String(e && e.message || e)})))";
+
+NSMutableDictionary<NSString *, NSMutableArray<NNContentBlockerOp *> *> *Queues() {
+  static NSMutableDictionary *queues = [NSMutableDictionary dictionary];
+  return queues;
+}
+
+NSMutableSet<NSString *> *BusyProfiles() {
+  static NSMutableSet *busy = [NSMutableSet set];
+  return busy;
+}
+
+void Pump(NSString *profile);
+
+constexpr double kPageIdleSeconds = 30;
+
+NSMutableDictionary<NSString *, NSNumber *> *Uses() {
+  static NSMutableDictionary *uses = [NSMutableDictionary dictionary];
+  return uses;
+}
+
+void CloseWhenIdle(NSString *profile) {
+  const NSUInteger use = Uses()[profile].unsignedIntegerValue + 1;
+  Uses()[profile] = @(use);
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kPageIdleSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    if (Uses()[profile].unsignedIntegerValue != use || [BusyProfiles() containsObject:profile] || Queues()[profile].count) return;
+    [Pages()[profile] fail:@"idle"];
+    [Pages() removeObjectForKey:profile];
   });
 }
 
-// Loads the extension into a profile Chrome just loaded, its pages held until the extension's rules are in force:
-// Chrome reads its rulesets from disk after loading it and holds no request meanwhile, so a profile's first pages (a
-// tab restored at launch, a new profile's first window) went out unblocked. Called before anything can open a tab in
-// the profile; NNCore lets its navigations go once the rulesets are in force, or when the load fails here.
-void LoadHeld(NSString *profile) {
-  NNCoreProfile *p = nncore_host::LoadedProfile(profile);
-  const bool hold = p && ![LoadedProfiles() containsObject:profile] && [p respondsToSelector:@selector(holdNavigationsUntilRulesetsOf:)];
-  if (hold) [p holdNavigationsUntilRulesetsOf:ExtensionId()];
-  void (^load)(void) = ^{
-    LoadIntoProfile(profile, ^(NSString *error) {
-      if (error && hold) [p releaseNavigationHold:[NSString stringWithFormat:@"the content blocker didn't load: %@", error]];
-    });
-  };
-  const double delay = std::exchange(gDelayNextLoadMs, 0);
-  if (delay > 0) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_MSEC)), dispatch_get_main_queue(), load);
-  else load();
+void Finish(NNContentBlockerOp *op, id value, NSString *error) {
+  NSMutableArray *queue = Queues()[op.profile];
+  if (queue.firstObject == op) [queue removeObjectAtIndex:0];
+  [BusyProfiles() removeObject:op.profile];
+  if (error) NSLog(@"[blocker] profile \"%@\": %@", op.profile, error);
+  op.completion(value, error);
+  Pump(op.profile);
+  if (!Queues()[op.profile].count) CloseWhenIdle(op.profile);
 }
 
-// Runs `expression` in the profile's extension page, where send(message) is chrome.runtime.sendMessage. Its value
-// (JSON) or the first error it throws come back.
-void Call(NSString *profile, NSString *expression, void (^completion)(id value, NSString *error)) {
-  completion = [completion copy];
-  if (!NNCoreHost.isStarted) return completion(nil, @"unavailable");
+bool Retriable(NSString *error, NNContentBlockerPage *page) {
+  if (!page.onOwnPage) return true;
+  for (NSString *sign in @[ @"no reply", @"no answer", @"context invalidated", @"not the extension page", @"renderer ", @"closed" ])
+    if ([error containsString:sign]) return true;
+  return false;
+}
+
+void Attempt(NNContentBlockerOp *op) {
+  NSString *profile = op.profile;
+  if (!NNCoreHost.isStarted) return Finish(op, nil, @"unavailable");
   if (![LoadedProfiles() containsObject:profile]) {
     return LoadIntoProfile(profile, ^(NSString *error) {
-      if (error) completion(nil, error);
-      else Call(profile, expression, completion);
+      if (error) Finish(op, nil, error);
+      else Attempt(op);
     });
   }
   NNCoreProfile *p = nncore_host::LoadedProfile(profile);
   NNContentBlockerPage *page = p ? PageFor(profile, p) : nil;
-  if (!page) return completion(nil, @"not loaded");
-  NSString *script = [NSString stringWithFormat:
-      @"let failing = %@;"
-       "const send = (message) => failing ? (failing = false, Promise.reject(new Error(`${message.what}: failed (dev)`)))"
-       "  : chrome.runtime.sendMessage(message);"
-       "Promise.resolve().then(() => (%@)).then("
-       "(v) => post('result', JSON.stringify({value: v === undefined ? null : v})),"
-       "(e) => post('result', JSON.stringify({error: String(e && e.message || e)})))",
-      gFailNextMessage ? @"true" : @"false", expression];
-  gFailNextMessage = false;
+  if (!page) return Finish(op, nil, @"not loaded");
+  const double leftMs = MAX(0, (op.deadline - NSDate.timeIntervalSinceReferenceDate) * 1000);
+  NSString *script = [NSString stringWithFormat:kPrelude, op.failNext ? @"true" : @"false", ScriptWith(@"%@", @[ kOffDirective ]),
+                                                ScriptWith(@"%@", @[ [@"chrome-extension://" stringByAppendingString:ExtensionId()] ]), @((long long)leftMs), op.expression];
+  const NSUInteger attempt = ++op.attempt;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((leftMs + 2000) * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+    if (op.attempt == attempt && Queues()[profile].firstObject == op) [page fail:@"the call timed out"];
+  });
   [page run:script
       completion:^(id value, NSString *error) {
-        if (error) NSLog(@"[blocker] profile \"%@\": %@", profile, error);
-        completion(value, error);
+        if (op.attempt != attempt) return;
+        if ([error hasSuffix:@"failed (dev)"]) op.failNext = NO;
+        if ([error containsString:@"timed out"]) [page fail:error];
+        const bool inTime = NSDate.timeIntervalSinceReferenceDate < op.deadline;
+        if (error && op.attemptsLeft > 0 && inTime && Retriable(error, page) && [LoadedProfiles() containsObject:profile] &&
+            !nncore_host::IsDeletedProfile(profile)) {
+          op.attemptsLeft--;
+          [page fail:@"uBlock Origin restarted"];
+          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRetryMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            Attempt(op);
+          });
+          return;
+        }
+        Finish(op, value, error);
       }];
 }
 
-// The default profile's lists and per-site modes, copied to the others. A profile whose own read fails is left as it
-// is (and the error reported). One write after the other: a failed one leaves nothing running when the next call starts.
+void Pump(NSString *profile) {
+  if ([BusyProfiles() containsObject:profile]) return;
+  NNContentBlockerOp *op = Queues()[profile].firstObject;
+  if (!op) return;
+  [BusyProfiles() addObject:profile];
+  Attempt(op);
+}
+
+void Call(NSString *profile, NSString *expression, void (^completion)(id value, NSString *error)) {
+  NNContentBlockerOp *op = [NNContentBlockerOp new];
+  op.profile = profile;
+  op.expression = expression;
+  op.completion = completion;
+  op.attemptsLeft = kAttempts;
+  op.deadline = NSDate.timeIntervalSinceReferenceDate + kOpSeconds;
+  if (gFailNextMessage && ![expression isEqualToString:@"null"]) {
+    op.failNext = YES;
+    gFailNextMessage = false;
+  }
+  NSMutableArray *queue = Queues()[profile] ?: (Queues()[profile] = [NSMutableArray array]);
+  [queue addObject:op];
+  Pump(profile);
+}
+
+NSString *const kRead =
+    @"Promise.all([lists(), trusted()]).then(([l, t]) => ({lists: selected(l).sort(), whitelist: [...t.whitelist].sort(), autoUpdate: l.autoUpdate !== false}))";
+
 NSString *const kFollow =
-    @"Promise.all([send({what: 'getFilteringModeDetails'}), send({what: 'getEnabledRulesets'})]).then(([modes, lists]) => {"
+    @"Promise.all([lists(), trusted()]).then(([l, t]) => {"
      "  const want = %@;"
-     "  if (!modes || typeof modes !== 'object' || !Array.isArray(lists)) throw new Error('no settings to compare');"
-     "  const key = (m) => JSON.stringify(Object.keys(m).sort().map((k) => [k, Array.isArray(m[k]) ? [...m[k]].sort() : m[k]]));"
+     "  if (!Array.isArray(want.lists) || !Array.isArray(want.whitelist)) throw new Error('no settings to copy');"
      "  let written = Promise.resolve(null);"
-     "  if (key(modes) !== key(want.modes)) written = written.then(() => send({what: 'setFilteringModeDetails', modes: want.modes}));"
-     "  if ([...lists].sort().join() !== [...want.lists].sort().join())"
-     "    written = written.then(() => send({what: 'applyRulesets', enabledRulesets: want.lists}));"
+     "  if (!sameSet(selected(l), want.lists))"
+     "    written = written.then(() => applyLists(want.lists));"
+     "  if (!sameSet(t.whitelist, want.whitelist))"
+     "    written = written.then(() => send({what: 'setWhitelist', whitelist: want.whitelist.join('\\n')}));"
+     "  if ((l.autoUpdate !== false) !== (want.autoUpdate !== false))"
+     "    written = written.then(() => send({what: 'userSettings', name: 'autoUpdate', value: want.autoUpdate !== false}));"
      "  return written.then(() => null);"
      "})";
 
-// A profile deleted (or being deleted) or released since the extension loaded into it: forgotten with its page. Every
-// change otherwise failed on it ("not loaded", or "no answer" from a page closing with its profile) once the user had
-// deleted a profile. Loaded again, it loads the extension again and follows the default profile then.
 void ForgetGoneProfiles() {
   for (NSString *profile in LoadedProfiles().array) {
     if (nncore_host::LoadedProfile(profile) && !nncore_host::IsDeletedProfile(profile)) continue;
@@ -356,21 +439,18 @@ void ForgetGoneProfiles() {
 
 void FollowDefault(NSArray<NSString *> *profiles, void (^done)(NSString *error)) {
   done = [done copy];
+  if (!gDefaultSettled && NNCoreHost.isStarted) return WhenDefaultSettled(^{ FollowDefault(profiles, done); });
   if (!profiles) ForgetGoneProfiles();
   profiles = [(profiles ?: LoadedProfiles().array) filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
   if (!profiles.count) return done(nil);
-  NSString *read = @"Promise.all([send({what: 'getFilteringModeDetails'}), send({what: 'getEnabledRulesets'})]).then(([modes, lists]) => {"
-                    "  if (!modes || typeof modes !== 'object' || !Array.isArray(lists)) throw new Error('no settings to copy');"
-                    "  return {modes, lists};"
-                    "})";
-  Call(kProfile, read, ^(NSDictionary *settings, NSString *error) {
+  Call(kProfile, kRead, ^(NSDictionary *settings, NSString *error) {
     if (error) return done(error);
+    if (![settings isKindOfClass:NSDictionary.class]) return done(@"no settings to copy");
     dispatch_group_t group = dispatch_group_create();
     __block NSString *failed;
     for (NSString *profile in profiles) {
       dispatch_group_enter(group);
       Call(profile, ScriptWith(kFollow, @[ settings ]), ^(id, NSString *error) {
-        // A profile deleted meanwhile (its page closed under the call) has nothing left to follow.
         const bool gone = !nncore_host::LoadedProfile(profile) || nncore_host::IsDeletedProfile(profile);
         if (!gone) failed = failed ?: error;
         dispatch_group_leave(group);
@@ -380,78 +460,158 @@ void FollowDefault(NSArray<NSString *> *profiles, void (^done)(NSString *error))
   });
 }
 
-NSString *Category(NSDictionary *ruleset) {
-  NSString *rulesetId = ruleset[@"id"], *group = ruleset[@"group"];
+NSMutableArray<void (^)(void)> *SettledWaiters() {
+  static NSMutableArray *waiters = [NSMutableArray array];
+  return waiters;
+}
+
+void WhenDefaultSettled(void (^then)(void)) {
+  if (gDefaultSettled) return then();
+  [SettledWaiters() addObject:[then copy]];
+}
+
+void DefaultSettled() {
+  gDefaultSettled = true;
+  gLaunching = false;
+  NSArray<void (^)(void)> *waiters = [SettledWaiters() copy];
+  [SettledWaiters() removeAllObjects];
+  for (void (^waiter)(void) in waiters) waiter();
+}
+
+constexpr int kInheritAttempts = 6;
+
+void Inherit(NSString *profile, int attempt, void (^first)(NSString *error)) {
+  first = [first copy];
+  FollowDefault(@[ profile ], ^(NSString *error) {
+    if (first) first(error);
+    const bool gone = !nncore_host::LoadedProfile(profile) || nncore_host::IsDeletedProfile(profile) ||
+                      ![LoadedProfiles() containsObject:profile];
+    if (!error || gone || attempt + 1 >= kInheritAttempts) {
+      if (error && !gone) NSLog(@"[blocker] profile \"%@\" didn't take the default profile's settings: %@", profile, error);
+      return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((1 << attempt) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      Inherit(profile, attempt + 1, nil);
+    });
+  });
+}
+
+void LoadHeld(NSString *profile) {
+  NNCoreProfile *p = nncore_host::LoadedProfile(profile);
+  const bool isDefault = profile.length == 0;
+  const bool firstLoad = p && ![LoadedProfiles() containsObject:profile];
+  const bool hold = firstLoad && !isDefault && !gLaunching && [p respondsToSelector:@selector(holdNavigationsUntilRulesetsOf:)];
+  if (hold) [p holdNavigationsUntilRulesetsOf:ExtensionId()];
+  void (^release)(NSString *) = ^(NSString *why) {
+    if (!hold) return;
+    if (!why && [p respondsToSelector:@selector(releaseNavigationHoldReady)]) [p releaseNavigationHoldReady];
+    else [p releaseNavigationHold:why ?: @"uBlock Origin is ready"];
+  };
+  void (^load)(void) = ^{
+    LoadIntoProfile(profile, ^(NSString *error) {
+      if (error) {
+        if (isDefault) DefaultSettled();
+        return release([@"the content blocker didn't load: " stringByAppendingString:error]);
+      }
+      if (!isDefault) {
+        return WhenDefaultSettled(^{
+          Inherit(profile, 0, ^(NSString *followError) {
+            release(followError ? [@"the default profile's settings didn't apply: " stringByAppendingString:followError] : nil);
+          });
+        });
+      }
+      void (^settle)(void) = ^{
+        if (nncore_host::LoadedProfile(profile) && SettleWithoutPage()) return DefaultSettled();
+        Call(profile, @"null", ^(id, NSString *) { DefaultSettled(); });
+      };
+      if (!gLaunching) return settle();
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kSettleAfterLaunchSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), settle);
+    });
+  };
+  const double delay = std::exchange(gDelayNextLoadMs, 0);
+  if (delay > 0) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_MSEC)), dispatch_get_main_queue(), load);
+  else load();
+}
+
+NSString *Category(NSString *listId, NSString *group) {
   if ([group isEqual:@"regions"]) return @"regional";
-  if ([rulesetId isEqual:@"annoyances-cookies"]) return @"cookies";
-  if ([group isEqual:@"privacy"] || [rulesetId isEqual:@"easyprivacy"]) return @"trackers";
-  if ([group isEqual:@"annoyances"]) return @"annoyances";
-  if ([group isEqual:@"malware"]) return @"security";
+  if ([listId containsString:@"cookie"]) return @"cookies";
+  if ([group isEqual:@"privacy"] || [listId isEqual:@"ublock-privacy"]) return @"trackers";
+  if ([group isEqual:@"malware"] || [listId isEqual:@"ublock-badware"]) return @"security";
+  if ([group isEqual:@"annoyances"] || [group isEqual:@"social"]) return @"annoyances";
   return @"ads";
 }
 
-double Count(NSDictionary *d, NSString *key) { return [d[key] isKindOfClass:NSNumber.class] ? [d[key] doubleValue] : 0; }
+double Count(id value) { return [value isKindOfClass:NSNumber.class] ? [value doubleValue] : 0; }
 
 NSString *BundledVersion() {
   NSString *path = [ExtensionPath() stringByAppendingPathComponent:@"manifest.json"];
   NSData *data = path ? [NSData dataWithContentsOfFile:path] : nil;
   NSDictionary *manifest = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-  return [manifest isKindOfClass:NSDictionary.class] && [manifest[@"version"] isKindOfClass:NSString.class] ? manifest[@"version"] : @"";
+  if (![manifest isKindOfClass:NSDictionary.class]) return @"";
+  for (NSString *key in @[ @"version_name", @"version" ])
+    if ([manifest[key] isKindOfClass:NSString.class]) return manifest[key];
+  return @"";
 }
 
+NSString *const kState =
+    @"Promise.all([lists(), trusted(), fetch('/assets/assets.json').then((r) => r.json())]).then(([l, t, assets]) => {"
+     "  const langs = new Set([chrome.i18n.getUILanguage(), ...(navigator.languages || [])].map((x) => (/^[a-z]+/.exec(x) || [])[0]).filter(Boolean));"
+     "  const forLanguages = (lang) => typeof lang === 'string' && lang.split(/\\s+/).some((x) => langs.has(x));"
+     "  const onByDefault = (id) => !!assets[id] && (assets[id].off !== true || forLanguages(assets[id].lang));"
+     "  return {"
+     "    lists: Object.entries(l.available)"
+     "      .filter(([id, list]) => list && list.content === 'filters' && list.group !== 'user' && list.group !== 'custom')"
+     "      .map(([id, list]) => ({id, title: list.title || id, group: list.group || '', enabled: list.off !== true,"
+     "        defaultOn: onByDefault(id), filters: list.entryCount || 0})),"
+     "    networkFilters: l.netFilterCount || 0,"
+     "    cosmeticFilters: l.cosmeticFilterCount || 0,"
+     "    enabled: !t.whitelist.includes(offDirective),"
+     "    allowedHosts: t.whitelist.filter((d) => !d.includes('/') && !d.startsWith('#') && !(t.whitelistDefault || []).includes(d)),"
+     "  };"
+     "})";
+
 void State(void (^completion)(NSDictionary *state)) {
-  Call(kProfile, @"Promise.all([send({what: 'getOptionsPageData'}), send({what: 'getFilteringModeDetails'})])", ^(NSArray *both, NSString *error) {
-    NSDictionary *options = [both isKindOfClass:NSArray.class] && both.count == 2 ? both[0] : nil;
-    id modes = options ? both[1] : nil;
-    if (![options isKindOfClass:NSDictionary.class]) {
+  completion = [completion copy];
+  if (!gDefaultSettled && NNCoreHost.isStarted) return WhenDefaultSettled(^{ State(completion); });
+  Call(kProfile, kState, ^(NSDictionary *read, NSString *error) {
+    if (![read isKindOfClass:NSDictionary.class] || ![read[@"lists"] isKindOfClass:NSArray.class]) {
       return completion(@{
         @"enabled" : @NO, @"lists" : @[], @"allowedHosts" : @[], @"version" : BundledVersion(),
         @"stats" : @{@"ready" : @NO, @"enabled" : @NO, @"parseMs" : @0, @"lookups" : @0, @"averageLookupMicros" : @0,
                      @"maxLookupMicros" : @0, @"error" : error ?: @"unavailable"},
       });
     }
-    NSSet *enabledIds = [NSSet setWithArray:options[@"enabledRulesets"] ?: @[]];
-    BOOL on = [options[@"defaultFilteringMode"] intValue] != kModeNone;
     NSMutableArray *lists = [NSMutableArray array];
-    double network = 0, cosmetic = 0;
-    for (NSDictionary *r in options[@"rulesetDetails"]) {
-      if (![r isKindOfClass:NSDictionary.class] || [r[@"id"] isEqual:@"ubol-tests"]) continue;
-      BOOL enabled = [enabledIds containsObject:r[@"id"]];
-      NSDictionary *rules = [r[@"rules"] isKindOfClass:NSDictionary.class] ? r[@"rules"] : @{};
-      NSDictionary *css = [r[@"css"] isKindOfClass:NSDictionary.class] ? r[@"css"] : @{};
-      NSDictionary *filters = [r[@"filters"] isKindOfClass:NSDictionary.class] ? r[@"filters"] : @{};
-      double count = Count(rules, @"total");
-      if (enabled) {
-        network += count;
-        cosmetic += Count(css, @"generic") + Count(css, @"specific");
-      }
+    for (NSDictionary *l in read[@"lists"]) {
+      if (![l isKindOfClass:NSDictionary.class] || ![l[@"id"] isKindOfClass:NSString.class]) continue;
       [lists addObject:@{
-        @"id" : r[@"id"],
-        @"title" : r[@"name"] ?: r[@"id"],
-        @"category" : Category(r),
-        @"enabled" : @(enabled),
-        @"defaultOn" : @([r[@"enabled"] boolValue]),
-        @"filters" : @(Count(filters, @"accepted") ?: count),
+        @"id" : l[@"id"],
+        @"title" : [l[@"title"] isKindOfClass:NSString.class] ? l[@"title"] : l[@"id"],
+        @"category" : Category(l[@"id"], [l[@"group"] isKindOfClass:NSString.class] ? l[@"group"] : @""),
+        @"enabled" : @([l[@"enabled"] boolValue]),
+        @"defaultOn" : @([l[@"defaultOn"] boolValue]),
+        @"filters" : @(Count(l[@"filters"])),
       }];
     }
     NSMutableArray *allowed = [NSMutableArray array];
-    NSArray *none = [modes isKindOfClass:NSDictionary.class] && [modes[@"none"] isKindOfClass:NSArray.class] ? modes[@"none"] : @[];
-    for (NSString *host in none)
-      if ([host isKindOfClass:NSString.class] && ![host isEqualToString:@"all-urls"]) [allowed addObject:host];
+    for (NSString *host in [read[@"allowedHosts"] isKindOfClass:NSArray.class] ? read[@"allowedHosts"] : @[])
+      if ([host isKindOfClass:NSString.class]) [allowed addObject:host];
+    const BOOL on = [read[@"enabled"] boolValue];
     completion(@{
       @"enabled" : @(on),
       @"version" : BundledVersion(),
       @"lists" : lists,
       @"allowedHosts" : allowed,
       @"stats" : @{
-        @"ready" : @YES, @"enabled" : @(on), @"networkFilters" : @(network), @"cosmeticFilters" : @(cosmetic),
-        @"parseMs" : @0, @"lookups" : @0, @"averageLookupMicros" : @0, @"maxLookupMicros" : @0,
+        @"ready" : @YES, @"enabled" : @(on), @"networkFilters" : @(Count(read[@"networkFilters"])),
+        @"cosmeticFilters" : @(Count(read[@"cosmeticFilters"])), @"parseMs" : @0, @"lookups" : @0,
+        @"averageLookupMicros" : @0, @"maxLookupMicros" : @0,
       },
     });
   });
 }
 
-// After a change in the default profile: the other profiles follow it, and the app hears the new stats.
 void Changed(NSString *error, void (^completion)(NSString *error)) {
   if (error) return completion(error);
   completion = [completion copy];
@@ -461,7 +621,7 @@ void Changed(NSString *error, void (^completion)(NSString *error)) {
   });
 }
 
-}  // namespace
+}
 
 namespace nncore_host {
 void PrepareContentBlocker() {
@@ -471,9 +631,7 @@ void PrepareContentBlocker() {
 void LoadContentBlocker(NSString *profile) {
   if (!IsIncognito(profile)) LoadHeld(profile ?: @"");
 }
-}  // namespace nncore_host
-
-// MARK: - Public API
+}
 
 @implementation NNCoreContentBlocker
 
@@ -482,16 +640,22 @@ void LoadContentBlocker(NSString *profile) {
 }
 
 + (void)setEnabled:(BOOL)enabled completion:(void (^)(NSString *))completion {
-  Call(kProfile, ScriptWith(@"send({what: 'setDefaultFilteringMode', level: %@})", @[ @(enabled ? kModeOptimal : kModeNone) ]), ^(id, NSString *error) {
+  NSString *script = @"trusted().then((t) => {"
+                      "  const on = %@;"
+                      "  const kept = t.whitelist.filter((d) => d !== offDirective);"
+                      "  return send({what: 'setWhitelist', whitelist: (on ? kept : kept.concat([offDirective])).join('\\n')});"
+                      "}).then(() => send({what: 'userSettings', name: 'autoUpdate', value: %@}))";
+  Call(kProfile, ScriptWith(script, @[ @(enabled), @(enabled) ]), ^(id, NSString *error) {
     Changed(error, completion);
   });
 }
 
 + (void)setList:(NSString *)listId enabled:(BOOL)enabled completion:(void (^)(NSString *))completion {
-  NSString *script = @"send({what: 'getEnabledRulesets'}).then((ids) => {"
+  NSString *script = @"lists().then((l) => {"
                       "  const [id, on] = [%@, %@];"
-                      "  if (!Array.isArray(ids)) throw new Error('getEnabledRulesets: no answer');"
-                      "  return send({what: 'applyRulesets', enabledRulesets: ids.filter((x) => x !== id).concat(on ? [id] : [])});"
+                      "  if (!l.available[id]) throw new Error(`no list ${id}`);"
+                      "  const keep = selected(l).filter((x) => x !== id);"
+                      "  return applyLists(on ? keep.concat([id]) : keep);"
                       "})";
   Call(kProfile, ScriptWith(script, @[ listId, @(enabled) ]), ^(id, NSString *error) {
     Changed(error, completion);
@@ -499,19 +663,19 @@ void LoadContentBlocker(NSString *profile) {
 }
 
 + (void)isAllowedOnHost:(NSString *)host completion:(void (^)(BOOL))completion {
-  Call(kProfile, ScriptWith(@"send({what: 'getFilteringMode', hostname: %@})", @[ host.lowercaseString ]), ^(id level, NSString *error) {
-    completion(!error && [level isKindOfClass:NSNumber.class] && [level intValue] == kModeNone);
+  NSString *script = @"trusted().then((t) => t.whitelist.some((d) => covers(d, %@)))";
+  Call(kProfile, ScriptWith(script, @[ host.lowercaseString ]), ^(id allowed, NSString *error) {
+    completion(!error && [allowed isKindOfClass:NSNumber.class] && [allowed boolValue]);
   });
 }
 
 + (void)setAllowed:(BOOL)allowed onHost:(NSString *)host completion:(void (^)(NSString *))completion {
-  // Blocking again puts the site back on the default level.
-  NSString *script = @"(%@ ? Promise.resolve(%@) : send({what: 'getDefaultFilteringMode'})).then((level) => {"
-                      "  if (typeof level !== 'number') throw new Error('getDefaultFilteringMode: no answer');"
-                      "  return send({what: 'setFilteringMode', hostname: %@, level});"
+  NSString *script = @"trusted().then((t) => {"
+                      "  const [allowed, host] = [%@, %@];"
+                      "  const kept = t.whitelist.filter((d) => allowed ? d !== host : !covers(d, host));"
+                      "  return send({what: 'setWhitelist', whitelist: (allowed ? kept.concat([host]) : kept).join('\\n')});"
                       "})";
-  // Each profile's rules follow before the caller reloads its page.
-  Call(kProfile, ScriptWith(script, @[ @(allowed), @(kModeNone), host.lowercaseString ]), ^(id, NSString *error) {
+  Call(kProfile, ScriptWith(script, @[ @(allowed), host.lowercaseString ]), ^(id, NSString *error) {
     Changed(error, completion);
   });
 }

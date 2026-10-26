@@ -22,17 +22,18 @@ public final class AppUpdater: NSObject {
   #if canImport(Sparkle)
   private lazy var controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
   private var deferredUpdate = false
-  private var deferredRelaunch: (() -> Void)?
   // The feed counts update checks by version and day; this one bit (no ID) tells a copy's first check
   // from the ones after, so first launches can be told from copies still running.
   private var firstCheckPending = false
   #endif
   private var started = false
-  /// An update found but not shown in Sparkle's window (its gentle reminder), or downloaded and waiting for a
-  /// restart: the sidebar shows an Update button while there's one. ["version": String, "ready": Bool]
+  /// An update found but not shown in Sparkle's window (its gentle reminder, or put off with Remind Me Later),
+  /// downloading, or downloaded and waiting for a restart: the sidebar shows an Update button while there's one.
+  /// ["version": String, "ready": Bool, "downloading": Bool]
   public private(set) var pending: [String: Any]?
   public var onPendingChange: (([String: Any]?) -> Void)?
   private var installNow: (() -> Void)?
+  private var isDownloading: Bool { pending?["downloading"] as? Bool == true }
 
   public var isAvailable: Bool {
     #if canImport(Sparkle)
@@ -104,6 +105,8 @@ public final class AppUpdater: NSObject {
   public func installPendingUpdate() {
     #if canImport(Sparkle)
     if let install = installNow { return install() }
+    // Sparkle's own session is downloading it, and checkForUpdates does nothing until that ends.
+    if isDownloading { return }
     checkForUpdates(nil)
     #endif
   }
@@ -145,14 +148,9 @@ public final class AppUpdater: NSObject {
   #if canImport(Sparkle)
   @objc private func fullScreenChanged() {
     DispatchQueue.main.async { [self] in
-      guard !Self.isPresentingFullScreen else { return }
-      if let relaunch = deferredRelaunch {
-        deferredRelaunch = nil
-        relaunch()
-      } else if deferredUpdate {
-        deferredUpdate = false
-        controller.checkForUpdates(nil)
-      }
+      guard !Self.isPresentingFullScreen, deferredUpdate else { return }
+      deferredUpdate = false
+      controller.checkForUpdates(nil)
     }
   }
   #endif
@@ -170,29 +168,33 @@ extension AppUpdater: SPUUpdaterDelegate {
     return [["key": "first", "value": "1"]]
   }
 
-  public func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
-    setPending(["version": item.displayVersionString, "ready": false])
-  }
-
   public func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
     installNow = nil
     setPending(nil)
   }
 
   public func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate updateItem: SUAppcastItem, state: SPUUserUpdateState) {
-    if choice == .skip { setPending(nil) }
+    switch choice {
+    case .skip: setPending(nil)
+    case .dismiss: setPending(["version": updateItem.displayVersionString, "ready": false])
+    default: break
+    }
+  }
+
+  public func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
+    setPending(["version": item.displayVersionString, "ready": false, "downloading": true])
+  }
+
+  // A download that didn't end in an update waiting to install (it failed, was cancelled, or needs the user's say,
+  // which Sparkle asks for next): the button goes.
+  public func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+    if isDownloading { setPending(nil) }
   }
 
   // Downloaded in the background: it installs as Bay quits, or now from the sidebar's button.
   public func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
     installNow = immediateInstallHandler
     setPending(["version": item.displayVersionString, "ready": true])
-    return true
-  }
-
-  public func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
-    guard Self.isPresentingFullScreen else { return false }
-    deferredRelaunch = installHandler
     return true
   }
 }

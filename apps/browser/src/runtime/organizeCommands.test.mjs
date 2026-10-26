@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { encodeSharedCollection } from "@bay/core";
 import { createBrowserStore } from "../store/browser.ts";
 import { activeTabId } from "../store/model.ts";
 import { createBrowserAuthority } from "./authority.ts";
@@ -7,6 +8,15 @@ import { executeOrganizeCommand, ORGANIZE_COMMAND_METHODS, parseOrganizeCommand 
 import { browserCommandResultKind } from "./userCommands.ts";
 
 const run = (store, command) => executeOrganizeCommand(store, parseOrganizeCommand(command));
+const shared = encodeSharedCollection({
+  version: 1,
+  kind: "folder",
+  title: "Reading",
+  children: [
+    { kind: "link", title: "One", url: "https://one.example/" },
+    { kind: "folder", title: "Nested", children: [{ kind: "link", title: "Two", url: "https://two.example/" }] },
+  ],
+});
 function setup() {
   const store = createBrowserStore();
   const windowId = store.getState().createWindow({ url: "a.com" });
@@ -30,10 +40,12 @@ test("organize parser closes every command and nested option object", () => {
     { method: "moveGroup", groupId: "g", placement: { pinned: true, beforeId: null } },
     { method: "newTabInGroup", groupId: "g", url: "x.com" },
     { method: "newPinnedFolder", windowId: "w", options: { tabIds: ["t"], name: "n", parentId: "f", spaceId: "s", beforeId: "b" } },
+    { method: "addSharedCollection", windowId: "w", token: shared, spaceId: "s" },
     { method: "updatePinnedFolder", folderId: "f", patch: { name: "n", icon: null, collapsed: false } },
     { method: "movePinnedFolder", folderId: "f", beforeId: null, parentId: null },
     { method: "deletePinnedFolder", folderId: "f" },
     { method: "undoPinnedFolderMove" },
+    { method: "undoSidebarEdit", windowId: "w" },
     { method: "setSelection", windowId: "w", tabIds: [] },
     { method: "placeTabs", tabIds: ["t"], placement: { pinned: false, row: true, folderId: null, beforeId: "b", groupId: null } },
     { method: "pinTabs", tabIds: ["t"], pinned: true },
@@ -174,4 +186,29 @@ test("group ids are never empty acknowledgements", async () => {
   });
   assert.deepEqual(authority.getSnapshot().state.groups, {});
   authority.close();
+});
+
+test("shared collections arrive as a validated token and become an unloaded folder in a public window", () => {
+  const { store, s, windowId, privateWindow } = setup();
+  assert.equal(browserCommandResultKind("addSharedCollection"), "id");
+  for (const token of ["", "not a token!", "A".repeat(16_001)])
+    assert.throws(() => parseOrganizeCommand({ method: "addSharedCollection", windowId, token }), { code: "invalid_request" }, token.slice(0, 20));
+  assert.throws(() => parseOrganizeCommand({ method: "addSharedCollection", windowId, token: shared, collection: {} }), { code: "invalid_request" });
+
+  for (const command of [
+    { method: "addSharedCollection", windowId: privateWindow, token: shared },
+    { method: "addSharedCollection", windowId, token: shared, spaceId: s().windows[privateWindow].spaceId },
+    { method: "addSharedCollection", windowId: "missing", token: shared },
+  ]) {
+    const before = s();
+    assert.throws(() => run(store, command), { code: "invalid_request" }, JSON.stringify(command));
+    assert.equal(s(), before);
+  }
+
+  const folderId = run(store, { method: "addSharedCollection", windowId, token: shared });
+  const folder = s().pinnedFolders[folderId];
+  assert.deepEqual([folder.name, folder.spaceId], ["Reading", s().windows[windowId].spaceId]);
+  const links = Object.values(s().tabs).filter((t) => t.url === "https://one.example/" || t.url === "https://two.example/");
+  assert.equal(links.length, 2);
+  assert.ok(links.every((t) => t.unloaded && t.pinnedRow));
 });

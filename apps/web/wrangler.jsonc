@@ -1,14 +1,33 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // A static Worker: no script, only the built site in dist/.
+  "main": "worker/index.ts",
   "name": "bay-web",
   "compatibility_date": "2026-10-09",
   "assets": {
+    "binding": "ASSETS",
     "directory": "./dist",
+    "run_worker_first": ["/easel/*", "/api/easels/*"],
     // Unknown paths get dist/404.html with a 404 status.
     "not_found_handling": "404-page",
     // Pages are folders (astro.config.mjs trailingSlash: "always"), so /switch-from-arc redirects to /switch-from-arc/.
     "html_handling": "force-trailing-slash",
+  },
+  // Default deployment needs no R2 account or bucket and exposes no shared Easels.
+  "vars": { "BAY_EASEL_WEB_SHARING": "false" },
+  "env": {
+    "easels": {
+      "name": "bay-web",
+      "routes": [{ "pattern": "bay.krishkalaria.in", "custom_domain": true }],
+      "vars": { "BAY_EASEL_WEB_SHARING": "true" },
+      "r2_buckets": [{ "binding": "EASELS", "bucket_name": "bay-easels" }],
+      "ratelimits": [
+        {
+          "name": "EASEL_MUTATIONS",
+          "namespace_id": "1001",
+          "simple": { "limit": 10, "period": 60 },
+        },
+      ],
+    },
   },
   // The zone must be on Cloudflare, and the hostname must have no DNS record yet; deploy creates it.
   "routes": [{ "pattern": "bay.krishkalaria.in", "custom_domain": true }],

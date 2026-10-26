@@ -55,6 +55,8 @@ function copyJson(value: unknown, previous?: unknown, ancestors = new Set<object
 // object passed through hydrate. Native facts and domain repair stay at source.
 const projectionFields: Record<keyof BrowserProjection, "array" | "record"> = {
   services: "record",
+  localFiles: "record",
+  sidebarUndo: "record",
   spaces: "record",
   spaceOrder: "array",
   orphanedProfileData: "array",

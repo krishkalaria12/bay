@@ -120,10 +120,13 @@ T *Field(NSDictionary *d, NSString *key) {
   return [value isKindOfClass:[T class]] ? value : nil;
 }
 
-NSString *Text(NSDictionary *d, NSString *key, NSUInteger max) {
-  NSString *s = Field<NSString>(d, key);
+NSString *Clip(NSString *s, NSUInteger max) {
   if (s.length <= max) return s;
   return [s substringToIndex:[s rangeOfComposedCharacterSequenceAtIndex:max].location];
+}
+
+NSString *Text(NSDictionary *d, NSString *key, NSUInteger max) {
+  return Clip(Field<NSString>(d, key), max);
 }
 
 bool Flag(NSDictionary *d, NSString *key) {
@@ -149,11 +152,12 @@ NSDictionary *NowPlayingState(NSDictionary *d) {
   NSMutableArray *actions = [NSMutableArray array];
   for (id action in Field<NSArray>(d, @"actions"))
     if ([action isKindOfClass:NSString.class] && [action length] <= 64 && actions.count < 32) [actions addObject:action];
-  double position = 0, duration = 0, rate = 1, timestamp = 0;
+  double position = 0, duration = 0, rate = 1, timestamp = 0, behind = 0;
   Finite(d, @"position", &position);
   const bool hasDuration = Finite(d, @"duration", &duration) && duration >= 0;
   Finite(d, @"playbackRate", &rate);
   Finite(d, @"timestamp", &timestamp);
+  Finite(d, @"liveBehind", &behind);
   return @{
     @"frame" : Text(d, @"frame", 64) ?: @"",
     @"title" : Text(d, @"title", 1024) ?: @"",
@@ -167,6 +171,31 @@ NSDictionary *NowPlayingState(NSDictionary *d) {
     @"timestamp" : @(timestamp),
     @"hasVideo" : @(Flag(d, @"hasVideo")),
     @"actions" : actions,
+    @"live" : @(Flag(d, @"live")),
+    @"liveBehind" : @(MAX(behind, 0)),
+  };
+}
+
+// The video in Picture in Picture, for the window's speed, subtitles and Live controls (page_script.js › Picture in
+// Picture).
+NSDictionary *PictureInPictureState(NSDictionary *d) {
+  double rate = 1, selected = -1, behind = 0;
+  Finite(d, @"rate", &rate);
+  Finite(d, @"selected", &selected);
+  Finite(d, @"behind", &behind);
+  NSMutableArray *tracks = [NSMutableArray array];
+  for (id label in Field<NSArray>(d, @"tracks")) {
+    if (tracks.count >= 64) break;
+    [tracks addObject:[label isKindOfClass:NSString.class] ? Clip(label, 200) : @""];
+  }
+  return @{
+    @"rate" : @(MIN(MAX(rate, 0.0625), 16.0)),
+    @"tracks" : tracks,
+    @"selected" : @(selected >= 0 && selected < tracks.count ? (NSInteger)selected : -1),
+    @"cue" : Text(d, @"cue", 1000) ?: @"",
+    @"live" : @(Flag(d, @"live")),
+    @"endless" : @(Flag(d, @"endless")),
+    @"behind" : @(MAX(behind, 0)),
   };
 }
 
@@ -314,6 +343,7 @@ const char kPageReportsKey = 0;
   CFTimeInterval _creatingAt;
   NSString *_transferredURL;
   BOOL _muted;
+  NSString *_boostStyle;
   NSInteger _tabIndex;
   BOOL _pinned;
   NSView *_devtoolsView;
@@ -679,6 +709,7 @@ const char kPageReportsKey = 0;
   [self layoutPage];
   [self applyPainting];
   if (_muted && [tab respondsToSelector:@selector(setMuted:)]) tab.muted = YES;
+  if (_boostStyle.length && [tab respondsToSelector:@selector(setBoostStyle:)]) [tab setBoostStyle:_boostStyle];
   // Always: a tab another view had may still peek its links.
   if ([tab respondsToSelector:@selector(setPeeksLinks:)]) tab.peeksLinks = _peekLinks;
   if (_pageBackgroundColor && [tab respondsToSelector:@selector(setPageBackgroundColor:)]) tab.pageBackgroundColor = _pageBackgroundColor;
@@ -1054,6 +1085,10 @@ const char kPageReportsKey = 0;
   gDisplayMediaPicker = enabled;
 }
 
++ (void)setBoosts:(NSArray<NSDictionary<NSString *, id> *> *)boosts {
+  if ([NNCoreEngine respondsToSelector:@selector(setBoosts:)]) [NNCoreEngine setBoosts:boosts];
+}
+
 + (void)setAutoPictureInPictureEnabled:(BOOL)enabled {
   if ([NNCoreEngine respondsToSelector:@selector(setAutoPictureInPicture:)]) [NNCoreEngine setAutoPictureInPicture:enabled];
 }
@@ -1257,6 +1292,13 @@ const char kPageReportsKey = 0;
   } else if ([kind isEqualToString:@"devMode"] && main && dict) {
     // Developer Mode's inspector, which the app put in the page (apps/browser developer/inspectorScript.ts).
     [self emit:@"pageMessage" payload:@{@"kind" : @"devMode", @"data" : dict}];
+  } else if (([kind isEqualToString:@"capture"] || [kind isEqualToString:@"captureGesture"]) && main && dict) {
+    // Capture's selection, which the app put in the page (apps/browser capture/captureScript.ts), and ⌘⇧ with a drag
+    // starting it (page_script.js › Capture).
+    [self emit:@"pageMessage" payload:@{@"kind" : kind, @"data" : dict}];
+  } else if ([kind isEqualToString:@"boost"] && main && dict) {
+    // Boosts' element picker, which the app put in the page (apps/browser boosts/pickerScript.ts).
+    [self emit:@"pageMessage" payload:@{@"kind" : @"boost", @"data" : dict}];
   } else if ([kind isEqualToString:@"scroll"] && main) {
     // The page's scroll direction, for the toolbar that hides while scrolling (page_script.js › Scroll direction).
     NSString *state = Text(dict, @"state", 8);
@@ -1304,6 +1346,8 @@ const char kPageReportsKey = 0;
     [self emit:@"pictureInPicture" payload:@{@"kind" : pipKind, @"active" : active}];
     // Chrome's video window, styled and handled as on CEF (NNCorePictureInPicture).
     if ([pipKind isEqual:@"video"]) nncore_pip::VideoChanged(self, [NSURL URLWithString:tab.url ?: @""].host ?: @"", frameId, active.boolValue);
+  } else if ([kind isEqualToString:@"pipState"] && dict) {
+    nncore_pip::StateChanged(self, frameId, PictureInPictureState(dict));
   } else if ([kind isEqualToString:@"notification"] && dict) {
     NSString *nid = Text(dict, @"id", 128);
     NSString *origin = OriginOf(tab.url);
@@ -1514,6 +1558,11 @@ const char kPageReportsKey = 0;
   if ([_tab respondsToSelector:@selector(setMuted:)]) _tab.muted = muted;
 }
 
+- (void)setBoostStyle:(NSString *)css {
+  _boostStyle = css.copy;
+  if ([_tab respondsToSelector:@selector(setBoostStyle:)]) [_tab setBoostStyle:css];
+}
+
 - (void)setPeekLinks:(BOOL)peekLinks {
   _peekLinks = peekLinks;
   if ([_tab respondsToSelector:@selector(setPeeksLinks:)]) _tab.peeksLinks = peekLinks;
@@ -1612,6 +1661,71 @@ const char kPageReportsKey = 0;
     completion([data isKindOfClass:NSString.class] ? data : nil);
   };
   ((void (*)(id, SEL, NSString *, NSDictionary *, NSTimeInterval, id))objc_msgSend)(_tab, timed, @"Page.captureScreenshot", @{@"format" : @"png"}, 3.0, done);
+}
+
+// A capture's PNG, written off the main thread to the temporary folder's Bay Captures (a day's worth kept): its path
+// and size in pixels, on the main thread; nil when it isn't an image.
+static void SaveCapture(NSString *base64, void (^completion)(NSDictionary *)) {
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    NSData *png = [[NSData alloc] initWithBase64EncodedString:base64 options:0];
+    NSBitmapImageRep *rep = png ? [NSBitmapImageRep imageRepWithData:png] : nil;
+    NSFileManager *files = NSFileManager.defaultManager;
+    NSURL *dir = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:@"Bay Captures"] isDirectory:YES];
+    [files createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSDate *dayAgo = [NSDate dateWithTimeIntervalSinceNow:-86400];
+    for (NSURL *old in [files contentsOfDirectoryAtURL:dir includingPropertiesForKeys:@[ NSURLContentModificationDateKey ] options:0 error:nil]) {
+      NSDate *modified = nil;
+      [old getResourceValue:&modified forKey:NSURLContentModificationDateKey error:nil];
+      if (modified && [modified compare:dayAgo] == NSOrderedAscending) [files removeItemAtURL:old error:nil];
+    }
+    NSURL *file = [dir URLByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingPathExtension:@"png"]];
+    NSDictionary *result = rep && rep.pixelsWide > 0 && [png writeToURL:file atomically:YES]
+                               ? @{@"path" : file.path, @"width" : @(rep.pixelsWide), @"height" : @(rep.pixelsHigh)}
+                               : nil;
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(result); });
+  });
+}
+
+// Capture (apps/browser components/capture): `clip` (x, y, width, height in CSS px from the document's top-left; past
+// the viewport with `beyond`), else the whole page with `fullPage`, else the viewport. A PNG at the page's pixels
+// (`pixelRatio`, the screen's times the zoom), scaled down past what Chrome can paint in one go. Its file, nil after 20 s.
+- (void)captureImage:(NSDictionary<NSString *, id> *)options completion:(void (^)(NSDictionary<NSString *, id> *))completion {
+  SEL timed = NSSelectorFromString(@"devToolsCall:params:timeout:completion:");
+  if (!_tab || !self.window || self.hidden || ![_tab respondsToSelector:timed]) return completion(nil);
+  NNCoreTab *tab = _tab;
+  void (^call)(NSString *, NSDictionary *, NSTimeInterval, void (^)(NSDictionary *, NSString *)) =
+      ^(NSString *method, NSDictionary *params, NSTimeInterval timeout, void (^done)(NSDictionary *, NSString *)) {
+        ((void (*)(id, SEL, NSString *, NSDictionary *, NSTimeInterval, id))objc_msgSend)(tab, timed, method, params, timeout, done);
+      };
+  const double pixelRatio = MAX(1.0, [options[@"pixelRatio"] isKindOfClass:NSNumber.class] ? [options[@"pixelRatio"] doubleValue] : 2.0);
+  void (^shoot)(NSDictionary *, BOOL) = ^(NSDictionary *clip, BOOL beyond) {
+    NSMutableDictionary *params = [@{@"format" : @"png"} mutableCopy];
+    if (clip) {
+      const double width = [clip[@"width"] doubleValue], height = [clip[@"height"] doubleValue];
+      if (!(width >= 1 && height >= 1)) return completion(nil);
+      // Chrome paints at most a GPU texture's side (16384 px) in one go.
+      const double scale = MIN(1.0, 16000.0 / (MAX(width, height) * pixelRatio));
+      params[@"clip"] = @{@"x" : clip[@"x"] ?: @0, @"y" : clip[@"y"] ?: @0, @"width" : @(width), @"height" : @(height), @"scale" : @(scale)};
+      if (beyond) params[@"captureBeyondViewport"] = @YES;
+    }
+    call(@"Page.captureScreenshot", params, 20.0, ^(NSDictionary *shot, NSString *error) {
+      NSString *data = shot[@"data"];
+      if ([data isKindOfClass:NSString.class] && data.length) SaveCapture(data, completion);
+      else completion(nil);
+    });
+  };
+  NSArray *clip = [options[@"clip"] isKindOfClass:NSArray.class] ? options[@"clip"] : nil;
+  if (clip.count == 4) {
+    for (id n in clip)
+      if (![n isKindOfClass:NSNumber.class]) return completion(nil);
+    return shoot(@{@"x" : clip[0], @"y" : clip[1], @"width" : clip[2], @"height" : clip[3]}, [options[@"beyond"] boolValue]);
+  }
+  if (![options[@"fullPage"] boolValue]) return shoot(nil, NO);
+  call(@"Page.getLayoutMetrics", @{}, 3.0, ^(NSDictionary *metrics, NSString *error) {
+    NSDictionary *size = [metrics[@"cssContentSize"] isKindOfClass:NSDictionary.class] ? metrics[@"cssContentSize"] : nil;
+    if (!size) return completion(nil);
+    shoot(@{@"x" : @0, @"y" : @0, @"width" : size[@"width"] ?: @0, @"height" : size[@"height"] ?: @0}, YES);
+  });
 }
 
 - (void)navigationEntries:(void (^)(NSArray<NSDictionary<NSString *, id> *> *))completion {
@@ -1723,6 +1837,10 @@ const char kPageReportsKey = 0;
     [_tab executeJavaScript:@"document.pictureInPictureElement && document.exitPictureInPicture()" frame:frameId];
   else
     [self exitPictureInPicture];
+}
+
+- (void)pictureInPictureAction:(NSString *)action value:(double)value inFrame:(NSString *)frameId {
+  [self callFrame:frameId ?: @"" kind:@"pip" json:JSONString(@{@"action" : action, @"value" : @(value)})];
 }
 
 - (void)exitPictureInPicture {

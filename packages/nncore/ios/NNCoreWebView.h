@@ -48,6 +48,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setDisplayMediaPicker:(BOOL)enabled;
 // The app's autoPictureInPicture setting, for Chrome's own automatic PiP (a call's document PiP on a tab switch).
 + (void)setAutoPictureInPictureEnabled:(BOOL)enabled NS_SWIFT_NAME(setAutoPictureInPictureEnabled(_:));
+// Every Boost that's on (+[NNCoreEngine setBoosts:]); engines without Boosts ignore it.
++ (void)setBoosts:(NSArray<NSDictionary<NSString *, id> *> *)boosts NS_SWIFT_NAME(setBoosts(_:));
 + (NSArray<NSDictionary<NSString *, id> *> *)devEventsForBrowser:(int)browserId NS_SWIFT_NAME(devEvents(browserId:));
 + (NSInteger)devWindowNumberForBrowser:(int)browserId NS_SWIFT_NAME(devWindowNumber(browserId:));
 // Tests: Chrome's picture-in-picture windows (styled or floating) and a test action on the newest styled one
@@ -68,6 +70,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)stopLoading;
 - (void)focusPage;
 - (void)setMuted:(BOOL)muted;
+// The serialized Boost palette/site-style descriptor, kept for a tab this view gets later.
+- (void)setBoostStyle:(NSString *)css NS_SWIFT_NAME(setBoostStyle(_:));
 - (void)setZoomFactor:(double)factor;
 - (void)zoomStep:(NSInteger)direction NS_SWIFT_NAME(zoomStep(_:));
 - (void)find:(NSString *)text forward:(BOOL)forward findNext:(BOOL)findNext;
@@ -80,6 +84,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)evaluate:(NSString *)code completion:(void (^)(NSString *_Nullable json))completion;
 - (void)capturePicture:(double)scale completion:(void (^)(NSDictionary<NSString *, id> *_Nullable picture))completion;
 - (void)captureScreenshot:(void (^)(NSString *_Nullable png))completion;
+- (void)captureImage:(NSDictionary<NSString *, id> *)options completion:(void (^)(NSDictionary<NSString *, id> *_Nullable image))completion;
 - (void)navigationEntries:(void (^)(NSArray<NSDictionary<NSString *, id> *> *entries))completion;
 - (void)downloadFavicon:(NSString *)url name:(nullable NSString *)name
              completion:(void (^)(NSDictionary<NSString *, id> *_Nullable result))completion

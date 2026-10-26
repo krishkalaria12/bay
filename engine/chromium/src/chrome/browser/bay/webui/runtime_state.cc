@@ -14,6 +14,8 @@
 namespace bay {
 namespace {
 constexpr const char* kRecords[] = {"spaces",
+                                    "localFiles",
+                                    "sidebarUndo",
                                     "windows",
                                     "pinnedFolders",
                                     "tabLists",
@@ -129,6 +131,53 @@ bool CommandText(const base::DictValue& command,
   return text && text->size() <= maximum &&
          (allow_empty ||
           !base::TrimWhitespaceASCII(*text, base::TRIM_ALL).empty());
+}
+// A download rename keeps the file in its folder: only the last path component
+// changes, and it is the new file name.
+bool RenamesInPlace(std::string_view from,
+                    std::string_view filename,
+                    std::string_view to) {
+  const auto folder_of = [](std::string_view path) {
+    const size_t slash = path.find_last_of("/\\");
+    return slash == std::string_view::npos ? std::string_view()
+                                           : path.substr(0, slash + 1);
+  };
+  const std::string_view folder = folder_of(from);
+  if (folder.empty() || folder_of(to) != folder)
+    return false;
+  const std::string_view name = to.substr(folder.size());
+  return name == filename && name != "." && name != ".." &&
+         name.find('\0') == std::string_view::npos;
+}
+// A share link token: the URI-safe alphabet of the shared collection codec.
+bool ShareToken(const base::DictValue& command) {
+  if (!CommandText(command, "token", 16000))
+    return false;
+  for (char c : *command.FindString("token"))
+    if (!base::IsAsciiAlphaNumeric(c) && c != '+' && c != '-')
+      return false;
+  return true;
+}
+// Metadata only. Native file grants and handles never cross this boundary.
+bool LocalFileDescriptor(const base::DictValue& file) {
+  const auto* path = file.FindString("path");
+  const auto* kind = file.FindString("kind");
+  if (!path || path->empty() || (*path)[0] != '/' ||
+      path->size() > 1024 * 1024 || path->find('\0') != std::string::npos ||
+      !CommandText(file, "name", 1024) ||
+      !kind || (*kind != "file" && *kind != "folder"))
+    return false;
+  std::string_view remaining(*path);
+  while (!remaining.empty()) {
+    const auto slash = remaining.find('/');
+    const auto part = remaining.substr(0, slash);
+    if (part == "." || part == "..")
+      return false;
+    if (slash == std::string_view::npos)
+      break;
+    remaining.remove_prefix(slash + 1);
+  }
+  return true;
 }
 // Service snapshots contain UI data only. Every record shape is allowlisted so
 // adding a credential or recovery field cannot silently publish it to windows.
@@ -515,15 +564,17 @@ RuntimeResultKind RuntimeCommandResultKind(const base::DictValue& command) {
   const auto* method = command.FindString("method");
   if (!method)
     return RuntimeResultKind::kNone;
+  if (*method == "pinLocalFiles") return RuntimeResultKind::kIdList;
   // Keep in sync with browserCommandResultKind in runtime/userCommands.ts.
   for (const char* name :
        {"newTab", "createWindow", "addCustomEngine", "createGroup", "groupTabs",
-        "duplicateGroup", "newTabInGroup", "newPinnedFolder", "createSplit",
-        "createSpace", "addBookmark", "addBookmarkFolder"})
+        "duplicateGroup", "newTabInGroup", "newPinnedFolder",
+        "addSharedCollection", "createSplit", "createSpace", "addBookmark",
+        "addBookmarkFolder"})
     if (*method == name)
       return RuntimeResultKind::kRequiredId;
   for (const char* name : {"duplicateTab", "moveTabsToWindow", "restoreCleaned",
-                           "openSplitPane", "openPeek", "removeBookmarks"})
+                           "openSplitPane", "openPeek", "removeBookmarks", "keepPeek"})
     if (*method == name)
       return RuntimeResultKind::kOptionalId;
   if (base::StartsWith(*method, "import"))
@@ -565,6 +616,16 @@ bool IsRuntimeReply(const base::DictValue& reply,
         if (!id.is_string() || id.GetString().empty() || id.GetString().size() > 1024) return false;
     }
   }
+  bool id_list_result = false;
+  if (result_kind == RuntimeResultKind::kIdList) {
+    if (!value || !value->is_list() || value->GetList().size() > 10000)
+      return false;
+    for (const auto& id : value->GetList())
+      if (!id.is_string() || id.GetString().size() > 1024 ||
+          base::TrimWhitespaceASCII(id.GetString(), base::TRIM_ALL).empty())
+        return false;
+    id_list_result = true;
+  }
   bool service_result = false;
   const auto* object = value && value->is_dict() ? &value->GetDict() : nullptr;
   if (result_kind == RuntimeResultKind::kBoolean)
@@ -588,7 +649,7 @@ bool IsRuntimeReply(const base::DictValue& reply,
       service_result &= object->FindBool(key).has_value();
   }
   const auto encoded = value ? base::WriteJson(*value) : std::nullopt;
-  const bool json_result = (service_result || result_kind == RuntimeResultKind::kImport) && value &&
+  const bool json_result = (id_list_result || service_result || result_kind == RuntimeResultKind::kImport) && value &&
       BoundedJson(*value) && encoded && encoded->size() <= 1024 * 1024;
   return reply.size() == 3 && revision && *revision >= minimum_revision &&
          *revision <= accepted_revision && value &&
@@ -613,6 +674,28 @@ bool IsRuntimeState(const base::DictValue& state) {
         *Text(value.GetDict(), "id") != id || PrivateSpace(id) ||
         HasPrivateData(value))
       return false;
+  }
+  for (const auto [id, value] : *state.FindDict("localFiles")) {
+    const auto* file = value.is_dict() ? &value.GetDict() : nullptr;
+    const auto* space = file ? file->FindString("spaceId") : nullptr;
+    if (!file || !CommandFields(*file, {"id", "spaceId", "path", "name", "kind",
+                                       "createdAt", "order", "expanded"}) ||
+        !CommandText(*file, "id", 1024) || *file->FindString("id") != id ||
+        !space || PrivateSpace(*space) || !ValidSpace(state, *space) ||
+        !LocalFileDescriptor(*file) || !file->FindDouble("createdAt") ||
+        !std::isfinite(*file->FindDouble("createdAt")) ||
+        !file->FindDouble("order") || !std::isfinite(*file->FindDouble("order")) ||
+        !file->FindBool("expanded").has_value())
+      return false;
+  }
+  for (const auto [id, value] : *state.FindDict("sidebarUndo")) {
+    if (!state.FindDict("windows")->FindDict(id) || !value.is_list() ||
+        value.GetList().size() > 50)
+      return false;
+    for (const auto& edit : value.GetList())
+      if (!edit.is_dict() ||
+          (edit.GetDict().contains("id") && !CommandText(edit.GetDict(), "id", 1024)))
+        return false;
   }
   for (const auto [id, value] : *state.FindDict("windows")) {
     if (!value.is_dict())
@@ -735,6 +818,34 @@ std::optional<base::DictValue> ProjectRuntimeState(
       tabs.emplace(id);
   }
   auto result = state.Clone();
+  // Undo snapshots retain deleted tabs and local paths. Renderers need only
+  // their own stack availability; the full edits stay in coordinator recovery.
+  base::DictValue undo;
+  if (own) {
+    if (const auto* stack = state.FindDict("sidebarUndo")->FindList(window_id)) {
+      base::ListValue summaries;
+      for (const auto& edit : *stack) {
+        auto summary = base::DictValue()
+                           .Set("changes", base::ListValue())
+                           .Set("closedIds", base::ListValue())
+                           .Set("cleanedIds", base::ListValue())
+                           .Set("groupIds", base::ListValue());
+        // Preserve transaction identity when the bounded stack is already full.
+        if (edit.is_dict()) {
+          if (const auto* id = edit.GetDict().FindString("id"))
+            summary.Set("id", *id);
+        }
+        summaries.Append(std::move(summary));
+      }
+      undo.Set(window_id, std::move(summaries));
+    }
+  }
+  result.Set("sidebarUndo", std::move(undo));
+  // Saved paths are public metadata, never exposed to private or small views.
+  const auto* own_kind = own ? own->FindString("kind") : nullptr;
+  if (is_private || (own_kind && *own_kind == "small"))
+    result.Set("localFiles", base::DictValue());
+
   for (const auto* key : {"windows", "windowUi", "peeks", "closedPeeks"})
     FilterRecord(result, key, windows);
   for (const auto* key : {"tabs", "live", "find"})
@@ -1130,6 +1241,46 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
     const auto value = command.FindDouble("delta");
     return value && (*value == -1 || *value == 1);
   };
+  if (*method == "undoSidebarEdit")
+    return !utility && CommandFields(command, {"method", "windowId"}) && own_target();
+  if (*method == "pinLocalFiles") {
+    if (utility || is_private || harbor || !own_target() ||
+        !CommandFields(command, {"method", "windowId", "files"}, {"spaceId"}) ||
+        (command.contains("spaceId") && !public_space(command, "spaceId")))
+      return false;
+    const auto* files = command.FindList("files");
+    if (!files || files->size() > 10000)
+      return false;
+    for (const auto& file : *files)
+      if (!file.is_dict() ||
+          !CommandFields(file.GetDict(), {"path", "name", "kind"}) ||
+          !LocalFileDescriptor(file.GetDict()))
+        return false;
+    return true;
+  }
+  if (*method == "renameLocalFile" || *method == "removeLocalFile" ||
+      *method == "moveLocalFile" || *method == "setLocalFileExpanded") {
+    if (utility || is_private || harbor)
+      return false;
+    const auto* files = state.FindDict("localFiles");
+    const auto* id = command.FindString("id");
+    const auto* file = files && id ? files->FindDict(*id) : nullptr;
+    if (!file || !public_space(*file, "spaceId"))
+      return false;
+    if (*method == "renameLocalFile")
+      return CommandFields(command, {"method", "id", "name"}) && CommandText(command, "name", 1024);
+    if (*method == "setLocalFileExpanded")
+      return CommandFields(command, {"method", "id", "expanded"}) && command.FindBool("expanded").has_value();
+    if (*method == "removeLocalFile")
+      return CommandFields(command, {"method", "id"});
+    if (!CommandFields(command, {"method", "id", "beforeId"}))
+      return false;
+    const auto* before = command.Find("beforeId");
+    if (before->is_none()) return true;
+    const auto* anchor = before->is_string() ? files->FindDict(before->GetString()) : nullptr;
+    return anchor && anchor->FindString("spaceId") &&
+           *anchor->FindString("spaceId") == *file->FindString("spaceId");
+  }
   if (*method == "serviceAction")
     return !is_private && ServiceCommand(state, acts_for, command);
   if (base::StartsWith(*method, "import")) {
@@ -1584,6 +1735,19 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
                                  std::string_view field) {
     return visible_folder(input, field) || visible_field(input, field);
   };
+  // Saved, unloaded links added after the person confirms. The import can
+  // start in Little Bay or any public window and land in a public main window.
+  if (*method == "addSharedCollection") {
+    const auto* target = command.FindString("windowId");
+    const auto* window = target ? windows->FindDict(*target) : nullptr;
+    const auto* target_kind = window ? window->FindString("kind") : nullptr;
+    return !is_private &&
+           CommandFields(command, {"method", "windowId", "token"},
+                         {"spaceId"}) &&
+           window && !window->FindBool("incognito").value_or(false) &&
+           !(target_kind && *target_kind == "small") && ShareToken(command) &&
+           (!command.contains("spaceId") || public_space(command, "spaceId"));
+  }
   if (*method == "newPinnedFolder") {
     if (!CommandFields(command, {"method", "windowId"}, {"options"}) ||
         !own_target() || is_private || harbor)
@@ -1967,11 +2131,12 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
            own_target() && command.FindBool("open");
   if (*method == "clearDownloads")
     return CommandFields(command, {"method", "windowId"}) && own_target();
-  if (*method == "removeDownload") {
-    const auto* id = command.FindString("downloadId");
-    if (!CommandFields(command, {"method", "windowId", "downloadId"}) ||
-        !own_target() || !id)
-      return false;
+  // The download, if the window's list shows it: a private window's own, or
+  // every regular one.
+  const auto listed_download =
+      [&](const std::string* id) -> const base::DictValue* {
+    if (!id)
+      return nullptr;
     const std::string& own_space = *own_window->FindString("spaceId");
     for (const auto& value : *state.FindList("downloads")) {
       const auto* download = value.is_dict() ? &value.GetDict() : nullptr;
@@ -1979,10 +2144,28 @@ bool CanDispatchRuntimeCommand(const base::DictValue& state,
       if (!download_id || *download_id != *id)
         continue;
       const auto* profile = download->FindString("profile");
-      return is_private ? profile && *profile == own_space
-                        : !(profile && PrivateSpace(*profile));
+      const bool listed = is_private ? profile && *profile == own_space
+                                     : !(profile && PrivateSpace(*profile));
+      return listed ? download : nullptr;
     }
-    return false;
+    return nullptr;
+  };
+  if (*method == "removeDownload")
+    return CommandFields(command, {"method", "windowId", "downloadId"}) &&
+           own_target() && listed_download(command.FindString("downloadId"));
+  if (*method == "updateDownloadFile") {
+    const auto* patch = command.FindDict("patch");
+    if (utility || !CommandFields(command, {"method", "id", "patch"}) ||
+        !patch || !CommandFields(*patch, {"filename", "path"}) ||
+        !CommandText(*patch, "filename", 1024) ||
+        !CommandText(*patch, "path", 32768))
+      return false;
+    const auto* download = listed_download(command.FindString("id"));
+    const auto* done = download ? download->FindString("state") : nullptr;
+    const auto* path = download ? download->FindString("path") : nullptr;
+    return done && *done == "finished" && path &&
+           RenamesInPlace(*path, *patch->FindString("filename"),
+                          *patch->FindString("path"));
   }
   if (*method == "setFind") {
     const auto* patch = command.FindDict("patch");

@@ -17,6 +17,7 @@ import { IconGrid } from "../../IconGrid";
 import { SpaceBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../spaces/icons";
 import { openThemeEditor } from "../../spaces/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { useSettingsNav } from "../windows";
 import { CLEAN_UP_CHOICES, PROFILE_ROW_HEIGHT, SPACE_PANE_ICON_COLUMNS } from "../constants";
@@ -53,7 +54,7 @@ export function SpacesPane() {
 
       <SectionHeader title="New windows open with" />
       <Group>
-        <Row title="Default space" description="Used for new windows and links opened from other apps.">
+        <Row settingId={SETTINGS.defaultSpaceId.id} title={SETTINGS.defaultSpaceId.title} description="Used for new windows.">
           <PopUp
             value={defaultId}
             options={spaces.map((p) => ({ value: p.id, title: p.name }))}

@@ -10,6 +10,7 @@ import { tourAnchorRef } from "../onboarding/tour/anchors";
 import { modifiersOf } from "../layout/controls";
 import { dispositionFor, type Disposition } from "./open";
 import { Keycaps } from "./Keycaps";
+import type { ScopeColors } from "./scopeColors";
 import { PaletteActionMenu, type PaletteMenuAction } from "./PaletteActionMenu";
 import { useHover } from "../primitives";
 import { SuggestionIcon } from "./SuggestionRow";
@@ -64,6 +65,8 @@ export function PaletteContent({
   onHover,
   onChoose,
   onSubmit,
+  onTopResult,
+  selectionColors,
 }: {
   field: ReactNode;
   leadingIcon?: ReactNode;
@@ -80,6 +83,9 @@ export function PaletteContent({
   onHover(index: number): void;
   onChoose(s: Suggestion, disposition: Disposition): void;
   onSubmit(): void;
+  /** ⇧↩: the search's first result, when the row is a search. */
+  onTopResult?: () => void;
+  selectionColors?: ScopeColors | null;
 }) {
   const theme = useTheme();
   const windowId = useWindowId();
@@ -178,6 +184,7 @@ export function PaletteContent({
                     suggestion={suggestion}
                     pageContext={pageContext}
                     selected={rowIndex === selectedIndex}
+                    colors={rowIndex === selectedIndex ? selectionColors : null}
                     onHover={(e) => hover(e, () => onHover(rowIndex))}
                     onChoose={(disposition) => onChoose(suggestion, disposition)}
                     onMenu={() => onRowMenu(suggestion)}
@@ -208,6 +215,7 @@ export function PaletteContent({
             }}
           >
             <FooterButton label={label} hint="↩" onPress={onSubmit} />
+            {onTopResult ? <FooterButton label="Top Result" hint="⇧↩" onPress={onTopResult} /> : null}
             <FooterButton label="Actions" hint="⌘K" onPress={onRowMenu} />
           </View>
         )}
@@ -239,6 +247,7 @@ function PaletteResultRow({
   onHover,
   onChoose,
   onMenu,
+  colors,
 }: {
   suggestion: PaletteSuggestion;
   pageContext: boolean;
@@ -246,6 +255,7 @@ function PaletteResultRow({
   onHover(event: PointerHoverEvent): void;
   onChoose(disposition: Disposition): void;
   onMenu(): void;
+  colors?: ScopeColors | null;
 }) {
   const theme = useTheme();
   const title =
@@ -271,7 +281,7 @@ function PaletteResultRow({
               gap: 11,
               borderRadius: 9,
               paddingHorizontal: 10,
-              backgroundColor: selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined,
+              backgroundColor: colors?.background ?? (selected ? (theme.dark ? "#FFFFFF10" : "#0000000B") : undefined),
             }}
           >
             {s.kind === "calc" ? (
@@ -291,16 +301,16 @@ function PaletteResultRow({
                       borderColor: theme.panelBorder,
                     }}
                   >
-                    <SuggestionIcon suggestion={s} />
+                    <SuggestionIcon suggestion={s} color={colors?.text} />
                   </View>
                 ) : (
-                  <SuggestionIcon suggestion={s} />
+                  <SuggestionIcon suggestion={s} color={colors?.text} />
                 )}
-                <Text numberOfLines={1} style={{ flexShrink: 1, maxWidth: detail ? "53%" : "85%", fontSize: 13, color: theme.textPrimary }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, maxWidth: detail ? "53%" : "85%", fontSize: 13, color: colors?.text ?? theme.textPrimary }}>
                   {title}
                 </Text>
                 {detail ? (
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: colors?.text ?? theme.textSecondary }}>
                     {detail}
                   </Text>
                 ) : (
@@ -309,7 +319,7 @@ function PaletteResultRow({
                 {s.kind === "action" && s.hint && pageContext ? (
                   <Keycaps hint={s.hint} />
                 ) : selected ? (
-                  <Keycaps hint="↩" />
+                  <Keycaps hint="↩" color={colors?.text} />
                 ) : s.kind === "action" && s.hint ? (
                   <Keycaps hint={s.hint} />
                 ) : null}

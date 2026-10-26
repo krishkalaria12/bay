@@ -11,6 +11,7 @@ import type { Settings } from "../../store/settings";
 import { useHover } from "../primitives";
 import { onEscapeKey } from "../../lib/escapeKey";
 import { useSettingsNav } from "./windows";
+import type { SettingId } from "./definitions";
 
 export function formColors(theme: Theme) {
   return theme.dark
@@ -360,9 +361,9 @@ export const SettingsScroll = createContext<((target: View) => void) | null>(nul
 
 const HIGHLIGHT_MS = 1600;
 
-// The setting chosen in the sidebar's search (search.ts), matched by its title: scrolled to, and marked for a moment.
-function useSearchHighlight(title: ReactNode) {
-  const marked = useSettingsNav((n) => typeof title === "string" && n.highlight === title);
+// The setting chosen in the sidebar's search (search.ts), matched by ID: scrolled to, and marked for a moment.
+function useSearchHighlight(settingId?: SettingId) {
+  const marked = useSettingsNav((n) => settingId !== undefined && n.highlight === settingId);
   const scrollTo = useContext(SettingsScroll);
   const ref = useRef<View>(null);
   useEffect(() => {
@@ -378,10 +379,10 @@ function useSearchHighlight(title: ReactNode) {
   return { ref, marked };
 }
 
-export function SectionHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+export function SectionHeader({ settingId, title, description, action }: { settingId?: SettingId; title: string; description?: string; action?: ReactNode }) {
   const theme = useTheme();
   const colors = useFormColors();
-  const { ref, marked } = useSearchHighlight(title);
+  const { ref, marked } = useSearchHighlight(settingId);
   return (
     <View ref={ref} style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 22, marginBottom: 8, paddingHorizontal: 2 }}>
       <View style={{ flex: 1 }}>
@@ -414,12 +415,14 @@ export function Group({ children, style }: { children: ReactNode; style?: StyleP
 }
 
 export function Row({
+  settingId,
   title,
   description,
   children,
   icon,
   onPress,
 }: {
+  settingId?: SettingId;
   title: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
@@ -429,7 +432,7 @@ export function Row({
   const theme = useTheme();
   const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
-  const { ref, marked } = useSearchHighlight(title);
+  const { ref, marked } = useSearchHighlight(settingId);
   let fill: string | undefined;
   if (marked) fill = `${colors.accent}2E`;
   else if (onPress && hovered) fill = colors.selected;
@@ -470,10 +473,20 @@ export function Row({
 }
 
 // A row that turns one of the settings on and off.
-export function SettingToggle({ setting, title, description }: { setting: keyof Settings; title: string; description?: string }) {
+export function SettingToggle({
+  setting,
+  settingId,
+  title,
+  description,
+}: {
+  setting: keyof Settings;
+  settingId?: SettingId;
+  title: string;
+  description?: string;
+}) {
   const value = useBrowserRead((s) => !!s.settings[setting]);
   return (
-    <Row title={title} description={description}>
+    <Row settingId={settingId} title={title} description={description}>
       <Toggle value={value} onChange={(v) => reportBrowserCommand(updateSettings({ [setting]: v }))} />
     </Row>
   );

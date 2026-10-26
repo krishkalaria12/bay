@@ -47,6 +47,14 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
+			<string>Bay shared collection</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bay</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
 			<string>Web site URL</string>
 			<key>CFBundleURLSchemes</key>
 			<array>

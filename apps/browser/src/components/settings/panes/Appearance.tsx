@@ -8,7 +8,8 @@ import { useBrowserRead } from "../../../store/read";
 import { useTheme } from "../../../lib/theme";
 import type { Settings } from "../../../store/settings";
 import { useHover } from "../../primitives";
-import { SectionHeader, useFormColors } from "../controls";
+import { Group, SectionHeader, SettingToggle, useFormColors } from "../controls";
+import { SETTINGS } from "../definitions";
 import { APP_ICON_CHOICE_SIZE } from "../constants";
 
 const MODES: { value: Settings["appearance"]; title: string; description: string }[] = [
@@ -22,7 +23,11 @@ export function AppearancePane() {
   const choose = (mode: Settings["appearance"]) => reportBrowserCommand(updateSettings({ appearance: mode }));
   return (
     <View>
-      <SectionHeader title="Appearance Theme" description="Also in View › Appearance. Incognito windows are always dark." />
+      <SectionHeader
+        settingId={SETTINGS.appearance.id}
+        title={SETTINGS.appearance.title}
+        description="Also in View › Appearance. Incognito windows are always dark."
+      />
       <View style={{ flexDirection: "row", gap: 14 }}>
         {MODES.map((m) => (
           <ModeChoice
@@ -50,7 +55,11 @@ function DensityPicker() {
   const colors = useFormColors();
   return (
     <>
-      <SectionHeader title="Density" description="Resize sidebar rows, pinned tiles and the address field together." />
+      <SectionHeader
+        settingId={SETTINGS.density.id}
+        title={SETTINGS.density.title}
+        description="Resize sidebar rows, pinned tiles and the address field together."
+      />
       <View style={{ flexDirection: "row", gap: 14 }}>
         {(["comfortable", "compact"] as const).map((value) => (
           <Pressable
@@ -83,7 +92,8 @@ function MaterialPicker() {
   return (
     <>
       <SectionHeader
-        title="Window"
+        settingId={SETTINGS.windowMaterial.id}
+        title={SETTINGS.windowMaterial.title}
         description="Solid fills the window with the page’s colour, or your space’s when it has none. Glass lets the desktop show through it."
       />
       <View style={{ flexDirection: "row", gap: 14 }}>
@@ -154,7 +164,8 @@ function SidebarPositionPicker() {
   return (
     <>
       <SectionHeader
-        title="Sidebar"
+        settingId={SETTINGS.sidebarPosition.id}
+        title={SETTINGS.sidebarPosition.title}
         description={
           topTabs
             ? "Tabs are across the top of the window. With tabs in the sidebar, it docks on the side you choose."
@@ -165,6 +176,16 @@ function SidebarPositionPicker() {
         <SidebarPositionChoice value="left" title="On the left" selected={position !== "right"} onPress={() => choose("left")} />
         <SidebarPositionChoice value="right" title="On the right" selected={position === "right"} onPress={() => choose("right")} />
       </View>
+      {topTabs ? null : (
+        <Group style={{ marginTop: 14 }}>
+          <SettingToggle
+            setting="showSidebarOnOption"
+            settingId={SETTINGS.showSidebarOnOption.id}
+            title={SETTINGS.showSidebarOnOption.title}
+            description="With the sidebar hidden (⌘S), it slides out while you hold Option and away when you let go."
+          />
+        </Group>
+      )}
     </>
   );
 }
@@ -228,7 +249,8 @@ function AddressBarPicker() {
   return (
     <>
       <SectionHeader
-        title="Address Bar"
+        settingId={SETTINGS.addressBar.id}
+        title={SETTINGS.addressBar.title}
         description={
           topTabs
             ? "Tabs are across the top of the window, so the address bar stays in the toolbar. Also in View › Show Address Bar in Sidebar."
@@ -306,7 +328,11 @@ function AppIconPicker() {
   };
   return (
     <>
-      <SectionHeader title="App Icon" description="Shown in the Dock and the app switcher. The Dock keeps it after you quit." />
+      <SectionHeader
+        settingId={SETTINGS.appIcon.id}
+        title={SETTINGS.appIcon.title}
+        description="Shown in the Dock and the app switcher. The Dock keeps it after you quit."
+      />
       <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 6, rowGap: 10 }}>
         {icons.map((icon) => (
           <IconChoice key={icon.id} icon={icon} selected={icon.id === current} onPress={() => choose(icon.id)} />

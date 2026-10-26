@@ -24,6 +24,7 @@ import { importModule } from "../../import/module";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
 import { Favicon, IconButton } from "../../primitives";
 import { Button, Group, PopUp, Row, SearchField, SectionHeader, Sheet, TextField, Toggle } from "../controls";
+import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 import { PASSWORDS_UNLOCK_MS } from "../constants";
@@ -119,13 +120,21 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         >
           <Toggle value={autofill} onChange={(v) => void setPasswordAutofill(v, profile).then(() => setAutofill(v))} />
         </Row>
-        <Row title="Import passwords" description={importStatus || "From a CSV exported by Chrome, Safari, Firefox, 1Password, Bitwarden…"}>
+        <Row
+          settingId={SETTINGS.importPasswords.id}
+          title={SETTINGS.importPasswords.title}
+          description={importStatus || "From a CSV exported by Chrome, Safari, Firefox, 1Password, Bitwarden…"}
+        >
           <Button title="Import CSV…" onPress={() => void importCsv()} />
         </Row>
-        <Row title="Export passwords" description={exportStatus || "To a CSV file. Anyone who can open the file can read your passwords."}>
+        <Row
+          settingId={SETTINGS.exportPasswords.id}
+          title={SETTINGS.exportPasswords.title}
+          description={exportStatus || "To a CSV file. Anyone who can open the file can read your passwords."}
+        >
           <Button title="Export CSV…" onPress={() => void exportCsv()} />
         </Row>
-        <Row title="Password manager apps" description={passwordManagerAppsNote()} />
+        <Row settingId={SETTINGS.passwordManagerApps.id} title={SETTINGS.passwordManagerApps.title} description={passwordManagerAppsNote()} />
       </Group>
 
       {!unlocked ? (

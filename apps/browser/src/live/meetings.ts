@@ -97,6 +97,16 @@ export function currentOrNext(events: CalendarEvent[], now: number): CalendarEve
   return current ?? meetings.sort((a, b) => a.start - b.start)[0] ?? null;
 }
 
+/**
+ * The meeting ⌃⌘J joins: one with a call link that's on now, or starts within `leadMs`. The one that started last
+ * wins (you're more likely late for it than for the one before), else the soonest.
+ */
+export function joinableMeeting(events: CalendarEvent[], now: number, leadMs: number): CalendarEvent | null {
+  const open = events.filter((e) => isMeeting(e) && e.end > now && e.start - leadMs <= now && !!joinLink(e));
+  const started = open.filter((e) => e.start <= now).sort((a, b) => b.start - a.start)[0];
+  return started ?? open.sort((a, b) => a.start - b.start)[0] ?? null;
+}
+
 export function eventForCall(events: CalendarEvent[], url: string, now: number): CalendarEvent | null {
   const key = meetingOf(url)?.key;
   if (!key) return null;

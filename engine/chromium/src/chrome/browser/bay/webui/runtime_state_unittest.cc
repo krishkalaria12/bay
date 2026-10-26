@@ -11,7 +11,7 @@ base::DictValue State() {
   auto state = base::JSONReader::ReadDict(R"({
     "spaces":{},"spaceOrder":[],"orphanedProfileData":[],
     "windows":{},"windowOrder":[],"closedWindows":[],"pinnedFolders":{},"folderMoveUndo":[],
-    "tabLists":{},"peeks":{},"closedPeeks":{},
+    "tabLists":{},"peeks":{},"closedPeeks":{},"localFiles":{},"sidebarUndo":{},
     "tabs":{},"live":{},"closedTabs":[],"groups":{},"selection":{},
     "cleanedTabs":[],"privateCleanedTabs":{},"privateSiteMutes":{},
     "closedGroups":[],"deletedGroups":[],"splits":{},"history":{},
@@ -1257,6 +1257,103 @@ TEST(RuntimeStateTest, WindowUiCommandsStayWithTheirWindowTabsAndDownloads) {
   details.FindDict("patch")->Set("url", "https://forged/");
   EXPECT_FALSE(allowed("private", details));
 }
+TEST(RuntimeStateTest, DownloadRenamesStayInTheirFolderAndWindowList) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  auto* downloads = state.FindList("downloads");
+  downloads->clear();
+  const auto add = [&](const char* id, const char* profile, const char* done,
+                       const char* path) {
+    downloads->Append(base::DictValue()
+                          .Set("id", id)
+                          .Set("profile", profile)
+                          .Set("state", done)
+                          .Set("path", path));
+  };
+  add("public", "default", "finished", "/Users/me/Downloads/file.pdf");
+  add("windows", "default", "finished", "C:\\Users\\me\\Downloads\\file.pdf");
+  add("busy", "default", "downloading", "/Users/me/Downloads/busy.pdf");
+  add("secret", "incognito:private", "finished", "/Users/me/Downloads/s.pdf");
+  const auto rename = [](const char* id, const char* filename,
+                         const char* path) {
+    return base::DictValue()
+        .Set("method", "updateDownloadFile")
+        .Set("id", id)
+        .Set("patch",
+             base::DictValue().Set("filename", filename).Set("path", path));
+  };
+  const auto allowed = [&](const char* window, const base::DictValue& c) {
+    return CanDispatchRuntimeCommand(state, window, c);
+  };
+  EXPECT_EQ(RuntimeCommandResultKind(rename("public", "a", "/a")),
+            RuntimeResultKind::kNone);
+  EXPECT_TRUE(
+      allowed("normal", rename("public", "R.pdf", "/Users/me/Downloads/R.pdf")));
+  EXPECT_TRUE(allowed("normal", rename("windows", "R.pdf",
+                                       "C:\\Users\\me\\Downloads\\R.pdf")));
+  EXPECT_FALSE(
+      allowed("normal", rename("public", "R.pdf", "/Users/me/Desktop/R.pdf")));
+  EXPECT_FALSE(
+      allowed("normal", rename("public", "R.pdf", "/Users/me/Downloads/X.pdf")));
+  EXPECT_FALSE(allowed("normal", rename("public", "..", "/Users/me/Downloads/..")));
+  EXPECT_FALSE(allowed("normal", rename("public", "R.pdf", "R.pdf")))
+      << "a path shorter than the download's folder";
+  EXPECT_FALSE(
+      allowed("normal", rename("busy", "R.pdf", "/Users/me/Downloads/R.pdf")));
+  EXPECT_FALSE(allowed("normal", rename("missing", "R.pdf", "/R.pdf")));
+  EXPECT_FALSE(
+      allowed("normal", rename("secret", "R.pdf", "/Users/me/Downloads/R.pdf")));
+  EXPECT_TRUE(
+      allowed("private", rename("secret", "R.pdf", "/Users/me/Downloads/R.pdf")));
+  EXPECT_FALSE(allowed("private",
+                       rename("public", "R.pdf", "/Users/me/Downloads/R.pdf")));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(
+      state, "", rename("public", "R.pdf", "/Users/me/Downloads/R.pdf"),
+      /*utility=*/true));
+  auto extra = rename("public", "R.pdf", "/Users/me/Downloads/R.pdf");
+  extra.FindDict("patch")->Set("url", "https://forged/");
+  EXPECT_FALSE(allowed("normal", extra));
+}
+TEST(RuntimeStateTest, SharedCollectionsLandInPublicMainWindows) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  AddLittleBay(state, "harbor");
+  const auto add = [](const char* window) {
+    return base::DictValue()
+        .Set("method", "addSharedCollection")
+        .Set("windowId", window)
+        .Set("token", "N4Ig+abc-123");
+  };
+  EXPECT_EQ(RuntimeCommandResultKind(add("normal")),
+            RuntimeResultKind::kRequiredId);
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", add("normal")));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "harbor", add("normal")))
+      << "Little Bay hands a shared link to its main window";
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "", add("normal"),
+                                        /*utility=*/true));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", add("normal")));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", add("private")));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", add("harbor")));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", add("missing")));
+  auto spaced = add("normal");
+  spaced.Set("spaceId", "default");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", spaced));
+  spaced.Set("spaceId", "incognito:private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", spaced));
+  for (const char* token : {"", "has space", "slash/", "{\"kind\":1}"}) {
+    auto bad = add("normal");
+    bad.Set("token", token);
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", bad)) << token;
+  }
+  auto huge = add("normal");
+  huge.Set("token", std::string(16001, 'A'));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", huge));
+  auto object = add("normal");
+  object.Set("collection", base::DictValue());
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", object));
+}
 TEST(RuntimeStateTest, OptionalResultsAcceptNoIdWithoutWeakeningRequiredIds) {
   auto reply = base::DictValue()
                    .Set("epoch", "epoch")
@@ -1890,4 +1987,127 @@ TEST(RuntimeStateTest, UtilityWindowsReadPublicStateAndActForPublicMainWindows) 
   EXPECT_FALSE(can(base::DictValue().Set("method", "setFind").Set("tabId", "normal-tab").Set("patch", base::DictValue())));
 }
 }  // namespace
+TEST(RuntimeLocalFilesTest, ValidatesMetadataAndFiltersPathsIncludingUndo) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "private", true);
+  AddLittleBay(state, "small");
+  auto file = base::DictValue()
+                  .Set("id", "file")
+                  .Set("spaceId", "default")
+                  .Set("path", "/Users/test/private-notes")
+                  .Set("name", "Notes")
+                  .Set("kind", "file")
+                  .Set("createdAt", 1)
+                  .Set("order", 0)
+                  .Set("expanded", false);
+  state.FindDict("localFiles")->Set("file", file.Clone());
+  state.FindDict("sidebarUndo")->Set(
+      "normal", base::ListValue().Append(base::DictValue().Set("id", "undo-1").Set(
+                    "changes", base::ListValue().Append(base::DictValue()
+                        .Set("key", "localFiles").Set("before", file.Clone())))));
+  EXPECT_TRUE(IsRuntimeState(state));
+  auto normal = ProjectRuntimeState(state, "normal");
+  ASSERT_TRUE(normal);
+  EXPECT_TRUE(normal->FindDict("localFiles")->contains("file"));
+  const auto* stack = normal->FindDict("sidebarUndo")->FindList("normal");
+  ASSERT_TRUE(stack);
+  EXPECT_EQ(stack->size(), 1u);
+  EXPECT_EQ(*(*stack)[0].GetDict().FindString("id"), "undo-1");
+  EXPECT_TRUE((*stack)[0].GetDict().FindList("changes")->empty());
+  for (const char* window : {"private", "small"}) {
+    auto projection = ProjectRuntimeState(state, window);
+    ASSERT_TRUE(projection);
+    EXPECT_TRUE(projection->FindDict("localFiles")->empty());
+    EXPECT_FALSE(projection->FindDict("sidebarUndo")->contains("normal"));
+    const auto json = base::WriteJson(*projection);
+    ASSERT_TRUE(json);
+    EXPECT_EQ(json->find("/Users/test/private-notes"), std::string::npos);
+  }
+  auto& edit = (*state.FindDict("sidebarUndo")->FindList("normal"))[0].GetDict();
+  edit.Set("id", 123);
+  EXPECT_FALSE(IsRuntimeState(state));
+  edit.Set("id", "undo-2");
+  auto updated = ProjectRuntimeState(state, "normal");
+  ASSERT_TRUE(updated);
+  EXPECT_EQ(*(*updated->FindDict("sidebarUndo")->FindList("normal"))[0]
+                 .GetDict().FindString("id"), "undo-2");
+  auto* stored = state.FindDict("localFiles")->FindDict("file");
+  stored->Set("nativeHandle", "forged");
+  EXPECT_FALSE(IsRuntimeState(state));
+  stored->Remove("nativeHandle");
+  stored->Set("spaceId", "incognito:private");
+  EXPECT_FALSE(IsRuntimeState(state));
+  stored->Set("spaceId", "default");
+  stored->Set("path", "/tmp/../secret");
+  EXPECT_FALSE(IsRuntimeState(state));
+}
+
+TEST(RuntimeLocalFilesTest, GatesCommandsByOriginAndRejectsNativeFields) {
+  auto state = State();
+  AddWindow(state, "normal", false);
+  AddWindow(state, "other", false);
+  AddWindow(state, "private", true);
+  AddLittleBay(state, "small");
+  auto pin = base::DictValue()
+                 .Set("method", "pinLocalFiles")
+                 .Set("windowId", "normal")
+                 .Set("files", base::ListValue().Append(base::DictValue()
+                     .Set("path", "/tmp/notes").Set("name", "Notes")
+                     .Set("kind", "file")));
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", pin));
+  for (const char* window : {"other", "private", "small"})
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, window, pin));
+  pin.Set("windowId", "private");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", pin));
+  pin.Set("windowId", "small");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "small", pin));
+  pin.Set("windowId", "normal");
+  auto& metadata = (*pin.FindList("files"))[0].GetDict();
+  metadata.Set("grant", "forged");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", pin));
+  metadata.Remove("grant");
+  metadata.Set("path", "/tmp/../secret");
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", pin));
+  state.FindDict("localFiles")->Set("file", base::DictValue().Set("spaceId", "default"));
+  for (const char* method : {"renameLocalFile", "removeLocalFile", "moveLocalFile", "setLocalFileExpanded"}) {
+    auto c = base::DictValue().Set("method", method).Set("id", "file");
+    if (std::string_view(method) == "renameLocalFile") c.Set("name", "Renamed");
+    if (std::string_view(method) == "moveLocalFile") c.Set("beforeId", base::Value());
+    if (std::string_view(method) == "setLocalFileExpanded") c.Set("expanded", true);
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", c));
+    EXPECT_TRUE(CanDispatchRuntimeCommand(state, "other", c));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", c));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "small", c));
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", c, true));
+    c.Set("native", true);
+    EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", c));
+  }
+  auto undo = base::DictValue().Set("method", "undoSidebarEdit").Set("windowId", "normal");
+  EXPECT_TRUE(CanDispatchRuntimeCommand(state, "normal", undo));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "other", undo));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "private", undo));
+  EXPECT_FALSE(CanDispatchRuntimeCommand(state, "normal", undo, true));
+}
+
+TEST(RuntimeLocalFilesTest, RequiresBoundedIdListReplies) {
+  const auto c = base::DictValue().Set("method", "pinLocalFiles");
+  EXPECT_EQ(RuntimeCommandResultKind(c), RuntimeResultKind::kIdList);
+  auto reply = base::DictValue().Set("epoch", "epoch").Set("revision", 1)
+                   .Set("value", base::ListValue().Append("file").Append("file"));
+  EXPECT_TRUE(IsRuntimeReply(reply, "epoch", 1, 1, RuntimeResultKind::kIdList));
+  reply.Set("value", base::ListValue());
+  EXPECT_TRUE(IsRuntimeReply(reply, "epoch", 1, 1, RuntimeResultKind::kIdList));
+  reply.Set("value", base::ListValue().Append(""));
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 1, 1, RuntimeResultKind::kIdList));
+  reply.Set("value", base::ListValue().Append(1));
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 1, 1, RuntimeResultKind::kIdList));
+  reply.Set("value", "file");
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 1, 1, RuntimeResultKind::kIdList));
+  base::ListValue ids;
+  for (int i = 0; i < 10001; ++i) ids.Append("file");
+  reply.Set("value", std::move(ids));
+  EXPECT_FALSE(IsRuntimeReply(reply, "epoch", 1, 1, RuntimeResultKind::kIdList));
+}
+
 }  // namespace bay
