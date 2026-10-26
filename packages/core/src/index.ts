@@ -10,6 +10,7 @@ export * from "./fuzzy.ts";
 export * from "./idn.ts";
 export * from "./omnibox.ts";
 export * from "./quickCreate.ts";
+export * from "./sharedCollection.ts";
 export * from "./siteSearch.ts";
 export * from "./suggest.ts";
 export * from "./suggestFetcher.ts";

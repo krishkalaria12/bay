@@ -14,6 +14,7 @@
   "dependencies": {
     "@astrojs/react": "^7.0.1",
     "@astrojs/sitemap": "^3.7.4",
+    "@bay/core": "file:../../packages/core",
     "@fontsource/caveat": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.3.0",

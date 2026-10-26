@@ -1,4 +1,5 @@
 import { appUrlRoute } from "@bay/core";
+import { handleSharedCollectionUrl } from "../../lib/collectionSharing";
 import { openNewTabPanel } from "../../lib/newTab";
 import { setAppUrlOpener } from "../../store/tabs";
 import { openSettings, type SettingsPane } from "../settings/windows";
@@ -34,6 +35,7 @@ export function settingsPaneOf(url: string): SettingsPane | "root" | null {
 }
 
 setAppUrlOpener((url, windowId) => {
+  if (handleSharedCollectionUrl(url, windowId)) return true;
   const route = appUrlRoute(url);
   if (route?.kind === "newTab") {
     openNewTabPanel(windowId);
