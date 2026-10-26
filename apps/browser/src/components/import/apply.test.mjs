@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { useBrowser } = await import("../../store/browser.ts");
-const { importArcSpace } = await import("./apply.ts");
+const { importArcSpace, importWarningNotes } = await import("./apply.ts");
 const { sidebarEntries, folderEntries } = await import("../sidebar/entries.ts");
 const { folderDepth, folderTabIds } = await import("../../store/folders.ts");
 
@@ -10,6 +10,35 @@ const S = () => useBrowser.getState();
 const short = (id) => S().tabs[id].url.replace(/^https:\/\/|\.com\/?$/g, "");
 const link = (name, title) => ({ type: "url", url: `https://${name}.com`, title: title ?? name });
 const folder = (title, ...children) => ({ type: "folder", title, children });
+
+test("partial imports report protected passwords and cards in completion notes", () => {
+  const result = {
+    credentials: [{ url: "https://saved.test", username: "saved", password: "readable" }],
+    failed: [],
+    warnings: [
+      { kind: "passwords", code: "passwordExportRequired", message: "2 passwords are protected. Export its password CSV and import that file" },
+      { kind: "autofill", code: "appBound", message: "Protected payment cards were skipped. Their source browser must export them" },
+    ],
+  };
+  assert.deepEqual(
+    importWarningNotes(result),
+    result.warnings.map((warning) => `${warning.message}.`),
+  );
+});
+
+test("completion notes retain skipped-data warnings without duplicating failed categories", () => {
+  const result = {
+    failed: ["passwords"],
+    warnings: [
+      { kind: "passwords", code: "passwordExportRequired", message: "Passwords need export" },
+      { kind: "autofill", code: "locked", message: "Cards were locked" },
+      { kind: "cookies", code: "undecryptable", message: "Cookies could not decrypt" },
+      { code: "skipped", message: "Some data was skipped" },
+      { code: "info", message: "An informational message" },
+    ],
+  };
+  assert.deepEqual(importWarningNotes(result), ["Cards were locked.", "Cookies could not decrypt.", "Some data was skipped."]);
+});
 
 test("an Arc space's pinned tabs become pinned rows and its folders pinned folders, in Arc's order", async () => {
   S().hydrate({});

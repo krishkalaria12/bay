@@ -16,6 +16,7 @@ import {
   importBookmarks,
   importDiaProfile,
   importExtensions,
+  importWarningNotes,
   openInWebStore,
   profileColorFor,
   type ImportCounts,
@@ -231,9 +232,7 @@ export function useImportFlow() {
         continue;
       }
       for (const k of result.failed) failed.set(k, [...(failed.get(k) ?? []), profile.name]);
-      for (const w of result.warnings) {
-        if (["undecryptable", "skipped", "locked"].includes(w.code) && !result.failed.includes(w.kind!)) left.push(`${w.message}.`);
-      }
+      left.push(...importWarningNotes(result));
       const refused = (k: ImportKind) => {
         const names = failed.get(k) ?? [];
         if (!names.includes(profile.name)) failed.set(k, [...names, profile.name]);
