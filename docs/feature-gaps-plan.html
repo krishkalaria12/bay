@@ -580,6 +580,7 @@
           <span>Phase 3 (Boosts) done; a two-Mac sync check before release</span>
           <span>Easel web sharing done; off by default until R2 is provisioned</span>
           <span>Collection link sharing done; deploy the web share page before release</span>
+          <span>Share Quote done on <code>main</code> at <code>cf5a701a</code></span>
           <span>Source: Arc's macOS release notes, 2021–2026</span>
           <span>Sizes are estimates: S a day or two, M about a week, L more</span>
         </div>
@@ -613,13 +614,11 @@
               Bay already matches most of Arc: spaces with themes and profiles, favorites, pinned tabs and nested folders, auto cleanup, Peek, Split View,
               Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
               folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>. The ten small
-              ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2), Boosts (Phase 3) and collection link sharing are implemented and listed under
-              <a href="#have">Already in Bay</a>. Easel web sharing is also implemented behind an environment flag that is off by default;
-              <strong>5 gaps</strong> remain.
+              ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2), Boosts (Phase 3), Share Quote and collection link sharing are implemented and
+              listed under <a href="#have">Already in Bay</a>; <strong>5 gaps</strong> remain.
+
             </p>
-            <p>
-              The gaps left are <strong>Share Quote and Arc Max</strong>: quote sharing and the "tidy" AI features. Each needs a decision before work starts.
-            </p>
+            <p>The gaps left are <strong>sharing and Arc Max</strong>: Easel links, and the "tidy" AI features. Each needs a decision before work starts.</p>
             <p>Phase 1 landed before Arc's sunset reminders start on 23 November. The phases left don't depend on Arc's dates.</p>
           </div>
         </section>
@@ -690,6 +689,7 @@
             <li>Supercopy: ⇧⌘C copies a link without trackers</li>
             <li>Copy URL as Markdown; link to highlighted text</li>
             <li>Share a folder, split or selected tabs as a snapshot link; preview in any browser and Add to Bay with nested folders, lazy tabs and Undo</li>
+            <li>Share Quote: copy highlighted text as a card in the space's colours and a passage link, with the macOS share sheet</li>
             <li>Capture an element, an area or the full page, with markup</li>
             <li>Capture in Portrait: the page framed on the space's colours</li>
             <li>Easels with live captures; export as PNG or HTML</li>
@@ -731,8 +731,9 @@
           <h2 id="missing-h">What's missing</h2>
           <p class="prose">
             "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
-            not run for this review. The date is when Arc shipped the feature. Gaps 1–15 and 17 are implemented; item 18 is implemented behind a flag. They
-            moved to <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
+            not run for this review. The date is when Arc shipped the feature. Gaps 1–17 are implemented and moved to <a href="#have">Already in Bay</a>; the
+            numbers of the rest are unchanged.
+
           </p>
           <div class="table-wrap">
             <table class="gaps">
@@ -751,11 +752,12 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>16</td>
-                  <td>Share Quote: highlighted text as a card image and link</td>
-                  <td>Nov 2023</td>
-                  <td>Implemented: copies a themed quote card and highlight link; offers the macOS share sheet</td>
-                  <td class="c"><span class="chip m">M</span></td>
+                  <td>18</td>
+                  <td>Share an Easel as a web page</td>
+                  <td>Jun 2022</td>
+                  <td>Export as a PNG or HTML file</td>
+                  <td class="c"><span class="chip l">L</span></td>
+
                   <td class="c">4</td>
                 </tr>
                 <tr>
@@ -876,8 +878,9 @@
             </li>
           </ol>
           <p class="prose">
-            Phases 1–3 and collection link sharing are implemented. Easel web sharing is done behind a flag. The remaining work in Phases 4 and 5 starts only
-            after its decisions are made.
+            Phases 1–3, Share Quote and collection link sharing are implemented. The remaining work in Phases 4 and 5 starts only after their decisions are
+            made.
+
           </p>
 
           <article class="phase gate" id="p4" aria-labelledby="p4-h">
@@ -892,28 +895,20 @@
             </p>
 
             <div class="item">
-              <h4>16 · Share Quote <span class="chip m">M</span></h4>
+              <h4>18 · Share an Easel as a web page <span class="chip l">L</span></h4>
               <p>
-                Implemented in the selection popover. "Share Quote" copies the selected text, page title and site as a card in the space's colours, together
-                with a link to the highlighted passage. The confirmation offers "Share…" to open the macOS share sheet with both the card and link. Rendering
-                stays local and needs no server. Selections over 4,000 characters are rejected rather than truncated.
+                Easels hold images, so they don't fit in a link. This needs storage somewhere: a hosted bucket with unlisted links, or the user's own iCloud
+                Drive public link. Until decided, the HTML export stays the way to share.
               </p>
               <dl class="facts">
                 <dt>Where</dt>
-                <dd><code>site/SelectionPopover.tsx</code>, <code>site/selection.ts</code>, <code>packages/shell/ios/QuoteCard.swift</code></dd>
+                <dd><code>library/export.ts</code>, plus whatever host is chosen</dd>
               </dl>
-              <ul class="checks">
-                <li>Pasting into Messages gives the card image; pasting into a text field gives the link, which opens scrolled to the quote.</li>
-                <li>
-                  Native rendering and plain/rich text paste checks: <code>python3 packages/shell/scripts/test-quote-card.py</code>. App integration:
-                  <code>node apps/browser/scripts/share-quote-test.mjs &lt;Debug Bay.app&gt;</code>.
-                </li>
-              </ul>
             </div>
-
             <h4 class="exit">Exit criteria</h4>
             <ul>
-              <li>Share Quote shipped; deploy the collection share page; provision Easel R2 storage and deploy its opt-in Worker.</li>
+              <li>Deploy the collection share page; Easel hosting either decided or recorded as out of scope.</li>
+
             </ul>
           </article>
 
