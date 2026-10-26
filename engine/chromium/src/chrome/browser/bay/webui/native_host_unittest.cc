@@ -15,6 +15,7 @@
 #include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_command_line.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -23,10 +24,14 @@
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/bay/webui/window_registry.h"
+#include "chrome/browser/lifetime/browser_close_manager.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/platform_util_internal.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/filename_util.h"
@@ -48,9 +53,12 @@ namespace {
 
 class NativeHostTest : public ChromeRenderViewHostTestHarness {
  public:
-  NativeHostTest()
+  explicit NativeHostTest(
+      base::test::TaskEnvironment::TimeSource time_source =
+          base::test::TaskEnvironment::TimeSource::SYSTEM_TIME)
       : ChromeRenderViewHostTestHarness(
-            base::test::TaskEnvironment::ThreadPoolExecutionMode::QUEUED) {}
+            base::test::TaskEnvironment::ThreadPoolExecutionMode::QUEUED,
+            time_source) {}
 
  protected:
   void SetUp() override {
@@ -1638,4 +1646,213 @@ TEST_F(FilePickerTest, StaysBusyUntilNativeCleanupAndCannotResetANewerPicker) {
 }
 
 }  // namespace
+
+// Friend of NativeHost so the tests use the same callbacks registered with
+// Chromium, without exposing shutdown controls to production callers.
+class NativeHostQuitTest : public NativeHostTest {
+ public:
+  NativeHostQuitTest()
+      : NativeHostTest(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+
+ protected:
+  class Client : public mojom::NativeHostClient {
+   public:
+    void Connect(NativeHost& host) {
+      host.SetClient(receiver.BindNewPipeAndPassRemote());
+    }
+    void OnNativeEvent(const std::string& module,
+                       const std::string& event,
+                       const std::string& json) override {
+      if (module != "BayShell" || event != "onAppEvent")
+        return;
+      auto payload = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+      ASSERT_TRUE(payload);
+      const auto* type = payload->FindString("type");
+      if (type && (*type == "willQuit" || *type == "quitCancelled"))
+        events.push_back(*type);
+    }
+    void OnHostInfoChanged(const std::string&) override {}
+    mojo::Receiver<mojom::NativeHostClient> receiver{this};
+    std::vector<std::string> events;
+  } client_;
+
+  void SetUp() override {
+    command_.GetProcessCommandLine()->AppendSwitch("bay-legacy-runtime");
+    NativeHostTest::SetUp();
+    ON_CALL(window_, GetProfile()).WillByDefault(testing::Return(profile()));
+    ON_CALL(window_, GetWeakPtr())
+        .WillByDefault(testing::Return(window_weak_factory_.GetWeakPtr()));
+    client_.Connect(*host_);
+    task_environment()->RunUntilIdle();
+  }
+  void TearDown() override {
+    NativeHost::CancelQuit();
+    AppRuntime::ShutdownIfStarted();
+    if (window_host_)
+      window_host_->ResetAndDeleteThis();
+    window_remote_.reset();
+    window_contents_.reset();
+    browser_shutdown::SetTryingToQuit(false);
+    NativeHostTest::TearDown();
+  }
+  void Prepare(base::OnceCallback<void(bool)> completion) {
+    NativeHost::PrepareForQuit(std::move(completion));
+  }
+  void Cancel() { NativeHost::CancelQuit(); }
+  bool CloseWindow() { return NativeHost::HandleWindowClose(&window_); }
+  void AddWindowHost() {
+    window_contents_ = CreateTestWebContents();
+    auto* host = new NativeHost(*window_contents_->GetPrimaryMainFrame(),
+                                HostContext::ForWindow(window_),
+                                window_remote_.BindNewPipeAndPassReceiver());
+    window_host_ = host->GetWeakPtr();
+    task_environment()->RunUntilIdle();
+  }
+  void UseSharedCoordinator() {
+    command_.GetProcessCommandLine()->RemoveSwitch("bay-legacy-runtime");
+    // This render-host harness has no ProfileManager or live coordinator
+    // renderer. Attach its document explicitly to exercise native ownership.
+    AppRuntime::StartForWindow(window_);
+    ASSERT_TRUE(AppRuntime::GetIfStarted());
+    AppRuntime::GetIfStarted()->SetCoordinatorHost(host_);
+  }
+
+  base::test::ScopedCommandLine command_;
+  testing::NiceMock<PickerWindow> window_;
+  base::WeakPtrFactory<BrowserWindowInterface> window_weak_factory_{&window_};
+  std::unique_ptr<content::WebContents> window_contents_;
+  mojo::Remote<mojom::NativeHost> window_remote_;
+  base::WeakPtr<NativeHost> window_host_;
+};
+
+TEST_F(NativeHostQuitTest, WaitsForRendererSaveAndCoalescesQuitRequests) {
+  base::test::TestFuture<bool> first, second;
+  Prepare(first.GetCallback());
+  Prepare(second.GetCallback());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  EXPECT_FALSE(first.IsReady());
+  EXPECT_FALSE(second.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[true]"),
+            R"({"value":null})");
+  EXPECT_TRUE(first.Get());
+  EXPECT_TRUE(second.Get());
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+}
+
+TEST_F(NativeHostQuitTest,
+       SharedCoordinatorOwnsQuitAndWindowCannotAcknowledge) {
+  UseSharedCoordinator();
+  AddWindowHost();
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  base::test::TestFuture<const std::string&> reply;
+  window_host_->Invoke("BayShell", "replyToTerminate", "[true]",
+                       reply.GetCallback());
+  ExpectError(reply.Get(), "stale_quit");
+  EXPECT_FALSE(result.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[true]"),
+            R"({"value":null})");
+  EXPECT_TRUE(result.Get());
+  EXPECT_FALSE(CloseWindow());
+}
+
+TEST_F(NativeHostQuitTest, MissingSharedCoordinatorRefusesToQuit) {
+  command_.GetProcessCommandLine()->RemoveSwitch("bay-legacy-runtime");
+  ASSERT_FALSE(AppRuntime::GetIfStarted());
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  EXPECT_FALSE(result.Get());
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(client_.events.empty());
+}
+
+TEST_F(NativeHostQuitTest, SaveFailureCancelsChromeCloseAndAllowsRetry) {
+  // Exercise the installed preflight, including the broker's first-use
+  // fallback. It must not replace the renderer preparation callback.
+  TabBroker::Get();
+  auto manager = base::MakeRefCounted<BrowserCloseManager>();
+  manager->StartClosingBrowsers();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[false]"),
+            R"({"value":null})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events,
+            (std::vector<std::string>{"willQuit", "quitCancelled"}));
+  EXPECT_FALSE(browser_shutdown::IsTryingToQuit());
+  base::test::TestFuture<bool> retry;
+  Prepare(retry.GetCallback());
+  EXPECT_FALSE(retry.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[true]"),
+            R"({"value":null})");
+  EXPECT_TRUE(retry.Get());
+}
+
+TEST_F(NativeHostQuitTest, InvalidReplyDoesNotReleasePendingQuit) {
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[null]"), "invalid_args");
+  EXPECT_FALSE(result.IsReady());
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[false]"),
+            R"({"value":null})");
+  EXPECT_FALSE(result.Get());
+}
+
+TEST_F(NativeHostQuitTest, UnresponsiveRendererTimesOutWithoutClosing) {
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  task_environment()->FastForwardBy(base::Seconds(19));
+  EXPECT_FALSE(result.IsReady());
+  task_environment()->FastForwardBy(base::Seconds(1));
+  EXPECT_FALSE(result.Get());
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+}
+
+TEST_F(NativeHostQuitTest, ReplacingQuitOwnerFailsOnceAndRejectsLateReply) {
+  int calls = 0;
+  Prepare(base::BindLambdaForTesting([&](bool proceed) {
+    ++calls;
+    EXPECT_FALSE(proceed);
+  }));
+  ReplaceHost();
+  EXPECT_EQ(calls, 1);
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+  task_environment()->FastForwardBy(base::Seconds(20));
+  EXPECT_EQ(calls, 1);
+}
+
+TEST_F(NativeHostQuitTest, CancellingBeforeAckSettlesOnceAndResumesRenderer) {
+  base::test::TestFuture<bool> result;
+  Prepare(result.GetCallback());
+  Cancel();
+  EXPECT_FALSE(result.Get());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events,
+            (std::vector<std::string>{"willQuit", "quitCancelled"}));
+  ExpectError(Invoke("BayShell", "replyToTerminate", "[true]"), "stale_quit");
+}
+
+TEST_F(NativeHostQuitTest, LastWindowClosePostsOneQuitAndHonorsSaveFailure) {
+  UseSharedCoordinator();
+  AddWindowHost();
+  // The mock window is not in GlobalBrowserCollection. Supply its browser
+  // keep-alive so AttemptExit reaches BrowserCloseManager instead of exiting.
+  ScopedKeepAlive browser_alive(KeepAliveOrigin::BROWSER,
+                                KeepAliveRestartOption::DISABLED);
+  EXPECT_TRUE(CloseWindow());
+  EXPECT_TRUE(CloseWindow());
+  EXPECT_TRUE(client_.events.empty());
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events, (std::vector<std::string>{"willQuit"}));
+  EXPECT_EQ(Invoke("BayShell", "replyToTerminate", "[false]"),
+            R"({"value":null})");
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(client_.events,
+            (std::vector<std::string>{"willQuit", "quitCancelled"}));
+  EXPECT_FALSE(browser_shutdown::IsTryingToQuit());
+}
+
 }  // namespace bay

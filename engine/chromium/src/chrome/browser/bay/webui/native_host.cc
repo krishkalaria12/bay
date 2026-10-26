@@ -59,6 +59,8 @@
 #include "chrome/browser/bay/webui/frame_win.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/updater_service_win.h"
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -102,8 +104,6 @@ std::map<NativeHost*, base::WeakPtr<NativeHost>>& Hosts() {
   return *hosts;
 }
 #if BUILDFLAG(IS_WIN)
-bool g_quit_requested = false;
-bool g_quit_prepared = false;
 UpdaterService& AppUpdater() {
   static base::NoDestructor<UpdaterService> updater(
       base::BindRepeating([](base::DictValue state) {
@@ -126,6 +126,10 @@ UpdaterService& AppUpdater() {
       base::BindRepeating(&chrome::AttemptExit));
   return *updater;
 }
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+bool g_quit_requested = false;
+bool g_quit_prepared = false;
 struct QuitPreparation {
   base::WeakPtr<NativeHost> owner;
   std::vector<base::OnceCallback<void(bool)>> callbacks;
@@ -175,82 +179,6 @@ void PrepareRendererForQuit(base::OnceCallback<void(bool)> completion) {
                       base::BindOnce(&CompleteQuitPreparation, false));
   quit.owner->Emit("BayShell", "onAppEvent",
                    base::Value(base::DictValue().Set("type", "willQuit")));
-}
-void InstallCloseHooks() {
-  static const bool installed = [] {
-    WebUIBrowserWindow::SetBayCloseRequestHandler(
-        [](BrowserWindowInterface* browser) {
-          if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-                  "bay-hosting-spike") ||
-              browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
-            return false;
-          const auto host = QuitOwner();
-          if (!host)
-            return false;
-          if (AppRuntime::Enabled()) {
-            auto* runtime = AppRuntime::GetIfStarted();
-            if (runtime && runtime->IsRetiringStartupWindow(browser))
-              return false;
-            if (WindowRegistry::Get().Ids().size() > 1)
-              return false;
-            bool is_shell = false;
-            for (const auto& [owner, candidate] : Hosts())
-              is_shell |= candidate && candidate->browser() == browser;
-            if (!is_shell)
-              return false;
-          } else if (host->browser() != browser) {
-            return false;
-          }
-          // Posting lets WebUIBrowserWindow rearm the consumed widget callback
-          // before application shutdown can synchronously call Close() again.
-          if (!g_quit_requested && !browser_shutdown::IsTryingToQuit()) {
-            g_quit_requested = true;
-            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-                FROM_HERE, base::BindOnce(&chrome::AttemptExit));
-          }
-          return true;
-        });
-    BrowserCloseManager::SetBayClosePreflight(
-        [](base::OnceCallback<void(bool)> completion) {
-          g_quit_requested = true;
-          g_quit_prepared = false;
-          if (browser_shutdown::ShouldIgnoreUnloadHandlers()) {
-            std::move(completion).Run(TabBroker::Get().PrepareForQuit());
-            return;
-          }
-          PrepareRendererForQuit(base::BindOnce(
-              [](base::OnceCallback<void(bool)> completion, bool proceed) {
-                if (!proceed) {
-                  std::move(completion).Run(false);
-                  return;
-                }
-                AppUpdater().PrepareForQuit(base::BindOnce(
-                    [](base::OnceCallback<void(bool)> completion,
-                       bool updater_ready) {
-                      const bool prepared =
-                          updater_ready && TabBroker::Get().PrepareForQuit();
-                      g_quit_prepared = prepared;
-                      std::move(completion).Run(prepared);
-                    },
-                    std::move(completion)));
-              },
-              std::move(completion)));
-        },
-        [] {
-          g_quit_requested = false;
-          g_quit_prepared = false;
-          CompleteQuitPreparation(false);
-          AppUpdater().CancelQuit();
-          for (const auto& [owner, host] : Hosts()) {
-            if (host)
-              host->Emit(
-                  "BayShell", "onAppEvent",
-                  base::Value(base::DictValue().Set("type", "quitCancelled")));
-          }
-        });
-    return true;
-  }();
-  (void)installed;
 }
 #endif
 std::map<uintptr_t, base::WeakPtr<NativeHost>>& PendingOwners() {
@@ -366,6 +294,95 @@ void DataEvent(const std::string& module,
 #endif
 }  // namespace
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+bool NativeHost::HandleWindowClose(BrowserWindowInterface* browser) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike") ||
+      browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
+    return false;
+  const auto host = QuitOwner();
+  if (!host)
+    return false;
+  if (AppRuntime::Enabled()) {
+    auto* runtime = AppRuntime::GetIfStarted();
+    if (runtime && runtime->IsRetiringStartupWindow(browser))
+      return false;
+    if (WindowRegistry::Get().Ids().size() > 1)
+      return false;
+    bool is_shell = false;
+    for (const auto& [owner, candidate] : Hosts())
+      is_shell |= candidate && candidate->browser() == browser;
+    if (!is_shell)
+      return false;
+  } else if (host->browser() != browser) {
+    return false;
+  }
+  // Posting lets WebUIBrowserWindow rearm the consumed widget callback
+  // before application shutdown can synchronously call Close() again.
+  if (!g_quit_requested && !browser_shutdown::IsTryingToQuit()) {
+    g_quit_requested = true;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&chrome::AttemptExit));
+  }
+  return true;
+}
+void NativeHost::PrepareForQuit(base::OnceCallback<void(bool)> completion) {
+  g_quit_requested = true;
+  g_quit_prepared = false;
+  if (browser_shutdown::ShouldIgnoreUnloadHandlers()) {
+    std::move(completion).Run(TabBroker::Get().PrepareForQuit());
+    return;
+  }
+  PrepareRendererForQuit(base::BindOnce(
+      [](base::OnceCallback<void(bool)> completion, bool proceed) {
+        if (!proceed) {
+          std::move(completion).Run(false);
+          return;
+        }
+        auto prepare_tabs = base::BindOnce(
+            [](base::OnceCallback<void(bool)> completion, bool updater_ready) {
+              const bool prepared =
+                  updater_ready && TabBroker::Get().PrepareForQuit();
+              g_quit_prepared = prepared;
+              std::move(completion).Run(prepared);
+            },
+            std::move(completion));
+#if BUILDFLAG(IS_WIN)
+        AppUpdater().PrepareForQuit(std::move(prepare_tabs));
+#else
+        std::move(prepare_tabs).Run(true);
+#endif
+      },
+      std::move(completion)));
+}
+void NativeHost::CancelQuit() {
+  g_quit_requested = false;
+  g_quit_prepared = false;
+  CompleteQuitPreparation(false);
+#if BUILDFLAG(IS_WIN)
+  AppUpdater().CancelQuit();
+#endif
+  for (const auto& [owner, host] : Hosts()) {
+    if (host)
+      host->Emit("BayShell", "onAppEvent",
+                 base::Value(base::DictValue().Set("type", "quitCancelled")));
+  }
+}
+void NativeHost::InstallCloseHooks() {
+  static const bool installed = [] {
+    // The broker installs a detached-tab-only fallback on Linux. Construct it
+    // first, then replace that fallback with the full renderer handshake so it
+    // cannot overwrite these hooks when the first tab is used.
+    TabBroker::Get();
+    WebUIBrowserWindow::SetBayCloseRequestHandler(
+        &NativeHost::HandleWindowClose);
+    BrowserCloseManager::SetBayClosePreflight(&NativeHost::PrepareForQuit,
+                                              &NativeHost::CancelQuit);
+    return true;
+  }();
+  (void)installed;
+}
+#endif
+
 NativeHost::NativeHost(content::RenderFrameHost& frame,
                        HostContext context,
                        mojo::PendingReceiver<mojom::NativeHost> receiver)
@@ -389,8 +406,10 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   engine_services_ = std::make_unique<EngineServices>(
       context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()));
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   InstallCloseHooks();
+#endif
+#if BUILDFLAG(IS_WIN)
   AppUpdater().Prepare(
       base::BindOnce(&NativeHost::PublishHostInfo, GetWeakPtr()));
 #endif
@@ -442,7 +461,7 @@ NativeHost::~NativeHost() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   appearance_.reset();
 #endif
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (PendingQuit().owner.get() == this)
     CompleteQuitPreparation(false);
 #endif
@@ -1001,7 +1020,7 @@ void NativeHost::Invoke(const std::string& module,
       Notifications::Get().Dispatch(context_, method, args, callback))
     return;
 #endif
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (module == "BayShell" && method == "replyToTerminate") {
     if (!args[0].is_bool()) {
       std::move(callback).Run(
@@ -1017,6 +1036,8 @@ void NativeHost::Invoke(const std::string& module,
     CompleteQuitPreparation(args[0].GetBool());
     return;
   }
+#endif
+#if BUILDFLAG(IS_WIN)
   if (module == "BayApp") {
     if ((method == "checkForUpdates" || method == "installPendingUpdate") &&
         !context_.window()) {

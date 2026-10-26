@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -58,6 +59,13 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  friend class NativeHostQuitTest;
+  static bool HandleWindowClose(BrowserWindowInterface* browser);
+  static void PrepareForQuit(base::OnceCallback<void(bool)> completion);
+  static void CancelQuit();
+  static void InstallCloseHooks();
+#endif
   void InvokeView(const std::string& method,
                   const base::ListValue& args,
                   InvokeCallback callback);
