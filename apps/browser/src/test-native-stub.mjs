@@ -70,7 +70,7 @@ export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);
 export const iconTheme = () => Promise.resolve(null);
 export const cancelDownload = () => Promise.resolve();
-export const renameFile = (path, name) => Promise.resolve(path);
+export const renameFile = (path, _name) => Promise.resolve(path);
 export const onDownload = () => ({ remove() {} });
 export const deletedProfileData = [];
 export const profileDataLeft = new Map();

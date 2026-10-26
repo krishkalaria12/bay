@@ -37,6 +37,7 @@ export const SYNCED_SETTINGS = [
   "optShiftClickOpensInGroup",
   "autoGroupMeetingTabs",
   "tidyTabTitles",
+  "tidyTabs",
   "cleanUpInactiveTabsAfterHours",
   "awakeSites",
   "tidyDownloads",
@@ -73,6 +74,7 @@ export const settingsAdapter: Adapter = {
       if (name === "searchShortcutMode" && record.v !== "arc" && record.v !== "duckduckgo") continue;
       if (name === "calculatorEnabled" && typeof record.v !== "boolean") continue;
       if (name === "tidyDownloads" && typeof record.v !== "boolean") continue;
+      if (name === "tidyTabs" && typeof record.v !== "boolean") continue;
       patch[name] = record.v;
     }
     if (Object.keys(patch).length) store().updateSettings(patch as Partial<Settings>);

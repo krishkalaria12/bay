@@ -60,6 +60,10 @@ export type OrganizeSlice = {
   newTabInGroup(groupId: string, url?: string): string;
   moveGroupToBookmarksBar(groupId: string): void;
 
+  /** Groups today's tabs by topic into tab groups. Pinned tabs and existing groups are left alone. */
+  tidyTabs(windowId?: string): number;
+  /** Alias for tidyTabs. */
+  tidyTodayTabs(windowId?: string): number;
   /** Cleans up the tabs of the space the window shows, or of `spaceId`. */
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; spaceId?: string }): number;
   /** The automatic clean up (Arc's archive): every window's spaces, each after its own time. */
@@ -472,6 +476,65 @@ export function forgetClosedPrivateWindows(s: BrowserState): Partial<BrowserStat
   return { privateCleanedTabs: without(s.privateCleanedTabs, cleaned), privateSiteMutes: without(s.privateSiteMutes, mutes) };
 }
 
+function hostOfTab(tab: Tab): string {
+  try {
+    return new URL(tab.url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function tidyTodayTabsImpl(get: () => BrowserState, set: (patch: Partial<BrowserState>) => void, windowId?: string): number {
+  const s = get();
+  const resolved = windowId ?? s.ui.focusedWindowId ?? s.windowOrder[0];
+  if (!resolved) return 0;
+  const w = s.windows[resolved];
+  if (!w) return 0;
+  const actualWindowId = resolved;
+  const spaceId = w.spaceId;
+  const view = viewTabIds(s, actualWindowId, spaceId);
+  const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
+  const candidates = view.filter((id) => {
+    const t = s.tabs[id];
+    if (!t || !t.url) return false;
+    if (pinnedPage(t)) return false;
+    if (grouped.has(id)) return false;
+    return true;
+  });
+
+  const clusters = new Map<string, string[]>();
+  const leftovers: string[] = [];
+  for (const id of candidates) {
+    const host = hostOfTab(s.tabs[id]!);
+    if (!host) {
+      leftovers.push(id);
+      continue;
+    }
+    const list = clusters.get(host) ?? [];
+    list.push(id);
+    clusters.set(host, list);
+  }
+
+  let next = s;
+  const created: string[] = [];
+  for (const ids of clusters.values()) {
+    if (ids.length < 2) {
+      leftovers.push(...ids);
+      continue;
+    }
+    const [state, id] = withGroup(next, ids, { pinned: false });
+    next = state;
+    if (id) created.push(id);
+  }
+  if (leftovers.length >= 2) {
+    const [state, id] = withGroup(next, leftovers, { pinned: false, name: "Other" });
+    next = state;
+    if (id) created.push(id);
+  }
+  if (created.length) set(next);
+  return created.length;
+}
+
 export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSlice> = (set, get) => ({
   selection: {},
   cleanedTabs: [],
@@ -649,6 +712,14 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
       if (t?.url) get().addBookmark({ spaceId, url: t.url, title: t.customTitle || t.title || t.url, favicon: t.favicon, parentId: folder });
     }
     set(closingGroup(get(), groupId));
+  },
+
+  tidyTabs(windowId) {
+    return tidyTodayTabsImpl(get, set, windowId);
+  },
+
+  tidyTodayTabs(windowId) {
+    return tidyTodayTabsImpl(get, set, windowId);
   },
 
   cleanUpTabs(windowId, options = {}) {

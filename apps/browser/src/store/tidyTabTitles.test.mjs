@@ -4,7 +4,7 @@ const { useBrowser } = await import("./browser.ts");
 
 const S = () => useBrowser.getState();
 
-const setup = (...urls) => {
+const _setup = (...urls) => {
   S().hydrate({});
   const w = S().createWindow({ url: `https://${urls[0]}.com` });
   const ids = [S().windows[w].activeTabIds[S().windows[w].spaceId], ...urls.slice(1).map((u) => S().newTab(w, { url: `https://${u}.com` }))];

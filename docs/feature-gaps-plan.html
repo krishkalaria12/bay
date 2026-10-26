@@ -594,7 +594,7 @@
           <li><a href="#summary">Summary</a></li>
           <li><a href="#sunset">Arc's sunset</a></li>
           <li><a href="#have">Already in Bay</a></li>
-          <li><a href="#missing">What's missing</a></li>
+
           <li><a href="#retest">Re-test</a></li>
           <li><a href="#phases">Phases</a></li>
           <li class="sub"><a href="#p4">4 · Sharing</a></li>
@@ -614,9 +614,9 @@
               Bay already matches most of Arc: spaces with themes and profiles, favorites, pinned tabs and nested folders, auto cleanup, Peek, Split View,
               Little Bay, link rules (Arc's Air Traffic Control), the command bar with actions and site search, Capture, Easels, the Library, previews, live
               folders and calendars, and the media players. The review found <strong>22 gaps</strong> and <strong>7 things to re-test</strong>. The ten small
-              ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2), Boosts (Phase 3), Share Quote and collection link sharing, and Tidy Downloads are
-              implemented and listed under <a href="#have">Already in Bay</a>. Easel web sharing is also implemented behind an environment flag that is off by default;
-              5-Second Previews is implemented; <strong>1 gap</strong> remains.
+              ones (Phase 1), the three keyboard, undo and Finder ones (Phase 2), Boosts (Phase 3), Share Quote and collection link sharing, and Tidy Downloads
+              are implemented and listed under <a href="#have">Already in Bay</a>. Easel web sharing is also implemented behind an environment flag that is off
+              by default; 5-Second Previews and Tidy Tabs are implemented; <strong>0 gaps</strong> remain.
             </p>
             <p>The gaps left are <strong>Arc Max</strong>: the "tidy" AI features. Each needs a decision before work starts.</p>
             <p>Phase 1 landed before Arc's sunset reminders start on 23 November. The phases left don't depend on Arc's dates.</p>
@@ -726,44 +726,9 @@
             <li>JavaScript Boosts in their own world, on one Mac only, off by default, not in private windows unless allowed</li>
             <li>Boosts sync without their JavaScript; import and export Bay's and Zen's Boost files</li>
             <li>Tidy Downloads: readable file names, offered and applied only when accepted, never to files a person named</li>
+            <li>Tidy Tabs: group today's tabs by topic into tab groups, with ⌘Z to undo; pinned tabs and existing groups are left alone</li>
             <li>5-Second Previews: Shift-hover a link for a summary card with Open, Peek and Copy</li>
           </ul>
-        </section>
-
-        <section id="missing" aria-labelledby="missing-h">
-          <h2 id="missing-h">What's missing</h2>
-          <p class="prose">
-            "Missing" means the code on <code>main</code> has nothing for it. Each was searched for in the app, the shell and the engine patches. The app was
-            not run for this review. The date is when Arc shipped the feature. Gaps 1–17 are implemented; item 18 is implemented behind a flag. They moved to
-            <a href="#have">Already in Bay</a>; the numbers of the rest are unchanged.
-          </p>
-          <div class="table-wrap">
-            <table class="gaps">
-              <caption>
-                Gaps, in the order they are built
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">Gap</th>
-                  <th scope="col">Arc</th>
-                  <th scope="col">Today in Bay</th>
-                  <th scope="col">Size</th>
-                  <th scope="col">Phase</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>21</td>
-                  <td>Tidy Tabs: group today's tabs by topic</td>
-                  <td>Feb 2024</td>
-                  <td>Clean up by age; meeting groups</td>
-                  <td class="c"><span class="chip m">M</span></td>
-                  <td class="c">5</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </section>
 
         <section id="retest" aria-labelledby="retest-h">
@@ -893,7 +858,7 @@
               </p>
             </div>
             <div class="item">
-              <h4>21 · Tidy Tabs <span class="chip m">M</span></h4>
+              <h4>21 · Tidy Tabs <span class="chip m">M</span> <span class="chip">shipped</span></h4>
               <p>
                 A button over today's tabs groups them by topic into Bay's tab groups, with ⌘Z to undo (needs item 12). Pinned tabs and existing groups are left
                 alone.
