@@ -30,6 +30,7 @@ class EngineServices;
 class DocumentStore;
 class SecretStorage;
 class ShellUI;
+class SyncUI;
 class ShellAppearance;
 class ShellFiles;
 class DefaultBrowser;
@@ -95,6 +96,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::unique_ptr<AppServicesLinux> app_services_;
   bool documents_ready_ = false;
   std::unique_ptr<ShellUI> shell_ui_;
+  std::unique_ptr<SyncUI> sync_ui_;
   std::unique_ptr<SecretStorage> secret_storage_;
   std::unique_ptr<DocumentStore> documents_;
 #endif

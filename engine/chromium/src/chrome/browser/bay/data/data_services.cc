@@ -121,22 +121,16 @@ Json WriteImported(const EngineCall& call,
 }  // namespace
 
 void Configure(std::string directory, ProfileResolver resolve_profile) {
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
   sync::SetDataDirectory(std::move(directory));
-#else
-  (void)directory;
-#endif
   {
     std::lock_guard<std::mutex> lock(configuration_mutex);
     profile_resolver = std::move(resolve_profile);
   }
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
   sync::SetProfileResolver([](const std::string& profile) {
     auto paths = ResolveProfile(profile);
     return std::pair{std::filesystem::u8path(paths.user_data_directory),
                      std::filesystem::u8path(paths.profile_directory)};
   });
-#endif
 }
 void SetEventSink(EventSink sink) {
   importer::SetEventSink(std::move(sink));
@@ -159,29 +153,23 @@ void SetEngineCall(EngineCall engine_call) {
 const std::vector<std::string>& ModuleNames() {
   static const std::vector<std::string> modules{
       importer::kModuleName,
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
       sync::kModuleName,
-#endif
   };
   return modules;
 }
 const std::vector<std::string>& MethodNames(const std::string& module) {
   if (module == importer::kModuleName)
     return importer::MethodNames();
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
   if (module == sync::kModuleName)
     return sync::MethodNames();
-#endif
   static const std::vector<std::string> empty;
   return empty;
 }
 bool RequiresUIThread(const std::string& module, const std::string& method) {
   if (module == importer::kModuleName)
     return importer::RequiresUIThread(method);
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
   if (module == sync::kModuleName)
     return sync::RequiresUIThread(method);
-#endif
   return false;
 }
 std::string Invoke(const std::string& module,
@@ -190,10 +178,8 @@ std::string Invoke(const std::string& module,
   try {
     if (module == importer::kModuleName)
       return importer::InvokeEnvelope(method, arguments);
-#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
     if (module == sync::kModuleName)
       return sync::InvokeEnvelope(method, arguments);
-#endif
     return Error("unsupported", "This native module is unavailable");
   } catch (const std::exception&) {
     return Error("native_failure", "The native data service failed");

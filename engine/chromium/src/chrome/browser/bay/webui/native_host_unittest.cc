@@ -589,8 +589,8 @@ TEST_F(NativeHostTest,
     ExpectError(Invoke("BayApp", method, "[1]"), "invalid_args");
   ExpectError(Invoke("BayApp", "launchEnvironment", "[1]"), "invalid_args");
   for (const char* args : {"[]", "[null]", R"(["file:///tmp/a"])",
-                           R"json(["javascript:alert(1)"])json", R"(["ftp://example.com"])",
-                           R"(["not a URL"])"})
+                           R"json(["javascript:alert(1)"])json",
+                           R"(["ftp://example.com"])", R"(["not a URL"])"})
     ExpectError(Invoke("BayApp", "openExternalURL", args), "invalid_args");
 }
 
@@ -881,14 +881,25 @@ class FakeFileDialog : public ui::SelectFileDialog {
       EXPECT_EQ(title, u"Open files");
       EXPECT_FALSE(file_types);
       EXPECT_EQ(file_type_index, 0);
-    } else {
+    } else if (type == SELECT_OPEN_FILE) {
       EXPECT_EQ(type, SELECT_OPEN_FILE);
       EXPECT_EQ(title, u"Choose import file");
       EXPECT_TRUE(file_types);
       EXPECT_EQ(file_type_index, 1);
+    } else if (type == SELECT_FOLDER) {
+      EXPECT_EQ(title, u"Choose sync folder");
+      EXPECT_FALSE(file_types);
+      EXPECT_EQ(file_type_index, 0);
+    } else {
+      EXPECT_EQ(type, SELECT_SAVEAS_FILE);
+      EXPECT_EQ(title, u"Save Recovery Kit");
+      EXPECT_TRUE(file_types);
+      EXPECT_EQ(file_type_index, 1);
     }
-    EXPECT_TRUE(default_path.empty());
-    EXPECT_TRUE(default_extension.empty());
+    if (type == SELECT_OPEN_FILE || type == SELECT_OPEN_MULTI_FILE) {
+      EXPECT_TRUE(default_path.empty());
+      EXPECT_TRUE(default_extension.empty());
+    }
     EXPECT_FALSE(caller);
     parent = owning_window;
     if (on_show_)
@@ -1205,20 +1216,22 @@ TEST_F(FilePickerTest, WindowHostAdvertisesFilePicking) {
   EXPECT_TRUE(methods->contains("BayShell.showMenu"));
 }
 
-TEST_F(NativeHostTest, ImportAdvertisedAndDispatchedWithoutSyncOrReadiness) {
+TEST_F(NativeHostTest, ImportAndSyncAdvertisedAndDispatchedWithoutReadiness) {
   const auto info = HostInfo();
   const auto* modules = info.FindList("modules");
   ASSERT_TRUE(modules);
   EXPECT_TRUE(modules->contains("BayImport"));
-  EXPECT_FALSE(modules->contains("BaySync"));
+  EXPECT_TRUE(modules->contains("BaySync"));
   const auto* methods = info.FindList("optionalMethods");
   ASSERT_TRUE(methods);
   for (const char* method : {"BayImport.listBrowsers", "BayImport.importData",
                              "BayImport.chooseImportFile"})
     EXPECT_TRUE(methods->contains(method));
-  for (const auto& method : *methods)
-    EXPECT_FALSE(method.GetString().starts_with("BaySync."));
-  ExpectError(Invoke("BaySync", "newDeviceId", "[]"), "unsupported_method");
+  for (const char* method :
+       {"BaySync.newDeviceId", "BaySync.readPasswords", "BaySync.createPhrase",
+        "BaySync.write", "BaySync.chooseFolder", "BaySync.saveRecoveryKit"})
+    EXPECT_TRUE(methods->contains(method));
+  EXPECT_TRUE(info.FindStringByDottedPath("snapshots.BaySync.deviceName"));
   ReplaceHost();
   base::test::TestFuture<const std::string&> result;
   host_->Invoke("BayImport", "cancelImport", R"(["fixture-job"])",
@@ -1228,12 +1241,123 @@ TEST_F(NativeHostTest, ImportAdvertisedAndDispatchedWithoutSyncOrReadiness) {
   EXPECT_EQ(result.Get(), R"({"value":null})");
 }
 
+TEST_F(NativeHostTest, SyncWorkerRunsWithoutPlatformReadiness) {
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BaySync", "newDeviceId", "[]", result.GetCallback());
+  EXPECT_FALSE(result.IsReady());
+  task_environment()->RunUntilIdle();
+  auto parsed = base::JSONReader::ReadDict(result.Get(), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(parsed);
+  const auto* id = parsed->FindString("value");
+  ASSERT_TRUE(id);
+  EXPECT_EQ(id->size(), 26u);
+  ExpectError(Invoke("BaySync", "readPasswords", R"(["unloaded-profile"])"),
+              "profile_unavailable");
+}
+
+TEST_F(NativeHostTest, CoordinatorCannotOpenSyncPickers) {
+  ExpectError(Invoke("BaySync", "chooseFolder", "[null]"), "window_required");
+  ExpectError(Invoke("BaySync", "saveRecoveryKit", R"(["pdf"])"),
+              "window_required");
+}
+
+TEST_F(FilePickerTest, WindowCannotMutateSyncOrReadProfilePasswords) {
+  WindowHost();
+  ASSERT_TRUE(AppRuntime::Enabled());
+  for (const char* method :
+       {"createPhrase", "unlock", "forget", "chainStatus", "createChain",
+        "deleteChain", "sealLocal", "openLocal", "readPasswords"}) {
+    base::test::TestFuture<const std::string&> result;
+    host_->Invoke("BaySync", method, R"(["fixture"])", result.GetCallback());
+    ASSERT_TRUE(result.IsReady()) << method;
+    ExpectError(result.Get(), "forbidden");
+  }
+  ExpectError(
+      Invoke("BaySync", "enterPhrase", R"(["account","phrase","folder"])"),
+      "forbidden");
+  for (const char* method : {"write", "read", "remove"})
+    ExpectError(Invoke("BaySync", method, R"(["folder","scope",[]])"),
+                "forbidden");
+  auto result = base::JSONReader::ReadDict(
+      Invoke("BaySync", "newDeviceId", "[]"), base::JSON_PARSE_RFC);
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(result->FindString("value"));
+}
+
+TEST_F(FilePickerTest, SyncFolderPickerUsesWindowOwnerAndNativePath) {
+  WindowHost();
+  base::test::TestFuture<const std::string&> result;
+  host_->Invoke("BaySync", "chooseFolder", "[null]", result.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  EXPECT_FALSE(result.IsReady());
+  auto dialog = factory_->dialogs.back();
+  EXPECT_EQ(dialog->parent, root_window());
+  EXPECT_EQ(dialog->selection_type, ui::SelectFileDialog::SELECT_FOLDER);
+  ExpectError(Invoke("BaySync", "chooseFolder", "[null]"), "dialog_busy");
+  const base::FilePath path("/tmp/sync ?#% café");
+  dialog->Select(ui::SelectedFileInfo(path));
+  EXPECT_EQ(result.Get(),
+            base::WriteJson(base::DictValue().Set("value", path.value())));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(dialog->detach_count, 1);
+  base::test::TestFuture<const std::string&> retry;
+  host_->Invoke("BaySync", "chooseFolder", "[null]", retry.GetCallback());
+  ASSERT_EQ(factory_->dialogs.size(), 2u);
+  factory_->dialogs.back()->Cancel();
+  EXPECT_EQ(retry.Get(), R"({"value":null})");
+}
+
+TEST_F(FilePickerTest, RecoverySaveValidatesAndChecksKeysBeforeOpeningPicker) {
+  WindowHost();
+  ExpectError(Invoke("BaySync", "saveRecoveryKit", R"(["invalid"])"),
+              "invalid_arguments");
+  ExpectError(Invoke("BaySync", "saveRecoveryKit", R"(["pdf"])"), "locked");
+  EXPECT_TRUE(factory_->dialogs.empty());
+}
+
+TEST_F(FilePickerTest, SyncPickerCancelsOnceWhenHostCloses) {
+  WindowHost();
+  int calls = 0;
+  host_->Invoke(
+      "BaySync", "chooseFolder", "[null]",
+      base::BindLambdaForTesting([&calls](const std::string& response) {
+        ++calls;
+        EXPECT_EQ(response, R"({"value":null})");
+      }));
+  ASSERT_EQ(factory_->dialogs.size(), 1u);
+  auto dialog = factory_->dialogs.back();
+  host_->ResetAndDeleteThis();
+  EXPECT_EQ(calls, 1);
+  dialog->Select(ui::SelectedFileInfo(base::FilePath("/tmp/late")));
+  dialog->Cancel();
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(dialog->detach_count, 1);
+}
+
+TEST_F(FilePickerTest, SyncPickerCanCloseItsHostDuringNativeShow) {
+  WindowHost();
+  factory_->on_show = base::BindRepeating(&FakeFileDialog::Cancel);
+  int calls = 0;
+  host_->Invoke(
+      "BaySync", "chooseFolder", "[null]",
+      base::BindLambdaForTesting([this, &calls](const std::string& response) {
+        ++calls;
+        EXPECT_EQ(response, R"({"value":null})");
+        host_->ResetAndDeleteThis();
+      }));
+  EXPECT_FALSE(host_);
+  EXPECT_EQ(calls, 1);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(factory_->dialogs.back()->detach_count, 1);
+}
+
 TEST_F(FilePickerTest, ImportPickerUsesSingleSelectionAndCsvFilter) {
   WindowHost();
   const auto info = HostInfo();
   ASSERT_TRUE(info.FindList("modules"));
   EXPECT_TRUE(info.FindList("modules")->contains("BayImport"));
-  EXPECT_FALSE(info.FindList("modules")->contains("BaySync"));
+  EXPECT_TRUE(info.FindList("modules")->contains("BaySync"));
   base::test::TestFuture<const std::string&> result;
   host_->Invoke("BayImport", "chooseImportFile", R"(["passwordsCSV"])",
                 result.GetCallback());

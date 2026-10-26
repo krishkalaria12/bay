@@ -52,6 +52,7 @@
 #include "chrome/browser/bay/webui/shell_clipboard.h"
 #include "chrome/browser/bay/webui/shell_files.h"
 #include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/bay/webui/sync_ui_linux.h"
 #include "chrome/browser/bay/webui/window_button_layout_linux.h"
 #endif
 #if BUILDFLAG(IS_WIN)
@@ -414,6 +415,7 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
       context_, g_browser_process->GetApplicationLocale());
   files_ = std::make_unique<ShellFiles>(context_);
   shell_ui_ = std::make_unique<ShellUI>();
+  sync_ui_ = std::make_unique<SyncUI>();
   secret_storage_ = std::make_unique<SecretStorage>();
   documents_ = std::make_unique<DocumentStore>(
       DocumentStore::DefaultDirectory(),
@@ -1032,6 +1034,8 @@ void NativeHost::Invoke(const std::string& module,
       return;
     }
   }
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (module == "BaySync" && AppRuntime::Enabled() && !is_coordinator()) {
     bool local = false;
     for (const char* name : {"chooseFolder", "folderInfo", "revealFolder", "deviceName", "newDeviceId",
@@ -1043,15 +1047,13 @@ void NativeHost::Invoke(const std::string& module,
       return;
     }
   }
-#endif
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
-  if (module == "BayImport"
-#if BUILDFLAG(IS_WIN)
-      || module == "BaySync"
-#endif
-  ) {
+  if (module == "BayImport" || module == "BaySync") {
 #if BUILDFLAG(IS_LINUX)
-    if (method == "chooseImportFile") {
+    // Native pickers retain this document's UI owner. Intercept before the
+    // synchronous data facade or worker dispatch can handle them.
+    if (sync_ui_->Dispatch(context_, module, method, args, callback))
+      return;
+    if (module == "BayImport" && method == "chooseImportFile") {
       ChooseImportFile(args, std::move(callback));
       return;
     }

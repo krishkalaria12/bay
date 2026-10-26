@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
@@ -19,11 +20,16 @@
 #include "build/build_config.h"
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/nn_dispatch.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#if BUILDFLAG(IS_LINUX)
+#include "components/os_crypt/async/browser/os_crypt_async.h"
+#include "components/os_crypt/async/common/encryptor.h"
+#endif
 
 namespace bay {
 namespace {
@@ -160,6 +166,21 @@ void InitializeDataBridge(
     return found == Profiles().paths.end() ? data::ProfilePaths{}
                                            : found->second;
   });
+#if BUILDFLAG(IS_LINUX)
+  // Bay's current providers decrypt v10, desktop-backed v11 and portal v12.
+  // The refcounted encryptor is safe on data workers. Until it is available,
+  // reads return null so sync cannot interpret an unavailable key as deletion.
+  g_browser_process->os_crypt_async()->GetInstance(
+      base::BindOnce([](scoped_refptr<os_crypt_async::Encryptor> encryptor) {
+        data::SetPasswordDecryptor(
+            [encryptor = std::move(encryptor)](
+                const std::string& ciphertext) -> std::optional<std::string> {
+              return encryptor ? encryptor->DecryptData(
+                                     base::as_byte_span(ciphertext))
+                               : std::nullopt;
+            });
+      }));
+#endif
   data::SetEventSink([runner = content::GetUIThreadTaskRunner({}), events](
                          const std::string& module, const std::string& event,
                          const std::string& json) {
