@@ -28,6 +28,8 @@ const System = requireNativeModule<{
   revealFile(path: string): Promise<boolean>;
   copyFile?(path: string): Promise<boolean>;
   moveToTrash(path: string): Promise<boolean>;
+  // Optional: a build from before Tidy Downloads has none.
+  renameFile?(path: string, name: string): Promise<string | null>;
   fileIcon(path: string, size: number): Promise<string | null>;
   appIcon(pid: number, size: number): Promise<string | null>;
   hapticTick(): void;
@@ -56,6 +58,8 @@ export const revealFile = (path: string) => System.revealFile(path);
 /** A file URL on the pasteboard, ready to paste into Finder or attach to a message. */
 export const copyFile = (path: string): Promise<boolean> => System.copyFile?.(path) ?? Promise.resolve(false);
 export const moveToTrash = (path: string) => System.moveToTrash(path);
+/** Renames a file beside itself, with a fresh " (n)" name on a collision. The new path, or null. */
+export const renameFile = (path: string, name: string): Promise<string | null> => System.renameFile?.(path, name) ?? Promise.resolve(null);
 export const fileIcon = (path: string, size = 32) => System.fileIcon(path, size);
 export const runningAppIcon = (pid: number, size = 32) => System.appIcon(pid, size);
 export const hapticTick = () => System.hapticTick();

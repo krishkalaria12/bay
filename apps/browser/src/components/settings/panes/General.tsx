@@ -7,6 +7,7 @@ import {
   setAutomaticUpdateDownloads,
   setLaunchAtLogin,
   Symbol,
+  tidyNames,
   updaterState,
   type UpdaterState,
 } from "@bay/shell";
@@ -15,7 +16,7 @@ import { AppState, Text, View } from "react-native";
 import { useTheme } from "../../../lib/theme";
 import { useBrowser } from "../../../store/browser";
 import { SHARING_COPY } from "../../../telemetry/copy";
-import { Button, Group, PopUp, Row, SectionHeader, Toggle, useFormColors } from "../controls";
+import { Button, Group, PopUp, Row, SectionHeader, SettingToggle, Toggle, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
 import { openImport } from "../windows";
 import { APP_NAME } from "../../../lib/constants";
@@ -145,6 +146,21 @@ function UpdatesSection() {
     : "Not checked yet.";
   return (
     <>
+      <SectionHeader
+        title="Downloads"
+        description={
+          tidyNames ? "Apple's on-device model writes the suggested name. Nothing leaves this Mac." : "Bay cleans the name on this Mac. Nothing leaves it."
+        }
+      />
+      <Group>
+        <SettingToggle
+          setting="tidyDownloads"
+          settingId={SETTINGS.tidyDownloads.id}
+          title={SETTINGS.tidyDownloads.title}
+          description="Offer a readable name for files the web hands over with machine names, like IMG_20261024_8812.pdf. You choose whether to rename each file; files you named yourself are left alone."
+        />
+      </Group>
+
       <SectionHeader title="Updates" description={ready ? undefined : "Updates aren't set up for this build."} />
       <Group>
         <Row settingId={SETTINGS.automaticUpdateChecks.id} title={SETTINGS.automaticUpdateChecks.title} description={SHARING_COPY.updateChecks}>

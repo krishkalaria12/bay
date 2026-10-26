@@ -14,7 +14,8 @@ Pod::Spec.new do |s|
   # Carbon: Little Bay's global shortcut (LittleBayAccess.swift), a hot key that needs no Accessibility permission.
   s.frameworks     = 'AppKit', 'Carbon', 'LocalAuthentication', 'ServiceManagement', 'UniformTypeIdentifiers', 'UserNotifications', 'CoreImage', 'EventKit', 'Security', 'NaturalLanguage', 'SwiftUI'
   # Page translation (TranslateModule.swift): new in macOS 15, weakly linked for 14.
-  s.weak_frameworks = 'Translation'
+  # Tidy Downloads (TidyNamesModule.swift): Foundation Models, new in macOS 26, weakly linked for 14.
+  s.weak_frameworks = ['Translation', 'FoundationModels']
   s.source_files   = '**/*.{h,m,swift}'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
 end

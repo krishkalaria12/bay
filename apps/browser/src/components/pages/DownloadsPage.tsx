@@ -9,6 +9,7 @@ import { useBrowser } from "../../store/browser";
 import { downloadsIn } from "../../store/ui";
 import { openUrl } from "../bookmarks/actions";
 import { downloadMenu, downloadStatus, FileIcon } from "../Downloads";
+import { useTidySuggestion, tidyRename } from "../../lib/tidyDownloads";
 import { IconButton, useHover } from "../primitives";
 import { Button, useFormColors } from "../settings/controls";
 import { EmptyState, hostLabel, matchesQuery, PageHeader } from "./PageLayout";
@@ -62,6 +63,7 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
   const exists = d.state !== "finished" || fileExists(d.path);
   const done = d.state === "finished" && exists;
   const progress = d.total > 0 ? d.received / d.total : 0;
+  const tidy = useTidySuggestion(d);
   return (
     <View {...hoverProps} style={{ width: PAGE_WIDTH - 32, maxWidth: "100%" }}>
       <MouseArea path={done ? d.path : null}>
@@ -122,7 +124,10 @@ function DownloadCard({ d, windowId }: { d: Download; windowId: string }) {
                 <Button title="Cancel" onPress={() => void cancelDownload(d.id)} />
               </View>
             ) : done ? (
-              <Button title="Show in Finder" onPress={() => void revealFile(d.path)} />
+              <>
+                {tidy ? <Button title="Tidy Name" onPress={() => void tidyRename(d, tidy, windowId)} /> : null}
+                <Button title="Show in Finder" onPress={() => void revealFile(d.path)} />
+              </>
             ) : null}
             <IconButton icon="ellipsis" size={13} box={26} radius={6} onPress={() => void downloadMenu(d, windowId)} tooltip="More actions" />
             {d.state !== "downloading" && (

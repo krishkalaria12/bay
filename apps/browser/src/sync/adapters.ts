@@ -39,6 +39,7 @@ export const SYNCED_SETTINGS = [
   "tidyTabTitles",
   "cleanUpInactiveTabsAfterHours",
   "awakeSites",
+  "tidyDownloads",
   "mutedSites",
   "autoPictureInPicture",
   "noAutoPictureInPictureSites",
@@ -71,6 +72,7 @@ export const settingsAdapter: Adapter = {
       if (name === "density" && record.v !== "comfortable" && record.v !== "compact") continue;
       if (name === "searchShortcutMode" && record.v !== "arc" && record.v !== "duckduckgo") continue;
       if (name === "calculatorEnabled" && typeof record.v !== "boolean") continue;
+      if (name === "tidyDownloads" && typeof record.v !== "boolean") continue;
       patch[name] = record.v;
     }
     if (Object.keys(patch).length) store().updateSettings(patch as Partial<Settings>);

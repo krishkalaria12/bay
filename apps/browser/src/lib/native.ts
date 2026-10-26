@@ -22,6 +22,7 @@ import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId,
 import { splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/layout/history";
 import type { Bookmarks, BookmarkNode } from "../store/types";
+import { startTidyDownloadOffers } from "./tidyDownloads";
 import { isUtilityWindowId } from "../components/settings/windows";
 import { isInternalTab } from "../components/pages/urls";
 import { sidebarMenuState } from "../components/sidebar/commands";
@@ -55,6 +56,7 @@ export function startNativeSync() {
   startLittleBayPutAway();
   onOpenURLs(openExternalUrls);
   onDownload((d) => store.getState().upsertDownload(d));
+  startTidyDownloadOffers();
 
   store.getState().setAppDark(Appearance.getColorScheme() === "dark");
   void setAppearance(store.getState().settings.appearance);

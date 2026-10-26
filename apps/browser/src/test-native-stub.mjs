@@ -70,6 +70,8 @@ export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);
 export const iconTheme = () => Promise.resolve(null);
 export const cancelDownload = () => Promise.resolve();
+export const renameFile = (path, name) => Promise.resolve(path);
+export const onDownload = () => ({ remove() {} });
 export const deletedProfileData = [];
 export const profileDataLeft = new Map();
 export const deleteProfileData = (profile) => (deletedProfileData.push(profile), Promise.resolve(profileDataLeft.get(profile) ?? []));
@@ -281,3 +283,5 @@ export const setSidebarKeyboard = (windowId, active) => (sidebarKeyboardCalls.pu
 // Boosts: what the app last sent the engine.
 export const engineBoostCalls = [];
 export const setBoosts = (boosts) => (engineBoostCalls.push(boosts), Promise.resolve());
+
+export const tidyNames = null;
