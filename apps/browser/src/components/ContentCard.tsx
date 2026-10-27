@@ -1,4 +1,4 @@
-import { WebView, type OpenWindowRequest } from "@bay/nncore";
+import { WebView, type OpenWindowRequest, type PageEngine } from "@bay/nncore";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -12,6 +12,7 @@ import { layout } from "../lib/constants";
 import { startChromeTabs } from "../lib/chromeTabs";
 import { handOff, wantsPage } from "../lib/tabPages";
 import { noteDiscarded, noteGone, noteReady } from "../lib/tabLifecycle";
+import { clearEngineOffer, followSiteChoice, noteWebKitPage, offerWebKit, persistEngine } from "../lib/engines";
 import { webviewRef, webviews } from "../lib/webviews";
 import { useBrowser } from "../store/browser";
 import { useActiveTabId, useSidebarOpen, useWindowId } from "../store/hooks";
@@ -19,6 +20,7 @@ import { activeTabId, engineProfile, viewTabIds, wake, windowTabIds } from "../s
 import { removeTabs } from "../store/tabs";
 import { peeksLinks, shownPeek } from "../store/peeks";
 import { splitOf } from "../store/splits";
+import { tabEngine } from "../store/engines";
 import type { SplitView } from "../store/types";
 import { BookmarksBar, useBookmarksBarShown } from "./bookmarks/BookmarksBar";
 import { BOOKMARKS_BAR_HEIGHT } from "./bookmarks/constants";
@@ -40,6 +42,7 @@ import { InternalPage } from "./pages";
 import {
   AutofillPrompt,
   BlockedPopupsPrompt,
+  EngineOfferPrompt,
   ExternalAppPrompt,
   PasswordPrompt,
   PermissionPrompt,
@@ -426,6 +429,7 @@ const TabPane = memo(function TabPane({
                 <PasswordPrompt tabId={tabId} right={barEnd} top={4} />
                 <AutofillPrompt tabId={tabId} right={barEnd} top={4} />
                 {!newTabShown && <ExternalAppPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
+                {!newTabShown && <EngineOfferPrompt tabId={tabId} left={Math.max(8, Math.min(geometry.urlLeft, frame.width - 348))} top={4} />}
                 {popover === "siteControls" && (!addressInSidebar || !sidebarOpen || devBar) && <SiteControls tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "popups" && <BlockedPopupsPrompt tabId={tabId} {...popoverSide} top={2} />}
                 {popover === "zoom" && <ZoomPopover tabId={tabId} {...popoverSide} top={2} />}
@@ -453,7 +457,16 @@ const isBlank = (url: string) => !url || url === "about:blank";
 const pageKey = (url: string) => url.replace(/#.*$/, "");
 const hostOf = (url: string) => url.match(/^[a-z][\w+.-]*:\/\/([^/?#]*)/i)?.[1]?.toLowerCase() ?? "";
 
-function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean; warm: boolean }) {
+type TabWebViewProps = { tabId: string; visible: boolean; warm: boolean };
+
+// The tab's page in its engine's view (store/engines.ts): moving it to the other engine mounts that one's view, which
+// loads the page again.
+function TabWebView(props: TabWebViewProps) {
+  const engine = useBrowser((s) => tabEngine(s, props.tabId));
+  return <EngineWebView key={engine} engine={engine} {...props} />;
+}
+
+function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { engine: PageEngine }) {
   const navigation = useBrowser((s) => s.tabs[tabId]?.navigation);
   const adoptId = useBrowser((s) => s.tabs[tabId]?.adoptId);
   const spaceId = useBrowser((s) => s.tabs[tabId]?.spaceId ?? "");
@@ -476,15 +489,19 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
     void webviews.get(tabId)?.loadUrl(navigation.url, { userInitiated: !!navigation.userInitiated });
   }, [seq]);
   const fromNewTab = useRef(pageOf(tabId).wasNewTab && !adoptId);
-  useEffect(() => () => noteGone(tabId), []);
+  useEffect(() => {
+    persistEngine(tabId, engine);
+    return () => noteGone(tabId);
+  }, []);
   // This view goes while its tab keeps its page (lib/tabPages.ts): handed off before the native unmount (a layout
   // effect's cleanup runs in the commit). A tab that closed, went to sleep, changed profile or is going to one of the
-  // app's own pages closes its page with the view.
+  // app's own pages or to the other engine closes its page with the view.
   const mountedProfile = useRef(engineProfile(spaceId));
   useLayoutEffect(
     () => () => {
       const t = tab();
-      if (wantsPage(t) && engineProfile(t.spaceId) === mountedProfile.current && !isQuitting()) handOff(tabId, mountedProfile.current);
+      const sameEngine = tabEngine(store(), tabId) === engine;
+      if (wantsPage(t) && sameEngine && engineProfile(t.spaceId) === mountedProfile.current && !isQuitting()) handOff(tabId, mountedProfile.current);
     },
     [],
   );
@@ -497,6 +514,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
   return (
     <WebView
       ref={ref}
+      engine={engine}
       style={StyleSheet.absoluteFill}
       url={navigation?.url ?? (adoptId ? tab()?.url : undefined)}
       profile={engineProfile(spaceId)}
@@ -514,7 +532,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         noteReady(tabId);
         if (tab()?.muted) void webviews.get(tabId)?.setMuted(true);
       }}
-      onNavigationChange={({ url, title, canGoBack, canGoForward, isLoading, themeColor, themeColorSource }) => {
+      onNavigationChange={({ url, title, canGoBack, canGoForward, isLoading, themeColor, themeColorSource, committedUrl }) => {
         const target = pending.current;
         // A fresh browser reports about:blank before the requested navigation commits.
         if (target !== null && isBlank(url) && !target.startsWith("about:")) {
@@ -533,6 +551,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         }
         if (fromNewTab.current && url && !isBlank(url)) patchPage(tabId, { backToNewTab: true });
         store().navigated(tabId, { url, title }, { isLoading, canGoBack, canGoForward, themeColor });
+        if (engine === "webkit") noteWebKitPage(tabId, { url, title, isLoading, committedUrl: committedUrl ?? "" });
         if (lastPage.current !== null && pageKey(url) !== lastPage.current) {
           // Like Chrome's tab-modal dialogs, the open-app prompt stays within a site.
           if (pageOf(tabId).externalApp && hostOf(url) !== hostOf(lastPage.current)) answerExternalApp(tabId, false);
@@ -540,8 +559,10 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
           setPopover(tabId, null);
           setPageSelection(tabId, null);
           setLinkPreview(tabId, null);
+          clearEngineOffer(tabId);
           patchPage(tabId, { popups: [], passwordPrompt: null, crashed: null, status: "" });
           revealToolbar(tabId);
+          if (!tab()?.peekOf) followSiteChoice(tabId, engine, url, lastPage.current);
         }
         lastPage.current = pageKey(url);
         patchPage(tabId, { themeColorSource: themeColorSource ?? null });
@@ -637,6 +658,7 @@ function TabWebView({ tabId, visible, warm }: { tabId: string; visible: boolean;
         else if (kind === "boost") onBoostMessage(tabId, data);
         else if (kind === "linkPreview") setLinkPreview(tabId, data as { url: string; rect: { x: number; y: number; width: number; height: number } } | null);
         else if (kind === "captureGesture") onCaptureGesture(tabId, data);
+        else if (kind === "drm") offerWebKit(tabId, data);
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {

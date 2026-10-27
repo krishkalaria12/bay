@@ -157,6 +157,15 @@ export const SETTINGS = {
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },
   chromium: { id: "advanced.chromium", pane: "advanced", title: "Chromium", words: "web engine version" },
   liveFolders: { id: "liveFolders.liveFolders", pane: "liveFolders", title: "Live folders", words: "refresh" },
+  defaultEngine: { id: "engines.defaultEngine", pane: "engines", title: "Open pages in", words: "engine webkit chromium safari drm netflix fairplay widevine" },
+  protectedVideoInWebKit: {
+    id: "engines.protectedVideoInWebKit",
+    pane: "engines",
+    title: "Open streaming sites in WebKit",
+    words: "netflix disney prime video hulu max spotify apple tv drm protected video fairplay widevine",
+  },
+  websiteEngines: { id: "engines.websiteEngines", pane: "engines", title: "Website rules", words: "opens in site engine rule webkit chromium" },
+  engineSignIns: { id: "engines.engineSignIns", pane: "engines", title: "Separate sign-ins", words: "cookies site data sign in logged out webkit" },
 } as const satisfies Record<string, { id: string; pane: SettingsPane; title: string; topTabsTitle?: string; words?: string }>;
 
 export type SettingEntry = (typeof SETTINGS)[keyof typeof SETTINGS];

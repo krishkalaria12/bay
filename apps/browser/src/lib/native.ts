@@ -19,6 +19,7 @@ import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { activeTab, bookmarkSpaceId, engineProfile, IDLE_LIVE, incognitoSpaceId, tabLabel, windowTitle } from "../store/model";
+import { canSwitchEngine, tabEngine } from "../store/engines";
 import { splitOf } from "../store/splits";
 import { canGoBack, canGoForward } from "../components/layout/history";
 import type { Bookmarks, BookmarkNode } from "../store/types";
@@ -205,6 +206,7 @@ const PAGE_COMMANDS = [
   "bookmarkPage",
   "addBookmarkToFolder",
   "toggleMute",
+  "togglePageEngine",
   "findAndReplace",
   "jumpToSelection",
   "viewSource",
@@ -329,6 +331,8 @@ export function menuState(s: BrowserState): MenuState {
   if (tab?.pinned) titles.togglePin = "Remove from Essentials";
   if (tab?.pinnedRow) titles.togglePinRow = "Unpin Tab";
   if (tab?.muted) titles.toggleMute = "Unmute Site";
+  if (tab && tabEngine(s, tab.id) === "webkit") titles.togglePageEngine = "Open Page in Chromium";
+  if (!canSwitchEngine(tab?.url)) disabled.push("togglePageEngine");
   if (tab?.url && isBookmarked(s.bookmarks, bookmarkProfile, tab.url)) {
     titles.bookmarkPage = "Edit Bookmark…";
   }

@@ -74,6 +74,7 @@ export type BrowserCommand =
   | "addBookmarkToFolder"
   | "openBookmark"
   | "toggleMute"
+  | "togglePageEngine"
   | "downloads"
   | "mergeAllWindows"
   | "switchSpace"

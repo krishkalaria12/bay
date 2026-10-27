@@ -74,6 +74,7 @@ export const snapshotTab = (t: Tab): TabSnapshot => ({
   pinnedUrl: t.pinnedUrl,
   spaceId: t.spaceId,
   ...(t.pinnedRow ? { pinnedRow: true } : {}),
+  ...(t.engine ? { engine: t.engine } : {}),
 });
 
 /** A pinned page: an Essential (a pinned tile) or a pinned row. It keeps the page it was pinned at (`pinnedUrl`). */

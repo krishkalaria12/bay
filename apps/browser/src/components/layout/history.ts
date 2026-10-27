@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { goBackAcrossEngines } from "../../lib/engines";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { changedIds } from "../../store/changes";
@@ -11,7 +12,7 @@ const store = () => useBrowser.getState();
 
 export function canGoBack(tabId: string, live: Pick<TabLive, "canGoBack">): boolean {
   const page = pageOf(tabId);
-  return !page.newTabShown && (live.canGoBack || page.backToNewTab);
+  return !page.newTabShown && (live.canGoBack || page.backToNewTab || !!page.engineBack);
 }
 
 export function canGoForward(tabId: string, live: Pick<TabLive, "canGoForward">): boolean {
@@ -23,7 +24,7 @@ export function useHistoryAvailability(tabId: string) {
   const back = useTabLive(tabId, (l) => l.canGoBack);
   const forward = useTabLive(tabId, (l) => l.canGoForward);
   const shown = usePage(tabId, (p) => !!p.newTabShown);
-  const backToNewTab = usePage(tabId, (p) => p.backToNewTab);
+  const backToNewTab = usePage(tabId, (p) => p.backToNewTab || !!p.engineBack);
   return { back: !shown && (back || backToNewTab), forward: shown || forward };
 }
 
@@ -31,6 +32,7 @@ export function goBack(tabId: string) {
   const live = store().live[tabId];
   if (pageOf(tabId).newTabShown) return;
   if (live?.canGoBack) return void webviews.get(tabId)?.goBack();
+  if (pageOf(tabId).engineBack) return void goBackAcrossEngines(tabId);
   if (pageOf(tabId).backToNewTab) showNewTab(tabId);
 }
 

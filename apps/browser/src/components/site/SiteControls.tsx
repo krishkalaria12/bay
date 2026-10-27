@@ -2,9 +2,13 @@ import { useShallow } from "zustand/react/shallow";
 import {
   getContentBlocker,
   getSiteSettings,
+  getWebKitSiteSettings,
   isContentBlockerAllowed,
   setContentBlockerAllowed,
   setSiteSetting,
+  setWebKitSiteSetting,
+  WEBKIT_SITE_SETTINGS,
+  type PageEngine,
   type SecurityInfo,
   type SiteSettingType,
   type SiteSettingValue,
@@ -20,7 +24,9 @@ import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowser } from "../../store/browser";
 import { useIsBookmarked, useSettings, useTab } from "../../store/hooks";
-import { bookmarkSpaceId, engineProfile, tabLabel } from "../../store/model";
+import { bookmarkSpaceId, engineProfile, isIncognitoSpace, tabLabel } from "../../store/model";
+import { canSwitchEngine, defaultEngine, ENGINE_NAMES, engineForUrl, otherEngine, recommendedEngineFor, ruleFor, tabEngine } from "../../store/engines";
+import { openPageIn, setWebsiteEngine, togglePageEngine } from "../../lib/engines";
 import { Favicon, useHover } from "../primitives";
 import { Popover, PopoverRow, PopoverSeparator, Toggle } from "../layout/controls";
 import { toggleDeveloperMode } from "../developer/devMode";
@@ -107,11 +113,19 @@ export function SiteControls({
   // Arc's per-site switch, while automatic Picture in Picture is on in Settings.
   const autoPipEverywhere = useBrowser((s) => s.settings.autoPictureInPicture ?? true);
   const autoPip = useBrowser((s) => autoPictureInPictureFor(s, tabId));
+  // A WebKit page has WebKit's few site settings, and no ad blocker or extensions (store/engines.ts).
+  const pageEngine = useBrowser((s) => tabEngine(s, tabId));
+  const webkitPage = pageEngine === "webkit";
+  const permissions = webkitPage ? PERMISSIONS.filter((p) => WEBKIT_SITE_SETTINGS.includes(p.type)) : PERMISSIONS;
+  const readSettings = webkitPage ? getWebKitSiteSettings : getSiteSettings;
+  const engineRule = useBrowser((s) => ruleFor(s, url));
+  const recommended = useBrowser((s) => recommendedEngineFor(s, url));
+  const usesDefault = useBrowser((s) => recommendedEngineFor(s, url) === defaultEngine(s));
 
   useEffect(() => {
     if (!origin) return;
     let live = true;
-    void getSiteSettings(profile, origin).then((s) => live && setSettings(s));
+    void readSettings(profile, origin).then((s) => live && setSettings(s));
     void Promise.all([getContentBlocker(), isContentBlockerAllowed(host)]).then(([state, allowed]) => live && setBlocker({ enabled: state.enabled, allowed }));
     // Navigation may finish before the popover subscribes to security updates.
     void webviews
@@ -121,14 +135,14 @@ export function SiteControls({
     return () => {
       live = false;
     };
-  }, [origin, profile, host, tabId]);
+  }, [origin, profile, host, tabId, webkitPage]);
 
   if (!tab) return null;
 
   const setPermission = async (type: SiteSettingType, value: SiteSettingValue) => {
     if (!origin) return;
-    await setSiteSetting(profile, origin, type, value);
-    setSettings(await getSiteSettings(profile, origin));
+    await (webkitPage ? setWebKitSiteSetting : setSiteSetting)(profile, origin, type, value);
+    setSettings(await readSettings(profile, origin));
     if (type === "sound") {
       useBrowser.getState().updateTab(tabId, { muted: value === "block" });
       void webviews.get(tabId)?.setMuted(value === "block");
@@ -167,6 +181,28 @@ export function SiteControls({
     setCleared(n ? `Cleared ${n} cookie${n === 1 ? "" : "s"} and site data` : "Cleared site data");
     void webviews.get(tabId)?.reload();
   };
+  // Which engine the site opens in: a website rule, else the recommended one (WebKit for streaming sites). A private
+  // window's choice moves this page only.
+  const privatePage = isIncognitoSpace(tab.spaceId);
+  const recommendedTitle = `${usesDefault ? "Default" : "Recommended"} (${ENGINE_NAMES[recommended]})`;
+  const opensIn = privatePage ? ENGINE_NAMES[pageEngine] : engineRule ? ENGINE_NAMES[engineRule] : recommendedTitle;
+  const pickEngine = async () => {
+    const checked = (engine: PageEngine) => (privatePage ? pageEngine === engine : engineRule === engine);
+    const choice = await showMenu([
+      ...(privatePage ? [] : [{ id: "default", title: recommendedTitle, checked: !engineRule }, { separator: true as const }]),
+      { id: "chromium", title: ENGINE_NAMES.chromium, checked: checked("chromium") },
+      { id: "webkit", title: ENGINE_NAMES.webkit, checked: checked("webkit") },
+    ]);
+    if (!choice) return;
+    close();
+    if (choice === "default") {
+      setWebsiteEngine(url, null);
+      void openPageIn(tabId, engineForUrl(useBrowser.getState(), url));
+    } else {
+      const engine: PageEngine = choice === "webkit" ? "webkit" : "chromium";
+      void openPageIn(tabId, engine, { rule: engine });
+    }
+  };
   const copyClean = () => {
     copyText(cleanUrl(url));
     setCopied(true);
@@ -176,6 +212,12 @@ export function SiteControls({
   const more = async () => {
     const items: MenuItem[] = [];
     if (origin) items.push({ id: "clear", title: `Clear Cookies and Data for ${displayHost(host)}…`, symbol: "trash" });
+    if (origin && canSwitchEngine(url))
+      items.push({
+        id: "engine",
+        title: `Open Page in ${ENGINE_NAMES[otherEngine(pageEngine)]}`,
+        symbol: otherEngine(pageEngine) === "webkit" ? "safari" : "globe",
+      });
     if (origin && translation && (translate.source || translate.status !== "idle")) {
       items.push({
         id: "translate",
@@ -196,7 +238,10 @@ export function SiteControls({
     );
     const choice = await showMenu(items);
     if (choice === "clear") void clearData();
-    else if (choice === "translate") {
+    else if (choice === "engine") {
+      close();
+      void togglePageEngine(tabId);
+    } else if (choice === "translate") {
       close();
       toggleTranslation(tabId);
     } else if (choice === "captureFullPage") {
@@ -308,10 +353,27 @@ export function SiteControls({
                   icon="shield.lefthalf.filled"
                   title="Block ads and trackers"
                   detail={
-                    !blocker ? "Loading…" : !blocker.enabled ? "Off in Settings" : blocker.allowed ? "Off" : blocked > 0 ? `On · ${blocked} blocked` : "On"
+                    webkitPage
+                      ? "Chromium only for now"
+                      : !blocker
+                        ? "Loading…"
+                        : !blocker.enabled
+                          ? "Off in Settings"
+                          : blocker.allowed
+                            ? "Off"
+                            : blocked > 0
+                              ? `On · ${blocked} blocked`
+                              : "On"
                   }
-                  accessory={blocker?.enabled ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
+                  accessory={blocker?.enabled && !webkitPage ? <Toggle value={!blocker.allowed} onChange={(on) => void toggleBlocker(on)} /> : null}
                 />
+                {canSwitchEngine(url) ? (
+                  <PopoverRow
+                    icon={webkitPage ? "safari" : "globe"}
+                    title="Opens in"
+                    accessory={<ValueButton title={opensIn} onPress={() => void pickEngine()} />}
+                  />
+                ) : null}
                 <PopoverRow
                   icon="chevron.left.forwardslash.chevron.right"
                   title="Developer Mode"
@@ -379,7 +441,7 @@ export function SiteControls({
 
             {origin && (
               <>
-                {PERMISSIONS.map((p) => (
+                {permissions.map((p) => (
                   <PopoverRow
                     key={p.type}
                     icon={p.icon}

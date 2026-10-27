@@ -23,6 +23,7 @@ const PANES: Record<string, SettingsPane> = {
   searchengines: "search",
   shortcuts: "shortcuts",
   links: "links",
+  engines: "engines",
   livefolders: "liveFolders",
   calendar: "calendar",
   advanced: "advanced",

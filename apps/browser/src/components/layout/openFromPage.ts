@@ -1,6 +1,7 @@
 import type { OpenWindowRequest } from "@bay/nncore";
 import { openWindow } from "../../lib/actions";
 import { useBrowser } from "../../store/browser";
+import { chosenEngine, tabEngine } from "../../store/engines";
 import { engineProfile } from "../../store/model";
 import { opensInPeek } from "../../store/peeks";
 import { isSmall } from "../../store/small";
@@ -41,6 +42,14 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
     return;
   }
   const background = disposition === "background";
+  // A site chosen for the other engine (a streaming site, a website rule) loads afresh there, instead of in the page
+  // the opener's engine made for it.
+  const engine = from.tabId && disposition !== "popup" ? chosenEngine(s, url) : undefined;
+  if (engine && engine !== tabEngine(s, from.tabId!)) {
+    const id = s.newTab(w.id, { url, openerId: from.tabId, spaceId: from.spaceId, background });
+    if (id) useBrowser.getState().updateTab(id, { engine });
+    return;
+  }
   s.newTab(w.id, { url, adoptId, openerId: from.tabId, spaceId: from.spaceId, background });
 }
 
