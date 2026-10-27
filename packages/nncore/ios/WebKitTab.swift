@@ -217,8 +217,11 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     ]
   }
 
+  // A warm page (the active tab of a neighbouring space, kept painting for a swipe) paints unseen, at alpha 0, as
+  // NNCoreWebView's does: shown, it covered the tab on screen.
   private func updateHidden() {
     webView?.isHidden = !(visible || warm)
+    alphaValue = visible || !warm ? 1 : 0
   }
 
   func close() {
