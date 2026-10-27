@@ -68,7 +68,12 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   var initialURL: String?
   var adoptId: String?
   var transferKey: String?
-  var visible = true { didSet { updateHidden() } }
+  var visible = true {
+    didSet {
+      if !visible { leaveFullscreen() }
+      updateHidden()
+    }
+  }
   var warm = false { didSet { updateHidden() } }
   var pageBackgroundColor: NSColor? { didSet { if let color = pageBackgroundColor { webView?.underPageBackgroundColor = color } } }
   let browserId = WebKitHub.shared.nextBrowserId()
@@ -102,6 +107,8 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   private var findText = ""
   private var findCount = 0
   private var findActive = 0
+  private weak var fullscreenHidden: NSWindow?
+  private var fullscreenKeyObserver: NSObjectProtocol?
 
   override var isFlipped: Bool { true }
 
@@ -162,6 +169,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     guard !closed, let view = webView else { return nil }
     closed = true
     observations = []
+    showWindowAfterFullscreen()
     WebKitHub.shared.dropPermissions(browserId: browserId)
     if let key = transferKey { WebKitHub.shared.forgetLive(self, key: key) }
     webView = nil
@@ -214,20 +222,71 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
       view.observe(\.cameraCaptureState) { [weak self] _, _ in self?.emitMediaAccess() },
       view.observe(\.microphoneCaptureState) { [weak self] _, _ in self?.emitMediaAccess() },
       view.observe(\.magnification) { [weak self] _, _ in self?.emitZoom() },
+      view.observe(\.fullscreenState) { [weak self] v, _ in self?.fullscreenChanged(v.fullscreenState) },
     ]
   }
 
+  // A page's element full screen: WebKit moves the web view into a window of its own, on a Space of its own, and leaves
+  // a "Click to Exit Full Screen" placeholder in the tab. A Chromium page takes its window into full screen instead
+  // (NNWindowFullScreen), so nothing of Bay stays behind: the window this page came from is hidden once the page fills
+  // the screen, and shown again as it leaves, so the way back lands on it. Bringing the window back (⌘`, the Window
+  // menu) or showing another tab in it takes the page out of full screen, as it does a Chromium page.
+  private func fullscreenChanged(_ state: WKWebView.FullscreenState) {
+    switch state {
+    case .inFullscreen: hideWindowForFullscreen()
+    case .exitingFullscreen: showWindowAfterFullscreen()
+    case .notInFullscreen:
+      showWindowAfterFullscreen()
+      // WebKit leaves the web view out of any window when full screen ends some ways (closing its media
+      // presentations did): it comes back to the tab.
+      if let view = webView, view.superview == nil {
+        view.frame = bounds
+        addSubview(view)
+      }
+      updateHidden()
+    default: break
+    }
+  }
+
+  private func hideWindowForFullscreen() {
+    guard fullscreenHidden == nil, let window, let view = webView, view.window !== window else { return }
+    fullscreenHidden = window
+    window.alphaValue = 0
+    window.ignoresMouseEvents = true
+    fullscreenKeyObserver = NotificationCenter.default.addObserver(
+      forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+    ) { [weak self] _ in self?.leaveFullscreen() }
+  }
+
+  private func showWindowAfterFullscreen() {
+    if let observer = fullscreenKeyObserver { NotificationCenter.default.removeObserver(observer) }
+    fullscreenKeyObserver = nil
+    guard let window = fullscreenHidden else { return }
+    fullscreenHidden = nil
+    window.alphaValue = 1
+    window.ignoresMouseEvents = false
+  }
+
+  // As the page itself leaves: WebKit puts the web view back in the tab (closeAllMediaPresentations left it out).
+  private func leaveFullscreen() {
+    guard let view = webView, view.fullscreenState == .inFullscreen else { return }
+    view.evaluateJavaScript("document.fullscreenElement && document.exitFullscreen()", in: nil, in: WebKitHub.world)
+  }
+
   // A warm page (the active tab of a neighbouring space, kept painting for a swipe) paints unseen, at alpha 0, as
-  // NNCoreWebView's does: shown, it covered the tab on screen.
+  // NNCoreWebView's does: shown, it covered the tab on screen. A web view in WebKit's full-screen window is hidden once
+  // back: hiding it there left it stuck at the screen's size, hidden, when the page left full screen.
   private func updateHidden() {
-    webView?.isHidden = !(visible || warm)
     alphaValue = visible || !warm ? 1 : 0
+    guard let view = webView, view.fullscreenState == .notInFullscreen else { return }
+    view.isHidden = !(visible || warm)
   }
 
   func close() {
     guard !closed else { return }
     closed = true
     observations = []
+    showWindowAfterFullscreen()
     WebKitHub.shared.dropPermissions(browserId: browserId)
     if let key = transferKey { WebKitHub.shared.forgetLive(self, key: key) }
     guard let view = webView else { return }
