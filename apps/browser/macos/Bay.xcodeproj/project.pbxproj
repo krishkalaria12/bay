@@ -389,6 +389,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				BAY_UPDATE_CHANNEL = stable;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Bay-macOS/Bay.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -424,6 +425,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				BAY_UPDATE_CHANNEL = stable;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Bay-macOS/Bay.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";

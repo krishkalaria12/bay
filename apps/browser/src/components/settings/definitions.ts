@@ -16,6 +16,7 @@ export const SETTINGS = {
   commandBarPreference: { id: "general.commandBarPreference", pane: "general", title: "When input looks like a website", words: "command bar search url" },
   automaticUpdateChecks: { id: "general.automaticUpdateChecks", pane: "general", title: "Check for updates automatically", words: "updates" },
   automaticUpdateDownloads: { id: "general.automaticUpdateDownloads", pane: "general", title: `Automatically update ${APP_NAME}`, words: "updates install" },
+  updateChannel: { id: "general.updateChannel", pane: "general", title: "Update channel", words: "updates nightly stable beta" },
   tidyDownloads: { id: "general.tidyDownloads", pane: "general", title: "Tidy Downloads", words: "tidy downloads rename readable file name arc max on device" },
   importBrowser: {
     id: "general.importBrowser",

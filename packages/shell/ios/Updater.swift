@@ -6,6 +6,39 @@ import Sparkle
 public final class AppUpdater: NSObject {
   public static let shared = AppUpdater()
 
+  // Two channels in one feed: a nightly's appcast item carries <sparkle:channel>nightly</sparkle:channel>, which
+  // Sparkle skips unless allowedChannels(for:) lists it. A copy follows the channel of the build it first ran
+  // (BayUpdateChannel, set by release.sh --channel) until the user picks one in Settings › General.
+  private static let channels = ["stable", "nightly"]
+  private static let channelDefaultsKey = "NNUpdateChannel"
+
+  static var buildChannel: String {
+    Bundle.main.object(forInfoDictionaryKey: "BayUpdateChannel") as? String == "nightly" ? "nightly" : "stable"
+  }
+
+  public var channel: String {
+    let chosen = UserDefaults.standard.string(forKey: Self.channelDefaultsKey) ?? ""
+    return Self.channels.contains(chosen) ? chosen : Self.buildChannel
+  }
+
+  /// Switching to Stable never downgrades: Sparkle only offers a higher build, so a nightly copy waits for the next
+  /// stable release.
+  public func setChannel(_ channel: String) {
+    guard Self.channels.contains(channel) else { return }
+    #if canImport(Sparkle)
+    // Channel filtering only applies to new checks; Sparkle can still install an update already in progress.
+    guard !controller.updater.sessionInProgress, installNow == nil else { return }
+    #endif
+    UserDefaults.standard.set(channel, forKey: Self.channelDefaultsKey)
+    setPending(nil)
+  }
+
+  // Written at the first start, so a nightly copy stays on Nightly after it updates to a stable build.
+  private func rememberChannel() {
+    guard !Self.channels.contains(UserDefaults.standard.string(forKey: Self.channelDefaultsKey) ?? "") else { return }
+    UserDefaults.standard.set(Self.buildChannel, forKey: Self.channelDefaultsKey)
+  }
+
   static var feedOverride: String? {
     let env = ProcessInfo.processInfo.environment
     if let feed = env["BAY_UPDATE_FEED_URL"] ?? UserDefaults.standard.string(forKey: "NNUpdateFeedURL") { return feed }
@@ -56,6 +89,7 @@ public final class AppUpdater: NSObject {
     #if canImport(Sparkle)
     guard !started, isConfigured else { return }
     started = true
+    rememberChannel()
     // Sparkle stamps the check date before it builds the feed URL, so read it before the first check.
     firstCheckPending = controller.updater.lastUpdateCheckDate == nil
     do {
@@ -94,6 +128,7 @@ public final class AppUpdater: NSObject {
       "feedURL": updater.feedURL?.absoluteString as Any,
       "lastCheck": updater.lastUpdateCheckDate.map { $0.timeIntervalSince1970 * 1000 } as Any,
       "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as Any,
+      "channel": channel,
       "pending": pending as Any,
     ]
     #else
@@ -159,6 +194,10 @@ public final class AppUpdater: NSObject {
 #if canImport(Sparkle)
 extension AppUpdater: SPUUpdaterDelegate {
   public func feedURLString(for updater: SPUUpdater) -> String? { Self.feedOverride }
+
+  public func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+    channel == "nightly" ? ["nightly"] : []
+  }
 
   // Sparkle calls this only when it's about to fetch the feed (the permission prompt, which also asks,
   // never shows: SUEnableAutomaticChecks is in Info.plist). No system profile is ever sent.

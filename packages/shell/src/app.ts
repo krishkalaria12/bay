@@ -12,8 +12,12 @@ export type UpdaterState =
       feedURL: string | null;
       lastCheck: number | null;
       version: string;
+      channel: UpdateChannel;
       pending: PendingUpdate | null;
     };
+
+/** Stable releases, or every nightly too. A nightly's appcast item is on Sparkle's "nightly" channel. */
+export type UpdateChannel = "stable" | "nightly";
 
 /** An update waiting for the user: found (Sparkle shows it on install), downloading (nothing to do yet), or
  * downloaded and installing on a restart. */
@@ -116,6 +120,7 @@ type AppModule = {
   disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;
   setAutomaticUpdateChecks(on: boolean): Promise<void>;
   setAutomaticUpdateDownloads(on: boolean): Promise<void>;
+  setUpdateChannel(channel: UpdateChannel): Promise<void>;
   setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;
   share(url: string, title: string | null, windowId: string | null): Promise<void>;
   isInDock(): Promise<boolean>;
@@ -161,6 +166,7 @@ export const disintegrate = (windowId: string, rects: { x: number; y: number; wi
 export const onUpdatePending = (listener: (pending: PendingUpdate | null) => void) => App.addListener("onUpdatePending", (e) => listener(e.pending ?? null));
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);
+export const setUpdateChannel = (channel: UpdateChannel) => App.setUpdateChannel(channel);
 
 export const setWindowActivity = (windowId: string, url: string | null, title: string | null) => App.setWindowActivity(windowId, url, title);
 

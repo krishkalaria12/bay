@@ -6,9 +6,11 @@ import {
   setAutomaticUpdateChecks,
   setAutomaticUpdateDownloads,
   setLaunchAtLogin,
+  setUpdateChannel,
   Symbol,
   tidyNames,
   updaterState,
+  type UpdateChannel,
   type UpdaterState,
 } from "@bay/shell";
 import { useEffect, useState } from "react";
@@ -136,10 +138,12 @@ function UpdatesSection() {
   }, []);
   if (!state?.available) return null;
   const ready = state.configured;
-  const set = (patch: { automaticChecks?: boolean; automaticDownloads?: boolean }) => {
+  const channelBusy = state.sessionInProgress || state.pending?.ready === true;
+  const set = (patch: { automaticChecks?: boolean; automaticDownloads?: boolean; channel?: UpdateChannel }) => {
     setState({ ...state, ...patch });
     if (patch.automaticChecks !== undefined) void setAutomaticUpdateChecks(patch.automaticChecks).finally(refresh);
     if (patch.automaticDownloads !== undefined) void setAutomaticUpdateDownloads(patch.automaticDownloads).finally(refresh);
+    if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(refresh);
   };
   const lastCheck = state.lastCheck
     ? `Last checked ${new Date(state.lastCheck).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
@@ -175,6 +179,26 @@ function UpdatesSection() {
             value={ready && state.automaticChecks && state.automaticDownloads}
             disabled={!ready || !state.automaticChecks}
             onChange={(v) => set({ automaticDownloads: v })}
+          />
+        </Row>
+        <Row
+          settingId={SETTINGS.updateChannel.id}
+          title={SETTINGS.updateChannel.title}
+          description={
+            channelBusy
+              ? "Finish the current update before changing channels."
+              : "Nightly gets each day's fixes first and is tested less. Switching back to Stable never downgrades: you stay on this version until the next stable release."
+          }
+        >
+          <PopUp
+            value={state.channel}
+            options={[
+              { value: "stable", title: "Stable" },
+              { value: "nightly", title: "Nightly" },
+            ]}
+            disabled={!ready || channelBusy}
+            onChange={(channel) => set({ channel })}
+            minWidth={190}
           />
         </Row>
         <Row title={`${APP_NAME} ${state.version}`} description={ready ? lastCheck : undefined}>
