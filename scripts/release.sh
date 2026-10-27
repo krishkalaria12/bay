@@ -180,6 +180,26 @@ sign() {
 }
 fw="$app/Contents/Frameworks/Chromium Framework.framework"
 fwv="$(cd "$fw/Versions/Current" && pwd -P)" || die "no Chromium Framework.framework in the export"
+echo "==> Strip Chromium's local symbols"
+# Keep the exact unstripped binaries for crash analysis, outside the shipped app. Only the private export changes.
+symbols="$dist/symbols/Chromium Framework.framework"
+mkdir -p "$(dirname "$symbols")"
+cp -cR "$fw" "$symbols"
+while IFS= read -r -d '' binary; do
+  [[ "$(file -b "$binary")" == *Mach-O* ]] || continue
+  relative="${binary#"$fw"/}"
+  original="$symbols/$relative"
+  dwarfdump --uuid "$original" | awk '{ print $1, $2, $3 }' > "$dist/uuid-before.txt"
+  nm -gjU "$original" | LC_ALL=C sort > "$dist/exports-before.txt"
+  strip -x "$binary"
+  dwarfdump --uuid "$binary" | awk '{ print $1, $2, $3 }' > "$dist/uuid-after.txt"
+  nm -gjU "$binary" | LC_ALL=C sort > "$dist/exports-after.txt"
+  cmp -s "$dist/uuid-before.txt" "$dist/uuid-after.txt" || die "stripping changed UUIDs: $relative"
+  cmp -s "$dist/exports-before.txt" "$dist/exports-after.txt" || die "stripping changed exports: $relative"
+  printf '%s: %s -> %s bytes; UUIDs and exports unchanged\n' "$relative" \
+    "$(stat -f %z "$original")" "$(stat -f %z "$binary")" | tee -a "$dist/strip.log"
+done < <(find "$fwv" -type f -print0)
+rm "$dist/uuid-before.txt" "$dist/uuid-after.txt" "$dist/exports-before.txt" "$dist/exports-after.txt"
 for lib in "$fwv"/Libraries/*.dylib; do sign "$lib"; done
 for helper in "$fwv"/Helpers/*.app; do
   case "$(basename "$helper")" in
@@ -280,7 +300,7 @@ staging="$dist/dmg"
 mkdir -p "$staging"
 ditto "$app" "$staging/Bay.app"
 ln -s /Applications "$staging/Applications"
-hdiutil create -volname Bay -srcfolder "$staging" -format ULFO -ov "$dmg" >/dev/null
+hdiutil create -volname Bay -srcfolder "$staging" -format ULMO -imagekey udif-chunk-size=8192 -ov "$dmg" >/dev/null
 rm -rf "$staging"
 sign "$dmg"
 if [ "$notarize" = 1 ]; then
