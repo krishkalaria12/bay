@@ -8,7 +8,7 @@ import type { AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps 
 import { adjustLightness, color, css } from "./web/colors";
 import { AreaGlow, EdgeOutline, GrainLayer, gradientCss } from "./web/fallbacks";
 import { grainInputs } from "./web/grain";
-import { drawPowerUp } from "./web/powerUpRenderer";
+import { drawPowerUp, POWER_UP_SOURCES } from "./web/powerUpRenderer";
 import { fill, useAnimatedCanvas, useContrast, useFocused, useMedia, webShaders } from "./web/ShaderView";
 import { areaLight } from "./web/sources/areaLight";
 import { backdrop } from "./web/sources/backdrop";
@@ -31,6 +31,8 @@ export { DIA_SPECTRUM } from "./constants";
 export type { Rect, AreaLightPalette, AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
 
 const DARK = "(prefers-color-scheme: dark)";
+const AREA_LIGHT_SOURCES = [areaLight];
+const EDGE_LIGHT_SOURCES = [edgeLight];
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
 export function WindowBackdrop({
@@ -148,6 +150,7 @@ export function PowerUp({ style, ...props }: PowerUpProps) {
   const haloFrame = validRect(props.halo);
   const { ref, failed } = useAnimatedCanvas(
     live,
+    POWER_UP_SOURCES,
     (surface, size, dt) => {
       const t = time.current;
       t.band = Math.min(t.band + dt, POWER_UP_FINISH);
@@ -195,6 +198,7 @@ export function AreaLight({ style, ...props }: AreaLightProps) {
   }, [focused, reduced]);
   const { ref, failed } = useAnimatedCanvas(
     live,
+    AREA_LIGHT_SOURCES,
     (surface, size, dt) => {
       const c = clock.current;
       if (c.running) c.time = Math.min(c.time + dt, AREA_LIGHT_DURATION);
@@ -230,6 +234,7 @@ export function EdgeLight({ style, ...props }: EdgeLightProps) {
   const live = webShaders && !forced && !!rect;
   const { ref, failed } = useAnimatedCanvas(
     live,
+    EDGE_LIGHT_SOURCES,
     (surface, size, dt) => {
       if (time.current <= end + 0.1) time.current += dt;
       surface.gl.disable(surface.gl.BLEND);

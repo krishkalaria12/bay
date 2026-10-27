@@ -8,7 +8,7 @@ export type UniformSpec = Record<string, UniformType>;
 export type UniformValues = Record<string, number | readonly number[]>;
 export type Source = { fragment: string; uniforms: UniformSpec };
 
-type Program = { program: WebGLProgram; locations: Map<string, WebGLUniformLocation | null> };
+type Program = { program: WebGLProgram; locations: Map<string, WebGLUniformLocation | null>; linked: boolean };
 
 const MAX_DPR = 2;
 const MAX_PIXELS = 8_000_000;
@@ -17,9 +17,15 @@ export type Surface = {
   gl: WebGL2RenderingContext;
   /** Context lost and not yet restored: draw nothing, show the CSS base. */
   readonly lost: boolean;
+  /**
+   * Starts compiling `sources` and reports: true when all are linked, false while the driver still compiles them
+   * (KHR_parallel_shader_compile, so the main thread never waits on it), null when one failed.
+   */
+  ready(...sources: Source[]): boolean | null;
+  /** The linked program, in use; null while compiling or failed. */
   use(source: Source): Program | null;
   uniforms(source: Source, program: Program, values: UniformValues): void;
-  /** Draws `source` over the current viewport. False when it failed to compile. */
+  /** Draws `source` over the current viewport. False when it is not linked (see `ready`). */
   draw(source: Source, values: UniformValues): boolean;
   release(): void;
 };
@@ -44,7 +50,23 @@ export function createSurface(canvas: HTMLCanvasElement | OffscreenCanvas, onLos
   } catch {}
   if (!gl) return null;
   const ctx = gl;
+  const parallel = ctx.getExtension("KHR_parallel_shader_compile") as { COMPLETION_STATUS_KHR: number } | null;
   let programs = new Map<Source, Program | null>();
+  // Compiles on first sight; then the link result once the driver has it, without blocking for it.
+  const program = (source: Source): Program | null | false => {
+    if (!programs.has(source)) programs.set(source, compile(ctx, source));
+    const p = programs.get(source) ?? null;
+    if (!p || p.linked) return p;
+    if (parallel && !ctx.getProgramParameter(p.program, parallel.COMPLETION_STATUS_KHR)) return false;
+    if (!ctx.getProgramParameter(p.program, ctx.LINK_STATUS)) {
+      if (!ctx.isContextLost()) console.warn("[BayShaders]", ctx.getProgramInfoLog(p.program));
+      ctx.deleteProgram(p.program);
+      programs.set(source, null);
+      return null;
+    }
+    p.linked = true;
+    return p;
+  };
   let lost = false;
   const lose = (event: Event) => {
     event.preventDefault();
@@ -64,11 +86,20 @@ export function createSurface(canvas: HTMLCanvasElement | OffscreenCanvas, onLos
     get lost() {
       return lost || ctx.isContextLost();
     },
+    ready(...sources) {
+      let all: boolean | null = true;
+      for (const source of sources) {
+        const p = program(source);
+        if (p === null) return null;
+        if (p === false) all = false;
+      }
+      return all;
+    },
     use(source) {
-      if (!programs.has(source)) programs.set(source, compile(ctx, source));
-      const program = programs.get(source) ?? null;
-      if (program) ctx.useProgram(program.program);
-      return program;
+      const p = program(source);
+      if (!p) return null;
+      ctx.useProgram(p.program);
+      return p;
     },
     uniforms(source, program, values) {
       for (const [name, type] of Object.entries(source.uniforms)) {
@@ -105,15 +136,13 @@ export function createSurface(canvas: HTMLCanvasElement | OffscreenCanvas, onLos
 }
 
 function compile(gl: WebGL2RenderingContext, source: Source): Program | null {
+  // No status queries here: they would wait for the driver. A failed compile shows as a failed link in `ready`.
   const shader = (type: number, text: string) => {
     const s = gl.createShader(type);
     if (!s) return null;
     gl.shaderSource(s, text);
     gl.compileShader(s);
-    if (gl.getShaderParameter(s, gl.COMPILE_STATUS)) return s;
-    if (!gl.isContextLost()) console.warn("[BayShaders]", gl.getShaderInfoLog(s));
-    gl.deleteShader(s);
-    return null;
+    return s;
   };
   const vs = shader(gl.VERTEX_SHADER, VERTEX);
   const fs = shader(gl.FRAGMENT_SHADER, source.fragment);
@@ -123,15 +152,10 @@ function compile(gl: WebGL2RenderingContext, source: Source): Program | null {
     gl.attachShader(program, fs);
     gl.linkProgram(program);
   }
+  // Flagged for deletion; they live on while attached.
   if (vs) gl.deleteShader(vs);
   if (fs) gl.deleteShader(fs);
-  if (!program) return null;
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    if (!gl.isContextLost()) console.warn("[BayShaders]", gl.getProgramInfoLog(program));
-    gl.deleteProgram(program);
-    return null;
-  }
-  return { program, locations: new Map() };
+  return program ? { program, locations: new Map(), linked: false } : null;
 }
 
 /** Device pixels for a CSS size: DPR capped at 2, at most 8 megapixels with the aspect kept, within `limit`. */

@@ -3,7 +3,7 @@
 import { capabilities } from "@bay/platform";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { subscribe } from "./clock";
-import { createSurface, glLimit, targetSize, type Surface } from "./surface";
+import { createSurface, glLimit, targetSize, type Source, type Surface } from "./surface";
 
 declare const process: { env: { EXPO_PUBLIC_BAY_WEB_SHADERS?: string } };
 
@@ -49,9 +49,10 @@ export type Draw = (surface: Surface, size: { width: number; height: number; css
 
 /**
  * A canvas with its own WebGL2 context, drawn through the shared clock while `draw` asks for more frames and the
- * canvas is on screen. Change `kick` to draw again (new inputs, a replay). `failed` means: show the fallback.
+ * canvas is on screen. Nothing is drawn, and no effect time passes, until `sources` have linked. Change `kick` to
+ * draw again (new inputs, a replay). `failed` means: show the fallback.
  */
-export function useAnimatedCanvas(enabled: boolean, draw: Draw, kick: unknown) {
+export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], draw: Draw, kick: unknown) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
   const drawRef = useRef(draw);
@@ -95,6 +96,12 @@ export function useAnimatedCanvas(enabled: boolean, draw: Draw, kick: unknown) {
     }
     const frame = (dt: number) => {
       if (!size || surface.lost) return halt();
+      const ready = surface.ready(...sources);
+      if (ready === false) return;
+      if (ready === null) {
+        halt();
+        return setFailed(true);
+      }
       surface.gl.viewport(0, 0, size.width, size.height);
       const more = drawRef.current(surface, size, first ? 0 : dt);
       first = false;

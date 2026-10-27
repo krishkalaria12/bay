@@ -19,7 +19,8 @@ const pending = new Set<Target>();
 let surface: Surface | null | undefined;
 let producer: HTMLCanvasElement | null = null;
 let frame = 0;
-export const staticStats = { draws: 0, contexts: 0 };
+/** Counters for the checks and shader-bench: draws, contexts made, and the last flush's main-thread milliseconds. */
+export const staticStats = { draws: 0, contexts: 0, flushMs: 0 };
 
 function producerSurface(): Surface | null {
   if (surface !== undefined) return surface;
@@ -39,19 +40,42 @@ function producerSurface(): Surface | null {
   return surface;
 }
 
+let creating = false;
+
 function schedule() {
-  if (!frame && pending.size) frame = requestAnimationFrame(flush);
+  if (frame || !pending.size) return;
+  // The context is made when the main thread is idle, not in the first paint: the CSS base already shows the same
+  // gradient and grain, and making a context can take tens of milliseconds.
+  if (surface === undefined) {
+    if (creating) return;
+    creating = true;
+    const create = () => {
+      producerSurface();
+      creating = false;
+      schedule();
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(create, { timeout: 500 });
+    else setTimeout(create, 0);
+    return;
+  }
+  frame = requestAnimationFrame(flush);
 }
 
 function flush() {
   frame = 0;
-  const s = producerSurface();
+  const started = performance.now();
+  const s = surface ?? null;
   const jobs = [...pending];
   pending.clear();
   for (const target of jobs) {
     if (!targets.has(target) || !target.job) continue;
-    target.onResult(!!s && !s.lost && draw(s, target, target.job));
+    const ready = s && !s.lost ? s.ready(target.job.source) : null;
+    // Still compiling: try again next frame, with the CSS base showing meanwhile.
+    if (ready === false) pending.add(target);
+    else target.onResult(!!s && ready === true && draw(s, target, target.job));
   }
+  staticStats.flushMs = performance.now() - started;
+  schedule();
 }
 
 function draw(s: Surface, target: Target, job: StaticJob): boolean {
