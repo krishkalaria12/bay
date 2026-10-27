@@ -492,7 +492,7 @@ export function DefaultBrowserStep() {
   const defaultOn = system?.isDefault || setDefault;
   return (
     <StepLayout
-      actions={<StepActions continueTitle={busy ? "Setting Up…" : "Continue"} onContinue={() => void apply()} disabled={!system || busy} />}
+      actions={<StepActions continueTitle={busy ? "Setting Up…" : "Continue"} onContinue={() => void apply()} disabled={!system} busy={busy} />}
       preview={<SystemPreview isDefault={!!defaultOn} dock={!!(system?.inDock || dock)} login={login} />}
     >
       <Reveal delay={60}>

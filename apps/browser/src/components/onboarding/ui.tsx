@@ -143,12 +143,12 @@ export function PrimaryButton({ title, onPress, disabled, icon }: { title: strin
   );
 }
 
-export function SecondaryButton({ title, onPress, filled }: { title: string; onPress: () => void; filled?: boolean }) {
+export function SecondaryButton({ title, onPress, filled, disabled }: { title: string; onPress: () => void; filled?: boolean; disabled?: boolean }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
   return (
     <View {...hoverProps}>
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
+      <Pressable disabled={disabled} onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
         {({ pressed }) => (
           <View
             style={{
@@ -171,12 +171,12 @@ export function SecondaryButton({ title, onPress, filled }: { title: string; onP
   );
 }
 
-export function BackButton({ onPress }: { onPress: () => void }) {
+export function BackButton({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
   return (
     <View {...hoverProps} tooltip="Back">
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Back">
+      <Pressable disabled={disabled} onPress={onPress} accessibilityRole="button" accessibilityLabel="Back">
         {({ pressed }) => (
           <View
             style={{
@@ -204,6 +204,7 @@ export function StepActions({
   onContinue,
   continueTitle = "Continue",
   disabled,
+  busy = false,
   icon,
   onSkip = skipStep,
   skip = true,
@@ -211,6 +212,7 @@ export function StepActions({
   onContinue: () => void;
   continueTitle?: string;
   disabled?: boolean;
+  busy?: boolean;
   icon?: string;
   onSkip?: () => void;
   skip?: boolean;
@@ -218,9 +220,9 @@ export function StepActions({
   const step = useOnboarding((s) => s.step);
   return (
     <>
-      {isFirstStep(step) ? null : <BackButton onPress={previousStep} />}
-      <PrimaryButton title={continueTitle} icon={icon} onPress={onContinue} disabled={disabled} />
-      {skip ? <SecondaryButton title="Skip" onPress={onSkip} /> : null}
+      {isFirstStep(step) ? null : <BackButton onPress={previousStep} disabled={busy} />}
+      <PrimaryButton title={continueTitle} icon={icon} onPress={onContinue} disabled={disabled || busy} />
+      {skip ? <SecondaryButton title="Skip" onPress={onSkip} disabled={busy} /> : null}
     </>
   );
 }
