@@ -72,7 +72,6 @@ export type Settings = {
   sidebarPosition: "left" | "right";
   // Holding Option alone slides the hidden sidebar out, as Arc's did (App.tsx › SidebarPeek).
   showSidebarOnOption: boolean;
-  batterySaver: boolean;
   extensionSidePanelWidth: number;
 
   showFullUrl: boolean;
@@ -153,7 +152,6 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
   showSidebarOnOption: true,
-  batterySaver: true,
   extensionSidePanelWidth: 360,
   showFullUrl: false,
   bookmarksBar: "never",

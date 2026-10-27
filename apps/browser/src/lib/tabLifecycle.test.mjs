@@ -1,12 +1,11 @@
-// Sleeping and freezing background tabs (lib/tabLifecycle.ts): a tab with unsaved input never sleeps.
+// Sleeping background tabs (lib/tabLifecycle.ts): a tab with unsaved input never sleeps.
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 
 globalThis.__DEV__ = false;
 
-// The battery saver's toast and Settings, and the internal pages, pull in the whole UI: stand-ins for them, and for the
-// engine's task and system calls.
+// The internal pages pull in the whole UI: a stand-in for them, and for the engine's task and system calls.
 const nncore = new URL("../test-native-stub.mjs", import.meta.url).href;
 const stubs = {
   "@bay/nncore": `export * from ${JSON.stringify(nncore)};
@@ -14,8 +13,6 @@ const stubs = {
     export const onSystemState = () => ({ remove() {} });
     export const systemState = async () => ({ memoryPressure: "normal", physicalMemory: 8 * 2 ** 30, onBattery: false, lowPowerMode: false });
     export const releaseProfile = async () => {};`,
-  "../components/layout/splitActions": "export const showToast = () => {};",
-  "../components/settings/windows": "export const openSettings = () => {};",
   "../components/pages": "export const isInternalTab = (t) => !/^https?:/.test(t.url ?? '');",
 };
 registerHooks({
@@ -31,40 +28,15 @@ const lifecycle = await import("./tabLifecycle.ts");
 
 const S = () => useBrowser.getState();
 
-// A page in a tab: evaluate answers whether it has unsaved input, setFrozen resolves when the test says so.
+// A page in a tab: evaluate answers whether it has unsaved input.
 function fakePage() {
-  const page = { dirty: false, evaluated: 0, discarded: 0, release: () => {} };
+  const page = { dirty: false, evaluated: 0, discarded: 0 };
   page.handle = {
     evaluate: async () => (page.evaluated++, page.dirty),
-    setFrozen: () => new Promise((resolve) => (page.release = resolve)),
     discard: async () => (page.discarded++, "discarded"),
   };
   return page;
 }
-
-test("a tab shown and typed in while it was being frozen doesn't sleep", async () => {
-  S().hydrate({});
-  const w = S().createWindow({ url: "https://a.com" });
-  const a = S().windows[w].activeTabIds[S().windows[w].spaceId];
-  const b = S().newTab(w, { url: "https://b.com", background: true });
-  const page = fakePage();
-  webviews.set(b, page.handle);
-  lifecycle.useLifecycle.setState({ batterySaver: true });
-
-  const freezing = lifecycle.freezeTab(b);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  // Before the engine answers, the tab is shown (which unfreezes it) and typed in, then left again.
-  S().activate(b);
-  page.dirty = true;
-  page.release();
-  await freezing;
-  S().activate(a);
-
-  assert.equal(await lifecycle.sleepTab(b), false);
-  assert.equal(page.evaluated, 1, "asks the page now");
-  assert.equal(page.discarded, 0);
-  webviews.delete(b);
-});
 
 test("a tab without unsaved input sleeps", async () => {
   S().hydrate({});
@@ -140,8 +112,6 @@ test("awake sites survive two idle hours and sleep last only under critical memo
     t.mock.timers.setTime(now + 2 * 60 * 60_000);
     assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0 }), [normal, inactive]);
     assert.equal(pages.get(awake).discarded, 0);
-    lifecycle.useLifecycle.setState({ batterySaver: true });
-    assert.equal(await lifecycle.freezeTab(awake), false, "Battery Saver keeps the protected site running");
     globalThis.nnLifecycle.simulate({ memoryPressure: "warning" });
     assert.deepEqual(await lifecycle.sweep({ protectedRecent: 0, perSweep: 10 }), []);
     assert.equal(pages.get(awake).discarded, 0);
