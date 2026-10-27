@@ -121,7 +121,7 @@ export function GeneralPane() {
           title={SETTINGS.importBrowser.title}
           description="Bookmarks, history, passwords, tabs and Arc spaces from Chrome, Arc, Safari, Firefox and more."
         >
-          <Button title="Import…" onPress={openImport} />
+          <Button title="Import…" onPress={() => openImport()} />
         </Row>
       </Group>
     </View>

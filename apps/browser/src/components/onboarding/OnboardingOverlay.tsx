@@ -6,9 +6,10 @@ import { tensionSpring } from "../../lib/springs";
 import { hex } from "../../lib/theme";
 import { useWindowId } from "../../store/hooks";
 import { Intro } from "./Intro";
-import { dismissOnboarding, useOnboarding } from "./state";
+import { dismissOnboarding, FIRST_STEP, goToStep, useOnboarding } from "./state";
 import { DefaultBrowserStep, ImportStep, OutroStep, PersonalizeStep, PinnedTabsStep } from "./steps";
 import { PrivacyStep } from "./privacyStep";
+import { SearchStep } from "./searchStep";
 import { ToolTour } from "./tour/ToolTour";
 import { useOnboardingColors } from "./ui";
 import { ONBOARDING_CARD } from "./constants";
@@ -84,18 +85,19 @@ function Overlay({ session }: { session: number }) {
               style={{ flex: 1, overflow: "hidden" }}
             >
               <View key={step} style={{ flex: 1 }}>
-                {step === "defaultBrowser" && <DefaultBrowserStep />}
-                {step === "personalize" && <PersonalizeStep />}
                 {step === "import" && <ImportStep />}
+                {step === "personalize" && <PersonalizeStep />}
+                {step === "search" && <SearchStep />}
                 {step === "pinnedTabs" && <PinnedTabsStep />}
                 {step === "privacy" && <PrivacyStep />}
+                {step === "defaultBrowser" && <DefaultBrowserStep />}
                 {step === "outro" && <OutroStep />}
               </View>
             </Surface>
           </Animated.View>
         </View>
       )}
-      {step === "intro" && <Intro onDone={() => useOnboarding.getState().go("defaultBrowser")} />}
+      {step === "intro" && <Intro onDone={() => goToStep(FIRST_STEP)} />}
     </Animated.View>
   );
 }

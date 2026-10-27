@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
-import { STEPS, useOnboarding, type OnboardingStep } from "./state";
+import { isFirstStep, previousStep, skipStep, STEPS, useOnboarding, type OnboardingStep } from "./state";
 
 export function onboardingColors(dark: boolean) {
   return dark
@@ -171,6 +171,125 @@ export function SecondaryButton({ title, onPress, filled }: { title: string; onP
   );
 }
 
+export function BackButton({ onPress }: { onPress: () => void }) {
+  const colors = useOnboardingColors();
+  const { hovered, hoverProps } = useHover();
+  return (
+    <View {...hoverProps} tooltip="Back">
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Back">
+        {({ pressed }) => (
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: hovered ? colors.outlinedHover : "transparent",
+              borderWidth: 1,
+              borderColor: colors.noThanksBorder,
+              transform: [{ scale: pressed ? 0.94 : 1 }],
+            }}
+          >
+            <Symbol name="chevron.left" size={12} weight="semibold" color={colors.noThanksText} style={{ width: 14, height: 14 }} />
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+// A step's buttons: Back (but on the first step), Continue, and Skip, which moves on without applying the step.
+export function StepActions({
+  onContinue,
+  continueTitle = "Continue",
+  disabled,
+  icon,
+  onSkip = skipStep,
+  skip = true,
+}: {
+  onContinue: () => void;
+  continueTitle?: string;
+  disabled?: boolean;
+  icon?: string;
+  onSkip?: () => void;
+  skip?: boolean;
+}) {
+  const step = useOnboarding((s) => s.step);
+  return (
+    <>
+      {isFirstStep(step) ? null : <BackButton onPress={previousStep} />}
+      <PrimaryButton title={continueTitle} icon={icon} onPress={onContinue} disabled={disabled} />
+      {skip ? <SecondaryButton title="Skip" onPress={onSkip} /> : null}
+    </>
+  );
+}
+
+// A tile to pick: a site to pin, the browser you're coming from, a search engine.
+export function SelectTile({
+  title,
+  selected,
+  onPress,
+  width = 80,
+  height = 70,
+  role = "checkbox",
+  children,
+}: {
+  title: string;
+  selected: boolean;
+  onPress: () => void;
+  width?: number;
+  height?: number;
+  role?: "checkbox" | "radio";
+  children: (state: { hovered: boolean }) => ReactNode;
+}) {
+  const colors = useOnboardingColors();
+  const { hovered, hoverProps } = useHover();
+  return (
+    <View {...hoverProps}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole={role}
+        accessibilityState={role === "radio" ? { selected } : { checked: selected }}
+        accessibilityLabel={title}
+      >
+        {({ pressed }) => (
+          <View
+            style={{
+              width,
+              height,
+              borderRadius: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 7,
+              paddingHorizontal: 4,
+              backgroundColor: selected || hovered ? colors.button : colors.row,
+              borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth * 2,
+              borderColor: selected ? colors.title : colors.rowBorder,
+              transform: [{ scale: pressed ? 0.96 : 1 }],
+            }}
+          >
+            <View style={{ opacity: selected || hovered ? 1 : 0.7 }}>{children({ hovered })}</View>
+            <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: "500", color: selected ? colors.title : colors.subtitle }}>
+              {title}
+            </Text>
+            {selected ? (
+              <View style={{ position: "absolute", top: 5, right: 5 }}>
+                <CheckMark on size={14} />
+              </View>
+            ) : null}
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+export function SectionLabel({ title }: { title: string }) {
+  const colors = useOnboardingColors();
+  return <Text style={{ fontSize: 12.5, color: colors.subtitle }}>{title}</Text>;
+}
+
 export function CheckMark({ on, size = 18 }: { on: boolean; size?: number }) {
   const colors = useOnboardingColors();
   const t = useSharedValue(on ? 1 : 0);
@@ -221,6 +340,7 @@ export function CheckRow({
   onChange,
   disabled,
   icon,
+  role = "checkbox",
 }: {
   title: string;
   subtitle: string;
@@ -228,6 +348,7 @@ export function CheckRow({
   onChange: (value: boolean) => void;
   disabled?: boolean;
   icon?: string;
+  role?: "checkbox" | "radio";
 }) {
   const colors = useOnboardingColors();
   const { hovered, hoverProps } = useHover();
@@ -236,8 +357,8 @@ export function CheckRow({
       <Pressable
         disabled={disabled}
         onPress={() => onChange(!value)}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: value, disabled }}
+        accessibilityRole={role}
+        accessibilityState={role === "radio" ? { selected: value, disabled } : { checked: value, disabled }}
         accessibilityLabel={title}
       >
         <View
