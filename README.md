@@ -246,7 +246,9 @@ Signed releases (DMG, Sparkle zip and appcast): `scripts/release.sh <version>`, 
 notes from `release-notes/<version>.md` and needs a Developer ID certificate, notarytool credentials
 (`scripts/.notary.env` or the `bay` keychain profile) and the Sparkle key in the login keychain
 (account `bay`). The app checks `bay.krishkalaria.in/appcast.xml` for updates and links to
-`bay.krishkalaria.in/release-notes/`.
+`bay.krishkalaria.in/release-notes/`. A nightly of `main` ships every night the app changed, on its own update
+channel (`bay.krishkalaria.in/nightly`); stable releases ship only when asked for. Both run in GitHub Actions:
+[docs/releasing.md](docs/releasing.md).
 
 ### Environment variables
 

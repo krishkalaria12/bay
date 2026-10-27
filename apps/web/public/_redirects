@@ -6,3 +6,7 @@
 
 # The update feed in the app's Info.plist (SUFeedURL): the latest release's.
 /appcast.xml https://github.com/krishkalaria12/bay/releases/latest/download/appcast.xml 302
+
+# The newest nightly (scripts/release/publish.sh re-uploads it each night).
+/nightly https://github.com/krishkalaria12/bay/releases/download/nightly/Bay-Nightly.dmg 302
+/nightly/ https://github.com/krishkalaria12/bay/releases/download/nightly/Bay-Nightly.dmg 302
