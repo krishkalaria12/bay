@@ -438,7 +438,7 @@ const TabPane = memo(function TabPane({
                 <CastPicker tabId={tabId} paneWidth={frame.width} />
                 <NavigationOverlays tabId={tabId} windowId={windowId} geometry={geometry} />
                 <SelectionPopover tabId={tabId} zoom={zoom} />
-                <LinkPreview tabId={tabId} />
+                <LinkPreview tabId={tabId} zoom={zoom} />
                 <CaptureLayer tabId={tabId} />
                 <BoostEditor tabId={tabId} maxHeight={Math.max(240, frame.height - 20)} />
               </>

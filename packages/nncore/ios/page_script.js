@@ -1056,13 +1056,17 @@
     linkPreviewTarget = null;
   };
   const armLinkPreview = (a) => {
+    // Moving across a link's own children (an icon, a span) keeps its timer, and a shown preview isn't sent again.
+    if (a === linkPreviewTarget) return;
     clearLinkPreview();
     const url = a && a.href;
     if (!url || !/^https?:/i.test(url)) return;
     linkPreviewTarget = a;
-    const r = a.getBoundingClientRect();
     linkPreviewTimer = setTimeout(() => {
       if (linkPreviewTarget !== a) return;
+      linkPreviewTimer = null;
+      // Where the link is now: the page may have scrolled in the 5 s.
+      const r = a.getBoundingClientRect();
       send("linkPreview", { url, rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
     }, 5000);
   };
@@ -1081,7 +1085,7 @@
     "mouseout",
     (e) => {
       const a = linkUnder(e.target);
-      if (a && a === linkPreviewTarget) clearLinkPreview();
+      if (a && a === linkPreviewTarget && !a.contains(e.relatedTarget)) clearLinkPreview();
     },
     true,
   );
@@ -1092,7 +1096,7 @@
       const a = linkUnder(document.elementFromPoint?.(lastMouseX, lastMouseY) || null);
       // Fall back to the currently hovered element tracked by mousemove.
       const target = a || hoveredLink;
-      if (target) armLinkPreview(target);
+      if (target && !e.repeat) armLinkPreview(target);
     },
     true,
   );

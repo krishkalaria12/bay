@@ -6,7 +6,7 @@ import { hex, useTheme } from "../../lib/theme";
 import { useHover } from "../primitives";
 import { copyLinkPreview, fetchLinkSummary, openLinkPreview, peekLinkPreview, setLinkPreview, useLinkPreview } from "./linkPreview";
 
-export function LinkPreview({ tabId }: { tabId: string }) {
+export function LinkPreview({ tabId, zoom }: { tabId: string; zoom: number }) {
   const preview = useLinkPreview((s) => s[tabId] ?? null);
   const theme = useTheme();
   const [summary, setSummary] = useState("");
@@ -30,6 +30,7 @@ export function LinkPreview({ tabId }: { tabId: string }) {
       live = false;
     };
   }, [preview?.url]);
+  useEffect(() => () => setLinkPreview(tabId, null), [tabId]);
 
   if (!preview || area.width === 0) {
     return <View pointerEvents="box-none" style={StyleSheet.absoluteFill} onLayout={(e) => setArea(e.nativeEvent.layout)} />;
@@ -37,8 +38,9 @@ export function LinkPreview({ tabId }: { tabId: string }) {
 
   const { url, rect } = preview;
   const width = 320;
-  const left = Math.max(8, Math.min(rect.x + rect.width + 8, area.width - width - 8));
-  const top = Math.max(8, Math.min(rect.y, area.height - 180));
+  // The page reports CSS pixels; the card sits in the zoomed view.
+  const left = Math.max(8, Math.min((rect.x + rect.width) * zoom + 8, area.width - width - 8));
+  const top = Math.max(8, Math.min(rect.y * zoom, area.height - 180));
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill} onLayout={(e) => setArea(e.nativeEvent.layout)}>
