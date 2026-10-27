@@ -277,6 +277,58 @@ class LinuxPreflightTests(unittest.TestCase):
 
 
 class BuildTests(unittest.TestCase):
+    def test_linux_download_resumes_sync_before_automate_and_limits_initial_sync(self):
+        for resumed in (False, True):
+            with self.subTest(resumed=resumed), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(engine, "clone_pin"), mock.patch.object(engine, "require_tools"), \
+                 mock.patch.object(engine, "verify_checkout"), mock.patch.object(engine, "run") as run, \
+                 mock.patch.object(engine.urllib.request, "urlopen") as urlopen:
+                root = Path(directory)
+                chromium = root / "chromium_git/chromium"
+                chromium.mkdir(parents=True)
+                if resumed:
+                    (chromium / ".gclient").write_text("solutions = []")
+                urlopen.return_value.__enter__.return_value.read.return_value = \
+                    b'run("gclient sync %s" % sync_args, chromium_dir)\n'
+                engine.download(root, engine.environment(root, "linux"), "linux")
+                commands = [call.args[0] for call in run.call_args_list]
+                self.assertEqual(commands[0], [root / "depot_tools/ensure_bootstrap"])
+                syncs = [cmd for cmd in commands if cmd[0] == "gclient"]
+                self.assertEqual(syncs, [["gclient", "sync", "--no-history", "--jobs=1"]] if resumed else [])
+                self.assertIn("gclient sync --jobs=1 %s", (root / "automate/automate-git.py").read_text())
+                self.assertEqual(commands[-1][1], root / "automate/automate-git.py")
+
+    def test_download_refuses_prepared_tree_before_sync_or_cloning(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "run") as run, \
+             mock.patch.object(engine, "clone_pin") as clone, mock.patch.object(engine, "require_tools"):
+            root = Path(directory)
+            (root / "bay-prepare-state-linux.json").write_text('["chromium-compat"]')
+            with self.assertRaisesRegex(RuntimeError, "prepared tree"):
+                engine.download(root, engine.environment(root, "linux"), "linux")
+            run.assert_not_called()
+            clone.assert_not_called()
+
+    def test_missing_cef_paths_are_generated_before_gn_and_failure_stops_gn(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine.linux_sysroot, "install"), \
+             mock.patch.object(engine, "require_tools"):
+            root = Path(directory)
+            env = engine.environment(root, "linux")
+            src = Path(env["CHROMIUM_SRC"])
+            make_linux_sysroot(src)
+            (src / "cef").mkdir()
+            def generate(command, **kwargs):
+                if command[1] == "tools/version_manager.py":
+                    (src / "cef/cef_paths.gypi").write_text("generated")
+            with mock.patch.object(engine, "run", side_effect=generate) as run:
+                engine.generate_gn(root, env, "linux")
+                self.assertEqual(run.call_args_list[0].args[0][1:], ["tools/version_manager.py", "-u", "--fast-check"])
+                self.assertEqual(run.call_args_list[1].args[0][0], "gn")
+            (src / "cef/cef_paths.gypi").unlink()
+            with mock.patch.object(engine, "run") as run:
+                with self.assertRaisesRegex(RuntimeError, "did not create"):
+                    engine.generate_gn(root, env, "linux")
+                self.assertEqual(run.call_count, 1)
+
     def test_cli_dispatches_linux_build_options(self):
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(sys, "platform", "linux"), \
@@ -339,15 +391,19 @@ class BuildTests(unittest.TestCase):
                     engine.require_tools(("gn",), env)
 
     def test_gn_generation_uses_selected_platform(self):
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "run") as run:
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(engine, "run") as run, \
+             mock.patch.object(engine.linux_sysroot, "install"), mock.patch.object(engine, "require_tools"):
             root = Path(directory)
             env = engine.environment(root, "linux")
             src = Path(env["CHROMIUM_SRC"])
             make_linux_sysroot(src)
+            (src / "cef").mkdir()
+            (src / "cef/cef_paths.gypi").write_text("generated")
             engine.generate_gn(root, env, "linux")
             args = (src / engine.platform_lock("linux")["outputDirectory"] / "args.gn").read_text()
             self.assertIn('use_sysroot = true', args)
-            self.assertIn('target_sysroot = "//build/linux/debian_bullseye_amd64-sysroot"', args)
+            self.assertNotIn('target_sysroot', args)
+            self.assertIn('clang_use_chrome_plugins = false', args)
             self.assertNotIn('enable_iterator_debugging', args)
             run.assert_called_once_with(["gn", "gen", "out/Release_GN_x64"], cwd=src, env=env)
 

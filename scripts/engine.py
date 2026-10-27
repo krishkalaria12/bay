@@ -44,6 +44,9 @@ LOCK = platform_lock()
 WEB_SPEC = importlib.util.spec_from_file_location("bay_web_artifacts", DRIVER_PATH.parent / "windows/web-artifacts.py")
 web_artifacts = importlib.util.module_from_spec(WEB_SPEC)
 WEB_SPEC.loader.exec_module(web_artifacts)
+LINUX_SPEC = importlib.util.spec_from_file_location("bay_linux_sysroot", REPO / "engine/patches/build/linux/sysroot.py")
+linux_sysroot = importlib.util.module_from_spec(LINUX_SPEC)
+LINUX_SPEC.loader.exec_module(linux_sysroot)
 GN_ARGS = {
     "is_official_build": False, "is_debug": False, "is_component_build": False,
     "target_cpu": "x64", "enable_cef": False, "dcheck_always_on": False, "use_thin_lto": False,
@@ -65,7 +68,9 @@ def gn_args(platform="win"):
     if platform == "linux":
         args.pop("enable_iterator_debugging")
         args.update(use_sysroot=True, is_cfi=False, use_vaapi=True, rtc_use_pipewire=True)
-        args["target_sysroot"] = "//build/linux/" + platform_lock("linux")["sysroot"]["directory"]
+        # Chromium selects this pinned x64 sysroot itself. An explicit override
+        # changes pkg-config arguments and bypasses its generated query cache.
+        args["clang_use_chrome_plugins"] = False
     elif platform != "win":
         raise ValueError(f"unsupported engine platform: {platform}")
     return args
@@ -267,18 +272,38 @@ def download(root, env, platform="win"):
     lock = platform_lock(platform)
     if platform == "linux":
         require_tools(("git",), env)
-    if (root / "chromium_git/chromium/src" / lock["outputDirectory"] / "build.ninja").exists():
+    if any((root / name).exists() for name in (
+            "bay-prepare-state.json", "bay-prepare-state-linux.json", "domsubcache.tar.gz")) or \
+            (root / "chromium_git/chromium/src" / lock["outputDirectory"] / "build.ninja").exists():
         raise RuntimeError("an engine build exists; use build rather than downloading into a prepared tree")
     for name, url, revision in (
         ("depot_tools", "https://chromium.googlesource.com/chromium/tools/depot_tools.git", lock["depotToolsCommit"]),
         ("ungoogled", "https://github.com/ungoogled-software/ungoogled-chromium.git", lock["ungoogledCommit"]),
     ):
         clone_pin(url, root / name, revision)
+    if platform == "linux":
+        run([root / "depot_tools/ensure_bootstrap"], env=env)
+        chromium = root / "chromium_git/chromium"
+        if (chromium / ".gclient").exists():
+            version_file = chromium / "src/chrome/VERSION"
+            if version_file.exists():
+                version = dict(line.split("=", 1) for line in version_file.read_text().splitlines() if "=" in line)
+                if ".".join(version[key] for key in ("MAJOR", "MINOR", "BUILD", "PATCH")) != lock["chromium"]:
+                    raise RuntimeError("existing Chromium version differs from the pin; use a fresh build root")
+            # automate-git skips sync when src already exists, even if the
+            # previous sync failed partway through fetching dependencies.
+            run(["gclient", "sync", "--no-history", "--jobs=1"], cwd=chromium, env=env)
     automate = root / "automate/automate-git.py"
     automate.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://raw.githubusercontent.com/chromiumembedded/cef/{lock['cefCommit']}/tools/automate/automate-git.py"
     with urllib.request.urlopen(url, timeout=90) as response:
-        automate.write_bytes(response.read())
+        script = response.read().decode("utf-8")
+    if platform == "linux":
+        anchor = 'run("gclient sync %s" % sync_args, chromium_dir)'
+        if script.count(anchor) != 1:
+            raise RuntimeError("CEF download script changed; recheck its initial sync concurrency")
+        script = script.replace(anchor, 'run("gclient sync --jobs=1 %s" % sync_args, chromium_dir)')
+    automate.write_text(script, encoding="utf-8")
     run([sys.executable, automate, f"--download-dir={root / 'chromium_git'}",
          f"--depot-tools-dir={root / 'depot_tools'}", f"--branch={lock['cefBranch']}",
          f"--checkout={lock['cefCommit']}", "--no-chromium-history", "--x64-build",
@@ -348,6 +373,14 @@ def generate_gn(root, env, platform="win"):
     lock = platform_lock(platform)
     require_linux_sysroot(env, platform)
     src = pathlib.Path(env["CHROMIUM_SRC"])
+    if platform == "linux":
+        require_tools(("pkg-config", "ar", "tar", "xz"), env)
+        linux_sysroot.install(root, src / "build/linux" / lock["sysroot"]["directory"], env, run)
+        cef = src / "cef"
+        if not (cef / "cef_paths.gypi").is_file():
+            run([sys.executable, "tools/version_manager.py", "-u", "--fast-check"], cwd=cef, env=env)
+            if not (cef / "cef_paths.gypi").is_file():
+                raise RuntimeError("CEF generation did not create cef_paths.gypi")
     # Chrome uses ordinary GN args. CEF's config merger would add client API
     # and CDM requirements that this desktop Chrome target does not need.
     directory = src / lock["outputDirectory"]
