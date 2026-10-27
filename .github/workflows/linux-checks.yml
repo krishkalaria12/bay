@@ -29,8 +29,10 @@ jobs:
           sudo apt-get install -y pkg-config libssl-dev libsqlite3-dev libnss3-dev libglib2.0-dev rpm desktop-file-utils appstream
       - name: Run portable JavaScript tests
         run: |
-          pnpm --filter @bay/core --filter @bay/platform --filter @bay/browser test
+          pnpm --filter @bay/core --filter @bay/platform --filter @bay/shaders --filter @bay/browser test
           pnpm --filter @bay/sync exec node --test 'src/**/*.test.ts'
+      - name: Check WebGL shaders in Chromium
+        run: CHROMIUM="$(command -v google-chrome || command -v chromium)" pnpm --filter @bay/shaders test:web
       - name: Test Linux sync services
         run: |
           python scripts/linux/test-import.py --services-only
