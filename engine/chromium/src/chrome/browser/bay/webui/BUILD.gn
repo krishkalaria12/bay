@@ -194,6 +194,9 @@ if (is_win || is_linux) {
       "//chrome/browser:shell_integration",
     ]
     deps = [ "//chrome/browser:primitives" ]
+    if (is_linux) {
+      deps += [ "//chrome/common:channel_info" ]
+    }
   }
 
   test("default_browser_unittests") {
