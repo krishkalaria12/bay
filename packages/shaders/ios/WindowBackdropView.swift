@@ -35,6 +35,7 @@ final class WindowBackdropView: MetalSurface {
     if on {
       let view = WindowTreatmentView(frame: bounds)
       view.tint = tint
+      view.grain = (uniforms.grainOpacity, uniforms.grainScale)
       addSubview(view, positioned: .below, relativeTo: metalView)
       treatment = view
     } else {
@@ -58,6 +59,7 @@ final class WindowBackdropView: MetalSurface {
 
   func set(_ key: WritableKeyPath<Uniforms, Float>, _ value: Float) {
     uniforms[keyPath: key] = value
+    treatment?.grain = (uniforms.grainOpacity, uniforms.grainScale)
     metalView.needsDisplay = true
   }
 
@@ -143,11 +145,14 @@ final class WindowTreatmentView: NSView {
   }
 
   var tint = Tint() { didSet { if tint != oldValue { updateTint() } } }
+  /// The Metal path's static grain, over the tint and under content: glass hides the Metal view.
+  var grain: (opacity: Float, scale: Float) = (0, 1) { didSet { if grain != oldValue { updateGrain() } } }
 
   private let blur = NSVisualEffectView()
   private let overlay = NSView()
   private let baseTint = CALayer()
   private let gradient = CAGradientLayer()
+  private let grainLayer = CALayer()
 
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -158,9 +163,10 @@ final class WindowTreatmentView: NSView {
     overlay.wantsLayer = true
     overlay.layer?.addSublayer(baseTint)
     overlay.layer?.addSublayer(gradient)
+    overlay.layer?.addSublayer(grainLayer)
     gradient.startPoint = CGPoint(x: 0.5, y: 0)
     gradient.endPoint = CGPoint(x: 0.5, y: 1)
-    for layer in [baseTint, gradient] as [CALayer] {
+    for layer in [baseTint, gradient, grainLayer] as [CALayer] {
       layer.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull(), "colors": NSNull(), "opacity": NSNull()]
     }
     addSubview(blur)
@@ -179,6 +185,12 @@ final class WindowTreatmentView: NSView {
     overlay.frame = bounds
     baseTint.frame = overlay.bounds
     gradient.frame = overlay.bounds
+    grainLayer.frame = overlay.bounds
+  }
+
+  override func viewDidChangeBackingProperties() {
+    super.viewDidChangeBackingProperties()
+    updateGrain()
   }
 
   override func setFrameSize(_ newSize: NSSize) {
@@ -208,6 +220,48 @@ final class WindowTreatmentView: NSView {
     let color = tint.color.usingColorSpace(.displayP3) ?? tint.color
     let lighter = Self.adjustingLightness(color, by: tint.lightness)
     gradient.colors = [lighter, color].map { $0.withAlphaComponent(tint.alpha).cgColor }
+  }
+
+  // A black layer at alpha (1 - g), drawn at the grain opacity, darkens the tint as the shader's multiply darkens the
+  // gradient, without sampling the desktop behind it.
+  private func updateGrain() {
+    grainLayer.opacity = min(max(grain.opacity, 0), 1)
+    grainLayer.backgroundColor = grain.opacity > 0
+      ? Self.grainPattern(points: CGFloat(max(grain.scale, 0.25)), backing: window?.backingScaleFactor ?? 2) : nil
+  }
+
+  private static var patterns: [String: CGColor] = [:]
+
+  static func grainPattern(points: CGFloat, backing: CGFloat) -> CGColor? {
+    let key = "\(points)@\(backing)"
+    if let cached = patterns[key] { return cached }
+    let cells = 128
+    let side = max(1, Int((CGFloat(cells) * points * backing).rounded()))
+    var bytes = [UInt8](repeating: 0, count: side * side * 4)
+    for y in 0..<side {
+      for x in 0..<side {
+        let g = grainHash(Float(x * cells / side), Float(y * cells / side))
+        bytes[(y * side + x) * 4 + 3] = UInt8(((1 - g) * 255).rounded())
+      }
+    }
+    guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+          let image = CGImage(
+            width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
+    let size = CGFloat(cells) * points
+    let color = NSColor(patternImage: NSImage(cgImage: image, size: NSSize(width: size, height: size))).cgColor
+    if patterns.count > 16 { patterns.removeAll() }
+    patterns[key] = color
+    return color
+  }
+
+  /// The shader's grainHash (Dave Hoskins' hash12).
+  static func grainHash(_ x: Float, _ y: Float) -> Float {
+    func fract(_ v: Float) -> Float { v - v.rounded(.down) }
+    var p = SIMD3<Float>(fract(x * 0.1031), fract(y * 0.1031), fract(x * 0.1031))
+    p += (p * (SIMD3(p.y, p.z, p.x) + 33.33)).sum()
+    return fract((p.x + p.y) * p.z)
   }
 
   static func adjustingLightness(_ c: NSColor, by delta: CGFloat) -> NSColor {
