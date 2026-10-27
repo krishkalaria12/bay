@@ -1,0 +1,96 @@
+diff --git a/chrome/browser/renderer_preferences_util.cc b/chrome/browser/renderer_preferences_util.cc
+--- a/chrome/browser/renderer_preferences_util.cc
++++ b/chrome/browser/renderer_preferences_util.cc
+@@ -9,6 +9,7 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/feature_list.h"
+ #include "base/logging.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+@@ -146,7 +147,10 @@
+ #endif  // BUILDFLAG(USE_AURA)
+ 
+ #if BUILDFLAG(IS_LINUX)
+-  if (auto* linux_ui = ui::LinuxUi::instance()) {
++  if (features::IsMiddleClickPasteOverridden()) {
++    prefs->middle_click_paste_allowed =
++        base::FeatureList::IsEnabled(features::kMiddleClickPaste);
++  } else if (auto* linux_ui = ui::LinuxUi::instance()) {
+     prefs->middle_click_paste_allowed = linux_ui->PrimaryPasteEnabled();
+   }
+ #endif
+diff --git a/chrome/browser/ungoogled_platform_flag_entries.h b/chrome/browser/ungoogled_platform_flag_entries.h
+--- a/chrome/browser/ungoogled_platform_flag_entries.h
++++ b/chrome/browser/ungoogled_platform_flag_entries.h
+@@ -4,4 +4,8 @@
+ 
+ #ifndef CHROME_BROWSER_UNGOOGLED_PLATFORM_FLAG_ENTRIES_H_
+ #define CHROME_BROWSER_UNGOOGLED_PLATFORM_FLAG_ENTRIES_H_
++    {"middle-click-paste",
++     "Middle Click Paste",
++     "Pastes the selected text with a middle click. Default follows the desktop's setting. Bay flag.",
++     kOsLinux, FEATURE_VALUE_TYPE(features::kMiddleClickPaste)},
+ #endif  // CHROME_BROWSER_UNGOOGLED_PLATFORM_FLAG_ENTRIES_H_
+diff --git a/ui/base/clipboard/clipboard.cc b/ui/base/clipboard/clipboard.cc
+--- a/ui/base/clipboard/clipboard.cc
++++ b/ui/base/clipboard/clipboard.cc
+@@ -29,6 +29,8 @@
+ #include "url/gurl.h"
+ 
+ #if BUILDFLAG(IS_LINUX)
++#include "base/feature_list.h"
++#include "ui/base/ui_base_features.h"
+ #include "ui/linux/linux_ui.h"
+ #endif
+ 
+@@ -116,6 +118,9 @@
+ // static
+ bool Clipboard::IsMiddleClickPasteEnabled() {
+ #if BUILDFLAG(IS_LINUX)
++  if (features::IsMiddleClickPasteOverridden()) {
++    return base::FeatureList::IsEnabled(features::kMiddleClickPaste);
++  }
+   if (auto* linux_ui = ui::LinuxUi::instance()) {
+     return linux_ui->PrimaryPasteEnabled();
+   }
+diff --git a/ui/base/ui_base_features.cc b/ui/base/ui_base_features.cc
+--- a/ui/base/ui_base_features.cc
++++ b/ui/base/ui_base_features.cc
+@@ -556,4 +556,14 @@
+   return base::FeatureList::IsEnabled(kColorIdCssStyleSheetOptimization);
+ }
+ 
++#if BUILDFLAG(IS_LINUX)
++BASE_FEATURE(kMiddleClickPaste, base::FEATURE_ENABLED_BY_DEFAULT);
++
++bool IsMiddleClickPasteOverridden() {
++  auto* feature_list = base::FeatureList::GetInstance();
++  return feature_list &&
++         feature_list->IsFeatureOverridden(kMiddleClickPaste.name);
++}
++#endif  // BUILDFLAG(IS_LINUX)
++
+ }  // namespace features
+diff --git a/ui/base/ui_base_features.h b/ui/base/ui_base_features.h
+--- a/ui/base/ui_base_features.h
++++ b/ui/base/ui_base_features.h
+@@ -369,6 +369,17 @@
+ COMPONENT_EXPORT(UI_BASE_FEATURES)
+ bool IsColorIdCssStyleSheetOptimizationEnabled();
+ 
++#if BUILDFLAG(IS_LINUX)
++// Bay: middle-click paste of the primary selection. Overridden from
++// bay://flags; when left at its default, the desktop's setting applies.
++COMPONENT_EXPORT(UI_BASE_FEATURES)
++BASE_DECLARE_FEATURE(kMiddleClickPaste);
++
++// Whether bay://flags or the command line overrides kMiddleClickPaste.
++COMPONENT_EXPORT(UI_BASE_FEATURES)
++bool IsMiddleClickPasteOverridden();
++#endif  // BUILDFLAG(IS_LINUX)
++
+ }  // namespace features
+ 
+ #endif  // UI_BASE_UI_BASE_FEATURES_H_
