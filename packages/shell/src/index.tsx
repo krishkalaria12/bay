@@ -518,5 +518,6 @@ type TidyNamesModule = {
 };
 const TidyNamesNative = requireNativeModule<TidyNamesModule>("BayTidyNames");
 
-// Null on Macs without Apple Intelligence, where Tidy Downloads leans on the local cleaner alone.
+// Null unless launched with BAY_TIDY_DOWNLOADS_AI=true on a Mac with Apple Intelligence; Tidy Downloads then leans on
+// the local cleaner alone.
 export const tidyNames: Omit<TidyNamesModule, "available"> | null = TidyNamesNative.available ? TidyNamesNative : null;
