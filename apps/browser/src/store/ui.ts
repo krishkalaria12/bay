@@ -117,13 +117,22 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
       if (!exists && d.profile && isIncognitoSpace(d.profile) && !Object.values(s.windows).some((w) => w.spaceId === d.profile)) {
         return {};
       }
+      // Chromium still names the path it saved after Tidy Downloads renamed the file; the renamed one stands.
+      const keep = (x: Download): Download => (x.renamedFrom === d.path ? { ...d, filename: x.filename, path: x.path, renamedFrom: x.renamedFrom } : d);
       // A new download doesn't open the panel: the magnet flies its icon to the downloads button instead.
-      return { downloads: exists ? s.downloads.map((x) => (x.id === d.id ? d : x)) : [d, ...s.downloads].slice(0, MAX_DOWNLOADS) };
+      return { downloads: exists ? s.downloads.map((x) => (x.id === d.id ? keep(x) : x)) : [d, ...s.downloads].slice(0, MAX_DOWNLOADS) };
     });
   },
 
   updateDownloadFile(id, patch) {
-    set((s) => ({ downloads: s.downloads.map((d) => (d.id === id ? { ...d, filename: patch.filename, path: patch.path } : d)) }));
+    set((s) => ({
+      downloads: s.downloads.map((d) => {
+        if (d.id !== id) return d;
+        const saved = d.renamedFrom ?? d.path;
+        const { renamedFrom: _, ...rest } = d;
+        return { ...rest, filename: patch.filename, path: patch.path, ...(patch.path === saved ? {} : { renamedFrom: saved }) };
+      }),
+    }));
   },
 
   removeDownload(id) {

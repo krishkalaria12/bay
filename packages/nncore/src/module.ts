@@ -23,6 +23,8 @@ export type Download = {
   /** The page that started the download, when Chromium knows it (blank for a private window's download). */
   referrer?: string;
   tabUrl?: string;
+  /** Set by the app, not the engine: the path Chromium saved, after Tidy Downloads renamed the file. */
+  renamedFrom?: string;
 };
 
 export type PermissionKind =

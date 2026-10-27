@@ -58,41 +58,44 @@ export function windowForDownload(s: BrowserState, d: Download): string | null {
 type TidyEntry = { filename: string; value: TidyName | null };
 export const useTidyNames = create<{ entries: Record<string, TidyEntry> }>(() => ({ entries: {} }));
 
-const resolving = new Set<string>();
+// In-flight suggestions, so the offer and a row asking at once share one answer.
+const resolving = new Map<string, Promise<TidyName | null>>();
 
-export async function resolveTidySuggestion(d: Download, s: BrowserState = useBrowser.getState()): Promise<TidyName | null> {
-  if (!s.settings.tidyDownloads || d.state !== "finished" || !d.path) return null;
-  if (isUserNamedDownload(d.filename, d.suggestedFilename)) return null;
-  const key = d.id;
-  const existing = useTidyNames.getState().entries[key];
-  if (existing && existing.filename === d.filename) return existing.value;
-  if (resolving.has(key)) return null;
-  resolving.add(key);
-  try {
-    const page = pageForDownload(d, s);
-    const heuristic = tidyDownloadName({
-      filename: d.filename,
-      pageTitle: page.title,
-      pageUrl: page.url ?? d.tabUrl ?? d.referrer,
-      mimeType: d.mimeType,
-    });
-    let result = heuristic;
-    if (heuristic && tidyNames) {
-      const refined = await tidyNames.suggest(d.filename, page.title ?? "", page.url ?? d.tabUrl ?? d.referrer ?? "", heuristic.stem);
-      if (refined) {
-        const candidate = tidyNameFor(refined, d.filename, "page");
-        if (candidate) result = candidate;
-      }
+export function resolveTidySuggestion(d: Download, s: BrowserState = useBrowser.getState()): Promise<TidyName | null> {
+  if (!s.settings.tidyDownloads || d.state !== "finished" || !d.path) return Promise.resolve(null);
+  if (isUserNamedDownload(d.filename, d.suggestedFilename)) return Promise.resolve(null);
+  const existing = useTidyNames.getState().entries[d.id];
+  if (existing && existing.filename === d.filename) return Promise.resolve(existing.value);
+  const key = `${d.id}\n${d.filename}`;
+  const pending = resolving.get(key);
+  if (pending) return pending;
+  const next = suggest(d, s).finally(() => resolving.delete(key));
+  resolving.set(key, next);
+  return next;
+}
+
+async function suggest(d: Download, s: BrowserState): Promise<TidyName | null> {
+  const page = pageForDownload(d, s);
+  const heuristic = tidyDownloadName({
+    filename: d.filename,
+    pageTitle: page.title,
+    pageUrl: page.url ?? d.tabUrl ?? d.referrer,
+    mimeType: d.mimeType,
+  });
+  let result = heuristic;
+  if (heuristic && tidyNames) {
+    const refined = await tidyNames.suggest(d.filename, page.title ?? "", page.url ?? d.tabUrl ?? d.referrer ?? "", heuristic.stem);
+    if (refined) {
+      const candidate = tidyNameFor(refined, d.filename, "page");
+      if (candidate) result = candidate;
     }
-    const current = useBrowser.getState().downloads.find((x) => x.id === d.id);
-    if (!current || current.filename !== d.filename) return null;
-    useTidyNames.setState((state) => ({
-      entries: { ...state.entries, [d.id]: { filename: d.filename, value: result } },
-    }));
-    return result;
-  } finally {
-    resolving.delete(key);
   }
+  const current = useBrowser.getState().downloads.find((x) => x.id === d.id);
+  if (!current || current.filename !== d.filename) return null;
+  useTidyNames.setState((state) => ({
+    entries: { ...state.entries, [d.id]: { filename: d.filename, value: result } },
+  }));
+  return result;
 }
 
 export function useTidySuggestion(d: Download | undefined): TidyName | null {
@@ -108,11 +111,14 @@ export function useTidySuggestion(d: Download | undefined): TidyName | null {
 
 // MARK: Applying
 
+// The name renameFile settled on, which gains " (1)" when the suggestion was taken.
+const baseName = (path: string) => path.split("/").pop() ?? path;
+
 export async function applyTidyName(d: Download, suggestion: TidyName): Promise<string | null> {
   if (d.state !== "finished" || !d.path) return null;
   const path = await renameFile(d.path, suggestion.filename);
   if (!path) return null;
-  useBrowser.getState().updateDownloadFile(d.id, { filename: suggestion.filename, path });
+  useBrowser.getState().updateDownloadFile(d.id, { filename: baseName(path), path });
   return path;
 }
 
@@ -123,8 +129,8 @@ export async function tidyRename(d: Download, suggestion: TidyName, windowId: st
     showToast(windowId, "Couldn’t Rename the Download", "The name may already be in use.", { icon: "exclamationmark.triangle" });
     return;
   }
-  const renamed = useBrowser.getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: suggestion.filename, path };
-  showToast(windowId, "Tidy Download", `Renamed to “${suggestion.filename}”`, {
+  const renamed = useBrowser.getState().downloads.find((x) => x.id === d.id) ?? { ...d, filename: baseName(path), path };
+  showToast(windowId, "Tidy Download", `Renamed to “${renamed.filename}”`, {
     icon: "wand.and.stars",
     key: `tidy-undo:${d.id}`,
     duration: 6000,
@@ -138,7 +144,7 @@ async function undoTidyName(d: Download, original: { filename: string; path: str
     showToast(windowId, "Couldn’t Undo", "The original name is no longer available.", { icon: "exclamationmark.triangle" });
     return;
   }
-  useBrowser.getState().updateDownloadFile(d.id, { filename: original.filename, path });
+  useBrowser.getState().updateDownloadFile(d.id, { filename: baseName(path), path });
 }
 
 // MARK: Offering
@@ -164,7 +170,10 @@ export async function offerTidyName(d: Download, s: BrowserState = useBrowser.ge
 }
 
 export function startTidyDownloadOffers(): void {
+  // Only downloads that finish while Bay watches: the engine replays its finished history at every launch.
+  const live = new Set<string>();
   onDownload((d) => {
-    if (d.state === "finished") void offerTidyName(d);
+    if (d.state === "downloading") live.add(d.id);
+    else if (live.delete(d.id) && d.state === "finished") void offerTidyName(d);
   });
 }
