@@ -5,7 +5,7 @@ import { AppState } from "react-native";
 import { APP_NAME } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import type { SpaceColor } from "../../store/types";
-import { IMPORT_WINDOW_ID } from "../settings/windows";
+import { IMPORT_WINDOW_ID, useImportRequest } from "../settings/windows";
 import {
   applyResult,
   applyArcProfile,
@@ -52,6 +52,7 @@ export function useImportFlow() {
   const [asking, setAsking] = useState(false);
   const diaLaunched = useRef(0);
   const abort = useRef<AbortController | null>(null);
+  const requested = useImportRequest((s) => s.browserId);
 
   const recheckAccess = async () => {
     if (!api) return;
@@ -452,13 +453,22 @@ export function useImportFlow() {
     };
   }, [step, diaStatus, api]);
 
+  // Opened again for another browser while it shows the list: switch to that one.
+  useEffect(() => {
+    const b = requested ? browsers.find((x) => x.id === requested) : undefined;
+    if (b && step === "choose" && b.id !== source?.id) choose(b);
+  }, [requested]);
+
   useEffect(() => {
     if (!api) return setStep("choose");
     void api
       .listBrowsers()
       .then((list) => {
         setBrowsers(list);
-        const first = list.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ?? list[0];
+        const first =
+          list.find((b) => b.id === useImportRequest.getState().browserId) ??
+          list.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ??
+          list[0];
         if (first) choose(first);
         setStep("choose");
       })
