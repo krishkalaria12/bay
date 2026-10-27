@@ -10,13 +10,14 @@ export const site = {
     "Bay is a beautiful, fast browser for Mac: spaces, a sidebar of pinned tabs and folders, Peek, Split View and ads blocked out of the box, on Chrome’s engine.",
   // public/_redirects sends it to the latest GitHub release's Bay.dmg.
   downloadUrl: "/download",
+  nightlyDownloadUrl: "/nightly",
   // The source, releases and issues.
   github: "https://github.com/krishkalaria12/bay",
   requirement: "macOS 14 Sonoma or later",
 } as const;
 
 /**
- * Spread on every link to site.downloadUrl: it redirects off the site to a 200 MB file, so the client router must
+ * Spread on every download link: it redirects off the site to a large file, so the client router must
  * leave it to the browser (a full navigation, which downloads) and never prefetch it.
  */
 export const downloadLink = { "data-astro-reload": true, "data-astro-prefetch": "false" } as const;

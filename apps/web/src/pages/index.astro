@@ -104,6 +104,10 @@ const schema = [
       <p class="mt-3 animate-rise text-[13px] text-muted [animation-delay:140ms]">
         For {site.requirement}. Coming from Arc? <a href="/switch-from-arc/" class="font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink">Here’s how to switch</a>.
       </p>
+      <p class="mx-auto mt-3 max-w-lg animate-rise text-[13px] text-muted [animation-delay:160ms]">
+        <a href={site.nightlyDownloadUrl} {...downloadLink} data-download-location="hero-nightly" class="font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink">Download Nightly</a>
+        to test the latest changes. Nightly builds may have bugs.
+      </p>
       <div class="mx-auto mt-20 max-w-[960px] animate-rise text-left [animation-delay:200ms]">
         <LiveFigure
           client:load
@@ -423,8 +427,12 @@ const schema = [
       <h2 class="mt-6 text-[40px] leading-[1.02] font-bold tracking-[-0.04em] text-balance sm:text-[56px]">
         Your spaces have a new <span class="marker">home</span>.
       </h2>
-      <a href={site.downloadUrl} {...downloadLink} data-download-location="closing" class="btn mt-8 px-7 py-3.5 text-[16px]">Download for Mac</a>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <a href={site.downloadUrl} {...downloadLink} data-download-location="closing" class="btn px-7 py-3.5 text-[16px]">Download for Mac</a>
+        <a href={site.nightlyDownloadUrl} {...downloadLink} data-download-location="closing-nightly" class="btn-ghost px-7 py-3.5 text-[16px]">Download Nightly</a>
+      </div>
       <p class="mt-4 text-[13px] text-muted">For {site.requirement}. Bring your tabs; we’ll unpack them.</p>
+      <p class="mt-2 text-[13px] text-muted">Nightly builds update automatically as new builds arrive.</p>
     </section>
   </main>
 
