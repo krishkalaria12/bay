@@ -7,15 +7,18 @@ each exception is explained in the patch list's header):
   - PARTIAL_EXCLUDE: applied without the listed files (git apply --exclude);
   - PARTIAL_FUZZY: applied with `patch`, dropping the hunk CEF already covers;
   - FIXUPS: small edits after the series (CEF build requirements);
+  - CONTEXT: a hunk whose context assumes a skipped patch, given the context the tree has;
   - everything else: `git apply` exactly, falling back to `patch -F2`.
 Run once on a fresh (CEF-patched) tree.
 
 Usage: 03-ungoogled.py [--dry-run]
 """
+import hashlib
 import pathlib
 import os
 import subprocess
 import sys
+import tempfile
 
 CB = pathlib.Path(os.environ.get('CB', pathlib.Path.home() / 'chromium-build'))
 SRC = pathlib.Path(os.environ.get('CHROMIUM_SRC', CB / 'chromium_git/chromium/src'))
@@ -59,6 +62,37 @@ PARTIAL_EXCLUDE = {
         ['chrome/browser/ui/views/toolbar/toolbar_view.cc'],  # conflicts with CEF's toolbar patch
     'extra/ungoogled-chromium/add-flag-for-incognito-themes.patch':
         ['chrome/browser/ui/views/frame/browser_widget.cc'],  # conflicts with CEF's frame patch
+}
+# The second security_page.html hunk removes the Advanced Protection link, and its trailing context assumes the
+# Safe Browsing disable dialog is gone too (a patch skipped above, SB). macOS's patch takes the hunk with fuzz;
+# GNU patch rejects it. Keyed by the upstream patch's SHA-256, so a new pin fails loudly rather than drifting.
+CONTEXT = {
+    'extra/ungoogled-chromium/remove-uneeded-ui.patch': (
+        '1d61ad24b0dcd88a7c758665aadc86dc945ffe57099c0ddcae0e0f7f2e66695b',
+        '@@ -172,10 +165,4 @@\n'
+        '         on-click="onManageCertificatesClick_" external>\n'
+        '     </cr-link-row>\n'
+        ' \n'
+        '-    <cr-link-row id="advancedProtectionProgramLink" class="hr"\n'
+        '-        label="$i18n{advancedProtectionProgramTitle}"\n'
+        '-        sub-label="$i18n{advancedProtectionProgramDesc}"\n'
+        '-        on-click="onAdvancedProtectionProgramLinkClick_"\n'
+        '-        external>\n'
+        '-    </cr-link-row>\n'
+        '   </settings-subpage>\n',
+        '@@ -172,12 +165,6 @@\n'
+        '         on-click="onManageCertificatesClick_" external>\n'
+        '     </cr-link-row>\n'
+        ' \n'
+        '-    <cr-link-row id="advancedProtectionProgramLink" class="hr"\n'
+        '-        label="$i18n{advancedProtectionProgramTitle}"\n'
+        '-        sub-label="$i18n{advancedProtectionProgramDesc}"\n'
+        '-        on-click="onAdvancedProtectionProgramLinkClick_"\n'
+        '-        external>\n'
+        '-    </cr-link-row>\n'
+        '     <template is="dom-if" if="[[showDisableSafebrowsingDialog_]]" restamp>\n'
+        '       <settings-simple-confirmation-dialog\n'
+        '           title-text="$i18n{safeBrowsingDisableDialog}"\n'),
 }
 PARTIAL_FUZZY = {
     'core/ungoogled-chromium/disable-gcm.patch': 'GCMClientImpl::Start hunk (CEF already stubs Start)',
@@ -105,9 +139,26 @@ def run(cmd):
     return subprocess.run(cmd, cwd=SRC, capture_output=True, text=True)
 
 
+def with_context(rel, path, scratch):
+    """The patch to apply for `rel`: upstream's, or a copy with CONTEXT's hunk."""
+    if rel not in CONTEXT:
+        return path
+    digest, old, new = CONTEXT[rel]
+    data = pathlib.Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != digest:
+        sys.exit(f'{rel} changed upstream; recheck its CONTEXT entry')
+    text = data.decode()
+    assert text.count(old) == 1, f'CONTEXT hunk missing in {rel}'
+    adjusted = pathlib.Path(scratch) / pathlib.Path(rel).name
+    adjusted.write_text(text.replace(old, new, 1))
+    return str(adjusted)
+
+
+scratch_directory = tempfile.TemporaryDirectory(prefix='bay-ungoogled-')
+scratch = scratch_directory.name
 rows = []
 for base, rel in series():
-    path = str(base / rel)
+    path = with_context(rel, str(base / rel), scratch)
     if rel in SKIP:
         rows.append((rel, 'skipped', SKIP[rel]))
         continue
@@ -163,4 +214,5 @@ for r in rows:
         print('%-8s %s  %s' % (r[1], r[0], r[2]))
 counts = {s: sum(1 for r in rows if r[1] == s) for s in ('applied', 'partial', 'skipped', 'FAILED')}
 print(' '.join(f'{k}={v}' for k, v in counts.items()))
+scratch_directory.cleanup()
 sys.exit(1 if counts['FAILED'] else 0)

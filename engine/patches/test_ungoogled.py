@@ -44,5 +44,23 @@ class SandboxSelectionTests(unittest.TestCase):
                 self.assertTrue(all("--check" in call.args[0] for call in run.call_args_list))
 
 
+class ContextTests(unittest.TestCase):
+    def test_changed_upstream_patch_stops_before_applying_anything(self):
+        rel = "extra/ungoogled-chromium/remove-uneeded-ui.patch"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            patches = root / "ungoogled/patches"
+            (patches / rel).parent.mkdir(parents=True)
+            (patches / rel).write_text("a newer upstream patch\n")
+            (patches / "series").write_text(rel + "\n")
+            with mock.patch.dict(os.environ, {"CB": directory, "CHROMIUM_SRC": str(root / "src")}), \
+                 mock.patch.object(sys, "argv", [str(SCRIPT), "--dry-run"]), \
+                 mock.patch.object(subprocess, "run") as run:
+                with self.assertRaises(SystemExit) as result:
+                    runpy.run_path(str(SCRIPT), run_name="__main__")
+            self.assertIn("changed upstream", str(result.exception.code))
+            run.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
