@@ -1,0 +1,205 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Bay web shader fixture</title>
+<body style="margin: 0">
+  <script type="module">
+    import { createSurface } from "/web/surface.ts";
+    import { registerStatic, staticStats } from "/web/staticRenderer.ts";
+    import { subscribers } from "/web/clock.ts";
+    import { drawPowerUp } from "/web/powerUpRenderer.ts";
+    import { backdrop } from "/web/sources/backdrop.ts";
+    import { blur, halo, powerUp } from "/web/sources/powerUp.ts";
+    import { areaLight } from "/web/sources/areaLight.ts";
+    import { edgeLight } from "/web/sources/edgeLight.ts";
+    import { color, oklab } from "/web/colors.ts";
+    import { areaLightUniforms, backdropUniforms, edgeLightUniforms, haloUniforms, powerUpUniforms } from "/web/uniforms.ts";
+
+    const results = [];
+    const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
+    const dpr = devicePixelRatio;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    // The shader's gradient on the CPU: OKLab mix, then gamma sRGB.
+    function reference(colors, angle, w, h) {
+      const a = oklab(color(colors[0])),
+        b = oklab(color(colors[1]));
+      const r = (angle * Math.PI) / 180,
+        dx = Math.sin(r),
+        dy = -Math.cos(r);
+      const out = new Float32Array(w * h * 3);
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const t = Math.min(1, Math.max(0, ((x + 0.5) / w - 0.5) * dx + ((y + 0.5) / h - 0.5) * dy + 0.5));
+          const [L, A, B] = [0, 1, 2].map((i) => a[i] + (b[i] - a[i]) * t);
+          const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3,
+            m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3,
+            s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+          const lin = [
+            4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+            -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+          ];
+          lin.forEach((c, i) => {
+            const v = Math.abs(c) <= 0.0031308 ? c * 12.92 : Math.sign(c) * (1.055 * Math.abs(c) ** (1 / 2.4) - 0.055);
+            out[(y * w + x) * 3 + i] = Math.min(1, Math.max(0, v)) * 255;
+          });
+        }
+      return out;
+    }
+
+    // One backdrop through the shared producer, read back from its 2D canvas.
+    async function backdropPixels(props, cssWidth = 160, cssHeight = 96) {
+      const canvas = document.createElement("canvas");
+      document.body.append(canvas);
+      const done = new Promise((resolve) => {
+        const slot = registerStatic(canvas, (ok) => resolve({ ok, slot }));
+        slot.update({ source: backdrop, cssWidth, cssHeight, values: (w, h) => backdropUniforms(props, w, h) });
+      });
+      const { ok, slot } = await done;
+      slot.dispose();
+      canvas.remove();
+      if (!ok) return null;
+      return { data: canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data, width: canvas.width, height: canvas.height };
+    }
+
+    function residual(a, b) {
+      let sum = 0;
+      for (let i = 0; i < a.data.length; i += 4) for (let c = 0; c < 3; c++) sum += Math.abs(a.data[i + c] - b.data[i + c]);
+      return sum / ((a.data.length / 4) * 3);
+    }
+
+    try {
+      // Every port compiles and links.
+      const canvas = document.createElement("canvas");
+      canvas.width = 400;
+      canvas.height = 300;
+      let lost = 0,
+        restored = 0;
+      const s = createSurface(
+        canvas,
+        () => lost++,
+        () => restored++,
+      );
+      check("WebGL2 context", s);
+      for (const [name, source] of Object.entries({ backdrop, powerUp, halo, blur, areaLight, edgeLight })) check(`${name} compiles and links`, s.use(source));
+
+      // The grain-free gradient matches the CPU reference, at every angle the app uses.
+      for (const colors of [
+        ["#694256", "#302B44"],
+        ["#E4D0DE", "#B9B4CE"],
+        ["#0358F7", "#FA3D1D"],
+      ])
+        for (const angle of [0, 90, 135, 150, 180]) {
+          const px = await backdropPixels({ colors, angle, grainOpacity: 0 });
+          const ref = reference(colors, angle, px.width, px.height);
+          let err = 0;
+          for (let i = 0; i < px.width * px.height; i++) for (let c = 0; c < 3; c++) err += Math.abs(px.data[i * 4 + c] - ref[i * 3 + c]);
+          err /= px.width * px.height * 3;
+          check(`gradient ${colors.join("→")} at ${angle}° within 2/255`, err <= 2, `mean error ${err.toFixed(3)}`);
+        }
+
+      // Grain: none at zero, visible at the default, stronger as it rises.
+      const colors = ["#694256", "#302B44"];
+      const zero = await backdropPixels({ colors, grainOpacity: 0 });
+      let previous = 0;
+      for (const grainOpacity of [0.09, 0.12, 0.45]) {
+        const r = residual(await backdropPixels({ colors, grainOpacity }), zero);
+        check(`grain ${grainOpacity} darkens more than the last`, r > previous && r > 0.5, `mean residual ${r.toFixed(3)}/255`);
+        previous = r;
+      }
+
+      // Cells are grainScale CSS pixels from the top-left, whatever the device pixel ratio.
+      for (const grainScale of [1, 2, 4]) {
+        const px = await backdropPixels({ colors: ["#808080", "#808080"], grainOpacity: 0.45, grainScale });
+        const cell = Math.round(grainScale * dpr);
+        let mismatched = 0,
+          distinct = new Set();
+        for (let y = 0; y < px.height; y++)
+          for (let x = 0; x < px.width; x++) {
+            const i = (y * px.width + x) * 4,
+              j = (Math.floor(y / cell) * cell * px.width + Math.floor(x / cell) * cell) * 4;
+            if (px.data[i] !== px.data[j]) mismatched++;
+            distinct.add(px.data[i]);
+          }
+        check(
+          `grain scale ${grainScale} makes ${cell}-device-pixel cells`,
+          mismatched === 0 && distinct.size > 8,
+          `${mismatched} stray pixels, ${distinct.size} levels`,
+        );
+      }
+
+      // A settled scene draws nothing more and runs no frame loop.
+      const before = staticStats.draws;
+      await wait(1000);
+      check(
+        "settled backdrops stay idle",
+        staticStats.draws === before && subscribers() === 0,
+        `${staticStats.draws - before} draws, ${subscribers()} subscribers`,
+      );
+      check("backdrops share one context", staticStats.contexts === 1, `${staticStats.contexts} contexts`);
+
+      // Animated effects draw into their own context.
+      const read = () => {
+        const gl = s.gl,
+          out = new Uint8Array(400 * 300 * 4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.readPixels(0, 0, 400, 300, gl.RGBA, gl.UNSIGNED_BYTE, out);
+        let max = 0;
+        for (let i = 3; i < out.length; i += 4) max = Math.max(max, out[i]);
+        return max;
+      };
+      const size = { width: 400, height: 300, cssWidth: 400, cssHeight: 300 };
+      const props = { palette: ["#0358F7", "#5092C7", "#E1E1FE", "#FFD400", "#FA3D1D", "#FD02F5"], speed: 0.8, origin: 0.5 };
+      drawPowerUp(s, size, powerUpUniforms(props, 0), null);
+      const atStart = read();
+      const drew = drawPowerUp(s, size, powerUpUniforms(props, 1.5), null);
+      const midway = read();
+      check("PowerUp starts clear and lights up midway", drew && atStart === 0 && midway > 0, `alpha ${atStart} → ${midway}`);
+      const haloRect = { x: 100, y: 75, width: 200, height: 150 };
+      drawPowerUp(s, size, null, { ...haloRect, values: haloUniforms(props, 1, [haloRect.width, haloRect.height], true) });
+      check("PowerUp halo draws in its region", read() > 0);
+
+      s.gl.viewport(0, 0, 400, 300);
+      s.draw(areaLight, areaLightUniforms({ source: { x: 100, y: 100, width: 200, height: 80 } }, 1, 5, true, true, 400, 300));
+      check("AreaLight draws", read() > 0);
+      s.draw(areaLight, areaLightUniforms({ source: { x: 0, y: 0, width: 0, height: 0 } }, 1, 5, true, true, 400, 300));
+      check("AreaLight without an emitter draws nothing", read() <= 3);
+      const edge = { rectFrame: { x: 50, y: 50, width: 300, height: 200 }, lightStart: { x: 0, y: 0 }, lightEnd: { x: 400, y: 300 } };
+      s.draw(edgeLight, edgeLightUniforms(edge, 2, 400, 300));
+      check("EdgeLight draws", read() > 0);
+      s.draw(edgeLight, edgeLightUniforms({ ...edge, rectFrame: { x: 0, y: 0, width: 0, height: 0 } }, 2, 400, 300));
+      check("EdgeLight with a degenerate rect draws nothing", read() === 0);
+
+      // A lost context stops drawing and comes back with its programs rebuilt.
+      const ext = s.gl.getExtension("WEBGL_lose_context");
+      ext.loseContext();
+      await wait(50);
+      check("context loss is reported", lost === 1 && s.lost && !s.draw(backdrop, {}));
+      ext.restoreContext();
+      for (let i = 0; i < 40 && !restored; i++) await wait(25);
+      s.gl.viewport(0, 0, 400, 300);
+      const again = s.draw(backdrop, backdropUniforms({ colors }, 400, 300));
+      check("a restored context draws again", restored === 1 && again && read() > 0);
+      s.release();
+
+      // Mount and release repeatedly: contexts are given back.
+      let made = 0;
+      for (let i = 0; i < 100; i++) {
+        const c = document.createElement("canvas");
+        const t = createSurface(
+          c,
+          () => {},
+          () => {},
+        );
+        if (t && t.use(backdrop)) made++;
+        t?.release();
+      }
+      check("100 create/release cycles keep working", made === 100, `${made}/100`);
+      await frame();
+    } catch (error) {
+      check("fixture ran", false, String(error?.stack ?? error));
+    }
+    window.results = results;
+  </script>
+</body>
