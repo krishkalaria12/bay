@@ -114,7 +114,8 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
 
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
-    webView?.frame = bounds
+    // Not while the web view is in WebKit's full-screen window: the page shrank to the card's size there.
+    if let view = webView, view.superview === self { view.frame = bounds }
   }
 
   private func emit(_ name: String, _ payload: [String: Any] = [:]) {
@@ -238,10 +239,10 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     case .notInFullscreen:
       showWindowAfterFullscreen()
       // WebKit leaves the web view out of any window when full screen ends some ways (closing its media
-      // presentations did): it comes back to the tab.
-      if let view = webView, view.superview == nil {
-        view.frame = bounds
-        addSubview(view)
+      // presentations did): it comes back to the tab. Either way at the card's size now, which may have changed.
+      if let view = webView {
+        if view.superview == nil { addSubview(view) }
+        if view.superview === self { view.frame = bounds }
       }
       updateHidden()
     default: break
