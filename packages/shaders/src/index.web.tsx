@@ -1,7 +1,7 @@
 import { capabilities, View } from "@bay/platform";
 import type { AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
 export type { Rect, AreaLightPalette, AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
-export const DIA_SPECTRUM = ["#0358F7", "#5092C7", "#E1E1FE", "#FFD400", "#FA3D1D", "#FD02F5"];
+export { DIA_SPECTRUM } from "./constants";
 
 // Metal-specific decoration is excluded from the desktop web host.
 export function AreaLight(_props: AreaLightProps) {

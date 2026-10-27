@@ -2599,15 +2599,17 @@ export const nativeContracts = {
       "DiaAutomationStatus": "\"granted\" | \"denied\" | \"notDetermined\" | \"notRunning\" | \"notInstalled\"",
       "ImportEvent": "({ jobId: string; type: \"progress\" } & ImportProgress) | { jobId: string; type: \"history\"; entries: string }"
     },
-    "shaders/src/index.tsx": {
+    "shaders/src/types.ts": {
       "Rect": "{ x: number; y: number; width: number; height: number }",
       "AreaLightPalette": "\"blue\" | \"red\" | \"pink\" | \"orange\" | \"yellow\" | \"green\" | \"purple\"",
       "AreaLightProps": "ViewProps & {\n  source: Rect | null;\n  cornerRadius?: number;\n  palette?: AreaLightPalette | string[];\n  lift?: number;\n  intensity?: number;\n  falloff?: number;\n  tilt?: [number, number];\n  noiseSeed?: number;\n  introDelay?: number;\n  introDuration?: number;\n  replayKey?: number;\n}",
-      "NativeAreaLightProps": "Omit<AreaLightProps, \"source\" | \"palette\"> & { shapeFrame: number[]; palette?: string[] }",
       "WindowBackdropProps": "ViewProps & {\n  colors: [string, string];\n  vibrancy?: boolean;\n  tintColor?: string;\n  tintAlpha?: number;\n  tintLightness?: number;\n  angle?: number;\n  grainOpacity?: number;\n  grainScale?: number;\n}",
       "EdgeLightProps": "ViewProps & {\n  rectFrame: Rect;\n  cornerRadius?: number;\n  lightStart: { x: number; y: number };\n  lightEnd: { x: number; y: number };\n  lightColor?: string;\n  logoFrame?: Rect | null;\n  animationDuration?: number;\n  animationDelay?: number;\n}",
+      "PowerUpProps": "ViewProps & {\n  palette?: AreaLightPalette | string[];\n  speed?: number;\n  origin?: number;\n  cornerRadius?: number;\n  halo?: Rect | null;\n}"
+    },
+    "shaders/src/index.tsx": {
+      "NativeAreaLightProps": "Omit<AreaLightProps, \"source\" | \"palette\"> & { shapeFrame: number[]; palette?: string[] }",
       "NativeEdgeLightProps": "ViewProps & {\n  rectFrame: number[];\n  cornerRadius?: number;\n  lightStart: number[];\n  lightEnd: number[];\n  lightColor?: string;\n  logoFrame?: number[];\n  animationDuration?: number;\n  animationDelay?: number;\n}",
-      "PowerUpProps": "ViewProps & {\n  palette?: AreaLightPalette | string[];\n  speed?: number;\n  origin?: number;\n  cornerRadius?: number;\n  halo?: Rect | null;\n}",
       "NativePowerUpProps": "Omit<PowerUpProps, \"palette\" | \"halo\"> & { palette?: string[]; haloFrame: number[] }"
     }
   }

@@ -22,6 +22,7 @@ const files = [
   "nncore/src/webkit.ts",
   "sync/src/native.ts",
   "import/src/index.ts",
+  "shaders/src/types.ts",
   "shaders/src/index.tsx",
 ];
 const modules = {},
