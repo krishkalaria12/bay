@@ -10,8 +10,8 @@ import tempfile
 import urllib.request
 
 PACKAGES = {
-    "libsecret-1-dev_0.20.4-2_amd64.deb": "8b3c260998f236751456f73250280f8ddfc1dc5ae719e21ab147345a3b393e9c",
-    "libsecret-1-0_0.20.4-2_amd64.deb": "b34b1471fdf786cc28912b7130d4db00b54807ffe9133fed03673b54651a62d2",
+    "libsecret-1-dev_0.20.4-2_amd64.deb": "8b3c260998f236751456f73250280f8ddfc1dc5ae719e21ab147345a3b393e9c",  # ggignore: public Debian package SHA-256 checksum
+    "libsecret-1-0_0.20.4-2_amd64.deb": "b34b1471fdf786cc28912b7130d4db00b54807ffe9133fed03673b54651a62d2",  # ggignore: public Debian package SHA-256 checksum
 }
 URL = "https://deb.debian.org/debian/pool/main/libs/libsecret/"
 
