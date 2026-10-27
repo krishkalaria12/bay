@@ -228,8 +228,8 @@ public class ShellModule: Module {
       WindowManager.shared.setTrafficLightsCenter(id: id, center: center.flatMap { $0.count == 2 ? NSPoint(x: $0[0], y: $0[1]) : nil })
     }.runOnQueue(.main)
     // "shown", "hover" (only while the pointer is over the window's top) or "hidden"; always shown in full screen.
-    AsyncFunction("setTrafficLightsMode") { (id: String, mode: String) in
-      WindowManager.shared.setTrafficLightsMode(id: id, mode: mode)
+    AsyncFunction("setTrafficLightsMode") { (id: String, mode: String, color: String?) in
+      WindowManager.shared.setTrafficLightsMode(id: id, mode: mode, color: color.flatMap(NSColor.init(hex:)))
     }.runOnQueue(.main)
     AsyncFunction("focusWindow") { (id: String) in WindowManager.shared.focus(id: id) }.runOnQueue(.main)
     // The dragged tab's picture under the pointer (DragPreview). Rects and points are in the source window from its

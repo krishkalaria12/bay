@@ -251,7 +251,7 @@ const Shell = requireNativeModule<{
   closeWindow(id: string): Promise<void>;
   focusWindow(id: string): Promise<void>;
   setTrafficLightsCenter(id: string, center: [number, number] | null): Promise<void>;
-  setTrafficLightsMode(id: string, mode: TrafficLightsMode): Promise<void>;
+  setTrafficLightsMode(id: string, mode: TrafficLightsMode, color: string | null): Promise<void>;
   dragPreviewBegin?(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;
   dragPreviewPage?(base64: string, frame: Rect4): Promise<void>;
   dragPreviewUpdate?(shape: DragPreviewShape, point: [number, number]): Promise<void>;
@@ -325,7 +325,7 @@ export const setTrafficLightsCenter = (id: string, center: [number, number] | nu
  * them); "hidden" (Arc's with the sidebar closed, shown with its peek).
  */
 export type TrafficLightsMode = "shown" | "hover" | "hidden";
-export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode) => Shell.setTrafficLightsMode(id, mode);
+export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode, color?: string) => Shell.setTrafficLightsMode(id, mode, color ?? null);
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›

@@ -74,9 +74,10 @@ function BrowserWindow() {
   const addressInSidebar = useAddressBarInSidebar();
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, right, topTabs, peekOut });
+  const lightsColor = theme.windowTint[0];
   useEffect(() => {
-    void setTrafficLightsMode(windowId, lights);
-  }, [windowId, lights]);
+    void setTrafficLightsMode(windowId, lights, lightsColor);
+  }, [windowId, lights, lightsColor]);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);

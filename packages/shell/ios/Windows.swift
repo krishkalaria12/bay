@@ -287,10 +287,16 @@ final class WindowManager: NSObject, NSWindowDelegate {
   // the sidebar on the right. "hidden": the sidebar closed, they show only with its peek ("shown" then), as Arc has
   // it. Kept per id, as the centres are.
   private var lightsModes: [String: String] = [:]
+  private var lightsColors: [String: NSColor] = [:]
   private var lightsStrips: [String: TrafficLightsHoverStrip] = [:]
 
-  func setTrafficLightsMode(id: String, mode: String) {
+  func setTrafficLightsMode(id: String, mode: String, color: NSColor?) {
     lightsModes[id] = mode
+    lightsColors[id] = color
+    if mode == "hover", let strip = lightsStrips[id] {
+      strip.backgroundColor = color ?? .windowBackgroundColor
+      return
+    }
     guard let window = windows[id] else { return }
     applyLightsMode(id: id, window: window, animated: true)
   }
@@ -301,11 +307,15 @@ final class WindowManager: NSObject, NSWindowDelegate {
       return Self.fadeTrafficLights(of: window, hidden: lightsModes[id] == "hidden", animated: animated)
     }
     let strip = TrafficLightsHoverStrip(in: content)
-    strip.onHover = { [weak window] inside in
-      if let window { Self.fadeTrafficLights(of: window, hidden: !inside, animated: true) }
+    strip.backgroundColor = lightsColors[id] ?? .windowBackgroundColor
+    strip.onHover = { [weak window, weak strip] inside in
+      guard let window else { return }
+      strip?.setRevealed(inside && !window.styleMask.contains(.fullScreen), animated: true)
+      Self.fadeTrafficLights(of: window, hidden: !inside, animated: true)
     }
     lightsStrips[id] = strip
     // A window shown (or the setting changed) with the pointer already there shows them.
+    strip.setRevealed(strip.pointerInside && !window.styleMask.contains(.fullScreen), animated: animated)
     Self.fadeTrafficLights(of: window, hidden: !strip.pointerInside, animated: animated)
   }
 
@@ -330,6 +340,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     guard let window = note.object as? NSWindow, let id = id(of: window), let mode = lightsModes[id], mode != "shown" else { return }
     let entering = note.name == NSWindow.willEnterFullScreenNotification
     let hidden = mode == "hidden" || !(lightsStrips[id]?.pointerInside ?? false)
+    lightsStrips[id]?.setRevealed(!entering && !hidden, animated: false)
     Self.fadeTrafficLights(of: window, hidden: !entering && hidden, animated: false)
   }
 
@@ -427,6 +438,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       stopKeepingContentSized(id)
       lightsCenters[id] = nil
       lightsModes[id] = nil
+      lightsColors[id] = nil
       lightsStrips[id] = nil
       auxKinds[id] = nil
       smallIds.remove(id)
@@ -470,6 +482,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     stopKeepingContentSized(id)
     lightsCenters[id] = nil
     lightsModes[id] = nil
+    lightsColors[id] = nil
     lightsStrips[id] = nil
     auxKinds[id] = nil
     smallIds.remove(id)
@@ -1070,18 +1083,38 @@ final class DragPreview {
 final class TrafficLightsHoverStrip: NSView {
   static let height: CGFloat = 40
   var onHover: ((Bool) -> Void)?
+  private let background = Background()
+  var backgroundColor: NSColor {
+    get { background.color }
+    set { background.color = newValue }
+  }
 
   init(in content: NSView) {
     let bounds = content.bounds
     let flipped = content.isFlipped
     super.init(frame: NSRect(x: 0, y: flipped ? 0 : bounds.height - Self.height, width: bounds.width, height: Self.height))
     autoresizingMask = flipped ? [.width, .maxYMargin] : [.width, .minYMargin]
+    background.frame = self.bounds
+    background.autoresizingMask = [.width, .height]
+    background.alphaValue = 0
+    addSubview(background)
     content.addSubview(self)
   }
 
   required init?(coder: NSCoder) { nil }
 
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+  func setRevealed(_ revealed: Bool, animated: Bool) {
+    guard animated else {
+      background.alphaValue = revealed ? 1 : 0
+      return
+    }
+    NSAnimationContext.runAnimationGroup { context in
+      context.duration = 0.15
+      background.animator().alphaValue = revealed ? 1 : 0
+    }
+  }
 
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
@@ -1096,4 +1129,13 @@ final class TrafficLightsHoverStrip: NSView {
 
   override func mouseEntered(with event: NSEvent) { onHover?(true) }
   override func mouseExited(with event: NSEvent) { onHover?(false) }
+
+  private final class Background: NSView {
+    var color = NSColor.windowBackgroundColor { didSet { needsDisplay = true } }
+
+    override func draw(_ dirtyRect: NSRect) {
+      color.setFill()
+      bounds.fill()
+    }
+  }
 }
