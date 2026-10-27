@@ -1,7 +1,8 @@
-// PowerUp in one context: the band into a quarter-size target, blurred 24 CSS pixels in two passes onto the canvas
-// (the native view's layer blur), then the halo unblurred on top in its own viewport.
+// PowerUp in one context: the band into a quarter-size target, blurred 24 CSS pixels in two passes there (the native
+// view's layer blur), stretched onto the canvas, then the halo unblurred on top in its own viewport. Blurring at a
+// quarter of the size costs a sixteenth of the full-size passes, and a 24-point blur has no detail to lose.
 
-import { blur, halo, powerUp } from "./sources/powerUp";
+import { blur, copy, halo, powerUp } from "./sources/powerUp";
 import type { Surface, UniformValues } from "./surface";
 
 type Target = { texture: WebGLTexture; framebuffer: WebGLFramebuffer; width: number; height: number };
@@ -50,6 +51,9 @@ function blurTargets(s: Surface, width: number, height: number): [Target, Target
 
 export type HaloRegion = { x: number; y: number; width: number; height: number; values: UniformValues };
 
+/** Every program a PowerUp frame uses, for `Surface.ready`. */
+export const POWER_UP_SOURCES = [powerUp, blur, copy, halo];
+
 /** Draws one PowerUp frame; false when a program or target failed. */
 export function drawPowerUp(
   s: Surface,
@@ -75,10 +79,13 @@ export function drawPowerUp(
     gl.bindFramebuffer(gl.FRAMEBUFFER, b.framebuffer);
     gl.bindTexture(gl.TEXTURE_2D, a.texture);
     if (!s.draw(blur, { image: 0, texel: [1 / a.width, 0], sigma })) return false;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, size.width, size.height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, a.framebuffer);
     gl.bindTexture(gl.TEXTURE_2D, b.texture);
     if (!s.draw(blur, { image: 0, texel: [0, 1 / b.height], sigma })) return false;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, size.width, size.height);
+    gl.bindTexture(gl.TEXTURE_2D, a.texture);
+    if (!s.draw(copy, { image: 0 })) return false;
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
   if (haloRegion) {

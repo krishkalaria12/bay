@@ -233,7 +233,8 @@ void main() {
 `,
 };
 
-// The band's 24-point Gaussian blur (the native view's CAFilter), one axis per pass over a premultiplied texture.
+// The band's 24-point Gaussian blur (the native view's CAFilter), one axis per pass over a premultiplied texture,
+// both at a quarter of the canvas's size.
 export const blur: Source = {
   uniforms: { image: "i", texel: "v2", sigma: "f" },
   fragment: `${HEADER}
@@ -253,6 +254,17 @@ void main() {
     total += w;
   }
   fragColor = sum / total;
+}
+`,
+};
+
+// The blurred band, stretched from its quarter-size target onto the canvas.
+export const copy: Source = {
+  uniforms: { image: "i" },
+  fragment: `${HEADER}
+uniform sampler2D image;
+void main() {
+  fragColor = texture(image, vec2(uv.x, 1.0 - uv.y));
 }
 `,
 };
