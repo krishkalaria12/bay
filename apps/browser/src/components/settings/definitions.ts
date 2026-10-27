@@ -65,7 +65,6 @@ export const SETTINGS = {
   autoPictureInPicture: { id: "tabs.autoPictureInPicture", pane: "tabs", title: "Automatic Picture in Picture", words: "pip video call" },
   autoGroupMeetingTabs: { id: "tabs.autoGroupMeetingTabs", pane: "tabs", title: "Automatically group tabs for meetings", words: "tab groups" },
   tidyTabTitles: { id: "tabs.tidyTabTitles", pane: "tabs", title: "Tidy tab titles when pinning", words: "tidy short name rename pinned arc max" },
-  tidyTabs: { id: "tabs.tidyTabs", pane: "tabs", title: "Tidy Tabs", words: "tidy tabs group today topic arc max" },
   awakeSites: {
     id: "tabs.awakeSites",
     pane: "tabs",

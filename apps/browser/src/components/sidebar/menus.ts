@@ -444,6 +444,7 @@ export async function openSidebarMenu(windowId: string) {
     { id: "search", title: "Search Tabs…", symbol: "magnifyingglass", ...hint("a", "shift", "command") },
     sep,
     { id: "clean", title: "Clean Up Tabs", symbol: "wand.and.stars", ...hint("k", "option", "command") },
+    { id: "tidy", title: "Tidy Tabs", symbol: "rectangle.stack" },
     { id: "mute", title: muted ? "Unmute All Tabs" : "Mute All Tabs", symbol: muted ? "speaker.wave.2" : "speaker.slash" },
     { id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...hint("k", "shift", "command") },
     sep,
@@ -455,6 +456,7 @@ export async function openSidebarMenu(windowId: string) {
   else if (choice === "newFolder") newPinnedFolderWith(windowId);
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") s.cleanUpTabs(windowId);
+  else if (choice === "tidy") s.tidyTabs(windowId);
   else if (choice === "mute") muteAll(windowId, !muted);
   else if (choice === "closeAll") closeAllTabs(windowId);
 }
@@ -526,6 +528,7 @@ export async function openOverflowMenu(windowId: string) {
     sep,
     { id: "clean", title: "Clean Up Tabs", symbol: "wand.and.stars", ...hint("k", "option", "command") },
     { id: "daily", title: "Clean Up Daily", checked: daily },
+    { id: "tidy", title: "Tidy Tabs", symbol: "rectangle.stack" },
     sep,
     { id: "mute", title: muted ? "Unmute All Tabs" : "Mute All Tabs", symbol: muted ? "speaker.wave.2" : "speaker.slash" },
     { id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...hint("k", "shift", "command") },
@@ -538,6 +541,7 @@ export async function openOverflowMenu(windowId: string) {
   else if (choice.startsWith("cleaned:")) s.restoreCleaned(choice.slice(8), windowId);
   else if (choice === "restoreAll") s.restoreCleaned(undefined, windowId);
   else if (choice === "clean") s.cleanUpTabs(windowId);
+  else if (choice === "tidy") s.tidyTabs(windowId);
   else if (choice === "daily") s.updateSettings({ cleanUpInactiveTabsAfterHours: daily ? null : 24 });
   else if (choice === "mute") muteAll(windowId, !muted);
   else if (choice === "closeAll") closeAllTabs(windowId);

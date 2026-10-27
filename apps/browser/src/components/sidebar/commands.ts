@@ -32,6 +32,9 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
     case "cleanUpTabs":
       s.cleanUpTabs(windowId);
       return true;
+    case "tidyTabs":
+      s.tidyTabs(windowId);
+      return true;
     case "closeAllTabs":
       closeAllTabs(windowId);
       return true;

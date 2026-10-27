@@ -273,7 +273,6 @@ const EDIT_ACTIONS = new Set([
   "setPinnedUrl",
   "cleanUpTabs",
   "tidyTabs",
-  "tidyTodayTabs",
   "createSplit",
   "separateSplit",
   "removeTabFromSplit",
@@ -285,14 +284,7 @@ const EDIT_ACTIONS = new Set([
 
 function editWindow(s: BrowserState, action: string, args: unknown[]): string | undefined {
   if (originWindow && s.windows[originWindow]) return originWindow;
-  if (
-    action === "cleanUpTabs" ||
-    action === "tidyTabs" ||
-    action === "tidyTodayTabs" ||
-    action === "newPinnedFolder" ||
-    action === "pinLocalFiles" ||
-    action === "importSharedCollection"
-  )
+  if (action === "cleanUpTabs" || action === "tidyTabs" || action === "newPinnedFolder" || action === "pinLocalFiles" || action === "importSharedCollection")
     return args[0] as string;
   const focused = s.ui.focusedWindowId;
   if (focused && s.windows[focused]) return focused;

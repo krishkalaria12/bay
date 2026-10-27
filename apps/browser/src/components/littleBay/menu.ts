@@ -19,6 +19,7 @@ export const LITTLE_BAY_DISABLED_COMMANDS = [
   "closeTabGroup",
   "closeAllTabs",
   "cleanUpTabs",
+  "tidyTabs",
   "newTabInGroup",
   "newGroupWithTabs",
   "searchTabs",
