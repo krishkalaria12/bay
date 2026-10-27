@@ -229,13 +229,16 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
 
   // A page's element full screen: WebKit moves the web view into a window of its own, on a Space of its own, and leaves
   // a "Click to Exit Full Screen" placeholder in the tab. A Chromium page takes its window into full screen instead
-  // (NNWindowFullScreen), so nothing of Bay stays behind: the window this page came from is hidden once the page fills
-  // the screen, and shown again as it leaves, so the way back lands on it. Bringing the window back (⌘`, the Window
-  // menu) or showing another tab in it takes the page out of full screen, as it does a Chromium page.
+  // (NNWindowFullScreen), so nothing of Bay stays behind: the window this page came from is taken off the screen once
+  // the page fills it, and put back once the page has left, so the way back lands on it. Off the screen, not transparent:
+  // a transparent window stayed on its desktop and became key when the user swiped there, which took the page out of
+  // full screen. Showing the window again (a link opened from another app) or another tab in it takes the page out,
+  // as it does a Chromium page. A window in full screen itself stays: taking it off the screen would end its Space.
   private func fullscreenChanged(_ state: WKWebView.FullscreenState) {
     switch state {
     case .inFullscreen: hideWindowForFullscreen()
-    case .exitingFullscreen: showWindowAfterFullscreen()
+    // Not as the page starts leaving: put back during the transition, the window joined the full-screen Space and
+    // took the screen's size.
     case .notInFullscreen:
       showWindowAfterFullscreen()
       // WebKit leaves the web view out of any window when full screen ends some ways (closing its media
@@ -250,10 +253,10 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   }
 
   private func hideWindowForFullscreen() {
-    guard fullscreenHidden == nil, let window, let view = webView, view.window !== window else { return }
+    guard fullscreenHidden == nil, let window, !window.styleMask.contains(.fullScreen), let view = webView, view.window !== window
+    else { return }
     fullscreenHidden = window
-    window.alphaValue = 0
-    window.ignoresMouseEvents = true
+    window.orderOut(nil)
     fullscreenKeyObserver = NotificationCenter.default.addObserver(
       forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
     ) { [weak self] _ in self?.leaveFullscreen() }
@@ -264,8 +267,7 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
     fullscreenKeyObserver = nil
     guard let window = fullscreenHidden else { return }
     fullscreenHidden = nil
-    window.alphaValue = 1
-    window.ignoresMouseEvents = false
+    window.orderFront(nil)
   }
 
   // As the page itself leaves: WebKit puts the web view back in the tab (closeAllMediaPresentations left it out).
