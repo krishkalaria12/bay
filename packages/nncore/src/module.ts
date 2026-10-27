@@ -1,4 +1,5 @@
 import { Cef, type EngineBoost } from "./native";
+import { WebKit, isWebKitDownload, isWebKitPermission, webKitListener } from "./webkit";
 
 export type { EngineBoost, EngineBoostStyle } from "./native";
 
@@ -136,8 +137,15 @@ export type ChromeWindowState = {
 };
 export const chromeWindows = () => Cef.chromeWindows();
 export const devWindowAction = (windowNumber: number, action: string) => Cef.devWindow(windowNumber, action);
-export const prepareTabTransfer = (transferKey: string) => Cef.prepareTransfer(transferKey);
-export const releaseTabTransfer = (transferKey: string) => Cef.releaseTransfer(transferKey);
+// Whichever engine the tab's page is in keeps it for the tab's next view.
+export const prepareTabTransfer = (transferKey: string) => {
+  Cef.prepareTransfer(transferKey);
+  WebKit?.prepareTransfer(transferKey);
+};
+export const releaseTabTransfer = (transferKey: string) => {
+  Cef.releaseTransfer(transferKey);
+  WebKit?.releaseTransfer(transferKey);
+};
 export const listComponents = () => Cef.components();
 
 export const beginTracing = () => Cef.beginTracing();
@@ -166,17 +174,30 @@ export const setBoosts = (boosts: EngineBoost[]) => Cef.setBoosts?.(boosts) ?? P
 export const setSearchEngineName = (name: string) => Cef.setSearchEngineName(name);
 export const getDisplayMediaSources = () => Cef.displayMediaSources();
 
-export const onDownload = (listener: (d: Download) => void) => Cef.addListener("onDownload", listener);
-export const cancelDownload = (id: string) => Cef.cancelDownload(id);
-export const pauseDownload = (id: string) => Cef.pauseDownload(id);
-export const resumeDownload = (id: string) => Cef.resumeDownload(id);
+// Downloads and permission prompts from both engines, in one list; a WebKit one's id says so (webkit.ts).
+const bothEngines = <T>(name: "onDownload" | "onPermission" | "onPermissionDismissed", listener: (value: T) => void) => {
+  const chromium = Cef.addListener(name as "onDownload", listener as (d: Download) => void);
+  const webkit = webKitListener(name, listener);
+  return { remove: () => (chromium.remove(), webkit.remove()) };
+};
+const webKitDownload = (action: "cancel" | "pause" | "resume", id: string) => WebKit?.downloadCommand(action, id) ?? Promise.resolve();
 
-export const onPermission = (listener: (p: PermissionRequest) => void) => Cef.addListener("onPermission", listener);
-export const onPermissionDismissed = (listener: (p: { id: string }) => void) => Cef.addListener("onPermissionDismissed", listener);
-export const resolvePermission = (id: string, result: PermissionResult, remember = false) => Cef.resolvePermission(id, result, remember);
+export const onDownload = (listener: (d: Download) => void) => bothEngines("onDownload", listener);
+export const cancelDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("cancel", id) : Cef.cancelDownload(id));
+export const pauseDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("pause", id) : Cef.pauseDownload(id));
+export const resumeDownload = (id: string) => (isWebKitDownload(id) ? webKitDownload("resume", id) : Cef.resumeDownload(id));
+
+export const onPermission = (listener: (p: PermissionRequest) => void) => bothEngines("onPermission", listener);
+export const onPermissionDismissed = (listener: (p: { id: string }) => void) => bothEngines("onPermissionDismissed", listener);
+export const resolvePermission = (id: string, result: PermissionResult, remember = false) =>
+  isWebKitPermission(id) ? (WebKit?.resolvePermission(id, result, remember) ?? Promise.resolve()) : Cef.resolvePermission(id, result, remember);
 
 export type BrowsingDataType = "history" | "siteData" | "cache" | "downloads";
-export const clearBrowsingData = (profile: string, types: BrowsingDataType[], since?: number) => Cef.clearBrowsingData(profile, types, since ?? null);
+export const clearBrowsingData = (profile: string, types: BrowsingDataType[], since?: number) =>
+  Promise.all([Cef.clearBrowsingData(profile, types, since ?? null), WebKit?.clearBrowsingData(profile, types, since ?? null).catch(() => {})]).then(() => {});
 export const releaseProfile = (profile: string) => Cef.releaseProfile(profile);
 // Resolves with the kinds of data that couldn't be deleted (none when it all went).
-export const deleteProfileData = async (profile: string): Promise<string[]> => (await Cef.deleteProfileData(profile))?.remaining ?? ["data"];
+export const deleteProfileData = async (profile: string): Promise<string[]> => {
+  const [chromium, webkit] = await Promise.all([Cef.deleteProfileData(profile), WebKit?.deleteProfileData(profile).catch(() => false) ?? true]);
+  return [...(chromium?.remaining ?? ["data"]), ...(webkit ? [] : ["WebKit data"])];
+};

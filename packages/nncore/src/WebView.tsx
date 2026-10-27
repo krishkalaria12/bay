@@ -5,6 +5,7 @@ import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
 import type { EngineBoostStyle } from "./native";
+import { hasWebKit, type PageEngine } from "./webkit";
 
 export type NavigationState = {
   url: string;
@@ -14,6 +15,8 @@ export type NavigationState = {
   isLoading: boolean;
   themeColor: string | null;
   themeColorSource: "meta" | "header" | "background" | null;
+  /** The page the view has committed to (WebKit only): differs from `url` while a navigation is pending. */
+  committedUrl?: string;
 };
 
 export type MediaState = { playing: boolean; muted: boolean };
@@ -147,6 +150,8 @@ export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 
 export type WebViewProps = ViewProps & {
   url?: string;
+  /** Where the page runs: Chromium (the default) or WebKit (webkit.ts). A view keeps its engine for its life. */
+  engine?: PageEngine;
   profile?: string;
   adoptId?: string;
   /** The app's id for the tab: its browser keeps it while moving between views, and Chrome's tab strips name the
@@ -356,6 +361,8 @@ type NativeHandle = Omit<WebViewHandle, "evaluate" | "loadUrl" | "downloadFavico
 };
 
 const NativeWebView = requireNativeViewManager<NativeProps>("BayCEF");
+let NativeWebKitView: typeof NativeWebView | undefined;
+const webKitView = () => (NativeWebKitView ??= requireNativeViewManager<NativeProps>("BayWebKit"));
 
 const VIEW_RETRIES = 3;
 // Expo's view functions reject with this cause when the view tag has no registered view.
@@ -437,6 +444,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
 
   const nativeProps: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(props)) {
+    if (key === "engine") continue;
     if (key === "url") {
       nativeProps.url = typeof value === "string" ? toEngineUrl(value) : value;
       continue;
@@ -446,8 +454,9 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       map && typeof value === "function" ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent)) : value;
   }
 
+  const Native = props.engine === "webkit" && hasWebKit() ? webKitView() : NativeWebView;
   return (
-    <NativeWebView
+    <Native
       // @ts-expect-error expo view managers accept a ref to their AsyncFunctions
       ref={native}
       {...(nativeProps as NativeProps)}
