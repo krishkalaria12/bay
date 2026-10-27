@@ -169,5 +169,52 @@ class PlatformRoutingTests(unittest.TestCase):
             self.assertTrue(series.is_applied(step, directory))
 
 
+class AppliedDetectionTests(unittest.TestCase):
+    """A step whose files a later step edits is still recognised, so a retried prepare skips it."""
+
+    CREATE = "\n".join(["diff --git a/BRANDING b/BRANDING", "new file mode 100644", "--- /dev/null",
+                        "+++ b/BRANDING", "@@ -0,0 +1,2 @@", "+NAME=Chromium", "+KEEP=1", ""])
+    REWRITE = "\n".join(["diff --git a/BRANDING b/BRANDING", "--- a/BRANDING", "+++ b/BRANDING",
+                         "@@ -1,2 +1,2 @@", "-NAME=Chromium", "+NAME=Bay", " KEEP=1", ""])
+    OTHER = "\n".join(["diff --git a/other.txt b/other.txt", "new file mode 100644", "--- /dev/null",
+                       "+++ b/other.txt", "@@ -0,0 +1 @@", "+new", ""])
+
+    def steps(self, directory):
+        patches = Path(directory) / "patches"
+        patches.mkdir()
+        steps = []
+        for line, (name, text) in enumerate((("create.patch", self.CREATE), ("rewrite.patch", self.REWRITE),
+                                              ("other.patch", self.OTHER)), 1):
+            (patches / name).write_text(text)
+            steps.append(series.Step("chromium", name, line))
+        return patches, steps
+
+    def test_step_rewritten_by_a_later_step_counts_as_applied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            patches, (create, rewrite, other) = self.steps(directory)
+            tree = Path(directory) / "tree"
+            tree.mkdir()
+            with mock.patch.object(series, "HERE", str(patches)):
+                self.assertFalse(series.is_applied(create, str(tree), [rewrite, other]))
+                for step in (create, rewrite):
+                    self.assertIsNone(series.apply_step(step, str(tree)))
+                # A plain reverse check fails: BRANDING no longer reads as create.patch left it.
+                self.assertFalse(series.reverses(create, str(tree)))
+                self.assertTrue(series.is_applied(create, str(tree), [rewrite, other]))
+                self.assertTrue(series.is_applied(rewrite, str(tree), [other]))
+                self.assertFalse(series.is_applied(other, str(tree)))
+                # The scratch check leaves the tree alone.
+                self.assertEqual((tree / "BRANDING").read_text(), "NAME=Bay\nKEEP=1\n")
+
+    def test_created_file_with_other_contents_is_not_applied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            patches, (create, rewrite, other) = self.steps(directory)
+            tree = Path(directory) / "tree"
+            tree.mkdir()
+            (tree / "BRANDING").write_text("NAME=Elsewhere\nKEEP=0\n")
+            with mock.patch.object(series, "HERE", str(patches)):
+                self.assertFalse(series.is_applied(create, str(tree), [rewrite, other]))
+
+
 if __name__ == "__main__":
     unittest.main()

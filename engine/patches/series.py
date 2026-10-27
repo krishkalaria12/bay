@@ -182,13 +182,36 @@ def apply_step(step, tree, strict=True):
     return None if p.returncode == 0 else (p.stdout + p.stderr).strip()
 
 
-def is_applied(step, tree):
-    if step.kind == "layer":
-        p = run([*layer_command(step), "--check"], REPO, dict(os.environ, CHROMIUM_SRC=tree, BAY_ENGINE_PLATFORM=step.target))
-        return p.returncode == 0
+def reverses(step, tree):
     cwd = os.path.join(tree, step.root)
     return run(["git", "apply", "--check", "-R", step.patch], cwd).returncode == 0 or \
         run(["patch", "-p1", "--dry-run", "-R", "-s", "-f", "-i", step.patch], cwd).returncode == 0
+
+
+def is_applied(step, tree, later=()):
+    """Whether `step` is in `tree`. `later` are the steps after it in series, applied or not."""
+    if step.kind == "layer":
+        p = run([*layer_command(step), "--check"], REPO, dict(os.environ, CHROMIUM_SRC=tree, BAY_ENGINE_PLATFORM=step.target))
+        return p.returncode == 0
+    if reverses(step, tree):
+        return True
+    # A later step that edits the same files hides this one from a reverse check: chromium-branding.patch creates
+    # BRANDING and the Linux branding patch rewrites it. Undo the later steps that share files, on a scratch copy.
+    paths = {path for path, _ in step.paths()}
+    overlapping = []
+    for other in later:
+        if other.kind != "layer" and other.root == step.root and paths & {path for path, _ in other.paths()}:
+            overlapping.append(other)
+            paths |= {path for path, _ in other.paths()}
+    if not overlapping:
+        return False
+    with tempfile.TemporaryDirectory(prefix="nn-applied-") as scratch:
+        for path in paths:
+            copy_path(tree, scratch, path, False)
+        for other in reversed(overlapping):
+            # A later step that isn't in the tree doesn't reverse; it leaves the copy as it is.
+            run(["git", "apply", "-R", "--whitespace=nowarn", other.patch], os.path.join(scratch, other.root))
+        return reverses(step, scratch)
 
 
 def phase_of(step):
@@ -240,10 +263,11 @@ def cmd_files(args):
 
 
 def cmd_apply(args):
-    for step in read_series(args.platform):
+    steps = read_series(args.platform)
+    for index, step in enumerate(steps):
         if args.phase and phase_of(step) != args.phase:
             continue
-        if step.kind != "layer" and is_applied(step, SRC):
+        if step.kind != "layer" and is_applied(step, SRC, steps[index + 1:]):
             print(f"already applied {step.name}")
             continue
         error = apply_step(step, SRC, strict=False)
