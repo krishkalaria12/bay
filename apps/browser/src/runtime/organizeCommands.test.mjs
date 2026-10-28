@@ -55,6 +55,7 @@ test("organize parser closes every command and nested option object", () => {
     { method: "returnToPinnedUrl", tabId: "t" },
     { method: "setPinnedUrl", tabId: "t", url: "x.com" },
     { method: "cleanUpTabs", windowId: "w", options: { inactiveForMs: 0, spaceId: "s" } },
+    { method: "tidyTabs", windowId: "w" },
     { method: "restoreCleaned", windowId: "w", entryId: "e" },
   ];
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(ORGANIZE_COMMAND_METHODS));
@@ -132,6 +133,8 @@ test("organize commands run group, folder, placement and cleanup reducers", () =
   assert.ok(entry);
   const restored = run(store, { method: "restoreCleaned", windowId, entryId: entry.id });
   assert.equal(s().tabs[restored].url, entry.tab.url);
+  // Tidy Tabs runs its reducer; the grouping itself is store/tidyTabs.test.mjs's.
+  assert.equal(run(store, { method: "tidyTabs", windowId }), null);
   assert.equal(browserCommandResultKind("restoreCleaned"), "optionalId");
   for (const method of ["createGroup", "groupTabs", "duplicateGroup", "newTabInGroup", "newPinnedFolder"]) assert.equal(browserCommandResultKind(method), "id");
 });
@@ -166,6 +169,7 @@ test("organize commands reject references across private and space boundaries wi
     { method: "setSelection", windowId: privateWindow, tabIds: [a] },
     { method: "setMuted", tabIds: [a, privateTab], muted: true },
     { method: "cleanUpTabs", windowId: privateWindow, options: { spaceId: other } },
+    { method: "tidyTabs", windowId: "missing" },
     { method: "restoreCleaned", windowId, entryId: privateEntry.id },
     { method: "restoreCleaned", windowId: privateWindow, entryId: "missing" },
   ]) {

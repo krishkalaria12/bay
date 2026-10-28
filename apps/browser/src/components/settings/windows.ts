@@ -20,6 +20,7 @@ export type SettingsPane =
   | "autofill"
   | "extensions"
   | "search"
+  | "engines"
   | "shortcuts"
   | "links"
   | "liveFolders"
@@ -68,6 +69,10 @@ export function openSettings(pane?: SettingsPane, spaceId?: string | null) {
   void openWindow(SETTINGS_WINDOW_ID, { kind: "settings", title: "Settings", ...(pane && { pane, ...(spaceId && { spaceId }) }) });
 }
 
-export function openImport() {
+// The browser the import window shows first, when it was opened for one (onboarding's "Where are you coming from?").
+export const useImportRequest = create<{ browserId: string | null }>(() => ({ browserId: null }));
+
+export function openImport(browserId?: string) {
+  useImportRequest.setState({ browserId: browserId ?? null });
   void openWindow(IMPORT_WINDOW_ID, { kind: "import", title: "Import from Another Browser" });
 }

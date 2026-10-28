@@ -19,6 +19,7 @@ const files = [
   "nncore/src/swipe.tsx",
   "nncore/src/WebView.tsx",
   "nncore/src/NativeWebView.tsx",
+  "nncore/src/webkit.ts",
   "sync/src/native.ts",
   "import/src/index.ts",
   "shaders/src/index.tsx",

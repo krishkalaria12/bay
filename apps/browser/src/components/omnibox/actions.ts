@@ -6,6 +6,7 @@ import { isBookmarked } from "../../store/bookmarks";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { activeTab, bookmarkSpaceId } from "../../store/model";
+import { canSwitchEngine, tabEngine } from "../../store/engines";
 import { isDeveloperUrl, siteKey } from "../developer/sites";
 import type { Tab } from "../../store/types";
 import { isInternalTab } from "../pages/urls";
@@ -30,7 +31,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "spaces" | "boost" | "boosted";
+  needs?: "page" | "site" | "tab" | "spaces" | "boost" | "boosted" | "engine";
   available?: (context: Context) => boolean;
 };
 
@@ -53,7 +54,8 @@ const DEFS: ActionDef[] = [
   { command: "duplicateTab", title: "Duplicate Tab", icon: "plus.square.on.square", needs: "tab" },
   { command: "renameTab", title: "Rename Tab", icon: "pencil", needs: "tab" },
   { command: "searchTabs", title: "Search Tabs", icon: "magnifyingglass", hint: "⇧⌘A" },
-  { command: "cleanUpTabs", title: "Clean Up Tabs", icon: "sparkles", hint: "⌥⌘K", keywords: ["tidy tabs"] },
+  { command: "cleanUpTabs", title: "Clean Up Tabs", icon: "sparkles", hint: "⌥⌘K" },
+  { command: "tidyTabs", title: "Tidy Tabs", icon: "rectangle.stack", keywords: ["group tabs", "organize tabs", "group by site"] },
   { command: "newGroupWithTabs", title: "New Group with Tab", icon: "folder.badge.plus", hint: "⌃⌘N", keywords: ["tab group"], needs: "tab" },
   { command: "reload", title: "Reload Page", icon: "arrow.clockwise", hint: "⌘R", keywords: ["refresh"], needs: page },
   { command: "forceReload", title: "Force Reload Page", icon: "arrow.clockwise", hint: "⇧⌘R", keywords: ["hard reload", "hard refresh"], needs: page },
@@ -63,6 +65,13 @@ const DEFS: ActionDef[] = [
     icon: "speaker.slash",
     keywords: ["mute", "unmute", "silence"],
     needs: page,
+  },
+  {
+    command: "togglePageEngine",
+    title: ({ s, tab }) => (tab && tabEngine(s, tab.id) === "webkit" ? "Open Page in Chromium" : "Open Page in WebKit"),
+    icon: "safari",
+    keywords: ["webkit", "chromium", "safari", "engine", "drm", "netflix", "protected video"],
+    needs: "engine",
   },
   { command: "copyUrl", title: "Copy URL", icon: "link", hint: "⇧⌘C", keywords: ["copy link"], needs: page },
   { command: "copyUrlAsMarkdown", title: "Copy URL as Markdown", icon: "link", hint: "⌥⇧⌘C", keywords: ["markdown link"], needs: page },
@@ -250,6 +259,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     if (d.needs === "spaces" && w?.incognito) continue;
     if (d.needs === "boost" && !boostHost(tab?.url)) continue;
     if (d.needs === "boosted" && !siteHasBoosts(tab?.url)) continue;
+    if (d.needs === "engine" && !canSwitchEngine(tab?.url)) continue;
     out.push({
       id: actionId(d),
       title: typeof d.title === "string" ? d.title : d.title(c),

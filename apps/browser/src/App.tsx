@@ -80,9 +80,10 @@ function BrowserWindow() {
   const captionCenter = showStrip ? TOP_STRIP_HEIGHT / 2 : layout.cardTop + layout.toolbarHeight / 2;
   const [peekOut, setPeekOut] = useState(false);
   const lights = trafficLightsMode({ addressInSidebar, fullscreen, sidebarOpen, right, topTabs, peekOut });
+  const lightsColor = theme.windowTint[0];
   useEffect(() => {
-    void setTrafficLightsMode(windowId, lights);
-  }, [windowId, lights]);
+    void setTrafficLightsMode(windowId, lights, lightsColor);
+  }, [windowId, lights, lightsColor]);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const width = size.width;
   const sidebarWidth = useSidebarWidth(windowId);

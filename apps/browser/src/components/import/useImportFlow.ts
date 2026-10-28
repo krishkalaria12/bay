@@ -7,7 +7,7 @@ import { APP_NAME } from "../../lib/constants";
 import { browserRead } from "../../store/read";
 import { createSpace } from "../../runtime/spaceActions";
 import type { SpaceColor } from "../../store/types";
-import { IMPORT_WINDOW_ID } from "../settings/windows";
+import { IMPORT_WINDOW_ID, useImportRequest } from "../settings/windows";
 import {
   applyResult,
   applyArcProfile,
@@ -59,6 +59,7 @@ export function useImportFlow() {
   const abort = useRef<AbortController | null>(null);
   const choice = useRef(0);
   const checkingUnlock = useRef(false);
+  const requested = useImportRequest((s) => s.browserId);
 
   const recheckAccess = async () => {
     if (!api) return;
@@ -483,6 +484,12 @@ export function useImportFlow() {
     };
   }, [step, diaStatus, api]);
 
+  // Opened again for another browser while it shows the list: switch to that one.
+  useEffect(() => {
+    const b = requested ? browsers.find((x) => x.id === requested) : undefined;
+    if (b && step === "choose" && b.id !== source?.id) choose(b);
+  }, [requested]);
+
   useEffect(() => {
     if (!api) return setStep("choose");
     void api
@@ -490,7 +497,10 @@ export function useImportFlow() {
       .then((list) => {
         const shown = importable(list);
         setBrowsers(shown);
-        const first = shown.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ?? shown[0];
+        const first =
+          shown.find((b) => b.id === useImportRequest.getState().browserId) ??
+          shown.find((b) => !b.needsFullDiskAccess && !b.requiresExport && b.family !== "automation") ??
+          shown[0];
         if (first) choose(first);
         setStep("choose");
       })

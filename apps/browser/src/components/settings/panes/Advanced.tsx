@@ -51,17 +51,6 @@ export function AdvancedPane() {
         <BoostsRow />
       </Group>
 
-      <SectionHeader title="Performance" />
-      <Group>
-        <Row
-          settingId={SETTINGS.batterySaver.id}
-          title={SETTINGS.batterySaver.title}
-          description="On battery or in Low Power Mode, pause background tabs that keep the processor busy."
-        >
-          <Toggle value={settings.batterySaver} onChange={(v) => reportBrowserCommand(updateSettings({ batterySaver: v }))} />
-        </Row>
-      </Group>
-
       <SectionHeader title="Data" />
       <Group>
         <Row settingId={SETTINGS.history.id} title={SETTINGS.history.title} description="Every page you visited, by day.">

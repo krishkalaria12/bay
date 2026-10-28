@@ -35,4 +35,5 @@ export const returnToPinnedUrl = (tabId: string) => dispatchBrowserCommand({ met
 export const setPinnedUrl = (tabId: string, url?: string) => dispatchBrowserCommand({ method: "setPinnedUrl", tabId, url });
 export const cleanUpTabs = (windowId: string, options?: { inactiveForMs?: number; spaceId?: string }) =>
   dispatchBrowserCommand({ method: "cleanUpTabs", windowId, options });
+export const tidyTabs = (windowId: string) => dispatchBrowserCommand({ method: "tidyTabs", windowId });
 export const restoreCleaned = (windowId: string, entryId?: string) => dispatchBrowserCommand({ method: "restoreCleaned", windowId, entryId });

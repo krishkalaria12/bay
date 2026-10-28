@@ -1,11 +1,9 @@
 import { listTasks, onSystemState, releaseProfile, systemState, type SystemState, type WebViewHandle } from "@bay/nncore";
 import { onAppEvent, onWindowEvent } from "@bay/shell";
 import { create } from "zustand";
-import { pageOf, usePages } from "../components/layout/pageState";
-import { showToast } from "../components/layout/splitActions";
+import { pageOf } from "../components/layout/pageState";
 import { useMedia } from "../components/media/state";
 import { isInternalTab } from "../components/pages";
-import { openSettings } from "../components/settings/windows";
 import { useBrowserRead as useBrowser } from "../store/read";
 import type { BrowserProjection as BrowserState } from "../runtime/projection";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
@@ -15,7 +13,7 @@ import { splitOf } from "../store/splits";
 import { applyHeldReports } from "./nativeEvents";
 import { everySlowly } from "./slowTimers";
 import { webviews } from "./webviews";
-import { FREEZE_SWEEP_MS, LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
+import { LIFECYCLE_EVAL_TIMEOUT_MS, LIFECYCLE_SWEEP_MS } from "./constants";
 import { siteKeptAwake } from "./awakeSites";
 
 export const POLICY = {
@@ -23,17 +21,13 @@ export const POLICY = {
   idleMs: 2 * 60 * 60_000,
   profileIdleMs: 2 * 60 * 60_000,
   perSweep: 6,
-  busyCpu: 10,
-  freezeAfterMs: 60_000,
 };
 
-// Whether a page is frozen is the engine's alone (showing a page unfreezes it), so nothing here keeps a copy.
 type Lifecycle = {
   discarded: Record<string, true>;
-  batterySaver: boolean;
 };
 
-export const useLifecycle = create<Lifecycle>()(() => ({ discarded: {}, batterySaver: false }));
+export const useLifecycle = create<Lifecycle>()(() => ({ discarded: {} }));
 
 export const useIsSleeping = (tabId: string) => useLifecycle((l) => !!l.discarded[tabId]);
 
@@ -53,7 +47,6 @@ function setAppActive(active: boolean) {
 const hiddenAt = new Map<string, number>();
 const unusedSince = new Map<string, number>();
 const loadedProfiles = new Set<string>();
-const busyStreak = new Map<string, number>();
 
 let system: SystemState | null = null;
 let systemOverride: Partial<SystemState> | null = null;
@@ -162,7 +155,6 @@ export function noteGone(tabId: string) {
 }
 
 function forget(tabId: string, all: boolean) {
-  busyStreak.delete(tabId);
   if (all) hiddenAt.delete(tabId);
   const l = useLifecycle.getState();
   if (l.discarded[tabId]) useLifecycle.setState({ discarded: omit(l.discarded, tabId) });
@@ -251,79 +243,6 @@ function releaseUnusedProfiles() {
   }
 }
 
-// MARK: Battery Saver
-
-function updateBatterySaver(announce: boolean) {
-  const sys = currentSystem();
-  const on = store().settings.batterySaver && !!sys && (sys.onBattery || sys.lowPowerMode);
-  if (on === useLifecycle.getState().batterySaver) return;
-  useLifecycle.setState({ batterySaver: on });
-  if (!on) thawAll();
-  const windowId = store().ui.focusedWindowId;
-  if (!announce || !windowId || !store().windows[windowId]) return;
-  if (on) {
-    showToast(windowId, "Battery Saver Mode Activated", "Busy background tabs are paused.", {
-      icon: "battery.25",
-      action: { title: "Settings", run: () => openSettings("advanced") },
-    });
-  } else {
-    showToast(windowId, "Battery Saver Mode Deactivated", undefined, { icon: "battery.100.bolt" });
-  }
-}
-
-// Thawing a page that isn't frozen does nothing, and shown pages never are.
-function thawAll() {
-  const shown = shownTabIds(store());
-  for (const id of loadedTabIds()) if (!shown.has(id)) void webviews.get(id)?.setFrozen(false);
-  busyStreak.clear();
-}
-
-let freezing = false;
-
-export async function freezeBusyTabs(overrides: Partial<typeof POLICY> = {}): Promise<string[]> {
-  if (freezing) return [];
-  freezing = true;
-  const frozen: string[] = [];
-  try {
-    const policy = { ...POLICY, ...overrides };
-    await listTasks();
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const tasks = await listTasks();
-    const s = store();
-    const shown = shownTabIds(s);
-    const browsers = usePages.getState().browsers;
-    const cpu = new Map<string, number>();
-    for (const task of tasks) {
-      if (task.cpu < 0 || task.browserIds.some((b) => shown.has(browsers[b] ?? ""))) continue;
-      for (const b of task.browserIds) {
-        const tabId = browsers[b];
-        if (tabId) cpu.set(tabId, Math.max(cpu.get(tabId) ?? 0, task.cpu));
-      }
-    }
-    const now = activeClock();
-    for (const id of loadedTabIds()) {
-      if (shown.has(id)) continue;
-      const streak = (cpu.get(id) ?? 0) >= policy.busyCpu ? (busyStreak.get(id) ?? 0) + 1 : 0;
-      busyStreak.set(id, streak);
-      if (streak < 2 || now - (hiddenAt.get(id) ?? now) < policy.freezeAfterMs || keepAliveReason(s, id)) continue;
-      if (await freezeTab(id)) frozen.push(id);
-    }
-  } finally {
-    freezing = false;
-  }
-  return frozen;
-}
-
-export async function freezeTab(id: string): Promise<boolean> {
-  const handle = webviews.get(id);
-  if (!handle || !useLifecycle.getState().batterySaver) return false;
-  applyHeldReports();
-  const s = store();
-  if (shownTabIds(s).has(id) || keepAliveReason(s, id) || siteKeptAwake(s.tabs[id]?.url, s.settings.awakeSites)) return false;
-  await handle.setFrozen(true);
-  return true;
-}
-
 // MARK: Launch
 
 export function reloadRecentTabs(sys: SystemState) {
@@ -367,23 +286,18 @@ export function startTabLifecycle() {
     const shown = shownTabIds(s);
     const now = activeClock();
     for (const id of lastShown) if (!shown.has(id)) hiddenAt.set(id, now);
-    for (const id of shown) {
-      hiddenAt.delete(id);
-      busyStreak.delete(id);
-    }
+    for (const id of shown) hiddenAt.delete(id);
     for (const id of webviews.keys()) if (!shown.has(id) && !hiddenAt.has(id)) hiddenAt.set(id, now);
     lastShown = shown;
   };
   track(store());
   useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows || s.splits !== prev.splits) track(s);
-    if (s.settings.batterySaver !== prev.settings.batterySaver) updateBatterySaver(false);
   });
 
   const onSystem = (state: SystemState) => {
     const pressureRose = state.memoryPressure !== "normal" && state.memoryPressure !== system?.memoryPressure;
     system = state;
-    updateBatterySaver(true);
     if (pressureRose) void sweep();
   };
   void Promise.resolve()
@@ -391,7 +305,6 @@ export function startTabLifecycle() {
     .then(
       (state) => {
         system = state;
-        updateBatterySaver(false);
         onSystemState(onSystem);
         setTimeout(() => reloadRecentTabs(currentSystem()!), 3000);
       },
@@ -405,21 +318,12 @@ export function startTabLifecycle() {
       void sweep();
     },
   });
-  // Only while Battery Saver is on: no timer otherwise.
-  everySlowly({
-    every: FREEZE_SWEEP_MS,
-    run: () => void freezeBusyTabs(),
-    needed: () => useLifecycle.getState().batterySaver,
-    watch: (changed) => useLifecycle.subscribe(changed),
-  });
 
   if (__DEV__) {
     (globalThis as { nnLifecycle?: unknown }).nnLifecycle = {
       policy: POLICY,
       sweep,
       sleepTab,
-      freezeBusyTabs,
-      freezeTab,
       reloadRecentTabs,
       state: () => ({
         ...useLifecycle.getState(),
@@ -453,7 +357,6 @@ export function startTabLifecycle() {
           }),
       simulate: (patch: Partial<SystemState> | null) => {
         systemOverride = patch;
-        updateBatterySaver(true);
       },
     };
   }

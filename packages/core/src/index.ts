@@ -16,4 +16,3 @@ export * from "./suggest.ts";
 export * from "./suggestFetcher.ts";
 export * from "./textFragment.ts";
 export * from "./tidyDownloads.ts";
-export * from "./tidyTabs.ts";

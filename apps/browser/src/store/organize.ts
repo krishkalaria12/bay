@@ -61,10 +61,8 @@ export type OrganizeSlice = {
   newTabInGroup(groupId: string, url?: string): string;
   moveGroupToBookmarksBar(groupId: string): void;
 
-  /** Groups today's tabs by topic into tab groups. Pinned tabs and existing groups are left alone. */
-  tidyTabs(windowId?: string): number;
-  /** Alias for tidyTabs. */
-  tidyTodayTabs(windowId?: string): number;
+  /** Groups the tabs used today by site into tab groups; the number of groups made. Pinned tabs and groups stay. */
+  tidyTabs(windowId: string): number;
   /** Cleans up the tabs of the space the window shows, or of `spaceId`. */
   cleanUpTabs(windowId: string, options?: { inactiveForMs?: number; spaceId?: string }): number;
   /** The automatic clean up (Arc's archive): every window's spaces, each after its own time. */
@@ -493,22 +491,14 @@ function hostOfTab(tab: Tab): string {
   }
 }
 
-function tidyTodayTabsImpl(get: () => BrowserState, set: (patch: Partial<BrowserState>) => void, windowId?: string): number {
-  const s = get();
-  const resolved = windowId ?? s.ui.focusedWindowId ?? s.windowOrder[0];
-  if (!resolved) return 0;
-  const w = s.windows[resolved];
-  if (!w) return 0;
-  const actualWindowId = resolved;
-  const spaceId = w.spaceId;
-  const view = viewTabIds(s, actualWindowId, spaceId);
+function tidyingTabs(s: BrowserState, windowId: string): [BrowserState, number] {
+  const w = s.windows[windowId];
+  if (!w) return [s, 0];
+  const today = new Date().setHours(0, 0, 0, 0);
   const grouped = new Set(Object.values(s.groups).flatMap((g) => g.tabIds));
-  const candidates = view.filter((id) => {
+  const candidates = viewTabIds(s, windowId, w.spaceId).filter((id) => {
     const t = s.tabs[id];
-    if (!t || !t.url) return false;
-    if (pinnedPage(t)) return false;
-    if (grouped.has(id)) return false;
-    return true;
+    return !!t?.url && !pinnedPage(t) && !grouped.has(id) && Math.max(t.lastActiveAt, t.createdAt) >= today;
   });
 
   const clusters = new Map<string, string[]>();
@@ -525,7 +515,7 @@ function tidyTodayTabsImpl(get: () => BrowserState, set: (patch: Partial<Browser
   }
 
   let next = s;
-  const created: string[] = [];
+  let made = 0;
   for (const ids of clusters.values()) {
     if (ids.length < 2) {
       leftovers.push(...ids);
@@ -533,15 +523,14 @@ function tidyTodayTabsImpl(get: () => BrowserState, set: (patch: Partial<Browser
     }
     const [state, id] = withGroup(next, ids, { pinned: false });
     next = state;
-    if (id) created.push(id);
+    if (id) made++;
   }
   if (leftovers.length >= 2) {
     const [state, id] = withGroup(next, leftovers, { pinned: false, name: "Other" });
     next = state;
-    if (id) created.push(id);
+    if (id) made++;
   }
-  if (created.length) set(next);
-  return created.length;
+  return [next, made];
 }
 
 export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSlice> = (set, get) => ({
@@ -724,11 +713,9 @@ export const createOrganizeSlice: StateCreator<BrowserState, [], [], OrganizeSli
   },
 
   tidyTabs(windowId) {
-    return tidyTodayTabsImpl(get, set, windowId);
-  },
-
-  tidyTodayTabs(windowId) {
-    return tidyTodayTabsImpl(get, set, windowId);
+    const [next, made] = tidyingTabs(get(), windowId);
+    if (made) set(next);
+    return made;
   },
 
   cleanUpTabs(windowId, options = {}) {

@@ -1,5 +1,6 @@
 import { Pressable, ScrollView, TextInput, View, capabilities, isWindows } from "@bay/platform";
 import { getNativeHostInfo } from "@bay/platform/nativeBridge";
+import { hasWebKit } from "@bay/nncore";
 import { onWindowEvent, Symbol, WindowDragRegion, type OpenWindowOptions } from "@bay/shell";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text } from "react-native";
@@ -13,6 +14,7 @@ import { AppearancePane } from "./panes/Appearance";
 import { CalendarPane } from "./panes/Calendar";
 import { GeneralPane } from "./panes/General";
 import { LinksPane } from "./panes/Links";
+import { EnginesPane } from "./panes/Engines";
 import { LiveFoldersPane } from "./panes/LiveFolders";
 import { ExtensionsPane } from "./panes/Extensions";
 import { PasswordsPane } from "./panes/Passwords";
@@ -46,6 +48,9 @@ const SECTIONS: Item[][] = [
     { id: "spaces", title: "Spaces", icon: "square.stack.fill", color: "#AF52DE", words: "profiles theme color pins" },
     { id: "liveFolders", title: "Live Folders", icon: "dot.radiowaves.left.and.right", color: "#FF9F0A", words: "github pull requests notion documents" },
     { id: "links", title: "Links", icon: "macwindow.on.rectangle", color: "#64D2FF", words: "little bay small window other apps" },
+    ...(hasWebKit()
+      ? [{ id: "engines" as const, title: "Engines", icon: "safari.fill", color: "#0A84FF", words: "webkit chromium netflix streaming drm protected video" }]
+      : []),
     { id: "passwords", title: "Passwords", icon: "key.fill", color: "#8E8E93", words: "passkeys logins" },
     { id: "autofill", title: "Autofill", icon: "creditcard.fill", color: "#30D158", words: "addresses cards payment" },
     { id: "privacy", title: "Privacy", icon: "hand.raised.fill", color: "#0A84FF", words: "security cookies tracking permissions clear data ads" },
@@ -310,6 +315,8 @@ function Pane({ pane, spaceId }: { pane: SettingsPane; spaceId: string | null })
       return <ShortcutsPane />;
     case "links":
       return <LinksPane />;
+    case "engines":
+      return hasWebKit() ? <EnginesPane /> : <GeneralPane />;
     case "liveFolders":
       return <LiveFoldersPane />;
     case "calendar":

@@ -220,11 +220,14 @@
   );
   const mediaEvents = ["play", "playing", "pause", "ended", "volumechange", "emptied", "seeked", "ratechange", "loadedmetadata", "timeupdate"];
   for (const e of mediaEvents) document.addEventListener(e, onMediaEvent, true);
+  // Others that follow media the page never adds to the document (Protected video, below).
+  const detachedMediaWatchers = [];
   const play = HTMLMediaElement.prototype.play;
   HTMLMediaElement.prototype.play = function () {
     if (!tracked.has(this) && !this.isConnected) {
       tracked.add(this);
       for (const e of mediaEvents) this.addEventListener(e, onMediaEvent);
+      for (const watch of detachedMediaWatchers) guard(watch)(this);
     }
     return play.apply(this, arguments);
   };
@@ -749,6 +752,83 @@
     };
   };
 
+  // Protected video: Chromium here has no Widevine, so a player that needs a DRM system it can't have stalls. Tell the
+  // app once (it offers to open the page in WebKit, apps/browser lib/engines.ts) when a refused Widevine, PlayReady
+  // or FairPlay request is followed by playback that tried and didn't start, not on a capability check alone.
+  try {
+    const NavigatorType = window.Navigator;
+    const requestAccess = NavigatorType && NavigatorType.prototype.requestMediaKeySystemAccess;
+    if (typeof requestAccess === "function") {
+      const protectedSystem = /^com\.(widevine\.alpha|microsoft\.playready|apple\.fps)/;
+      const { test } = RegExp.prototype;
+      const then = Promise.prototype.then;
+      const setTimer = window.setTimeout;
+      const GRACE_MS = 5000;
+      const KEYS_GRACE_MS = 2000;
+      const MEDIA_ERR_DECODE = 3;
+      let drmSent = false;
+      let refused = "";
+      const attempted = new Set();
+      const needsProtectedPlayback = (keySystem) => {
+        if (drmSent) return;
+        drmSent = true;
+        send("drm", { keySystem });
+      };
+      const progressed = (m) => m.readyState >= 2 && m.currentTime > 0;
+      const anyProgressed = () => [...attempted, ...document.querySelectorAll("video, audio")].some(progressed);
+      const after = (ms, fn) => apply(setTimer, window, [guard(fn), ms]);
+      const stalled = (m) => !m.paused && !m.ended && !progressed(m);
+      const judgeAttempt = (m) =>
+        after(GRACE_MS, () => {
+          if (refused && stalled(m)) needsProtectedPlayback(refused);
+        });
+      const onAttempt = (m) => {
+        if (attempted.size >= 16) attempted.delete(attempted.values().next().value);
+        attempted.add(m);
+        judgeAttempt(m);
+      };
+      const onNeedsKey = (m) =>
+        after(KEYS_GRACE_MS, () => {
+          if (!m.mediaKeys && !progressed(m)) needsProtectedPlayback(refused);
+        });
+      const onDrmMediaEvent = (e) => {
+        const m = e.target;
+        if (drmSent || !(m instanceof HTMLMediaElement)) return;
+        if (e.type === "play") onAttempt(m);
+        else if (e.type === "encrypted" || e.type === "waitingforkey") onNeedsKey(m);
+        else if (e.type === "error" && refused && m.error && m.error.code === MEDIA_ERR_DECODE) needsProtectedPlayback(refused);
+      };
+      const drmMediaEvents = ["play", "encrypted", "waitingforkey", "error"];
+      for (const type of drmMediaEvents) document.addEventListener(type, guard(onDrmMediaEvent), true);
+      detachedMediaWatchers.push((m) => {
+        for (const type of drmMediaEvents) m.addEventListener(type, guard(onDrmMediaEvent));
+      });
+      const onRefused = (keySystem, activated) => {
+        if (drmSent) return;
+        if (!refused) refused = keySystem;
+        for (const m of attempted) if (stalled(m)) judgeAttempt(m);
+        if (activated)
+          after(GRACE_MS, () => {
+            if (!anyProgressed()) needsProtectedPlayback(keySystem);
+          });
+      };
+      const wrapped = {
+        requestMediaKeySystemAccess(keySystem, _configurations) {
+          const result = apply(requestAccess, this, arguments);
+          if (!drmSent && typeof keySystem === "string" && apply(test, protectedSystem, [keySystem])) {
+            const activated = !!(navigator.userActivation && navigator.userActivation.isActive);
+            apply(then, result, [null, () => onRefused(keySystem, activated)]);
+          }
+          return result;
+        },
+      }.requestMediaKeySystemAccess;
+      Object.defineProperty(NavigatorType.prototype, "requestMediaKeySystemAccess", {
+        ...Object.getOwnPropertyDescriptor(NavigatorType.prototype, "requestMediaKeySystemAccess"),
+        value: wrapped,
+      });
+    }
+  } catch {}
+
   handlers.config = (config) => {
     blockAutoplay = !!config.blockAutoplay;
     if (config.displayMediaPicker) installDisplayMedia();
@@ -976,13 +1056,17 @@
     linkPreviewTarget = null;
   };
   const armLinkPreview = (a) => {
+    // Moving across a link's own children (an icon, a span) keeps its timer, and a shown preview isn't sent again.
+    if (a === linkPreviewTarget) return;
     clearLinkPreview();
     const url = a && a.href;
     if (!url || !/^https?:/i.test(url)) return;
     linkPreviewTarget = a;
-    const r = a.getBoundingClientRect();
     linkPreviewTimer = setTimeout(() => {
       if (linkPreviewTarget !== a) return;
+      linkPreviewTimer = null;
+      // Where the link is now: the page may have scrolled in the 5 s.
+      const r = a.getBoundingClientRect();
       send("linkPreview", { url, rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
     }, 5000);
   };
@@ -1001,7 +1085,7 @@
     "mouseout",
     (e) => {
       const a = linkUnder(e.target);
-      if (a && a === linkPreviewTarget) clearLinkPreview();
+      if (a && a === linkPreviewTarget && !a.contains(e.relatedTarget)) clearLinkPreview();
     },
     true,
   );
@@ -1012,7 +1096,7 @@
       const a = linkUnder(document.elementFromPoint?.(lastMouseX, lastMouseY) || null);
       // Fall back to the currently hovered element tracked by mousemove.
       const target = a || hoveredLink;
-      if (target) armLinkPreview(target);
+      if (target && !e.repeat) armLinkPreview(target);
     },
     true,
   );

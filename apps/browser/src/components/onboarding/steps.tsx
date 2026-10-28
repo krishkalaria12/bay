@@ -1,5 +1,9 @@
 import { reportBrowserCommand } from "../../runtime/commands";
-import { Pressable, View, shortcutForCommand, capabilities, shortcutLabel } from "@bay/platform";
+import type { DeepReadonly } from "../../runtime/projection";
+import { updateSettings } from "../../runtime/settingsActions";
+import { updateSpace } from "../../runtime/spaceActions";
+import { toggleTabLayout } from "../../runtime/splitActions";
+import { Pressable, View, shortcutForCommand, capabilities, isMac, shortcutLabel } from "@bay/platform";
 import { listInstalledBrowsers, type BrowserApplication } from "@bay/import";
 import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
@@ -7,12 +11,14 @@ import { Image, StyleSheet, Text } from "react-native";
 import { interpolateColor } from "@bay/platform/motion";
 import { SPACE_COLORS, spaceThemeKey, themeFor, useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
+import type { Settings } from "../../store/settings";
+import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { Favicon, useHover } from "../primitives";
 import { openImport } from "../settings/windows";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personalize";
 import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
-import { finishOnboarding, recordDefaultBrowserTrial, useOnboarding } from "./state";
-import { CheckMark, CheckRow, PrimaryButton, Reveal, SecondaryButton, StepProgress, StepTitle, useOnboardingColors } from "./ui";
+import { finishOnboarding, nextStep, recordDefaultBrowserTrial, skipStep, STEPS, useOnboarding } from "./state";
+import { CheckMark, CheckRow, Reveal, SecondaryButton, SectionLabel, SelectTile, StepActions, StepProgress, StepTitle, useOnboardingColors } from "./ui";
 import { APP_ICON } from "../../lib/assets";
 import { BrowserIcon } from "../import/BrowserIcon";
 
@@ -53,136 +59,237 @@ export function StepLayout({ children, actions, preview }: { children: ReactNode
   );
 }
 
-// MARK: Default browser, Dock, login item
+// The step column's width inside its padding, for tiles four to a row.
+const COLUMN = 380;
+const TILE_GAP = 8;
+export const QUARTER_TILE = (COLUMN - TILE_GAP * 3) / 4;
 
-type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean };
+// MARK: Import
 
-async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
-  if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser()) && choice.trial) recordDefaultBrowserTrial();
-  if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
-  if (capabilities.dock && choice.dock && !system.inDock) await addToDock();
-}
+// The computer, as the copy names it.
+const THIS_COMPUTER = isMac ? "this Mac" : "this computer";
 
-export function DefaultBrowserStep() {
-  const next = useOnboarding((s) => s.next);
-  const [system, setSystem] = useState<SystemState | null>(null);
-  const [setDefault, setSetDefault] = useState(true);
-  const [trial, setTrial] = useState(false);
-  const [dock, setDock] = useState(true);
-  const [login, setLogin] = useState(false);
-  const [busy, setBusy] = useState(false);
+// Tiles for browsers found on this computer, then "Starting fresh": two rows at most.
+const SOURCE_TILES = 7;
+const FRESH = "fresh";
+
+export function ImportStep() {
+  const colors = useOnboardingColors();
+  const [browsers, setBrowsers] = useState<BrowserApplication[]>([]);
+  // A browser's id, or FRESH.
+  const [source, setSource] = useState<string | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
 
   useEffect(() => {
-    void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(
-      ([isDefault, inDock, login]) => {
-        setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
-        if (login === "enabled") setLogin(true);
+    let active = true;
+    void listInstalledBrowsers().then(
+      (installed) => {
+        if (active) setBrowsers(installed);
+      },
+      () => {
+        if (active) setBrowsers([]);
       },
     );
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const apply = async () => {
-    if (!system) return;
-    setBusy(true);
-    await applySystemChoices(system, { setDefault, trial, login, dock }).finally(() => {
-      setBusy(false);
-      next();
-    });
+  const shown = browsers.slice(0, SOURCE_TILES);
+  const chosen = shown.find((b) => b.id === source) ?? null;
+  const importingFrom = shown.find((b) => b.id === importing) ?? null;
+
+  const importNow = () => {
+    if (!chosen) return;
+    openImport(chosen.id);
+    setImporting(chosen.id);
   };
 
-  const defaultOn = system?.isDefault || setDefault;
+  const done = () => nextStep(importingFrom ? [`Your things from ${importingFrom.name}`] : []);
+
   return (
     <StepLayout
-      actions={<PrimaryButton title={busy ? "Setting Up…" : "Continue"} onPress={() => void apply()} disabled={!system || busy} />}
-      preview={<SystemPreview isDefault={!!defaultOn} dock={!!(system?.inDock || dock)} login={login} />}
+      actions={<StepActions onContinue={done} disabled={!source} />}
+      preview={<ImportPreview chosen={chosen} fresh={source === FRESH} browsers={shown} />}
     >
       <Reveal delay={60}>
-        <StepTitle title="Fast, secure, and packed with all your browser essentials" subtitle="Bay works best as your default browser." />
-      </Reveal>
-      <Reveal delay={140} style={{ gap: 6 }}>
-        <CheckRow
-          icon="globe"
-          title="Set Bay as default browser"
-          subtitle={system?.isDefault ? "Bay is already your default browser" : "Open links and web pages in Bay by default"}
-          value={defaultOn}
-          disabled={!system || system.isDefault}
-          onChange={setSetDefault}
+        <StepTitle
+          title="Where are you coming from?"
+          subtitle={`Bring your bookmarks, history, passwords and tabs, and stay signed in to your sites. It all stays on ${THIS_COMPUTER}.`}
         />
-        {!system?.isDefault && setDefault ? (
-          <CheckRow
-            icon="calendar"
-            title="Try Bay as your default for seven days"
-            subtitle="We'll check in to make sure you love it."
-            value={trial}
-            onChange={setTrial}
-          />
+      </Reveal>
+      <Reveal delay={140} style={{ gap: 12 }}>
+        <View style={{ gap: 8 }}>
+          {shown.length ? <SectionLabel title={`Found on ${THIS_COMPUTER}`} /> : null}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: TILE_GAP }} accessibilityRole="radiogroup" accessibilityLabel="Browser">
+            {shown.map((b) => (
+              <SelectTile key={b.id} title={b.name} role="radio" width={QUARTER_TILE} selected={source === b.id} onPress={() => setSource(b.id)}>
+                {() => <BrowserIcon iconPath={b.iconPath} size={30} color={colors.steps} />}
+              </SelectTile>
+            ))}
+            <SelectTile title="Starting fresh" role="radio" width={QUARTER_TILE} selected={source === FRESH} onPress={() => setSource(FRESH)}>
+              {() => <Symbol name="sparkles" size={17} color={colors.subtitle} style={{ width: 30, height: 30 }} />}
+            </SelectTile>
+          </View>
+        </View>
+        {chosen ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: colors.row,
+              borderWidth: StyleSheet.hairlineWidth * 2,
+              borderColor: colors.rowBorder,
+            }}
+          >
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={{ fontSize: 13, fontWeight: "500", color: colors.title }}>
+                {importing === chosen.id ? `Importing from ${chosen.name}` : `Bring your stuff from ${chosen.name}`}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.rowSubtitle }}>
+                {importing === chosen.id ? "It runs in its own window. Carry on here." : "Bookmarks, history, passwords and tabs."}
+              </Text>
+            </View>
+            {importing === chosen.id ? <CheckMark on size={18} /> : <SecondaryButton title="Import…" filled onPress={importNow} />}
+          </View>
         ) : null}
-        {capabilities.dock && system && !system.inDock ? (
-          <CheckRow icon="dock.rectangle" title="Add Bay to Dock" subtitle="Quick access to Bay whenever you need it" value={dock} onChange={setDock} />
-        ) : null}
-        <CheckRow icon="power" title="Open Bay at login" subtitle="Automatically open Bay when you sign in" value={login} onChange={setLogin} />
       </Reveal>
     </StepLayout>
   );
 }
 
-function SystemChip({ on, icon, label }: { on: boolean; icon: string; label: string }) {
+function ImportPreview({ chosen, fresh, browsers }: { chosen: BrowserApplication | null; fresh: boolean; browsers: BrowserApplication[] }) {
   const colors = useOnboardingColors();
+  const from = chosen ? [chosen] : fresh ? [] : browsers.slice(0, 6);
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        height: 34,
-        paddingLeft: 12,
-        paddingRight: 10,
-        borderRadius: 17,
-        backgroundColor: colors.row,
-        borderWidth: StyleSheet.hairlineWidth * 2,
-        borderColor: colors.rowBorder,
-        opacity: on ? 1 : 0.45,
-      }}
-    >
-      <Symbol name={icon} size={13} color={colors.title} style={{ width: 16, height: 16 }} />
-      <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{label}</Text>
-      <CheckMark on={on} size={16} />
-    </View>
-  );
-}
-
-function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
-  return (
-    <View style={{ alignItems: "center", gap: 28 }}>
-      <Image source={APP_ICON} style={{ width: 132, height: 132 }} />
-      <View style={{ gap: 8, alignItems: "center" }}>
-        <SystemChip on={isDefault} icon="globe" label="Default browser" />
-        {capabilities.dock && <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />}
-        <SystemChip on={login} icon="power" label="Opens at login" />
-      </View>
+    <View style={{ alignItems: "center", gap: 22 }}>
+      {from.length ? (
+        <>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, maxWidth: 300 }}>
+            {from.map((browser) => (
+              <View key={browser.id} style={{ alignItems: "center", gap: 6, width: chosen ? 96 : 72 }}>
+                <BrowserIcon iconPath={browser.iconPath} size={chosen ? 88 : 56} color={colors.steps} />
+                <Text style={{ fontSize: 11, color: colors.subtitle }}>{browser.name}</Text>
+              </View>
+            ))}
+          </View>
+          <Symbol name="arrow.down" size={18} weight="medium" color={colors.steps} style={{ width: 24, height: 24 }} />
+        </>
+      ) : null}
+      <Image source={APP_ICON} style={{ width: chosen || fresh ? 96 : 72, height: chosen || fresh ? 96 : 72 }} />
     </View>
   );
 }
 
 // MARK: Personalization
 
+const APPEARANCES: { value: Settings["appearance"]; title: string; picked: string }[] = [
+  { value: "auto", title: "Auto", picked: `Light and dark follow ${isMac ? "your Mac" : "your system"}` },
+  { value: "light", title: "Light", picked: "Always light" },
+  { value: "dark", title: "Dark", picked: "Always dark" },
+];
+
+type Look = {
+  spaceId?: string;
+  color?: SpaceColor;
+  theme: DeepReadonly<SpaceTheme> | null;
+  tabLayout: Settings["tabLayout"];
+  appearance: Settings["appearance"];
+};
+
+function lookOf(windowId: string): Look {
+  const s = useBrowser.getState();
+  const spaceId = s.windows[windowId]?.spaceId;
+  const space = spaceId ? s.spaces[spaceId] : undefined;
+  return {
+    spaceId,
+    color: space?.color,
+    theme: space?.theme ?? null,
+    tabLayout: s.windows[windowId]?.tabLayout ?? s.settings.tabLayout,
+    appearance: s.settings.appearance,
+  };
+}
+
+// The pickers change the window as you choose, so Skip puts the look back as the step found it.
+function restoreLook(windowId: string, look: Look) {
+  const b = useBrowser.getState();
+  const theme = look.theme ? { ...look.theme, colors: [...look.theme.colors] } : null;
+  if (look.spaceId && look.color) reportBrowserCommand(updateSpace(look.spaceId, { color: look.color, theme }));
+  if (lookOf(windowId).tabLayout !== look.tabLayout) reportBrowserCommand(toggleTabLayout(windowId));
+  if (b.settings.appearance !== look.appearance) reportBrowserCommand(updateSettings({ appearance: look.appearance }));
+}
+
 export function PersonalizeStep() {
-  const next = useOnboarding((s) => s.next);
   const windowId = useOnboarding((s) => s.windowId) ?? "";
-  const colors = useOnboardingColors();
+  const appearance = useBrowser((s) => s.settings.appearance);
+  const [before] = useState(() => lookOf(windowId));
+
+  const done = () => {
+    const look = lookOf(windowId);
+    const theme = look.theme ? "Twilight" : look.color ? SPACE_COLORS[look.color]?.name : undefined;
+    const appearance = APPEARANCES.find((a) => a.value === look.appearance)?.picked;
+    nextStep([
+      ...(theme ? [`${theme} theme`] : []),
+      look.tabLayout === "sidebar" ? "Tabs down the side" : "Tabs along the top",
+      ...(appearance ? [appearance] : []),
+    ]);
+  };
+
+  const skip = () => {
+    restoreLook(windowId, before);
+    skipStep();
+  };
+
   return (
-    <StepLayout actions={<PrimaryButton title="Continue" onPress={next} />} preview={<WindowPreview windowId={windowId} />}>
+    <StepLayout actions={<StepActions onContinue={done} onSkip={skip} />} preview={<WindowPreview windowId={windowId} />}>
       <Reveal delay={60}>
         <StepTitle title={PERSONALIZE_COPY.title} subtitle={PERSONALIZE_COPY.subtitle} />
       </Reveal>
       <Reveal delay={140} style={{ gap: 18 }}>
         <ThemeColorPicker windowId={windowId} size={32} />
         <View style={{ gap: 10 }}>
-          <Text style={{ fontSize: 12.5, color: colors.subtitle }}>{PERSONALIZE_COPY.layouts}</Text>
+          <SectionLabel title={PERSONALIZE_COPY.layouts} />
           <TabLayoutPicker windowId={windowId} />
+        </View>
+        <View style={{ flexDirection: "row", gap: 6 }} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
+          {APPEARANCES.map((a) => (
+            <Segment
+              key={a.value}
+              title={a.title}
+              selected={appearance === a.value}
+              onPress={() => reportBrowserCommand(updateSettings({ appearance: a.value }))}
+            />
+          ))}
         </View>
       </Reveal>
     </StepLayout>
+  );
+}
+
+function Segment({ title, selected, onPress }: { title: string; selected: boolean; onPress: () => void }) {
+  const colors = useOnboardingColors();
+  const { hovered, hoverProps } = useHover();
+  return (
+    <View {...hoverProps} style={{ flex: 1 }}>
+      <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={title}>
+        <View
+          style={{
+            height: 30,
+            borderRadius: 8,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: selected || hovered ? colors.button : colors.row,
+            borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth * 2,
+            borderColor: selected ? colors.title : colors.rowBorder,
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "500", color: selected ? colors.title : colors.subtitle }}>{title}</Text>
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
@@ -265,83 +372,9 @@ function WindowPreview({ windowId }: { windowId: string }) {
   );
 }
 
-// MARK: Import
-
-export function ImportStep() {
-  const next = useOnboarding((s) => s.next);
-  const colors = useOnboardingColors();
-  const [opened, setOpened] = useState(false);
-  const [browsers, setBrowsers] = useState<BrowserApplication[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    void listInstalledBrowsers().then(
-      (installed) => {
-        if (active) setBrowsers(installed);
-      },
-      () => {
-        if (active) setBrowsers([]);
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const importNow = () => {
-    openImport();
-    setOpened(true);
-  };
-
-  return (
-    <StepLayout
-      actions={
-        opened ? (
-          <PrimaryButton title="Continue" onPress={next} />
-        ) : (
-          <>
-            <PrimaryButton title="Import…" onPress={importNow} />
-            <SecondaryButton title="Skip" onPress={next} />
-          </>
-        )
-      }
-      preview={
-        <View style={{ alignItems: "center", gap: 22 }}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, maxWidth: 300 }}>
-            {browsers.length ? (
-              browsers.map((browser) => (
-                <View key={browser.id} style={{ alignItems: "center", gap: 6, width: 72 }}>
-                  <BrowserIcon iconPath={browser.iconPath} size={56} color={colors.steps} />
-                  <Text style={{ fontSize: 11, color: colors.subtitle }}>{browser.name}</Text>
-                </View>
-              ))
-            ) : (
-              <Symbol name="globe" size={40} color={colors.steps} style={{ width: 56, height: 56 }} />
-            )}
-          </View>
-          <Symbol name="arrow.down" size={18} weight="medium" color={colors.steps} style={{ width: 24, height: 24 }} />
-          <Image source={APP_ICON} style={{ width: 72, height: 72 }} />
-        </View>
-      }
-    >
-      <Reveal delay={60}>
-        <StepTitle
-          title="Bring your browsing with you"
-          subtitle={
-            opened
-              ? "Finish up in the import window, then continue here. You can import more any time from the Bay menu."
-              : "Import bookmarks, history, passwords and tabs from the browser you use now, and stay signed in to your sites. It all stays on this computer."
-          }
-        />
-      </Reveal>
-    </StepLayout>
-  );
-}
-
 // MARK: Pinned tabs
 
 export function PinnedTabsStep() {
-  const next = useOnboarding((s) => s.next);
   const windowId = useOnboarding((s) => s.windowId);
   const history = useBrowser((s) => s.history[s.windows[windowId ?? ""]?.spaceId ?? ""]);
   // Preselected from the history as the step opens.
@@ -351,16 +384,16 @@ export function PinnedTabsStep() {
 
   const pinSelected = () => {
     if (windowId) reportBrowserCommand(pinSites(windowId, selected));
-    next();
+    nextStep(selected.length ? [`${selected.length} ${selected.length === 1 ? "app" : "apps"} pinned`] : []);
   };
 
   return (
     <StepLayout
       actions={
-        <>
-          <PrimaryButton title={selected.length ? `Pin ${selected.length} ${selected.length === 1 ? "Tab" : "Tabs"}` : "Continue"} onPress={pinSelected} />
-          {selected.length ? <SecondaryButton title="Skip" onPress={next} /> : null}
-        </>
+        <StepActions
+          continueTitle={selected.length ? `Pin ${selected.length} ${selected.length === 1 ? "Tab" : "Tabs"}` : "Continue"}
+          onContinue={pinSelected}
+        />
       }
       preview={<PinnedPreview selected={selected} />}
     >
@@ -369,47 +402,12 @@ export function PinnedTabsStep() {
       </Reveal>
       <Reveal delay={140} style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {PINNABLE_SITES.map((site) => (
-          <SiteTile key={site.id} title={site.title} url={site.url} selected={selected.includes(site.id)} onPress={() => toggle(site.id)} />
+          <SelectTile key={site.id} title={site.title} selected={selected.includes(site.id)} onPress={() => toggle(site.id)}>
+            {() => <Favicon url={site.url} size={22} />}
+          </SelectTile>
         ))}
       </Reveal>
     </StepLayout>
-  );
-}
-
-function SiteTile({ title, url, selected, onPress }: { title: string; url: string; selected: boolean; onPress: () => void }) {
-  const colors = useOnboardingColors();
-  const { hovered, hoverProps } = useHover();
-  return (
-    <View {...hoverProps}>
-      <Pressable onPress={onPress} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} accessibilityLabel={title}>
-        {({ pressed }) => (
-          <View
-            style={{
-              width: 80,
-              height: 70,
-              borderRadius: 12,
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 7,
-              backgroundColor: selected || hovered ? colors.button : colors.row,
-              borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth * 2,
-              borderColor: selected ? colors.title : colors.rowBorder,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            }}
-          >
-            <View style={{ opacity: selected || hovered ? 1 : 0.7 }}>
-              <Favicon url={url} size={22} />
-            </View>
-            <Text style={{ fontSize: 11, fontWeight: "500", color: selected ? colors.title : colors.subtitle }}>{title}</Text>
-            {selected ? (
-              <View style={{ position: "absolute", top: 5, right: 5 }}>
-                <CheckMark on size={14} />
-              </View>
-            ) : null}
-          </View>
-        )}
-      </Pressable>
-    </View>
   );
 }
 
@@ -468,19 +466,139 @@ function PinnedPreview({ selected }: { selected: string[] }) {
   );
 }
 
+// MARK: Default browser, Dock, login item
+
+type SystemState = { isDefault: boolean; inDock: boolean; loginEnabled: boolean };
+
+async function applySystemChoices(system: SystemState, choice: { setDefault: boolean; trial: boolean; login: boolean; dock: boolean }) {
+  if (choice.setDefault && !system.isDefault && (await setAsDefaultBrowser()) && choice.trial) recordDefaultBrowserTrial();
+  if (choice.login !== system.loginEnabled) await setLaunchAtLogin(choice.login).catch(() => {});
+  if (capabilities.dock && choice.dock && !system.inDock) await addToDock();
+}
+
+export function DefaultBrowserStep() {
+  const [system, setSystem] = useState<SystemState | null>(null);
+  const [setDefault, setSetDefault] = useState(true);
+  const [trial, setTrial] = useState(false);
+  const [dock, setDock] = useState(true);
+  const [login, setLogin] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([isDefaultBrowser(), capabilities.dock ? isInDock() : Promise.resolve(false), launchAtLoginStatus()]).then(
+      ([isDefault, inDock, login]) => {
+        setSystem({ isDefault, inDock, loginEnabled: login === "enabled" });
+        if (login === "enabled") setLogin(true);
+      },
+    );
+  }, []);
+
+  const apply = async () => {
+    if (!system) return;
+    setBusy(true);
+    const picked = [
+      ...(setDefault && !system.isDefault ? [trial ? "A week as your default browser" : "Bay is your default browser"] : []),
+      ...(capabilities.dock && dock && !system.inDock ? ["In your Dock"] : []),
+      ...(login ? ["Opens at login"] : []),
+    ];
+    await applySystemChoices(system, { setDefault, trial, login, dock }).finally(() => {
+      setBusy(false);
+      nextStep(picked);
+    });
+  };
+
+  const defaultOn = system?.isDefault || setDefault;
+  return (
+    <StepLayout
+      actions={<StepActions continueTitle={busy ? "Setting Up…" : "Continue"} onContinue={() => void apply()} disabled={!system} busy={busy} />}
+      preview={<SystemPreview isDefault={!!defaultOn} dock={!!(system?.inDock || dock)} login={login} />}
+    >
+      <Reveal delay={60}>
+        <StepTitle title="Make Bay your home" subtitle="Bay works best as your default browser, so links from every app open here." />
+      </Reveal>
+      <Reveal delay={140} style={{ gap: 6 }}>
+        <CheckRow
+          icon="globe"
+          title="Set Bay as default browser"
+          subtitle={system?.isDefault ? "Bay is already your default browser" : "Open links and web pages in Bay by default"}
+          value={defaultOn}
+          disabled={!system || system.isDefault}
+          onChange={setSetDefault}
+        />
+        {!system?.isDefault && setDefault ? (
+          <CheckRow
+            icon="calendar"
+            title="Try Bay as your default for seven days"
+            subtitle="We'll check in to make sure you love it."
+            value={trial}
+            onChange={setTrial}
+          />
+        ) : null}
+        {capabilities.dock && system && !system.inDock ? (
+          <CheckRow icon="dock.rectangle" title="Add Bay to Dock" subtitle="Quick access to Bay whenever you need it" value={dock} onChange={setDock} />
+        ) : null}
+        <CheckRow icon="power" title="Open Bay at login" subtitle="Automatically open Bay when you sign in" value={login} onChange={setLogin} />
+      </Reveal>
+    </StepLayout>
+  );
+}
+
+function SystemChip({ on, icon, label }: { on: boolean; icon: string; label: string }) {
+  const colors = useOnboardingColors();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        height: 34,
+        paddingLeft: 12,
+        paddingRight: 10,
+        borderRadius: 17,
+        backgroundColor: colors.row,
+        borderWidth: StyleSheet.hairlineWidth * 2,
+        borderColor: colors.rowBorder,
+        opacity: on ? 1 : 0.45,
+      }}
+    >
+      <Symbol name={icon} size={13} color={colors.title} style={{ width: 16, height: 16 }} />
+      <Text style={{ fontSize: 12, fontWeight: "500", color: colors.title }}>{label}</Text>
+      <CheckMark on={on} size={16} />
+    </View>
+  );
+}
+
+function SystemPreview({ isDefault, dock, login }: { isDefault: boolean; dock: boolean; login: boolean }) {
+  return (
+    <View style={{ alignItems: "center", gap: 28 }}>
+      <Image source={APP_ICON} style={{ width: 132, height: 132 }} />
+      <View style={{ gap: 8, alignItems: "center" }}>
+        <SystemChip on={isDefault} icon="globe" label="Default browser" />
+        {capabilities.dock && <SystemChip on={dock} icon="dock.rectangle" label="In your Dock" />}
+        <SystemChip on={login} icon="power" label="Opens at login" />
+      </View>
+    </View>
+  );
+}
+
 // MARK: Welcome
+
+// The postcard lists this many of your choices.
+const POSTCARD_LINES = 8;
 
 export function OutroStep() {
   const colors = useOnboardingColors();
+  const picked = useOnboarding((s) => s.picked);
+  const lines = STEPS.flatMap((step) => picked[step] ?? []);
   return (
     <StepLayout
       actions={
         <>
-          <PrimaryButton title="Get Started" icon="arrow.right" onPress={() => finishOnboarding()} />
+          <StepActions continueTitle="Get Started" icon="arrow.right" onContinue={() => finishOnboarding()} skip={false} />
           <SecondaryButton title="Take the Tour" onPress={() => finishOnboarding({ tour: true })} />
         </>
       }
-      preview={<Postcard />}
+      preview={<Postcard lines={lines.slice(0, POSTCARD_LINES)} />}
     >
       <Reveal delay={60}>
         <StepTitle title={"Welcome to your new\nhome on the internet"} subtitle="Everything you set up is saved. Change any of it later in Settings." />
@@ -513,13 +631,13 @@ export function OutroStep() {
   );
 }
 
-function Postcard() {
+function Postcard({ lines }: { lines: string[] }) {
   const colors = useOnboardingColors();
   return (
     <View
       style={{
-        width: 300,
-        height: 200,
+        width: 320,
+        minHeight: 200,
         borderRadius: 6,
         padding: 18,
         flexDirection: "row",
@@ -529,14 +647,26 @@ function Postcard() {
         transform: [{ rotate: "-3deg" }],
       }}
     >
-      <View style={{ flex: 1, justifyContent: "space-between", paddingRight: 14 }}>
+      <View style={{ flex: 1, gap: 10, paddingRight: 14 }}>
         <Text style={{ fontSize: 20, fontWeight: "300", fontStyle: "italic", color: colors.title }}>Hello!</Text>
-        <Text style={{ fontSize: 12, lineHeight: 17, color: colors.subtitle }}>
-          {"Glad you're here. Make yourself at home — your tabs, bookmarks and pins are ready."}
-        </Text>
+        {lines.length ? (
+          <View style={{ gap: 4 }}>
+            <Text style={{ fontSize: 11, lineHeight: 15, color: colors.subtitle }}>You picked:</Text>
+            {lines.map((line) => (
+              <View key={line} style={{ flexDirection: "row", gap: 6, alignItems: "flex-start" }}>
+                <Symbol name="checkmark" size={8} weight="bold" color={colors.title} style={{ width: 10, height: 15 }} />
+                <Text style={{ flex: 1, fontSize: 11, lineHeight: 15, color: colors.title }}>{line}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={{ fontSize: 12, lineHeight: 17, color: colors.subtitle }}>
+            {"Glad you're here. Make yourself at home — your tabs, bookmarks and pins are ready."}
+          </Text>
+        )}
       </View>
       <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.separator }} />
-      <View style={{ width: 104, paddingLeft: 14, justifyContent: "space-between", alignItems: "flex-end" }}>
+      <View style={{ width: 96, paddingLeft: 14, justifyContent: "space-between", alignItems: "flex-end" }}>
         <View style={{ padding: 4, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.rowBorder, borderRadius: 3 }}>
           <Image source={APP_ICON} style={{ width: 46, height: 46 }} />
         </View>
@@ -549,7 +679,7 @@ function Postcard() {
       <View
         style={{
           position: "absolute",
-          right: 54,
+          right: 50,
           top: 52,
           width: 44,
           height: 44,

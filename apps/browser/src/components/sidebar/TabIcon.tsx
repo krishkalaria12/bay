@@ -5,6 +5,7 @@ import { Text } from "react-native";
 import { useIsSleeping } from "../../lib/tabLifecycle";
 import { useTheme } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
+import { engineMark, ENGINE_NAMES, ENGINE_SYMBOLS } from "../../store/engines";
 import { Favicon } from "../primitives";
 import { SYMBOL_PREFIX } from "../../lib/constants";
 import { iconColor } from "../symbolColors";
@@ -38,9 +39,37 @@ export const TabIcon = memo(function TabIcon({
   return (
     <View style={{ opacity: sleeping ? SLEEPING_OPACITY : 1 }}>
       {profile || !tabId ? <Icon {...props} spaceId={profile} /> : <TabSpaceIcon {...props} tabId={tabId} />}
+      {tabId && iconSize >= 14 ? <EngineMark tabId={tabId} size={iconSize} /> : null}
     </View>
   );
 });
+
+// A tab whose page runs in the other engine (store/engines.ts) wears that engine's mark on its icon.
+function EngineMark({ tabId, size }: { tabId: string; size: number }) {
+  const theme = useTheme();
+  const mark = useBrowser((s) => engineMark(s, tabId));
+  if (!mark) return null;
+  const box = Math.round(size * 0.6);
+  return (
+    <View
+      pointerEvents="none"
+      accessibilityLabel={`Opens in ${ENGINE_NAMES[mark]}`}
+      style={{
+        position: "absolute",
+        right: -box / 3,
+        bottom: -box / 3,
+        width: box,
+        height: box,
+        borderRadius: box / 2,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: theme.dark ? "#2C2C2E" : "#FFFFFF",
+      }}
+    >
+      <Symbol name={ENGINE_SYMBOLS[mark]} size={box - 3} weight="semibold" color={theme.icon} style={{ width: box, height: box }} />
+    </View>
+  );
+}
 
 // Looks the tab's profile up only when the caller didn't pass it: a subscription per icon adds up in
 // the sidebar, where every row runs its selectors on every store update.

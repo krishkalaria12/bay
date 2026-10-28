@@ -4,20 +4,19 @@ import { StyleSheet, Text } from "react-native";
 import { setSharing, useTelemetry } from "../../telemetry/client";
 import { SHARING_COPY } from "../../telemetry/copy";
 import { StepLayout } from "./steps";
-import { useOnboarding } from "./state";
-import { CheckRow, PrimaryButton, Reveal, StepTitle, useOnboardingColors } from "./ui";
+import { nextStep } from "./state";
+import { CheckRow, Reveal, StepActions, StepTitle, useOnboardingColors } from "./ui";
 import { MONO_FONT } from "../../lib/constants";
 
 export function PrivacyStep() {
-  const next = useOnboarding((s) => s.next);
   const [share, setShare] = useState(() => useTelemetry.getState().sharing);
   const colors = useOnboardingColors();
   const done = () => {
     setSharing(share, "onboarding");
-    next();
+    nextStep(share ? ["Sharing crash reports"] : []);
   };
   return (
-    <StepLayout actions={<PrimaryButton title="Continue" onPress={done} />} preview={<Receipt on={share} />}>
+    <StepLayout actions={<StepActions onContinue={done} />} preview={<Receipt on={share} />}>
       <Reveal delay={60}>
         <StepTitle title={SHARING_COPY.onboarding.title} subtitle={SHARING_COPY.onboarding.subtitle} />
       </Reveal>
