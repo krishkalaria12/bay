@@ -1,7 +1,7 @@
-import { ContextMenuArea, hapticTick, showMenu, Symbol } from "@bay/shell";
-import { useLayoutEffect, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "react-native-reanimated";
+import { ContextMenuArea, showMenu, Symbol } from "@bay/shell";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { createSpace, deleteSpace } from "../../../lib/actions";
 import { hex, SPACE_COLORS, useTheme } from "../../../lib/theme";
 import { useBrowser, type BrowserState } from "../../../store/browser";
@@ -12,6 +12,7 @@ import { ClearDataDialog } from "../../pages/ClearDataDialog";
 import { useHover } from "../../primitives";
 import { IconGrid } from "../../IconGrid";
 import { SpaceBadge, SPACE_SYMBOLS, spaceIconTitle } from "../../spaces/icons";
+import { useSpaceDrag, useSpaceReorder, type SpaceReorder } from "../../spaces/reorder";
 import { openThemeEditor } from "../../spaces/ThemeEditor";
 import { Button, Group, PopUp, Row, SectionHeader, TextField, useFormColors } from "../controls";
 import { SETTINGS } from "../definitions";
@@ -68,90 +69,32 @@ export function SpacesPane() {
   );
 }
 
-const settle = (value: SharedValue<number>, toValue: number) => value.set(withTiming(toValue, { duration: 160, easing: Easing.out(Easing.cubic) }));
-
 function SpaceList() {
   const colors = useFormColors();
   const order = useBrowser((s) => s.spaceOrder);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [controller] = useState(() => profileReorder(setDragging));
-  useLayoutEffect(() => controller.reordered(), [order, controller]);
+  const { reorder, dragging } = useSpaceReorder(PROFILE_ROW_HEIGHT);
 
   return (
     <View style={{ borderRadius: 10, backgroundColor: colors.group, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.groupBorder }}>
       {order.map((id, i) => (
-        <SpaceRow key={id} spaceId={id} first={i === 0} offset={controller.offsetOf(id)} lifted={dragging === id} controller={controller} />
+        <SpaceRow key={id} spaceId={id} first={i === 0} offset={reorder.offsetOf(id)} lifted={dragging === id} reorder={reorder} />
       ))}
     </View>
   );
 }
-
-// Dragging a row up and down the list: the rows it passes make room, and let go, the store reorders them.
-function profileReorder(setDragging: (id: string | null) => void) {
-  const offsets = new Map<string, SharedValue<number>>();
-  let drag = { id: "", from: 0, to: 0, reorderPending: false };
-  const offsetOf = (id: string) => {
-    let v = offsets.get(id);
-    if (!v) offsets.set(id, (v = makeMutable(0)));
-    return v;
-  };
-  return {
-    offsetOf,
-    // The store has the new order: the rows are laid out where they were dragged to.
-    reordered() {
-      if (!drag.reorderPending) return;
-      drag.reorderPending = false;
-      offsets.forEach((v) => v.set(0));
-    },
-    start(id: string) {
-      const ids = useBrowser.getState().spaceOrder;
-      const from = ids.indexOf(id);
-      drag = { id, from, to: from, reorderPending: false };
-      setDragging(id);
-    },
-    move(dy: number) {
-      const { id, from } = drag;
-      const ids = useBrowser.getState().spaceOrder;
-      const max = ids.length - 1;
-      offsetOf(id).set(Math.max(-from * PROFILE_ROW_HEIGHT - 6, Math.min((max - from) * PROFILE_ROW_HEIGHT + 6, dy)));
-      const to = Math.max(0, Math.min(max, Math.round(from + dy / PROFILE_ROW_HEIGHT)));
-      if (to === drag.to) return;
-      drag.to = to;
-      hapticTick();
-      ids.forEach((other, j) => {
-        if (other === id) return;
-        settle(offsetOf(other), from < j && j <= to ? -PROFILE_ROW_HEIGHT : to <= j && j < from ? PROFILE_ROW_HEIGHT : 0);
-      });
-    },
-    end(commit: boolean) {
-      const { id, from, to } = drag;
-      setDragging(null);
-      if (!commit || from === to) {
-        offsets.forEach((v) => settle(v, 0));
-        return;
-      }
-      const ids = useBrowser.getState().spaceOrder.filter((x) => x !== id);
-      ids.splice(to, 0, id);
-      drag.reorderPending = true;
-      useBrowser.getState().reorderSpaces(ids);
-    },
-  };
-}
-
-type DragController = { start(id: string): void; move(dy: number): void; end(commit: boolean): void };
 
 function SpaceRow({
   spaceId,
   first,
   offset,
   lifted,
-  controller,
+  reorder,
 }: {
   spaceId: string;
   first: boolean;
   offset: SharedValue<number>;
   lifted: boolean;
-  controller: DragController;
+  reorder: SpaceReorder;
 }) {
   const theme = useTheme();
   const colors = useFormColors();
@@ -159,16 +102,7 @@ function SpaceRow({
   const isDefault = useBrowser((s) => s.settings.defaultSpaceId === spaceId);
   const { hovered, hoverProps } = useHover();
   const go = useSettingsNav((n) => n.go);
-  const [pan] = useState(() =>
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
-      onPanResponderGrant: () => controller.start(spaceId),
-      onPanResponderMove: (_, g) => controller.move(g.dy),
-      onPanResponderRelease: () => controller.end(true),
-      onPanResponderTerminate: () => controller.end(false),
-      onPanResponderTerminationRequest: () => false,
-    }),
-  );
+  const panHandlers = useSpaceDrag(reorder, spaceId, "y");
   const offsetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }), [offset]);
   if (!profile) return null;
 
@@ -188,7 +122,7 @@ function SpaceRow({
 
   return (
     <Animated.View
-      {...pan.panHandlers}
+      {...panHandlers}
       style={[
         {
           zIndex: lifted ? 1 : 0,
