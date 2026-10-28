@@ -83,6 +83,13 @@
       const canvas = document.createElement("canvas");
       canvas.width = 400;
       canvas.height = 300;
+      const context = canvas.getContext("webgl2");
+      const getExtension = context.getExtension.bind(context);
+      let parallelRequests = 0;
+      context.getExtension = (name) => {
+        if (name === "KHR_parallel_shader_compile") parallelRequests++;
+        return getExtension(name);
+      };
       let lost = 0,
         restored = 0;
       const s = createSurface(
@@ -192,6 +199,7 @@
       s.gl.viewport(0, 0, 400, 300);
       await linked(s, backdrop);
       const again = s.draw(backdrop, backdropUniforms({ colors }, 400, 300));
+      check("context restoration re-enables parallel compilation", parallelRequests === 2);
       check("a restored context draws again", restored === 1 && again && read() > 0);
       s.release();
 

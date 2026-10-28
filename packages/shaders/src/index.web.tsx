@@ -174,7 +174,7 @@ export function PowerUp({ style, ...props }: PowerUpProps) {
   // Decorative: with reduced motion, forced colours or no GPU there is nothing to show.
   return (
     <View pointerEvents="none" style={style}>
-      {live && !failed ? <canvas ref={ref} aria-hidden="true" style={fill} /> : null}
+      {live ? <canvas ref={ref} aria-hidden="true" style={{ ...fill, visibility: failed ? "hidden" : "visible" }} /> : null}
     </View>
   );
 }
@@ -212,11 +212,8 @@ export function AreaLight({ style, ...props }: AreaLightProps) {
   const first = typeof props.palette === "object" ? props.palette[0] : AREA_LIGHT_PALETTES[props.palette ?? "pink"]?.[0];
   return (
     <View pointerEvents="none" style={[{ opacity: 0.75 }, style]}>
-      {live && !failed ? (
-        <canvas ref={ref} aria-hidden="true" style={fill} />
-      ) : (
-        <AreaGlow source={source} colorHex={first ?? "#D37B8B"} cornerRadius={props.cornerRadius ?? 22} />
-      )}
+      {live ? <canvas ref={ref} aria-hidden="true" style={{ ...fill, visibility: failed ? "hidden" : "visible" }} /> : null}
+      {!live || failed ? <AreaGlow source={source} colorHex={first ?? "#D37B8B"} cornerRadius={props.cornerRadius ?? 22} /> : null}
     </View>
   );
 }
@@ -245,11 +242,8 @@ export function EdgeLight({ style, ...props }: EdgeLightProps) {
   if (forced || !rect) return <View pointerEvents="none" style={style} />;
   return (
     <View pointerEvents="none" style={style}>
-      {live && !failed ? (
-        <canvas ref={ref} aria-hidden="true" style={fill} />
-      ) : (
-        <EdgeOutline rect={rect} colorHex={props.lightColor} cornerRadius={props.cornerRadius ?? 20} />
-      )}
+      {live ? <canvas ref={ref} aria-hidden="true" style={{ ...fill, visibility: failed ? "hidden" : "visible" }} /> : null}
+      {!live || failed ? <EdgeOutline rect={rect} colorHex={props.lightColor} cornerRadius={props.cornerRadius ?? 20} /> : null}
     </View>
   );
 }

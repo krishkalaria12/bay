@@ -50,7 +50,7 @@ export function createSurface(canvas: HTMLCanvasElement | OffscreenCanvas, onLos
   } catch {}
   if (!gl) return null;
   const ctx = gl;
-  const parallel = ctx.getExtension("KHR_parallel_shader_compile") as { COMPLETION_STATUS_KHR: number } | null;
+  let parallel = ctx.getExtension("KHR_parallel_shader_compile") as { COMPLETION_STATUS_KHR: number } | null;
   let programs = new Map<Source, Program | null>();
   // Compiles on first sight; then the link result once the driver has it, without blocking for it.
   const program = (source: Source): Program | null | false => {
@@ -76,6 +76,8 @@ export function createSurface(canvas: HTMLCanvasElement | OffscreenCanvas, onLos
   const restore = () => {
     lost = false;
     programs = new Map();
+    // Context restoration disables extensions; enable parallel compilation again before linking new programs.
+    parallel = ctx.getExtension("KHR_parallel_shader_compile") as typeof parallel;
     onRestored();
   };
   canvas.addEventListener("webglcontextlost", lose as EventListener);

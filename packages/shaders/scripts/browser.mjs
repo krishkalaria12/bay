@@ -22,9 +22,10 @@ export function findChromium(explicit) {
  * Starts Chromium with `args` and calls `run(open)`. `open(page, { width, height, dpr, query })` loads
  * tests/web/<page> in a new tab and resolves with its `window.results`.
  */
-export async function withChromium({ browser, args }, run) {
+export async function withChromium({ browser, args, scripts = {} }, run) {
   const server = createServer((req, res) => {
     const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
+    if (Object.hasOwn(scripts, path)) return res.writeHead(200, { "content-type": "text/javascript" }).end(scripts[path]);
     if (path.endsWith(".html")) {
       const file = normalize(join(pages, path));
       if (!file.startsWith(pages) || !existsSync(file)) return res.writeHead(404).end();

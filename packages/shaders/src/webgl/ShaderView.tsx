@@ -42,7 +42,7 @@ export function useFocused(): boolean {
 }
 
 // At most two animated contexts per document; a third animation takes its CSS fallback.
-let slots = 2;
+const slots = new Set<HTMLCanvasElement>();
 
 /** Draws a frame. `dt` is 0 for a redraw of the same moment; return true while there is more to animate. */
 export type Draw = (surface: Surface, size: { width: number; height: number; cssWidth: number; cssHeight: number }, dt: number) => boolean;
@@ -64,11 +64,11 @@ export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], 
   useEffect(() => {
     const canvas = ref.current;
     if (!enabled || !canvas) return;
-    if (slots <= 0) {
+    if (slots.size >= 2) {
       setFailed(true);
       return;
     }
-    slots--;
+    slots.add(canvas);
     let stop: (() => void) | null = null;
     let onScreen = true;
     let size: Parameters<Draw>[1] | null = null;
@@ -90,10 +90,11 @@ export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], 
       },
     );
     if (!surface) {
-      slots++;
+      slots.delete(canvas);
       setFailed(true);
       return;
     }
+    setFailed(false);
     const frame = (dt: number) => {
       if (!size || surface.lost) return halt();
       const ready = surface.ready(...sources);
@@ -157,7 +158,7 @@ export function useAnimatedCanvas(enabled: boolean, sources: readonly Source[], 
       dpr?.removeEventListener("change", onDpr);
       start.current = () => {};
       surface.release();
-      slots++;
+      slots.delete(canvas);
     };
   }, [enabled]);
 
