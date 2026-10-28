@@ -445,9 +445,12 @@ fi
 echo "==> Package"
 ditto -c -k --keepParent "$app" "$zip"
 staging="$dist/dmg"
-mkdir -p "$staging"
+mkdir -p "$staging/.background"
 ditto "$app" "$staging/Bay.app"
 ln -s /Applications "$staging/Applications"
+# The window's look: its background and Finder's layout of it (scripts/release/dmg).
+cp "$root/scripts/release/dmg/background.tiff" "$staging/.background/"
+cp "$root/scripts/release/dmg/DS_Store" "$staging/.DS_Store"
 hdiutil create -volname Bay -srcfolder "$staging" -format ULMO -imagekey udif-chunk-size=8192 -ov "$dmg" >/dev/null
 rm -rf "$staging"
 sign "$dmg"
