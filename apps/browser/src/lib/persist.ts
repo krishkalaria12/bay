@@ -1,5 +1,5 @@
 import { restorableClosedEntry, restorableClosedWindow, restorableWindow } from "../store/windowPlacement";
-import { cancelDownload, type Download } from "@bay/nncore";
+import { cancelDownload, endWebKitPrivateSession, type Download } from "@bay/nncore";
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } from "../store/browser";
 import { inPinnedContainer, isIncognitoSpace, makeTab, newId, snapshotTab } from "../store/model";
@@ -530,5 +530,7 @@ function forgetClosedIncognito(s: BrowserState, prev: BrowserState) {
     if (!w.incognito || s.windows[w.id]) continue;
     for (const d of s.downloads) if (d.profile === w.spaceId && d.state === "downloading") void cancelDownload(d.id);
     s.forgetDownloads(w.spaceId);
+    // Its WebKit pages' cookies and site data, kept in memory for the window, go with it.
+    void endWebKitPrivateSession(w.spaceId);
   }
 }

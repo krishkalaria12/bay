@@ -1,6 +1,6 @@
 import type { BrowserCommand, MenuEntry } from "@bay/shell";
 import { reportBrowserCommand } from "../../runtime/commands";
-import { cleanUpTabs, returnToPinnedUrl } from "../../runtime/organizeActions";
+import { cleanUpTabs, returnToPinnedUrl, tidyTabs } from "../../runtime/organizeActions";
 import { closeTabs, updateTabDetails } from "../../runtime/tabActions";
 import type { BrowserProjection as BrowserState } from "../../runtime/projection";
 import { browserRead } from "../../store/read";
@@ -36,6 +36,9 @@ export function runSidebarCommand(command: BrowserCommand, arg: string | null, w
       return true;
     case "cleanUpTabs":
       reportBrowserCommand(cleanUpTabs(windowId));
+      return true;
+    case "tidyTabs":
+      reportBrowserCommand(tidyTabs(windowId));
       return true;
     case "closeAllTabs":
       reportBrowserCommand(closeAllTabs(windowId));

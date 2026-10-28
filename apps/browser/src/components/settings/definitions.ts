@@ -16,6 +16,7 @@ export const SETTINGS = {
   commandBarPreference: { id: "general.commandBarPreference", pane: "general", title: "When input looks like a website", words: "command bar search url" },
   automaticUpdateChecks: { id: "general.automaticUpdateChecks", pane: "general", title: "Check for updates automatically", words: "updates" },
   automaticUpdateDownloads: { id: "general.automaticUpdateDownloads", pane: "general", title: `Automatically update ${APP_NAME}`, words: "updates install" },
+  updateChannel: { id: "general.updateChannel", pane: "general", title: "Update channel", words: "updates nightly stable beta" },
   tidyDownloads: { id: "general.tidyDownloads", pane: "general", title: "Tidy Downloads", words: "tidy downloads rename readable file name arc max on device" },
   importBrowser: {
     id: "general.importBrowser",
@@ -65,7 +66,6 @@ export const SETTINGS = {
   autoPictureInPicture: { id: "tabs.autoPictureInPicture", pane: "tabs", title: "Automatic Picture in Picture", words: "pip video call" },
   autoGroupMeetingTabs: { id: "tabs.autoGroupMeetingTabs", pane: "tabs", title: "Automatically group tabs for meetings", words: "tab groups" },
   tidyTabTitles: { id: "tabs.tidyTabTitles", pane: "tabs", title: "Tidy tab titles when pinning", words: "tidy short name rename pinned arc max" },
-  tidyTabs: { id: "tabs.tidyTabs", pane: "tabs", title: "Tidy Tabs", words: "tidy tabs group today topic arc max" },
   awakeSites: {
     id: "tabs.awakeSites",
     pane: "tabs",
@@ -152,11 +152,19 @@ export const SETTINGS = {
   },
   showBookmarksImport: { id: "advanced.showBookmarksImport", pane: "advanced", title: "Show the Import bookmarks button", words: "bookmarks bar" },
   boosts: { id: "advanced.boosts", pane: "advanced", title: "Boosts", words: "boost zap custom css site style javascript arc" },
-  batterySaver: { id: "advanced.batterySaver", pane: "advanced", title: "Battery Saver", words: "energy power performance" },
   history: { id: "advanced.history", pane: "advanced", title: "History", words: "visited pages" },
   downloads: { id: "advanced.downloads", pane: "advanced", title: "Downloads", words: "files" },
   chromium: { id: "advanced.chromium", pane: "advanced", title: "Chromium", words: "web engine version" },
   liveFolders: { id: "liveFolders.liveFolders", pane: "liveFolders", title: "Live folders", words: "refresh" },
+  defaultEngine: { id: "engines.defaultEngine", pane: "engines", title: "Open pages in", words: "engine webkit chromium safari drm netflix fairplay widevine" },
+  protectedVideoInWebKit: {
+    id: "engines.protectedVideoInWebKit",
+    pane: "engines",
+    title: "Open streaming sites in WebKit",
+    words: "netflix disney prime video hulu max spotify apple tv drm protected video fairplay widevine",
+  },
+  websiteEngines: { id: "engines.websiteEngines", pane: "engines", title: "Website rules", words: "opens in site engine rule webkit chromium" },
+  engineSignIns: { id: "engines.engineSignIns", pane: "engines", title: "Separate sign-ins", words: "cookies site data sign in logged out webkit" },
 } as const satisfies Record<string, { id: string; pane: SettingsPane; title: string; topTabsTitle?: string; words?: string }>;
 
 export type SettingEntry = (typeof SETTINGS)[keyof typeof SETTINGS];

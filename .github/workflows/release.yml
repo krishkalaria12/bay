@@ -1,0 +1,364 @@
+# Releases (docs/releasing.md › CI):
+#   - every night, a nightly of main when the app changed since the last release (Sparkle's nightly channel, a GitHub
+#     prerelease, bay.krishkalaria.in/nightly);
+#   - a stable release only when it's asked for: Actions › Release › Run workflow › channel stable, or
+#     gh workflow run release.yml -f channel=stable -f version=<version>, after committing the version bump and notes.
+# The engine is prebuilt (scripts/publish-engine.sh): a normal runner can't build Chromium.
+name: Release
+
+on:
+  schedule:
+    # 02:30 IST.
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Channel
+        type: choice
+        options: [nightly, stable]
+        default: nightly
+      version:
+        description: "Stable: the version committed in MARKETING_VERSION (1.5.3). Nightly: leave empty for the next one"
+        type: string
+        required: false
+      dry_run:
+        description: Dry run, a release candidate that publishes nothing
+        type: boolean
+        default: false
+      force:
+        description: "Nightly: build even if the app hasn't changed since the last release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      skip: ${{ steps.plan.outputs.skip }}
+      version: ${{ steps.plan.outputs.version }}
+      channel: ${{ steps.plan.outputs.channel }}
+      dry_run: ${{ steps.plan.outputs.dry_run }}
+      dist: ${{ steps.plan.outputs.dist }}
+      tree: ${{ steps.plan.outputs.tree }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel || 'nightly' }}
+          VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          FORCE: ${{ inputs.force && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          check() { if [ "$DRY_RUN" = true ]; then echo "::warning::$* (a real release would stop here)"; else fail "$*"; fi; }
+          skip=false
+          [ "$GITHUB_REF" = refs/heads/main ] || check "releases are made from main, not $GITHUB_REF"
+          if [ "$CHANNEL" = nightly ]; then
+            [ -z "$VERSION" ] || [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]+$ ]] || fail "a nightly is <next stable>-nightly.<n>, not $VERSION (or leave it empty)"
+            [ -n "$VERSION" ] || VERSION="$(scripts/release/next-nightly.sh)"
+            last="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)"
+            if [ -n "$last" ] && [ "$FORCE" != true ] && git diff --quiet "$last" HEAD -- apps/browser packages engine; then
+              echo "::notice::the app hasn't changed since $last: no nightly tonight"
+              skip=true
+            fi
+          else
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "a stable version is <major>.<minor>.<patch>, not '$VERSION'"
+            project="$(sed -n 's/.*MARKETING_VERSION = \(.*\);/\1/p' apps/browser/macos/Bay.xcodeproj/project.pbxproj | sort -u)"
+            [ "$project" = "$VERSION" ] || check "MARKETING_VERSION is $project: commit the bump to $VERSION first"
+            [ -f "release-notes/$VERSION.md" ] || check "no release-notes/$VERSION.md: write and commit the notes first"
+          fi
+          if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then check "v$VERSION is already published"; fi
+          tree="$(git rev-parse HEAD:engine)"
+          if [ "$skip" = false ] && ! awk -v t="$tree" '$1 == t { found = 1 } END { exit !found }' packages/nncore/prebuilt-engines.tsv; then
+            fail "no prebuilt engine for engine/ tree ${tree:0:12}: build it on the Mac, run scripts/publish-engine.sh, and commit packages/nncore/prebuilt-engines.tsv"
+          fi
+          if [ "$DRY_RUN" = true ]; then dist="dist/$VERSION-rc"; else dist="dist/$VERSION"; fi
+          {
+            echo "skip=$skip"
+            echo "version=$VERSION"
+            echo "channel=$CHANNEL"
+            echo "dry_run=$DRY_RUN"
+            echo "dist=$dist"
+            echo "tree=$tree"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Bay $VERSION ($CHANNEL)"
+            echo "- commit \`$GITHUB_SHA\`, engine tree \`${tree:0:12}\`"
+            if [ "$skip" = true ]; then echo "- skipped: nothing changed in the app since the last release"
+            elif [ "$DRY_RUN" = true ]; then echo "- dry run: a release candidate, nothing published"
+            else echo "- publishes"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    name: Format, lint, types and tests
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm fmt:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - name: Tests
+        run: |
+          pnpm turbo run test --filter=@bay/core --filter=@bay/browser
+          pnpm --filter @bay/sync exec node --test "src/**/*.test.ts"
+
+  # The archive, signed ad hoc: no secrets here, so no dependency code runs next to the keys.
+  build:
+    name: Build
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      CHANNEL: ${{ needs.plan.outputs.channel }}
+      DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+      DIST: ${{ needs.plan.outputs.dist }}
+      TREE: ${{ needs.plan.outputs.tree }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Xcode
+        run: |
+          # The newest released Xcode on the runner (the project needs 26 or later).
+          xcode="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|release_candidate' | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - uses: actions/cache@v6
+        with:
+          path: apps/browser/build-nncore/prebuilt
+          key: engine-${{ env.TREE }}
+      - name: Engine
+        run: |
+          framework="$(packages/nncore/scripts/fetch-engine.sh)"
+          { echo "NNCORE_FRAMEWORK=$framework"; echo "NNCORE_FRAMEWORK_ENGINE=$TREE"; } >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6
+        with:
+          path: |
+            apps/browser/macos/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('apps/browser/macos/Podfile', 'apps/browser/macos/Podfile.lock', 'pnpm-lock.yaml', 'patches/**') }}
+          restore-keys: pods-${{ runner.os }}-
+      - uses: actions/cache@v6
+        with:
+          path: packages/nncore/vendor/ubo
+          key: ubo-${{ hashFiles('packages/nncore/scripts/ubo.sh') }}
+      - name: Pods
+        run: pnpm pods
+      - name: Tree is clean
+        run: |
+          # BayNNCore's podspec reads a path under this checkout, so its checksum in Podfile.lock differs here: that
+          # alone isn't a change.
+          lock=apps/browser/macos/Podfile.lock
+          if [ -n "$(git diff -U0 -- "$lock" | grep '^[-+] ' | grep -v '^[-+]  BayNNCore: [0-9a-f]\{40\}$' || true)" ]; then
+            git diff -- "$lock" | head -50
+          elif ! git diff --quiet -- "$lock"; then
+            echo "::notice::pod install only rehashed BayNNCore's podspec (its checksum includes this checkout's path)"
+            git update-index --assume-unchanged "$lock"
+          fi
+          dirty="$(git status --porcelain -- apps/browser packages engine | grep -v ' apps/browser/build' || true)"
+          [ -z "$dirty" ] || { echo "::error::installing changed tracked files, so release.sh would refuse the tree:"; echo "$dirty"; exit 1; }
+      - name: Update channels
+        run: python3 packages/shell/scripts/test-updater.py
+      - name: Build
+        run: |
+          args=("$VERSION" --channel "$CHANNEL" --phase build)
+          [ "$DRY_RUN" != true ] || args+=(--rc)
+          scripts/release.sh "${args[@]}"
+      - name: Pack the build
+        run: COPYFILE_DISABLE=1 tar --no-mac-metadata -cf "$RUNNER_TEMP/build.tar" -C "$DIST" Bay.xcarchive provenance.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build
+          path: ${{ runner.temp }}/build.tar
+          if-no-files-found: error
+          retention-days: 3
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-logs
+          path: ${{ needs.plan.outputs.dist }}/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Restores no cache and installs nothing (but Sparkle's own pinned tools), and treats the build as untrusted.
+  sign:
+    name: Sign, notarize, check
+    needs: [plan, build]
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      CHANNEL: ${{ needs.plan.outputs.channel }}
+      DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+      DIST: ${{ needs.plan.outputs.dist }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A nightly's notes are the commits since the previous release's tag.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: build
+          path: ${{ runner.temp }}/build-download
+      - name: Unpack the build
+        run: |
+          /usr/bin/python3 -I .github/release/unpack-build.py "$RUNNER_TEMP/build-download/build.tar" "$RUNNER_TEMP/build-in" "$VERSION"
+          rm -rf "$RUNNER_TEMP/build-download"
+      - name: Sparkle's tools
+        run: |
+          tarball="$RUNNER_TEMP/Sparkle-2.9.6.tar.xz"
+          curl -fsSL --retry 3 -o "$tarball" https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
+          [ "$(shasum -a 256 "$tarball" | awk '{ print $1 }')" = 52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192 ] \
+            || { echo "::error::Sparkle-2.9.6.tar.xz didn't match its pinned SHA-256"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xJf "$tarball" -C "$RUNNER_TEMP/sparkle" bin
+          echo "SPARKLE_BIN=$RUNNER_TEMP/sparkle/bin" >> "$GITHUB_ENV"
+      - name: Signing
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_PROVISIONING_PROFILE: ${{ secrets.MACOS_PROVISIONING_PROFILE }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+          ALLOW_MISSING_NOTARY: ${{ needs.plan.outputs.dry_run == 'true' && '1' || '0' }}
+        run: .github/release/signing.sh setup
+      - name: Sign, notarize, package
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: |
+          export RELEASE_BUILD_INPUT="$RUNNER_TEMP/build-in"
+          args=("$VERSION" --channel "$CHANNEL" --phase sign)
+          [ "$DRY_RUN" != true ] || args+=(--rc)
+          scripts/release.sh "${args[@]}"
+      # Written here, not in a script, so nothing the job ran can change what removes the keys.
+      - if: always()
+        name: Remove signing
+        run: |
+          secrets="$RUNNER_TEMP/release-signing"
+          if [ -f "$secrets/release.keychain-db" ]; then security delete-keychain "$secrets/release.keychain-db" || true; fi
+          rm -rf "$secrets"
+          printf '%s=\n' RELEASE_PROVISIONING_PROFILE SPARKLE_KEY_FILE NOTARY_KEY >> "$GITHUB_ENV"
+          [ ! -e "$secrets" ] || { echo "::error::couldn't remove $secrets"; exit 1; }
+          if security find-identity -v -p codesigning | grep -q 'Developer ID Application: .*(GP328GJT66)'; then
+            echo "::error::a Developer ID identity is still in the keychain search list"
+            exit 1
+          fi
+          echo "signing keychain and key files removed"
+      - name: Checkout untouched
+        run: |
+          changed="$(git status --porcelain --untracked-files=all -- . ':!dist')"
+          [ -z "$changed" ] || { echo "::error::signing changed files in the checkout:"; echo "$changed"; exit 1; }
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Launch check
+        run: |
+          args=("$VERSION" --channel "$CHANNEL" --phase check)
+          [ "$DRY_RUN" != true ] || args+=(--rc)
+          scripts/release.sh "${args[@]}"
+      - name: Update signature
+        run: .github/release/check-sparkle.sh "$DIST" "$VERSION"
+      - name: dSYMs
+        run: ditto -c -k --keepParent "$RUNNER_TEMP/build-in/Bay.xcarchive/dSYMs" "$DIST/Bay-$VERSION-dSYMs.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            ${{ needs.plan.outputs.dist }}/Bay-${{ needs.plan.outputs.version }}.dmg
+            ${{ needs.plan.outputs.dist }}/Bay-${{ needs.plan.outputs.version }}.zip
+            ${{ needs.plan.outputs.dist }}/appcast.xml
+            ${{ needs.plan.outputs.dist }}/release-notes.md
+            ${{ needs.plan.outputs.dist }}/provenance.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      # Crash reports are symbolicated with these; Chromium's own symbols are the engine release's unstripped copy.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsyms
+          path: ${{ needs.plan.outputs.dist }}/Bay-${{ needs.plan.outputs.version }}-dSYMs.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sign-logs
+          path: ${{ needs.plan.outputs.dist }}/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    name: Publish
+    needs: [plan, checks, sign]
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+      - name: Publish
+        run: |
+          export RELEASE_DIST="$RUNNER_TEMP/release"
+          if [ "${{ needs.plan.outputs.dry_run }}" = true ]; then
+            scripts/release/publish.sh "$VERSION" --dry-run
+          else
+            scripts/release/publish.sh "$VERSION"
+          fi

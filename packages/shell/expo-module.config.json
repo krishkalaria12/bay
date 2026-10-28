@@ -19,6 +19,7 @@
       "DockSelectionModule",
       "InlineCompletionModule",
       "TranslateModule",
+      "TidyNamesModule",
       "WindowProfileModule",
       "CaptureModule",
       "EaselModule"

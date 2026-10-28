@@ -28,6 +28,7 @@ import {
   returnToPinnedUrl,
   setPinnedUrl,
   setSelection,
+  tidyTabs,
   ungroup,
   updateGroup,
   updatePinnedFolder,
@@ -37,6 +38,8 @@ import { removeTabFromSplit } from "../../runtime/splitActions";
 import { closeTabs, duplicateTab, togglePin, updateTabDetails } from "../../runtime/tabActions";
 import { moveTabsToWindow, restoreClosed } from "../../runtime/windowActions";
 import { browserRead } from "../../store/read";
+import { canSwitchEngine, ENGINE_NAMES, ENGINE_SYMBOLS, otherEngine, tabEngine } from "../../store/engines";
+import { togglePageEngine } from "../../lib/engines";
 import {
   activeTabId,
   bookmarkSpaceId,
@@ -225,6 +228,9 @@ export async function openTabMenu(windowId: string, tab: Tab) {
     { id: "mute", title: tab.muted ? "Unmute Site" : "Mute Site", symbol: tab.muted ? "speaker.wave.2" : "speaker.slash", enabled: !!tab.url },
     { id: "bookmark", title: "Add to Bookmarks…", symbol: "bookmark", enabled: !!tab.url, ...hint("d", "command") },
     { id: "bookmarkTo", title: "Add Bookmark to Folder", symbol: "folder", enabled: !!tab.url, children: bookmarkFolderItems(windowId, "folder:") },
+    ...(canSwitchEngine(tab.url)
+      ? [{ id: "engine", title: `Open Page in ${ENGINE_NAMES[otherEngine(tabEngine(s, tab.id))]}`, symbol: ENGINE_SYMBOLS[otherEngine(tabEngine(s, tab.id))] }]
+      : []),
     ...(pinnedPage(tab)
       ? []
       : [
@@ -284,6 +290,7 @@ export async function openTabMenu(windowId: string, tab: Tab) {
   else if (choice === "icon") void openIconPicker(windowId, t);
   else if (choice === "resetIcon") reportBrowserCommand(updateTabDetails(tab.id, { customIcon: null }));
   else if (choice === "mute") toggleMute(tab.id);
+  else if (choice === "engine") void togglePageEngine(tab.id);
   // Like ⌘D: bookmarks the page (or finds its bookmark) and opens the dialog; never removes one.
   else if (choice === "bookmark") reportBrowserCommand(bookmarkTab(windowId, tab.id));
   else if (choice.startsWith("folder:")) void bookmarkTabs(windowId, [tab.id], choice.slice(7));
@@ -464,6 +471,7 @@ export async function openSidebarMenu(windowId: string) {
     { id: "search", title: "Search Tabs…", symbol: "magnifyingglass", ...hint("a", "shift", "command") },
     sep,
     { id: "clean", title: "Clean Up Tabs", symbol: "wand.and.stars", ...hint("k", "option", "command") },
+    { id: "tidy", title: "Tidy Tabs", symbol: "rectangle.stack" },
     { id: "mute", title: muted ? "Unmute All Tabs" : "Mute All Tabs", symbol: muted ? "speaker.wave.2" : "speaker.slash" },
     { id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...hint("k", "shift", "command") },
     sep,
@@ -475,6 +483,7 @@ export async function openSidebarMenu(windowId: string) {
   else if (choice === "newFolder") reportBrowserCommand(newPinnedFolderWith(windowId));
   else if (choice === "search") setSidebarUi({ searchTabs: windowId });
   else if (choice === "clean") reportBrowserCommand(cleanUpTabs(windowId));
+  else if (choice === "tidy") reportBrowserCommand(tidyTabs(windowId));
   else if (choice === "mute") reportBrowserCommand(muteAll(windowId, !muted));
   else if (choice === "closeAll") closeAllTabs(windowId);
 }
@@ -546,6 +555,7 @@ export async function openOverflowMenu(windowId: string) {
     sep,
     { id: "clean", title: "Clean Up Tabs", symbol: "wand.and.stars", ...hint("k", "option", "command") },
     { id: "daily", title: "Clean Up Daily", checked: daily },
+    { id: "tidy", title: "Tidy Tabs", symbol: "rectangle.stack" },
     sep,
     { id: "mute", title: muted ? "Unmute All Tabs" : "Mute All Tabs", symbol: muted ? "speaker.wave.2" : "speaker.slash" },
     { id: "closeAll", title: "Close All Tabs", symbol: "xmark", ...hint("k", "shift", "command") },
@@ -558,6 +568,7 @@ export async function openOverflowMenu(windowId: string) {
   else if (choice.startsWith("cleaned:")) reportBrowserCommand(restoreCleaned(windowId, choice.slice(8)));
   else if (choice === "restoreAll") reportBrowserCommand(restoreCleaned(windowId));
   else if (choice === "clean") reportBrowserCommand(cleanUpTabs(windowId));
+  else if (choice === "tidy") reportBrowserCommand(tidyTabs(windowId));
   else if (choice === "daily") reportBrowserCommand(updateSettings({ cleanUpInactiveTabsAfterHours: daily ? null : 24 }));
   else if (choice === "mute") reportBrowserCommand(muteAll(windowId, !muted));
   else if (choice === "closeAll") reportBrowserCommand(closeAllTabs(windowId));

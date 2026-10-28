@@ -6,17 +6,21 @@ import ExpoModulesCore
 /// The app's local cleaner (packages/core/src/tidyDownloads.ts) always runs first and gives an instant answer. On
 /// Macs where the system model is available this refines that answer with the page's title and address. Neither
 /// half sends anything off the Mac, and the person still chooses whether the file is renamed.
+///
+/// Off unless the app is launched with BAY_TIDY_DOWNLOADS_AI=true; without it the local cleaner works alone.
 public class TidyNamesModule: Module {
+  static var enabled: Bool { ProcessInfo.processInfo.environment["BAY_TIDY_DOWNLOADS_AI"] == "true" }
+
   public func definition() -> ModuleDefinition {
     Name("BayTidyNames")
 
     Constant("available") { () -> Bool in
-      guard #available(macOS 26.0, *) else { return false }
+      guard Self.enabled, #available(macOS 26.0, *) else { return false }
       return SystemLanguageModel.default.availability == .available
     }
 
     AsyncFunction("suggest") { (filename: String, pageTitle: String, pageUrl: String, candidate: String) async -> String? in
-      guard #available(macOS 26.0, *) else { return nil }
+      guard Self.enabled, #available(macOS 26.0, *) else { return nil }
       guard SystemLanguageModel.default.availability == .available else { return nil }
       let session = LanguageModelSession(instructions: Self.instructions)
       let prompt = """

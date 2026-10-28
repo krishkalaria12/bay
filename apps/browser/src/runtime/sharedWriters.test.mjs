@@ -34,6 +34,8 @@ const ALLOWED = {
   "components/layout/openFromPage.ts": "legacy page adoption",
   "components/layout/splitActions.ts": "legacy page adoption",
   "lib/chromeTabs.ts": "legacy tab strip mirror",
+  // WebKit is macOS's alone, and macOS runs the legacy entry: without it (hasWebKit()) these never write.
+  "lib/engines.ts": "WebKit page engine moves",
 };
 
 const root = fileURLToPath(new URL("..", import.meta.url));

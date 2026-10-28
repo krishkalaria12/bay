@@ -1,3 +1,5 @@
+import type { PageEngine } from "@bay/nncore";
+
 export type Frame = [number, number, number, number];
 export type WindowSize = [number, number];
 export type WindowPlacement = { size?: WindowSize; maximized?: boolean };
@@ -91,6 +93,8 @@ export type Tab = {
   // A peek's page (store/peeks.ts): shown over this tab, its opener, and in no list until it's kept.
   peekOf?: string;
   unloaded?: boolean;
+  // The engine its page runs in (store/engines.ts), once it has one: it keeps it until moved to the other.
+  engine?: PageEngine;
   createdAt: number;
   lastActiveAt: number;
 };
@@ -167,7 +171,7 @@ export type Bookmarks = {
 };
 
 export type TabSnapshot = Pick<Tab, "url" | "title" | "favicon" | "pinned" | "muted" | "zoom" | "customTitle" | "customIcon" | "spaceId"> &
-  Partial<Pick<Tab, "pinnedUrl" | "pinnedRow">>;
+  Partial<Pick<Tab, "pinnedUrl" | "pinnedRow" | "engine">>;
 
 export type ClosedTab = {
   kind: "tab";

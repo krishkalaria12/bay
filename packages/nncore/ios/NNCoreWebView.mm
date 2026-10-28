@@ -1304,6 +1304,9 @@ const char kPageReportsKey = 0;
     NSString *state = Text(dict, @"state", 8);
     if ([@[ @"down", @"up", @"top" ] containsObject:state ?: @""])
       [self emit:@"pageMessage" payload:@{@"kind" : @"scroll", @"data" : @{@"state" : state}}];
+  } else if ([kind isEqualToString:@"drm"] && dict) {
+    // Protected video Chromium can't play (page_script.js › Protected video): the app offers WebKit.
+    [self emit:@"pageMessage" payload:@{@"kind" : @"drm", @"data" : @{@"keySystem" : Text(dict, @"keySystem", 64) ?: @"", @"main" : @(main)}}];
   } else if ([kind isEqualToString:@"media"] && dict) {
     NSString *mediaFrame = Text(dict, @"frame", 64);
     if (!mediaFrame) return;

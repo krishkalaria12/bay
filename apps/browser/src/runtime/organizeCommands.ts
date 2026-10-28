@@ -49,6 +49,7 @@ export type OrganizeCommand =
   | { method: "returnToPinnedUrl"; tabId: string }
   | { method: "setPinnedUrl"; tabId: string; url?: string }
   | { method: "cleanUpTabs"; windowId: string; options?: { inactiveForMs?: number; spaceId?: string } }
+  | { method: "tidyTabs"; windowId: string }
   | { method: "restoreCleaned"; windowId: string; entryId?: string };
 
 export const ORGANIZE_COMMAND_METHODS = [
@@ -80,6 +81,7 @@ export const ORGANIZE_COMMAND_METHODS = [
   "returnToPinnedUrl",
   "setPinnedUrl",
   "cleanUpTabs",
+  "tidyTabs",
   "restoreCleaned",
 ] as const;
 
@@ -238,6 +240,9 @@ export function parseOrganizeCommand(value: unknown): OrganizeCommand {
           spaceId: commandText,
         }),
       };
+    case "tidyTabs":
+      fields("windowId");
+      return { method: c.method, windowId: windowId() };
     case "restoreCleaned":
       fields("windowId", "entryId");
       return { method: c.method, windowId: windowId(), ...(c.entryId !== undefined ? { entryId: commandText(c.entryId) } : {}) };
@@ -393,6 +398,10 @@ export function executeOrganizeCommand(store: BrowserStore, command: OrganizeCom
       s.cleanUpTabs(command.windowId, command.options);
       break;
     }
+    case "tidyTabs":
+      requireCommandWindow(s, command.windowId);
+      s.tidyTabs(command.windowId);
+      break;
     case "restoreCleaned":
       requireCleanedEntry(s, command.windowId, command.entryId);
       return s.restoreCleaned(command.entryId, command.windowId) ?? null;

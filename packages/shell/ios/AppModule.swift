@@ -7,7 +7,7 @@ public class AppModule: Module {
     Name("BayApp")
     // The JS/native contract: NATIVE_API_VERSION in apps/browser/src/nativeApi.tsx, which a JS bundle checks before it
     // loads the app. Bump both together whenever JS starts needing native code that older builds lack.
-    Constant("apiVersion") { () -> Int in 12 }
+    Constant("apiVersion") { () -> Int in 13 }
     Events("onNotificationResponse", "onScriptCommand", "onUpdatePending")
 
     OnCreate {
@@ -48,6 +48,7 @@ public class AppModule: Module {
     AsyncFunction("installPendingUpdate") { AppUpdater.shared.installPendingUpdate() }.runOnQueue(.main)
     AsyncFunction("setAutomaticUpdateChecks") { (on: Bool) in AppUpdater.shared.setAutomaticChecks(on) }.runOnQueue(.main)
     AsyncFunction("setAutomaticUpdateDownloads") { (on: Bool) in AppUpdater.shared.setAutomaticDownloads(on) }.runOnQueue(.main)
+    AsyncFunction("setUpdateChannel") { (channel: String) in AppUpdater.shared.setChannel(channel) }.runOnQueue(.main)
 
     // MARK: Clear
 

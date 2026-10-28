@@ -11,6 +11,7 @@ import {
 import { Symbol } from "@bay/shell";
 import { useState, type ReactNode } from "react";
 import { Image, Text } from "react-native";
+import { acceptEngineOffer, stayOnPage, useEngineOffers, type EngineOffer } from "../../lib/engines";
 import { useTheme } from "../../lib/theme";
 import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
@@ -318,6 +319,42 @@ function PromptLines({ lines, label }: { lines: string[]; label?: string }) {
 }
 
 // "Open “Codex”?": a site (or an OAuth redirect) sent this tab to another app's link.
+// Chromium couldn't play the page's protected video (lib/engines.ts offerWebKit): WebKit can, with FairPlay.
+export function EngineOfferPrompt({ tabId, left, top }: { tabId: string; left: number; top: number }) {
+  const offer = useEngineOffers((offers) => offers[tabId]);
+  return offer ? <EngineOfferPopover key={offer.site} tabId={tabId} offer={offer} left={left} top={top} /> : null;
+}
+
+function EngineOfferPopover({ tabId, offer, left, top }: { tabId: string; offer: EngineOffer; left: number; top: number }) {
+  const theme = useTheme();
+  const [remember, setRemember] = useState(false);
+  return (
+    <Popover width={320} top={top} left={left} modal={false}>
+      <View>
+        <PromptBody
+          icons={["play.circle.fill", "safari"]}
+          title={`Play ${offer.host} in WebKit?`}
+          message="This site plays protected video, which Chromium in Bay can't. The page reloads in WebKit, which keeps its own sign-ins."
+          detail={
+            offer.canRemember ? (
+              <Pressable onPress={() => setRemember(!remember)} style={{ flexDirection: "row", alignItems: "flex-start", gap: 7 }}>
+                <View style={{ marginTop: 1 }}>
+                  <Checkbox value={remember} onChange={setRemember} />
+                </View>
+                <Text style={{ flex: 1, fontSize: 12, lineHeight: 16, color: theme.textPrimary }}>Don't ask again for this site</Text>
+              </Pressable>
+            ) : undefined
+          }
+        >
+          <PromptButton title="Stay on Page" onPress={() => stayOnPage(tabId, remember)} />
+          <PromptButton title="Open in WebKit" primary onPress={() => void acceptEngineOffer(tabId)} />
+        </PromptBody>
+        <CloseButton color={theme.textSecondary} onPress={() => stayOnPage(tabId)} />
+      </View>
+    </Popover>
+  );
+}
+
 export function ExternalAppPrompt({ tabId, left, top }: { tabId: string; left: number; top: number }) {
   const theme = useTheme();
   const request = usePage(tabId, (p) => p.externalApp);

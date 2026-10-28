@@ -41,6 +41,7 @@ const paths: Record<string, string> = {
     "M9 3H7a4 4 0 0 0-4 4v2m0 6v2a4 4 0 0 0 4 4h2m6 0h2a4 4 0 0 0 4-4v-2m0-6V7a4 4 0 0 0-4-4h-2M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6m0 2.5h.01",
   "arrow.up.forward.app": "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Zm2 12 6-6m-5 0h5v5",
   "arrow.up.forward.square": "M10 3H3v18h18v-7M14 3h7v7m0-7-9 9",
+  "play.rectangle": "M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm5 4v6l5-3Z",
   equal: "M5 9h14M5 15h14",
   "plus.magnifyingglass": "M16 16 22 22M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0M10 6v8m-4-4h8",
   "minus.magnifyingglass": "M16 16 22 22M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0M6 10h8",

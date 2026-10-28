@@ -5,6 +5,7 @@ import type {
   ExternalAppRequest,
   MediaAccess,
   NavigationState,
+  PageEngine,
   PasswordPrompt,
   PermissionRequest,
   SecurityInfo,
@@ -31,6 +32,8 @@ export type PageState = {
   mediaAccess: MediaAccess | null;
   wasNewTab: boolean;
   backToNewTab: boolean;
+  /** A link moved the tab to its site's engine (lib/engines.ts followSiteChoice): Back reopens this page in that one. */
+  engineBack: { engine: PageEngine; url: string } | null;
 };
 
 export const IDLE_PAGE: PageState = {
@@ -49,6 +52,7 @@ export const IDLE_PAGE: PageState = {
   mediaAccess: null,
   wasNewTab: false,
   backToNewTab: false,
+  engineBack: null,
 };
 
 type Store = {

@@ -9,7 +9,7 @@ type MountedView = { surfaceId: string; browserId: number; chromeTabId: number }
 type ViewEvent = { tag: number; event: string; payload: unknown };
 
 /** SurfaceEmbed is an engine-owned compositor surface, never a scripted iframe. */
-export default forwardRef<NativeHandle, NativeProps>(function NativeWebView(props, ref) {
+const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebView(props, ref) {
   const windowId = useWindowId();
   const activeTag = useRef(0);
   const [surfaceId, setSurfaceId] = useState("");
@@ -116,3 +116,8 @@ export default forwardRef<NativeHandle, NativeProps>(function NativeWebView(prop
     </View>
   );
 });
+
+export default NativeWebView;
+
+/** The Chrome-hosted desktop has no WebKit (hasWebKit() is false); Chromium serves every page. */
+export const webKitView = () => NativeWebView;

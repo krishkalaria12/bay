@@ -162,9 +162,9 @@ export const nativeContracts = {
         "setTrafficLightsMode": {
           "async": true,
           "optional": false,
-          "minArgs": 2,
-          "maxArgs": 2,
-          "signature": "setTrafficLightsMode(id: string, mode: TrafficLightsMode): Promise<void>;"
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "setTrafficLightsMode(id: string, mode: TrafficLightsMode, color: string | null): Promise<void>;"
         },
         "dragPreviewBegin": {
           "async": true,
@@ -519,6 +519,13 @@ export const nativeContracts = {
           "minArgs": 1,
           "maxArgs": 1,
           "signature": "setAutomaticUpdateDownloads(on: boolean): Promise<void>;"
+        },
+        "setUpdateChannel": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setUpdateChannel(channel: UpdateChannel): Promise<void>;"
         },
         "setWindowActivity": {
           "async": true,
@@ -1825,6 +1832,108 @@ export const nativeContracts = {
       "events": [],
       "constants": {}
     },
+    "BayWebKit": {
+      "source": "nncore/src/webkit.ts",
+      "methods": {
+        "prepareTransfer": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "prepareTransfer(key: string): Promise<void>;"
+        },
+        "releaseTransfer": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "releaseTransfer(key: string): Promise<void>;"
+        },
+        "resolvePermission": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;"
+        },
+        "downloadCommand": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;"
+        },
+        "endPrivateSession": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "endPrivateSession(session: string): Promise<void>;"
+        },
+        "sitePermissions": {
+          "async": true,
+          "optional": false,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;"
+        },
+        "setSitePermission": {
+          "async": true,
+          "optional": false,
+          "minArgs": 4,
+          "maxArgs": 4,
+          "signature": "setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;"
+        },
+        "resolveExternalApp": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;"
+        },
+        "externalAppAllowances": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;"
+        },
+        "removeExternalAppAllowance": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;"
+        },
+        "clearBrowsingData": {
+          "async": true,
+          "optional": false,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;"
+        },
+        "deleteProfileData": {
+          "async": true,
+          "optional": false,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "deleteProfileData(profile: string): Promise<boolean>;"
+        },
+        "info": {
+          "async": true,
+          "optional": false,
+          "minArgs": 0,
+          "maxArgs": 0,
+          "signature": "info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;"
+        }
+      },
+      "events": [
+        "onDownload",
+        "onPermission",
+        "onPermissionDismissed"
+      ],
+      "constants": {}
+    },
     "BaySync": {
       "source": "sync/src/native.ts",
       "methods": {
@@ -2243,6 +2352,10 @@ export const nativeContracts = {
       "source": "nncore/src/NativeWebView.tsx",
       "props": "NativeProps"
     },
+    "BayWebKit": {
+      "source": "nncore/src/NativeWebView.tsx",
+      "props": "NativeProps"
+    },
     "BayAreaLight": {
       "source": "shaders/src/index.tsx",
       "props": "NativeAreaLightProps"
@@ -2268,7 +2381,7 @@ export const nativeContracts = {
       "WebViewHost": "{\n  mount(tag: number, windowId: string, props: EmbeddedTabProps): Promise<EmbeddedTab>;\n  update(tag: number, props: EmbeddedTabProps): Promise<void>;\n  call(tag: number, method: string, args: unknown[]): Promise<unknown>;\n  unmount(tag: number): Promise<void>;\n}"
     },
     "shell/src/index.tsx": {
-      "BrowserCommand": "| \"focusSidebar\"\n  | \"sidebarKey\"\n  | \"sidebarBlur\"\n  | \"undoPinnedFolderMove\"\n  | \"openLibrary\"\n  | \"newEasel\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"joinMeeting\"\n  | \"capturePortrait\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"capture\"\n  | \"captureFullPage\"\n  | \"newBoost\"\n  | \"editBoost\"\n  | \"zapElements\"\n  | \"toggleSiteBoosts\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
+      "BrowserCommand": "| \"focusSidebar\"\n  | \"sidebarKey\"\n  | \"sidebarBlur\"\n  | \"undoPinnedFolderMove\"\n  | \"openLibrary\"\n  | \"newEasel\"\n  | \"newTab\"\n  | \"newWindow\"\n  | \"newIncognitoWindow\"\n  | \"newLittleBay\"\n  | \"joinMeeting\"\n  | \"capturePortrait\"\n  | \"toggleOpenLinksInLittleBay\"\n  | \"removeFromSplit\"\n  | \"togglePinRow\"\n  | \"reopenClosedTab\"\n  | \"reopenClosedWindow\"\n  | \"restoreClosed\"\n  | \"focusCommandBar\"\n  | \"closeTab\"\n  | \"closeAllTabs\"\n  | \"print\"\n  | \"copyUrl\"\n  | \"copyUrlAsMarkdown\"\n  | \"findInPage\"\n  | \"findNext\"\n  | \"findPrevious\"\n  | \"setAppearance\"\n  | \"reload\"\n  | \"forceReload\"\n  | \"toggleTabLayout\"\n  | \"toggleSidebar\"\n  | \"openSplitPane\"\n  | \"useSelectionForFind\"\n  | \"findAndReplace\"\n  | \"jumpToSelection\"\n  | \"focusNextPane\"\n  | \"focusPreviousPane\"\n  | \"toggleFullUrl\"\n  | \"toggleAddressBar\"\n  | \"toggleSidebarPosition\"\n  | \"cast\"\n  | \"zoomReset\"\n  | \"zoomIn\"\n  | \"zoomOut\"\n  | \"devTools\"\n  | \"toggleDeveloperMode\"\n  | \"toggleDevTools\"\n  | \"javaScriptConsole\"\n  | \"inspectElements\"\n  | \"viewSource\"\n  | \"back\"\n  | \"forward\"\n  | \"nextTab\"\n  | \"previousTab\"\n  | \"selectTab\"\n  | \"selectLastTab\"\n  | \"togglePin\"\n  | \"duplicateTab\"\n  | \"moveTabToSpace\"\n  | \"moveTabToWindow\"\n  | \"bookmarkPage\"\n  | \"addBookmarkToFolder\"\n  | \"openBookmark\"\n  | \"toggleMute\"\n  | \"togglePageEngine\"\n  | \"downloads\"\n  | \"mergeAllWindows\"\n  | \"switchSpace\"\n  | \"nextSpace\"\n  | \"previousSpace\"\n  | \"newSpace\"\n  | \"openSettings\"\n  | \"importBrowserData\"\n  | \"showHistory\"\n  | \"clearBrowsingData\"\n  | \"manageBookmarks\"\n  | \"bookmarkAllTabs\"\n  | \"setBookmarksBar\"\n  | \"toggleBookmarksBar\"\n  | \"newTabInGroup\"\n  | \"newGroupWithTabs\"\n  | \"cleanUpTabs\"\n  | \"tidyTabs\"\n  | \"searchTabs\"\n  | \"renameTab\"\n  | \"changeTabIcon\"\n  | \"returnToPinnedUrl\"\n  | \"tabSwitcher\"\n  | \"keepTab\"\n  | \"closeOtherTabs\"\n  | \"share\"\n  | \"sendFeedback\"\n  | \"keyboardShortcuts\"\n  | \"copyDiagnostics\"\n  | \"recordPerformanceIssue\"\n  | \"toolTour\"\n  | \"videoTour\"\n  | \"releaseNotes\"\n  | \"showOnboarding\"\n  | \"taskManager\"\n  | \"openExtension\"\n  | \"addExtension\"\n  | \"manageExtensions\"\n  | \"pinExtensions\"\n  | \"autofill\"\n  | \"openFile\"\n  | \"savePage\"\n  | \"capture\"\n  | \"captureFullPage\"\n  | \"newBoost\"\n  | \"editBoost\"\n  | \"zapElements\"\n  | \"toggleSiteBoosts\"\n  | \"emailPageLocation\"\n  | \"printWithSystemDialog\"\n  | \"stop\"\n  | \"caretBrowsing\"\n  | \"moveTabDown\"\n  | \"moveTabUp\"\n  | \"closeTabGroup\"\n  | \"openSpaceMenu\"",
       "CommandEvent": "{\n  command: BrowserCommand;\n  arg: string | null;\n  windowId: string | null;\n}",
       "WindowEvent": "| { type: \"focus\"; id: string }\n  | { type: \"close\"; id: string }\n  | { type: \"frame\"; id: string; frame: [number, number, number, number] }\n  | { type: \"closeRequest\"; id: string }\n  // Windows' shared runtime: openWindow named this open utility window again, with these options.\n  | { type: \"opened\"; id: string; options: OpenWindowOptions }\n  | ({ type: \"state\"; id: string } & WindowState)",
       "WindowState": "{\n  maximized: boolean;\n  fullscreen: boolean;\n  /** Ephemeral native state, never restored from a session. */\n  minimized?: boolean;\n  /** Restored/normal window size, including while maximized or fullscreen. No screen position. */\n  size?: [number, number];\n}",
@@ -2303,7 +2416,8 @@ export const nativeContracts = {
       "TidyNamesModule": "{\n  readonly available: boolean;\n  suggest(filename: string, pageTitle: string, pageUrl: string, candidate: string): Promise<string | null>;\n}"
     },
     "shell/src/app.ts": {
-      "UpdaterState": "| { available: false; managedBy?: \"packageManager\" }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      pending: PendingUpdate | null;\n    }",
+      "UpdaterState": "| { available: false; managedBy?: \"packageManager\" }\n  | {\n      available: true;\n      configured: boolean;\n      automaticChecks: boolean;\n      automaticDownloads: boolean;\n      canCheck: boolean;\n      sessionInProgress: boolean;\n      feedURL: string | null;\n      lastCheck: number | null;\n      version: string;\n      channel: UpdateChannel;\n      pending: PendingUpdate | null;\n    }",
+      "UpdateChannel": "\"stable\" | \"nightly\"",
       "PendingUpdate": "{ version: string; ready: boolean; downloading?: boolean }",
       "AppIcon": "{ id: string; name: string; preview: string | null }",
       "NotificationPermission": "\"granted\" | \"denied\" | \"notDetermined\" | \"provisional\"",
@@ -2314,7 +2428,7 @@ export const nativeContracts = {
       "NativeFrame": "{ image: string; symbol?: string; offset?: number }",
       "ScriptState": "{\n  windows: {\n    id: string;\n    title: string;\n    profileId: string;\n    incognito: boolean;\n    activeTabId: string | null;\n    tabs: { id: string; title: string; url: string; loading: boolean; pinned: boolean }[];\n  }[];\n  profiles: { id: string; name: string }[];\n}",
       "ScriptCommand": "{ id: string } & (\n  | { command: \"newWindow\"; url?: string; incognito: boolean; profileId?: string }\n  | { command: \"newTab\"; windowId?: string; url?: string; index?: number }\n  | { command: \"setURL\"; tabId: string; url: string }\n  | { command: \"closeTab\" | \"reload\" | \"back\" | \"forward\" | \"focusTab\"; tabId: string }\n  | { command: \"closeWindow\"; windowId: string }\n  | { command: \"setActiveTabIndex\"; windowId: string; index: number }\n  | { command: \"execute\"; tabId: string; code: string }\n  | { command: \"focusProfile\"; profileId: string }\n)",
-      "AppModule": "{\n  readonly apiVersion: number;\n  addListener(name: \"onNotificationResponse\", listener: (e: NotificationResponse) => void): EventSubscription;\n  addListener(name: \"onScriptCommand\", listener: (e: ScriptCommand) => void): EventSubscription;\n  addListener(name: \"onUpdatePending\", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;\n  updaterState(): Promise<UpdaterState>;\n  checkForUpdates(): Promise<void>;\n  installPendingUpdate(): Promise<void>;\n  disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;\n  setAutomaticUpdateChecks(on: boolean): Promise<void>;\n  setAutomaticUpdateDownloads(on: boolean): Promise<void>;\n  setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;\n  share(url: string, title: string | null, windowId: string | null): Promise<void>;\n  isInDock(): Promise<boolean>;\n  addToDock(): Promise<boolean>;\n  appIcons(size: number): Promise<AppIcon[]>;\n  appIcon(): Promise<string>;\n  setAppIcon(id: string): Promise<void>;\n  notificationPermission?(): Promise<NotificationPermission>;\n  requestNotificationPermission?(): Promise<boolean>;\n  postNotification(options: NotificationOptions): Promise<string | null>;\n  removeNotifications(ids: string[]): Promise<void>;\n  openNotificationSettings?(): Promise<void>;\n  setScriptState(state: ScriptState): Promise<void>;\n  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;\n  systemInfo(): SystemInfo;\n  openExternalURL(url: string): Promise<boolean>;\n  launchEnvironment(name: string): string | null;\n  playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;\n  setIntroMusicMuted(muted: boolean): Promise<void>;\n  stopIntroMusic(fade: number): Promise<void>;\n  devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;\n  devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;\n  devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;\n  devMenuCommand(command: string, arg: string | null): Promise<void>;\n  devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;\n  devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;\n  crashReports(since: number): Promise<CrashReport[]>;\n  devCrash(kind?: \"exception\"): Promise<void>;\n}",
+      "AppModule": "{\n  readonly apiVersion: number;\n  addListener(name: \"onNotificationResponse\", listener: (e: NotificationResponse) => void): EventSubscription;\n  addListener(name: \"onScriptCommand\", listener: (e: ScriptCommand) => void): EventSubscription;\n  addListener(name: \"onUpdatePending\", listener: (e: { pending: PendingUpdate | null }) => void): EventSubscription;\n  updaterState(): Promise<UpdaterState>;\n  checkForUpdates(): Promise<void>;\n  installPendingUpdate(): Promise<void>;\n  disintegrate(windowId: string, rects: [number, number, number, number][]): Promise<void>;\n  setAutomaticUpdateChecks(on: boolean): Promise<void>;\n  setAutomaticUpdateDownloads(on: boolean): Promise<void>;\n  setUpdateChannel(channel: UpdateChannel): Promise<void>;\n  setWindowActivity(windowId: string, url: string | null, title: string | null): Promise<void>;\n  share(url: string, title: string | null, windowId: string | null): Promise<void>;\n  isInDock(): Promise<boolean>;\n  addToDock(): Promise<boolean>;\n  appIcons(size: number): Promise<AppIcon[]>;\n  appIcon(): Promise<string>;\n  setAppIcon(id: string): Promise<void>;\n  notificationPermission?(): Promise<NotificationPermission>;\n  requestNotificationPermission?(): Promise<boolean>;\n  postNotification(options: NotificationOptions): Promise<string | null>;\n  removeNotifications(ids: string[]): Promise<void>;\n  openNotificationSettings?(): Promise<void>;\n  setScriptState(state: ScriptState): Promise<void>;\n  replyToScript(id: string, result: Record<string, unknown> | null, error: string | null): Promise<void>;\n  systemInfo(): SystemInfo;\n  openExternalURL(url: string): Promise<boolean>;\n  launchEnvironment(name: string): string | null;\n  playIntroMusic(cues: IntroMusicCues, muted: boolean): Promise<void>;\n  setIntroMusicMuted(muted: boolean): Promise<void>;\n  stopIntroMusic(fade: number): Promise<void>;\n  devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;\n  devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;\n  devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;\n  devMenuCommand(command: string, arg: string | null): Promise<void>;\n  devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;\n  devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;\n  crashReports(since: number): Promise<CrashReport[]>;\n  devCrash(kind?: \"exception\"): Promise<void>;\n}",
       "IntroMusicCues": "{\n  icon: number;\n  letters: number;\n  letterStep: number;\n  letterCount: number;\n  tagline: number;\n  exit: number;\n  end: number;\n}",
       "KeyTiming": "{ due: number; handled: number; drawn: number }",
       "KeyPress": "{\n  key: string;\n  keyCode: number;\n  modifiers?: (\"command\" | \"shift\" | \"option\" | \"control\" | \"function\")[];\n  characters?: string;\n  focus?: \"window\" | \"page\" | \"devtools\";\n  asKey?: boolean;\n  settle?: number;\n  wait?: number;\n  dry?: boolean;\n}",
@@ -2403,7 +2517,7 @@ export const nativeContracts = {
       "NativeComponent": "React.ComponentType<NativeProps & { ref?: React.Ref<NativeHandle> }>"
     },
     "nncore/src/WebView.tsx": {
-      "NavigationState": "{\n  url: string;\n  title: string;\n  canGoBack: boolean;\n  canGoForward: boolean;\n  isLoading: boolean;\n  themeColor: string | null;\n  themeColorSource: \"meta\" | \"header\" | \"background\" | null;\n}",
+      "NavigationState": "{\n  url: string;\n  title: string;\n  canGoBack: boolean;\n  canGoForward: boolean;\n  isLoading: boolean;\n  themeColor: string | null;\n  themeColorSource: \"meta\" | \"header\" | \"background\" | null;\n  /** The page the view has committed to (WebKit only): differs from `url` while a navigation is pending. */\n  committedUrl?: string;\n}",
       "MediaState": "{ playing: boolean; muted: boolean }",
       "NowPlaying": "{\n  title: string;\n  artist: string;\n  album: string;\n  artwork: string | null;\n  playbackState: \"playing\" | \"paused\" | \"none\";\n  position: number;\n  duration: number | null;\n  playbackRate: number;\n  timestamp: number;\n  hasVideo: boolean;\n  actions: string[];\n  /** An endless video, or one whose seekable end keeps moving (a live stream that can be rewound). */\n  live: boolean;\n  /** Seconds behind a live stream's end, at `timestamp`. */\n  liveBehind: number;\n}",
       "MediaCommand": "\"play\" | \"pause\" | \"toggle\" | \"next\" | \"previous\" | \"seekBy\" | \"seekTo\" | \"seekToLive\" | \"stop\"",
@@ -2432,7 +2546,7 @@ export const nativeContracts = {
       "AutofillPrompt": "{\n  id: number;\n  kind: \"saveAddress\" | \"updateAddress\" | \"saveCard\";\n  origin: string;\n  title: string;\n  message: string;\n  accept: string;\n  decline: string;\n  footer: string;\n  lines: string[];\n  changes?: { field: \"name\" | \"address\" | \"email\" | \"phone\" | \"other\"; from: string; to: string }[];\n  newLabel?: string;\n  oldLabel?: string;\n}",
       "AutofillPromptAnswer": "\"accept\" | \"decline\" | \"dismiss\"",
       "ExtensionActionResult": "\"none\" | \"popup\" | \"sidePanel\"",
-      "WebViewProps": "ViewProps & {\n  url?: string;\n  profile?: string;\n  adoptId?: string;\n  /** The app's id for the tab: its browser keeps it while moving between views, and Chrome's tab strips name the\n   *  tab by it (`StripTab.key`, tabStrip.ts). */\n  transferKey?: string;\n  standalone?: boolean;\n  /** An extension's popup or side panel page (implies `standalone`): Chrome's own extension view, bound to the\n   *  window it shows in, so the page's current window and active tab are that window's (chrome.windows,\n   *  chrome.tabs). Without it, a standalone page's current window is a hidden one. */\n  extensionHost?: \"popup\" | \"sidePanel\";\n  visible?: boolean;\n  warm?: boolean;\n  pageBackgroundColor?: string;\n  autoPictureInPicture?: boolean;\n  /** Arc's Peek: a link the user clicks to another site doesn't navigate the page; it comes to `onPeekLink`. */\n  peekLinks?: boolean;\n  onNavigationChange?: (state: NavigationState) => void;\n  onProgress?: (progress: number) => void;\n  onFavicon?: (url: string, candidates: string[]) => void;\n  onMedia?: (state: MediaState) => void;\n  onNowPlaying?: (state: NowPlaying | null) => void;\n  onMediaAccess?: (access: MediaAccess) => void;\n  onOpenWindow?: (request: OpenWindowRequest) => void;\n  onPopupBlocked?: (popup: BlockedPopup) => void;\n  onFindResult?: (result: FindResult) => void;\n  onFullscreen?: (fullscreen: boolean) => void;\n  onStatus?: (text: string) => void;\n  onPeekLink?: (url: string) => void;\n  onCrashed?: (info: CrashInfo) => void;\n  onUnresponsive?: () => void;\n  onResponsive?: () => void;\n  onLoadError?: (error: LoadError) => void;\n  onSecurity?: (info: SecurityInfo) => void;\n  onZoom?: (zoom: ZoomState) => void;\n  onContentBlocked?: (state: ContentBlockedState) => void;\n  onDownloadNavigation?: (navigation: DownloadNavigation) => void;\n  onNotification?: (notification: WebNotification) => void;\n  onNotificationClose?: (id: string) => void;\n  onPictureInPicture?: (state: PictureInPictureState) => void;\n  onActivateRequest?: (request: ActivateRequest) => void;\n  onDisplayMediaRequest?: (request: DisplayMediaRequest) => void;\n  onWindowClose?: () => void;\n  onCommand?: (command: PageCommand) => void;\n  onPageFocus?: () => void;\n  onPageMessage?: (kind: string, data: unknown) => void;\n  onReady?: (browserId: number, chromeTabId: number) => void;\n  onDiscarded?: (url: string) => void;\n  onPasswordPrompt?: (prompt: PasswordPrompt) => void;\n  /** An offer to save an address or card (`prompt`), or null once offer `id` went (answered, or Chrome closed it). */\n  onAutofillPrompt?: (prompt: AutofillPrompt | null, id: number) => void;\n  onExternalApp?: (request: ExternalAppRequest) => void;\n}",
+      "WebViewProps": "ViewProps & {\n  url?: string;\n  /** Where the page runs: Chromium (the default) or WebKit (webkit.ts). A view keeps its engine for its life. */\n  engine?: PageEngine;\n  profile?: string;\n  adoptId?: string;\n  /** The app's id for the tab: its browser keeps it while moving between views, and Chrome's tab strips name the\n   *  tab by it (`StripTab.key`, tabStrip.ts). */\n  transferKey?: string;\n  standalone?: boolean;\n  /** An extension's popup or side panel page (implies `standalone`): Chrome's own extension view, bound to the\n   *  window it shows in, so the page's current window and active tab are that window's (chrome.windows,\n   *  chrome.tabs). Without it, a standalone page's current window is a hidden one. */\n  extensionHost?: \"popup\" | \"sidePanel\";\n  visible?: boolean;\n  warm?: boolean;\n  pageBackgroundColor?: string;\n  autoPictureInPicture?: boolean;\n  /** Arc's Peek: a link the user clicks to another site doesn't navigate the page; it comes to `onPeekLink`. */\n  peekLinks?: boolean;\n  onNavigationChange?: (state: NavigationState) => void;\n  onProgress?: (progress: number) => void;\n  onFavicon?: (url: string, candidates: string[]) => void;\n  onMedia?: (state: MediaState) => void;\n  onNowPlaying?: (state: NowPlaying | null) => void;\n  onMediaAccess?: (access: MediaAccess) => void;\n  onOpenWindow?: (request: OpenWindowRequest) => void;\n  onPopupBlocked?: (popup: BlockedPopup) => void;\n  onFindResult?: (result: FindResult) => void;\n  onFullscreen?: (fullscreen: boolean) => void;\n  onStatus?: (text: string) => void;\n  onPeekLink?: (url: string) => void;\n  onCrashed?: (info: CrashInfo) => void;\n  onUnresponsive?: () => void;\n  onResponsive?: () => void;\n  onLoadError?: (error: LoadError) => void;\n  onSecurity?: (info: SecurityInfo) => void;\n  onZoom?: (zoom: ZoomState) => void;\n  onContentBlocked?: (state: ContentBlockedState) => void;\n  onDownloadNavigation?: (navigation: DownloadNavigation) => void;\n  onNotification?: (notification: WebNotification) => void;\n  onNotificationClose?: (id: string) => void;\n  onPictureInPicture?: (state: PictureInPictureState) => void;\n  onActivateRequest?: (request: ActivateRequest) => void;\n  onDisplayMediaRequest?: (request: DisplayMediaRequest) => void;\n  onWindowClose?: () => void;\n  onCommand?: (command: PageCommand) => void;\n  onPageFocus?: () => void;\n  onPageMessage?: (kind: string, data: unknown) => void;\n  onReady?: (browserId: number, chromeTabId: number) => void;\n  onDiscarded?: (url: string) => void;\n  onPasswordPrompt?: (prompt: PasswordPrompt) => void;\n  /** An offer to save an address or card (`prompt`), or null once offer `id` went (answered, or Chrome closed it). */\n  onAutofillPrompt?: (prompt: AutofillPrompt | null, id: number) => void;\n  onExternalApp?: (request: ExternalAppRequest) => void;\n}",
       "CaptureOptions": "{\n  /** x, y, width, height in CSS px from the document's top-left. */\n  clip?: [number, number, number, number];\n  /** The clip reaches past the viewport. */\n  beyond?: boolean;\n  fullPage?: boolean;\n  /** The page's pixels per CSS px: the screen's scale times the zoom. */\n  pixelRatio?: number;\n}",
       "CapturedImage": "{ path: string; width: number; height: number }",
       "WebViewHandle": "{\n  loadUrl(url: string, options?: { userInitiated?: boolean }): Promise<void>;\n  goBack(): Promise<void>;\n  goForward(): Promise<void>;\n  goToOffset(offset: number): Promise<void>;\n  reload(): Promise<void>;\n  forceReload(): Promise<void>;\n  stopLoading(): Promise<void>;\n  focus(): Promise<void>;\n  setMuted(muted: boolean): Promise<void>;\n  // Palette and per-host tints, ready for the renderer to select when each document starts.\n  setBoostStyle(style: EngineBoostStyle): Promise<void>;\n  zoomStep(direction: 1 | -1 | 0): Promise<void>;\n  find(text: string, forward: boolean, findNext: boolean): Promise<void>;\n  stopFinding(clearSelection: boolean): Promise<void>;\n  print(): Promise<void>;\n  runPageCommand(name: \"savePage\" | \"systemPrint\" | \"caretBrowsing\"): Promise<void>;\n  showDevTools(panel?: string): Promise<void>;\n  executeJavaScript(code: string): Promise<void>;\n  evaluate<T = unknown>(code: string): Promise<T | null>;\n  navigationEntries(): Promise<NavigationEntry[]>;\n  /** The page as painted: a base64 JPEG and the view's frame in its window from the top-left (null after 1 s). */\n  capturePicture(scale: number): Promise<{ data: string; frame: [number, number, number, number] } | null>;\n  /** The page's viewport as a base64 PNG at its device scale (null after 3 s). */\n  captureScreenshot(): Promise<string | null>;\n  /** Capture's image: an area of the page, its whole length or its viewport, as a PNG file (null after 20 s). */\n  captureImage(options: CaptureOptions): Promise<CapturedImage | null>;\n  downloadFavicon(url: string): Promise<FaviconImage | null>;\n  downloadImage(url: string, maxPixels: number): Promise<FaviconImage | null>;\n\n  mediaCommand(action: MediaCommand, seconds?: number): Promise<void>;\n  requestPictureInPicture(): Promise<boolean>;\n  exitPictureInPicture(): Promise<void>;\n\n  getSecurityInfo(): Promise<SecurityInfo | null>;\n  openBlockedPopup(id: string, always?: boolean): Promise<void>;\n  clearSiteData(): Promise<{ cookies: number | false; storage: boolean }>;\n\n  resolvePasswordPrompt(answer: PasswordPromptAnswer, edits?: { username?: string; password?: string }): Promise<void>;\n  resolveAutofillPrompt(id: number, answer: AutofillPromptAnswer): Promise<void>;\n  executeExtensionAction(extensionId: string): Promise<ExtensionActionResult | null>;\n\n  resolveDisplayMedia(id: string, sourceId: string | null): Promise<void>;\n  mediaCaptureSourceId(): Promise<string | null>;\n  notificationAction(id: string, action: \"click\" | \"close\"): Promise<void>;\n\n  resolveUnresponsive(terminate: boolean): Promise<void>;\n  discard(options?: { unload?: boolean }): Promise<DiscardOutcome>;\n  setFrozen(frozen: boolean): Promise<void>;\n}",
@@ -2443,7 +2557,13 @@ export const nativeContracts = {
       "NativeProps": "Omit<WebViewProps, Handlers> & { [K in Handlers]?: Evt<NativeEvents[K]> }",
       "NativeHandle": "Omit<WebViewHandle, \"evaluate\" | \"loadUrl\" | \"downloadFavicon\" | \"resolvePasswordPrompt\" | \"discard\" | \"setBoostStyle\"> & {\n  setBoostStyle?(descriptor: string): Promise<void>;\n  evaluate(code: string): Promise<string | null>;\n  downloadFavicon(url: string): Promise<FaviconImage | null>;\n  loadUrl(url: string, userInitiated?: boolean): Promise<void>;\n  resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;\n  discard(unload: boolean): Promise<DiscardOutcome>;\n}"
     },
-    "nncore/src/NativeWebView.tsx": {},
+    "nncore/src/NativeWebView.tsx": {
+      "NativeView": "ComponentType<NativeProps & RefAttributes<NativeHandle>>"
+    },
+    "nncore/src/webkit.ts": {
+      "PageEngine": "\"chromium\" | \"webkit\"",
+      "WebKitNative": "{\n  addListener(name: \"onDownload\", listener: (d: Download) => void): EventSubscription;\n  addListener(name: \"onPermission\", listener: (p: PermissionRequest) => void): EventSubscription;\n  addListener(name: \"onPermissionDismissed\", listener: (p: { id: string }) => void): EventSubscription;\n  prepareTransfer(key: string): void;\n  releaseTransfer(key: string): void;\n  resolvePermission(id: string, result: PermissionResult, remember: boolean): Promise<void>;\n  downloadCommand(action: \"cancel\" | \"pause\" | \"resume\", id: string): Promise<void>;\n  endPrivateSession(session: string): Promise<void>;\n  sitePermissions(profile: string, origin: string): Promise<Partial<SiteSettings>>;\n  setSitePermission(profile: string, origin: string, kind: string, value: string): Promise<void>;\n  resolveExternalApp(id: string, open: boolean, remember: boolean): Promise<void>;\n  externalAppAllowances(profile: string): Promise<ExternalAppAllowance[]>;\n  removeExternalAppAllowance(profile: string, origin: string, scheme: string): Promise<void>;\n  clearBrowsingData(profile: string, types: BrowsingDataType[], since: number | null): Promise<void>;\n  deleteProfileData(profile: string): Promise<boolean>;\n  info(): Promise<{ safariVersion: string; userAgentSuffix: string; passkeys: boolean }>;\n}"
+    },
     "sync/src/native.ts": {
       "FolderInfo": "{\n  keyStorage?: \"persistent\" | \"session\" | \"locked\";\n  path: string;\n  defaultPath: string;\n  iCloudAvailable: boolean;\n  inICloud: boolean;\n  exists: boolean;\n  writable: boolean;\n  hasSyncData: boolean;\n}",
       "PhraseResult": "| { ok: true }\n  | { error: \"wordCount\"; count: number }\n  | { error: \"unknownWord\"; word: string }\n  | { error: \"checksum\" }\n  | { error: \"noData\" }\n  | { error: \"mismatch\" }\n  | { error: \"keychain\" }",

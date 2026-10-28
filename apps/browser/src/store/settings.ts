@@ -10,6 +10,7 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@bay/core";
+import type { PageEngine } from "@bay/nncore";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { layout } from "../lib/constants";
@@ -50,8 +51,6 @@ export type Settings = {
   // Off by default; reversible via Reset Name. macOS 26 with Apple Intelligence in Arc;
   // Bay ships a heuristic that runs everywhere.
   tidyTabTitles: boolean;
-  // Arc Max's "Tidy Tabs": group today's tabs by topic on demand.
-  tidyTabs: boolean;
   cleanUpInactiveTabsAfterHours: number | null;
   awakeSites: string[];
   mutedSites: string[];
@@ -73,7 +72,6 @@ export type Settings = {
   sidebarPosition: "left" | "right";
   // Holding Option alone slides the hidden sidebar out, as Arc's did (App.tsx › SidebarPeek).
   showSidebarOnOption: boolean;
-  batterySaver: boolean;
   extensionSidePanelWidth: number;
 
   showFullUrl: boolean;
@@ -103,6 +101,12 @@ export type Settings = {
   littleBayMenuBarItem: boolean;
   // A Little Bay left alone this long is put away, its page in the Library's archive (littleBay/putAway.ts); null never.
   littleBayPutAwayAfterHours: number | null;
+
+  // Where pages open (store/engines.ts): the default engine, website rules ("https://host[:port]" to an engine), and
+  // whether streaming sites open in WebKit, where their protected video plays.
+  pageEngine: PageEngine;
+  websiteEngines: Record<string, PageEngine>;
+  protectedVideoInWebKit: boolean;
 };
 
 export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
@@ -133,7 +137,6 @@ export const DEFAULT_SETTINGS: Settings = {
   optShiftClickOpensInGroup: true,
   autoGroupMeetingTabs: true,
   tidyTabTitles: false,
-  tidyTabs: false,
   // On, as Arc's archive (its default is 12 hours). A saved session keeps its choice.
   cleanUpInactiveTabsAfterHours: 12,
   awakeSites: [...DEFAULT_AWAKE_SITES],
@@ -149,7 +152,6 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
   showSidebarOnOption: true,
-  batterySaver: true,
   extensionSidePanelWidth: 360,
   showFullUrl: false,
   bookmarksBar: "never",
@@ -169,6 +171,9 @@ export const DEFAULT_SETTINGS: Settings = {
   littleBayMenuBarItem: false,
   // Arc's: six hours.
   littleBayPutAwayAfterHours: 6,
+  pageEngine: "chromium",
+  websiteEngines: {},
+  protectedVideoInWebKit: true,
 };
 
 type LegacySettings = Partial<Settings> & {

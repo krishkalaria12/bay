@@ -84,6 +84,7 @@ export type BrowserCommand =
   | "addBookmarkToFolder"
   | "openBookmark"
   | "toggleMute"
+  | "togglePageEngine"
   | "downloads"
   | "mergeAllWindows"
   | "switchSpace"
@@ -101,6 +102,7 @@ export type BrowserCommand =
   | "newTabInGroup"
   | "newGroupWithTabs"
   | "cleanUpTabs"
+  | "tidyTabs"
   | "searchTabs"
   | "renameTab"
   | "changeTabIcon"
@@ -287,7 +289,7 @@ const Shell = requireNativeModule<{
   closeWindow(id: string): Promise<void>;
   focusWindow(id: string): Promise<void>;
   setTrafficLightsCenter(id: string, center: [number, number] | null): Promise<void>;
-  setTrafficLightsMode(id: string, mode: TrafficLightsMode): Promise<void>;
+  setTrafficLightsMode(id: string, mode: TrafficLightsMode, color: string | null): Promise<void>;
   dragPreviewBegin?(windowId: string, chip: Rect4, grab: [number, number]): Promise<void>;
   dragPreviewPage?(base64: string, frame: Rect4): Promise<void>;
   dragPreviewUpdate?(shape: DragPreviewShape, point: [number, number]): Promise<void>;
@@ -382,8 +384,8 @@ export const setTrafficLightsCenter = (id: string, center: [number, number] | nu
  * them); "hidden" (Arc's with the sidebar closed, shown with its peek).
  */
 export type TrafficLightsMode = "shown" | "hover" | "hidden";
-export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode) =>
-  capabilities.trafficLights ? Shell.setTrafficLightsMode(id, mode) : Promise.resolve();
+export const setTrafficLightsMode = (id: string, mode: TrafficLightsMode, color?: string) =>
+  capabilities.trafficLights ? Shell.setTrafficLightsMode(id, mode, color ?? null) : Promise.resolve();
 type Rect4 = [number, number, number, number];
 export type DragPreviewShape = "hidden" | "pill" | "card";
 // The dragged tab's picture under the pointer, a native panel that floats over everything (Windows.swift ›
@@ -584,6 +586,7 @@ type TidyNamesModule = {
 };
 const TidyNamesNative = requireOptionalNativeModule<TidyNamesModule>("BayTidyNames");
 
-// Null without Apple Intelligence, where Tidy Downloads uses the local cleaner alone.
+// Null unless launched with BAY_TIDY_DOWNLOADS_AI=true on a Mac with Apple Intelligence; Tidy Downloads then leans on
+// the local cleaner alone.
 export const tidyNames: Omit<TidyNamesModule, "available"> | null =
   TidyNamesNative && nativeSnapshot("BayTidyNames", "available", [], () => TidyNamesNative.available) ? TidyNamesNative : null;

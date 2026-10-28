@@ -1,11 +1,12 @@
 import type { ViewProps } from "@bay/platform";
 import { toAppUrl, toEngineUrl } from "@bay/core";
-import NativeWebView from "./NativeWebView";
+import NativeWebView, { webKitView } from "./NativeWebView";
 import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import { NativeSyntheticEvent } from "react-native";
 import type { ExternalAppRequest } from "./externalApps";
 import type { FaviconImage } from "./favicons";
 import type { EngineBoostStyle } from "./native";
+import { hasWebKit, type PageEngine } from "./webkit";
 
 export type NavigationState = {
   url: string;
@@ -15,6 +16,8 @@ export type NavigationState = {
   isLoading: boolean;
   themeColor: string | null;
   themeColorSource: "meta" | "header" | "background" | null;
+  /** The page the view has committed to (WebKit only): differs from `url` while a navigation is pending. */
+  committedUrl?: string;
 };
 
 export type MediaState = { playing: boolean; muted: boolean };
@@ -148,6 +151,8 @@ export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 
 export type WebViewProps = ViewProps & {
   url?: string;
+  /** Where the page runs: Chromium (the default) or WebKit (webkit.ts). A view keeps its engine for its life. */
+  engine?: PageEngine;
   profile?: string;
   adoptId?: string;
   /** The app's id for the tab: its browser keeps it while moving between views, and Chrome's tab strips name the
@@ -436,6 +441,7 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
 
   const nativeProps: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(props)) {
+    if (key === "engine") continue;
     if (key === "url") {
       nativeProps.url = typeof value === "string" ? toEngineUrl(value) : value;
       continue;
@@ -445,5 +451,6 @@ export const WebView = forwardRef<WebViewHandle, WebViewProps>(function WebView(
       map && typeof value === "function" ? (e: NativeSyntheticEvent<unknown>) => (value as (...args: unknown[]) => void)(...map(e.nativeEvent)) : value;
   }
 
-  return <NativeWebView ref={native} {...(nativeProps as NativeProps)} />;
+  const Native = props.engine === "webkit" && hasWebKit() ? webKitView() : NativeWebView;
+  return <Native ref={native} {...(nativeProps as NativeProps)} />;
 });
