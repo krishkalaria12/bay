@@ -37,6 +37,7 @@ chromium all chromium-side-panel-hook.patch
 chromium all chromium-hidden-window-current-window.patch
 chromium mac chromium-devtools-redock-display.patch
 chromium all chromium-devtools-window-title.patch
+chromium win,linux chromium-devtools-opener-cef-off.patch
 chromium all chromium-extension-install-prompt-hook.patch
 chromium all chromium-extension-updates.patch
 chromium all chromium-extension-import.patch
