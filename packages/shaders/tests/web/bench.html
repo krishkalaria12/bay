@@ -4,13 +4,13 @@
 <body style="margin: 0; overflow: hidden">
   <script type="module">
     // One shader-bench scenario (?scenario=…), timed in the page; apps/browser/scripts/perf/shader-bench.mjs runs it.
-    import { createSurface } from "/web/surface.ts";
-    import { registerStatic, staticStats } from "/web/staticRenderer.ts";
-    import { drawPowerUp, POWER_UP_SOURCES } from "/web/powerUpRenderer.ts";
-    import { edgeLight } from "/web/sources/edgeLight.ts";
-    import { backdrop } from "/web/sources/backdrop.ts";
-    import { areaLight } from "/web/sources/areaLight.ts";
-    import { areaLightUniforms, backdropUniforms, POWER_UP_FINISH, powerUpUniforms } from "/web/uniforms.ts";
+    import { createSurface } from "/webgl/surface.ts";
+    import { registerStatic, staticStats } from "/webgl/staticRenderer.ts";
+    import { drawPowerUp, POWER_UP_SOURCES } from "/webgl/powerUpRenderer.ts";
+    import { edgeLight } from "/webgl/shaders/edgeLight.ts";
+    import { backdrop } from "/webgl/shaders/backdrop.ts";
+    import { areaLight } from "/webgl/shaders/areaLight.ts";
+    import { areaLightUniforms, backdropUniforms, POWER_UP_FINISH, powerUpUniforms } from "/webgl/uniforms.ts";
 
     const params = new URLSearchParams(location.search);
     const scenario = params.get("scenario");

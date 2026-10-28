@@ -3,16 +3,16 @@
 <title>Bay web shader fixture</title>
 <body style="margin: 0">
   <script type="module">
-    import { createSurface } from "/web/surface.ts";
-    import { registerStatic, staticStats } from "/web/staticRenderer.ts";
-    import { subscribers } from "/web/clock.ts";
-    import { drawPowerUp } from "/web/powerUpRenderer.ts";
-    import { backdrop } from "/web/sources/backdrop.ts";
-    import { blur, copy, halo, powerUp } from "/web/sources/powerUp.ts";
-    import { areaLight } from "/web/sources/areaLight.ts";
-    import { edgeLight } from "/web/sources/edgeLight.ts";
-    import { color, oklab } from "/web/colors.ts";
-    import { areaLightUniforms, backdropUniforms, edgeLightUniforms, haloUniforms, powerUpUniforms } from "/web/uniforms.ts";
+    import { createSurface } from "/webgl/surface.ts";
+    import { registerStatic, staticStats } from "/webgl/staticRenderer.ts";
+    import { subscribers } from "/webgl/clock.ts";
+    import { drawPowerUp } from "/webgl/powerUpRenderer.ts";
+    import { backdrop } from "/webgl/shaders/backdrop.ts";
+    import { blur, copy, halo, powerUp } from "/webgl/shaders/powerUp.ts";
+    import { areaLight } from "/webgl/shaders/areaLight.ts";
+    import { edgeLight } from "/webgl/shaders/edgeLight.ts";
+    import { color, oklab } from "/webgl/colors.ts";
+    import { areaLightUniforms, backdropUniforms, edgeLightUniforms, haloUniforms, powerUpUniforms } from "/webgl/uniforms.ts";
 
     const results = [];
     const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });

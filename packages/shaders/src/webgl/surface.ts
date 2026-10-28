@@ -1,7 +1,7 @@
 // WebGL2 plumbing for every web effect: contexts, per-context programs, typed uniforms and capped target sizes.
 // Programs, textures and uniform locations belong to one context and are never shared between contexts.
 
-import { VERTEX } from "./sources/common";
+import { VERTEX } from "./shaders/common";
 
 export type UniformType = "f" | "i" | "v2" | "v4" | "v4[]";
 export type UniformSpec = Record<string, UniformType>;

@@ -2,7 +2,7 @@
 // view's layer blur), stretched onto the canvas, then the halo unblurred on top in its own viewport. Blurring at a
 // quarter of the size costs a sixteenth of the full-size passes, and a 24-point blur has no detail to lose.
 
-import { blur, copy, halo, powerUp } from "./sources/powerUp";
+import { blur, copy, halo, powerUp } from "./shaders/powerUp";
 import type { Surface, UniformValues } from "./surface";
 
 type Target = { texture: WebGLTexture; framebuffer: WebGLFramebuffer; width: number; height: number };

@@ -5,15 +5,15 @@ import { capabilities, View } from "@bay/platform";
 import { useEffect, useRef, useState } from "react";
 import { GRAIN_OPACITY, GRAIN_SCALE } from "./constants";
 import type { AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
-import { adjustLightness, color, css } from "./web/colors";
-import { AreaGlow, EdgeOutline, GrainLayer, gradientCss } from "./web/fallbacks";
-import { grainInputs } from "./web/grain";
-import { drawPowerUp, POWER_UP_SOURCES } from "./web/powerUpRenderer";
-import { fill, useAnimatedCanvas, useContrast, useFocused, useMedia, webShaders } from "./web/ShaderView";
-import { areaLight } from "./web/sources/areaLight";
-import { backdrop } from "./web/sources/backdrop";
-import { edgeLight } from "./web/sources/edgeLight";
-import { registerStatic } from "./web/staticRenderer";
+import { adjustLightness, color, css } from "./webgl/colors";
+import { AreaGlow, EdgeOutline, GrainLayer, gradientCss } from "./webgl/fallbacks";
+import { grainInputs } from "./webgl/grain";
+import { drawPowerUp, POWER_UP_SOURCES } from "./webgl/powerUpRenderer";
+import { fill, useAnimatedCanvas, useContrast, useFocused, useMedia, webShaders } from "./webgl/ShaderView";
+import { areaLight } from "./webgl/shaders/areaLight";
+import { backdrop } from "./webgl/shaders/backdrop";
+import { edgeLight } from "./webgl/shaders/edgeLight";
+import { registerStatic } from "./webgl/staticRenderer";
 import {
   AREA_LIGHT_DURATION,
   AREA_LIGHT_PALETTES,
@@ -26,7 +26,7 @@ import {
   POWER_UP_FINISH,
   powerUpUniforms,
   validRect,
-} from "./web/uniforms";
+} from "./webgl/uniforms";
 export { DIA_SPECTRUM } from "./constants";
 export type { Rect, AreaLightPalette, AreaLightProps, EdgeLightProps, PowerUpProps, WindowBackdropProps } from "./types";
 
