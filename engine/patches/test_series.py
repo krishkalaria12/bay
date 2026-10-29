@@ -12,6 +12,12 @@ SPEC.loader.exec_module(series)
 
 
 class PlatformRoutingTests(unittest.TestCase):
+    def test_crashpad_handler_patch_is_linux_only(self):
+        name = "chromium-crashpad-handler-linux.patch"
+        self.assertIn(name, {step.name for step in series.read_series("linux")})
+        for platform in ("mac", "win"):
+            self.assertNotIn(name, {step.name for step in series.read_series(platform)})
+
     def test_linux_selects_shared_host_without_cef_or_windows_patches(self):
         selected = {step.name for step in series.read_series("linux")}
         for name in ("webui-window", "lifecycle", "extension-hooks"):
