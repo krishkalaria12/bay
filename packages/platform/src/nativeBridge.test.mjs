@@ -66,6 +66,31 @@ test("native constants refresh from host snapshots and optional methods require 
   info = hostInfo();
   assert.equal(shell.windowFrame, undefined);
 });
+test("native selection and capture settings require host support", async () => {
+  for (const platform of ["linux", "windows", "macos"]) {
+    const calls = [];
+    let info = hostInfo({ platform, modules: ["BayCEF"] });
+    const cef = bindNativeModule(
+      transport({
+        getHostInfo: () => info,
+        invoke: async (...args) => {
+          calls.push(args);
+          return '{"value":null}';
+        },
+      }),
+      "BayCEF",
+    );
+    assert.equal(cef.setDisplayMediaPicker, undefined);
+    assert.equal(cef.setSearchEngineName, undefined);
+    info = { ...info, optionalMethods: ["BayCEF.setDisplayMediaPicker", "BayCEF.setSearchEngineName"] };
+    await cef.setDisplayMediaPicker(true);
+    await cef.setSearchEngineName("DuckDuckGo");
+    assert.deepEqual(calls, [
+      ["BayCEF", "setDisplayMediaPicker", "[true]"],
+      ["BayCEF", "setSearchEngineName", '["DuckDuckGo"]'],
+    ]);
+  }
+});
 test("envelopes distinguish native errors from engine domain Result values", async () => {
   assert.deepEqual(decodeNativeResult('{"value":{"error":"not found"}}'), { error: "not found" });
   assert.throws(() => decodeNativeResult('{"error":{"code":"denied","message":"Access denied"}}'), { code: "denied", message: "Access denied" });

@@ -1186,10 +1186,10 @@ export const nativeContracts = {
         },
         "setDisplayMediaPicker": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 1,
           "maxArgs": 1,
-          "signature": "setDisplayMediaPicker(enabled: boolean): Promise<void>;"
+          "signature": "setDisplayMediaPicker?(enabled: boolean): Promise<void>;"
         },
         "setAutoPictureInPicture": {
           "async": true,
@@ -1207,10 +1207,10 @@ export const nativeContracts = {
         },
         "setSearchEngineName": {
           "async": true,
-          "optional": false,
+          "optional": true,
           "minArgs": 1,
           "maxArgs": 1,
-          "signature": "setSearchEngineName(name: string): Promise<void>;"
+          "signature": "setSearchEngineName?(name: string): Promise<void>;"
         },
         "displayMediaSources": {
           "async": true,

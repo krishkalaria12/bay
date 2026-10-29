@@ -61,10 +61,10 @@ export const Cef = requireNativeModule<{
   beginTracing(): Promise<boolean>;
   endTracing(keep: boolean): Promise<string | null>;
   isTracing(): Promise<boolean>;
-  setDisplayMediaPicker(enabled: boolean): Promise<void>;
+  setDisplayMediaPicker?(enabled: boolean): Promise<void>;
   setAutoPictureInPicture?(enabled: boolean): Promise<void>;
   setBoosts?(boosts: EngineBoost[]): Promise<void>;
-  setSearchEngineName(name: string): Promise<void>;
+  setSearchEngineName?(name: string): Promise<void>;
   displayMediaSources(): Promise<DisplayMediaSource[]>;
   listTasks(): Promise<EngineTask[]>;
   killTask(id: number): Promise<boolean>;
