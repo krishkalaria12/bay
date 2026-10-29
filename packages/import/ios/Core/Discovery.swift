@@ -301,7 +301,7 @@ public struct BrowserDiscovery {
       if Firefox.sessionFile(profile: dir) != nil { kinds.append(.tabs) }
       if has("logins.json") { kinds.append(.passwords) }
       if has("cookies.sqlite") { kinds.append(.cookies) }
-      if !ExtensionsImport.list(profile: dir, browser: def).isEmpty { kinds.append(.extensions) }
+      if FirefoxExtensions.hasAddons(profile: dir) { kinds.append(.extensions) }
       return BrowserProfile(id: p.path, name: p.name, path: dir.path, email: nil, avatarPath: nil, color: nil,
                             isDefault: p.isDefault, available: kinds, spaces: nil)
     }

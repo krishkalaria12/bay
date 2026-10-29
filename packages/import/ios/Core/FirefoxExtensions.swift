@@ -86,6 +86,12 @@ public enum FirefoxExtensions {
     return Data([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00]) + key
   }
 
+  /// Whether `list` would have anything, from the add-on registry alone: discovery asks for every profile, and
+  /// `list` unpacks and converts each package.
+  public static func hasAddons(profile: URL) -> Bool {
+    !addons(profile: profile).isEmpty
+  }
+
   private static func addons(profile: URL) -> [[String: Any]] {
     guard let data = try? Data(contentsOf: profile.appendingPathComponent("extensions.json")),
           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
