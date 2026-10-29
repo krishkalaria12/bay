@@ -1,4 +1,3 @@
-import { listInstalledBrowsers, type BrowserApplication } from "@bay/import";
 import { addToDock, isDefaultBrowser, isInDock, launchAtLoginStatus, setAsDefaultBrowser, setLaunchAtLogin, Symbol } from "@bay/shell";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
@@ -8,13 +7,11 @@ import { useBrowser } from "../../store/browser";
 import type { Settings } from "../../store/settings";
 import type { SpaceColor, SpaceTheme } from "../../store/types";
 import { Favicon, useHover } from "../primitives";
-import { openImport } from "../settings/windows";
 import { PERSONALIZE_COPY, TabLayoutPicker, ThemeColorPicker } from "./personalize";
 import { PINNABLE_SITES, pinSites, preselectedSites } from "./sites";
 import { finishOnboarding, nextStep, recordDefaultBrowserTrial, skipStep, STEPS, useOnboarding } from "./state";
 import { CheckMark, CheckRow, Reveal, SecondaryButton, SectionLabel, SelectTile, StepActions, StepProgress, StepTitle, useOnboardingColors } from "./ui";
 import { APP_ICON } from "../../lib/assets";
-import { BrowserIcon } from "../import/BrowserIcon";
 
 export function StepLayout({ children, actions, preview }: { children: ReactNode; actions: ReactNode; preview: ReactNode }) {
   const colors = useOnboardingColors();
@@ -57,123 +54,6 @@ export function StepLayout({ children, actions, preview }: { children: ReactNode
 const COLUMN = 380;
 const TILE_GAP = 8;
 export const QUARTER_TILE = (COLUMN - TILE_GAP * 3) / 4;
-
-// MARK: Import
-
-// Tiles for browsers found on this Mac, then "Starting fresh": two rows at most.
-const SOURCE_TILES = 7;
-const FRESH = "fresh";
-
-export function ImportStep() {
-  const colors = useOnboardingColors();
-  const [browsers, setBrowsers] = useState<BrowserApplication[]>([]);
-  // A browser's id, or FRESH.
-  const [source, setSource] = useState<string | null>(null);
-  const [importing, setImporting] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void listInstalledBrowsers().then(
-      (installed) => {
-        if (active) setBrowsers(installed);
-      },
-      () => {
-        if (active) setBrowsers([]);
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const shown = browsers.slice(0, SOURCE_TILES);
-  const chosen = shown.find((b) => b.id === source) ?? null;
-  const importingFrom = shown.find((b) => b.id === importing) ?? null;
-
-  const importNow = () => {
-    if (!chosen) return;
-    openImport(chosen.id);
-    setImporting(chosen.id);
-  };
-
-  const done = () => nextStep(importingFrom ? [`Your things from ${importingFrom.name}`] : []);
-
-  return (
-    <StepLayout
-      actions={<StepActions onContinue={done} disabled={!source} />}
-      preview={<ImportPreview chosen={chosen} fresh={source === FRESH} browsers={shown} />}
-    >
-      <Reveal delay={60}>
-        <StepTitle
-          title="Where are you coming from?"
-          subtitle="Bring your bookmarks, history, passwords and tabs, and stay signed in to your sites. It all stays on this Mac."
-        />
-      </Reveal>
-      <Reveal delay={140} style={{ gap: 12 }}>
-        <View style={{ gap: 8 }}>
-          {shown.length ? <SectionLabel title="Found on this Mac" /> : null}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: TILE_GAP }} accessibilityRole="radiogroup" accessibilityLabel="Browser">
-            {shown.map((b) => (
-              <SelectTile key={b.id} title={b.name} role="radio" width={QUARTER_TILE} selected={source === b.id} onPress={() => setSource(b.id)}>
-                {() => <BrowserIcon iconPath={b.iconPath} size={30} color={colors.steps} />}
-              </SelectTile>
-            ))}
-            <SelectTile title="Starting fresh" role="radio" width={QUARTER_TILE} selected={source === FRESH} onPress={() => setSource(FRESH)}>
-              {() => <Symbol name="sparkles" size={17} color={colors.subtitle} style={{ width: 30, height: 30 }} />}
-            </SelectTile>
-          </View>
-        </View>
-        {chosen ? (
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              padding: 12,
-              borderRadius: 12,
-              backgroundColor: colors.row,
-              borderWidth: StyleSheet.hairlineWidth * 2,
-              borderColor: colors.rowBorder,
-            }}
-          >
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ fontSize: 13, fontWeight: "500", color: colors.title }}>
-                {importing === chosen.id ? `Importing from ${chosen.name}` : `Bring your stuff from ${chosen.name}`}
-              </Text>
-              <Text style={{ fontSize: 12, color: colors.rowSubtitle }}>
-                {importing === chosen.id ? "It runs in its own window. Carry on here." : "Bookmarks, history, passwords and tabs."}
-              </Text>
-            </View>
-            {importing === chosen.id ? <CheckMark on size={18} /> : <SecondaryButton title="Import…" filled onPress={importNow} />}
-          </View>
-        ) : null}
-      </Reveal>
-    </StepLayout>
-  );
-}
-
-function ImportPreview({ chosen, fresh, browsers }: { chosen: BrowserApplication | null; fresh: boolean; browsers: BrowserApplication[] }) {
-  const colors = useOnboardingColors();
-  const from = chosen ? [chosen] : fresh ? [] : browsers.slice(0, 6);
-  return (
-    <View style={{ alignItems: "center", gap: 22 }}>
-      {from.length ? (
-        <>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, maxWidth: 300 }}>
-            {from.map((browser) => (
-              <View key={browser.id} style={{ alignItems: "center", gap: 6, width: chosen ? 96 : 72 }}>
-                <BrowserIcon iconPath={browser.iconPath} size={chosen ? 88 : 56} color={colors.steps} />
-                <Text style={{ fontSize: 11, color: colors.subtitle }}>{browser.name}</Text>
-              </View>
-            ))}
-          </View>
-          <Symbol name="arrow.down" size={18} weight="medium" color={colors.steps} style={{ width: 24, height: 24 }} />
-        </>
-      ) : null}
-      <Image source={APP_ICON} style={{ width: chosen || fresh ? 96 : 72, height: chosen || fresh ? 96 : 72 }} />
-    </View>
-  );
-}
 
 // MARK: Personalization
 

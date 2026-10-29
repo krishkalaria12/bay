@@ -87,19 +87,23 @@ export function Reveal({ delay = 0, children, style }: { delay?: number; childre
   return <Animated.View style={[style, reveal]}>{children}</Animated.View>;
 }
 
-export function StepProgress() {
+/** `onColor`: over a coloured backdrop rather than the card, as the import step's halves are. */
+export function StepProgress({ onColor = false }: { onColor?: boolean }) {
   const colors = useOnboardingColors();
   const step = useOnboarding((s) => s.step);
   const steps: OnboardingStep[] = STEPS.filter((s) => s !== "intro");
   const index = steps.indexOf(step);
+  const track = onColor ? "rgba(255,255,255,0.22)" : colors.progressTrack;
   return (
     <View style={{ gap: 8 }}>
       <View style={{ flexDirection: "row", gap: 4 }}>
         {steps.map((s, i) => (
-          <View key={s} style={{ width: 22, height: 3, borderRadius: 1.5, backgroundColor: i <= index ? colors.progressFill : colors.progressTrack }} />
+          <View key={s} style={{ width: 22, height: 3, borderRadius: 1.5, backgroundColor: i <= index ? colors.progressFill : track }} />
         ))}
       </View>
-      <Text style={{ fontSize: 11, fontWeight: "500", letterSpacing: 0.2, color: colors.steps }}>{`STEP ${index + 1} OF ${steps.length}`}</Text>
+      <Text style={{ fontSize: 11, fontWeight: "500", letterSpacing: 0.2, color: onColor ? "rgba(255,255,255,0.6)" : colors.steps }}>
+        {`STEP ${index + 1} OF ${steps.length}`}
+      </Text>
     </View>
   );
 }
