@@ -40,6 +40,7 @@ chromium all chromium-devtools-window-title.patch
 chromium win,linux chromium-devtools-opener-cef-off.patch
 chromium win,linux chromium-window-features-cef-off.patch
 chromium win,linux chromium-runtime-views-cef-off.patch
+chromium win,linux chromium-webui-post-tab-model.patch
 chromium linux chromium-crashpad-handler-linux.patch
 chromium all chromium-extension-install-prompt-hook.patch
 chromium all chromium-extension-updates.patch
