@@ -31,6 +31,12 @@ export type WebNativeBridgeOptions = {
 const MAX_PENDING_NOTIFICATION_RESPONSES = 32;
 const MAX_PENDING_NOTIFICATION_BYTES = 256 * 1024;
 
+function awaitsWindowAssignment(info: NativeHostInfo): boolean {
+  const shell = info.constants.BayShell;
+  if (typeof shell?.initializationError === "string" && shell.initializationError) return false;
+  return shell?.sharedRuntime === true && shell.runtimeRole === "window" && (shell.windowId === undefined || shell.windowId === "");
+}
+
 /** Only the trusted chrome://bay bootstrap creates the Mojo endpoints. No window messages are accepted. */
 export async function createMojoTransport({
   remote,
@@ -41,6 +47,7 @@ export async function createMojoTransport({
   let info: NativeHostInfo | null = null;
   let failure: Error | null = null;
   let disposed = false;
+  let bootstrapUpdated: (() => void) | undefined;
   const listeners = new Map<string, Map<string, Set<{ listener: (payload: unknown) => void }>>>();
   const notificationResponses: { payload: unknown; bytes: number }[] = [];
   let notificationBytes = 0;
@@ -120,6 +127,9 @@ export async function createMojoTransport({
           failure = error instanceof Error ? error : new Error(String(error));
           onProtocolError(failure);
         }
+        const updated = bootstrapUpdated;
+        bootstrapUpdated = undefined;
+        updated?.();
       }),
     );
     removers.push(
@@ -146,21 +156,25 @@ export async function createMojoTransport({
     );
     remote.setClient(client.$.bindNewPipeAndPassRemote());
     let timeout: ReturnType<typeof setTimeout> | undefined;
-    let initial: NativeHostInfo;
     try {
-      const response = await Promise.race([
-        remote.getHostInfo(),
-        new Promise<never>((_, reject) => {
-          timeout = setTimeout(() => reject(new NativeBridgeError("bootstrap_timeout", "Bay's native host did not finish starting")), bootstrapTimeoutMs);
-        }),
-      ]);
-      initial = parseInfo(response.infoJson);
+      const deadline = new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new NativeBridgeError("bootstrap_timeout", "Bay's native host did not finish starting")), bootstrapTimeoutMs);
+      });
+      const response = await Promise.race([remote.getHostInfo(), deadline]);
+      const initial = parseInfo(response.infoJson);
+      active();
+      // An update received during bootstrap is newer than the initial snapshot.
+      info ??= initial;
+      // The coordinator restores canonical window IDs asynchronously. Keep
+      // its initial shell pending until native reconciliation assigns one.
+      while (awaitsWindowAssignment(info)) {
+        await Promise.race([new Promise<void>((resolve) => (bootstrapUpdated = resolve)), deadline]);
+        active();
+      }
     } finally {
       clearTimeout(timeout);
+      bootstrapUpdated = undefined;
     }
-    active();
-    // An update received during bootstrap is newer than the initial request's snapshot.
-    info ??= initial;
     return {
       getHostInfo() {
         active();

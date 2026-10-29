@@ -4,6 +4,8 @@ import { createMojoTransport, initializeWebNativeBridge } from "./mojoTransport.
 import { bindNativeModule, getNativeHostInfo } from "./nativeBridge.ts";
 
 const info = (overrides) => ({ contractVersion: 2, platform: "windows", modules: ["BayShell"], views: [], constants: {}, snapshots: {}, ...overrides });
+const windowInfo = (shell = {}) => info({ platform: "linux", constants: { BayShell: { sharedRuntime: true, runtimeRole: "window", ...shell } } });
+const nextTurn = () => new Promise(setImmediate);
 function endpoints(overrides = {}) {
   let nextId = 1,
     closed = 0;
@@ -86,6 +88,85 @@ test("newer host info received during initialization wins over old initial snaps
   const transport = await ready;
   assert.equal(transport.getHostInfo().platform, "linux");
   transport.dispose();
+});
+test("shared window bootstrap waits through incomplete updates for its native-assigned id", async () => {
+  const native = endpoints({ getHostInfo: async () => ({ infoJson: JSON.stringify(windowInfo()) }) });
+  let settled = false;
+  const ready = createMojoTransport(native).then((transport) => {
+    settled = true;
+    return transport;
+  });
+  await nextTurn();
+  assert.equal(settled, false);
+  native.emit("info", JSON.stringify(windowInfo({ windowId: "" })));
+  await nextTurn();
+  assert.equal(settled, false);
+  native.emit("info", JSON.stringify(windowInfo({ windowId: "restored-window" })));
+  const transport = await ready;
+  assert.equal(transport.getHostInfo().constants.BayShell.windowId, "restored-window");
+  transport.dispose();
+});
+test("window assignment received before the initial reply wins over the unassigned snapshot", async () => {
+  let resolve;
+  const native = endpoints({ getHostInfo: () => new Promise((done) => (resolve = done)) });
+  const ready = createMojoTransport(native);
+  native.emit("info", JSON.stringify(windowInfo({ windowId: "restored-window" })));
+  resolve({ infoJson: JSON.stringify(windowInfo()) });
+  const transport = await ready;
+  assert.equal(transport.getHostInfo().constants.BayShell.windowId, "restored-window");
+  transport.dispose();
+});
+test("coordinator, legacy and failed initialization metadata do not wait for window assignment", async () => {
+  for (const shell of [
+    { sharedRuntime: true, runtimeRole: "coordinator" },
+    { sharedRuntime: false, runtimeRole: "window" },
+    { sharedRuntime: true, runtimeRole: "window", windowId: "assigned-window" },
+    { sharedRuntime: true, runtimeRole: "window", initializationError: "Document storage is unavailable" },
+  ]) {
+    const snapshot = info({ constants: { BayShell: shell } });
+    const native = endpoints({ getHostInfo: async () => ({ infoJson: JSON.stringify(snapshot) }) });
+    const transport = await createMojoTransport({ ...native, bootstrapTimeoutMs: 5 });
+    assert.deepEqual(transport.getHostInfo(), snapshot);
+    transport.dispose();
+  }
+});
+test("unassigned window bootstrap times out and ignores late assignment", async () => {
+  const native = endpoints({ getHostInfo: async () => ({ infoJson: JSON.stringify(windowInfo()) }) });
+  await assert.rejects(createMojoTransport({ ...native, bootstrapTimeoutMs: 5 }), { code: "bootstrap_timeout" });
+  assert.equal(native.closed(), 2);
+  assert.equal(native.callbacks.size, 0);
+  native.emit("info", JSON.stringify(windowInfo({ windowId: "late-window" })));
+  assert.equal(native.closed(), 2);
+});
+test("initial metadata and window assignment share one bootstrap timeout", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let resolve;
+  const native = endpoints({ getHostInfo: () => new Promise((done) => (resolve = done)) });
+  const ready = createMojoTransport({ ...native, bootstrapTimeoutMs: 100 });
+  const rejected = assert.rejects(ready, { code: "bootstrap_timeout" });
+  t.mock.timers.tick(60);
+  resolve({ infoJson: JSON.stringify(windowInfo()) });
+  await nextTurn();
+  try {
+    t.mock.timers.tick(40);
+    await nextTurn();
+    assert.equal(native.closed(), 2, "waiting for assignment must not restart the timeout");
+  } finally {
+    t.mock.timers.tick(100);
+    await rejected;
+  }
+});
+test("invalid host updates reject a pending window assignment and clean up endpoints", async () => {
+  const native = endpoints({ getHostInfo: async () => ({ infoJson: JSON.stringify(windowInfo()) }) });
+  const errors = [];
+  const ready = createMojoTransport({ ...native, onProtocolError: (error) => errors.push(error) });
+  const rejected = assert.rejects(ready, { code: "contract_mismatch" });
+  await nextTurn();
+  native.emit("info", JSON.stringify(info({ contractVersion: 999 })));
+  await rejected;
+  assert.equal(errors[0].code, "contract_mismatch");
+  assert.equal(native.closed(), 2);
+  assert.equal(native.callbacks.size, 0);
 });
 test("invalid host updates fail the transport and malformed events report errors", async () => {
   const native = endpoints(),
