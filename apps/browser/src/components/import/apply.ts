@@ -12,7 +12,7 @@ import type {
 } from "@bay/import";
 import type { BookmarkDraft } from "../../store/bookmarks";
 import { useBrowser } from "../../store/browser";
-import { engineProfile, isIncognitoSpace, listIds, tabListKey } from "../../store/model";
+import { engineProfile, isIncognitoSpace, listIds, plural, tabListKey } from "../../store/model";
 import { withNewTab } from "../../store/tabs";
 import type { SpaceColor } from "../../store/types";
 import { importModule } from "./module";
@@ -40,6 +40,20 @@ export const emptyCounts = (): ImportCounts => ({
   extensions: 0,
   extensionSettings: 0,
 });
+
+/** What an import brought, a phrase for each kind with any: "3 bookmarks", "1 address". */
+export const importedSummary = (counts: ImportCounts) =>
+  [
+    counts.bookmarks && plural(counts.bookmarks, "bookmark"),
+    counts.history && plural(counts.history, "history item"),
+    counts.passwords && plural(counts.passwords, "password"),
+    counts.cookies && plural(counts.cookies, "cookie"),
+    counts.addresses && `${counts.addresses} ${counts.addresses === 1 ? "address" : "addresses"}`,
+    counts.cards && plural(counts.cards, "card"),
+    counts.tabs && plural(counts.tabs, "tab"),
+    counts.extensions && plural(counts.extensions, "extension"),
+    counts.extensionSettings && plural(counts.extensionSettings, "extension setting"),
+  ].filter(Boolean) as string[];
 
 export type ExtensionFailure = { spaceId: string; extension: ImportedExtension; message: string };
 

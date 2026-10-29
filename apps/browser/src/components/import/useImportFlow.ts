@@ -396,6 +396,16 @@ export function useImportFlow() {
     finish();
   };
 
+  // Onboarding's handoff: the chosen profiles or spaces and every kind, straight away. The keychain's prompt is
+  // the one stop on the way; what else needs asking (Full Disk Access, Dia's permission) stays in the import window.
+  const importNow = () => {
+    if (!api || !source) return;
+    setError(null);
+    if (source.family === "safari") return void importSafariDirect();
+    if (ENCRYPTED.some((k) => kinds.has(k)) && source.needsKeychain && !api.isBrowserUnlocked(source.id)) return void unlock();
+    void run(kinds);
+  };
+
   const chooseSafariExport = async () => (await api?.chooseImportFile("safariExport")) ?? null;
 
   const importHtml = async () => {
@@ -549,6 +559,7 @@ export function useImportFlow() {
     readDia,
     importSafari,
     importSafariDirect,
+    importNow,
     chooseSafariExport,
     importHtml,
     openExtensions,
