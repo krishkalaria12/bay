@@ -1,7 +1,7 @@
 import { decodeNativeResult, NativeBridgeError } from "./nativeBridge.ts";
 
 export type RuntimeCommit<State> = Readonly<{ epoch: string; revision: number; state: State }>;
-export type RuntimeRequest<Command> = Readonly<{ epoch: string; clientId: string; requestId: number; command: Command }>;
+export type RuntimeRequest<Command> = Readonly<{ epoch: string; clientId: string; requestId: number; originWindowId?: string; command: Command }>;
 export type RuntimeReply<State, Value> = Readonly<{ clientId: string; requestId: number; commit: RuntimeCommit<State>; value: Value }>;
 export type RuntimeResolution<Value> =
   | Readonly<{ epoch: string; revision: number; value: Value }>
@@ -106,11 +106,12 @@ function commitFrom<State>(value: unknown, epoch: string): RuntimeCommit<State> 
   object(commit.state);
   return commit as unknown as RuntimeCommit<State>;
 }
-function requestFrom<Command>(value: unknown, epoch: string): RuntimeRequest<Command> {
+function requestFrom<Command>(value: unknown, epoch: string, fromNative = false): RuntimeRequest<Command> {
   const request = object(value);
-  exact(request, ["epoch", "clientId", "requestId", "command"]);
+  exact(request, ["epoch", "clientId", "requestId", "command"], fromNative ? ["originWindowId"] : []);
   if (id(request.epoch) !== epoch) throw new NativeBridgeError("stale_epoch", "Browser runtime epoch changed");
   id(request.clientId);
+  if (Object.hasOwn(request, "originWindowId")) id(request.originWindowId);
   if (revision(request.requestId) < 1) invalid("Runtime request id must be positive");
   object(request.command);
   return request as unknown as RuntimeRequest<Command>;
@@ -276,7 +277,8 @@ export async function createAppRuntimeTransport<State, Command, Value>({
         if (bootstrap!.role !== "coordinator") invalid("Window received a coordinator command");
         id(token);
         if (tokens.has(token) || tokens.size >= 64) invalid("Invalid coordinator command token");
-        const request = requestFrom<Command>(fromJSON(json, REQUEST_LIMIT), bootstrap!.epoch);
+        // Only native dispatch can stamp the originating window's identity.
+        const request = requestFrom<Command>(fromJSON(json, REQUEST_LIMIT), bootstrap!.epoch, true);
         tokens.add(token);
         if (commandListener) commandListener(token, request);
         else queuedCommands.push([token, request]);

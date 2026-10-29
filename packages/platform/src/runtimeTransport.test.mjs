@@ -199,6 +199,39 @@ test("coordinator operations preserve native token identity and explicit readine
   connection.dispose();
 });
 
+test("coordinator accepts the origin window stamped by native dispatch", async () => {
+  const native = endpoints("coordinator");
+  const connection = await createAppRuntimeTransport(native);
+  const received = [];
+  connection.subscribeCommands((token, input) => received.push([token, input]));
+  const forwarded = { ...request(), originWindowId: "window-1" };
+  native.emit("command", "native-token", JSON.stringify(forwarded));
+  assert.deepEqual(received, [["native-token", forwarded]]);
+  await connection.resolve("native-token", { epoch: stamp.epoch, revision: 1, value: null });
+  assert.equal(native.closed(), 0);
+  connection.dispose();
+});
+
+for (const originWindowId of ["", "window with spaces", "x".repeat(129), 1, null])
+  test(`coordinator rejects invalid native origin window ${JSON.stringify(originWindowId)}`, async () => {
+    const native = endpoints("coordinator");
+    const connection = await createAppRuntimeTransport(native);
+    let failure;
+    connection.subscribeClose((error) => (failure = error));
+    native.emit("command", "native-token", JSON.stringify({ ...request(), originWindowId }));
+    assert.equal(failure?.code, "invalid_runtime_message");
+    assert.equal(native.closed(), 2);
+    assert.equal(native.handlers.size, 0);
+  });
+
+test("window dispatch cannot supply native origin window metadata", async () => {
+  const native = endpoints();
+  const connection = await createAppRuntimeTransport(native);
+  await assert.rejects(connection.dispatch({ ...request(), originWindowId: "another-window" }), { code: "invalid_runtime_message" });
+  assert.deepEqual(native.calls, [["connect", "client-pipe"]]);
+  connection.dispose();
+});
+
 test("coordinator command failures use native error envelopes", async () => {
   const native = endpoints("coordinator"),
     connection = await createAppRuntimeTransport(native);

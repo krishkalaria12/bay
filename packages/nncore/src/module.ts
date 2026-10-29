@@ -166,14 +166,16 @@ export type SystemState = {
 export const systemState = () => Cef.systemState();
 export const onSystemState = (listener: (state: SystemState) => void) => Cef.addListener("onSystemState", listener);
 
-export const setDisplayMediaPicker = (enabled: boolean) => Cef.setDisplayMediaPicker(enabled);
+// These settings control the macOS native picker and selection menu. Web hosts
+// keep Chromium's defaults unless they advertise the corresponding integration.
+export const setDisplayMediaPicker = (enabled: boolean) => Cef.setDisplayMediaPicker?.(enabled) ?? Promise.resolve();
 // Chrome's automatic Picture in Picture (a call's own document PiP on a tab switch) follows the app's setting. (Builds
 // before it have no such function: Chrome's default, its prompt, stays.)
 export const setAutoPictureInPicture = (enabled: boolean) => Cef.setAutoPictureInPicture?.(enabled) ?? Promise.resolve();
 // Boosts (Arc's site tweaks), every one that's on: the engine puts their sheets into the pages of their site at document
 // start and runs their script in its own isolated world (NNCoreEngine setBoosts:). Builds before it ignore them.
 export const setBoosts = (boosts: EngineBoost[]) => Cef.setBoosts?.(boosts) ?? Promise.resolve();
-export const setSearchEngineName = (name: string) => Cef.setSearchEngineName(name);
+export const setSearchEngineName = (name: string) => Cef.setSearchEngineName?.(name) ?? Promise.resolve();
 export const getDisplayMediaSources = () => Cef.displayMediaSources();
 
 // Downloads and permission prompts from both engines, in one list; a WebKit one's id says so (webkit.ts).
