@@ -97,6 +97,10 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
       });
   }, [serialized]);
 
+  // As a macOS page view: one that isn't visible doesn't draw. A warm one stays composited, transparent, so showing it
+  // again is immediate; Chrome keeps the last frame of a tab it hid, which would otherwise show through another
+  // space's card.
+  const hidden = props.visible === false;
   return (
     <View style={props.style}>
       {surfaceId ? (
@@ -104,9 +108,18 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
           ref={embed}
           type="application/x-chromium-surface-embed"
           data-content-id={surfaceId}
-          tabIndex={0}
+          tabIndex={hidden ? -1 : 0}
+          aria-hidden={hidden || undefined}
           aria-label="Web page"
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            border: 0,
+            opacity: hidden ? 0 : 1,
+            pointerEvents: hidden ? "none" : undefined,
+          }}
         />
       ) : error || preview ? (
         <Text accessibilityRole={error ? "alert" : undefined} style={{ margin: 24, color: "#8b8791" }}>
