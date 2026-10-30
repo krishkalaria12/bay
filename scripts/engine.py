@@ -151,6 +151,11 @@ def require_linux_sysroot(env, platform):
                            "rerun build/linux/sysroot_scripts/install-sysroot.py --arch=amd64")
 
 
+def nixos_without_loader(root=pathlib.Path("/")):
+    """NixOS has no /lib64 loader for Chromium's downloaded Linux tools until packaging/linux/nix/shell.nix provides one."""
+    return (root / "etc/NIXOS").exists() and not (root / "lib64/ld-linux-x86-64.so.2").exists()
+
+
 def require_tools(names, env):
     for name in names:
         if not shutil.which(name, path=env.get("PATH")):
@@ -566,6 +571,8 @@ def main():
         parser.error(f"{platform} engine commands require a native {platform} host; pin works on any host")
     if platform == "linux" and host_platform.machine().lower() not in ("x86_64", "amd64"):
         parser.error("Linux engine commands require an x64 host; cross-compilation is not supported")
+    if platform == "linux" and nixos_without_loader():
+        parser.error("on NixOS, run engine commands inside nix-shell packaging/linux/nix/shell.nix (docs/linux-building.md)")
     if args.jobs is not None and args.jobs < 1:
         parser.error("--jobs must be positive")
     root = (args.root or default_root(platform)).resolve()

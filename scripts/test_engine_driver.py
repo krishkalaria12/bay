@@ -111,6 +111,26 @@ class PlatformTests(unittest.TestCase):
                     engine.main()
                 lock.assert_not_called()
 
+    def test_nixos_needs_the_build_shell_loader_before_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertFalse(engine.nixos_without_loader(root))
+            (root / "etc").mkdir()
+            (root / "etc/NIXOS").write_text("")
+            self.assertTrue(engine.nixos_without_loader(root))
+            (root / "lib64").mkdir()
+            (root / "lib64/ld-linux-x86-64.so.2").write_text("")
+            self.assertFalse(engine.nixos_without_loader(root))
+        with mock.patch.object(sys, "platform", "linux"), \
+             mock.patch.object(sys, "argv", ["engine.py", "--platform", "linux", "build"]), \
+             mock.patch.object(engine.host_platform, "machine", return_value="x86_64"), \
+             mock.patch.object(engine, "nixos_without_loader", return_value=True), \
+             mock.patch.object(engine, "build_lock") as lock, contextlib.redirect_stderr(io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit):
+                engine.main()
+            lock.assert_not_called()
+        self.assertIn("packaging/linux/nix/shell.nix", stderr.getvalue())
+
     def test_root_refuses_other_platform_and_legacy_windows_state(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
