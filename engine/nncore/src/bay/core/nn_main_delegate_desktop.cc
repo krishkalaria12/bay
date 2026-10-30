@@ -177,6 +177,11 @@ std::optional<int> NNMainDelegate::BasicStartupComplete() {
     command->AppendSwitchASCII("enable-features", enabled);
     command->AppendSwitch("no-first-run");
     command->AppendSwitch("no-default-browser-check");
+    // Bay opens its own windows, each in its space's profile, from Default's
+    // coordinator: Chrome starts there, and never shows its profile picker
+    // (spaces' profiles are Chrome profiles too).
+    if (!command->HasSwitch(switches::kProfileDirectory))
+      command->AppendSwitchASCII(switches::kProfileDirectory, "Default");
     if (!command->HasSwitch(switches::kUserDataDir)) {
       auto environment = base::Environment::Create();
       auto custom = environment->GetVar("BAY_DATA_DIR");
