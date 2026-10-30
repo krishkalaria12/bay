@@ -14,6 +14,7 @@ import type { CompatViewProps, CompatPressableProps, CompatTextInputProps, Compa
 export type { CompatViewProps, CompatPressableProps, CompatTextInputProps, CompatScrollViewProps, MacOnlyProps, KeyDownEventSpec } from "./viewTypes";
 
 import { webKeyMatches } from "./webKeyboard";
+import { installTextInputSelection } from "./webTextInput";
 export { keyCode, webKeyMatches } from "./webKeyboard";
 function assignRef<T>(ref: ForwardedRef<T>, value: T | null) {
   if (typeof ref === "function") ref(value);
@@ -141,7 +142,14 @@ export const Pressable = forwardRef<ComponentRef<typeof NativeView>, CompatPress
   return <NativePressable {...(bound.props as NativePressableProps)} ref={bound.ref} />;
 });
 export const TextInput = forwardRef<ComponentRef<typeof NativeTextInput>, CompatTextInputProps>(function TextInput(props, ref) {
-  const bound = useWebProps(props, ref);
+  const inputRef = useCallback(
+    (value: ComponentRef<typeof NativeTextInput> | null) => {
+      installTextInputSelection(value);
+      assignRef(ref, value);
+    },
+    [ref],
+  );
+  const bound = useWebProps(props, inputRef);
   return <NativeTextInput {...(bound.props as NativeTextInputProps)} ref={bound.ref} />;
 });
 export const ScrollView = forwardRef<ComponentRef<typeof NativeScrollView>, CompatScrollViewProps>(function ScrollView(props, ref) {
