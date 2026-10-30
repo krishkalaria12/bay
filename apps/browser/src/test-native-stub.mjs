@@ -60,6 +60,7 @@ export const shellDialogAnswers = {
 export const confirm = (...args) => shellDialogAnswers.confirm(...args);
 export const openTextFile = (...args) => shellDialogAnswers.openTextFile(...args);
 export const prompt = (...args) => shellDialogAnswers.prompt(...args);
+export const setDialogPresenter = () => {};
 export const saveTextFile = (...args) => shellDialogAnswers.saveTextFile(...args);
 export const windowEventListeners = new Set();
 export const onWindowEvent = (listener) => (windowEventListeners.add(listener), { remove: () => windowEventListeners.delete(listener) });

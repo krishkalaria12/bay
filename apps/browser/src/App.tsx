@@ -17,6 +17,7 @@ import { isUtilityWindowId } from "./components/settings/windows";
 import { OnboardingOverlay } from "./components/onboarding";
 import { CreateSpaceHost } from "./components/spaces/CreateSpace";
 import { RenameDialogHost } from "./components/RenameDialog";
+import { AppDialogHost } from "./components/AppDialog";
 import { ThemeEditorHost } from "./components/spaces/ThemeEditor";
 import { useFullscreenTab } from "./components/layout/pageState";
 import { SpaceSwipe, SpaceTint } from "./components/layout/SpaceSwipe";
@@ -44,6 +45,7 @@ export function WindowRoot({ windowId }: { windowId?: string }) {
     return (
       <ThemeScope>
         <UtilityWindow id={windowId!} />
+        <AppDialogHost windowId={windowId!} />
       </ThemeScope>
     );
   return <BrowserWindowRoot windowId={windowId} />;
@@ -56,7 +58,10 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <LittleBayWindow /> : <BrowserWindow />}</ThemeScope>
+      <ThemeScope>
+        {small ? <LittleBayWindow /> : <BrowserWindow />}
+        <AppDialogHost windowId={id} />
+      </ThemeScope>
     </WindowContext.Provider>
   );
 }
