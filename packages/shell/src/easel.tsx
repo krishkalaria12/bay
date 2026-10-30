@@ -1,6 +1,7 @@
 import { hasNativeModule } from "@bay/platform";
 import { requireNativeModule, nativeSnapshot } from "@bay/platform/native";
 import { requireNativeViewManager } from "./nativeViews";
+import { imageFiles } from "./imageFiles";
 import type { Ref } from "react";
 import type { ViewProps } from "@bay/platform";
 
@@ -114,6 +115,10 @@ const Capture = () =>
     exportEaselHTML(document: string): Promise<string | null>;
     createEaselShareIdentity(): Promise<{ id: string; key: string }>;
     readEaselShareRecords(): string | null;
+    /** The desktop web hosts' file moves (imageFiles.web.ts). macOS has none. */
+    readImage?(path: string): Promise<string | null>;
+    storeImage?(base64: string, cache: boolean): Promise<string | null>;
+    saveDownload?(base64: string, name: string, extension: string): Promise<string | null>;
   }>("BayEasel");
 
 /** Opt-in launch flag; unset and false both keep web sharing disabled. */
@@ -121,13 +126,14 @@ export const isEaselWebSharingEnabled = () =>
   hasNativeModule("BayEasel") && nativeSnapshot("BayEasel", "isEaselWebSharingEnabled", [], () => Capture().isEaselWebSharingEnabled());
 
 /** Copies and normalizes a local image into the app's durable Library Media folder. */
-export const retainLibraryImage = async (path: string) => Capture().retainLibraryImage(path);
+export const retainLibraryImage = async (path: string) => (imageFiles ? imageFiles.retain(path) : Capture().retainLibraryImage(path));
 /** Deletes only files inside the app's Library Media folder. */
 export const removeLibraryImage = async (path: string) => Capture().removeLibraryImage(path);
 export const libraryImageExists = async (path: string) => Capture().libraryImageExists(path);
 /** Saves a standalone HTML canvas with embedded PNG media in Downloads. */
-export const exportEaselHTML = async (document: string) => Capture().exportEaselHTML(document);
+export const exportEaselHTML = async (document: string) => (imageFiles ? imageFiles.exportHTML(document) : Capture().exportEaselHTML(document));
 /** Generates independent, cryptographically random public and management capabilities. */
 export const createEaselShareIdentity = async () => Capture().createEaselShareIdentity();
 /** Returns null only for a missing registry; throws on read or decoding failures. */
 export const readEaselShareRecords = () => nativeSnapshot("BayEasel", "readEaselShareRecords", [], () => Capture().readEaselShareRecords());
+export { libraryImageUri } from "./imageFiles";

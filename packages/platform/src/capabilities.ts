@@ -51,6 +51,10 @@ export type Capabilities = {
   focusRing: boolean;
   /** The `keyDownEvents` prop, keys a view takes before the page sees them. Windows: Phase 5. */
   keyDownEvents: boolean;
+  /** The system's share menu. Elsewhere: none, Copy and Save instead. */
+  shareSheet: boolean;
+  /** Capture's Mark Up canvas (ios/Capture.swift). */
+  captureMarkup: boolean;
   /** File drags out of the app (the `draggedTypes` prop). Windows: BayFileDrag (OLE), Phase 4. */
   nativeDrag: boolean;
   /** Dragging the window by its own views (the `mouseDownCanMoveWindow` prop). Windows: Phase 5. */
@@ -90,6 +94,8 @@ export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boo
     hover: mac || webDesktop,
     focusRing: mac,
     keyDownEvents: mac,
+    shareSheet: mac,
+    captureMarkup: mac,
     nativeDrag: mac,
     windowMoveByView: mac,
   };

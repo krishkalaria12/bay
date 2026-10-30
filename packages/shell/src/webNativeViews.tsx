@@ -16,6 +16,7 @@ import type { MiddleClickEvent, MouseAreaProps } from "./system";
 import type { LocalFilesAreaProps } from "./localFiles";
 import { fluentSymbol, svgSymbol } from "./symbols.web";
 import { WebActivitySpinner } from "./WebActivitySpinner";
+import { EaselCanvasWeb } from "./EaselCanvas.web";
 
 type ViewRef = ComponentRef<typeof View>;
 type CSS = CSSProperties & { WebkitAppRegion?: "drag" | "no-drag"; WebkitBackdropFilter?: string; WebkitMaskImage?: string };
@@ -367,7 +368,7 @@ const views: Record<string, unknown> = {
   BayContextMenuArea: ContextMenuArea,
   BayFileDrag: MouseArea,
   BayCapture: unavailableCanvas("Capture Mark Up"),
-  BayEasel: unavailableCanvas("Easel canvas"),
+  BayEasel: EaselCanvasWeb,
   BayLocalFiles: LocalFilesArea,
 };
 export function requireNativeViewManager<P extends object>(name: string): ComponentType<P> {
