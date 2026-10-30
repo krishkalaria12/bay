@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/scoped_observation.h"
@@ -22,6 +23,7 @@ class Profile;
 
 namespace bay {
 class NativeHost;
+class ProfileBrowserWindow;
 
 // UI-thread registry. A Chrome window is not a Bay application window until its
 // persisted JS id has been adopted or assigned by Open(). Document replacement
@@ -51,6 +53,21 @@ class WindowRegistry final : public BrowserCollectionObserver {
   Result Open(const HostContext& context,
               const std::string& id,
               const base::DictValue& options);
+  // Loads regular profile `name` ("" is Default's), then runs `done` with it,
+  // or with null if it can't be loaded.
+  void LoadProfile(const std::string& name,
+                   base::OnceCallback<void(Profile*)> done);
+  // Regular profile `name` ("" is Default's) if it is loaded, else null.
+  Profile* LoadedProfile(const std::string& name) const;
+  // The Chrome Browser holding `profile`'s tabs in Bay window `frame`: the
+  // frame itself for its own profile, else the one the window keeps for that
+  // profile (ProfileBrowserWindow), made on first use. As on macOS, a space's
+  // pages keep their profile and every space shares the window. Null when the
+  // window is closing or can't take the profile.
+  BrowserWindowInterface* BrowserFor(BrowserWindowInterface* frame,
+                                     Profile* profile);
+  // The Bay window `browser` is part of: itself, or the frame holding it.
+  BrowserWindowInterface* FrameOf(BrowserWindowInterface* browser) const;
   Result Close(const std::string& id);
   Result Focus(const std::string& id);
   Result SetTitle(const std::string& id, const std::string& title);
@@ -95,6 +112,12 @@ class WindowRegistry final : public BrowserCollectionObserver {
   std::map<BrowserWindowInterface*, std::unique_ptr<Entry>> entries_;
   std::map<NativeHost*, std::unique_ptr<Host>> hosts_;
   std::unique_ptr<PendingOpen> pending_open_;
+  // Each Browser BrowserFor made, with its window and the frame holding it.
+  struct Held {
+    base::WeakPtr<BrowserWindowInterface> frame;
+    raw_ptr<ProfileBrowserWindow> window;
+  };
+  std::map<BrowserWindowInterface*, Held> held_;
   std::map<Profile*, base::WeakPtr<Profile>> private_profiles_;
   base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>
       observation_{this};

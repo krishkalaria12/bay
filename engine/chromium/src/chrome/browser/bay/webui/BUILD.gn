@@ -39,6 +39,8 @@ source_set("impl") {
     "page_security.h",
     "page_services.cc",
     "page_services.h",
+    "profile_window.cc",
+    "profile_window.h",
     "runtime_state.cc",
     "runtime_state.h",
     "tab_broker.cc",

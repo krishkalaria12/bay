@@ -35,7 +35,8 @@ class TabBroker final {
     std::string error;
   };
   static TabBroker& Get();
-  Result Mount(BrowserWindowInterface* browser, const base::DictValue& props);
+  // Mounts a page of the profile `props` names in Bay window `window`.
+  Result Mount(BrowserWindowInterface* window, const base::DictValue& props);
   std::optional<std::string> PrepareTransfer(const std::string& key);
   void ReleaseTransfer(const std::string& key);
   // Parks every page whose accepted window changes, so neither window's

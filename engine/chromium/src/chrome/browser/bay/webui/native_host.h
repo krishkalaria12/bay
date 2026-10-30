@@ -3,6 +3,7 @@
 #define CHROME_BROWSER_BAY_WEBUI_NATIVE_HOST_H_
 
 #include <map>
+#include <set>
 #include <memory>
 #include <optional>
 #include <string>
@@ -91,6 +92,8 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
   std::vector<KeyShortcut> key_shortcuts_;
   std::map<uintptr_t, std::pair<bool, InvokeCallback>> pending_;
+  // View tags whose mount waits for its profile to load.
+  std::set<int> loading_mounts_;
   base::WeakPtrFactory<NativeHost> weak_factory_{this};
 };
 }  // namespace bay

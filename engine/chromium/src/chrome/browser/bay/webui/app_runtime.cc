@@ -647,9 +647,15 @@ bool AppRuntime::ValidatePageOpens(const base::DictValue& state) const {
         source && source->starts_with("incognito:") &&
         target->profile != *source)
       return false;
+    // A regular window holds a Browser for each regular profile it shows
+    // (WindowRegistry::BrowserFor); a private window holds only its own.
+    const bool private_page = opened->profile->IsOffTheRecord();
     if (auto* window = WindowRegistry::Get().Find(target->window_id);
-        window && window->GetProfile() != opened->profile.get())
+        window && window->GetProfile() != opened->profile.get() &&
+        (private_page || window->GetProfile()->IsOffTheRecord()))
       return false;
+    if (!private_page)
+      continue;
     const auto [existing, inserted] =
         profiles.emplace(target->window_id, opened->profile.get());
     if (!inserted && existing->second != opened->profile.get())

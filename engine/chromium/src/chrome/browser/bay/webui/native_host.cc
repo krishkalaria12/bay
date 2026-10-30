@@ -979,6 +979,20 @@ void NativeHost::Invoke(const std::string& module,
   std::move(callback).Run(Failure(
       "unsupported_method", module + "." + method + " is not implemented"));
 }
+namespace {
+// Makes a page its Browser's active tab: the window's own, or the one the
+// window keeps for the page's profile (WindowRegistry::BrowserFor).
+void ActivateInBrowser(content::WebContents* contents) {
+  auto* browser =
+      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(contents);
+  if (!browser)
+    return;
+  auto* model = browser->GetTabStripModel();
+  const int index = model->GetIndexOfWebContents(contents);
+  if (index != TabStripModel::kNoTab)
+    model->ActivateTabAt(index);
+}
+}  // namespace
 void NativeHost::InvokeView(const std::string& method,
                             const base::ListValue& args,
                             InvokeCallback callback) {
@@ -993,6 +1007,7 @@ void NativeHost::InvokeView(const std::string& method,
     return;
   }
   if (method == "unmount") {
+    loading_mounts_.erase(tag);
     const auto found = tabs_.find(tag);
     if (found != tabs_.end()) {
       auto* contents = found->second->contents();
@@ -1006,12 +1021,42 @@ void NativeHost::InvokeView(const std::string& method,
   }
   if (method == "mount") {
     const auto* raw = At(args, 2);
-    if (!raw || !raw->is_dict() || tabs_.count(tag)) {
+    if (!raw || !raw->is_dict() || tabs_.count(tag) ||
+        loading_mounts_.contains(tag)) {
       std::move(callback).Run(
           Failure("invalid_args", "unique view tag and props required"));
       return;
     }
     const auto& props = raw->GetDict();
+    // A space's own profile loads on its first page (macOS: the engine's
+    // loadProfile); an unmount meanwhile cancels the mount.
+    const auto* requested = props.FindString("profile");
+    if (requested && !requested->starts_with("incognito:") &&
+        !WindowRegistry::Get().LoadedProfile(*requested)) {
+      loading_mounts_.insert(tag);
+      WindowRegistry::Get().LoadProfile(
+          *requested,
+          base::BindOnce(
+              [](base::WeakPtr<NativeHost> host, std::string method,
+                 base::ListValue args, int tag, InvokeCallback callback,
+                 Profile* profile) {
+                if (!host)
+                  return;
+                if (!host->loading_mounts_.erase(tag)) {
+                  std::move(callback).Run(
+                      Failure("mount_failed", "The view was unmounted"));
+                  return;
+                }
+                if (!profile) {
+                  std::move(callback).Run(Failure(
+                      "mount_failed", "The tab profile could not be loaded"));
+                  return;
+                }
+                host->InvokeView(method, args, std::move(callback));
+              },
+              GetWeakPtr(), method, args.Clone(), tag, std::move(callback)));
+      return;
+    }
     auto mounted = TabBroker::Get().Mount(context_.window(), props);
     if (!mounted.contents) {
       std::move(callback).Run(Failure("mount_failed", mounted.error));
@@ -1068,10 +1113,8 @@ void NativeHost::InvokeView(const std::string& method,
       contents->SetAudioMuted(*mute);
     if (auto frozen = props.FindBool("frozen"))
       contents->SetPageFrozen(*frozen);
-    if (props.FindBool("visible").value_or(false)) {
-      auto* model = context_.window()->GetTabStripModel();
-      model->ActivateTabAt(model->GetIndexOfWebContents(contents));
-    }
+    if (props.FindBool("visible").value_or(false))
+      ActivateInBrowser(contents);
     std::move(callback).Run(Success());
     return;
   }
@@ -1126,8 +1169,7 @@ void NativeHost::InvokeView(const std::string& method,
   else if (command == "stop" || command == "stopLoading")
     contents->Stop();
   else if (command == "focus") {
-    auto* model = context_.window()->GetTabStripModel();
-    model->ActivateTabAt(model->GetIndexOfWebContents(contents));
+    ActivateInBrowser(contents);
     contents->Focus();
   } else if (command == "showDevTools")
     DevToolsWindow::OpenDevToolsWindow(contents, DevToolsToggleAction::Show(),

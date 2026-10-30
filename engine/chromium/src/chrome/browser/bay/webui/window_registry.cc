@@ -16,14 +16,19 @@
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
+#include "chrome/browser/bay/webui/profile_window.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/browser_window/public/desktop_browser_window_capabilities.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -169,16 +174,21 @@ void WindowRegistry::UnregisterHost(NativeHost* host) {
   hosts_.erase(host);
 }
 std::string WindowRegistry::IdFor(BrowserWindowInterface* browser) const {
-  auto it = entries_.find(browser);
+  auto it = entries_.find(FrameOf(browser));
   return it == entries_.end() ? std::string() : it->second->id;
+}
+BrowserWindowInterface* WindowRegistry::FrameOf(
+    BrowserWindowInterface* browser) const {
+  auto it = held_.find(browser);
+  return it == held_.end() ? browser : it->second.frame.get();
 }
 base::DictValue WindowRegistry::OptionsFor(
     BrowserWindowInterface* browser) const {
-  auto it = entries_.find(browser);
+  auto it = entries_.find(FrameOf(browser));
   return it == entries_.end() ? base::DictValue() : it->second->options.Clone();
 }
 bool WindowRegistry::IsUtility(BrowserWindowInterface* browser) const {
-  auto it = entries_.find(browser);
+  auto it = entries_.find(FrameOf(browser));
   const auto* kind =
       it == entries_.end() ? nullptr : it->second->options.FindString("kind");
   return kind && IsUtilityWindowKind(*kind);
@@ -377,6 +387,78 @@ WindowRegistry::Result WindowRegistry::Open(const HostContext& context,
   return Success();
 }
 
+namespace {
+// Regular profile `name`'s directory ("" is Default's), if the name is valid.
+std::optional<base::FilePath> RegularProfilePath(const std::string& name) {
+  base::FilePath root;
+  if ((!name.empty() && (!ValidName(name) || name.size() > 128)) ||
+      !base::PathService::Get(chrome::DIR_USER_DATA, &root)) {
+    return std::nullopt;
+  }
+  return root.AppendASCII(name.empty() ? "Default" : name);
+}
+}  // namespace
+
+Profile* WindowRegistry::LoadedProfile(const std::string& name) const {
+  auto* manager = g_browser_process->profile_manager();
+  const auto path = RegularProfilePath(name);
+  return manager && path ? manager->GetProfileByPath(*path) : nullptr;
+}
+
+void WindowRegistry::LoadProfile(const std::string& name,
+                                 base::OnceCallback<void(Profile*)> done) {
+  auto* manager = g_browser_process->profile_manager();
+  const auto path = RegularProfilePath(name);
+  // Never one being deleted: loading it would make its folder anew.
+  if (!manager || !path || IsProfileDirectoryMarkedForDeletion(*path)) {
+    std::move(done).Run(nullptr);
+    return;
+  }
+  if (auto* loaded = manager->GetProfileByPath(*path)) {
+    std::move(done).Run(loaded);
+    return;
+  }
+  manager->CreateProfileAsync(*path, std::move(done));
+}
+
+BrowserWindowInterface* WindowRegistry::BrowserFor(
+    BrowserWindowInterface* frame,
+    Profile* profile) {
+  if (!frame || !profile || !entries_.contains(frame))
+    return nullptr;
+  if (frame->GetProfile() == profile)
+    return frame;
+  // A private window's pages are its own profile's only.
+  if (profile->IsOffTheRecord() || frame->GetProfile()->IsOffTheRecord() ||
+      frame->IsDeleteScheduled() ||
+      frame->capabilities()->IsAttemptingToCloseBrowser()) {
+    return nullptr;
+  }
+  for (const auto& [browser, held] : held_) {
+    if (held.frame.get() == frame && browser->GetProfile() == profile &&
+        !browser->IsDeleteScheduled() &&
+        !browser->capabilities()->IsAttemptingToCloseBrowser()) {
+      return browser;
+    }
+  }
+  if (browser_shutdown::IsTryingToQuit() ||
+      GetBrowserWindowCreationStatusForProfile(*profile) !=
+          BrowserWindowInterface::CreationStatus::kOk) {
+    return nullptr;
+  }
+  auto* window = new ProfileBrowserWindow(frame->GetWeakPtr());
+  BrowserWindowCreateParams params(profile, false);
+  params.window = window;
+  params.should_trigger_session_restore = false;
+  params.omit_from_session_restore = true;
+  auto* browser = static_cast<Browser*>(CreateBrowserWindow(std::move(params)));
+  if (!browser)
+    return nullptr;
+  held_[browser] = {frame->GetWeakPtr(), window};
+  window->AttachBrowser(browser);
+  return browser;
+}
+
 WindowRegistry::Result WindowRegistry::Close(const std::string& id) {
   auto* browser = Find(id);
   if (!browser)
@@ -526,6 +608,10 @@ void WindowRegistry::BoundsChanged(BrowserWindowInterface* browser,
                   .Set("frame", RectValue(bounds)));
 }
 void WindowRegistry::ShowStateChanged(BrowserWindowInterface* browser) {
+  for (const auto& [held_browser, held] : held_) {
+    if (held.frame.get() == browser)
+      held.window->FrameShowStateChanged();
+  }
   const auto id = IdFor(browser);
   if (!id.empty())
     Broadcast(StateValue(browser).Set("type", "state").Set("id", id));
@@ -621,6 +707,19 @@ void WindowRegistry::MoveIntoBayWindow(
     source->GetWindow()->Close();
 }
 void WindowRegistry::OnBrowserClosed(BrowserWindowInterface* browser) {
+  // A profile's Browser in a window: the window itself goes on.
+  if (held_.erase(browser))
+    return;
+  // The profiles' Browsers it held go with the window.
+  std::vector<base::WeakPtr<BrowserWindowInterface>> held;
+  for (const auto& [held_browser, entry] : held_) {
+    if (!entry.frame || entry.frame.get() == browser)
+      held.push_back(held_browser->GetWeakPtr());
+  }
+  for (const auto& held_browser : held) {
+    if (held_browser && !held_browser->IsDeleteScheduled())
+      held_browser->GetWindow()->Close();
+  }
   const auto id = IdFor(browser);
   entries_.erase(browser);
   if (!id.empty()) {
