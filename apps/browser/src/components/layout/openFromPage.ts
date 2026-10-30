@@ -9,7 +9,7 @@ import { openLinkInSplit, openSplitPane } from "./splitActions";
 
 // Where a page's new tab, window or split goes (the engine's openWindow): one place for tabs, extension
 // popups and side panels. `tabId` is the page's tab, the new tab's opener; extension pages have none.
-export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, from: { windowId: string; spaceId: string; tabId?: string }) {
+export function openFromPage({ url, adoptId, disposition, point }: OpenWindowRequest, from: { windowId: string; spaceId: string; tabId?: string }) {
   const s = useBrowser.getState();
   const w = s.windows[from.windowId];
   if (!w) return;
@@ -38,7 +38,7 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
   }
   // A link a pinned tab or a favourite opens in front: a peek over its page, as Arc's (store/peeks.ts).
   if (disposition === "foreground" && from.tabId && opensInPeek(s, from.tabId, url)) {
-    s.openPeek(from.tabId, url, adoptId);
+    s.openPeek(from.tabId, url, adoptId, point);
     return;
   }
   const background = disposition === "background";

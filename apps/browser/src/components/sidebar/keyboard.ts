@@ -1,6 +1,7 @@
 import { setSidebarKeyboard } from "@bay/shell";
 import { useBrowser } from "../../store/browser";
 import { activeTabId } from "../../store/model";
+import { dismissPeek } from "../layout/peekDismiss";
 import { live, setLive, updateFolder } from "../../live/store";
 import { sidebarKeyboardRows } from "./entries";
 import { adjacentKeyboardRow, reconcileKeyboardRow, type SidebarKeyboardRow } from "./keyboardModel";
@@ -134,7 +135,7 @@ export function runSidebarKey(windowId: string, key: string) {
   const row = focusedKeyboardRow(windowId);
   const effect = actions.get(windowId);
   if (key === "Escape") {
-    useBrowser.getState().closePeek(windowId);
+    dismissPeek(windowId);
     blurSidebar(windowId);
     effect?.focusPage();
     return;

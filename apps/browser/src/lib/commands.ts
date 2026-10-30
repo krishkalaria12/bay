@@ -12,6 +12,7 @@ import { openNewTabPanel } from "./newTab";
 import { webviews } from "./webviews";
 import { goBack, goForward } from "../components/layout/history";
 import { openSplitPane } from "../components/layout/splitActions";
+import { dismissPeek } from "../components/layout/peekDismiss";
 import { runSidebarCommand } from "../components/sidebar/commands";
 import { numberedTabs } from "../components/sidebar/entries";
 import { openExtensionFromMenu } from "../components/extensions/bridge";
@@ -388,7 +389,7 @@ function runPeekCommand(command: string, windowId: string): boolean {
   if (!shownPeek(s, windowId)) return false;
   switch (command) {
     case "closeTab":
-      s.closePeek(windowId);
+      dismissPeek(windowId);
       return true;
     case "openFile":
       const target = s.keepPeek(windowId);

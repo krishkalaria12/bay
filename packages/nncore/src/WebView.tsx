@@ -43,6 +43,9 @@ export type MediaAccess = { camera: boolean; microphone: boolean; screen: boolea
 
 export type OpenDisposition = "foreground" | "background" | "window" | "popup" | "incognito" | "current" | "split";
 
+/** A point over a page, in its window's points from the top left (as measureInWindow's). */
+export type PagePoint = { x: number; y: number };
+
 export type OpenWindowRequest = {
   url: string;
   disposition: OpenDisposition;
@@ -50,6 +53,8 @@ export type OpenWindowRequest = {
   userGesture?: boolean;
   /** The new tab's navigation is a form's POST. */
   postBody?: boolean;
+  /** A foreground tab's: where the pointer was over the page, on the link it clicked most likely. */
+  point?: PagePoint;
 };
 
 export type BlockedPopup = { id: string; url: string; origin: string };
@@ -179,7 +184,8 @@ export type WebViewProps = ViewProps & {
   onFindResult?: (result: FindResult) => void;
   onFullscreen?: (fullscreen: boolean) => void;
   onStatus?: (text: string) => void;
-  onPeekLink?: (url: string) => void;
+  /** `point`: where the pointer was over the page, on the link it clicked. */
+  onPeekLink?: (url: string, point?: PagePoint) => void;
   onCrashed?: (info: CrashInfo) => void;
   onUnresponsive?: () => void;
   onResponsive?: () => void;
@@ -287,7 +293,7 @@ type NativeEvents = {
   onFindResult: FindResult;
   onFullscreen: { fullscreen: boolean };
   onStatus: { text: string };
-  onPeekLink: { url: string };
+  onPeekLink: { url: string; point?: PagePoint };
   onCrashed: CrashInfo;
   onUnresponsive: object;
   onResponsive: object;
@@ -326,7 +332,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onFindResult: (e) => [e],
   onFullscreen: (e) => [e.fullscreen],
   onStatus: (e) => [e.text],
-  onPeekLink: (e) => [e.url],
+  onPeekLink: (e) => [e.url, e.point],
   onCrashed: (e) => [e],
   onUnresponsive: () => [],
   onResponsive: () => [],

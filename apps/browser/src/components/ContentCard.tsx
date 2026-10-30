@@ -36,6 +36,7 @@ import { DropTargets, SplitDividers, SplitToast } from "./layout/SplitChrome";
 import { SplitEmptyState } from "./layout/SplitEmptyState";
 import { pagerFor } from "./layout/spacePager";
 import { openFromPage } from "./layout/openFromPage";
+import { dismissPeek } from "./layout/peekDismiss";
 import { setUrlAnchor, useAddressBarInSidebar, useSidebarOnRight, useTabLayout } from "./layout/windowLayout";
 import { BlankTabSurface } from "./BlankTabSurface";
 import { InternalPage } from "./pages";
@@ -268,7 +269,7 @@ export function ContentCard() {
       {split && !fullscreenTab && <SplitDividers split={split} dividers={dividers} width={size.width} height={size.height} />}
       {!fullscreenTab && <DropTargets panes={panes} origin={origin} />}
       {peek && peekRect && (
-        <PeekLayer windowId={windowId} peek={peek} rect={peekRect}>
+        <PeekLayer windowId={windowId} peek={peek} rect={peekRect} origin={origin}>
           <TabWebView key={peek.tabId} tabId={peek.tabId} visible warm={false} />
         </PeekLayer>
       )}
@@ -604,11 +605,11 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       onDisplayMediaRequest={(request) => requestDisplayMedia(tabId, request)}
       onOpenWindow={onOpenWindow}
       onStatus={(status) => patchPage(tabId, { status })}
-      onPeekLink={(url) => {
+      onPeekLink={(url, point) => {
         // The engine judged it another site (Chrome's own rule); the tab stayed. A tab that has just stopped peeking
         // still gets its click: the link loads in it.
         if (!/^https?:/i.test(url)) return;
-        if (peeksLinks(store(), tabId)) store().openPeek(tabId, url);
+        if (peeksLinks(store(), tabId)) store().openPeek(tabId, url, undefined, point);
         else store().navigate(tabId, url, { userInitiated: false });
       }}
       onCrashed={(crashed) => {
@@ -646,7 +647,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
           if (closeCaptureOnEscape(tabId)) return;
           if (closeBoostEditorOnEscape(tabId)) return;
           if (t && closeThemeEditorOnEscape(t.windowId)) return;
-          if (t?.peekOf) store().closePeek(t.windowId);
+          if (t?.peekOf) dismissPeek(t.windowId);
           else closeLittleBayOnEscape(tabId);
         }
       }}

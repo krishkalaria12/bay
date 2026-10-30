@@ -1,3 +1,4 @@
+import type { PagePoint } from "@bay/nncore";
 import type { StateCreator } from "zustand";
 import { matchingLinkRule } from "../lib/externalLinkRules";
 import type { BrowserState } from "./browser";
@@ -14,7 +15,8 @@ import { mainWindowFor, mostRecentSpace } from "./small";
 // after its opener as any link's tab, and splitting it lists it and pairs it with its opener. One per window, as Arc's:
 // another link replaces it.
 
-export type Peek = { tabId: string; fromId: string };
+// `at`: where in the window its link was clicked, for the card to open out of (layout/PeekLayer.tsx).
+export type Peek = { tabId: string; fromId: string; at?: PagePoint };
 
 // The last peek a window closed, for Reopen Closed Tab (⌘⇧T) to bring back, as Arc's.
 // `afterTab`: the window's last closed tab then (ClosedTab.id), so a tab closed since is told apart from it.
@@ -24,8 +26,8 @@ export type PeeksSlice = {
   // By window.
   peeks: Record<string, Peek>;
   closedPeeks: Record<string, ClosedPeek>;
-  /** Opens `url` in a peek over `fromId`'s page (`adoptId`: the tab Chrome already made for the link). */
-  openPeek(fromId: string, url: string, adoptId?: string): string | undefined;
+  /** Opens `url` in a peek over `fromId`'s page (`adoptId`: the tab Chrome already made for the link; `at`: Peek's). */
+  openPeek(fromId: string, url: string, adoptId?: string, at?: PagePoint): string | undefined;
   closePeek(windowId: string): void;
   /** Open as Tab: the peek becomes a tab after its opener, shown. */
   keepPeek(windowId: string): string | undefined;
@@ -119,7 +121,7 @@ export const createPeeksSlice: StateCreator<BrowserState, [], [], PeeksSlice> = 
   peeks: {},
   closedPeeks: {},
 
-  openPeek(fromId, url, adoptId) {
+  openPeek(fromId, url, adoptId, at) {
     let s = get();
     const from = s.tabs[fromId];
     if (!from || !s.windows[from.windowId]) return undefined;
@@ -136,7 +138,7 @@ export const createPeeksSlice: StateCreator<BrowserState, [], [], PeeksSlice> = 
       ...s,
       tabs: { ...s.tabs, [tab.id]: tab },
       live: { ...s.live, [tab.id]: IDLE_LIVE },
-      peeks: { ...s.peeks, [windowId]: { tabId: tab.id, fromId } },
+      peeks: { ...s.peeks, [windowId]: { tabId: tab.id, fromId, ...(at && { at }) } },
     });
     return tab.id;
   },

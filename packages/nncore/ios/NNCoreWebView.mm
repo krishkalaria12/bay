@@ -854,14 +854,15 @@ const char kPageReportsKey = 0;
     });
     return;
   }
-  [self emit:@"openWindow"
-      payload:@{
-        @"url" : url ?: @"",
-        @"disposition" : disposition,
-        @"adoptId" : adoptId,
-        @"userGesture" : @YES,
-        @"postBody" : @NO,
-      }];
+  NSMutableDictionary *payload = [@{
+    @"url" : url ?: @"",
+    @"disposition" : disposition,
+    @"adoptId" : adoptId,
+    @"userGesture" : @YES,
+    @"postBody" : @NO,
+  } mutableCopy];
+  if ([disposition isEqualToString:@"foreground"]) payload[@"point"] = [self pointerPoint];
+  [self emit:@"openWindow" payload:payload];
 }
 
 - (void)tabRemovedFromWindow:(NNCoreWindow *)window {
@@ -1457,7 +1458,20 @@ const char kPageReportsKey = 0;
 }
 
 - (void)tab:(NNCoreTab *)tab wantsPeekOfURL:(NSString *)url {
-  [self emit:@"peekLink" payload:@{@"url" : url ?: @""}];
+  NSMutableDictionary *payload = [@{@"url" : url ?: @""} mutableCopy];
+  payload[@"point"] = [self pointerPoint];
+  [self emit:@"peekLink" payload:payload];
+}
+
+// Where the pointer is, when over the page: in the window's content, from its top left (as JS measures in the window),
+// for a peek to open out of the link just clicked. nil off the page.
+- (NSDictionary *)pointerPoint {
+  NSView *content = self.window.contentView;
+  if (!content) return nil;
+  NSPoint inWindow = self.window.mouseLocationOutsideOfEventStream;
+  if (!NSPointInRect([self convertPoint:inWindow fromView:nil], self.bounds)) return nil;
+  NSPoint p = [content convertPoint:inWindow fromView:nil];
+  return @{@"x" : @(p.x), @"y" : @(content.isFlipped ? p.y : NSHeight(content.bounds) - p.y)};
 }
 
 - (void)tabDidGainFocus:(NNCoreTab *)tab {
