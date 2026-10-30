@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatShortcut, parseShortcut, relabelShortcuts, strokeMatches, windowsShortcutLabel, WINDOWS_SHORTCUTS } from "./keys.ts";
+import { formatShortcut, parseShortcut, relabelShortcuts, strokeMatches, virtualKeyCode, windowsShortcutLabel, WINDOWS_SHORTCUTS } from "./keys.ts";
 import { capabilitiesFor } from "./capabilities.ts";
 
 test("desktop shortcut labels preserve Mac glyphs and spell Windows modifiers", () => {
@@ -61,4 +61,15 @@ test("Linux desktop uses the web host without Apple services", () => {
   ])
     assert.equal(linux[key], false, key);
   assert.equal(linux.keychain, true);
+});
+
+test("every Windows shortcut key has the virtual-key code Chromium's key events carry", () => {
+  assert.equal(virtualKeyCode("C"), 0x43);
+  assert.equal(virtualKeyCode("c"), 0x43);
+  assert.equal(virtualKeyCode("9"), 0x39);
+  assert.equal(virtualKeyCode("F6"), 0x75);
+  assert.equal(virtualKeyCode("Left"), 0x25);
+  assert.equal(virtualKeyCode("="), 0xbb);
+  assert.equal(virtualKeyCode("Pause"), null);
+  for (const [command, stroke] of Object.entries(WINDOWS_SHORTCUTS)) assert.notEqual(virtualKeyCode(stroke.key), null, command);
 });

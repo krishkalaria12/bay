@@ -11,7 +11,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/webui_browser/webui_browser.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "components/surface_embed/common/features.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -72,6 +74,16 @@ BayWebUIBrowserWindow::BayWebUIBrowserWindow(BrowserWindowInterface* browser)
 
 void BayWebUIBrowserWindow::SetFocusToLocationBar(bool is_user_initiated) {
   EmitWindowCommand(browser(), "focusCommandBar");
+}
+content::KeyboardEventProcessingResult
+BayWebUIBrowserWindow::PreHandleKeyboardEvent(
+    const input::NativeWebKeyboardEvent& event) {
+  const auto shortcut = RunWindowShortcut(browser(), event);
+  if (shortcut == WindowShortcut::kRan)
+    return content::KeyboardEventProcessingResult::HANDLED;
+  if (shortcut == WindowShortcut::kForDocument)
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+  return WebUIBrowserWindow::PreHandleKeyboardEvent(event);
 }
 void BayWebUIBrowserWindow::Show() {
   if (!WindowRegistry::Get().AbsorbOnShow(browser()))

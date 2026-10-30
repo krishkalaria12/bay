@@ -74,6 +74,7 @@ source_set("impl") {
     "//components/find_in_page",
     "//components/guest_contents/browser",
     "//components/infobars/content",
+    "//components/input",
     "//components/keep_alive_registry",
     "//components/media_router/browser",
     "//components/media_router/common",

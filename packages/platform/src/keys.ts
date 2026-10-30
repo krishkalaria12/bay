@@ -192,6 +192,37 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   returnToPinnedUrl: { key: "Enter", mod: true },
 };
 
+// Windows virtual-key codes, which Chromium's key events carry on every desktop (ui::KeyboardCode).
+const VIRTUAL_KEYS: Record<string, number> = {
+  tab: 0x09,
+  enter: 0x0d,
+  escape: 0x1b,
+  esc: 0x1b,
+  space: 0x20,
+  left: 0x25,
+  up: 0x26,
+  right: 0x27,
+  down: 0x28,
+  delete: 0x2e,
+  ";": 0xba,
+  "=": 0xbb,
+  ",": 0xbc,
+  "-": 0xbd,
+  ".": 0xbe,
+  "/": 0xbf,
+  "[": 0xdb,
+  "\\": 0xdc,
+  "]": 0xdd,
+};
+
+/** A table key's virtual-key code (a letter's or digit's is its capital ASCII), or null for a key it doesn't know. */
+export function virtualKeyCode(key: string): number | null {
+  if (/^[a-z0-9]$/i.test(key)) return key.toUpperCase().charCodeAt(0);
+  const f = /^F([1-9]|1[0-2])$/i.exec(key);
+  if (f) return 0x6f + Number(f[1]);
+  return VIRTUAL_KEYS[key.toLowerCase()] ?? null;
+}
+
 /** "Ctrl+Shift+T" for a command, or null when the table has none. */
 export function windowsShortcutLabel(command: string, os: PlatformOS = "windows"): string | null {
   const stroke = WINDOWS_SHORTCUTS[command];

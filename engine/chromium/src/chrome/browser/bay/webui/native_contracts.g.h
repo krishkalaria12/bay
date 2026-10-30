@@ -52,6 +52,7 @@ inline constexpr Method methods[] = {
   {"BayShell", "setAppearance", true, 1, 1},
   {"BayShell", "isDarkAppearance", true, 0, 0},
   {"BayShell", "setMenuState", true, 1, 1},
+  {"BayShell", "setKeyShortcuts", true, 1, 1},
   {"BayShell", "focusSidebarRow", true, 2, 2},
   {"BayShell", "setSidebarKeyboard", true, 2, 2},
   {"BayShell", "setSidebarMoveUndo", true, 3, 3},

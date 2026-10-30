@@ -285,6 +285,13 @@ export const nativeContracts = {
           "maxArgs": 1,
           "signature": "setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;"
         },
+        "setKeyShortcuts": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "setKeyShortcuts?(shortcuts: KeyShortcut[]): Promise<void>;"
+        },
         "focusSidebarRow": {
           "async": true,
           "optional": true,
@@ -2383,6 +2390,7 @@ export const nativeContracts = {
       "TrafficLightsMode": "\"shown\" | \"hover\" | \"hidden\"",
       "Rect4": "[number, number, number, number]",
       "DragPreviewShape": "\"hidden\" | \"pill\" | \"card\"",
+      "KeyShortcut": "{ command: BrowserCommand; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean }",
       "MenuBookmarkKey": "\"bookmarkFolders\" | \"recentBookmarks\" | \"bookmarksBar\" | \"otherBookmarks\"",
       "SymbolProps": "ViewProps & {\n  name: string;\n  size?: number;\n  weight?: \"light\" | \"regular\" | \"medium\" | \"semibold\" | \"bold\";\n  color?: string;\n  /** \"hierarchical\": `color`, the symbol's secondary layers lighter. \"multicolor\": its own colours where it has them. */\n  rendering?: \"monochrome\" | \"hierarchical\" | \"multicolor\";\n}",
       "FadeLabelProps": "ViewProps & {\n  text: string;\n  fontSize?: number;\n  weight?: \"light\" | \"regular\" | \"medium\" | \"semibold\" | \"bold\";\n  color?: string;\n  fadeWidth?: number;\n}",
