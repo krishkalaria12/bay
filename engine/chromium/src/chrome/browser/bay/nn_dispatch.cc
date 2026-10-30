@@ -50,6 +50,7 @@ NN_ENGINE_CALL(nn_passwords_update);
 NN_ENGINE_CALL(nn_prefs_get);
 NN_ENGINE_CALL(nn_prefs_set);
 NN_ENGINE_CALL(nn_search_engines_list);
+NN_ENGINE_CALL(nn_search_suggestions);
 NN_ENGINE_CALL(nn_site_data_clear);
 NN_ENGINE_CALL(nn_site_settings_get);
 NN_ENGINE_CALL(nn_site_settings_origins);
@@ -124,6 +125,7 @@ bool DispatchEngineCall(std::string_view name,
       {"nn_prefs_get", &nn_prefs_get},
       {"nn_prefs_set", &nn_prefs_set},
       {"nn_search_engines_list", &nn_search_engines_list},
+      {"nn_search_suggestions", &nn_search_suggestions},
       {"nn_site_data_clear", &nn_site_data_clear},
       {"nn_site_settings_get", &nn_site_settings_get},
       {"nn_site_settings_origins", &nn_site_settings_origins},
@@ -161,6 +163,7 @@ bool IsWebEngineCall(std::string_view name) {
       "nn_history_watch",
       "nn_prefs_get",
       "nn_prefs_set",
+      "nn_search_suggestions",
       "nn_tab_restore_load",
   };
   for (auto allowed : names) {

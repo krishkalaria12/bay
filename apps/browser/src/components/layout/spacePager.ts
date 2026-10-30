@@ -3,7 +3,7 @@ import * as windowCommands from "../../runtime/windowActions";
 import * as cef from "@bay/nncore";
 import type { NativePagerConfig, PagerStateEvent, SwipeEvent } from "@bay/nncore";
 import { useEffect } from "react";
-import { batchedUpdates } from "@bay/platform";
+import { batchedUpdates, capabilities } from "@bay/platform";
 import { Easing, Extrapolation, interpolate, makeMutable, useAnimatedStyle, withTiming, type SharedValue } from "@bay/platform/motion";
 import { create, useStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
@@ -45,11 +45,10 @@ class SpacePager {
       const was = prev.windows[windowId];
       if (w.spaceId !== was?.spaceId || w.incognito !== was?.incognito || s.spaceOrder !== prev.spaceOrder) {
         this.state.setState({ pages: this.warmPages() });
-        // No surface (the sidebar closed, its peek showing) means no native controller to move the pages: they slide
-        // here, as its would.
-        if (!this.surfaces && this.index() >= 0) this.pos.set(withTiming(this.index(), { duration: 250, easing: Easing.out(Easing.cubic) }));
+        // Without an active native pager, React's selection moves the pages.
+        if (!this.active && this.index() >= 0) this.pos.set(withTiming(this.index(), { duration: 250, easing: Easing.out(Easing.cubic) }));
       }
-      if (!this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
+      if (capabilities.swipe && !this.switching && !w.incognito && w.spaceId !== was?.spaceId) this.selectExternal(w.spaceId, s.spaceOrder);
     });
   }
 
@@ -110,7 +109,7 @@ class SpacePager {
   }
 
   get active() {
-    return this.surfaces > 0 && !!this.current();
+    return capabilities.swipe && this.surfaces > 0 && !!this.current();
   }
 
   wheel(e: SwipeEvent) {
@@ -209,7 +208,7 @@ export function usePagerNativeConfig(windowId: string, width?: number): NativePa
       return [i, s.spaceOrder.length, s.spaceOrder.join("\n")] as const;
     }),
   );
-  return selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;
+  return capabilities.swipe && selected >= 0 ? { key: windowId, selected, count, width: width || undefined, ack, order } : undefined;
 }
 
 // A page's place in the pager: off to the side at rest, outside the surface's clip.

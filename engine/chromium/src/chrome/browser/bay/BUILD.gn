@@ -49,6 +49,8 @@ source_set("bay") {
     "nn_reauth.h",
     "nn_search_engines.cc",
     "nn_search_engines.h",
+    "nn_search_suggestions.cc",
+    "nn_search_suggestions.h",
     "nn_sensitive_args.cc",
     "nn_sensitive_args.h",
     "nn_site_settings.cc",
@@ -67,6 +69,7 @@ source_set("bay") {
   ]
 
   deps = [
+    ":search_suggestions_policy",
     "//base",
     "//cc/paint",
     "//chrome/app:generated_resources",
@@ -229,4 +232,21 @@ if (is_linux) {
       "//url",
     ]
   }
+}
+
+source_set("search_suggestions_policy") {
+  sources = [
+    "nn_search_suggestions_policy.cc",
+    "nn_search_suggestions_policy.h",
+  ]
+  public_deps = [ "//url" ]
+}
+
+test("search_suggestions_policy_unittests") {
+  sources = [ "nn_search_suggestions_policy_unittest.cc" ]
+  deps = [
+    ":search_suggestions_policy",
+    "//base/test:run_all_unittests",
+    "//testing/gtest",
+  ]
 }

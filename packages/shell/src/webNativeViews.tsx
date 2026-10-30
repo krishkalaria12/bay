@@ -9,12 +9,13 @@ import {
   type CSSProperties,
   type ForwardedRef,
 } from "react";
-import { ActivityIndicator, Image, Text, type TextStyle } from "react-native";
+import { Image, Text, type TextStyle } from "react-native";
 import { View, type ViewProps } from "@bay/platform";
 import type { ContextMenuAreaProps, DockSelectionProps, FadeLabelProps, GlassEffectProps, SurfaceProps, SymbolProps, VisualEffectProps } from "./index";
 import type { MiddleClickEvent, MouseAreaProps } from "./system";
 import type { LocalFilesAreaProps } from "./localFiles";
 import { fluentSymbol, svgSymbol } from "./symbols.web";
+import { WebActivitySpinner } from "./WebActivitySpinner";
 
 type ViewRef = ComponentRef<typeof View>;
 type CSS = CSSProperties & { WebkitAppRegion?: "drag" | "no-drag"; WebkitBackdropFilter?: string; WebkitMaskImage?: string };
@@ -356,11 +357,7 @@ function LocalFilesArea({
 const views: Record<string, unknown> = {
   BaySymbol: Symbol,
   BayFadeLabel: FadeLabel,
-  BayActivitySpinner: (props: ViewProps) => (
-    <View {...props}>
-      <ActivityIndicator />
-    </View>
-  ),
+  BayActivitySpinner: WebActivitySpinner,
   BaySurface: Surface,
   BayVisualEffect: Effect,
   BayGlassEffect: Effect,
