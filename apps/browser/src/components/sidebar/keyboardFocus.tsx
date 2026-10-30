@@ -1,7 +1,8 @@
 import { View, type ScrollView, type ViewProps } from "@bay/platform";
 import { focusSidebarRow, prompt } from "@bay/shell";
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
-import { findNodeHandle, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { nodeTag } from "../../lib/nodeTag";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { openPeek } from "../../runtime/splitActions";
 import { closeTab } from "../../lib/actions";
@@ -55,7 +56,7 @@ export function SidebarKeyboardRowView({ rowId, legacyId, label, children, ...pr
         if (!ref.current) return;
         revealers.get(windowId)?.(ref.current);
         if (ms === 220) {
-          const tag = findNodeHandle(ref.current);
+          const tag = nodeTag(ref.current);
           if (tag) void focusSidebarRow(windowId, tag);
         }
       }, ms),

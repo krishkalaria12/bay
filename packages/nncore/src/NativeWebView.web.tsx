@@ -97,9 +97,9 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
       });
   }, [serialized]);
 
-  // As a macOS page view: one that isn't visible doesn't draw. A warm one stays composited, transparent, so showing it
-  // again is immediate; Chrome keeps the last frame of a tab it hid, which would otherwise show through another
-  // space's card.
+  // As a macOS page view: one that isn't visible doesn't draw, nor does its error. A warm one stays composited,
+  // transparent, so showing it again is immediate; Chrome keeps the last frame of a tab it hid, which would otherwise
+  // show through another space's card.
   const hidden = props.visible === false;
   return (
     <View style={props.style}>
@@ -121,7 +121,7 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
             pointerEvents: hidden ? "none" : undefined,
           }}
         />
-      ) : error || preview ? (
+      ) : !hidden && (error || preview) ? (
         <Text accessibilityRole={error ? "alert" : undefined} style={{ margin: 24, color: "#8b8791" }}>
           {error ?? "Page rendering is available in the native Chrome host. This is the local UI preview."}
         </Text>

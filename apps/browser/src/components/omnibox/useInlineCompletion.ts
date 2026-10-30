@@ -1,7 +1,7 @@
 import { type TextInput } from "@bay/platform";
 import { completeInline } from "@bay/shell";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { findNodeHandle } from "react-native";
+import { nodeTag } from "../../lib/nodeTag";
 import { completionToWrite, fieldChange, withoutFirst, type FieldChange, type Inline, type PendingInline } from "./inline";
 
 export function useInlineCompletion(input: RefObject<TextInput | null>, typed: string, wanted: string) {
@@ -16,7 +16,7 @@ export function useInlineCompletion(input: RefObject<TextInput | null>, typed: s
       pending.current = pending.current.map((p) => ({ ...p, orphaned: true }));
     }
     const write = completionToWrite(typed, wanted, shown, pending.current);
-    const tag = write && findNodeHandle(input.current);
+    const tag = write && nodeTag(input.current);
     if (!write || tag == null) return;
     pending.current = [...pending.current, write];
     const settle = (result: number) => {
