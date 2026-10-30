@@ -7,6 +7,7 @@ import {
   parseShortcut,
   relabelShortcuts,
   strokeMatches,
+  virtualKeyCode,
   windowsShortcutLabel,
   WINDOWS_SHORTCUTS,
 } from "./keys.ts";
@@ -117,4 +118,15 @@ test("context-menu hints read as strokes on every desktop", () => {
 test("global coordinates default to desktop support only on macOS and Windows", () => {
   for (const os of ["macos", "windows"]) assert.equal(capabilitiesFor(os, () => false).globalWindowCoordinates, true);
   assert.equal(capabilitiesFor("linux", () => true).globalWindowCoordinates, false);
+});
+
+test("every Windows and Linux shortcut key has the virtual-key code Chromium's key events carry", () => {
+  assert.equal(virtualKeyCode("C"), 0x43);
+  assert.equal(virtualKeyCode("c"), 0x43);
+  assert.equal(virtualKeyCode("9"), 0x39);
+  assert.equal(virtualKeyCode("F6"), 0x75);
+  assert.equal(virtualKeyCode("Left"), 0x25);
+  assert.equal(virtualKeyCode("="), 0xbb);
+  assert.equal(virtualKeyCode("Pause"), null);
+  for (const [command, stroke] of Object.entries(LINUX_SHORTCUTS)) assert.notEqual(virtualKeyCode(stroke.key), null, command);
 });

@@ -308,6 +308,7 @@ const Shell = requireNativeModule<{
   setAppearance(mode: "auto" | "light" | "dark"): Promise<void>;
   isDarkAppearance(): Promise<boolean>;
   setMenuState(state: Omit<MenuState, MenuBookmarkKey>): Promise<void>;
+  setKeyShortcuts?(shortcuts: KeyShortcut[]): Promise<void>;
   focusSidebarRow?(windowId: string, tag: number): Promise<void>;
   setSidebarKeyboard?(windowId: string, active: boolean): Promise<void>;
   setSidebarMoveUndo?(windowId: string, available: boolean, focus: boolean): Promise<void>;
@@ -410,6 +411,12 @@ export const raiseView = (tag: number | null, levels: number, raised: boolean) =
 /** The window's frame now, on screen (AppKit's coordinates); null without global screen coordinates. */
 export const windowFrame = (id: string): Promise<Rect4 | null> => Shell.windowFrame?.(id) ?? Promise.resolve(null);
 export const windowIds = () => Shell.windowIds();
+
+/** A key the window's host runs as an app command (onCommand) rather than Chrome's: `keyCode` is the key's virtual-key
+ *  code, as Chromium's key events carry it. */
+export type KeyShortcut = { command: BrowserCommand; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean };
+/** Hands the host the window's key shortcuts (hosts whose menus don't carry them: the Chrome-hosted desktop). */
+export const setKeyShortcuts = (shortcuts: KeyShortcut[]) => Shell.setKeyShortcuts?.(shortcuts) ?? Promise.resolve();
 
 // The window's own caption buttons (capabilities.captionButtons): no-ops on hosts whose system draws them.
 export const minimizeWindow = (id: string) => Shell.minimizeWindow?.(id) ?? Promise.resolve();

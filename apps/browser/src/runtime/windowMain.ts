@@ -10,12 +10,14 @@ import { startTabPages } from "../lib/tabPages";
 import { startWindowCloseGuard } from "../lib/windowClose";
 import { startExtensionsBridge } from "../components/extensions/bridge";
 import { runCommand } from "../lib/commands";
+import { startWebShortcuts } from "../lib/webShortcuts";
 import { installErrorReporting } from "../telemetry";
 
 export function startWindowMain() {
   installErrorReporting();
   quietLaunchTabs();
   onCommand(runCommand);
+  startWebShortcuts();
   startWindowCloseGuard();
   startExtensionsBridge({ sharedWindow: true });
   startTabPages();

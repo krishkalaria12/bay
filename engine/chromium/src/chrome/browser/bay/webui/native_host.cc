@@ -76,6 +76,7 @@
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/find_in_page/find_tab_helper.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "components/find_in_page/find_types.h"
 #include "components/guest_contents/browser/guest_contents_handle.h"
 #include "components/sessions/content/session_tab_helper.h"
@@ -92,6 +93,7 @@
 #include "net/base/filename_util.h"
 #include "url/gurl.h"
 #endif
+#include "third_party/blink/public/common/input/web_input_event.h"
 
 extern "C" void nn_engine_set_event_sink(nn_engine_event_t sink, void* context);
 
@@ -456,6 +458,9 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
         context_.window(), GetWeakPtr(),
         base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
   }
+}
+content::WebContents* NativeHost::document_contents() const {
+  return content::WebContents::FromRenderFrameHost(&render_frame_host());
 }
 NativeHost::~NativeHost() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
@@ -1160,6 +1165,39 @@ void NativeHost::Invoke(const std::string& module,
     std::move(callback).Run(Success());
     return;
   }
+  if (module == "BayShell" && method == "setKeyShortcuts") {
+    const auto* list = At(args, 0);
+    if (!context_.is_window() || !list || !list->is_list() ||
+        list->GetList().size() > 256) {
+      std::move(callback).Run(
+          Failure("invalid_args", "A window's key shortcuts list required"));
+      return;
+    }
+    std::vector<KeyShortcut> shortcuts;
+    for (const auto& item : list->GetList()) {
+      const auto* shortcut = item.GetIfDict();
+      const auto* command = shortcut ? shortcut->FindString("command") : nullptr;
+      const auto key_code =
+          shortcut ? shortcut->FindInt("keyCode") : std::nullopt;
+      const auto* arg = shortcut ? shortcut->Find("arg") : nullptr;
+      if (!command || command->empty() || command->size() > 64 || !key_code ||
+          *key_code <= 0 || *key_code > 0xff || !arg ||
+          !(arg->is_none() || arg->is_string())) {
+        std::move(callback).Run(
+            Failure("invalid_args", "Invalid key shortcut"));
+        return;
+      }
+      shortcuts.push_back(
+          {*key_code, shortcut->FindBool("ctrl").value_or(false),
+           shortcut->FindBool("shift").value_or(false),
+           shortcut->FindBool("alt").value_or(false), *command,
+           arg->is_string() ? std::make_optional(arg->GetString())
+                            : std::nullopt});
+    }
+    key_shortcuts_ = std::move(shortcuts);
+    std::move(callback).Run(Success());
+    return;
+  }
   if (module == "BayShell") {
     auto& windows = WindowRegistry::Get();
     if (method == "windowIds") {
@@ -1475,6 +1513,45 @@ void BindNativeHost(content::WebUI* web_ui,
   AppRuntime::StartForWindow(*window->browser());
   new NativeHost(*frame, HostContext::ForWindow(*window->browser()),
                  std::move(receiver));
+}
+WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
+                                 const input::NativeWebKeyboardEvent& event) {
+  if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown)
+    return WindowShortcut::kNone;
+  const int modifiers = event.GetModifiers();
+  if (modifiers & blink::WebInputEvent::kMetaKey)
+    return WindowShortcut::kNone;
+  const bool ctrl = modifiers & blink::WebInputEvent::kControlKey;
+  const bool shift = modifiers & blink::WebInputEvent::kShiftKey;
+  const bool alt = modifiers & blink::WebInputEvent::kAltKey;
+  for (const auto& [owner, host] : Hosts()) {
+    if (!host || host->is_coordinator() || host->browser() != browser)
+      continue;
+    for (const auto& shortcut : host->key_shortcuts()) {
+      if (shortcut.key_code != event.windows_key_code ||
+          shortcut.ctrl != ctrl || shortcut.shift != shift ||
+          shortcut.alt != alt) {
+        continue;
+      }
+      // A page's frame has focus when the document's focused frame is in an
+      // embedded page rather than the document itself.
+      auto* document = host->document_contents();
+      auto* focused = document ? document->GetFocusedFrame() : nullptr;
+      if (!focused ||
+          content::WebContents::FromRenderFrameHost(focused) == document) {
+        return WindowShortcut::kForDocument;
+      }
+      host->Emit("BayShell", "onCommand",
+                 base::Value(base::DictValue()
+                                 .Set("command", shortcut.command)
+                                 .Set("arg", shortcut.arg
+                                                 ? base::Value(*shortcut.arg)
+                                                 : base::Value())
+                                 .Set("windowId", base::Value())));
+      return WindowShortcut::kRan;
+    }
+  }
+  return WindowShortcut::kNone;
 }
 void EmitWindowCommand(BrowserWindowInterface* browser, const char* command) {
   for (const auto& entry : Hosts())

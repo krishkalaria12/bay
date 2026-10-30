@@ -4,6 +4,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -55,6 +56,20 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   void ViewEvent(int tag, const char* event, base::DictValue payload);
   void PublishHostInfo();
   BrowserWindowInterface* browser() const { return context_.window(); }
+  // The Bay document this host serves.
+  content::WebContents* document_contents() const;
+  // A key the window's document runs as its command (BayShell.setKeyShortcuts).
+  struct KeyShortcut {
+    int key_code;
+    bool ctrl;
+    bool shift;
+    bool alt;
+    std::string command;
+    std::optional<std::string> arg;
+  };
+  const std::vector<KeyShortcut>& key_shortcuts() const {
+    return key_shortcuts_;
+  }
   bool is_coordinator() const { return !context_.is_window(); }
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
@@ -112,6 +127,7 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   std::unique_ptr<EngineServices> engine_services_;
   mojo::Remote<mojom::NativeHostClient> client_;
   std::map<int, std::unique_ptr<TabObserver>> tabs_;
+  std::vector<KeyShortcut> key_shortcuts_;
   std::map<uintptr_t, std::pair<bool, InvokeCallback>> pending_;
   base::WeakPtrFactory<NativeHost> weak_factory_{this};
 };

@@ -32,14 +32,13 @@ class BayWebUIBrowserWindow : public WebUIBrowserWindow {
  public:
   explicit BayWebUIBrowserWindow(BrowserWindowInterface* browser);
   void SetFocusToLocationBar(bool is_user_initiated) override;
+  // Ctrl+Q quits on Linux, as its desktops expect (quit_shortcut_linux.h);
+  // then the window's own key shortcuts (RunWindowShortcut), then Chrome's.
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      const input::NativeWebKeyboardEvent& event) override;
   // A window Chrome opened beside Bay's own is never shown (WindowRegistry).
   void Show() override;
   void ShowInactive() override;
-#if BUILDFLAG(IS_LINUX)
-  // Ctrl+Q quits, as Linux desktops expect (quit_shortcut_linux.h).
-  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
-      const input::NativeWebKeyboardEvent& event) override;
-#endif
 };
 
 // Called by the shared upstream controller after its Browser association is
@@ -51,6 +50,14 @@ void ShutdownAppRuntimeIfStarted();
 void BindAppRuntime(content::WebUI* web_ui,
                     mojo::PendingReceiver<mojom::AppRuntime> receiver);
 void EmitWindowCommand(BrowserWindowInterface* browser, const char* command);
+
+// One of the window's key shortcuts (NativeHost::KeyShortcut) for a key down:
+// with a page focused its command runs, as macOS's menu runs it first; with
+// Bay's own document focused the key goes there, where a field's own keys come
+// first (the palette's Ctrl+K). Chrome's accelerator runs in neither case.
+enum class WindowShortcut { kNone, kRan, kForDocument };
+WindowShortcut RunWindowShortcut(BrowserWindowInterface* browser,
+                                 const input::NativeWebKeyboardEvent& event);
 
 }  // namespace bay
 #endif
