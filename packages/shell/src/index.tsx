@@ -410,8 +410,19 @@ export function setMenuStateParts(state: MenuState, bookmarksChanged: boolean) {
 }
 export const replyToTerminate = (ok: boolean) => Shell.replyToTerminate(ok);
 
-export const confirm = (options: ConfirmOptions) => Shell.confirm(options);
-export const prompt = (options: PromptOptions) => Shell.prompt(options);
+export type ConfirmResult = { confirmed: boolean; suppressed: boolean };
+/** The app's own dialog for a confirm or a prompt, or null to leave it to the system's. */
+export type DialogPresenter = {
+  confirm(options: ConfirmOptions): Promise<ConfirmResult> | null;
+  prompt(options: PromptOptions): Promise<string | null> | null;
+};
+let dialogPresenter: DialogPresenter | null = null;
+/** The app's in-window dialogs take the system's place where it can show them. */
+export const setDialogPresenter = (presenter: DialogPresenter | null) => {
+  dialogPresenter = presenter;
+};
+export const confirm = (options: ConfirmOptions): Promise<ConfirmResult> => dialogPresenter?.confirm(options) ?? Shell.confirm(options);
+export const prompt = (options: PromptOptions): Promise<string | null> => dialogPresenter?.prompt(options) ?? Shell.prompt(options);
 
 export const onCommand = (listener: (e: CommandEvent) => void) => Shell.addListener("onCommand", listener);
 export const onWindowEvent = (listener: (e: WindowEvent) => void) => Shell.addListener("onWindowEvent", listener);
