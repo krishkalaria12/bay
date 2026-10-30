@@ -1,6 +1,7 @@
 import { exportEaselHTML, revealFile, saveCaptureImage, shareCaptureImage, type EaselCanvasHandle } from "@bay/shell";
 import { showToast } from "../layout/splitActions";
 import type { EaselDocument } from "./model";
+import { revealTitle } from "./words";
 
 export async function writeEaselPNG(canvas: EaselCanvasHandle | null, doc: EaselDocument, windowId: string, share: boolean) {
   const image = await canvas?.export();
@@ -18,5 +19,5 @@ export async function writeEaselHTML(doc: EaselDocument, windowId: string) {
 }
 
 function exported(windowId: string, path: string, message: string) {
-  showToast(windowId, "Exported Easel", message, { icon: "arrow.down.circle", action: { title: "Show in Finder", run: () => void revealFile(path) } });
+  showToast(windowId, "Exported Easel", message, { icon: "arrow.down.circle", action: { title: revealTitle, run: () => void revealFile(path) } });
 }

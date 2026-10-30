@@ -1,8 +1,9 @@
-import { Pressable, ScrollView, View } from "@bay/platform";
+import { capabilities, Pressable, ScrollView, View } from "@bay/platform";
 import {
   ContextMenuArea,
   copyCaptureImage,
   fileExists,
+  libraryImageUri,
   MouseArea,
   openFile,
   pickFiles,
@@ -33,7 +34,8 @@ import { Button, SearchField, useFormColors } from "../settings/controls";
 import { tabTitle } from "../sidebar/actions";
 import { SpaceGlyph } from "../spaces/SpaceGlyph";
 import { chooseEasel, easelMenu, libraryWindow, newEasel, openEasel } from "./actions";
-import type { EaselDocument, LibraryMedia } from "./model";
+import { fileNameOf, type EaselDocument, type LibraryMedia } from "./model";
+import { thisComputer } from "./words";
 import { removeLibraryMedia, saveLibraryMedia, startLibrary, useLibrary } from "./state";
 import type { Boost } from "../../lib/boosts";
 import { Toggle } from "../layout/controls";
@@ -53,8 +55,6 @@ function sectionOf(value?: string): Section {
   if (value === "archived-tabs" || value === "archived") return "archive";
   return SECTIONS.find((section) => section.id === value)?.id ?? "media";
 }
-const fileUri = (path: string) => `file://${path.split("/").map(encodeURIComponent).join("/")}`;
-
 export function LibraryPage({ tabId, initialSection }: { tabId: string; initialSection?: string }) {
   const window = useBrowser((s) => s.windows[s.tabs[tabId]?.windowId ?? ""]);
   if (!window || window.incognito || isIncognitoSpace(window.spaceId)) {
@@ -63,7 +63,7 @@ export function LibraryPage({ tabId, initialSection }: { tabId: string; initialS
         <LibraryTitle />
         <EmptyState
           title="Library is available in regular windows"
-          subtitle="Media and Easels are saved on this Mac. Open a regular window to use your Library."
+          subtitle={`Media and Easels are saved on ${thisComputer}. Open a regular window to use your Library.`}
         />
       </View>
     );
@@ -103,7 +103,9 @@ function PublicLibrary({ tabId, windowId, initialSection }: { tabId: string; win
       setActionError(`Couldn't import images: ${String(error)}`);
     }
     if (failed)
-      setActionError(`${failed === 1 ? "One file couldn't" : `${failed} files couldn't`} be imported. Choose image files that are available on this Mac.`);
+      setActionError(
+        `${failed === 1 ? "One file couldn't" : `${failed} files couldn't`} be imported. Choose image files that are available on ${thisComputer}.`,
+      );
     setImporting(false);
   }
 
@@ -176,7 +178,7 @@ async function importMediaFiles(windowId: string) {
     if (!libraryWindow(windowId)) break;
     try {
       const path = file.startsWith("file://") ? decodeURIComponent(new URL(file).pathname) : file;
-      const media = await saveLibraryMedia({ path, width: 1, height: 1 }, path.split("/").pop() || "Image");
+      const media = await saveLibraryMedia({ path, width: 1, height: 1 }, fileNameOf(path) || "Image");
       if (!media) failed++;
     } catch {
       failed++;
@@ -280,7 +282,7 @@ function MediaCard({ media, windowId, width }: { media: LibraryMedia; windowId: 
           >
             {available ? (
               <Image
-                source={{ uri: fileUri(media.path) }}
+                source={{ uri: libraryImageUri(media.path) }}
                 resizeMode="contain"
                 onError={() => setBroken(true)}
                 accessibilityIgnoresInvertColors
@@ -326,7 +328,7 @@ async function mediaMenu(media: LibraryMedia, windowId: string) {
     const choice = await showMenu([
       { id: "copy", title: "Copy Image", enabled: exists },
       { id: "save", title: "Save to Downloads", enabled: exists },
-      { id: "share", title: "Share…", enabled: exists },
+      ...(capabilities.shareSheet ? [{ id: "share", title: "Share…", enabled: exists }] : []),
       { id: "source", title: "Open Source", enabled: !!media.source },
       { id: "easel", title: "Add to Easel…", enabled: exists && !useLibrary.getState().error },
       { separator: true },
@@ -450,7 +452,7 @@ function EaselImage({ path }: { path: string }) {
   const [broken, setBroken] = useState(false);
   const exists = useFileExists(path);
   if (broken || exists !== true) return <Text style={{ fontSize: 9, color: "#777777" }}>Image unavailable</Text>;
-  return <Image source={{ uri: fileUri(path) }} resizeMode="contain" onError={() => setBroken(true)} style={{ width: "100%", height: "100%" }} />;
+  return <Image source={{ uri: libraryImageUri(path) }} resizeMode="contain" onError={() => setBroken(true)} style={{ width: "100%", height: "100%" }} />;
 }
 
 function SpacesSection({ windowId, query }: { windowId: string; query: string }) {
