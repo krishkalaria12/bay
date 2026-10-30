@@ -581,8 +581,6 @@ base::DictValue NativeHost::Info() const {
 #endif
   for (const auto& method : engine_services_->SupportedMethods())
     engine_methods.Append(method.Clone());
-  for (const auto& method : LibraryFiles::SupportedMethods())
-    engine_methods.Append(method.Clone());
 #if BUILDFLAG(IS_LINUX)
   for (auto& method : Notifications::SupportedMethods())
     engine_methods.Append(std::move(method));
@@ -712,6 +710,8 @@ base::DictValue NativeHost::Info() const {
   auto* host_methods = info.FindList("optionalMethods");
   if (context_.is_window())
     host_methods->Append("BayShell.setKeyShortcuts");
+  for (auto& method : LibraryFiles::SupportedMethods())
+    host_methods->Append(std::move(method));
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
