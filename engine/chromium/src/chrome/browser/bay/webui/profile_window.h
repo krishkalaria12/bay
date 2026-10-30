@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 
 class Browser;
-class FindBarOwner;
 class WebUIBrowserExclusiveAccessContext;
 class WebUIBrowserWindow;
 
@@ -194,7 +193,6 @@ class ProfileBrowserWindow final : public BrowserWindow,
 
   const base::WeakPtr<BrowserWindowInterface> frame_;
   raw_ptr<Browser> browser_ = nullptr;
-  std::unique_ptr<FindBarOwner> find_bar_owner_;
 };
 
 }  // namespace bay

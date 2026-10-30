@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "bay/core/nn_page_channel.h"
+#include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -27,7 +28,6 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
-#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -410,15 +410,6 @@ void WriteAutofillSettings(EngineInvoker engine,
           engine, profile, addresses.has_value(), cards, std::move(response)));
 }
 
-content::WebContents* FindTab(BrowserWindowInterface* browser, int id) {
-  auto* tabs = browser ? browser->GetTabStripModel() : nullptr;
-  for (int i = 0; tabs && i < tabs->count(); ++i) {
-    auto* contents = tabs->GetWebContentsAt(i);
-    if (sessions::SessionTabHelper::IdForTab(contents).id() == id)
-      return contents;
-  }
-  return nullptr;
-}
 TabSharingInfoBarDelegate* SharingDelegate(content::WebContents* target,
                                            content::WebContents* capturer) {
   auto* manager = infobars::ContentInfoBarManager::FromWebContents(target);
@@ -614,9 +605,10 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
   if (module == "BayChromeUI" && (method == "changeCaptureSource" ||
                                   method == "showAutofillSuggestions")) {
     const auto* first = At(args, 0);
-    auto* contents = first && first->is_int()
-                         ? FindTab(context_.window(), first->GetInt())
-                         : nullptr;
+    auto* contents =
+        first && first->is_int()
+            ? WindowRegistry::Get().FindTab(context_.window(), first->GetInt())
+            : nullptr;
     if (!contents) {
       std::move(response).Run(
           Failure("tab_unavailable", "This window does not own that tab"));
@@ -633,9 +625,11 @@ bool EngineServices::DispatchEngineModule(const std::string& module,
           base::Value(focused && focused->Trigger(passwords->GetBool()))));
     } else {
       const auto* second = At(args, 1);
-      auto* target = second && second->is_int()
-                         ? FindTab(context_.window(), second->GetInt())
-                         : nullptr;
+      auto* target =
+          second && second->is_int()
+              ? WindowRegistry::Get().FindTab(context_.window(),
+                                              second->GetInt())
+              : nullptr;
       auto* sharing = target ? SharingDelegate(target, contents) : nullptr;
       const bool allowed = sharing &&
                            (sharing->GetButtons() &

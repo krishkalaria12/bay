@@ -73,6 +73,9 @@ class WindowRegistry final : public BrowserCollectionObserver {
                                      Profile* profile);
   // The Bay window `browser` is part of: itself, or the frame holding it.
   BrowserWindowInterface* FrameOf(BrowserWindowInterface* browser) const;
+  // The tab with Chrome tab id `id` in Bay window `frame`, in any of its
+  // profiles' Browsers, or null.
+  content::WebContents* FindTab(BrowserWindowInterface* frame, int id) const;
   Result Close(const std::string& id);
   Result Focus(const std::string& id);
   Result SetTitle(const std::string& id, const std::string& title);

@@ -125,15 +125,6 @@ Profile* ResolveCastProfile(BrowserWindowInterface* browser,
   return profiles->GetProfileByPath(
       root.AppendASCII(logical_id.empty() ? "Default" : logical_id));
 }
-content::WebContents* FindTab(BrowserWindowInterface* browser, int id) {
-  auto* tabs = browser ? browser->GetTabStripModel() : nullptr;
-  for (int i = 0; tabs && i < tabs->count(); ++i) {
-    auto* contents = tabs->GetWebContentsAt(i);
-    if (sessions::SessionTabHelper::IdForTab(contents).id() == id)
-      return contents;
-  }
-  return nullptr;
-}
 base::Value HexColor(SkColor color) {
   if (!SkColorGetA(color))
     return base::Value();
@@ -606,9 +597,11 @@ bool BrowserServices::DispatchChromeUI(const std::string& method,
     return true;
   }
   const auto* browser_id = At(args, 0);
-  auto* contents = browser_id && browser_id->is_int()
-                       ? FindTab(context_.window(), browser_id->GetInt())
-                       : nullptr;
+  auto* contents =
+      browser_id && browser_id->is_int()
+          ? WindowRegistry::Get().FindTab(context_.window(),
+                                          browser_id->GetInt())
+          : nullptr;
   if (!contents) {
     std::move(response).Run(
         Failure("tab_unavailable", "This window does not own that tab"));
