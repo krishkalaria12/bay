@@ -1,5 +1,6 @@
 import { requireNativeModule } from "@bay/platform/native";
 import { requireNativeViewManager } from "./nativeViews";
+import { imageFiles } from "./imageFiles";
 import type { Ref } from "react";
 import type { ViewProps } from "@bay/platform";
 
@@ -23,12 +24,13 @@ export const shareQuoteCard = async ({ text, title, url, colors, dark }: QuoteCa
   Capture().shareQuote(text, title, url, colors, dark, windowId);
 
 /** Capture in Portrait: the picture framed, with a shadow, on a gradient of `colors` (hex), as a new PNG. */
-export const portraitCaptureImage = async (path: string, colors: string[], dark: boolean) => Capture().portraitImage(path, colors, dark);
+export const portraitCaptureImage = async (path: string, colors: string[], dark: boolean) =>
+  imageFiles ? imageFiles.portrait(path, colors, dark) : Capture().portraitImage(path, colors, dark);
 
 /** The picture on the clipboard. */
-export const copyCaptureImage = async (path: string) => Capture().copyImage(path);
+export const copyCaptureImage = async (path: string) => (imageFiles ? imageFiles.copy(path) : Capture().copyImage(path));
 /** A copy in Downloads named `name` (numbered when taken): its path. */
-export const saveCaptureImage = async (path: string, name: string) => Capture().saveImage(path, name);
+export const saveCaptureImage = async (path: string, name: string) => (imageFiles ? imageFiles.save(path, name) : Capture().saveImage(path, name));
 /** The share menu for the picture, under `anchor` (x, y, width, height in the window's content from its top-left). */
 export const shareCaptureImage = async (path: string, name: string, windowId: string | null, anchor?: [number, number, number, number]) =>
   Capture().shareImage(path, name, windowId, anchor ?? null);

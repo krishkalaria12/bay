@@ -8,7 +8,8 @@ import { showToast } from "../layout/splitActions";
 import { isInternalTab } from "../pages";
 import { saveLibraryMedia } from "../library/state";
 import { chooseEasel, libraryWindow } from "../library/actions";
-import { webLink } from "../library/model";
+import { fileNameOf, webLink } from "../library/model";
+import { revealTitle } from "../library/words";
 import { engineProfile } from "../../store/model";
 import { themeFor, themeKey } from "../../lib/theme";
 import { captureScript } from "./captureScript";
@@ -206,11 +207,11 @@ export function applyMarkup(tabId: string, image: CapturedImage) {
 
 function savedToast(windowId: string, path: string | null, title: string) {
   if (!path) return showToast(windowId, "Couldn’t Save the Capture", "Bay couldn’t write to Downloads.", { icon: "camera.viewfinder" });
-  const file = path.split("/").pop() ?? path;
+  const file = fileNameOf(path) || path;
   showToast(windowId, title, `In Downloads as ${file}`, {
     icon: "arrow.down.circle",
     key: "capture",
-    action: { title: "Show in Finder", run: () => void revealFile(path) },
+    action: { title: revealTitle, run: () => void revealFile(path) },
   });
 }
 

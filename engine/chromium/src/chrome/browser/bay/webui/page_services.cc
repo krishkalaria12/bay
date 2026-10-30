@@ -21,6 +21,7 @@
 #include "bay/core/nn_devtools_call.h"
 #include "bay/core/nn_page_channel.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -291,6 +292,101 @@ void CaptureScreenshot(content::WebContents* contents, PageResponse callback) {
           },
           std::move(callback)));
 }
+
+// A page's picture as a PNG in Library's capture cache: {path, width, height},
+// or null. The clip is in CSS px from the document's top-left.
+void TakeImage(content::WebContents* contents,
+               base::DictValue clip,
+               bool beyond_viewport,
+               PageResponse callback) {
+  base::DictValue request;
+  request.Set("format", "png");
+  request.Set("captureBeyondViewport", beyond_viewport);
+  if (!clip.empty())
+    request.Set("clip", std::move(clip));
+  nncore::CallDevTools(
+      contents, "Page.captureScreenshot", std::move(request), base::Seconds(15),
+      base::BindOnce(
+          [](PageResponse callback, std::optional<base::DictValue> result,
+             std::optional<std::string> error) {
+            auto* data =
+                result && !error ? result->FindString("data") : nullptr;
+            if (!data) {
+              std::move(callback).Run(Success());
+              return;
+            }
+            LibraryFiles::StoreCapture(
+                std::move(*data),
+                base::BindOnce(
+                    [](PageResponse callback,
+                       std::optional<base::DictValue> image) {
+                      std::move(callback).Run(
+                          Success(image ? base::Value(std::move(*image))
+                                        : base::Value()));
+                    },
+                    std::move(callback)));
+          },
+          std::move(callback)));
+}
+
+void CaptureImage(content::WebContents* contents,
+                  const base::Value* value,
+                  PageResponse callback) {
+  const auto* options = value ? value->GetIfDict() : nullptr;
+  if (!options || contents->GetVisibility() != content::Visibility::VISIBLE) {
+    std::move(callback).Run(Success());
+    return;
+  }
+  if (options->FindBool("fullPage").value_or(false)) {
+    // The whole document, from its measured size.
+    nncore::CallDevTools(
+        contents, "Page.getLayoutMetrics", base::DictValue(), base::Seconds(5),
+        base::BindOnce(
+            [](base::WeakPtr<content::WebContents> contents,
+               PageResponse callback, std::optional<base::DictValue> result,
+               std::optional<std::string> error) {
+              const auto* size =
+                  result && !error ? result->FindDict("cssContentSize")
+                                   : nullptr;
+              const auto width = size ? size->FindDouble("width") : std::nullopt;
+              const auto height =
+                  size ? size->FindDouble("height") : std::nullopt;
+              if (!contents || !width || !height || *width <= 0 ||
+                  *height <= 0) {
+                std::move(callback).Run(Success());
+                return;
+              }
+              TakeImage(contents.get(),
+                        base::DictValue()
+                            .Set("x", 0)
+                            .Set("y", 0)
+                            .Set("width", std::min(*width, 16384.0))
+                            .Set("height", std::min(*height, 16384.0))
+                            .Set("scale", 1),
+                        true, std::move(callback));
+            },
+            contents->GetWeakPtr(), std::move(callback)));
+    return;
+  }
+  base::DictValue clip;
+  if (const auto* area = options->FindList("clip")) {
+    if (area->size() != 4 ||
+        !std::ranges::all_of(*area, [](const base::Value& number) {
+          return number.is_int() || number.is_double();
+        })) {
+      std::move(callback).Run(Failure("Invalid capture area"));
+      return;
+    }
+    clip = base::DictValue()
+               .Set("x", (*area)[0].GetDouble())
+               .Set("y", (*area)[1].GetDouble())
+               .Set("width", (*area)[2].GetDouble())
+               .Set("height", (*area)[3].GetDouble())
+               .Set("scale", 1);
+  }
+  TakeImage(contents, std::move(clip),
+            options->FindBool("beyond").value_or(false), std::move(callback));
+}
 }  // namespace
 
 base::DictValue GetPageSecurityInfo(content::WebContents* contents) {
@@ -314,6 +410,9 @@ bool DispatchPageMethod(content::WebContents* contents,
         Success(base::Value(GetPageSecurityInfo(contents))));
   } else if (command == "captureScreenshot") {
     CaptureScreenshot(contents, std::move(callback));
+  } else if (command == "captureImage") {
+    CaptureImage(contents, params.empty() ? nullptr : &params[0],
+                 std::move(callback));
   } else if (command == "capturePicture") {
     CapturePicture(contents, Number(params, 0, 1), std::move(callback));
   } else if (command == "downloadImage" || command == "downloadFavicon") {

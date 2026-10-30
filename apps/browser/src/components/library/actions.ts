@@ -7,6 +7,7 @@ import { resolveWindowId, viewTabIds } from "../../store/model";
 import { showToast } from "../layout/splitActions";
 import { openInternalPage, tabDestination } from "../pages/urls";
 import { libraryAvailable } from "./availability";
+import { thisComputer } from "./words";
 import type { LibraryMedia } from "./model";
 import { addMediaToEasel, createEasel, deleteEasel, duplicateEasel, startLibrary, updateEasel, useLibrary } from "./state";
 import { startEaselShares, stopSharingEasel, useEaselShares } from "./sharing";
@@ -30,7 +31,7 @@ export function libraryWindow(windowId?: string | null): string | null {
     return null;
   }
   if (s.windows[id]?.incognito) {
-    showToast(id, "Open Library in a Regular Window", "Library and Easels are saved on this Mac.", { icon: "books.vertical" });
+    showToast(id, "Open Library in a Regular Window", `Library and Easels are saved on ${thisComputer}.`, { icon: "books.vertical" });
     return null;
   }
   return id;

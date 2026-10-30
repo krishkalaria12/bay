@@ -3,11 +3,9 @@ import { test } from "node:test";
 import { docs } from "@bay/shell";
 import { installServiceClient } from "../../runtime/serviceClient.ts";
 import { addBoost, boostsAvailable, createBoost, ensureBoostsLoaded, setBoostsOn, startBoosts, useBoosts } from "./state.ts";
-import { libraryAvailable } from "../library/availability.ts";
-import { createEasel, startLibrary, useLibrary } from "../library/state.ts";
 import { newBoost } from "../../lib/boosts.ts";
 
-test("remote windows cannot start feature persistence, style timers or unsupported mutations", () => {
+test("remote windows cannot start boosts persistence, style timers or unsupported mutations", () => {
   const stopClient = installServiceClient(async () => null);
   const before = useBoosts.getState();
   const disk = [...docs];
@@ -19,16 +17,12 @@ test("remote windows cannot start feature persistence, style timers or unsupport
   };
   try {
     assert.equal(boostsAvailable(), false);
-    assert.equal(libraryAvailable(), false);
     ensureBoostsLoaded();
     startBoosts();
     assert.equal(createBoost("example.com"), null);
     addBoost(newBoost("remote", "example.com", 1));
     setBoostsOn(false);
     assert.equal(useBoosts.getState(), before);
-    startLibrary();
-    assert.equal(createEasel("default"), null);
-    assert.match(useLibrary.getState().error, /not available/);
     assert.deepEqual([...docs], disk);
     assert.equal(timers, 0);
   } finally {

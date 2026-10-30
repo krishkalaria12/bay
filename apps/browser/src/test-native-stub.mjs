@@ -362,6 +362,7 @@ export const openWindow = () => Promise.resolve();
 // Library assets: a test can replace the importer to simulate an unavailable file.
 export const libraryImages = { retain: async (path) => ({ path: `/data/Library Media/${path.split("/").pop()}`, width: 640, height: 480 }) };
 export const retainLibraryImage = (path) => libraryImages.retain(path);
+export const libraryImageUri = (path) => `file://${path}`;
 
 export const sidebarKeyboardCalls = [];
 export const setSidebarKeyboard = (windowId, active) => (sidebarKeyboardCalls.push({ windowId, active }), Promise.resolve());

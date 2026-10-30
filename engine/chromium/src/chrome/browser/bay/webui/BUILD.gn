@@ -46,6 +46,8 @@ source_set("impl") {
     "engine_services.cc",
     "engine_services.h",
     "host_context.cc",
+    "library_files.cc",
+    "library_files.h",
     "native_host.cc",
     "page_observer.cc",
     "page_observer.h",

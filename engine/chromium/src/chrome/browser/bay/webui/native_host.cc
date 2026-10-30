@@ -30,6 +30,7 @@
 #include "chrome/browser/bay/webui/bay_webui.h"
 #include "chrome/browser/bay/webui/browser_services.h"
 #include "chrome/browser/bay/webui/engine_services.h"
+#include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
@@ -491,7 +492,8 @@ NativeHost::~NativeHost() {
 }
 base::DictValue NativeHost::Info() const {
   base::ListValue modules;
-  for (const char* name : {"BayApp", "BayCEF", "BayShell", "BayWebView"})
+  for (const char* name :
+       {"BayApp", "BayCEF", "BayEasel", "BayShell", "BayWebView"})
     modules.Append(name);
   for (const auto& module : browser_services_->Modules())
     modules.Append(module.Clone());
@@ -578,6 +580,8 @@ base::DictValue NativeHost::Info() const {
     engine_methods.Append(std::move(method));
 #endif
   for (const auto& method : engine_services_->SupportedMethods())
+    engine_methods.Append(method.Clone());
+  for (const auto& method : LibraryFiles::SupportedMethods())
     engine_methods.Append(method.Clone());
 #if BUILDFLAG(IS_LINUX)
   for (auto& method : Notifications::SupportedMethods())
@@ -699,6 +703,11 @@ base::DictValue NativeHost::Info() const {
     for (const auto& method : data::MethodNames(module))
       info.FindList("optionalMethods")->Append(module + "." + method);
 #endif
+  // Set last: a platform's services replace the snapshots above.
+  info.FindDict("snapshots")
+      ->Set("BayEasel", base::DictValue()
+                            .Set("isEaselWebSharingEnabled", false)
+                            .Set("readEaselShareRecords", base::Value()));
   // Window features this host routes itself, on every desktop it runs on.
   auto* host_methods = info.FindList("optionalMethods");
   if (context_.is_window())
@@ -989,6 +998,8 @@ void NativeHost::Invoke(const std::string& module,
     InvokeView(method, args, std::move(callback));
     return;
   }
+  if (LibraryFiles::Dispatch(module, method, args, callback))
+    return;
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (keychain_->Dispatch(module, method, args, callback))
     return;
