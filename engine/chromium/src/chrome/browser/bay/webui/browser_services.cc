@@ -537,6 +537,27 @@ bool BrowserServices::DispatchChromeUI(const std::string& method,
     }
     auto* native_profile =
         profile ? ResolveCastProfile(context_.window(), *profile) : nullptr;
+    // A space's own profile loads on first use, as for its pages.
+    if (!native_profile && profile && !profile->starts_with("incognito:") &&
+        !WindowRegistry::Get().LoadedProfile(*profile)) {
+      WindowRegistry::Get().LoadProfile(
+          *profile,
+          base::BindOnce(
+              [](base::WeakPtr<BrowserServices> services, base::ListValue args,
+                 Response response, Profile* loaded) {
+                if (!services)
+                  return;
+                if (!loaded) {
+                  std::move(response).Run(
+                      Failure("profile_unavailable",
+                              "The requested cast profile is not available"));
+                  return;
+                }
+                services->DispatchChromeUI("watchCastRoutes", args, response);
+              },
+              weak_factory_.GetWeakPtr(), args.Clone(), std::move(response)));
+      return true;
+    }
     if (!native_profile) {
       std::move(response).Run(
           Failure("profile_unavailable",
