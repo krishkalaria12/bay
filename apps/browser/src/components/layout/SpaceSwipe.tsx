@@ -9,6 +9,7 @@ import { themeFor, themeKey } from "../../lib/theme";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
 import { pagerFor, usePagerNativeConfig, usePagerPages, usePagerSurface } from "./spacePager";
+import { SpaceSwipeGesture } from "./SpaceSwipeGesture";
 
 // `swipes` false keeps the children mounted without the swipe area: the peek has one only while it's out.
 export function SpaceSwipe({ children, swipes = true }: { children: ReactNode; swipes?: boolean }) {
@@ -67,18 +68,21 @@ export function SpaceSwipeArea({ surface, style, pageWidth }: { surface: "sideba
   // position returns to zero. The area stays transparent and recognizes no single-profile drags.
   if (!multiple && !nativePager) return null;
   return (
-    <SwipeArea
-      ref={area}
-      style={style}
-      canSwipeBack={previous}
-      canSwipeForward={next}
-      tracksUnavailableDirections={multiple}
-      isPager={multiple}
-      onSwipe={onSwipe}
-      nativePager={nativePager}
-      onPagerPosition={nativePager && onPagerPosition}
-      onPagerState={nativePager && pager.onNativeState}
-    />
+    <>
+      <SpaceSwipeGesture canSwipeBack={previous} canSwipeForward={next} onSwipe={onSwipe} />
+      <SwipeArea
+        ref={area}
+        style={style}
+        canSwipeBack={previous}
+        canSwipeForward={next}
+        tracksUnavailableDirections={multiple}
+        isPager={multiple}
+        onSwipe={onSwipe}
+        nativePager={nativePager}
+        onPagerPosition={nativePager && onPagerPosition}
+        onPagerState={nativePager && pager.onNativeState}
+      />
+    </>
   );
 }
 
