@@ -11,8 +11,8 @@ RAM, provision swap and start with `--jobs 2`.
 Ubuntu and Debian are the initial build hosts. Other glibc distributions can use
 the same sysroot and driver, but Bay has not completed native build or runtime
 validation on Fedora, Arch or openSUSE. Alpine's musl environment and Linux ARM64
-are unsupported. NixOS needs an environment capable of running Chromium's
-downloaded Linux tools. A successful build does not establish runtime compatibility
+are unsupported. NixOS builds in Bay's Nix shell (see [NixOS](#nixos)). A
+successful build does not establish runtime compatibility
 on every distro; the minimum glibc version remains unmeasured in the engine lock.
 
 Install Python 3.10 or later, Git, CA certificates, GNU patch, pkg-config, binutils
@@ -41,7 +41,8 @@ sudo "$BAY_ENGINE_ROOT/chromium_git/chromium/src/build/install-build-deps.sh" \
   --no-arm --no-chromeos-fonts
 ```
 
-For other hosts, follow the distro notes in the pinned checkout's
+On NixOS, skip both: the Nix shell below provides these tools. For other hosts,
+follow the distro notes in the pinned checkout's
 `docs/linux/build_instructions.md` for the remaining dependencies.
 Chromium's downloaded host binaries still
 require compatible host libraries, even though target libraries use a sysroot.
@@ -53,6 +54,63 @@ depot_tools during download. Before GN generation it checks `pkg-config`, `ar`,
 libsecret development/runtime packages into that sysroot. This uses `ar` and
 `tar` on every distro; `dpkg` is not required. Packages are cached under
 `$BAY_ENGINE_ROOT/libsecret-packages`. It also generates missing CEF paths.
+
+## NixOS
+
+Chromium downloads prebuilt host tools (clang, gn, siso, Node and CIPD's
+Python) that expect `/lib64/ld-linux-x86-64.so.2` and libraries under
+`/usr/lib`. NixOS has neither, so the driver refuses to start there until
+`packaging/linux/nix/shell.nix` provides them. That shell is a `buildFHSEnv`:
+a bubblewrap namespace over the host's filesystem, not a container. It has every
+base tool above, Node 24, pnpm through Corepack at the version `package.json`
+pins, and the libraries `build-app.py`'s ldd check needs. Target libraries
+still come from Chromium's pinned Debian sysroot, so the engine is the same one
+other distros build.
+
+```bash
+git clone -b feat/linux https://github.com/krishkalaria12/bay.git ~/bay
+cd ~/bay
+nix-shell packaging/linux/nix/shell.nix
+```
+
+Run every command in the next sections inside that shell, from `~/bay`; skip
+`install-build-deps.sh`. The shell starts an interactive Bash and ignores
+`nix-shell --run`. If NixOS uses flakes without channels, add
+`-I nixpkgs=flake:nixpkgs`. Bubblewrap needs unprivileged user namespaces,
+which NixOS allows unless `security.allowUserNamespaces` is off.
+
+Package only the tarball, which needs no `dpkg-deb` or `rpmbuild`:
+
+```bash
+scripts/linux/release.sh --app dist/linux-app --version 0.0.1 --output dist/linux-release --formats tar
+```
+
+Then leave the shell. `packaging/linux/nix/default.nix` turns the tarball into a
+Nix package that runs without the shell: it sets the Nix loader and library
+paths on the executables, and wraps `bin/bay` with the paths for libraries
+Chromium loads at run time (GTK, Qt 6, VA-API, Vulkan and the host GPU drivers
+in `/run/opengl-driver`). Its install check fails the build if any ELF file has
+an unresolved library.
+
+```bash
+nix-build packaging/linux/nix --arg tarball ./dist/linux-release/bay-0.0.1-linux-x64.tar.xz
+./result/bin/bay
+```
+
+To install it, add it to `environment.systemPackages` in `configuration.nix`:
+
+```nix
+(import /home/you/bay/packaging/linux/nix {
+  inherit pkgs;
+  tarball = /home/you/bay/dist/linux-release/bay-0.0.1-linux-x64.tar.xz;
+})
+```
+
+The installed `bay.desktop` points at the package's `bin/bay`. Running from
+`./result` has no desktop entry in the XDG data directories, so Set as Default
+explains that it's missing. The sandbox uses unprivileged user namespaces;
+`chrome-sandbox` isn't setuid, as in the tarball. Check `chrome://sandbox` and
+`chrome://gpu` after the first launch.
 
 ## Download, prepare and build
 
