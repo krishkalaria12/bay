@@ -384,7 +384,9 @@ const TabPane = memo(function TabPane({
   useEffect(() => {
     if (!focused || !visible || isNewTab || small) return;
     const timer = setTimeout(() => {
-      if (useBrowser.getState().windowUi[windowId]?.panel?.open || TextInput.State.currentlyFocusedInput()) return;
+      // React Native Web's TextInput state has only currentlyFocusedField.
+      const typing = TextInput.State.currentlyFocusedInput?.() ?? TextInput.State.currentlyFocusedField?.();
+      if (useBrowser.getState().windowUi[windowId]?.panel?.open || typing) return;
       void webviews.get(tabId)?.focus();
     }, 0);
     return () => clearTimeout(timer);
