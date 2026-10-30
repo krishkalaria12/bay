@@ -5,7 +5,9 @@ import { layout } from "../../lib/constants";
 
 /** Native macOS traffic lights keep their existing spacing. */
 export const LIGHTS_WIDTH = capabilities.trafficLights ? layout.trafficLightsWidth : 0;
-export const CAPTION_BUTTON_WIDTH = 46;
+/** Windows' own width. Linux title bar buttons are compact: with three at the sidebar's edge, its header keeps the
+ *  sidebar toggle and the back, forward and reload buttons, as beside macOS's lights. */
+export const CAPTION_BUTTON_WIDTH = platformOS === "linux" ? 26 : 46;
 
 const listeners = new Set<() => void>();
 let subscription: ReturnType<typeof onAppEvent> | undefined;

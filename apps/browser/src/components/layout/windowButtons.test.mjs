@@ -21,19 +21,29 @@ if (!process.env.BAY_WINDOW_BUTTONS_CHILD) {
   const platform = process.env.BAY_TEST_PLATFORM;
   const mac = platform === "macos";
   const linux = platform === "linux";
-  const { captionMaximizeRect, captionPeekInsets, getWindowButtonLayout, LIGHTS_WIDTH, subscribeWindowButtonLayout, utilityCaptionHeight, windowButtonRoom } =
-    await import("./windowButtons.ts");
+  const {
+    CAPTION_BUTTON_WIDTH,
+    captionMaximizeRect,
+    captionPeekInsets,
+    getWindowButtonLayout,
+    LIGHTS_WIDTH,
+    subscribeWindowButtonLayout,
+    utilityCaptionHeight,
+    windowButtonRoom,
+  } = await import("./windowButtons.ts");
   const { noToolbarGeometry, NO_TOOLBAR, paneButtonClearance, sidebarButtonRoom, toolbarEndRoom, toolbarGeometry } = await import("./geometry.ts");
   const { SIDEBAR_BUTTON_END_ROOM, TRAFFIC_LIGHTS_OFFSET } = await import("./constants.ts");
   const { appEventListeners, emitAppEvent, windowButtonLayoutState } = await import("../../test-native-stub.mjs");
+  const { addressToggleMinWidth, ADDRESS_EDGE, ADDRESS_TOGGLE_X_RIGHT } = await import("../sidebar/constants.ts");
+  const { layout } = await import("../../lib/constants.ts");
   const right3 = { left: [], right: ["minimize", "maximize", "close"] };
   const empty = { left: [], right: [] };
   const fixtures = linux
     ? [
-        { name: "left", buttons: { left: ["close", "minimize", "maximize"], right: [] }, left: 138, right: 0, max: 92 },
-        { name: "right", buttons: right3, left: 0, right: 138, max: 908 },
-        { name: "split", buttons: { left: ["close"], right: ["maximize", "minimize"] }, left: 46, right: 92, max: 908 },
-        { name: "close only", buttons: { left: ["close"], right: [] }, left: 46, right: 0, max: null },
+        { name: "left", buttons: { left: ["close", "minimize", "maximize"], right: [] }, left: 78, right: 0, max: 52 },
+        { name: "right", buttons: right3, left: 0, right: 78, max: 948 },
+        { name: "split", buttons: { left: ["close"], right: ["maximize", "minimize"] }, left: 26, right: 52, max: 948 },
+        { name: "close only", buttons: { left: ["close"], right: [] }, left: 26, right: 0, max: null },
         { name: "empty", buttons: empty, left: 0, right: 0, max: null },
       ]
     : [{ name: platform, buttons: mac ? empty : right3, left: mac ? 78 : 0, right: mac ? 0 : 138, max: mac ? null : 908 }];
@@ -45,10 +55,20 @@ if (!process.env.BAY_WINDOW_BUTTONS_CHILD) {
     assert.equal(utilityCaptionHeight(getWindowButtonLayout(), 32), linux ? 32 : 0);
   });
 
+  if (linux) {
+    test("a default sidebar keeps its toggle and navigation beside three caption buttons on either edge", () => {
+      const buttons = ["close", "minimize", "maximize"];
+      for (const room of [sidebarButtonRoom({ left: buttons, right: [] }, false), sidebarButtonRoom({ left: [], right: buttons }, true)]) {
+        const end = ADDRESS_EDGE + room.right;
+        assert.ok(layout.sidebarWidth >= addressToggleMinWidth(ADDRESS_TOGGLE_X_RIGHT + room.left, end));
+      }
+    });
+  }
+
   for (const { name, buttons, left, right, max } of fixtures) {
     test(`${name}: edge room, maximize target and utility origin`, () => {
       assert.deepEqual(windowButtonRoom(buttons), { left, right });
-      assert.deepEqual(captionMaximizeRect(buttons, 1000, 40), max === null ? null : [max, 0, 46, 40]);
+      assert.deepEqual(captionMaximizeRect(buttons, 1000, 40), max === null ? null : [max, 0, CAPTION_BUTTON_WIDTH, 40]);
       assert.equal(utilityCaptionHeight(buttons, 32), linux && left + right > 0 ? 32 : 0);
       assert.deepEqual(sidebarButtonRoom(buttons, false), { left, right: 0 });
       assert.deepEqual(sidebarButtonRoom(buttons, true), { left: 0, right });
