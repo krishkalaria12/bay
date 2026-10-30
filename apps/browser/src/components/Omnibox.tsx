@@ -1,4 +1,4 @@
-import { TextInput, View, modKey } from "@bay/platform";
+import { isMac, TextInput, View, modKey } from "@bay/platform";
 import { customBangTable, displayUrl, hostOf, joinBangTables, resolveInput, searchUrl, scopedSearchUrl, type SearchScope, type Suggestion } from "@bay/core";
 import { ContextMenuArea, Symbol, copyText, showMenu } from "@bay/shell";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -6,7 +6,7 @@ import { useTheme } from "../lib/theme";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { sampleOmniboxLatency, trackSuggestionChosen } from "../telemetry/track";
 import { useBrowserRead as useBrowser } from "../store/read";
-import { useBrowserRead } from "../store/read";
+import { browserRead, useBrowserRead } from "../store/read";
 import { dispatchBrowserCommand, reportBrowserCommand } from "../runtime/commands";
 import { showToast } from "./layout/splitActions";
 import { useWindowId, useWindowSpaceId } from "../store/hooks";
@@ -462,13 +462,27 @@ export function Omnibox({
   // Focus once the field has its frame: autoFocus hands the window's shared field editor a
   // zero-width field, and the editor then stays wider than the field (its text draws past the
   // edge and never scrolls).
+  const focusField = () => {
+    input.current?.focus();
+    const { start, end } = selection.current;
+    input.current?.setSelection(start, end);
+  };
   const focused = useRef(false);
   const focusOnce = () => {
     if (focused.current) return;
     focused.current = true;
-    input.current?.focus();
-    const { start, end } = selection.current;
-    input.current?.setSelection(start, end);
+    focusField();
+  };
+  // macOS's buttons never take the keyboard, nor does a page attaching under the palette; the web host's do. So, as
+  // there, the open palette's field keeps the keyboard (across a space switch, say) unless another field takes it.
+  const keepFocus = () => {
+    if (isMac) return;
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      const field = active instanceof HTMLElement && (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+      if (field || !document.hasFocus() || !browserRead.getState().windowUi[windowId]?.panel.open) return;
+      focusField();
+    });
   };
 
   const field = (
@@ -486,7 +500,7 @@ export function Omnibox({
       enableFocusRing={false}
       onSubmitEditing={() => choose(current, "current", true)}
       submitBehavior={palette ? "submit" : "blurAndSubmit"}
-      onBlur={palette ? undefined : onCancel}
+      onBlur={palette ? keepFocus : onCancel}
       keyDownEvents={scope && !typed ? SCOPE_KEYS : canForget ? FORGET_KEYS : BASE_KEYS}
       onKeyDown={onKeyDown}
       onKeyPress={(e) => isEscapeKey(e) && onKeyDown({ nativeEvent: { key: "Escape" } })}
