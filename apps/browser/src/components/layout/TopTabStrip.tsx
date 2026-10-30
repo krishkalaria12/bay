@@ -3,7 +3,8 @@ import { ScrollView } from "@bay/platform";
 import { Pressable, View, shortcutForCommand } from "@bay/platform";
 import { ContextMenuArea, FadeLabel, raiseView, setTrafficLightsCenter, Surface, Symbol, WindowDragRegion } from "@bay/shell";
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
-import { findNodeHandle, PanResponder, StyleSheet, Text } from "react-native";
+import { PanResponder, StyleSheet, Text } from "react-native";
+import { nodeTag } from "../../lib/nodeTag";
 import { closeTab, toggleMute } from "../../lib/actions";
 import { hex, ThemeScope, useTheme } from "../../lib/theme";
 import { useEffectEvent } from "../../lib/useEffectEvent";
@@ -478,7 +479,7 @@ function stripDrag(current: () => StripDrag, { dx, lift }: { dx: SharedValue<num
   // Drawn over the row while dragged and settling (a group's member over the group's other members).
   let raised: number | null = null;
   const raise = (on: boolean) => {
-    const tag = on ? findNodeHandle(view) : raised;
+    const tag = on ? nodeTag(view) : raised;
     raiseView(tag, current().groupId ? 1 : 0, on);
     raised = on ? tag : null;
   };
