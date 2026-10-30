@@ -9,6 +9,7 @@
 #include "base/path_service.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
+#include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/window_registry.h"
 #include "chrome/browser/ui/webui_browser/webui_browser.h"
 #include "components/input/native_web_keyboard_event.h"
@@ -38,6 +39,11 @@ scoped_refptr<base::RefCountedMemory> ReadAsset(const std::string& request) {
   std::string path = request.substr(0, request.find('?'));
   if (path.empty())
     path = "index.html";
+  // Library's images: nothing but the files LibraryFiles named.
+  constexpr std::string_view kLibraryMedia = "library-media/";
+  if (path.starts_with(kLibraryMedia))
+    return LibraryFiles::ReadAsset(
+        std::string_view(path).substr(kLibraryMedia.size()));
   const base::FilePath relative = base::FilePath::FromUTF8Unsafe(path);
   // Never let a compromised WebUI read files outside the installed UI bundle.
   if (relative.IsAbsolute() || relative.ReferencesParent() ||

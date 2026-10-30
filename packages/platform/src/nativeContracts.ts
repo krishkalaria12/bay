@@ -1036,6 +1036,27 @@ export const nativeContracts = {
           "minArgs": 0,
           "maxArgs": 0,
           "signature": "readEaselShareRecords(): Promise<string | null>;"
+        },
+        "readImage": {
+          "async": true,
+          "optional": true,
+          "minArgs": 1,
+          "maxArgs": 1,
+          "signature": "readImage?(path: string): Promise<string | null>;"
+        },
+        "storeImage": {
+          "async": true,
+          "optional": true,
+          "minArgs": 2,
+          "maxArgs": 2,
+          "signature": "storeImage?(base64: string, cache: boolean): Promise<string | null>;"
+        },
+        "saveDownload": {
+          "async": true,
+          "optional": true,
+          "minArgs": 3,
+          "maxArgs": 3,
+          "signature": "saveDownload?(base64: string, name: string, extension: string): Promise<string | null>;"
         }
       },
       "events": [],
