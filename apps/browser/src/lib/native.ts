@@ -1,5 +1,5 @@
 import { onDownload, releaseProfile } from "@bay/nncore";
-import { capabilities } from "@bay/platform";
+import { capabilities, isMac } from "@bay/platform";
 import {
   closeWindow,
   focusWindow,
@@ -8,6 +8,7 @@ import {
   onOpenURLs,
   onWindowEvent,
   openWindow,
+  rehostWindow,
   replyToTerminate,
   setAppearance,
   setMenuStateParts,
@@ -159,6 +160,13 @@ export function startNativeSync({
       if (options.incognito) void releaseProfile(incognitoSpaceId(id));
     },
     report: (operation, id, error) => console.error(`Couldn't ${operation} window ${id}`, error),
+    // A macOS window shows any profile's pages; a Chrome-hosted one has one profile, so a space with another moves it.
+    rehost: isMac
+      ? undefined
+      : {
+          needed: (current, next) => !next.incognito && (current.profile ?? "") !== (next.profile ?? ""),
+          run: rehostWindow,
+        },
   });
 
   const syncWindows = (s: BrowserState, prev?: BrowserState) => {

@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,7 @@ class Profile;
 namespace content {
 class WebContents;
 }
+struct BrowserWindowCreateParams;
 
 namespace bay {
 class NativeHost;
@@ -55,6 +57,16 @@ class WindowRegistry final : public BrowserCollectionObserver {
   Result Open(const HostContext& context,
               const std::string& id,
               const base::DictValue& options);
+  // Loads the regular profile `options` names ("profile"; none is Default),
+  // then runs `done`: Open and Rehost only find a loaded one.
+  void LoadProfile(const base::DictValue& options, base::OnceClosure done);
+  // A Chrome window has one profile; Bay's shows its space's. Moves window
+  // `id` to a new Chrome window of the profile `options` names, with its frame
+  // and show state, then closes the old one without reporting it closed. Its
+  // pages are parked for their next mount (TabBroker::ParkWindow).
+  Result Rehost(const std::string& id, const base::DictValue& options);
+  // A window Rehost replaced, closing: never the application's last.
+  bool IsRetiring(BrowserWindowInterface* browser) const;
   Result Close(const std::string& id);
   Result Focus(const std::string& id);
   Result SetTitle(const std::string& id, const std::string& title);
@@ -94,6 +106,11 @@ class WindowRegistry final : public BrowserCollectionObserver {
   ~WindowRegistry() override;
   Entry& EnsureEntry(BrowserWindowInterface* browser);
   base::DictValue StateValue(BrowserWindowInterface* browser) const;
+  // Creates the Chrome window that becomes window `id`, or returns null.
+  BrowserWindowInterface* Create(Profile* profile,
+                                 const std::string& id,
+                                 base::DictValue options,
+                                 BrowserWindowCreateParams params);
   void PublishHostInfo();
   void Broadcast(base::DictValue event);
   void EmitToWindow(const std::string& id, base::DictValue event);
@@ -119,6 +136,7 @@ class WindowRegistry final : public BrowserCollectionObserver {
   std::map<BrowserWindowInterface*, std::unique_ptr<Entry>> entries_;
   std::map<NativeHost*, std::unique_ptr<Host>> hosts_;
   std::unique_ptr<PendingOpen> pending_open_;
+  std::set<BrowserWindowInterface*> retiring_;
   std::map<Profile*, base::WeakPtr<Profile>> private_profiles_;
   std::vector<LaunchPage> launch_pages_;
   base::ScopedObservation<GlobalBrowserCollection, BrowserCollectionObserver>

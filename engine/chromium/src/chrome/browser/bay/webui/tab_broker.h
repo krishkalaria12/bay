@@ -42,6 +42,9 @@ class TabBroker final {
   // unmount closes it before the destination mounts it.
   void PreserveTransfers(const base::DictValue* previous,
                          const base::DictValue& next);
+  // Parks every app page in `browser`, so the window closing for another
+  // profile's (WindowRegistry::Rehost) leaves them for their next mount.
+  void ParkWindow(BrowserWindowInterface* browser);
   void Unmount(content::WebContents* contents, uint64_t lease);
   bool IsCurrent(content::WebContents* contents, uint64_t lease) const;
   bool IsLastLease(content::WebContents* contents, uint64_t lease) const;
