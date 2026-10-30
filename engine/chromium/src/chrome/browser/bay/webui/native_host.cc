@@ -700,6 +700,12 @@ base::DictValue NativeHost::Info() const {
     for (const auto& method : data::MethodNames(module))
       info.FindList("optionalMethods")->Append(module + "." + method);
 #endif
+  // Window features this host routes itself, on every desktop it runs on.
+  auto* host_methods = info.FindList("optionalMethods");
+  if (context_.is_window())
+    host_methods->Append("BayShell.setKeyShortcuts");
+  if (!AppRuntime::Enabled() || is_coordinator())
+    host_methods->Append("BayShell.rehostWindow");
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
