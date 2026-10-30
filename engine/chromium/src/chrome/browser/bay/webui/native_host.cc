@@ -534,6 +534,12 @@ base::DictValue NativeHost::Info() const {
       methods.Append(module + "." + method);
   info.Set("optionalMethods", std::move(methods));
 #endif
+  // Window features this host routes itself, on every desktop it runs on.
+  auto* host_methods = info.FindList("optionalMethods");
+  if (context_.is_window())
+    host_methods->Append("BayShell.setKeyShortcuts");
+  if (!AppRuntime::Enabled() || is_coordinator())
+    host_methods->Append("BayShell.rehostWindow");
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
