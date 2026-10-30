@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #include "chrome/browser/ui/window_metadata/window_metadata_controller.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
 #include "ui/base/page_transition_types.h"
@@ -181,6 +182,29 @@ BrowserWindowInterface* WindowRegistry::FrameOf(
     BrowserWindowInterface* browser) const {
   auto it = held_.find(browser);
   return it == held_.end() ? browser : it->second.frame.get();
+}
+content::WebContents* WindowRegistry::FindTab(BrowserWindowInterface* frame,
+                                              int id) const {
+  auto find = [id](BrowserWindowInterface* browser) -> content::WebContents* {
+    auto* tabs = browser->GetTabStripModel();
+    for (int i = 0; i < tabs->count(); ++i) {
+      auto* contents = tabs->GetWebContentsAt(i);
+      if (sessions::SessionTabHelper::IdForTab(contents).id() == id)
+        return contents;
+    }
+    return nullptr;
+  };
+  if (!frame)
+    return nullptr;
+  if (auto* contents = find(frame))
+    return contents;
+  for (const auto& [browser, held] : held_) {
+    if (held.frame.get() != frame)
+      continue;
+    if (auto* contents = find(browser))
+      return contents;
+  }
+  return nullptr;
 }
 base::DictValue WindowRegistry::OptionsFor(
     BrowserWindowInterface* browser) const {
