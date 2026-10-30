@@ -402,6 +402,20 @@ void TabBroker::PreserveTransfers(const base::DictValue* previous,
   for (const auto& key : release)
     ReleaseTransfer(key);
 }
+void TabBroker::ParkWindow(BrowserWindowInterface* browser) {
+  PruneDestroyed();
+  for (const auto& [contents, entry] : entries_) {
+    if (entry->key.empty() || entry->parked || BrowserFor(contents) != browser)
+      continue;
+    // Best effort, as for a moved page: one that can't be parked loads its URL
+    // afresh when its space shows again.
+    if (auto error = Park(*entry)) {
+      LOG(WARNING) << "Bay could not keep a page live: " << *error;
+      continue;
+    }
+    entry->prepared = true;
+  }
+}
 void TabBroker::Unmount(content::WebContents* contents, uint64_t lease) {
   PruneDestroyed();
   auto it = entries_.find(contents);
