@@ -15,16 +15,20 @@
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/app_runtime.h"
 #include "chrome/browser/bay/webui/native_host.h"
+#include "chrome/browser/bay/webui/profile_window.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
 #include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/browser_window/public/desktop_browser_window_capabilities.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -184,16 +188,21 @@ void WindowRegistry::UnregisterHost(NativeHost* host) {
   hosts_.erase(host);
 }
 std::string WindowRegistry::IdFor(BrowserWindowInterface* browser) const {
-  auto it = entries_.find(browser);
+  auto it = entries_.find(FrameOf(browser));
   return it == entries_.end() ? std::string() : it->second->id;
+}
+BrowserWindowInterface* WindowRegistry::FrameOf(
+    BrowserWindowInterface* browser) const {
+  auto it = held_.find(browser);
+  return it == held_.end() ? browser : it->second.frame.get();
 }
 base::DictValue WindowRegistry::OptionsFor(
     BrowserWindowInterface* browser) const {
-  auto it = entries_.find(browser);
+  auto it = entries_.find(FrameOf(browser));
   return it == entries_.end() ? base::DictValue() : it->second->options.Clone();
 }
 bool WindowRegistry::IsUtility(BrowserWindowInterface* browser) const {
-  auto it = entries_.find(browser);
+  auto it = entries_.find(FrameOf(browser));
   const auto* kind =
       it == entries_.end() ? nullptr : it->second->options.FindString("kind");
   return kind && IsUtilityWindowKind(*kind);
@@ -421,101 +430,73 @@ BrowserWindowInterface* WindowRegistry::Create(
   return created;
 }
 
-void WindowRegistry::LoadProfile(const base::DictValue& options,
-                                 base::OnceClosure done) {
-  const auto* name = options.FindString("profile");
+namespace {
+// Regular profile `name`'s directory ("" is Default's), if the name is valid.
+std::optional<base::FilePath> RegularProfilePath(const std::string& name) {
+  if (!name.empty() && (!ValidName(name) || name.size() > 128))
+    return std::nullopt;
+  return ProfilePath(name);
+}
+}  // namespace
+
+Profile* WindowRegistry::LoadedProfile(const std::string& name) const {
   auto* manager = g_browser_process->profile_manager();
-  const auto path = name && !name->empty() && ValidName(*name) &&
-                            name->size() <= 128
-                        ? ProfilePath(*name)
-                        : std::nullopt;
+  const auto path = RegularProfilePath(name);
+  return manager && path ? manager->GetProfileByPath(*path) : nullptr;
+}
+
+void WindowRegistry::LoadProfile(const std::string& name,
+                                 base::OnceCallback<void(Profile*)> done) {
+  auto* manager = g_browser_process->profile_manager();
+  const auto path = RegularProfilePath(name);
   // Never one being deleted: loading it would make its folder anew.
-  if (options.FindBool("incognito").value_or(false) || !manager || !path ||
-      manager->GetProfileByPath(*path) ||
-      IsProfileDirectoryMarkedForDeletion(*path)) {
-    std::move(done).Run();
+  if (!manager || !path || IsProfileDirectoryMarkedForDeletion(*path)) {
+    std::move(done).Run(nullptr);
     return;
   }
-  manager->CreateProfileAsync(
-      *path, base::BindOnce([](base::OnceClosure done,
-                              Profile*) { std::move(done).Run(); },
-                           std::move(done)));
+  if (auto* loaded = manager->GetProfileByPath(*path)) {
+    std::move(done).Run(loaded);
+    return;
+  }
+  manager->CreateProfileAsync(*path, std::move(done));
 }
 
-WindowRegistry::Result WindowRegistry::Rehost(const std::string& id,
-                                              const base::DictValue& options) {
-  auto* old = Find(id);
-  if (!old)
-    return Failure("Unknown window id");
-  if (old->GetProfile()->IsOffTheRecord() ||
-      options.FindBool("incognito").value_or(false)) {
-    return Failure("A private window keeps its profile");
+BrowserWindowInterface* WindowRegistry::BrowserFor(
+    BrowserWindowInterface* frame,
+    Profile* profile) {
+  if (!frame || !profile || !entries_.contains(frame))
+    return nullptr;
+  if (frame->GetProfile() == profile)
+    return frame;
+  // A private window's pages are its own profile's only.
+  if (profile->IsOffTheRecord() || frame->GetProfile()->IsOffTheRecord() ||
+      frame->IsDeleteScheduled() ||
+      frame->capabilities()->IsAttemptingToCloseBrowser()) {
+    return nullptr;
   }
-  const std::string name =
-      options.FindString("profile") ? *options.FindString("profile") : "";
-  if (!name.empty() && (!ValidName(name) || name.size() > 128))
-    return Failure("Invalid profile id");
-  const auto path = ProfilePath(name);
-  if (!path)
-    return Failure("The user data directory is unavailable");
-  auto* manager = g_browser_process->profile_manager();
-  Profile* profile = manager ? manager->GetProfileByPath(*path) : nullptr;
-  if (!profile)
-    return Failure("The requested profile has not been loaded");
-  if (old->GetProfile() == profile)
-    return Success();
-  if (pending_open_)
-    return Failure("A window is already being created");
-  if (GetBrowserWindowCreationStatusForProfile(*profile) !=
-      BrowserWindowInterface::CreationStatus::kOk) {
-    return Failure("The profile cannot create a browser window");
+  for (const auto& [browser, held] : held_) {
+    if (held.frame.get() == frame && browser->GetProfile() == profile &&
+        !browser->IsDeleteScheduled() &&
+        !browser->capabilities()->IsAttemptingToCloseBrowser()) {
+      return browser;
+    }
   }
-  auto* window = old->GetWindow();
-  BrowserWindowCreateParams params(profile, true);
+  if (browser_shutdown::IsTryingToQuit() ||
+      GetBrowserWindowCreationStatusForProfile(*profile) !=
+          BrowserWindowInterface::CreationStatus::kOk) {
+    return nullptr;
+  }
+  auto* window = new ProfileBrowserWindow(frame->GetWeakPtr());
+  BrowserWindowCreateParams params(profile, false);
+  params.window = window;
   params.should_trigger_session_restore = false;
   params.omit_from_session_restore = true;
-  const auto bounds = window->GetRestoredBounds();
-  if (GlobalWindowCoordinates()) {
-    params.initial_bounds = bounds;
-  } else {
-    // Wayland places windows itself: keep the size, not a global origin.
-    params.initial_bounds = gfx::Rect(bounds.size());
-    params.initial_origin_specified =
-        BrowserWindowCreateParams::ValueSpecified::kUnspecified;
-  }
-  params.initial_show_state = window->IsMaximized()
-                                  ? ui::mojom::WindowShowState::kMaximized
-                                  : ui::mojom::WindowShowState::kNormal;
-  if (const auto* title = options.FindString("title"))
-    params.user_title = *title;
-  const bool active = window->IsActive();
-  auto& entry = *entries_.at(old);
-  auto moved = entry.options.Clone();
-  moved.Set("profile", name);
-  if (const auto* title = options.FindString("title"))
-    moved.Set("title", *title);
-  TabBroker::Get().ParkWindow(old);
-  // The id moves to the new window; the old one, without it, closes unseen by
-  // the application (OnBrowserClosed reports only windows with ids).
-  entry.id.clear();
-  retiring_.insert(old);
-  auto* created = Create(profile, id, std::move(moved), std::move(params));
-  if (!created) {
-    entry.id = id;
-    retiring_.erase(old);
-    return Failure("Chrome could not create the requested window");
-  }
-  PublishHostInfo();
-  if (active)
-    created->GetWindow()->Show();
-  else
-    created->GetWindow()->ShowInactive();
-  window->Close();
-  return Success();
-}
-
-bool WindowRegistry::IsRetiring(BrowserWindowInterface* browser) const {
-  return retiring_.contains(browser);
+  auto* browser = static_cast<Browser*>(CreateBrowserWindow(std::move(params)));
+  if (!browser)
+    return nullptr;
+  held_[browser] = {frame->GetWeakPtr(), window};
+  window->AttachBrowser(browser);
+  return browser;
 }
 
 WindowRegistry::Result WindowRegistry::Close(const std::string& id) {
@@ -694,6 +675,10 @@ void WindowRegistry::BoundsChanged(BrowserWindowInterface* browser,
                   .Set("frame", RectValue(bounds)));
 }
 void WindowRegistry::ShowStateChanged(BrowserWindowInterface* browser) {
+  for (const auto& [held_browser, held] : held_) {
+    if (held.frame.get() == browser)
+      held.window->FrameShowStateChanged();
+  }
   const auto id = IdFor(browser);
   if (!id.empty())
     Broadcast(StateValue(browser).Set("type", "state").Set("id", id));
@@ -866,9 +851,21 @@ void WindowRegistry::ScheduleLaunchPageAdoption() {
                                 base::Unretained(this)));
 }
 void WindowRegistry::OnBrowserClosed(BrowserWindowInterface* browser) {
+  // A profile's Browser in a window: the window itself goes on.
+  if (held_.erase(browser))
+    return;
+  // The profiles' Browsers it held go with the window.
+  std::vector<base::WeakPtr<BrowserWindowInterface>> held;
+  for (const auto& [held_browser, entry] : held_) {
+    if (!entry.frame || entry.frame.get() == browser)
+      held.push_back(held_browser->GetWeakPtr());
+  }
+  for (const auto& held_browser : held) {
+    if (held_browser && !held_browser->IsDeleteScheduled())
+      held_browser->GetWindow()->Close();
+  }
   const auto id = IdFor(browser);
   entries_.erase(browser);
-  retiring_.erase(browser);
   if (!id.empty()) {
     PublishHostInfo();
     Broadcast(base::DictValue().Set("type", "close").Set("id", id));

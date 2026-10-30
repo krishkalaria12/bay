@@ -35,16 +35,14 @@ class TabBroker final {
     std::string error;
   };
   static TabBroker& Get();
-  Result Mount(BrowserWindowInterface* browser, const base::DictValue& props);
+  // Mounts a page of the profile `props` names in Bay window `window`.
+  Result Mount(BrowserWindowInterface* window, const base::DictValue& props);
   std::optional<std::string> PrepareTransfer(const std::string& key);
   void ReleaseTransfer(const std::string& key);
   // Parks every page whose accepted window changes, so neither window's
   // unmount closes it before the destination mounts it.
   void PreserveTransfers(const base::DictValue* previous,
                          const base::DictValue& next);
-  // Parks every app page in `browser`, so the window closing for another
-  // profile's (WindowRegistry::Rehost) leaves them for their next mount.
-  void ParkWindow(BrowserWindowInterface* browser);
   void Unmount(content::WebContents* contents, uint64_t lease);
   bool IsCurrent(content::WebContents* contents, uint64_t lease) const;
   bool IsLastLease(content::WebContents* contents, uint64_t lease) const;

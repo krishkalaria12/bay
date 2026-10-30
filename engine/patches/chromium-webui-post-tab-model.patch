@@ -1,12 +1,17 @@
 diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
 --- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
 +++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
-@@ -1146,6 +1146,10 @@
+@@ -1146,6 +1146,15 @@
  void BrowserWindowFeatures::InitPostTabModelConstruction(
      BrowserWindowInterface* interface) {
    auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
-+  if (!browser_view && WebUIBrowserWindow::FromBrowser(interface)) {
-+    // WebUI windows have no native contents view for this controller.
++  // Bay: WebUI windows, and the normal Browsers they keep for other profiles'
++  // pages (with the WebUI browser on, a normal Browser has no BrowserView),
++  // have no native contents view for this controller.
++  if (!browser_view &&
++      (WebUIBrowserWindow::FromBrowser(interface) ||
++       (webui_browser::IsWebUIBrowserEnabled() &&
++        interface->GetType() == BrowserWindowInterface::TYPE_NORMAL))) {
 +    return;
 +  }
    CHECK(browser_view);

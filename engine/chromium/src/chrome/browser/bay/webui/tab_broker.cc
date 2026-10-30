@@ -230,30 +230,32 @@ void TabBroker::Attach(Entry& entry, BrowserWindowInterface* browser) {
   entry.profile_keep_alive.reset();
   entry.process_keep_alive.reset();
 }
-TabBroker::Result TabBroker::Mount(BrowserWindowInterface* browser,
+TabBroker::Result TabBroker::Mount(BrowserWindowInterface* window,
                                    const base::DictValue& props) {
   PruneDestroyed();
-  if (!browser || shutting_down_ || g_browser_process->IsShuttingDown())
+  if (!window || shutting_down_ || g_browser_process->IsShuttingDown())
     return {.error = "The browser is shutting down"};
+  // The Browser of the page's profile in this window: the window's own, or
+  // the one it keeps for another space's profile (WindowRegistry::BrowserFor).
+  BrowserWindowInterface* browser = window;
+  const bool private_window = window->GetProfile()->IsOffTheRecord();
   if (const auto* profile_value = props.Find("profile")) {
     if (!profile_value->is_string())
       return {.error = "The tab profile must be a string"};
     const auto& requested = profile_value->GetString();
-    const bool is_private = requested.starts_with("incognito:");
-    const auto current_name = browser->GetProfile()
-                                  ->GetOriginalProfile()
-                                  ->GetPath()
-                                  .BaseName()
-                                  .AsUTF8Unsafe();
-    const std::string current = current_name == "Default" ? "" : current_name;
-    if (is_private != browser->GetProfile()->IsOffTheRecord() ||
-        (!is_private && requested != current) ||
-        (is_private &&
-         requested != "incognito:" + WindowRegistry::Get().IdFor(browser))) {
+    if (requested.starts_with("incognito:") != private_window ||
+        (private_window &&
+         requested != "incognito:" + WindowRegistry::Get().IdFor(window))) {
       return {.error =
                   "The requested tab profile does not belong to this window"};
     }
-  } else if (browser->GetProfile()->IsOffTheRecord()) {
+    if (!private_window) {
+      browser = WindowRegistry::Get().BrowserFor(
+          window, WindowRegistry::Get().LoadedProfile(requested));
+      if (!browser)
+        return {.error = "The requested tab profile is not available"};
+    }
+  } else if (private_window) {
     return {.error = "Private tabs must name their private profile"};
   }
   const auto* key_value = props.Find("transferKey");
@@ -404,20 +406,6 @@ void TabBroker::PreserveTransfers(const base::DictValue* previous,
   }
   for (const auto& key : release)
     ReleaseTransfer(key);
-}
-void TabBroker::ParkWindow(BrowserWindowInterface* browser) {
-  PruneDestroyed();
-  for (const auto& [contents, entry] : entries_) {
-    if (entry->key.empty() || entry->parked || BrowserFor(contents) != browser)
-      continue;
-    // Best effort, as for a moved page: one that can't be parked loads its URL
-    // afresh when its space shows again.
-    if (auto error = Park(*entry)) {
-      LOG(WARNING) << "Bay could not keep a page live: " << *error;
-      continue;
-    }
-    entry->prepared = true;
-  }
 }
 void TabBroker::Unmount(content::WebContents* contents, uint64_t lease) {
   PruneDestroyed();

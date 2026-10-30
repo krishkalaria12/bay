@@ -1,4 +1,4 @@
-"""Verify the native-view check distinguishes WebUI windows from broken native windows."""
+"""Verify the native-view check distinguishes Bay's WebUI windows and profile Browsers from broken native windows."""
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,7 +18,17 @@ ORIGINAL = """void BrowserWindowFeatures::InitPostTabModelConstruction(
 """
 STUBS = """
 #define CHECK(condition) do { if (!(condition)) throw 1; } while (false)
-struct BrowserWindowInterface { bool native; bool webui; };
+struct BrowserWindowInterface {
+  enum Type { TYPE_NORMAL, TYPE_POPUP };
+  bool native;
+  bool webui;
+  Type type = TYPE_NORMAL;
+  Type GetType() const { return type; }
+};
+namespace webui_browser {
+bool enabled = false;
+bool IsWebUIBrowserEnabled() { return enabled; }
+}
 struct BrowserView {
   static BrowserView* GetBrowserViewForBrowser(BrowserWindowInterface* browser) {
     static BrowserView view;
@@ -52,6 +62,21 @@ int main() {
   features.InitPostTabModelConstruction(&native);
   if (features.native_initializations != 1) return 3;
 
+  // A Bay window's Browser for another profile (WebUI browser on).
+  webui_browser::enabled = true;
+  BrowserWindowInterface profile_browser{false, false};
+  try { features.InitPostTabModelConstruction(&profile_browser); }
+  catch (...) { return 5; }
+  if (features.native_initializations != 1) return 6;
+
+  BrowserWindowInterface broken_popup{false, false,
+                                      BrowserWindowInterface::TYPE_POPUP};
+  bool popup_failed = false;
+  try { features.InitPostTabModelConstruction(&broken_popup); }
+  catch (...) { popup_failed = true; }
+  if (!popup_failed) return 7;
+
+  webui_browser::enabled = false;
   BrowserWindowInterface broken_native{false, false};
   try { features.InitPostTabModelConstruction(&broken_native); }
   catch (...) { return 0; }

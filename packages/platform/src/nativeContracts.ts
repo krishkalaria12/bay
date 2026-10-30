@@ -138,13 +138,6 @@ export const nativeContracts = {
           "maxArgs": 2,
           "signature": "openWindow(id: string, options: OpenWindowOptions): Promise<void>;"
         },
-        "rehostWindow": {
-          "async": true,
-          "optional": true,
-          "minArgs": 2,
-          "maxArgs": 2,
-          "signature": "rehostWindow?(id: string, options: OpenWindowOptions): Promise<void>;"
-        },
         "closeWindow": {
           "async": true,
           "optional": false,
@@ -2417,6 +2410,8 @@ export const nativeContracts = {
       "DragPreviewShape": "\"hidden\" | \"pill\" | \"card\"",
       "KeyShortcut": "{ command: BrowserCommand; arg: string | null; keyCode: number; ctrl: boolean; shift: boolean; alt: boolean }",
       "MenuBookmarkKey": "\"bookmarkFolders\" | \"recentBookmarks\" | \"bookmarksBar\" | \"otherBookmarks\"",
+      "ConfirmResult": "{ confirmed: boolean; suppressed: boolean }",
+      "DialogPresenter": "{\n  confirm(options: ConfirmOptions): Promise<ConfirmResult> | null;\n  prompt(options: PromptOptions): Promise<string | null> | null;\n}",
       "SymbolProps": "ViewProps & {\n  name: string;\n  size?: number;\n  weight?: \"light\" | \"regular\" | \"medium\" | \"semibold\" | \"bold\";\n  color?: string;\n  /** \"hierarchical\": `color`, the symbol's secondary layers lighter. \"multicolor\": its own colours where it has them. */\n  rendering?: \"monochrome\" | \"hierarchical\" | \"multicolor\";\n}",
       "FadeLabelProps": "ViewProps & {\n  text: string;\n  fontSize?: number;\n  weight?: \"light\" | \"regular\" | \"medium\" | \"semibold\" | \"bold\";\n  color?: string;\n  fadeWidth?: number;\n}",
       "ContextMenuAreaProps": "ViewProps & {\n  onContextMenu?: () => void;\n  captureDescendants?: boolean;\n}",

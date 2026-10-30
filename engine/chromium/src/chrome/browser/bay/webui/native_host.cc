@@ -299,8 +299,7 @@ void DataEvent(const std::string& module,
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 bool NativeHost::HandleWindowClose(BrowserWindowInterface* browser) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike") ||
-      browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared ||
-      WindowRegistry::Get().IsRetiring(browser))
+      browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
     return false;
   const auto host = QuitOwner();
   if (!host)
@@ -704,8 +703,6 @@ base::DictValue NativeHost::Info() const {
   auto* host_methods = info.FindList("optionalMethods");
   if (context_.is_window())
     host_methods->Append("BayShell.setKeyShortcuts");
-  if (!AppRuntime::Enabled() || is_coordinator())
-    host_methods->Append("BayShell.rehostWindow");
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
@@ -1262,50 +1259,7 @@ void NativeHost::Invoke(const std::string& module,
                 : "Additional windows require the shared application runtime"));
         return;
       }
-      // A space's own profile loads on first use (macOS: its engine's
-      // loadProfile).
-      windows.LoadProfile(
-          options->GetDict(),
-          base::BindOnce(
-              [](base::WeakPtr<NativeHost> host, std::string id,
-                 base::DictValue options, InvokeCallback callback) {
-                if (!host)
-                  return;
-                const auto opened =
-                    WindowRegistry::Get().Open(host->context_, id, options);
-                std::move(callback).Run(
-                    opened.ok ? Success()
-                              : Failure("window_error", opened.error));
-              },
-              GetWeakPtr(), id, options->GetDict().Clone(),
-              std::move(callback)));
-      return;
-    } else if (method == "rehostWindow") {
-      const auto* options = At(args, 1);
-      if (AppRuntime::Enabled() && !is_coordinator()) {
-        std::move(callback).Run(Failure(
-            "forbidden",
-            "Only the application coordinator moves windows between "
-            "profiles"));
-        return;
-      }
-      if (!options || !options->is_dict()) {
-        std::move(callback).Run(
-            Failure("invalid_args", "Window options required"));
-        return;
-      }
-      windows.LoadProfile(
-          options->GetDict(),
-          base::BindOnce(
-              [](std::string id, base::DictValue options,
-                 InvokeCallback callback) {
-                const auto moved = WindowRegistry::Get().Rehost(id, options);
-                std::move(callback).Run(
-                    moved.ok ? Success()
-                             : Failure("window_error", moved.error));
-              },
-              Text(args, 0), options->GetDict().Clone(), std::move(callback)));
-      return;
+      result = windows.Open(context_, id, options->GetDict());
     } else if (method == "closeWindow")
       result = windows.Close(Text(args, 0));
     else if (method == "focusWindow")
@@ -1327,6 +1281,20 @@ void NativeHost::Invoke(const std::string& module,
   std::move(callback).Run(Failure(
       "unsupported_method", module + "." + method + " is not implemented"));
 }
+namespace {
+// Makes a page its Browser's active tab: the window's own, or the one the
+// window keeps for the page's profile (WindowRegistry::BrowserFor).
+void ActivateInBrowser(content::WebContents* contents) {
+  auto* browser =
+      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(contents);
+  if (!browser)
+    return;
+  auto* model = browser->GetTabStripModel();
+  const int index = model->GetIndexOfWebContents(contents);
+  if (index != TabStripModel::kNoTab)
+    model->ActivateTabAt(index);
+}
+}  // namespace
 void NativeHost::InvokeView(const std::string& method,
                             const base::ListValue& args,
                             InvokeCallback callback) {
@@ -1341,6 +1309,7 @@ void NativeHost::InvokeView(const std::string& method,
     return;
   }
   if (method == "unmount") {
+    loading_mounts_.erase(tag);
     const auto found = tabs_.find(tag);
     if (found != tabs_.end()) {
       auto* contents = found->second->contents();
@@ -1354,12 +1323,42 @@ void NativeHost::InvokeView(const std::string& method,
   }
   if (method == "mount") {
     const auto* raw = At(args, 2);
-    if (!raw || !raw->is_dict() || tabs_.count(tag)) {
+    if (!raw || !raw->is_dict() || tabs_.count(tag) ||
+        loading_mounts_.contains(tag)) {
       std::move(callback).Run(
           Failure("invalid_args", "unique view tag and props required"));
       return;
     }
     const auto& props = raw->GetDict();
+    // A space's own profile loads on its first page (macOS: the engine's
+    // loadProfile); an unmount meanwhile cancels the mount.
+    const auto* requested = props.FindString("profile");
+    if (requested && !requested->starts_with("incognito:") &&
+        !WindowRegistry::Get().LoadedProfile(*requested)) {
+      loading_mounts_.insert(tag);
+      WindowRegistry::Get().LoadProfile(
+          *requested,
+          base::BindOnce(
+              [](base::WeakPtr<NativeHost> host, std::string method,
+                 base::ListValue args, int tag, InvokeCallback callback,
+                 Profile* profile) {
+                if (!host)
+                  return;
+                if (!host->loading_mounts_.erase(tag)) {
+                  std::move(callback).Run(
+                      Failure("mount_failed", "The view was unmounted"));
+                  return;
+                }
+                if (!profile) {
+                  std::move(callback).Run(Failure(
+                      "mount_failed", "The tab profile could not be loaded"));
+                  return;
+                }
+                host->InvokeView(method, args, std::move(callback));
+              },
+              GetWeakPtr(), method, args.Clone(), tag, std::move(callback)));
+      return;
+    }
     auto mounted = TabBroker::Get().Mount(context_.window(), props);
     if (!mounted.contents) {
       std::move(callback).Run(Failure("mount_failed", mounted.error));
@@ -1416,10 +1415,8 @@ void NativeHost::InvokeView(const std::string& method,
       contents->SetAudioMuted(*mute);
     if (auto frozen = props.FindBool("frozen"))
       contents->SetPageFrozen(*frozen);
-    if (props.FindBool("visible").value_or(false)) {
-      auto* model = context_.window()->GetTabStripModel();
-      model->ActivateTabAt(model->GetIndexOfWebContents(contents));
-    }
+    if (props.FindBool("visible").value_or(false))
+      ActivateInBrowser(contents);
     std::move(callback).Run(Success());
     return;
   }
@@ -1474,8 +1471,7 @@ void NativeHost::InvokeView(const std::string& method,
   else if (command == "stop" || command == "stopLoading")
     contents->Stop();
   else if (command == "focus") {
-    auto* model = context_.window()->GetTabStripModel();
-    model->ActivateTabAt(model->GetIndexOfWebContents(contents));
+    ActivateInBrowser(contents);
     contents->Focus();
   } else if (command == "showDevTools")
     DevToolsWindow::OpenDevToolsWindow(contents, DevToolsToggleAction::Show(),

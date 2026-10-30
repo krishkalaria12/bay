@@ -9,7 +9,6 @@ export function createNativeWindowReconciler<Options>({
   openFailed,
   closed,
   report,
-  rehost,
 }: {
   open(id: string, options: Options): void | Promise<void>;
   close(id: string): void | Promise<void>;
@@ -18,8 +17,6 @@ export function createNativeWindowReconciler<Options>({
   openFailed(id: string): void;
   closed(id: string, options: Options): void;
   report(operation: string, id: string, error: unknown): void;
-  /** An open window whose new options its native window can't take (`needed`) moves to a new one (`run`). */
-  rehost?: { needed(current: Options, next: Options): boolean; run(id: string, options: Options): void | Promise<void> };
 }) {
   type Wanted = { id: string; title: string; options: Options };
   type Entry = {
@@ -30,7 +27,6 @@ export function createNativeWindowReconciler<Options>({
     cancelled: boolean;
     nativeClosed: boolean;
     released: boolean;
-    rehosting: boolean;
   };
   let disposed = false;
   const pending = new Set<Promise<unknown>>();
@@ -82,17 +78,6 @@ export function createNativeWindowReconciler<Options>({
       },
     );
   };
-  const startRehost = (id: string, entry: Entry, options: Options) => {
-    entry.rehosting = true;
-    void invoke(() => rehost!.run(id, options))
-      .catch((error) => report("rehost", id, error))
-      .finally(() => {
-        // Taken either way: a failed move isn't retried on every store update.
-        entry.options = options;
-        entry.rehosting = false;
-        void Promise.resolve().then(reconcile);
-      });
-  };
   const updateTitle = (id: string, entry: Entry) => {
     const next = wanted.get(id);
     if (!next || next.title === entry.title) return;
@@ -107,9 +92,7 @@ export function createNativeWindowReconciler<Options>({
       if (!wanted.has(id) || failed.has(id)) continue;
       const existing = entries.get(id);
       if (existing) {
-        if (existing.status !== "open" || existing.rehosting) continue;
-        if (rehost?.needed(existing.options, window.options)) startRehost(id, existing, window.options);
-        else updateTitle(id, existing);
+        if (existing.status === "open") updateTitle(id, existing);
         continue;
       }
       const entry: Entry = {
@@ -120,7 +103,6 @@ export function createNativeWindowReconciler<Options>({
         cancelled: false,
         nativeClosed: false,
         released: false,
-        rehosting: false,
       };
       entries.set(id, entry);
       void invoke(() => open(id, window.options)).then(

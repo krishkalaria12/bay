@@ -8,7 +8,6 @@ import {
   onOpenURLs,
   onWindowEvent,
   openWindow,
-  rehostWindow,
   replyToTerminate,
   setAppearance,
   setMenuStateParts,
@@ -160,13 +159,6 @@ export function startNativeSync({
       if (options.incognito) void releaseProfile(incognitoSpaceId(id));
     },
     report: (operation, id, error) => console.error(`Couldn't ${operation} window ${id}`, error),
-    // A macOS window shows any profile's pages; a Chrome-hosted one has one profile, so a space with another moves it.
-    rehost: isMac
-      ? undefined
-      : {
-          needed: (current, next) => !next.incognito && (current.profile ?? "") !== (next.profile ?? ""),
-          run: rehostWindow,
-        },
   });
 
   const syncWindows = (s: BrowserState, prev?: BrowserState) => {
@@ -187,7 +179,9 @@ export function startNativeSync({
       order.map((id) => {
         const w = s.windows[id]!;
         const title = windowTitle(s, id);
-        const profile = engineProfile(w.spaceId);
+        // A macOS window shows any profile's pages. A Chrome-hosted one is the Default profile's and keeps a Browser for
+        // each other profile its spaces show (WindowRegistry::BrowserFor), so a space switch never replaces the window.
+        const profile = isMac || w.incognito ? engineProfile(w.spaceId) : "";
         const small = w.kind === "small" ? { kind: "small" as const, size: s.settings.littleBaySize } : {};
         return { id, title, options: { ...nativeWindowPlacement(w), incognito: w.incognito, title, focus: id === focused, profile, ...small } };
       }),

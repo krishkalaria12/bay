@@ -286,7 +286,6 @@ const Shell = requireNativeModule<{
   saveDocument(name: string, contents: string): Promise<void>;
   removeDocument(name: string): void;
   openWindow(id: string, options: OpenWindowOptions): Promise<void>;
-  rehostWindow?(id: string, options: OpenWindowOptions): Promise<void>;
   closeWindow(id: string): Promise<void>;
   focusWindow(id: string): Promise<void>;
   setTrafficLightsCenter(id: string, center: [number, number] | null): Promise<void>;
@@ -369,9 +368,6 @@ export function showMenu(items: MenuItem[]): Promise<string | null> {
 }
 
 export const openWindow = (id: string, options: OpenWindowOptions = {}) => Shell.openWindow(id, options);
-/** Moves an open window to a new native window of `options.profile`, keeping its frame (hosts where a native window
- *  has one profile: the Chrome-hosted desktop). Its pages wait for their next mount. */
-export const rehostWindow = (id: string, options: OpenWindowOptions) => Shell.rehostWindow?.(id, options) ?? Promise.resolve();
 
 export type WindowProfileProps = ViewProps & {
   profile: string;
