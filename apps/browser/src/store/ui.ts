@@ -67,7 +67,8 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
   },
 
   openPanel(windowId, initialText = "") {
-    set((s) => patchWindowUi(s, windowId, { panel: { open: true, initialText, mode: "navigate", sessionId: newId("panel") } }));
+    // One of the palette and the downloads panel at a time: the one opened last.
+    set((s) => patchWindowUi(s, windowId, { panel: { open: true, initialText, mode: "navigate", sessionId: newId("panel") }, downloadsOpen: false }));
   },
 
   openNewTabPanel(windowId, groupId) {
@@ -78,6 +79,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
     set(
       patchWindowUi(s, windowId, {
         panel: { open: true, initialText: "", mode: "newTab", sessionId: newId("panel"), ...(groupId ? { groupId } : {}) },
+        downloadsOpen: false,
       }),
     );
   },
@@ -104,7 +106,7 @@ export const createUiSlice: StateCreator<BrowserState, [], [], UiSlice> = (set, 
   },
 
   setDownloadsOpen(windowId, downloadsOpen) {
-    set((s) => patchWindowUi(s, windowId, { downloadsOpen }));
+    set((s) => patchWindowUi(s, windowId, downloadsOpen ? { downloadsOpen, panel: { open: false, initialText: "" } } : { downloadsOpen }));
   },
 
   setFind(tabId, patch) {

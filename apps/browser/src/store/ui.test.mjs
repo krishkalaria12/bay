@@ -188,3 +188,17 @@ test("Little Bay creates a main window with one reusable initial blank when need
   assert.equal(S().tabs[initial].url, "https://a.com");
   assert.deepEqual(focusedWindows, [main]);
 });
+
+test("the palette and the downloads panel close each other", () => {
+  reset();
+  const w = S().createWindow({ url: "a.com" });
+  S().setDownloadsOpen(w, true);
+  S().openPanel(w);
+  assert.equal(S().windowUi[w].downloadsOpen, false);
+  S().setDownloadsOpen(w, true);
+  assert.equal(S().windowUi[w].panel.open, false);
+  S().openNewTabPanel(w);
+  assert.equal(S().windowUi[w].downloadsOpen, false);
+  S().setDownloadsOpen(w, false);
+  assert.equal(S().windowUi[w].panel.open, true);
+});
