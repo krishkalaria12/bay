@@ -140,6 +140,11 @@ function barrier() {
   return { promise, resolve, reject };
 }
 
+// About ten seconds for a runtime that isn't ready yet.
+const SNAPSHOT_RETRIES = 40;
+const SNAPSHOT_RETRY_MS = 250;
+const errorCode = (error: unknown) => (error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : undefined);
+
 /** A read-only mirror. The browser must authenticate its transport and clientId.
  * Complete authority projections contain private data and must be filtered by
  * the native broker before this is connected to a visible renderer.
@@ -151,6 +156,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
   let buffered: BrowserCommit | null = null;
   let terminalError: BrowserClientError | null = null;
   let snapshotInFlight = false;
+  let snapshotRetries = 0;
   let availability = barrier();
   const ready = availability.promise;
   let nextRequestId = 0;
@@ -269,6 +275,7 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
             return;
           }
         }
+        snapshotRetries = 0;
         status = "ready";
         availability.resolve(current!);
         notify();
@@ -276,7 +283,15 @@ export function createBrowserClient({ clientId, transport }: { clientId: string;
       })
       .catch((error: unknown) => {
         snapshotInFlight = false;
-        if (!terminalError) fail(error instanceof BrowserClientError ? error : new BrowserClientError("snapshot_failed", "browser runtime snapshot failed"));
+        if (terminalError) return;
+        // The runtime is between coordinators (a window opening as another replaces it): ask again once it's back.
+        if (errorCode(error) === "not_ready" && snapshotRetries < SNAPSHOT_RETRIES) {
+          snapshotRetries++;
+          setTimeout(requestSnapshot, SNAPSHOT_RETRY_MS);
+          return;
+        }
+        const cause = error instanceof Error ? `: ${error.message}` : "";
+        fail(error instanceof BrowserClientError ? error : new BrowserClientError("snapshot_failed", `browser runtime snapshot failed${cause}`));
       });
   }
   function receiveReply(command: Pending, input: unknown) {

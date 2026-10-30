@@ -485,3 +485,23 @@ test("a command held by resync rejects replies predating its actual send", async
   assert.equal(client.getStatus(), "closed");
   authority.close();
 });
+
+test("a window that opens while the runtime isn't ready asks again, and says why if it never is", async () => {
+  const authority = makeAuthority(),
+    fake = fakeTransport();
+  const notReady = () => Object.assign(new Error("Application state is not ready"), { code: "not_ready" });
+  const client = createBrowserClient({ clientId: "window-1", transport: fake.transport });
+  await tick();
+  fake.snapshots[0].reject(notReady());
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(fake.snapshots.length, 2);
+  fake.snapshots[1].resolve(authority.getSnapshot());
+  await client.ready;
+  assert.equal(client.getStatus(), "ready");
+
+  const other = fakeTransport();
+  const failing = createBrowserClient({ clientId: "window-2", transport: other.transport });
+  await tick();
+  other.snapshots[0].reject(new Error("projection refused"));
+  await assert.rejects(failing.ready, /browser runtime snapshot failed: projection refused/);
+});
