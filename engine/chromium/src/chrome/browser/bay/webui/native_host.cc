@@ -471,8 +471,6 @@ base::DictValue NativeHost::Info() const {
   auto engine_methods = browser_services_->SupportedMethods();
   for (const auto& method : engine_services_->SupportedMethods())
     engine_methods.Append(method.Clone());
-  for (const auto& method : LibraryFiles::SupportedMethods())
-    engine_methods.Append(method.Clone());
   auto info =
       base::DictValue()
           .Set("contractVersion", 2)
@@ -546,6 +544,8 @@ base::DictValue NativeHost::Info() const {
   auto* host_methods = info.FindList("optionalMethods");
   if (context_.is_window())
     host_methods->Append("BayShell.setKeyShortcuts");
+  for (auto& method : LibraryFiles::SupportedMethods())
+    host_methods->Append(std::move(method));
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
