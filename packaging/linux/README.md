@@ -26,6 +26,7 @@ can't find. `--verify DIR` rechecks a staged app.
 | `bay-<version>-1.x86_64.rpm` | Fedora, openSUSE | bundled libraries are neither provided nor required |
 | `Bay-<version>-x86_64.AppImage` and `.zsync` | anywhere | updates through zsync from the latest GitHub release |
 | `aur/PKGBUILD`, `aur/.SRCINFO` | Arch (`bay-bin`) | from `aur/PKGBUILD.in`, with the tarball's checksum |
+| `nix/default.nix` (not built here) | NixOS | `nix-build packaging/linux/nix --arg tarball bay-<version>-linux-x64.tar.xz` patches the tarball's executables for the Nix loader and wraps `bin/bay`; `nix/shell.nix` is the build shell (`docs/linux-building.md` › NixOS) |
 | `SHA256SUMS` | | every artifact |
 
 Set `BAY_GPG_KEY` to a key ID to sign every artifact and `SHA256SUMS` with detached `.asc` signatures. Publishing the
