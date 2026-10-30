@@ -1,4 +1,4 @@
-import { Pressable, View } from "@bay/platform";
+import { isMac, Pressable, View } from "@bay/platform";
 import { Surface } from "@bay/shell";
 import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
@@ -50,7 +50,9 @@ export function CommandPanel({
   // crossfade rather than at once, which left the bare page on screen for a frame or two.
   const [last, setLast] = useState(session);
   if (session && session.key !== last?.key) setLast(session);
-  const shown = session ?? last;
+  // Native pages crossfade with the closing palette. Web pages can attach
+  // before that animation finishes, so remove their palette on submission.
+  const shown = session ?? (isMac ? last : null);
   if (shown) {
     return (
       <CenteredPalette
