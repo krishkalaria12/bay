@@ -16,8 +16,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/views/find_bar_host.h"
+#include "chrome/browser/ui/views/find_bar_owner.h"
 #include "chrome/browser/ui/webui_browser/browser_elements_webui_browser.h"
-#include "chrome/browser/ui/webui_browser/find_bar_owner_webui_browser.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_exclusive_access_context.h"
 #include "chrome/browser/ui/webui_browser/webui_browser_window.h"
 #include "content/public/browser/eye_dropper.h"
@@ -33,7 +33,6 @@ ProfileBrowserWindow::~ProfileBrowserWindow() {
   // As BrowserView: features holding references into the window go first.
   if (browser_)
     browser_->GetFeatures().TearDownPreBrowserWindowDestruction();
-  find_bar_owner_.reset();
 }
 
 void ProfileBrowserWindow::AttachBrowser(Browser* browser) {
@@ -41,13 +40,11 @@ void ProfileBrowserWindow::AttachBrowser(Browser* browser) {
   auto* frame = FrameWindow();
   if (!frame)
     return;
-  // Anchors and the find bar are the frame's widget's, the one on screen.
+  // Anchors are the frame's widget's, the one on screen.
   if (auto* elements = BrowserElements::From(browser)) {
     if (auto* webui = elements->AsA<BrowserElementsWebUiBrowser>())
       webui->Init(frame->widget());
   }
-  find_bar_owner_ = std::make_unique<FindBarOwnerWebUIBrowser>(
-      frame, browser->GetUnownedUserDataHost());
 }
 
 void ProfileBrowserWindow::FrameShowStateChanged() {
@@ -206,9 +203,9 @@ bool ProfileBrowserWindow::HandleKeyboardEvent(
   return Frame() && Frame()->HandleKeyboardEvent(event);
 }
 std::unique_ptr<FindBar> ProfileBrowserWindow::CreateFindBar() {
-  if (!find_bar_owner_)
-    return nullptr;
-  return std::make_unique<FindBarHost>(find_bar_owner_.get());
+  // Chrome's features register the Browser's owner (BrowserWindowFeatures).
+  auto* owner = browser_ ? FindBarOwner::From(browser_) : nullptr;
+  return owner ? std::make_unique<FindBarHost>(owner) : nullptr;
 }
 web_modal::WebContentsModalDialogHost*
 ProfileBrowserWindow::GetWebContentsModalDialogHost() {
