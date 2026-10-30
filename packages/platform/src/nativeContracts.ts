@@ -138,13 +138,6 @@ export const nativeContracts = {
           "maxArgs": 2,
           "signature": "openWindow(id: string, options: OpenWindowOptions): Promise<void>;"
         },
-        "rehostWindow": {
-          "async": true,
-          "optional": true,
-          "minArgs": 2,
-          "maxArgs": 2,
-          "signature": "rehostWindow?(id: string, options: OpenWindowOptions): Promise<void>;"
-        },
         "closeWindow": {
           "async": true,
           "optional": false,

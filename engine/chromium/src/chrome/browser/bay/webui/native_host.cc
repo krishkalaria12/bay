@@ -162,8 +162,7 @@ void InstallCloseHooks() {
         [](BrowserWindowInterface* browser) {
           if (base::CommandLine::ForCurrentProcess()->HasSwitch(
                   "bay-hosting-spike") ||
-              browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared ||
-              WindowRegistry::Get().IsRetiring(browser))
+              browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
             return false;
           const auto host = QuitOwner();
           if (!host)
@@ -538,8 +537,6 @@ base::DictValue NativeHost::Info() const {
   auto* host_methods = info.FindList("optionalMethods");
   if (context_.is_window())
     host_methods->Append("BayShell.setKeyShortcuts");
-  if (!AppRuntime::Enabled() || is_coordinator())
-    host_methods->Append("BayShell.rehostWindow");
   if (AppRuntime::Enabled() && is_coordinator()) {
     auto* methods = info.FindList("optionalMethods");
     methods->Append("BayCEF.startPageEvents");
@@ -960,50 +957,7 @@ void NativeHost::Invoke(const std::string& module,
                 : "Additional windows require the shared application runtime"));
         return;
       }
-      // A space's own profile loads on first use (macOS: its engine's
-      // loadProfile).
-      windows.LoadProfile(
-          options->GetDict(),
-          base::BindOnce(
-              [](base::WeakPtr<NativeHost> host, std::string id,
-                 base::DictValue options, InvokeCallback callback) {
-                if (!host)
-                  return;
-                const auto opened =
-                    WindowRegistry::Get().Open(host->context_, id, options);
-                std::move(callback).Run(
-                    opened.ok ? Success()
-                              : Failure("window_error", opened.error));
-              },
-              GetWeakPtr(), id, options->GetDict().Clone(),
-              std::move(callback)));
-      return;
-    } else if (method == "rehostWindow") {
-      const auto* options = At(args, 1);
-      if (AppRuntime::Enabled() && !is_coordinator()) {
-        std::move(callback).Run(Failure(
-            "forbidden",
-            "Only the application coordinator moves windows between "
-            "profiles"));
-        return;
-      }
-      if (!options || !options->is_dict()) {
-        std::move(callback).Run(
-            Failure("invalid_args", "Window options required"));
-        return;
-      }
-      windows.LoadProfile(
-          options->GetDict(),
-          base::BindOnce(
-              [](std::string id, base::DictValue options,
-                 InvokeCallback callback) {
-                const auto moved = WindowRegistry::Get().Rehost(id, options);
-                std::move(callback).Run(
-                    moved.ok ? Success()
-                             : Failure("window_error", moved.error));
-              },
-              Text(args, 0), options->GetDict().Clone(), std::move(callback)));
-      return;
+      result = windows.Open(context_, id, options->GetDict());
     } else if (method == "closeWindow")
       result = windows.Close(Text(args, 0));
     else if (method == "focusWindow")

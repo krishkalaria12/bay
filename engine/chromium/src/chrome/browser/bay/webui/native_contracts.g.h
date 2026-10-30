@@ -31,7 +31,6 @@ inline constexpr Method methods[] = {
   {"BayShell", "saveDocument", true, 2, 2},
   {"BayShell", "removeDocument", true, 1, 1},
   {"BayShell", "openWindow", true, 2, 2},
-  {"BayShell", "rehostWindow", true, 2, 2},
   {"BayShell", "closeWindow", true, 1, 1},
   {"BayShell", "focusWindow", true, 1, 1},
   {"BayShell", "setTrafficLightsCenter", true, 2, 2},
