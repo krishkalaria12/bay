@@ -1,0 +1,15 @@
+diff --git a/chrome/browser/ui/views/location_bar/lens_overlay_homework_page_action_controller.cc b/chrome/browser/ui/views/location_bar/lens_overlay_homework_page_action_controller.cc
+--- a/chrome/browser/ui/views/location_bar/lens_overlay_homework_page_action_controller.cc
++++ b/chrome/browser/ui/views/location_bar/lens_overlay_homework_page_action_controller.cc
+@@ -60,6 +60,11 @@
+ 
+ void LensOverlayHomeworkPageActionController::UpdatePageActionIcon() {
+   CHECK(tab_->GetContents());
++  // Bay: a page between windows (TabBroker's parked tabs) is in no window and
++  // has no page actions; a navigation it finishes there changes nothing.
++  if (!tab_->GetBrowserWindowInterface()) {
++    return;
++  }
+ 
+   if (ShouldShow()) {
+     if (!scoped_call_to_action_lock_) {

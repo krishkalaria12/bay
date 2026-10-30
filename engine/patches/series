@@ -40,6 +40,7 @@ chromium win chromium-devtools-opener-cef-off.patch
 chromium win chromium-window-features-cef-off.patch
 chromium win chromium-runtime-views-cef-off.patch
 chromium win chromium-webui-post-tab-model.patch
+chromium win chromium-lens-homework-detached-tab.patch
 chromium all chromium-extension-install-prompt-hook.patch
 chromium all chromium-extension-updates.patch
 chromium all chromium-extension-import.patch
