@@ -1,0 +1,11 @@
+#!/bin/bash
+# Runs JavaScript in Bay Dev's app runtime through the dev harness (lib/devHarness.ts) and prints its JSON answer.
+# A Release build answers only with a `perf-probe` file in its data folder (lib/perfProbe.ts).
+#
+#   scripts/capture/ev 'return nn.store.getState().spaceOrder'   (or the script on stdin)
+D="${BAY_DATA_DIR:-$HOME/Library/Application Support/Bay Dev}"
+id="e$(date +%s)$RANDOM"
+src="${1:-$(cat)}"
+printf '// %s\n%s' "$id" "$src" > "$D/dev-eval.js"
+for _ in $(seq 1 200); do grep -q "\"id\":\"$id\"" "$D/dev-eval-result.json" 2>/dev/null && break; sleep 0.1; done
+cat "$D/dev-eval-result.json"; echo

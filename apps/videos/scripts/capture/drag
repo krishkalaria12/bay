@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""A real, smooth drag with cliclick: press, eased drag moves, release. Each cliclick drag step takes ~100 ms.
+
+usage: scripts/capture/drag X1 Y1 X2 Y2 [ms]   (screen points)
+"""
+import subprocess
+import sys
+
+x1, y1, x2, y2 = map(float, sys.argv[1:5])
+ms = int(sys.argv[5]) if len(sys.argv) > 5 else 900
+steps = max(6, ms // 100)
+ease = lambda t: t * t * (3 - 2 * t)
+cmds = [f"dd:{int(x1)},{int(y1)}", "w:180", f"dm:{int(x1)+2},{int(y1)-3}", "w:60"]
+for i in range(1, steps + 1):
+    t = ease(i / steps)
+    cmds.append(f"dm:{round(x1 + (x2 - x1) * t)},{round(y1 + (y2 - y1) * t)}")
+cmds += ["w:250", f"du:{int(x2)},{int(y2)}"]
+subprocess.run(["cliclick", "-e", "0", "-w", "0", *cmds], check=True)
