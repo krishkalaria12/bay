@@ -10,9 +10,11 @@
     "android": "bash scripts/native android",
     "e2e": "bash scripts/e2e",
     "prebuild": "expo prebuild --clean",
+    "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bay/engine": "workspace:*",
     "@expo/metro-runtime": "~58.0.14",
     "@expo/ui": "~58.0.25",
     "@gorhom/bottom-sheet": "^5.2.14",
@@ -41,5 +43,6 @@
   "devDependencies": {
     "@types/react": "~19.3.0",
     "typescript": "~6.0.3"
-  }
+  },
+  "packageManager": "pnpm@11.1.3"
 }

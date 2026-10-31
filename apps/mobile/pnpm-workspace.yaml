@@ -2,6 +2,7 @@
 # so its React Native version never touches the desktop app's node_modules.
 packages:
   - .
+  - modules/*
 
 # React Native and CocoaPods expect a flat node_modules.
 nodeLinker: hoisted

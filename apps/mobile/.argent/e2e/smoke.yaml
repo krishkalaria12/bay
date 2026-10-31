@@ -4,10 +4,12 @@
 # Toolbar buttons are SwiftUI on iOS, absent from the runner's UIView tree, so they stay accessibility-tree tool waits.
 steps:
   - launch: { ios: in.krishkalaria.bay.mobile, android: in.krishkalaria.bay.mobile }
-  - await: { idle: true }
-  - tool: open-url
-    args:
-      url: exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
+  - await: { idle: true, timeout: 15000 }
+  - when: { platform: android }
+    steps:
+      - tool: open-url
+        args:
+          url: exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
   - await: { visible: { text: Tap to search }, timeout: 60000 }
   - tool: await-ui-element
     args:

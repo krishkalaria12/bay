@@ -20,6 +20,7 @@
       "package": "in.krishkalaria.bay.mobile"
     },
     "plugins": [
+      "./modules/bay-engine/app.plugin.js",
       "expo-router",
       [
         "expo-splash-screen",

@@ -1,18 +1,16 @@
-import { Button, HStack, Host } from "@expo/ui/swift-ui";
-import { buttonStyle, controlSize, labelStyle } from "@expo/ui/swift-ui/modifiers";
 import type { JSX } from "react";
+import { View } from "react-native";
 
-const glassIconButton = [buttonStyle("glass"), labelStyle("iconOnly"), controlSize("large")];
+import { GlassIconButton } from "./GlassIconButton";
+import type { StartToolbarProps } from "./StartToolbar.types";
 
 // iOS: SwiftUI Liquid Glass buttons.
-export function StartToolbar(): JSX.Element {
+export function StartToolbar({ onSearch }: StartToolbarProps): JSX.Element {
   return (
-    <Host matchContents style={{ alignSelf: "center", marginBottom: 8 }}>
-      <HStack spacing={28}>
-        <Button systemImage="archivebox" label="Archive" modifiers={glassIconButton} />
-        <Button systemImage="magnifyingglass" label="Search" modifiers={glassIconButton} />
-        <Button systemImage="gearshape" label="Settings" modifiers={glassIconButton} />
-      </HStack>
-    </Host>
+    <View className="mb-2 flex-row items-center justify-center gap-7">
+      <GlassIconButton id="start-archive" systemImage="archivebox" label="Archive" />
+      <GlassIconButton id="start-search" systemImage="magnifyingglass" label="Search" onPress={onSearch} />
+      <GlassIconButton id="start-settings" systemImage="gearshape" label="Settings" />
+    </View>
   );
 }

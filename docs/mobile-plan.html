@@ -266,7 +266,7 @@
   <body>
     <main>
       <header>
-        <p class="meta">Implementation plan · revised 31 October 2026 · setup done on both platforms, engine and features not started</p>
+        <p class="meta">Implementation plan · revised 31 October 2026 · phases 0 and 1 done on both platforms</p>
         <h1>Bay for iPhone and Android.<br />One Lens design, WebKit on iOS, Chromium on Android.</h1>
         <p class="lead">
           Build Bay's mobile browser in <code>apps/mobile</code> with Expo and HeroUI Native. Both platforms get the same design, the Lens demo you shared: it
@@ -275,8 +275,8 @@
         </p>
         <p>
           iOS renders pages with WebKit. Android uses the system WebView (also Chromium) while we build, and our own Chromium, built from the desktop engine
-          tree, comes in the last phase before release. Phase 0 is done; everything after it is a plan. iOS is tested completely, and every UI change is also
-          tested on Android.
+          tree, comes in the last phase before release. Phases 0 and 1 are done; the Lens browsing UI comes next in phase 2. iOS is tested completely, and every
+          UI change is also tested on Android.
         </p>
       </header>
 
@@ -743,7 +743,12 @@
         <div class="stage">
           <div class="stage-number">1</div>
           <div>
-            <h3>Engine API on both platforms</h3>
+            <h3>Engine API on both platforms <span class="done">done</span></h3>
+            <p class="note">
+              The local <code>@bay/engine</code> module and initial address/navigation screen are implemented. Native builds succeed on both platforms.
+              <code>pnpm e2e</code> passes twice unchanged on iOS and Android, including page title/URL, clear address, back/forward and a reload smoke check.
+              The Lens browsing UI remains phase 2.
+            </p>
             <ul>
               <li>Write the <code>@bay/engine</code> TypeScript API and scaffold <code>modules/bay-engine</code>.</li>
               <li>
