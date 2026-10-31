@@ -5,8 +5,10 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start --dev-client",
-    "ios": "expo run:ios",
-    "android": "expo run:android",
+    "native": "bash scripts/native",
+    "ios": "bash scripts/native ios",
+    "android": "bash scripts/native android",
+    "e2e": "bash scripts/e2e",
     "prebuild": "expo prebuild --clean",
     "typecheck": "tsc --noEmit"
   },

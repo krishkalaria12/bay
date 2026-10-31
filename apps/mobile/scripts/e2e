@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Runs every Argent e2e test in .argent/e2e on the iOS simulator and then the Android emulator, so
+# each flow passes on both platforms. Boots the devices if needed. Needs Metro running (pnpm start)
+# and both dev clients installed (pnpm native).
+#
+#   scripts/e2e                  all tests, both platforms
+#   scripts/e2e ios              one platform
+#   scripts/e2e android
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source scripts/lib/devices.sh
+parse_platforms "$@"
+
+failed=0
+for platform in "${platforms[@]}"; do
+  if [[ $platform == ios ]]; then device=$(boot_ios); else device=$(boot_android); fi
+  echo "e2e: $platform ($device)"
+  argent e2e run .argent/e2e --recursive --platform "$platform" --device "$device" || failed=1
+done
+exit $failed
