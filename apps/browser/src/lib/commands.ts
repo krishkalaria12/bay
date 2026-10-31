@@ -27,6 +27,7 @@ import { newEasel, openLibrary } from "../components/library/actions";
 import { openSpaceMenu } from "../components/SpaceIndicator";
 import { groupOf } from "../store/organize";
 import { shownPeek } from "../store/peeks";
+import { rowPinned } from "../store/splits";
 import { isSmall, mainWindowFor } from "../store/small";
 import { closeLittleBay, openInMainWindow, openLittleBay } from "../components/littleBay/actions";
 import { joinMeetingNow } from "../live/alerts";
@@ -245,7 +246,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "togglePin":
       return tab ? s.togglePin(tab.id) : undefined;
     case "togglePinRow":
-      return tab ? s.pinRows([tab.id], !tab.pinnedRow) : undefined;
+      return tab ? s.pinRows([tab.id], !rowPinned(s, tab.id)) : undefined;
     case "moveTabDown":
     case "moveTabUp": {
       if (!tab) return;

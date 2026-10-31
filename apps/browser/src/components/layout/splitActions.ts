@@ -3,7 +3,7 @@ import { closeTab } from "../../lib/actions";
 import { shareCollection } from "../../lib/collectionSharing";
 import { useBrowser } from "../../store/browser";
 import { activeTabId, isIncognitoSpace } from "../../store/model";
-import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
+import { pinnedSplitOf, slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
 import { MAX_SPLIT_PANES } from "../../store/constants";
 import { showToast } from "./toasts";
 export { showToast, hideToast, hideKeyedToast, useToasts, type ToastOptions } from "./toasts";
@@ -59,8 +59,10 @@ export function dropTabIntoSplit(tabId: string, targetTabId: string, side: Split
   openSplitPane(target.windowId, { tabId, anchorTabId: targetTabId, side });
 }
 
+// ⌘W unloads a pinned split whole; asked to close one pane, it goes and the rest stay pinned.
 export function closePane(tabId: string) {
-  void closeTab(tabId);
+  if (pinnedSplitOf(store(), tabId)) store().removeTab(tabId);
+  else void closeTab(tabId);
 }
 
 export async function showSplitMenu(tabId: string) {

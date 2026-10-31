@@ -448,7 +448,9 @@ const ListEntry = memo(function ListEntry({ entry }: { entry: string }) {
 
 const PinnedEntry = memo(function PinnedEntry({ entry }: { entry: string }) {
   const id = entry.slice(2);
-  return entry.startsWith("f:") ? <FolderBlock folderId={id} /> : <TabRowItem tabId={id} section="pinned" />;
+  if (entry.startsWith("f:")) return <FolderBlock folderId={id} />;
+  if (entry.startsWith("s:")) return <SplitRowItem splitId={id} section="pinned" />;
+  return <TabRowItem tabId={id} section="pinned" />;
 });
 
 // The line separates pinned content from the tab list, including a lone tab. Dropping above its middle pins a tab.

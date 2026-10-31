@@ -110,7 +110,7 @@ function folderRowSpan(s: BrowserState, windowId: string, spaceId: string, folde
   }
   let nextTop = top + ROW + GAP;
   for (const entry of entries) {
-    if (entry === `t:${tabId}`) return { top: nextTop, height: ROW };
+    if (entry === `t:${tabId}` || (entry.startsWith("s:") && s.splits[entry.slice(2)]?.tabIds.includes(tabId))) return { top: nextTop, height: ROW };
     if (entry.startsWith("f:") && folderTabIds(s, entry.slice(2)).includes(tabId)) return folderRowSpan(s, windowId, spaceId, entry.slice(2), tabId, nextTop);
     nextTop += entryHeight(s, windowId, spaceId, entry) + GAP;
   }
@@ -135,7 +135,7 @@ export function folderDragItemVisible(s: BrowserState, windowId: string, item: {
   while (parent) {
     if (parent.collapsed) {
       const active = activeTabId(s, windowId);
-      return item.kind === "row" && !!active && item.tabIds.includes(active);
+      return (item.kind === "row" || item.kind === "split") && !!active && item.tabIds.includes(active);
     }
     parent = parent.parentId ? s.pinnedFolders[parent.parentId] : undefined;
   }

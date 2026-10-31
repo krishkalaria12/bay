@@ -9,6 +9,7 @@ import { isDeveloperUrl, siteKey } from "../developer/sites";
 import type { Tab } from "../../store/types";
 import { boostHost } from "../../lib/boosts";
 import { boostsForHost, useBoosts } from "../boosts/state";
+import { pinnableSplit, pinRowTitle } from "../../store/splits";
 
 const siteHasBoosts = (url: string | undefined) => {
   const host = boostHost(url);
@@ -25,7 +26,7 @@ type ActionDef = {
   icon: string;
   hint?: string;
   keywords?: string[];
-  needs?: "page" | "site" | "tab" | "spaces" | "boost" | "boosted" | "engine";
+  needs?: "page" | "site" | "tab" | "split" | "spaces" | "boost" | "boosted" | "engine";
 };
 
 const page = "page" as const;
@@ -43,6 +44,14 @@ const DEFS: ActionDef[] = [
     icon: "pin",
     keywords: ["pin", "unpin", "pin tab", "unpin tab", "remove from top apps", "favorites"],
     needs: "tab",
+  },
+  {
+    command: "togglePinRow",
+    title: ({ s, tab }) => (tab ? pinRowTitle(s, tab.id) : ""),
+    icon: "pin",
+    hint: "⇧⌘D",
+    keywords: ["pin split", "unpin split", "pin split view", "unpin split view"],
+    needs: "split",
   },
   { command: "duplicateTab", title: "Duplicate Tab", icon: "plus.square.on.square", needs: "tab" },
   { command: "renameTab", title: "Rename Tab", icon: "pencil", needs: "tab" },
@@ -182,6 +191,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
   for (const d of DEFS) {
     if (d.needs === "page" && !tab?.url) continue;
     if (d.needs === "tab" && !tab) continue;
+    if (d.needs === "split" && !(tab && pinnableSplit(s, tab.id))) continue;
     if (d.needs === "site" && !siteKey(tab?.url ?? "")) continue;
     if (d.needs === "spaces" && w?.incognito) continue;
     if (d.needs === "boost" && !boostHost(tab?.url)) continue;

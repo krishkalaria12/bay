@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 import { leaveGroups, syncGroupOrder } from "./groups";
-import { listOfTab, newId, tabListKey, withList } from "./model";
+import { listOfTab, newId, pinnedPage, tabListKey, withList } from "./model";
 import { activated, apply, removeTabs, withNewTab } from "./tabs";
 import type { SplitView, Tab } from "./types";
 import { MAX_SPLIT_PANES } from "./constants";
@@ -61,6 +61,52 @@ export function splitOf(s: Pick<BrowserState, "splits">, tabId: string | undefin
   if (!tabId) return undefined;
   for (const v of Object.values(s.splits)) if (v.tabIds.includes(tabId)) return v;
   return undefined;
+}
+
+export function pinnedSplitOf(s: Pick<BrowserState, "splits" | "tabs">, tabId: string | undefined): SplitView | undefined {
+  const split = splitOf(s, tabId);
+  return split && isPinnedSplit(s, split) ? split : undefined;
+}
+
+/** A split pinned as one row: every pane in the Pinned section, in one folder or none. */
+export function isPinnedSplit(s: Pick<BrowserState, "tabs">, split: Pick<SplitView, "tabIds">): boolean {
+  const folderId = s.tabs[split.tabIds[0] ?? ""]?.folderId;
+  return split.tabIds.every((id) => s.tabs[id]?.pinnedRow && s.tabs[id]!.folderId === folderId);
+}
+
+/** The panes a split's row shows: outside a pinned split, a pane pinned on its own has its own row or tile. */
+export function splitRowTabs(s: Pick<BrowserState, "tabs">, split: Pick<SplitView, "tabIds">): string[] {
+  return isPinnedSplit(s, split) ? split.tabIds : split.tabIds.filter((id) => s.tabs[id] && !pinnedPage(s.tabs[id]!));
+}
+
+/** The split that goes in and out of the Pinned section whole. An Essential stays a tile, so with one its panes go alone. */
+export function pinnableSplit(s: Pick<BrowserState, "splits" | "tabs">, tabId: string): SplitView | undefined {
+  const split = splitOf(s, tabId);
+  return split && !split.tabIds.some((id) => s.tabs[id]?.pinned) ? split : undefined;
+}
+
+export const withSplitPanes = (s: Pick<BrowserState, "splits" | "tabs">, ids: string[]) => [
+  ...new Set(ids.flatMap((id) => pinnableSplit(s, id)?.tabIds ?? [id])),
+];
+
+/** Whether Pin Tab would unpin: the tab's row, or its whole split. */
+export function rowPinned(s: Pick<BrowserState, "splits" | "tabs">, tabId: string): boolean {
+  const split = pinnableSplit(s, tabId);
+  return split ? isPinnedSplit(s, split) : !!s.tabs[tabId]?.pinnedRow;
+}
+
+export function pinRowTitle(s: Pick<BrowserState, "splits" | "tabs">, tabId: string): string {
+  const noun = pinnableSplit(s, tabId) ? "Split View" : "Tab";
+  return `${rowPinned(s, tabId) ? "Unpin" : "Pin"} ${noun}`;
+}
+
+// A pane joining a pinned split is pinned with it. A tile stays a tile.
+function pinnedAlong(s: BrowserState, tabId: string, anchor: Tab): BrowserState {
+  const t = s.tabs[tabId]!;
+  if (t.pinned) return s;
+  const { folderId: _, ...rest } = t;
+  const pinnedUrl = pinnedPage(t) ? t.pinnedUrl : t.url || null;
+  return { ...s, tabs: { ...s.tabs, [tabId]: { ...rest, pinnedRow: true, pinnedUrl, ...(anchor.folderId ? { folderId: anchor.folderId } : {}) } } };
 }
 
 export function removeFromSplits(splits: Record<string, SplitView>, gone: Set<string>): Record<string, SplitView> {
@@ -161,6 +207,7 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     if (!w || !anchor || anchor.spaceId !== w.spaceId) return { ok: false, reason: "invalid" };
     const existing = Object.values(s.splits).find((v) => v.tabIds.includes(anchor.id));
     if (existing && existing.tabIds.length >= MAX_SPLIT_PANES) return { ok: false, reason: "max" };
+    const pinned = !!existing && isPinnedSplit(s, existing);
 
     let tabId = o.tabId;
     if (tabId) {
@@ -179,6 +226,7 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     const current = existing && s.splits[existing.id];
     const split = withPane(current, anchor.id, tabId, o.side ?? "right");
     if (!split) return { ok: false, reason: "max" };
+    if (pinned) s = pinnedAlong(s, tabId, anchor);
     s = gather({ ...s, splits: { ...s.splits, [split.id]: split } }, anchor.id, split.tabIds);
     if (!o.background) s = apply(s, activated(s, tabId, windowId));
     set(s);
@@ -191,6 +239,7 @@ export const createSplitsSlice: StateCreator<BrowserState, [], [], SplitsSlice> 
     const pane = s.tabs[paneTabId];
     const tab = s.tabs[tabId];
     if (!split || !pane || !tab || split.tabIds.includes(tabId) || tab.spaceId !== pane.spaceId) return;
+    if (isPinnedSplit(s, split)) s = pinnedAlong(s, tabId, pane);
     s = { ...s, splits: removeFromSplits(s.splits, new Set([tabId])) };
     s = gather(s, paneTabId, [paneTabId, tabId]);
     const current = s.splits[split.id]!;

@@ -5,7 +5,7 @@ import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
 const model = await import("./model.ts");
 const { folderTabIds } = await import("./folders.ts");
-const { sidebarEntries } = await import("../components/sidebar/entries.ts");
+const { folderEntries, numberedTabs, sidebarEntries } = await import("../components/sidebar/entries.ts");
 
 const S = () => useBrowser.getState();
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
@@ -149,4 +149,111 @@ test("a session keeps its folders, and drops the mark of a folder that's gone", 
   S().hydrate({ ...data, pinnedFolders: {} });
   assert.deepEqual(entries(w).pinned, ["a", "b"]);
   assert.equal(S().tabs[a].folderId, undefined, `no longer in ${f}`);
+});
+
+// A split pinned as one row (Arc's): every pane a pinned row, kept whole while unloaded.
+const { pinRowTitle, rowPinned } = await import("./splits.ts");
+const pinnedSplit = (...urls) => {
+  const [w, a, b, ...rest] = setup(...urls);
+  const split = S().createSplit([a, b]);
+  S().pinRows([a], true);
+  return { w, a, b, rest, split };
+};
+const rows = (w) => sidebarEntries(S(), w);
+
+test("pinning a split's pane pins the whole split as one row, and unpinning takes it back to the list", () => {
+  const [w, a, b, c] = setup("a", "b", "c");
+  const split = S().createSplit([a, b]);
+  assert.equal(pinRowTitle(S(), a), "Pin Split View");
+  S().pinRows([b], true);
+  assert.deepEqual(rows(w).pinned, [`s:${split}`]);
+  assert.deepEqual(rows(w).list, [`t:${c}`]);
+  assert.equal(S().tabs[a].pinnedUrl, "https://a.com");
+  assert.equal(S().tabs[b].pinnedUrl, "https://b.com");
+  assert.equal(rowPinned(S(), a), true);
+  assert.equal(pinRowTitle(S(), a), "Unpin Split View");
+  S().pinRows([a], false);
+  assert.deepEqual(rows(w).pinned, []);
+  assert.deepEqual(rows(w).list.toSorted(), [`s:${split}`, `t:${c}`].toSorted());
+  assert.equal(S().splits[split].tabIds.length, 2);
+});
+
+test("a split with an Essential pins pane by pane", () => {
+  const [w, a, b] = setup("a", "b", "c");
+  const split = S().createSplit([a, b]);
+  S().pinTabs([a], true);
+  assert.equal(pinRowTitle(S(), b), "Pin Tab");
+  S().pinRows([b], true);
+  assert.equal(S().tabs[a].pinned, true, "the Essential stays one");
+  assert.ok(S().splits[split]);
+  assert.deepEqual(rows(w).pinned, [`t:${b}`]);
+});
+
+test("closing a pane unloads the pinned split whole; it stays a split, and a click brings it back", () => {
+  const { w, a, b, rest, split } = pinnedSplit("a", "b", "c");
+  S().activate(a, w);
+  S().closeTab(a);
+  assert.ok(S().splits[split], "still a split");
+  assert.deepEqual(S().splits[split].tabIds, [a, b]);
+  assert.ok(S().tabs[a].unloaded && S().tabs[b].unloaded, "both panes unloaded");
+  assert.equal(S().tabs[a].navigation, null);
+  assert.equal(S().tabs[b].navigation, null);
+  assert.equal(model.activeTabId(S(), w), rest[0], "the window moves on to a regular tab");
+  assert.deepEqual(rows(w).pinned, [`s:${split}`]);
+  S().activate(b, w);
+  assert.equal(S().tabs[b].unloaded, undefined);
+  assert.ok(S().tabs[b].navigation);
+});
+
+test("a blank pane of a pinned split closes for good, and a new pane is pinned with its split", () => {
+  const { w, a, b, split } = pinnedSplit("a", "b", "c");
+  S().activate(a, w);
+  const pane = S().openSplitPane(w).tabId;
+  assert.equal(S().tabs[pane].pinnedRow, true);
+  assert.deepEqual(rows(w).pinned, [`s:${split}`]);
+  S().closeTab(pane);
+  assert.equal(S().tabs[pane], undefined);
+  assert.deepEqual(S().splits[split].tabIds, [a, b]);
+  assert.ok(S().tabs[a].unloaded, "closing unloads what's left of it, as any pane does");
+});
+
+test("a pinned split moves into a folder and out whole, and stays one row there", () => {
+  const { w, a, b, split } = pinnedSplit("a", "b", "c");
+  const folder = S().newPinnedFolder(w);
+  S().placeTabs([a], { pinned: false, row: true, folderId: folder });
+  assert.equal(S().tabs[a].folderId, folder);
+  assert.equal(S().tabs[b].folderId, folder);
+  assert.deepEqual(rows(w).pinned, [`f:${folder}`]);
+  assert.deepEqual(folderEntries(S(), folder), [`s:${split}`]);
+  S().placeTabs([b], { pinned: false, row: true, folderId: null });
+  assert.deepEqual(rows(w).pinned.includes(`s:${split}`), true);
+  assert.equal(S().tabs[a].folderId, undefined);
+});
+
+test("removing a pane leaves both pinned, as rows of their own", () => {
+  const { w, a, b, split } = pinnedSplit("a", "b", "c");
+  S().removeTabFromSplit(a);
+  assert.equal(S().splits[split], undefined);
+  assert.deepEqual(rows(w).pinned.toSorted(), [`t:${a}`, `t:${b}`].toSorted());
+});
+
+test("a pinned split is saved, comes back, and takes one number", () => {
+  const { w, a, b, split } = pinnedSplit("a", "b", "c");
+  S().activate(b, w);
+  assert.ok(numberedTabs(S(), w).includes(b));
+  assert.ok(!numberedTabs(S(), w).includes(a), "one number per split, as in the list");
+  const saved = JSON.parse(JSON.stringify({ tabs: S().tabs, tabLists: S().tabLists, splits: S().splits, spaces: S().spaces, spaceOrder: S().spaceOrder }));
+  S().hydrate(saved);
+  assert.ok(S().splits[split]);
+  assert.equal(S().tabs[a].pinnedRow, true);
+  assert.equal(S().tabs[b].pinnedRow, true);
+});
+
+test("a pinned split stays whole when its window closes, for the next window", () => {
+  const { w, a, b, split } = pinnedSplit("a", "b", "c");
+  const spaceId = S().windows[w].spaceId;
+  S().closeWindow(w);
+  assert.deepEqual(S().splits[split].tabIds, [a, b]);
+  const next = S().createWindow({ spaceId });
+  assert.deepEqual(rows(next).pinned, [`s:${split}`]);
 });

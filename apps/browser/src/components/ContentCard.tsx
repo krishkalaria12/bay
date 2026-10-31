@@ -160,7 +160,7 @@ export function ContentCard() {
     const s = useBrowser.getState();
     for (const id of Object.keys(panes)) {
       const t = s.tabs[id];
-      if (t?.url && !t.navigation && !t.adoptId) s.updateTab(id, wake(t));
+      if (t?.url && !t.navigation && !t.adoptId) s.updateTab(id, { ...wake(t), unloaded: undefined });
     }
   }, [panes]);
 

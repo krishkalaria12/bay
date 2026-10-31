@@ -3,6 +3,7 @@ import type { BrowserState } from "./browser";
 import { leaveGroups, orderSections, syncGroupOrder } from "./groups";
 import { listIds, newId, pinnedPage, spaceListKey, withList, without } from "./model";
 import { placing } from "./organize";
+import { withSplitPanes } from "./splits";
 import type { PinnedFolder, Tab, TabGroup } from "./types";
 
 export const MAX_FOLDER_DEPTH = 5;
@@ -208,7 +209,7 @@ export const createFoldersSlice: StateCreator<BrowserState, [], [], FoldersSlice
       ...(emptyAnchor ? { beforeId: emptyAnchor } : {}),
     };
     let next: BrowserState = { ...s, pinnedFolders: { ...s.pinnedFolders, [folder.id]: folder } };
-    const members = tabIds.filter((id) => next.tabs[id]?.spaceId === spaceId);
+    const members = withSplitPanes(s, tabIds).filter((id) => next.tabs[id]?.spaceId === spaceId);
     const list = listIds(s, spaceListKey(s, spaceId));
     if (members.length) {
       const at = list.findIndex((id) => members.includes(id));
