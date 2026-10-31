@@ -41,6 +41,7 @@
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
@@ -294,6 +295,19 @@ class NNPageObserver : public content::RenderFrameObserver,
       }
     }
     ApplyBoost();
+  }
+
+  void InsertUserStyle(const std::string& css, const std::string& origin) override {
+    blink::WebDocument document = render_frame()->GetWebFrame()->GetDocument();
+    if (css.empty() || document.IsNull() ||
+        url::Origin::Create(GURL(document.Url())) !=
+            url::Origin::Create(GURL(origin))) {
+      return;
+    }
+    document.InsertStyleSheet(blink::WebString::FromUtf8(css), nullptr,
+                              blink::WebCssOrigin::kUser,
+                              blink::BackForwardCacheAware::kAllow,
+                              blink::WebStyleSheetInsertionOrder::kBeforeDocument);
   }
 
   void WillReleaseScriptContext(v8::Local<v8::Context> context,

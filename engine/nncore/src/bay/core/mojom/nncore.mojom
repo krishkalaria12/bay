@@ -52,4 +52,8 @@ interface NNPage {
   // and inserts user-origin sheets while a Boost is on for it. Kept across navigation;
   // empty clears the descriptor.
   SetBoostStyle(string css);
+  // A user-origin sheet (its !important rules beat the page's) into the document the frame
+  // shows, if its origin is still `origin`'s (a document that has replaced it never gets it):
+  // the content blocker's cosmetic filters. It goes with the document.
+  InsertUserStyle(string css, string origin);
 };

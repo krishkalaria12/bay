@@ -60,6 +60,8 @@ source_set("core") {
     "nn_permissions.mm",
     "nn_picture_in_picture.h",
     "nn_picture_in_picture.mm",
+    "nn_request_filter.cc",
+    "nn_request_filter.h",
     "nn_strings.cc",
     "nn_strings.h",
     "nn_tab_info.h",
