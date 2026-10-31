@@ -72,7 +72,7 @@ A nightly by hand: `gh workflow run release.yml` (`-f force=true` even if nothin
   exports the archive by hand (`scripts/lib/export-developer-id.sh`, Xcode's export needs a signed-in account),
   strips and signs Chrome's framework, verifies, notarizes and staples the app and DMG, and writes the notes and
   appcast. A step written in the workflow removes the keychain and key files, the run fails if the checkout changed,
-  and only then the launch check runs (`--phase check`: the final app opened hidden, uBO must be ready, the signature
+  and only then the launch check runs (`--phase check`: the final app opened hidden, the content blocker must block an ad request, the signature
   must survive) and `.github/release/check-sparkle.sh` checks the zip's EdDSA signature against the app's
   `SUPublicEDKey`. The dSYMs are kept as a 90-day artifact.
 - **publish** runs `scripts/release/publish.sh`, which creates the tag at the built commit if it isn't there yet.

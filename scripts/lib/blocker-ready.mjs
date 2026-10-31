@@ -1,11 +1,10 @@
 import { devtools, sleep } from "./instance.mjs";
 
-// The release launch check: uBlock Origin, in an app started with BAY_REMOTE_DEBUGGING_PORT, is ready (its background
-// page's µBlock.isReadyPromise settles) and blocks an ad request from a page.
-// usage: node scripts/lib/ubo-ready.mjs <port> [seconds]
+// The release launch check: Bay's content blocker, in an app started with BAY_REMOTE_DEBUGGING_PORT, blocks an ad
+// request from a page once its lists have loaded (it tries until then).
+// usage: node scripts/lib/blocker-ready.mjs <port> [seconds]
 
 const [port, seconds = "90"] = process.argv.slice(2);
-const extensionId = "fajbdaomknpkicfjcpipdmcpoamdmilh";
 const adUrl = "https://ib.adnxs.com/ut/v3?bay-release-check";
 const deadline = Date.now() + Number(seconds) * 1000;
 const left = () => Math.max(1, deadline - Date.now());
@@ -25,30 +24,6 @@ async function getJson(path) {
 
 async function connect(target) {
   return bounded(devtools(target), `connecting to ${target.url}`);
-}
-
-async function readiness() {
-  while (Date.now() < deadline) {
-    const list = await getJson("/json/list").catch(() => []);
-    const background = list.find((t) => t.type === "background_page" && t.url.includes(extensionId));
-    if (background) {
-      const session = await connect(background).catch(() => null);
-      try {
-        const state =
-          session &&
-          (await session
-            .eval(`self.µBlock?.isReadyPromise ? µBlock.isReadyPromise.then(() => ({ ready: µBlock.supportStats.allReadyAfter ?? "ready" })) : null`, {
-              timeout: Math.min(10000, left()),
-            })
-            .catch(() => null));
-        if (state) return state;
-      } finally {
-        session?.close();
-      }
-    }
-    await sleep(Math.min(500, left()));
-  }
-  throw new Error(`uBlock Origin wasn't ready within ${seconds} s`);
 }
 
 async function blocks() {
@@ -84,10 +59,23 @@ async function blocks() {
   }
 }
 
+// The blocker loads its engine a moment after launch: until then the request goes through.
+async function blocksSoon() {
+  let last;
+  while (Date.now() < deadline) {
+    try {
+      return await bounded(blocks(), "the blocking check");
+    } catch (e) {
+      last = e;
+      await sleep(Math.min(1000, left()));
+    }
+  }
+  throw last ?? new Error(`the content blocker didn't block within ${seconds} s`);
+}
+
 try {
-  const state = await readiness();
-  const blocked = await bounded(blocks(), "the blocking check");
-  console.log(`uBlock Origin ready (${state.ready}) and blocking (${blocked})`);
+  const blocked = await blocksSoon();
+  console.log(`the content blocker is blocking (${blocked})`);
   process.exit(0);
 } catch (e) {
   console.error(`error: ${e.message}`);
