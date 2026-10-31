@@ -1,5 +1,11 @@
 package expo.modules.bayengine
 
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import androidx.webkit.WebStorageCompat
+import androidx.webkit.WebViewFeature
+import expo.modules.kotlin.Promise
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -7,13 +13,40 @@ class BayEngineModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("BayEngine")
 
+    AsyncFunction("clearData") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("E_CONTEXT_LOST", "The browser context is unavailable.", null)
+      } else if (!WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
+        // The legacy API has no completion callback and does not promise all modern storage types.
+        promise.reject("E_WEBVIEW_UPDATE_REQUIRED", "Update Android System WebView to clear all website data.", null)
+      } else {
+        try {
+          WebStorageCompat.deleteBrowsingData(WebStorage.getInstance()) {
+            try {
+              CookieManager.getInstance().flush()
+              BayEngineSnapshots.clear(context)
+              promise.resolve(null)
+            } catch (error: Exception) {
+              promise.reject("E_CLEAR_DATA", "Couldn't clear website data.", error)
+            }
+          }
+        } catch (error: Exception) {
+          promise.reject("E_CLEAR_DATA", "Couldn't clear website data.", error)
+        }
+      }
+    }.runOnQueue(Queues.MAIN)
+
     View(BayEngineView::class) {
-      Events("onNavigationStateChange", "onNavigationError")
+      Events("onNavigationStateChange", "onNavigationError", "onScroll", "onLinkPress")
+      Prop("pullToRefreshEnabled") { view: BayEngineView, enabled: Boolean -> view.pullToRefreshEnabled = enabled }
+      Prop("initialUrl") { view: BayEngineView, url: String? -> view.loadInitial(url) }
       AsyncFunction("load") { view: BayEngineView, url: String -> view.load(url) }
       AsyncFunction("goBack") { view: BayEngineView -> view.webView.goBack() }
       AsyncFunction("goForward") { view: BayEngineView -> view.webView.goForward() }
       AsyncFunction("reload") { view: BayEngineView -> view.reload() }
       AsyncFunction("stop") { view: BayEngineView -> view.stop() }
+      AsyncFunction("snapshot") { view: BayEngineView -> view.snapshot() }
       OnViewDestroys { view: BayEngineView -> view.dispose() }
     }
   }

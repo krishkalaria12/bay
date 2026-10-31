@@ -2,7 +2,15 @@
 
 Local Expo module imported as `@bay/engine`. The Swift implementation uses `WKWebView`; the Kotlin implementation uses `android.webkit.WebView`. Both export `BayEngine` to Expo and the same TypeScript `EngineView`, `Tab`, navigation state and error types.
 
-Keep `EngineView` mounted and use its ref to request navigation. `load(url)`, `goBack()`, `goForward()`, `reload()` and `stop()` resolve when the native command is dispatched. Observe `onNavigationStateChange` for URL, title, estimated progress, loading and history availability. Main-frame failures are delivered through `onNavigationError`. Page code has no JavaScript bridge to the app.
+Keep `EngineView` mounted and use its ref to request navigation. `initialUrl` is loaded once when the native view is created (later values are ignored), so a newly mounted tab can open its page before its ref is usable. `load(url)`, `goBack()`, `goForward()`, `reload()` and `stop()` resolve when the native command is dispatched. Observe `onNavigationStateChange` for URL, title, estimated progress, loading and history availability. Main-frame failures are delivered through `onNavigationError`. Page code has no JavaScript bridge to the app.
+
+`onScroll` reports `{ offsetY, deltaY }` in logical screen points, throttled to 50 ms with a trailing update. `pullToRefreshEnabled` defaults to true; both engines reload when the user pulls down from the top. iOS supports WebKit's native back/forward edge gestures. Android edge navigation belongs to the shared gesture layer.
+
+Long-pressing an HTTP(S) link emits `onLinkPress` with `{ url, title, x, y }` instead of the system link menu. Coordinates are normalized within the engine view, or null when unavailable. Android gets the anchor text through the native focused-node API. iOS turns off WebKit's link callout and link-text selection with an injected style and finds the link under the finger from an isolated script world, which also gives it the link text. Text selection outside links is preserved.
+
+`snapshot()` resolves to a unique `file://` JPEG URI in the app cache, or null when no page viewport can be captured. Images are limited to 640 pixels wide. A successful new capture removes only that view's preceding capture. Its last snapshot survives view disposal, so archived cards can retain their image until cache eviction or clear data.
+
+Module-level `clearData()` waits for native website-data deletion and removes the snapshot cache. Close page views before calling it so scripts cannot immediately write fresh data. Android uses AndroidX WebKit's `DELETE_BROWSING_DATA` capability and rejects with `E_WEBVIEW_UPDATE_REQUIRED` if the installed system WebView cannot provide complete deletion. It does not claim success through the incomplete legacy API.
 
 The app accepts HTTP and HTTPS addresses. `app.plugin.js` enables HTTP for WebKit page loads and Android release builds. Native certificate validation stays enabled. Android disables file/content access and mixed content.
 

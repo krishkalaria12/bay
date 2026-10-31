@@ -9,3 +9,7 @@ version = '0.1.0'
 android {
   namespace 'in.krishkalaria.bay.engine'
 }
+
+dependencies {
+  implementation 'androidx.webkit:webkit:1.15.0'
+}
