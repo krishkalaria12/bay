@@ -42,7 +42,7 @@ namespace {
 
 // waits-for: the extension ready in the profile: its rulesets in force (RulesMonitorService's initial
 //            load, g_bay_dnr_rulesets_in_force), or the host's ReleaseNavigationHoldReady (an
-//            extension without rulesets, uBlock Origin's webRequest); or the host's ReleaseNavigationHold
+//            extension without rulesets, an MV2 webRequest blocker); or the host's ReleaseNavigationHold
 // on-timeout: logs an error and lets the profile's pages load without the extension's rules
 constexpr base::TimeDelta kDeadline = base::Seconds(10);
 

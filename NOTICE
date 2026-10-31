@@ -7,7 +7,9 @@ Bay builds on and ships third-party software under its own licenses, including:
 - Chromium (BSD-3-Clause and others; see chrome://credits in the app)
 - Chromium Embedded Framework (BSD-3-Clause)
 - ungoogled-chromium (BSD-3-Clause)
-- uBlock Origin (GPL-3.0), bundled as a separate extension, with the changes packages/nncore/scripts/ubo.sh makes
+- adblock-rust (MPL-2.0), Brave's content blocking engine, in Bay's content blocker (packages/adblock)
+- Filter lists the app bundles and downloads, each under its own license: uBlock Origin's uAssets (GPL-3.0),
+  EasyList and EasyPrivacy (GPL-3.0 / CC BY-SA 3.0), Peter Lowe's list and the Online Malicious URL Blocklist
 - Sparkle (MIT)
 - React Native and React Native macOS (MIT)
 - Zen Browser (MPL-2.0): Boosts' element selector builder (apps/browser/src/components/boosts/pickerScript.ts ›

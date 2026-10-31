@@ -129,6 +129,14 @@ NSString *Text(NSDictionary *d, NSString *key, NSUInteger max) {
   return Clip(Field<NSString>(d, key), max);
 }
 
+// A page's list of names (class names, ids): strings only, each clipped, at most `max` of them.
+NSArray<NSString *> *Names(NSDictionary *d, NSString *key, NSUInteger max) {
+  NSMutableArray *names = [NSMutableArray array];
+  for (id name in Field<NSArray>(d, key))
+    if ([name isKindOfClass:NSString.class] && [name length] && names.count < max) [names addObject:Clip(name, 256)];
+  return names;
+}
+
 bool Flag(NSDictionary *d, NSString *key) {
   return Field<NSNumber>(d, key).boolValue;
 }
@@ -1272,10 +1280,18 @@ const char kPageReportsKey = 0;
     // The frame's settings, as CEF's NNClient answers hello: autoplay blocked for the top page's site.
     NSString *frameURL = Text(dict, @"url", 8192) ?: tab.url;
     NSString *origin = OriginOf(main ? frameURL : tab.url);
+    // The content blocker's cosmetic filters for the new document: its site's sheet now, its scriptlets in its main
+    // world, and generic hiding for the classes and ids the page script then reports ("cosmetic").
+    NSDictionary *cosmetic = nncore_host::ContentBlockerCosmetics(frameURL ?: @"", (main ? frameURL : tab.url) ?: @"");
+    if (cosmetic[@"css"] && frameId.length && [tab respondsToSelector:@selector(insertUserStyle:frame:origin:)])
+      [tab insertUserStyle:cosmetic[@"css"] frame:frameId origin:frameURL];
+    if (cosmetic[@"script"] && frameId.length) [tab executeJavaScript:cosmetic[@"script"] frame:frameId];
+    const BOOL genericHiding = [cosmetic[@"generic"] boolValue] && [tab respondsToSelector:@selector(insertUserStyle:frame:origin:)];
     __weak NNCoreWebView *weakSelf = self;
     void (^answer)(BOOL) = ^(BOOL blockAutoplay) {
       NSMutableDictionary *config = [NSMutableDictionary dictionary];
       if (blockAutoplay) config[@"blockAutoplay"] = @YES;
+      if (genericHiding) config[@"cosmetic"] = @YES;
       // The app's screen-share picker, when the engine can grant the picked source to getUserMedia (CEF's
       // site::AllowDesktopCapture).
       if (gDisplayMediaPicker && [NNCoreEngine respondsToSelector:@selector(allowDesktopCapture:tab:frame:origin:)])
@@ -1289,6 +1305,14 @@ const char kPageReportsKey = 0;
       }];
     else
       answer(NO);
+  } else if ([kind isEqualToString:@"cosmetic"] && dict && frameId.length) {
+    // Classes and ids new in a frame's document (page_script.js › Content blocker): the generic rules that hide them.
+    NSString *frameURL = Text(dict, @"url", 8192);
+    if (frameURL.length && [tab respondsToSelector:@selector(insertUserStyle:frame:origin:)]) {
+      NSString *css = nncore_host::ContentBlockerGenericStyle(frameURL, (main ? frameURL : tab.url) ?: @"",
+                                                              Names(dict, @"classes", 4000), Names(dict, @"ids", 4000));
+      if (css) [tab insertUserStyle:css frame:frameId origin:frameURL];
+    }
   } else if ([kind isEqualToString:@"selection"] && main) {
     [self emit:@"pageMessage" payload:@{@"kind" : @"selection", @"data" : SelectionState(dict) ?: NSNull.null}];
   } else if ([kind isEqualToString:@"devMode"] && main && dict) {

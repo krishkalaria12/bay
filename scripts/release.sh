@@ -115,14 +115,14 @@ fi
 launch_check() {
   echo "==> Launch check"
   # Running the app must leave its bundle as signed: anything written into it breaks the signature (Chrome indexing
-  # uBlock's rulesets next to the extension did, in 0.1.0). Launch it hidden with a throwaway data dir, wait for uBlock
-  # Origin to be ready and block an ad request, quit, verify again.
+  # an extension's rulesets next to it did, in 0.1.0). Launch it hidden with a throwaway data dir, wait for the content
+  # blocker to block an ad request, quit, verify again.
   check_data="$(mktemp -d "${TMPDIR:-/tmp}/nn-release.XXXXXX")"
   before="$(pgrep -f "^$app/Contents/MacOS/Bay" | sort || true)"
   check_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
   open -g -n --env BAY_BACKGROUND=1 --env BAY_DATA_DIR="$check_data" --env BAY_REMOTE_DEBUGGING_PORT="$check_port" "$app"
-  ubo_ok=0
-  node "$root/scripts/lib/ubo-ready.mjs" "$check_port" 90 && ubo_ok=1
+  blocker_ok=0
+  node "$root/scripts/lib/blocker-ready.mjs" "$check_port" 90 && blocker_ok=1
   sleep 5
   # The instance this launched: the one started with our data dir (a copy of the same build the owner is running
   # must never be the one quit or killed here).
@@ -136,7 +136,7 @@ launch_check() {
   for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
   kill -KILL "$pid" 2>/dev/null || true
   codesign --verify --deep --strict "$app" || die "running the app changed its bundle"
-  [ "$ubo_ok" = 1 ] || die "uBlock Origin wasn't ready and blocking in the exported app (90 s)"
+  [ "$blocker_ok" = 1 ] || die "the content blocker wasn't blocking in the exported app (90 s)"
   rm -rf "$check_data"
 }
 if [ "$phase" = check ]; then
@@ -280,9 +280,8 @@ if [ "$phase" != sign ]; then
   build_cli
 
   echo "==> Content blocker"
-  # The pinned uBlock Origin, which embed.sh copies into the app.
-  "$nncore/scripts/ubo.sh"
-  [ -f "$nncore/vendor/ubo/ext/manifest.json" ] || die "uBlock Origin isn't installed ($nncore/scripts/ubo.sh)"
+  # The default filter lists, which embed.sh copies into the app (the blocker itself builds with the BayNNCore pod).
+  "$nncore/scripts/filter-lists.sh" --strict
 
   # Without the team's development profile (CI, or an export by hand), the archive is signed ad hoc and the export
   # signs it for real.
@@ -427,7 +426,8 @@ done
 [ -d "$app/Contents/Frameworks/Sparkle.framework" ] || die "no Sparkle.framework"
 [ -d "$app/Contents/PlugIns/BayDockTile.plugin" ] || die "no dock tile plug-in"
 [ -f "$app/Contents/embedded.provisionprofile" ] || die "no Developer ID provisioning profile (keychain groups need it)"
-[ -f "$app/Contents/Resources/Extensions/ublock/manifest.json" ] || die "no uBlock Origin in the app"
+[ -f "$app/Contents/Resources/FilterLists/easylist.txt" ] || die "no bundled filter lists in the app"
+[ ! -e "$app/Contents/Resources/Extensions/ublock" ] || die "the app still bundles uBlock Origin"
 designated="$(codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => //p')"
 [[ "$designated" == *"identifier \"$bundle_id\""* && "$designated" == *"subject.OU] = $team"* ]] \
   || die "designated requirement: $designated"

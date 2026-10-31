@@ -181,10 +181,8 @@ jobs:
             ~/Library/Caches/CocoaPods
           key: pods-${{ runner.os }}-${{ hashFiles('apps/browser/macos/Podfile', 'apps/browser/macos/Podfile.lock', 'pnpm-lock.yaml', 'patches/**') }}
           restore-keys: pods-${{ runner.os }}-
-      - uses: actions/cache@v6
-        with:
-          path: packages/nncore/vendor/ubo
-          key: ubo-${{ hashFiles('packages/nncore/scripts/ubo.sh') }}
+      - name: Rust (the content blocker, packages/adblock)
+        run: rustup target add aarch64-apple-darwin
       - name: Pods
         run: pnpm pods
       - uses: oven-sh/setup-bun@v2

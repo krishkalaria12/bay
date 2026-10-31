@@ -88,6 +88,11 @@ class PageChannel : public content::WebContentsObserver,
                  const std::string& json);
   void Execute(const std::string& code, bool user_gesture = false);
   void ExecuteInFrame(const std::string& frame_id, const std::string& code);
+  // A user-origin sheet into a frame's document while it is from `origin`
+  // (mojom::NNPage::InsertUserStyle).
+  void InsertUserStyle(const std::string& frame_id,
+                       const std::string& css,
+                       const std::string& origin);
   void Evaluate(const std::string& code,
                 bool user_gesture,
                 base::OnceCallback<void(const std::optional<std::string>&)> callback);

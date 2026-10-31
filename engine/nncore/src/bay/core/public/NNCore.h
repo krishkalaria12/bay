@@ -19,6 +19,19 @@ NS_ASSUME_NONNULL_BEGIN
 @class NNCoreTab;
 @class NNCoreWindow;
 
+// The host's content blocker, asked about every web request a page makes before it starts:
+// its documents' and workers' subresources (on a background sequence) and its subframe
+// navigations (on the main thread), never a main-frame navigation. It must be thread-safe and
+// quick. url: the request; source: the URL or origin of the document or worker asking; top:
+// the tab's page (URL or origin); type: an adblock resource type ("script", "image",
+// "stylesheet", "font", "media", "subdocument", "xmlhttprequest", "ping", "object", "other").
+// true blocks it: it fails with ERR_BLOCKED_BY_CLIENT (tab:didBlockRequests:lastURL: counts
+// it) and a blocked frame collapses.
+typedef bool (*NNCoreRequestFilter)(const char* url,
+                                    const char* source,
+                                    const char* top,
+                                    const char* type);
+
 // --- Engine -----------------------------------------------------------------------------
 
 @protocol NNCoreEngineDelegate <NSObject>
@@ -141,6 +154,9 @@ NNCORE_EXPORT
 // isolated world once the DOM is in, on documents loaded from now on, and in private
 // profiles only with scriptInPrivate. invert: Chrome's forced dark mode on the site.
 + (void)setBoosts:(NSArray<NSDictionary<NSString*, id>*>*)boosts;
+// The content blocker (NNCoreRequestFilter); NULL (the default) blocks nothing. Requests
+// starting from now on see the new one.
++ (void)setRequestFilter:(nullable NNCoreRequestFilter)filter;
 // Device choosers (engine:deviceChooser:tab:). index: an option, or -1 for a scanning
 // prompt's OK.
 + (void)selectDevice:(int)chooserId index:(int)index;
@@ -678,6 +694,10 @@ NNCORE_EXPORT
 @property(readonly, nullable) NSDictionary<NSString*, NSNumber*>* popupFeatures;
 // The same in one frame (a frameId from tab:didReceivePageMessage:json:frame:main:).
 - (void)callFrame:(NSString*)frameId kind:(NSString*)kind json:(NSString*)json;
+// A user-origin style sheet (its !important rules beat the page's) into one frame's document
+// (a frameId from tab:didReceivePageMessage:json:frame:main:), if it still shows a document
+// from `origin`'s origin: the content blocker's cosmetic filters. It goes with the document.
+- (void)insertUserStyle:(NSString*)css frame:(NSString*)frameId origin:(NSString*)origin;
 @end
 
 NS_ASSUME_NONNULL_END
