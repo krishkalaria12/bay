@@ -93,7 +93,8 @@ const NativeWebView = forwardRef<NativeHandle, NativeProps>(function NativeWebVi
     pending.current = pending.current
       .then(() => invokeNative("BayWebView", "update", [tag, JSON.parse(serialized)]))
       .catch((cause) => {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        // An update queued before a remount reaches the old, unmounted tag; its failure isn't the new view's.
+        if (activeTag.current === tag) setError(cause instanceof Error ? cause.message : String(cause));
       });
   }, [serialized]);
 
