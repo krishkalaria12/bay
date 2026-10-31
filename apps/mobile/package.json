@@ -14,13 +14,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bay/core": "link:../../packages/core",
     "@bay/engine": "workspace:*",
     "@expo/metro-runtime": "~58.0.14",
     "@expo/ui": "~58.0.25",
     "@gorhom/bottom-sheet": "^5.2.14",
     "expo": "~58.0.16",
+    "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.12",
     "expo-dev-client": "~58.0.17",
+    "expo-file-system": "~58.0.13",
     "expo-linking": "~58.0.13",
     "expo-router": "~58.0.24",
     "expo-splash-screen": "~58.0.10",
@@ -38,7 +41,8 @@
     "tailwind-merge": "^3.7.0",
     "tailwind-variants": "^3.3.1",
     "tailwindcss": "^4.3.3",
-    "uniwind": "^1.13.0"
+    "uniwind": "^1.13.0",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@types/react": "~19.3.0",

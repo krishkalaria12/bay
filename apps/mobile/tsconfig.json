@@ -6,7 +6,8 @@
       "@/*": ["./src/*"],
       "@/assets/*": ["./assets/*"]
     },
-    "moduleSuffixes": [".ios", ".android", ""]
+    "moduleSuffixes": [".ios", ".android", ""],
+    "allowImportingTsExtensions": true
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "uniwind-env.d.ts"],
   "exclude": ["node_modules", "tests"]

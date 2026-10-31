@@ -3,6 +3,8 @@ import { buttonStyle, controlSize, disabled, labelStyle } from "@expo/ui/swift-u
 import type { ComponentProps, JSX } from "react";
 import { View } from "react-native";
 
+import { useStableCallback } from "./useStableCallback";
+
 export function GlassIconButton(props: {
   id: string;
   label: string;
@@ -10,6 +12,7 @@ export function GlassIconButton(props: {
   isDisabled?: boolean;
   onPress?: () => void;
 }): JSX.Element {
+  const onPress = useStableCallback(props.onPress);
   return (
     <View testID={props.id} collapsable={false}>
       <Host matchContents>
@@ -17,7 +20,7 @@ export function GlassIconButton(props: {
           label={props.label}
           systemImage={props.systemImage}
           modifiers={[buttonStyle("glass"), labelStyle("iconOnly"), controlSize("large"), disabled(props.isDisabled ?? false)]}
-          onPress={props.onPress}
+          onPress={onPress}
         />
       </Host>
     </View>
