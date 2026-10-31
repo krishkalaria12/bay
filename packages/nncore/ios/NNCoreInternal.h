@@ -97,18 +97,18 @@ extern NSNotificationName const NNCoreWindowSeenDidChange;
 + (void)setPinned:(BOOL)pinned tab:(NNCoreTab *)tab;
 @end
 
-// Asked of the engine (stage 2, A0); used with respondsToSelector:.
-@interface NNCoreProfile (Pending)
-- (nullable NSString *)loadComponentExtension:(NSString *)path;
-- (void)releaseNavigationHoldReady;
-@end
-
 namespace nncore_host {
 NSArray<NNCoreProfile *> *LoadedProfiles();
-// Loads the built-in content blocker into a profile Chrome just loaded (NNCoreContentBlocker.mm).
-void LoadContentBlocker(NSString *profile);
-// Starts making the blocker's writable copy (at launch, off the main thread).
+// The built-in content blocker (NNCoreContentBlocker.mm): its settings, the engine's request filter, and its engine
+// loading in the background. At launch, before the engine starts.
 void PrepareContentBlocker();
+// A frame's cosmetic filters, for its document at `frameURL` in a tab showing `pageURL`: {css (a user sheet, if any),
+// script (scriptlets for its main world, if any), generic (whether to look for its classes and ids)}; nil when the
+// blocker is off, paused on the page, or not for the document.
+NSDictionary *_Nullable ContentBlockerCosmetics(NSString *frameURL, NSString *pageURL);
+// Generic hiding for classes and ids a frame's page script found: a user sheet, or nil when nothing hides.
+NSString *_Nullable ContentBlockerGenericStyle(NSString *frameURL, NSString *pageURL, NSArray<NSString *> *classes,
+                                               NSArray<NSString *> *ids);
 // The engine has stage 1's tab model (adoptTab:, tabWillClose:…); older engines report closes only as removals.
 bool EngineHasTabModel();
 }

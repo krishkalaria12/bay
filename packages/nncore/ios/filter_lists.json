@@ -1,0 +1,670 @@
+{
+  "lists": [
+    {
+      "id": "ublock-filters",
+      "title": "uBlock filters – Ads",
+      "category": "ads",
+      "defaultOn": true,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/filters.min.txt",
+        "https://ublockorigin.pages.dev/filters/filters.min.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/filters.min.txt",
+        "https://ublockorigin.github.io/uAssets/filters/filters.txt"
+      ]
+    },
+    {
+      "id": "ublock-badware",
+      "title": "uBlock filters – Badware risks",
+      "category": "security",
+      "defaultOn": true,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/badware.min.txt",
+        "https://ublockorigin.pages.dev/filters/badware.min.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/badware.min.txt",
+        "https://ublockorigin.github.io/uAssets/filters/badware.txt"
+      ]
+    },
+    {
+      "id": "ublock-privacy",
+      "title": "uBlock filters – Privacy",
+      "category": "trackers",
+      "defaultOn": true,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/privacy.min.txt",
+        "https://ublockorigin.pages.dev/filters/privacy.min.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/privacy.min.txt",
+        "https://ublockorigin.github.io/uAssets/filters/privacy.txt"
+      ]
+    },
+    {
+      "id": "ublock-unbreak",
+      "title": "uBlock filters – Unbreak",
+      "category": "ads",
+      "defaultOn": true,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/unbreak.min.txt",
+        "https://ublockorigin.pages.dev/filters/unbreak.min.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/unbreak.min.txt",
+        "https://ublockorigin.github.io/uAssets/filters/unbreak.txt"
+      ]
+    },
+    {
+      "id": "ublock-quick-fixes",
+      "title": "uBlock filters – Quick fixes",
+      "category": "ads",
+      "defaultOn": true,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/quick-fixes.min.txt",
+        "https://ublockorigin.pages.dev/filters/quick-fixes.min.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/quick-fixes.min.txt",
+        "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt"
+      ]
+    },
+    {
+      "id": "ublock-experimental",
+      "title": "uBlock filters – Experimental",
+      "category": "ads",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/experimental.min.txt",
+        "https://ublockorigin.pages.dev/filters/experimental.min.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/experimental.min.txt",
+        "https://ublockorigin.github.io/uAssets/filters/experimental.txt"
+      ]
+    },
+    {
+      "id": "adguard-generic",
+      "title": "AdGuard – Ads",
+      "category": "ads",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/2_without_easylist.txt"]
+    },
+    {
+      "id": "adguard-mobile",
+      "title": "AdGuard – Mobile Ads",
+      "category": "ads",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/11.txt"]
+    },
+    {
+      "id": "easylist",
+      "title": "EasyList",
+      "category": "ads",
+      "defaultOn": true,
+      "urls": [
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist.txt"
+      ]
+    },
+    {
+      "id": "adguard-spyware-url",
+      "title": "AdGuard/uBO – URL Tracking Protection",
+      "category": "trackers",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/privacy-removeparam.txt",
+        "https://ublockorigin.pages.dev/filters/privacy-removeparam.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/privacy-removeparam.txt",
+        "https://ublockorigin.github.io/uAssets/filters/privacy-removeparam.txt"
+      ]
+    },
+    {
+      "id": "block-lan",
+      "title": "Block Outsider Intrusion into LAN",
+      "category": "trackers",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/lan-block.txt",
+        "https://ublockorigin.pages.dev/filters/lan-block.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/lan-block.txt",
+        "https://ublockorigin.github.io/uAssets/filters/lan-block.txt"
+      ]
+    },
+    {
+      "id": "easyprivacy",
+      "title": "EasyPrivacy",
+      "category": "trackers",
+      "defaultOn": true,
+      "urls": [
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easyprivacy.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easyprivacy.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easyprivacy.txt"
+      ]
+    },
+    {
+      "id": "urlhaus-1",
+      "title": "Online Malicious URL Blocklist",
+      "category": "security",
+      "defaultOn": true,
+      "urls": [
+        "https://curbengh.github.io/malware-filter/urlhaus-filter-ag-online.txt",
+        "https://malware-filter.gitlab.io/urlhaus-filter/urlhaus-filter-ag-online.txt",
+        "https://malware-filter.pages.dev/urlhaus-filter-ag-online.txt"
+      ]
+    },
+    {
+      "id": "curben-phishing",
+      "title": "Phishing URL Blocklist",
+      "category": "security",
+      "defaultOn": false,
+      "urls": [
+        "https://curbengh.github.io/phishing-filter/phishing-filter.txt",
+        "https://malware-filter.gitlab.io/phishing-filter/phishing-filter.txt",
+        "https://phishing-filter.pages.dev/phishing-filter.txt"
+      ]
+    },
+    {
+      "id": "adguard-cookies",
+      "title": "AdGuard – Cookie Notices",
+      "category": "cookies",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/18.txt"]
+    },
+    {
+      "id": "ublock-cookies-adguard",
+      "title": "uBlock filters – Cookie Notices",
+      "category": "cookies",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/annoyances-cookies.txt",
+        "https://ublockorigin.pages.dev/filters/annoyances-cookies.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/annoyances-cookies.txt",
+        "https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt"
+      ]
+    },
+    {
+      "id": "fanboy-cookiemonster",
+      "title": "EasyList – Cookie Notices",
+      "category": "cookies",
+      "defaultOn": true,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/thirdparties/easylist-cookies.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist-cookies.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist-cookies.txt",
+        "https://secure.fanboy.co.nz/fanboy-cookiemonster_ubo.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist-cookies.txt"
+      ]
+    },
+    {
+      "id": "ublock-cookies-easylist",
+      "title": "uBlock filters – Cookie Notices",
+      "category": "cookies",
+      "defaultOn": true,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/annoyances-cookies.txt",
+        "https://ublockorigin.pages.dev/filters/annoyances-cookies.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/annoyances-cookies.txt",
+        "https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt"
+      ]
+    },
+    {
+      "id": "adguard-social",
+      "title": "AdGuard – Social Widgets",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/4.txt"]
+    },
+    {
+      "id": "fanboy-social",
+      "title": "EasyList – Social Widgets",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/thirdparties/easylist-social.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist-social.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist-social.txt",
+        "https://secure.fanboy.co.nz/fanboy-social_ubo.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist-social.txt"
+      ]
+    },
+    {
+      "id": "fanboy-thirdparty_social",
+      "title": "Fanboy – Anti-Facebook",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": ["https://secure.fanboy.co.nz/fanboy-antifacebook.txt"]
+    },
+    {
+      "id": "adguard-popup-overlays",
+      "title": "AdGuard – Popup Overlays",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/19.txt"]
+    },
+    {
+      "id": "adguard-mobile-app-banners",
+      "title": "AdGuard – Mobile App Banners",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/20.txt"]
+    },
+    {
+      "id": "adguard-other-annoyances",
+      "title": "AdGuard – Other Annoyances",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/21.txt"]
+    },
+    {
+      "id": "adguard-widgets",
+      "title": "AdGuard – Widgets",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/22.txt"]
+    },
+    {
+      "id": "easylist-annoyances",
+      "title": "EasyList – Other Annoyances",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/thirdparties/easylist-annoyances.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist-annoyances.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist-annoyances.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist-annoyances.txt"
+      ]
+    },
+    {
+      "id": "easylist-chat",
+      "title": "EasyList – Chat Widgets",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/thirdparties/easylist-chat.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist-chat.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist-chat.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist-chat.txt"
+      ]
+    },
+    {
+      "id": "fanboy-ai-suggestions",
+      "title": "EasyList – AI Widgets",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/thirdparties/easylist-ai.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist-ai.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist-ai.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist-ai.txt"
+      ]
+    },
+    {
+      "id": "easylist-newsletters",
+      "title": "EasyList – Newsletter Notices",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/thirdparties/easylist-newsletters.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist-newsletters.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist-newsletters.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist-newsletters.txt"
+      ]
+    },
+    {
+      "id": "easylist-notifications",
+      "title": "EasyList – Notifications",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/thirdparties/easylist-notifications.txt",
+        "https://ublockorigin.pages.dev/thirdparties/easylist-notifications.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/thirdparties/easylist-notifications.txt",
+        "https://ublockorigin.github.io/uAssets/thirdparties/easylist-notifications.txt"
+      ]
+    },
+    {
+      "id": "ublock-annoyances",
+      "title": "uBlock filters – Annoyances",
+      "category": "annoyances",
+      "defaultOn": false,
+      "urls": [
+        "https://ublockorigin.github.io/uAssetsCDN/filters/annoyances.min.txt",
+        "https://ublockorigin.pages.dev/filters/annoyances.min.txt",
+        "https://cdn.jsdelivr.net/gh/uBlockOrigin/uAssetsCDN@main/filters/annoyances.min.txt",
+        "https://ublockorigin.github.io/uAssets/filters/annoyances.txt"
+      ]
+    },
+    {
+      "id": "dpollock-0",
+      "title": "Dan Pollock’s hosts file",
+      "category": "ads",
+      "defaultOn": false,
+      "hosts": true,
+      "urls": ["https://someonewhocares.org/hosts/hosts"]
+    },
+    {
+      "id": "plowe-0",
+      "title": "Peter Lowe’s Ad and tracking server list",
+      "category": "ads",
+      "defaultOn": true,
+      "hosts": true,
+      "urls": ["https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=1&mimetype=plaintext"]
+    },
+    {
+      "id": "ALB-0",
+      "title": "🇦🇱al 🇽🇰xk: Adblock List for Albania",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "sq",
+      "urls": ["https://raw.githubusercontent.com/AnXh3L0/blocklist/master/albanian-easylist-addition/Albania.txt"]
+    },
+    {
+      "id": "ara-0",
+      "title": "🇪🇬eg 🇸🇦sa 🇲🇦ma 🇩🇿dz: Liste AR",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "ar kab",
+      "urls": ["https://easylist-downloads.adblockplus.org/Liste_AR.txt"]
+    },
+    {
+      "id": "BGR-0",
+      "title": "🇧🇬bg: Bulgarian Adblock list",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "bg mk",
+      "urls": ["https://stanev.org/abp/adblock_bg.txt"]
+    },
+    {
+      "id": "CHN-0",
+      "title": "🇨🇳cn 🇹🇼tw: AdGuard Chinese (中文)",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "ug zh",
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/224.txt"]
+    },
+    {
+      "id": "CZE-0",
+      "title": "🇨🇿cz 🇸🇰sk: EasyList Czech and Slovak",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "cs sk",
+      "urls": ["https://raw.githubusercontent.com/tomasko126/easylistczechandslovak/master/filters.txt"]
+    },
+    {
+      "id": "DEU-0",
+      "title": "🇩🇪de 🇨🇭ch 🇦🇹at: EasyList Germany",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "de dsb hsb lb rm",
+      "urls": ["https://easylist.to/easylistgermany/easylistgermany.txt", "https://easylist-downloads.adblockplus.org/easylistgermany.txt"]
+    },
+    {
+      "id": "EST-0",
+      "title": "🇪🇪ee: Eesti saitidele kohandatud filter",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "et",
+      "urls": ["https://ubo-et.lepik.io/list.txt"]
+    },
+    {
+      "id": "FIN-0",
+      "title": "🇫🇮fi: Adblock List for Finland",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "fi",
+      "urls": ["https://raw.githubusercontent.com/finnish-easylist-addition/finnish-easylist-addition/gh-pages/Finland_adb.txt"]
+    },
+    {
+      "id": "FRA-0",
+      "title": "🇫🇷fr 🇧🇪be 🇨🇦ca: AdGuard Français",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "ar br ff fr kab lb oc son",
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/16.txt"]
+    },
+    {
+      "id": "GRC-0",
+      "title": "🇬🇷gr 🇨🇾cy: Greek AdBlock Filter",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "el",
+      "urls": ["https://www.void.gr/kargig/void-gr-filters.txt"]
+    },
+    {
+      "id": "HRV-0",
+      "title": "🇭🇷hr 🇷🇸rs: Dandelion Sprout's Serbo-Croatian filters",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "bs hr sr",
+      "urls": [
+        "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/SerboCroatianList.txt",
+        "https://cdn.jsdelivr.net/gh/DandelionSprout/adfilt@master/SerboCroatianList.txt"
+      ]
+    },
+    {
+      "id": "HUN-0",
+      "title": "🇭🇺hu: hufilter",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "hu",
+      "urls": ["https://cdn.jsdelivr.net/gh/hufilter/hufilter@gh-pages/hufilter-ublock.txt"]
+    },
+    {
+      "id": "IDN-0",
+      "title": "🇮🇩id 🇲🇾my: ABPindo",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "id ms",
+      "urls": ["https://raw.githubusercontent.com/ABPindo/indonesianadblockrules/master/subscriptions/abpindo.txt"]
+    },
+    {
+      "id": "IND-0",
+      "title": "🇮🇳in 🇱🇰lk 🇳🇵np: IndianList",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "as bn gu hi kn ml mr ne pa sat si ta te",
+      "urls": ["https://easylist-downloads.adblockplus.org/indianlist.txt"]
+    },
+    {
+      "id": "IRN-0",
+      "title": "🇮🇷ir: PersianBlocker",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "fa ps tg",
+      "urls": [
+        "https://cdn.jsdelivr.net/gh/MasterKia/PersianBlocker@main/PersianBlocker.txt",
+        "https://cdn.statically.io/gh/MasterKia/PersianBlocker/main/PersianBlocker.txt",
+        "https://raw.githubusercontent.com/MasterKia/PersianBlocker/main/PersianBlocker.txt"
+      ]
+    },
+    {
+      "id": "ISL-0",
+      "title": "🇮🇸is: Icelandic ABP List",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "is",
+      "urls": ["https://raw.githubusercontent.com/brave/adblock-lists/master/custom/is.txt"]
+    },
+    {
+      "id": "ISR-0",
+      "title": "🇮🇱il: EasyList Hebrew",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "he",
+      "urls": ["https://raw.githubusercontent.com/easylist/EasyListHebrew/master/EasyListHebrew.txt"]
+    },
+    {
+      "id": "ITA-0",
+      "title": "🇮🇹it: EasyList Italy",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "fur it lij sc",
+      "urls": ["https://easylist-downloads.adblockplus.org/easylistitaly.txt"]
+    },
+    {
+      "id": "JPN-1",
+      "title": "🇯🇵jp: AdGuard Japanese",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "ja",
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/7.txt"]
+    },
+    {
+      "id": "KOR-1",
+      "title": "🇰🇷kr: 한국어 (Korean)",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "ko",
+      "urls": ["https://cdn.jsdelivr.net/npm/@filteringdev/filterslists-ko@latest/dist/filterslist-uBlockOrigin-classic.txt"]
+    },
+    {
+      "id": "LTU-0",
+      "title": "🇱🇹lt: EasyList Lithuania",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "lt",
+      "urls": [
+        "https://cdn.jsdelivr.net/gh/EasyList-Lithuania/easylist_lithuania@master/easylistlithuania.txt",
+        "https://cdn.statically.io/gh/EasyList-Lithuania/easylist_lithuania/master/easylistlithuania.txt",
+        "https://raw.githubusercontent.com/EasyList-Lithuania/easylist_lithuania/master/easylistlithuania.txt"
+      ]
+    },
+    {
+      "id": "LVA-0",
+      "title": "🇱🇻lv: Latvian List",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "lv",
+      "urls": ["https://raw.githubusercontent.com/Latvian-List/adblock-latvian/master/lists/latvian-list.txt"]
+    },
+    {
+      "id": "MKD-0",
+      "title": "🇲🇰mk: Macedonian adBlock Filters",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "mk",
+      "urls": ["https://raw.githubusercontent.com/DeepSpaceHarbor/Macedonian-adBlock-Filters/master/Filters"]
+    },
+    {
+      "id": "NLD-0",
+      "title": "🇳🇱nl 🇧🇪be: AdGuard Dutch",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "af fy nl",
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/8.txt"]
+    },
+    {
+      "id": "NOR-0",
+      "title": "🇳🇴no 🇩🇰dk 🇮🇸is: Dandelion Sprouts nordiske filtre",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "nb nn no da is",
+      "urls": [
+        "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/NorwegianList.txt",
+        "https://cdn.jsdelivr.net/gh/DandelionSprout/adfilt@master/NorwegianList.txt"
+      ]
+    },
+    {
+      "id": "POL-0",
+      "title": "🇵🇱pl: Oficjalne Polskie Filtry do uBlocka Origin",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "szl pl _",
+      "urls": ["https://raw.githubusercontent.com/MajkiIT/polish-ads-filter/master/polish-adblock-filters/adblock.txt"]
+    },
+    {
+      "id": "POL-3",
+      "title": "🇵🇱pl: CERT.PL's Warning List",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "szl pl",
+      "urls": ["https://hole.cert.pl/domains/v2/domains_ublock.txt"]
+    },
+    {
+      "id": "ROU-1",
+      "title": "🇷🇴ro 🇲🇩md: Romanian Ad (ROad) Block List Light",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "ro",
+      "urls": ["https://raw.githubusercontent.com/tcptomato/ROad-Block/master/road-block-filters-light.txt"]
+    },
+    {
+      "id": "RUS-0",
+      "title": "🇷🇺ru 🇺🇦ua 🇺🇿uz 🇰🇿kz: RU AdList",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "be kk tt ru uz",
+      "urls": [
+        "https://cdn.jsdelivr.net/gh/dimisa-RUAdList/RUAdListCDN@main/lists/ruadlist.ubo.min.txt",
+        "https://raw.githubusercontent.com/dimisa-RUAdList/RUAdListCDN/main/lists/ruadlist.ubo.min.txt",
+        "https://raw.githubusercontent.com/easylist/ruadlist/master/RuAdList-uBO.txt"
+      ]
+    },
+    {
+      "id": "RUS-1",
+      "title": "🇷🇺ru 🇺🇦ua 🇺🇿uz 🇰🇿kz: RU AdList: Counters",
+      "category": "regional",
+      "defaultOn": false,
+      "urls": ["https://cdn.jsdelivr.net/gh/easylist/ruadlist@master/cntblock.txt", "https://raw.githubusercontent.com/easylist/ruadlist/master/cntblock.txt"]
+    },
+    {
+      "id": "spa-0",
+      "title": "🇪🇸es 🇦🇷ar 🇲🇽mx 🇨🇴co: EasyList Spanish",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "an ast ca cak es eu gl gn trs quz",
+      "urls": ["https://easylist-downloads.adblockplus.org/easylistspanish.txt"]
+    },
+    {
+      "id": "spa-1",
+      "title": "🇪🇸es 🇦🇷ar 🇧🇷br 🇵🇹pt: AdGuard Spanish/Portuguese",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "an ast ca cak es eu gl gn trs pt quz",
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/9.txt"]
+    },
+    {
+      "id": "SVN-0",
+      "title": "🇸🇮si: Slovenian List",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "sl",
+      "urls": ["https://raw.githubusercontent.com/betterwebleon/slovenian-list/master/filters.txt"]
+    },
+    {
+      "id": "SWE-1",
+      "title": "🇸🇪se: Frellwit's Swedish Filter",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "sv",
+      "urls": [
+        "https://raw.githubusercontent.com/lassekongo83/Frellwits-filter-lists/swefilter/swefilter.min.txt",
+        "https://cdn.jsdelivr.net/gh/lassekongo83/Frellwits-filter-lists@swefilter/swefilter.min.txt",
+        "https://raw.githubusercontent.com/lassekongo83/Frellwits-filter-lists/master/Frellwits-Swedish-Filter.txt"
+      ]
+    },
+    {
+      "id": "THA-0",
+      "title": "🇹🇭th: EasyList Thailand",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "th",
+      "urls": ["https://raw.githubusercontent.com/easylist-thailand/easylist-thailand/master/subscription/easylist-thailand.txt"]
+    },
+    {
+      "id": "TUR-0",
+      "title": "🇹🇷tr: AdGuard Turkish",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "tr",
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/13.txt"]
+    },
+    {
+      "id": "UKR-0",
+      "title": "🇺🇦ua: AdGuard Ukrainian",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "uk",
+      "urls": ["https://filters.adtidy.org/extension/ublock/filters/23.txt"]
+    },
+    {
+      "id": "VIE-1",
+      "title": "🇻🇳vn: ABPVN List",
+      "category": "regional",
+      "defaultOn": false,
+      "lang": "vi",
+      "urls": ["https://raw.githubusercontent.com/abpvn/abpvn/master/filter/abpvn_ublock.txt"]
+    }
+  ]
+}

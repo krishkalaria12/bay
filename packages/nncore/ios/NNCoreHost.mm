@@ -126,7 +126,6 @@ NSMutableDictionary<NSString *, NSDictionary *> *gInstallPrompts = [NSMutableDic
   NNCoreEngine *engine = NNCoreEngine.sharedEngine;
   // Personal ("") is always Chrome's Default profile directory, whichever profile Chrome used last.
   if (NNCoreProfile *profile = nncore_host::PersonalIfLoaded(engine)) Profiles()[@""] = profile;
-  nncore_host::LoadContentBlocker(@"");
   [NNCoreWebView installScrollZoom];
   [NNCoreServices watchDownloads:@""];
 
@@ -815,7 +814,6 @@ void WithProfile(NSString *name, void (^completion)(NNCoreProfile *)) {
              }
              NNCoreProfile *profile = [DeletedProfiles() containsObject:name] ? nil : loaded;
              if (profile) Profiles()[name] = profile;
-             if (profile) nncore_host::LoadContentBlocker(name);
              if (profile) [NNCoreServices watchDownloads:name];
              for (void (^waiter)(NNCoreProfile *) in pending) waiter(profile);
            }];
