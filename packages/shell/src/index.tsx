@@ -85,6 +85,7 @@ export type BrowserCommand =
   | "importBrowserData"
   | "showHistory"
   | "clearBrowsingData"
+  | "clearCookiesAndCache"
   | "manageBookmarks"
   | "bookmarkAllTabs"
   | "setBookmarksBar"

@@ -19,6 +19,7 @@ import { openExtensionFromMenu } from "../components/extensions/bridge";
 import { toggleCastPicker } from "../components/media/cast";
 import { openManageExtensions, openPinDialog, openWebStore } from "../components/extensions/state";
 import { requestAutofill } from "../components/site/Autofill";
+import { clearCookiesAndCache } from "../components/site/clearSite";
 import { copyPageUrl, jumpToSelection } from "../components/site/selection";
 import { toggleDeveloperMode } from "../components/developer/devMode";
 import { captureFullPage, capturePortrait, startCapture } from "../components/capture/state";
@@ -291,6 +292,8 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
     case "clearBrowsingData":
       openInternalPage("history", windowId);
       return useClearDataRequest.getState().request(windowId);
+    case "clearCookiesAndCache":
+      return page ? void clearCookiesAndCache(page.id) : undefined;
     case "manageBookmarks":
       return openInternalPage("bookmarks", windowId);
     case "bookmarkAllTabs":
@@ -319,6 +322,7 @@ function dispatchCommand({ command, arg, windowId: requested }: CommandEvent) {
 // What Little Bay runs on its own page; everything else goes to the main window (menuState disables the tab and
 // sidebar commands that make no sense from there).
 const LITTLE_BAY_PAGE_COMMANDS = new Set<string>([
+  "clearCookiesAndCache",
   "print",
   "printWithSystemDialog",
   "savePage",
