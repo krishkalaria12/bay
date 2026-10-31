@@ -1,9 +1,10 @@
 # Bay mobile
 
-Bay for iPhone, built with Expo, Expo Router, HeroUI Native and Expo UI (SwiftUI). See [AGENTS.md](AGENTS.md) for running and driving the app, and [docs/mobile-plan.html](../../docs/mobile-plan.html) for the roadmap.
+Bay for iPhone and Android, built with Expo, Expo Router, HeroUI Native and Expo UI, on our own Chromium engine (planned). See [AGENTS.md](AGENTS.md) for building, running and driving both apps, and [docs/mobile-plan.html](../../docs/mobile-plan.html) for the roadmap.
 
 ```sh
 pnpm install
-pnpm ios     # build and install the dev client on the simulator
-pnpm start   # Metro
+pnpm start    # Metro
+pnpm native   # build and install the dev clients on the iOS simulator and Android emulator
+pnpm e2e      # Argent e2e tests on both
 ```
