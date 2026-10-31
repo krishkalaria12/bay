@@ -57,6 +57,11 @@ impl Blocker {
     /// Builds an engine from separate lists, so each list's rule count can be read back ([`Blocker::list_counts`]).
     /// uBO's `!#if` blocks are resolved as uBO resolves them on Chromium.
     pub fn from_lists(lists: &[FilterList]) -> Self {
+        Self::from_lists_for(lists, crate::Platform::DesktopChromium)
+    }
+
+    /// [`Blocker::from_lists`], resolving uBO's `!#if` blocks for `platform`.
+    pub fn from_lists_for(lists: &[FilterList], platform: crate::Platform) -> Self {
         let mut set = FilterSet::new(false);
         for list in lists {
             let format = if list.hosts {
@@ -65,7 +70,7 @@ impl Blocker {
                 FilterFormat::Standard
             };
             set.add_filter_list(
-                crate::preprocess::preprocess(list.text).into_owned(),
+                crate::preprocess::preprocess_for(list.text, platform).into_owned(),
                 ParseOptions {
                     format,
                     ..ParseOptions::default()
@@ -166,10 +171,45 @@ impl Blocker {
     }
 }
 
+/// Loads the engine cached at `cache` for `version` (a near-instant read), or builds it from the list files and
+/// writes the cache for the next launch. Building parses every rule; loading only maps adblock-rust's binary format.
+pub fn load_cached(
+    files: &[String],
+    cache: &std::path::Path,
+    version: &str,
+    platform: crate::Platform,
+) -> std::io::Result<Blocker> {
+    let header = format!("bay-adblock:{version}\n");
+    if let Ok(bytes) = std::fs::read(cache) {
+        if let Some(blocker) = bytes
+            .strip_prefix(header.as_bytes())
+            .and_then(Blocker::deserialize)
+        {
+            return Ok(blocker);
+        }
+    }
+    let texts = files
+        .iter()
+        .map(std::fs::read_to_string)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let lists: Vec<FilterList> = texts
+        .iter()
+        .map(|text| FilterList { text, hosts: false })
+        .collect();
+    let blocker = Blocker::from_lists_for(&lists, platform);
+    let mut bytes = header.into_bytes();
+    bytes.extend(blocker.serialize());
+    let draft = cache.with_extension("tmp");
+    std::fs::write(&draft, &bytes)?;
+    std::fs::rename(&draft, cache)?;
+    Ok(blocker)
+}
+
 /// WebKit content-blocking rules for the lists, as a JSON array. WebKit compiles them itself.
 pub fn content_blocking_rules(lists: &str) -> String {
     let mut set = FilterSet::new(true);
-    set.add_filter_list(lists.to_owned(), ParseOptions::default());
+    let lists = crate::preprocess_for(lists, crate::Platform::IosWebKit);
+    set.add_filter_list(lists.into_owned(), ParseOptions::default());
     let rules = set
         .into_content_blocking()
         .map(|(rules, _)| rules)
@@ -295,5 +335,36 @@ mod tests {
         assert!(rules.as_array().is_some_and(|rules| !rules.is_empty()));
         assert!(text.contains("ads\\\\.example") || text.contains("ads\\.example"));
         assert!(text.contains("css-display-none"));
+    }
+
+    #[test]
+    fn caches_the_engine_per_version() {
+        let dir = std::env::temp_dir().join(format!("bay-adblock-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let list = dir.join("list.txt");
+        let cache = dir.join("engine.bin");
+        std::fs::write(&list, "||ads.example^\n").unwrap();
+        let files = vec![list.to_string_lossy().into_owned()];
+        let built = load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView).unwrap();
+        assert!(built.should_block(
+            "https://ads.example/a.js",
+            "https://site.example/",
+            "script"
+        ));
+        // A cached engine is used even when the lists have changed, until the version does.
+        std::fs::write(&list, "||other.example^\n").unwrap();
+        let cached = load_cached(&files, &cache, "v1", crate::Platform::AndroidWebView).unwrap();
+        assert!(cached.should_block(
+            "https://ads.example/a.js",
+            "https://site.example/",
+            "script"
+        ));
+        let rebuilt = load_cached(&files, &cache, "v2", crate::Platform::AndroidWebView).unwrap();
+        assert!(!rebuilt.should_block(
+            "https://ads.example/a.js",
+            "https://site.example/",
+            "script"
+        ));
+        std::fs::remove_dir_all(dir).ok();
     }
 }

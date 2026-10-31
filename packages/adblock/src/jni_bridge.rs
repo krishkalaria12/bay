@@ -1,7 +1,7 @@
 //! JNI for the Android engine (`expo.modules.bayengine.BayAdblock`). A blocker handle is a leaked `Box<Blocker>`;
 //! Kotlin frees it with `nativeFree` once no request can still reach it.
 
-use jni::objects::{JClass, JString};
+use jni::objects::{JClass, JObjectArray, JString};
 use jni::sys::{jboolean, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
@@ -35,6 +35,34 @@ pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeNew(
 ) -> jlong {
     let lists = text(&mut env, &lists);
     Box::into_raw(Box::new(Blocker::new(&lists))) as jlong
+}
+
+/// The cached engine for `version`, or one built from the list files (then cached); 0 if the files can't be read.
+#[no_mangle]
+pub extern "system" fn Java_expo_modules_bayengine_BayAdblock_nativeLoad(
+    mut env: JNIEnv,
+    _class: JClass,
+    files: JObjectArray,
+    cache: JString,
+    version: JString,
+) -> jlong {
+    let count = env.get_array_length(&files).unwrap_or(0);
+    let mut paths = Vec::new();
+    for index in 0..count {
+        if let Ok(path) = env.get_object_array_element(&files, index) {
+            paths.push(text(&mut env, &JString::from(path)));
+        }
+    }
+    let (cache, version) = (text(&mut env, &cache), text(&mut env, &version));
+    match crate::load_cached(
+        &paths,
+        std::path::Path::new(&cache),
+        &version,
+        crate::Platform::AndroidWebView,
+    ) {
+        Ok(blocker) => Box::into_raw(Box::new(blocker)) as jlong,
+        Err(_) => 0,
+    }
 }
 
 #[no_mangle]

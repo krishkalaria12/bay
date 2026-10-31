@@ -1,14 +1,44 @@
 //! uBlock Origin's list preprocessor (`!#if`, `!#else`, `!#endif`), which adblock-rust reads as comments and so keeps
 //! every branch: lists then apply rules meant for Firefox, Safari or another blocker. This keeps what uBO keeps on
-//! Chromium, where Bay's blocker has a user stylesheet but no HTML filtering.
+//! each of Bay's engines (see [`Platform`]); none of them has HTML filtering.
 
 use std::borrow::Cow;
 
-/// The tokens that are true for Bay; any other (`env_firefox`, `adguard`, `cap_html_filtering`…) is false.
-const TRUE_TOKENS: &[&str] = &["env_chromium", "ext_ublock", "cap_user_stylesheet"];
+/// The engine a list is prepared for. Each has its own true tokens; any other (`env_firefox`, `adguard`,
+/// `cap_html_filtering`…) is false.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Platform {
+    /// Desktop Bay: Chromium with a user stylesheet.
+    DesktopChromium,
+    /// Android: the system WebView (Chromium), with injected cosmetic CSS.
+    AndroidWebView,
+    /// iOS: WebKit content-blocking rules, as uBO resolves lists for Safari.
+    IosWebKit,
+}
 
-/// The list without the lines its `!#if` conditions leave out (unchanged when it has none).
+impl Platform {
+    fn true_tokens(self) -> &'static [&'static str] {
+        match self {
+            Self::DesktopChromium => &["env_chromium", "ext_ublock", "cap_user_stylesheet"],
+            Self::AndroidWebView => &[
+                "env_chromium",
+                "env_mobile",
+                "ext_ublock",
+                "cap_user_stylesheet",
+            ],
+            Self::IosWebKit => &["env_safari", "env_mobile"],
+        }
+    }
+}
+
+/// The list without the lines its `!#if` conditions leave out on desktop (unchanged when it has none).
 pub fn preprocess(list: &str) -> Cow<'_, str> {
+    preprocess_for(list, Platform::DesktopChromium)
+}
+
+/// The list without the lines its `!#if` conditions leave out on `platform` (unchanged when it has none).
+pub fn preprocess_for(list: &str, platform: Platform) -> Cow<'_, str> {
+    let true_tokens = platform.true_tokens();
     if !list.contains("!#if") {
         return Cow::Borrowed(list);
     }
@@ -21,7 +51,7 @@ pub fn preprocess(list: &str) -> Cow<'_, str> {
         let directive = line.trim_end();
         if let Some(condition) = directive.strip_prefix("!#if ") {
             let outer = active(&blocks);
-            blocks.push((outer, evaluate(condition)));
+            blocks.push((outer, evaluate(condition, true_tokens)));
         } else if directive == "!#else" {
             if let Some(block) = blocks.last_mut() {
                 block.1 = !block.1;
@@ -36,10 +66,11 @@ pub fn preprocess(list: &str) -> Cow<'_, str> {
     Cow::Owned(kept)
 }
 
-fn evaluate(condition: &str) -> bool {
+fn evaluate(condition: &str, true_tokens: &[&str]) -> bool {
     let tokens = tokenize(condition);
     let mut parser = Parser {
         tokens: &tokens,
+        true_tokens,
         at: 0,
     };
     let value = parser.or();
@@ -68,6 +99,7 @@ fn tokenize(condition: &str) -> Vec<&str> {
 
 struct Parser<'a> {
     tokens: &'a [&'a str],
+    true_tokens: &'a [&'a str],
     at: usize,
 }
 
@@ -113,7 +145,7 @@ impl<'a> Parser<'a> {
             }
             Some(token) if !matches!(token, ")" | "&&" | "||") => {
                 self.at += 1;
-                TRUE_TOKENS.contains(&token)
+                self.true_tokens.contains(&token)
             }
             _ => {
                 self.at = self.tokens.len() + 1;
@@ -143,5 +175,19 @@ mod tests {
     fn drops_malformed_conditions() {
         assert_eq!(preprocess("!#if (env_chromium\nx\n!#endif\ny\n"), "y\n");
         assert_eq!(preprocess("!#if env_chromium &&\nx\n!#endif\n"), "");
+    }
+
+    #[test]
+    fn keeps_each_platforms_branch() {
+        let list = "!#if env_mobile\nmobile\n!#endif\n!#if env_safari\nsafari\n!#else\nnot-safari\n!#endif\n";
+        assert_eq!(preprocess(list), "not-safari\n");
+        assert_eq!(
+            preprocess_for(list, Platform::AndroidWebView),
+            "mobile\nnot-safari\n"
+        );
+        assert_eq!(
+            preprocess_for(list, Platform::IosWebKit),
+            "mobile\nsafari\n"
+        );
     }
 }
