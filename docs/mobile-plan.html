@@ -266,7 +266,7 @@
   <body>
     <main>
       <header>
-        <p class="meta">Implementation plan · revised 31 October 2026 · phases 0 and 1 done on both platforms</p>
+        <p class="meta">Implementation plan · revised 31 October 2026 · phases 0, 1 and 2 done on both platforms</p>
         <h1>Bay for iPhone and Android.<br />One Lens design, WebKit on iOS, Chromium on Android.</h1>
         <p class="lead">
           Build Bay's mobile browser in <code>apps/mobile</code> with Expo and HeroUI Native. Both platforms get the same design, the Lens demo you shared: it
@@ -555,9 +555,15 @@
               </tr>
               <tr>
                 <td>
-                  iOS 26 minimum; Android at the WebView's and later Chromium 154's floor; zustand for state, expo-sqlite for history, tabs and site rules
+                  iOS 26 minimum; Android at the WebView's and later Chromium 154's floor; zustand for state, persisted as one versioned JSON document
+                  with <code>expo-file-system</code>; passwords and keys in <code>expo-secure-store</code>
                 </td>
-                <td>Recommended: Liquid Glass needs iOS 26; zustand matches desktop.</td>
+                <td>
+                  Recommended: Liquid Glass needs iOS 26; zustand matches desktop. expo-sqlite 58 doesn't register its native module on Android (its
+                  module is written against Expo's new module API, which this build doesn't wire up), and one document is all phase 2 needs; the
+                  store sits behind a repository interface, so SQLite can return when history outgrows a file. The Keychain/Keystore-backed secure store
+                  is for credentials (phase 6).
+                </td>
               </tr>
               <tr>
                 <td>
@@ -598,7 +604,7 @@
           </div>
           <div class="layer">
             <b>State · <code>src/store</code></b>
-            <p>zustand stores for tabs, the current tab and the omnibox, persisted to expo-sqlite. The tab model matches desktop's so sync is a mapping.</p>
+            <p>One zustand store for tabs, history, pins, the archive and preferences, saved as a versioned JSON file (<code>expo-file-system</code>, written atomically). The tab model matches desktop's so sync is a mapping.</p>
           </div>
           <div class="layer">
             <b>Engine API · <code>modules/bay-engine</code></b>
@@ -767,7 +773,15 @@
         <div class="stage">
           <div class="stage-number">2</div>
           <div>
-            <h3>Browsing core UI</h3>
+            <h3>Browsing core UI <span class="done">done</span></h3>
+            <p class="note">
+              <code>search-and-open</code>, <code>tabs-roundtrip</code>, <code>link-menu</code> and <code>smoke</code> pass twice in a row on the iPhone 18 Pro
+              simulator and the bay-pixel emulator; each starts from <code>.argent/flows/fresh-start.yaml</code>, which clears browsing data in Settings. The
+              start page, search card, page bar and switcher match on both platforms. Open: on a page too short to scroll, its last line sits under the
+              floating bar (the bar only hides on scroll); Android's back edge is the system back gesture, with no forward edge swipe; pull to reload and
+              the hiding bar have no e2e test yet; on iOS, taps inside the Settings sheet are sometimes lost during <code>fresh-start</code>, so a
+              run can fail before its test begins (Android passes every run).
+            </p>
             <ul>
               <li>Start page, search card with <code>@bay/core</code> suggestions, page view with the hiding bar, edge swipes, pull to reload.</li>
               <li>Tabs and the card switcher from snapshots; automatic archive; the link menu.</li>
@@ -960,7 +974,7 @@
       </section>
 
       <footer class="note">
-        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phase 0 set up and checked on the iPhone 18 Pro simulator (iOS 27) and the bay-pixel emulator
+        Bay mobile plan · <code>docs/mobile-plan.html</code> · Phases 0–2 checked on the iPhone 18 Pro simulator (iOS 27) and the bay-pixel emulator
         (Android 16) on 31 October 2026.
       </footer>
     </main>

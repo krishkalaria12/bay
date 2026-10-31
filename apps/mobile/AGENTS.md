@@ -49,6 +49,14 @@ Argent (`@swmansion/argent`) is set up at the repo root: `.mcp.json` registers t
 4. `screenshot` both after each change and compare them with the reference below.
 5. Record finished flows as e2e tests in `.argent/e2e/` with a launch map (`launch: { ios: …, android: … }`) so one file runs on both; `pnpm e2e` replays them on both.
 
+Writing e2e tests:
+
+- Start each test with `run: ../flows/fresh-start`: it launches the app, opens Metro on Android and clears browsing data in Settings, because tabs and history persist between runs.
+- On iOS the runner's tree has no web content: wait on app controls (`bar-more`, `page-progress` hidden, idle) and long-press links by point, with the point explained in a comment (see `link-menu.yaml`). Android's tree has the page's links, so select them by text there.
+- Tap rows whose order can change (search suggestions) by their text, not their index.
+- Keep sheets short enough that a flow never scrolls them: on iOS the runner's first tap after scrolling a sheet can be lost.
+- SwiftUI buttons get their handler through `useStableCallback` (`src/chrome`): a handler that changes while a page loads can drop a tap.
+
 The CLI does the same outside MCP: `argent run <tool> --udid <id> ...` (`argent tools` lists them).
 
 ## Design reference
