@@ -1,31 +1,8 @@
-# Cold start on both platforms: the start page renders its hint and all three toolbar buttons.
-# The open-url step points the dev client at Metro (Android's dev launcher skips auto-launch when Argent starts the app);
-# the idle wait before it lets the launcher finish starting, or a cold start drops the link.
-# Toolbar buttons are SwiftUI on iOS, absent from the runner's UIView tree, so they stay accessibility-tree tool waits.
+# Cold start on both platforms (fresh-start launches the app): the start page shows its hint and the archive,
+# search and settings buttons.
 steps:
-  - launch: { ios: in.krishkalaria.bay.mobile, android: in.krishkalaria.bay.mobile }
-  - await: { idle: true, timeout: 15000 }
-  - when: { platform: android }
-    steps:
-      - tool: open-url
-        args:
-          url: exp+bay://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
-  - await: { visible: { text: Tap to search }, timeout: 60000 }
-  - tool: await-ui-element
-    args:
-      condition: visible
-      selector:
-        text: Archive
-      timeoutMs: 10000
-  - tool: await-ui-element
-    args:
-      condition: visible
-      selector:
-        text: Search
-      timeoutMs: 10000
-  - tool: await-ui-element
-    args:
-      condition: visible
-      selector:
-        text: Settings
-      timeoutMs: 10000
+  - run: ../flows/fresh-start
+  - await: { visible: { text: Tap to search }, timeout: 10000 }
+  - await: { visible: { id: bar-archive }, timeout: 10000 }
+  - await: { visible: { id: bar-search }, timeout: 10000 }
+  - await: { visible: { id: bar-settings }, timeout: 10000 }
