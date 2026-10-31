@@ -1,0 +1,7 @@
+# The mobile app is its own workspace (excluded from the repo root's, which pins react-native-macos),
+# so its React Native version never touches the desktop app's node_modules.
+packages:
+  - .
+
+# React Native and CocoaPods expect a flat node_modules.
+nodeLinker: hoisted

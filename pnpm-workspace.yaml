@@ -7,6 +7,8 @@ packages:
   - "!apps/cli"
   # The release videos are a standalone Remotion project (apps/videos).
   - "!apps/videos"
+  # The mobile app is a standalone Expo project on a newer React Native (apps/mobile).
+  - "!apps/mobile"
 
 # React Native + CocoaPods expect a flat node_modules (the Podfile and Metro
 # resolve react-native-macos by path), so hoist instead of pnpm's symlink store.
