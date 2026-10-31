@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { childFolderIds, folderRootId, folderTabIds, inFolder } from "../../store/folders";
-import { activeTabId, favoriteTabIds, viewTabIds } from "../../store/model";
+import { activeTabId, favoriteTabIds, spaceFolded, viewTabIds } from "../../store/model";
 import { live, profileFolders } from "../../live/store";
 import { folderRows } from "../../live/rows";
 import type { SidebarKeyboardRow } from "./keyboardModel";
@@ -245,7 +245,7 @@ export function sidebarKeyboardRows(s: BrowserState, windowId: string, liveState
     } else if (s.tabs[id]) out.push({ id: entry, kind: "tab", tabIds: [id], parentId });
   };
   tiles.forEach((id) => append(`t:${id}`));
-  if (!s.spaces[w.spaceId]?.folded) {
+  if (!spaceFolded(s, w.spaceId)) {
     pinned.forEach((entry) => append(entry));
     out.push(...extensions);
     pinnedGroups.forEach((id) => append(`g:${id}`));

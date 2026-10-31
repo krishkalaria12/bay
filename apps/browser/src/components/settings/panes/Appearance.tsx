@@ -184,6 +184,12 @@ function SidebarPositionPicker() {
             title={SETTINGS.showSidebarOnOption.title}
             description="With the sidebar hidden (⌘S), it slides out while you hold Option and away when you let go."
           />
+          <SettingToggle
+            setting="hideSingleSpaceHeader"
+            settingId={SETTINGS.hideSingleSpaceHeader.id}
+            title={SETTINGS.hideSingleSpaceHeader.title}
+            description="With only one space, the sidebar leaves out its name and keeps your pinned tabs open. It comes back when you add a space."
+          />
         </Group>
       )}
     </>

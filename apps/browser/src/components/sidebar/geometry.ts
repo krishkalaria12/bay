@@ -4,7 +4,7 @@ import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
 import type { BrowserState } from "../../store/browser";
 import { folderTabIds } from "../../store/folders";
-import { activeTabId } from "../../store/model";
+import { activeTabId, spaceFolded } from "../../store/model";
 import { GROUP_BORDER, GROUP_PAD, NEW_TAB_GAP } from "./constants";
 import { folderEntries, groupEntries, sidebarEntries } from "./entries";
 
@@ -68,7 +68,7 @@ export function rowSpan(
   newTabAtTop: boolean,
 ): { section: Section; top: number; height: number } | null {
   const ROW = sidebarMetrics(s.settings.density).rowHeight;
-  const folded = !!s.spaces[spaceId]?.folded;
+  const folded = spaceFolded(s, spaceId);
   const { pinned, pinnedGroups, list } = sidebarEntries(s, windowId, spaceId);
   const sections: [Section, string[], number][] = [
     ["pinned", folded ? [] : pinned, 0],

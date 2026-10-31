@@ -10,7 +10,7 @@ import { everySlowly } from "../lib/slowTimers";
 import { useEffectEvent } from "../lib/useEffectEvent";
 import { useBrowser } from "../store/browser";
 import { PageSpaceContext, useIsIncognito, useSettings, useWindowId, useWindowSpaceId } from "../store/hooks";
-import { activeTabId, listIds, windowListKey } from "../store/model";
+import { activeTabId, listIds, spaceFolded, spaceHeaderHidden, windowListKey } from "../store/model";
 import { cleanUpCandidates } from "../store/organize";
 import { openNewTabInSplit } from "./layout/splitActions";
 import { listTopGap, useAddressBarInSidebar, useSidebarFieldShown, useSidebarOnRight } from "./layout/windowLayout";
@@ -250,7 +250,8 @@ type PageProps = {
 function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom, rows, geometryRef, onListHeight, onScrollView, onScrollY }: PageProps) {
   const windowId = useWindowId();
   const metrics = useSidebarMetrics();
-  const folded = useBrowser((s) => !!s.spaces[spaceId]?.folded);
+  const folded = useBrowser((s) => spaceFolded(s, spaceId));
+  const headerHidden = useBrowser(spaceHeaderHidden);
   const hasLocalFiles = useBrowser((s) => Object.values(s.localFiles).some((pin) => pin.spaceId === spaceId));
   const { tiles, pinned, pinnedGroups, list: all } = useSidebarEntries(windowId, spaceId);
   // A page's first render mounts only the rows a screen can show; the rest follow in chunks, one per frame, so a
@@ -345,7 +346,7 @@ function SidebarPage({ spaceId, slot, width, current, resting, docked, glowRoom,
                         >
                           <PinnedGrid tabs={tiles} innerWidth={innerWidth} />
                           <View style={{ marginTop: tiles.length ? 6 : topGap }}>
-                            <SpaceTitle windowId={windowId} spaceId={spaceId} />
+                            {headerHidden ? null : <SpaceTitle windowId={windowId} spaceId={spaceId} />}
                           </View>
                           {/* The Pinned section (Arc's, Zen's): pinned rows and folders, above a line. */}
                           <FoldAway

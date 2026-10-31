@@ -5,7 +5,7 @@ import { test } from "node:test";
 const { useBrowser } = await import("./browser.ts");
 const model = await import("./model.ts");
 const { folderTabIds } = await import("./folders.ts");
-const { folderEntries, numberedTabs, sidebarEntries } = await import("../components/sidebar/entries.ts");
+const { folderEntries, numberedTabs, sidebarEntries, sidebarKeyboardRows } = await import("../components/sidebar/entries.ts");
 
 const S = () => useBrowser.getState();
 // These cases read lists in the order their tabs opened: new tabs go to the bottom.
@@ -247,6 +247,25 @@ test("a pinned split is saved, comes back, and takes one number", () => {
   assert.ok(S().splits[split]);
   assert.equal(S().tabs[a].pinnedRow, true);
   assert.equal(S().tabs[b].pinnedRow, true);
+});
+
+test("with the header hidden and one space, the pinned section can't stay folded; a second space brings it back", () => {
+  const [w, a] = setup("a", "b");
+  S().pinRows([a], true);
+  const space = S().windows[w].spaceId;
+  S().updateSpace(space, { folded: true });
+  assert.equal(model.spaceFolded(S(), space), true);
+  S().updateSettings({ hideSingleSpaceHeader: true });
+  assert.equal(model.spaceHeaderHidden(S()), true);
+  assert.equal(model.spaceFolded(S(), space), false);
+  assert.ok(
+    sidebarKeyboardRows(S(), w).some((r) => r.id === `t:${a}`),
+    "its rows are reachable",
+  );
+  S().createSpace({ name: "Two" });
+  assert.equal(model.spaceHeaderHidden(S()), false);
+  assert.equal(model.spaceFolded(S(), space), true);
+  S().updateSettings({ hideSingleSpaceHeader: false });
 });
 
 test("a pinned split stays whole when its window closes, for the next window", () => {

@@ -49,6 +49,12 @@ export const SETTINGS = {
     title: "Hold Option to show the hidden sidebar",
     words: "alt option key peek auto-hide reveal",
   },
+  hideSingleSpaceHeader: {
+    id: "appearance.hideSingleSpaceHeader",
+    pane: "appearance",
+    title: "Hide the space header with only one space",
+    words: "space name title sidebar",
+  },
   addressBar: { id: "appearance.addressBar", pane: "appearance", title: "Address Bar", words: "url toolbar location" },
   appIcon: { id: "appearance.appIcon", pane: "appearance", title: "App Icon", words: "dock" },
   tabLayout: { id: "tabs.tabLayout", pane: "tabs", title: "Tab layout", words: "sidebar top vertical horizontal" },

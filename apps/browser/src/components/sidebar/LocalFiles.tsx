@@ -18,6 +18,7 @@ import { useTheme } from "../../lib/theme";
 import { useBrowser } from "../../store/browser";
 import { usePageSpaceId } from "../../store/hooks";
 import { localFilePins } from "../../store/localFiles";
+import { spaceFolded } from "../../store/model";
 import type { LocalFilePin } from "../../store/types";
 import { useSidebarMetrics } from "./tokens";
 import { blurSidebar, registerSidebarKeyboardRows, type SidebarKeyboardRow } from "./keyboard";
@@ -60,7 +61,7 @@ export function LocalFiles({ windowId, spaceId: requestedSpace }: { windowId: st
   const page = usePageSpaceId();
   const spaceId = requestedSpace ?? page;
   const privateWindow = useBrowser((s) => !!s.windows[windowId]?.incognito);
-  const folded = useBrowser((s) => !!s.spaces[spaceId]?.folded);
+  const folded = useBrowser((s) => spaceFolded(s, spaceId));
   const pins = useBrowser(useShallow((s) => localFilePins(s, spaceId)));
   const registry = useMemo(() => fileKeyboardRegistry(windowId, spaceId, !folded && !privateWindow), [windowId, spaceId, folded, privateWindow]);
   useEffect(() => () => registry.dispose(), [registry]);

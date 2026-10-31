@@ -19,6 +19,7 @@ import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
 import { useBrowser } from "../../store/browser";
 import { useWindowId } from "../../store/hooks";
+import { spaceFolded } from "../../store/model";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { canMoveFolder, folderDepth } from "../../store/folders";
 import type { TabPlacement } from "../../store/organize";
@@ -527,7 +528,7 @@ export function FinderDropZone({ windowId, spaceId, enabled = true, children }: 
 export function DragProvider({ children }: { children: (ghost: Ghost | null, controller: DragController) => ReactNode }) {
   const windowId = useWindowId();
   const density = useBrowser((s) => s.settings.density);
-  const folded = useBrowser((s) => !!s.spaces[s.windows[windowId]?.spaceId ?? ""]?.folded);
+  const folded = useBrowser((s) => spaceFolded(s, s.windows[windowId]?.spaceId ?? ""));
   const [ghost, setGhost] = useState<Ghost | null>(null);
   const [controller] = useState(() => new DragController(setGhost, windowId));
   useEffect(() => {
