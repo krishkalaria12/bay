@@ -73,5 +73,10 @@ chromium win chromium-bay-notifications-win.patch
 chromium win chromium-bay-frame-win.patch
 chromium all chromium-injected-author-sheet-order.patch
 
+chromium mac chromium-devtools-control-token.patch
+chromium mac chromium-devtools-background-target.patch
+
+chromium mac chromium-scripts-policy.patch
+
 layer all engine/chromium
 layer all engine/nncore

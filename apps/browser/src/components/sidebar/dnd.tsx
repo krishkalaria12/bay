@@ -22,6 +22,7 @@ import { sidebarMetrics } from "../../lib/sidebarDensity";
 import { layout } from "../../lib/constants";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useWindowId } from "../../store/hooks";
+import { spaceFolded } from "../../store/model";
 import { useEffectEvent } from "../../lib/useEffectEvent";
 import { canMoveFolder, folderDepth } from "../../store/folders";
 import type { TabPlacement } from "../../store/organize";
@@ -378,6 +379,8 @@ class DragController {
     const dragged = new Set(this.sources.flatMap((s) => s.tabIds));
     const firstTab = (i: Item | undefined) => i?.tabIds.find((id) => !dragged.has(id)) ?? null;
     const tabsDrag = source.kind === "row" || source.kind === "tile";
+    // A split pins and unpins as a row does; it's never an Essential or dropped into a group.
+    const rowsDrag = tabsDrag || source.kind === "split";
     const rowPitch =
       (source.kind === "group" || source.kind === "folder"
         ? (source.frame?.h ?? sidebarMetrics(useBrowser.getState().settings.density).rowHeight)
@@ -404,11 +407,11 @@ class DragController {
     } else {
       // Above the line under the Pinned section, a tab is pinned there.
       const divider = this.at(this.regionFrames.get("divider") ?? null);
-      const pinning = tabsDrag && !!divider && y < divider.y + divider.h / 2;
+      const pinning = rowsDrag && !!divider && y < divider.y + divider.h / 2;
       // Onto a pinned folder's header (its middle third), or among its open rows.
       const folderDrag = source.kind === "folder";
       const folder =
-        tabsDrag || folderDrag
+        rowsDrag || folderDrag
           ? live
               .filter((i) => i.kind === "folder" && (!folderDrag || canMoveFolder(state, source.folderId!, i.folderId!)))
               .sort((a, b) => folderDepth(state, b.folderId!) - folderDepth(state, a.folderId!))
@@ -435,7 +438,7 @@ class DragController {
             : { type: "tabs", placement: { pinned: false, row: true, folderId: folder.folderId!, beforeId: null } };
           into = folder.folderId!;
         } else {
-          const members = live.filter((i) => (i.kind === "row" || i.kind === "folder") && i.parentGroup === folder.folderId).sort(byY);
+          const members = live.filter((i) => (i.kind === "row" || i.kind === "split" || i.kind === "folder") && i.parentGroup === folder.folderId).sort(byY);
           const before = members.find((m) => cy(m) > y);
           drop = folderDrag
             ? { type: "folder", folderId: source.folderId!, parentId: folder.folderId!, beforeId: before?.folderId ?? firstTab(before) }
@@ -469,11 +472,6 @@ class DragController {
               ? { type: "folder", folderId: source.folderId!, beforeId: before?.folderId ?? firstTab(before), parentId: null }
               : { type: "tabs", placement: { pinned: false, row: section === "pinned", folderId: null, beforeId: firstTab(before) } };
       }
-    }
-    if (source.kind === "split" && drop.type === "tabs" && (drop.placement.pinned || drop.placement.groupId || drop.placement.row)) {
-      drop = { type: "none" };
-      gapKey = null;
-      into = null;
     }
 
     const key = JSON.stringify(drop);
@@ -532,7 +530,7 @@ export function FinderDropZone({ windowId, spaceId, enabled = true, children }: 
 export function DragProvider({ children }: { children: (ghost: Ghost | null, controller: DragController) => ReactNode }) {
   const windowId = useWindowId();
   const density = useBrowser((s) => s.settings.density);
-  const folded = useBrowser((s) => !!s.spaces[s.windows[windowId]?.spaceId ?? ""]?.folded);
+  const folded = useBrowser((s) => spaceFolded(s, s.windows[windowId]?.spaceId ?? ""));
   const [ghost, setGhost] = useState<Ghost | null>(null);
   const [controller] = useState(() => new DragController(setGhost, windowId));
   useEffect(() => {

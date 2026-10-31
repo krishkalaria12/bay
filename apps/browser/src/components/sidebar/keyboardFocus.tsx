@@ -13,7 +13,7 @@ import { live, updateFolder, useLive } from "../../live/store";
 import { useShallow } from "zustand/react/shallow";
 import { sidebarKeyboardRows } from "./entries";
 import { useBrowserRead as useBrowser } from "../../store/read";
-import { activeTabId } from "../../store/model";
+import { activeTabId, spaceFolded } from "../../store/model";
 import { usePageSpaceId, useWindowId } from "../../store/hooks";
 import { clickTab, startRename } from "./actions";
 import { dismissHover } from "./hover";
@@ -39,7 +39,7 @@ export function SidebarKeyboardRowView({ rowId, legacyId, label, children, ...pr
   const visibleRows = useContext(VisibleRows);
   const current = useBrowser((s) => s.windows[windowId]?.spaceId === spaceId);
   const extension = !/^(t:|s:|g:|f:|livefolder\||live\||stack\||more\|)/.test(rowId);
-  const folded = useBrowser((s) => !!s.spaces[spaceId]?.folded);
+  const folded = useBrowser((s) => spaceFolded(s, spaceId));
   const visible = current && (extension ? !folded : !visibleRows || visibleRows.has(rowId));
   const renameId = useSidebarUi((s) => (s.renaming?.windowId === windowId ? s.renaming.id : null));
   const renaming = useBrowser(

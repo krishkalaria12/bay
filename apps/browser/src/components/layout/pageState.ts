@@ -58,10 +58,11 @@ export const IDLE_PAGE: PageState = {
 type Store = {
   pages: Record<string, PageState>;
   browsers: Record<number, string>;
+  chromeTabs: Record<string, number>;
   popover: Record<string, "siteControls" | "popups" | "zoom" | null>;
 };
 
-export const usePages = create<Store>()(() => ({ pages: {}, browsers: {}, popover: {} }));
+export const usePages = create<Store>()(() => ({ pages: {}, browsers: {}, chromeTabs: {}, popover: {} }));
 
 export function patchPage(tabId: string, patch: Partial<PageState>) {
   usePages.setState((s) => {
@@ -81,16 +82,28 @@ export function usePage<T>(tabId: string | undefined, select: (p: PageState) => 
   return usePages((s) => select((tabId && s.pages[tabId]) || IDLE_PAGE));
 }
 
-export function setBrowserId(tabId: string, browserId: number) {
+export function setBrowserId(tabId: string, browserId: number, chromeTabId?: number) {
   usePages.setState((s) => {
     const browsers = { ...s.browsers };
     for (const [id, tab] of Object.entries(browsers)) if (tab === tabId) delete browsers[Number(id)];
     browsers[browserId] = tabId;
-    return { browsers };
+    const chromeTabs = { ...s.chromeTabs };
+    if (chromeTabId && chromeTabId > 0) chromeTabs[tabId] = chromeTabId;
+    else delete chromeTabs[tabId];
+    return { browsers, chromeTabs };
   });
 }
 
 export const tabForBrowser = (browserId: number): string | undefined => usePages.getState().browsers[browserId];
+
+export function clearChromeTabId(tabId: string) {
+  usePages.setState((s) => {
+    if (!(tabId in s.chromeTabs)) return s;
+    const chromeTabs = { ...s.chromeTabs };
+    delete chromeTabs[tabId];
+    return { chromeTabs };
+  });
+}
 
 export function setPopover(tabId: string, popover: Store["popover"][string]) {
   usePages.setState((s) => ({ popover: { ...s.popover, [tabId]: popover } }));
@@ -117,7 +130,7 @@ export function useFullscreenTab(windowId: string): string | undefined {
 
 useBrowser.subscribe((s, prev) => {
   if (s.tabs === prev.tabs) return;
-  const { pages, browsers, popover } = usePages.getState();
+  const { pages, browsers, chromeTabs, popover } = usePages.getState();
   // Plain loops that allocate nothing while every entry still has its tab: this runs on every tab update.
   const stale = (ids: string[], tabOf: (id: string) => string) => {
     for (let i = 0; i < ids.length; i++) if (!s.tabs[tabOf(ids[i]!)]) return true;
@@ -136,5 +149,7 @@ useBrowser.subscribe((s, prev) => {
   }
   const nextBrowsers = { ...browsers };
   for (const [id] of goneBrowsers) delete nextBrowsers[Number(id)];
-  usePages.setState({ pages: nextPages, browsers: nextBrowsers, popover: nextPopover });
+  const nextChromeTabs = { ...chromeTabs };
+  for (const id of Object.keys(chromeTabs)) if (!s.tabs[id]) delete nextChromeTabs[id];
+  usePages.setState({ pages: nextPages, browsers: nextBrowsers, chromeTabs: nextChromeTabs, popover: nextPopover });
 });

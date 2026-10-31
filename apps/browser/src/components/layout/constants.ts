@@ -166,4 +166,10 @@ export const PEEK_INSET_SHARE = 0.09;
 export const PEEK_INSET_MIN = 48;
 export const PEEK_CARD_GAP = 8;
 export const PEEK_BUTTON = 26;
-export const PEEK_OPEN_MS = 240;
+// Opening, as Zen's Glance: the card grows out of the link clicked (the pane's middle without one) on a spring that
+// overshoots by about 4% and settles, arcing up to PEEK_ARC on the way; the buttons come in as it lands.
+export const PEEK_SPRING = { duration: 420, dampingRatio: 0.72 } as const;
+export const PEEK_FROM_SCALE = 0.12;
+export const PEEK_ARC = 30;
+// Closing by hand plays it back, into the link, without the overshoot.
+export const PEEK_CLOSE_MS = 300;

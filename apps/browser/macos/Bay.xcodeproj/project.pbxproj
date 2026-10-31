@@ -329,7 +329,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$PROJECT_DIR/../../../packages/shell/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/nncore/scripts/embed.sh\"\n";
+			shellScript = "\"$PROJECT_DIR/../../../packages/shell/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/nncore/scripts/embed.sh\" && \"$PROJECT_DIR/../../../packages/shell/scripts/bundle-cli-installer.sh\"\n";
 		};
 		F2B782290948FD07702EBCEC /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -394,7 +394,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Bay-macOS/Bay.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 44;
 				DEAD_CODE_STRIPPING = NO;
 				DEVELOPMENT_TEAM = GP328GJT66;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -402,7 +402,7 @@
 				INFOPLIST_FILE = "Bay-macOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.3;
+				MARKETING_VERSION = 1.5.4;
 				NNCORE_STAGE_DIR = "$(OBJROOT)/NNCoreFramework";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -430,7 +430,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Bay-macOS/Bay.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 44;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = GP328GJT66;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -438,7 +438,7 @@
 				INFOPLIST_FILE = "Bay-macOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5.3;
+				MARKETING_VERSION = 1.5.4;
 				NNCORE_STAGE_DIR = "$(OBJROOT)/NNCoreFramework";
 				OTHER_LDFLAGS = (
 					"$(inherited)",

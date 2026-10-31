@@ -21,6 +21,8 @@ import { normalizeExternalLinkRules, normalizeLinkDestination, type ExternalLink
 export type SearchEngineId = string;
 
 export type Settings = {
+  // This Mac's terminal control permission. Kept out of SYNCED_SETTINGS.
+  cliControl: boolean;
   warnBeforeQuitting: boolean;
   warnBeforeClosingWindow: boolean;
   restoreSession: boolean;
@@ -72,6 +74,8 @@ export type Settings = {
   sidebarPosition: "left" | "right";
   // Holding Option alone slides the hidden sidebar out, as Arc's did (App.tsx › SidebarPeek).
   showSidebarOnOption: boolean;
+  // With one space its name in the sidebar says nothing: this takes the header away until there's a second.
+  hideSingleSpaceHeader: boolean;
   extensionSidePanelWidth: number;
 
   showFullUrl: boolean;
@@ -112,6 +116,7 @@ export type Settings = {
 export type LittleBayShortcut = { key: string; keyCode: number; modifiers: ("control" | "option" | "shift" | "command")[] };
 
 export const DEFAULT_SETTINGS: Settings = {
+  cliControl: false,
   warnBeforeQuitting: false,
   warnBeforeClosingWindow: true,
   restoreSession: true,
@@ -152,6 +157,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarWidth: layout.sidebarWidth,
   sidebarPosition: "left",
   showSidebarOnOption: true,
+  hideSingleSpaceHeader: false,
   extensionSidePanelWidth: 360,
   showFullUrl: false,
   bookmarksBar: "never",

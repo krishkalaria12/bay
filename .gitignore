@@ -78,3 +78,6 @@ __pycache__/
 **/windows/bundle/
 *.VC.db
 *.VC.opendb
+# Bun build artifacts
+*.bun-build
+.*.bun-build

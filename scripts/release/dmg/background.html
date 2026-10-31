@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  The DMG window's background, in the site's look (apps/web/src/styles/global.css): paper, ink, a highlighter stroke,
+  the pen's handwriting. Finder draws the two icons and their names on top, centered at (170, 284) and (490, 284) of a
+  660 × 440 window (make-layout.sh), so the arrow sits between them. render.sh draws it at 1x and 2x.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Caveat";
+        font-weight: 600;
+        src: url("../../../apps/web/node_modules/@fontsource/caveat/files/caveat-latin-600-normal.woff2") format("woff2");
+      }
+      :root {
+        --paper: #edeef1;
+        --ink: #1c1e23;
+        --muted: #5c616d;
+        --line: #dfe1e6;
+        --yellow: #ffd84d;
+        --pen: #1f5fe0;
+      }
+      * {
+        margin: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 660px;
+        height: 440px;
+        overflow: hidden;
+      }
+      body {
+        position: relative;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .brand {
+        position: absolute;
+        top: 26px;
+        left: 40px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .brand img {
+        width: 24px;
+        height: 24px;
+      }
+      .brand span {
+        margin-left: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0;
+        color: var(--muted);
+      }
+      h1 {
+        position: absolute;
+        top: 64px;
+        left: 38px;
+        font-size: 58px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: -0.045em;
+      }
+      .marker {
+        position: relative;
+        isolation: isolate;
+      }
+      .marker::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        left: -0.06em;
+        right: -0.06em;
+        bottom: 0.02em;
+        height: 0.36em;
+        background: var(--yellow);
+        border-radius: 0.08em;
+        transform: rotate(-1deg);
+      }
+      .hand {
+        position: absolute;
+        font-family: "Caveat", cursive;
+        font-weight: 600;
+        color: var(--pen);
+      }
+      .drag {
+        top: 222px;
+        left: 268px;
+        width: 124px;
+        text-align: center;
+        font-size: 26px;
+        transform: rotate(-4deg);
+      }
+      .arrow {
+        position: absolute;
+        top: 258px;
+        left: 274px;
+        width: 112px;
+        height: 44px;
+        color: var(--pen);
+      }
+      .sticky {
+        position: absolute;
+        top: 30px;
+        right: 34px;
+        width: 128px;
+        padding: 12px 12px 14px;
+        background: var(--yellow);
+        color: var(--ink);
+        font-family: "Caveat", cursive;
+        font-weight: 600;
+        font-size: 21px;
+        line-height: 1.05;
+        transform: rotate(4deg);
+        box-shadow:
+          0 14px 24px -12px rgba(40, 30, 0, 0.35),
+          0 2px 4px rgba(0, 0, 0, 0.06);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="brand"><img src="../../../apps/web/src/assets/app-icon.png" alt="" />Bay<span>A beautiful, fast browser for Mac</span></div>
+    <h1>Bring it <span class="marker">home</span>.</h1>
+    <div class="sticky">then open it from Applications</div>
+
+    <div class="hand drag">drag it over</div>
+    <svg class="arrow" viewBox="0 0 112 44" fill="none" aria-hidden="true">
+      <path d="M4 26C26 14 56 12 98 22" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" />
+      <path d="M84 10C91 15 96 19 100 22C94 26 88 31 83 36" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </body>
+</html>

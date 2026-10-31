@@ -25,6 +25,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/bay/nn_scripts_policy.h"  // nogncheck
 #include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
@@ -349,6 +350,7 @@ class NNContentBrowserClient : public ChromeContentBrowserClient {
   void CreateThrottlesForNavigation(
       content::NavigationThrottleRegistry& registry) override {
     ChromeContentBrowserClient::CreateThrottlesForNavigation(registry);
+    bay::AddScriptsPagesThrottle(registry);
     AddAppSchemeThrottle(registry);
     MaybeAddNavigationHoldThrottle(registry);
     MaybeAddPeekLinksThrottle(registry);

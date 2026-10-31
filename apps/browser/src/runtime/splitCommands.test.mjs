@@ -30,6 +30,7 @@ test("split parser closes commands and excludes native page adoption", () => {
     { method: "focusPane", windowId: "w", delta: -1 },
     ...["toggleTabLayout", "closePeek", "keepPeek", "splitPeek", "reopenPeekOrClosed"].map((method) => ({ method, windowId: "w" })),
     { method: "openPeek", fromTabId: "t", url: "x.com" },
+    { method: "openPeek", fromTabId: "t", url: "x.com", point: { x: 120, y: 80 } },
   ];
   assert.deepEqual(new Set(commands.map((c) => c.method)), new Set(SPLIT_COMMAND_METHODS));
   for (const command of commands) {
@@ -50,6 +51,12 @@ test("split parser closes commands and excludes native page adoption", () => {
     { method: "updateSplit", splitId: "s", patch: { stackSizes: [0.2, 0.3, 0.5] } },
     { method: "movePane", tabId: "t", delta: 2 },
     { method: "reopenPeek", windowId: "w" },
+    ...[{ x: NaN, y: 1 }, { x: 1, y: Infinity }, { x: 1 }, { x: 1, y: 2, native: true }].map((point) => ({
+      method: "openPeek",
+      fromTabId: "t",
+      url: "x.com",
+      point,
+    })),
   ])
     assert.throws(() => parseSplitCommand(command), { code: "invalid_request" }, JSON.stringify(command));
 });
@@ -79,7 +86,8 @@ test("split commands drive split view and peeks", () => {
 
   s().togglePin(a);
   s().activate(a, windowId);
-  const peek = run(store, { method: "openPeek", fromTabId: a, url: "https://other.org" });
+  const peek = run(store, { method: "openPeek", fromTabId: a, url: "https://other.org", point: { x: 120, y: 80 } });
+  assert.deepEqual(s().peeks[windowId].at, { x: 120, y: 80 });
   assert.equal(s().peeks[windowId].tabId, peek);
   run(store, { method: "closePeek", windowId });
   assert.equal(s().peeks[windowId], undefined);

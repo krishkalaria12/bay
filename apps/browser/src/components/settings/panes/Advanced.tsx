@@ -1,4 +1,4 @@
-import { View } from "@bay/platform";
+import { View, isMac } from "@bay/platform";
 import { engineInfo, listComponents, WIDEVINE_COMPONENT_ID, type EngineComponent, type EngineInfo } from "@bay/nncore";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
@@ -11,12 +11,14 @@ import { Button, Group, Row, SectionHeader, Toggle } from "../controls";
 import { SETTINGS } from "../definitions";
 import { setBoostsOn, startBoosts, useBoosts } from "../../boosts/state";
 import { openLibrary } from "../../library/actions";
+import { describeCliControl, describeCliInstall, installCliInBackground, useCli } from "../../cli/control";
 
 export function AdvancedPane() {
   const theme = useTheme();
   const settings = useBrowserRead((s) => s.settings);
   const [info, setInfo] = useState<EngineInfo | null>(null);
   const [widevine, setWidevine] = useState<EngineComponent | null | undefined>(undefined);
+  const cli = useCli();
   useEffect(() => {
     void engineInfo()
       .then(setInfo)
@@ -60,6 +62,24 @@ export function AdvancedPane() {
           <Button title="Show Downloads" onPress={() => openInternalPage("downloads")} />
         </Row>
       </Group>
+
+      {isMac ? (
+        <>
+          <SectionHeader title="Terminal" />
+          <Group>
+            <Row settingId={SETTINGS.installCli.id} title={SETTINGS.installCli.title} description={describeCliInstall(cli)}>
+              <Button
+                title={cli.installing ? "Installing…" : cli.installedVersion ? "Reinstall" : "Install"}
+                disabled={cli.installing}
+                onPress={() => void installCliInBackground()}
+              />
+            </Row>
+            <Row settingId={SETTINGS.cliControl.id} title={SETTINGS.cliControl.title} description={describeCliControl(cli.server)}>
+              <Toggle value={settings.cliControl === true} onChange={(cliControl) => reportBrowserCommand(updateSettings({ cliControl }))} />
+            </Row>
+          </Group>
+        </>
+      ) : null}
 
       <SectionHeader title="Web engine" />
       <Group>

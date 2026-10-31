@@ -14,7 +14,7 @@ import { openLinkInSplit, openPageInSplit } from "./splitActions";
 
 // Where a page's new tab, window or split goes (the engine's openWindow): one place for tabs, extension
 // popups and side panels. `tabId` is the page's tab, the new tab's opener; extension pages have none.
-export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, from: { windowId: string; spaceId: string; tabId?: string }) {
+export function openFromPage({ url, adoptId, disposition, point }: OpenWindowRequest, from: { windowId: string; spaceId: string; tabId?: string }) {
   // Chrome offers these pages directly to the authority. A window callback
   // must not create another tab or try to move the offered page itself.
   if (adoptId && pageFactsInCoordinator()) return;
@@ -47,8 +47,8 @@ export function openFromPage({ url, adoptId, disposition }: OpenWindowRequest, f
   }
   // A link a pinned tab or a favourite opens in front: a peek over its page, as Arc's (store/peeks.ts).
   if (disposition === "foreground" && from.tabId && opensInPeek(s, from.tabId, url)) {
-    if (adoptId) return void legacyBrowser.getState().openPeek(from.tabId, url, adoptId);
-    return reportBrowserCommand(openPeek(from.tabId, url));
+    if (adoptId) return void legacyBrowser.getState().openPeek(from.tabId, url, adoptId, point);
+    return reportBrowserCommand(openPeek(from.tabId, url, point));
   }
   const background = disposition === "background";
   // A site chosen for the other engine (a streaming site, a website rule) loads afresh there, instead of in the page

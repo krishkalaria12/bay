@@ -4084,68 +4084,62 @@ try {
   });
 
   await check("page-background", async () => {
-    // The page's base background (pageBackgroundColor) is transparent (53ed19ca): a page that paints none shows the
-    // app's card once, drawn by ContentCard, so a 1×1 screenshot of the page is clear, and stays clear after a reload
-    // (a new document's view once took over an opaque base); a page that paints its own background covers it.
+    // Pages with no authored background rely on the browser's canvas. Making that canvas transparent puts
+    // their dark text over Bay's dark card, as on App Store Connect. Keep the engine's light/dark canvas defaults.
     await evalApp(`nn.actions.switchToTab("${first.id}"); return true`);
     await until("A shown", async () => (await state()).active === first.id);
     const pixel = async (t) => {
       const shot = await cdp(t, "Page.captureScreenshot", { format: "png", clip: { x: 600, y: 400, width: 1, height: 1, scale: 1 } });
       return firstPixel(shot.data);
     };
-    const transparent = await pixel(await pageFor(first.id, `${base}/a`));
-    // Again after a reload (a new document; the base background is the tab's, not the document's).
+    const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 3);
+    const expectPixel = (name, actual, expected) => {
+      if (!near(actual, expected)) throw new Error(`${name} shows ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
+    };
+    const unpainted = await pixel(await pageFor(first.id, `${base}/a`));
+    expectPixel("the default light canvas", unpainted, [255, 255, 255, 255]);
     await evalApp(`return nn.webviews.get("${first.id}").reload()`);
-    await sleep(1000);
     await until("A reloaded", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Page A" && !t.loading), 10000);
     await sleep(500);
     const reloaded = await pixel(await pageFor(first.id, `${base}/a`));
+    expectPixel("the reloaded light canvas", reloaded, [255, 255, 255, 255]);
     await evalApp(`nn.store.getState().navigate("${first.id}", "${base}/painted", { userInitiated: true }); return true`);
     let painted;
     try {
       await until("the painted page", async () => (await state()).tabs.find((t) => t.id === first.id && t.title === "Painted" && !t.loading), 10000);
       await sleep(500);
       painted = await pixel(await pageFor(first.id, `${base}/painted`));
+      expectPixel("the site's painted background", painted, [60, 60, 60, 255]);
     } finally {
       await backToA();
     }
-    // Navigated to from the painted page: the new document's view doesn't keep the last page's opaque gray.
     await sleep(500);
-    const after = await pixel(await pageFor(first.id, `${base}/a`));
-    const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 3);
-    if (transparent[3] !== 0 || reloaded[3] !== 0 || after[3] !== 0) {
-      // Whether a base background reaches the screenshot at all: DevTools' own override, then cleared again.
-      const t = await pageFor(first.id, `${base}/a`);
-      const ws = new WebSocket(t.webSocketDebuggerUrl);
-      await new Promise((r, j) => ((ws.onopen = r), (ws.onerror = j)));
-      let seq = 0;
-      const send = (method, params = {}) =>
-        new Promise((r) => {
-          const id = ++seq;
-          ws.addEventListener("message", function on(m) {
-            const msg = JSON.parse(m.data);
-            if (msg.id === id) {
-              ws.removeEventListener("message", on);
-              r(msg.result ?? msg);
-            }
-          });
-          ws.send(JSON.stringify({ id, method, params }));
-        });
-      const shot = async () =>
-        firstPixel((await send("Page.captureScreenshot", { format: "png", clip: { x: 600, y: 400, width: 1, height: 1, scale: 1 } })).data);
-      await send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 255, g: 0, b: 0, a: 0.5 } });
-      const overridden = await shot();
-      await send("Emulation.setDefaultBackgroundColorOverride", {});
-      const cleared = await shot();
-      const dark = (await send("Runtime.evaluate", { expression: "matchMedia('(prefers-color-scheme: dark)').matches", returnByValue: true })).result?.value;
-      ws.close();
-      throw new Error(
-        `the transparent page shows ${JSON.stringify(transparent)} (after a reload ${JSON.stringify(reloaded)}, after the painted page ${JSON.stringify(after)}), not a clear base (DevTools' override ${JSON.stringify(overridden)}, cleared ${JSON.stringify(cleared)}, page dark ${dark}, painted ${JSON.stringify(painted)})`,
-      );
+    const t = await pageFor(first.id, `${base}/a`);
+    const after = await pixel(t);
+    expectPixel("the light canvas after a painted page", after, [255, 255, 255, 255]);
+    let dark, translucent, light;
+    try {
+      // A site can opt into dark controls and canvas regardless of the app's appearance. This must remain native,
+      // rather than forcing a white page background or injecting CSS that overrides the site's own styling.
+      await cdp(t, "Runtime.evaluate", { expression: "document.documentElement.style.colorScheme = 'dark'" });
+      await sleep(200);
+      dark = await pixel(t);
+      expectPixel("the dark canvas", dark, [18, 18, 18, 255]);
+      await cdp(t, "Runtime.evaluate", {
+        expression: "document.documentElement.style.colorScheme = 'light'; document.body.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'",
+      });
+      await sleep(200);
+      translucent = await pixel(t);
+      expectPixel("a translucent site background over the light canvas", translucent, [127, 127, 127, 255]);
+    } finally {
+      await cdp(t, "Runtime.evaluate", {
+        expression: "document.documentElement.style.removeProperty('color-scheme'); document.body.style.removeProperty('background-color')",
+      });
     }
-    // A neutral gray: the screenshot is in the display's color space, where sRGB grays keep their values.
-    if (!near(painted, [60, 60, 60, 255])) throw new Error(`the painted page shows ${JSON.stringify(painted)}`);
-    return { transparentPage: transparent, reloaded, paintedPage: painted, afterPainted: after };
+    await sleep(200);
+    light = await pixel(t);
+    expectPixel("the restored light canvas", light, [255, 255, 255, 255]);
+    return { unpainted, reloaded, painted, afterPainted: after, dark, translucent, light };
   });
 
   await check("external-app-answer", async () => {

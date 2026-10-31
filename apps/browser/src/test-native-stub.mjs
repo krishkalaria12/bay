@@ -217,6 +217,23 @@ export const removeDocument = (name) => docs.delete(name);
 export const chromeWindows = () => Promise.resolve([]);
 export const devWindowAction = () => Promise.resolve("");
 export const engineInfo = () => Promise.resolve(null);
+export const cliControlCalls = [];
+export const cliActiveCalls = [];
+export const cliControlAnswers = { call: async () => ({ state: "off", generation: 0 }) };
+const cliControlListeners = new Set();
+export const cliControlStatus = () => cliControlAnswers.call();
+export const setCliControl = (on) => (cliControlCalls.push(on), cliControlAnswers.call(on));
+export const setCliActiveTab = (active) => (cliActiveCalls.push(active), Promise.resolve({ state: "on" }));
+export const onCliControlChanged = (listener) => {
+  cliControlListeners.add(listener);
+  return { remove: () => cliControlListeners.delete(listener) };
+};
+export const emitCliControl = (status) => {
+  for (const listener of cliControlListeners) listener(status);
+};
+export const installedCliVersion = () => null;
+export const installCli = () => Promise.resolve({ ok: false, appVersion: "", error: "not available in tests", lines: [] });
+export const onCliInstallLine = () => ({ remove() {} });
 export const prepareTabTransfer = () => {};
 export const releaseTabTransfer = () => {};
 export const onTabStripTransaction = (listener) => globalThis.nnTestTabStrip.listen(listener);
@@ -346,3 +363,9 @@ export const engineBoostCalls = [];
 export const setBoosts = (boosts) => (engineBoostCalls.push(boosts), Promise.resolve());
 
 export const tidyNames = null;
+export const userScriptsAvailable = () => false;
+export const watchUserScripts = () => {};
+export const readUserScripts = async () => ({ state: "empty" });
+export const readUserScriptsStatus = async () => null;
+export const writeUserScriptsStatus = async () => {};
+export const onUserScriptsChange = () => ({ remove() {} });

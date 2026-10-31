@@ -3,11 +3,11 @@ import { closeTab } from "../../lib/actions";
 import { reportBrowserCommand } from "../../runtime/commands";
 import * as commands from "../../runtime/splitActions";
 import type { UserPaneOptions } from "../../runtime/splitCommands";
-import { navigate } from "../../runtime/tabActions";
+import { navigate, removeTab } from "../../runtime/tabActions";
 import { useBrowser as legacyBrowser } from "../../store/browser";
 import { activeTabId, isIncognitoSpace } from "../../store/model";
 import { browserRead } from "../../store/read";
-import { slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
+import { pinnedSplitOf, slotsOf, splitOf, type OpenPaneOptions, type SplitSide } from "../../store/splits";
 import { MAX_SPLIT_PANES } from "../../store/constants";
 import { openNewTabPanel } from "../../lib/newTab";
 import { pageFactsInCoordinator } from "../../lib/pageFactOwnership";
@@ -94,8 +94,10 @@ export function dropTabIntoSplit(tabId: string, targetTabId: string, side: Split
   reportBrowserCommand(openSplitPane(target.windowId, { tabId, anchorTabId: targetTabId, side }));
 }
 
+// ⌘W unloads a pinned split whole; asked to close one pane, it goes and the rest stay pinned.
 export function closePane(tabId: string) {
-  void closeTab(tabId);
+  if (pinnedSplitOf(store(), tabId)) reportBrowserCommand(removeTab(tabId));
+  else void closeTab(tabId);
 }
 
 export async function showSplitMenu(tabId: string) {

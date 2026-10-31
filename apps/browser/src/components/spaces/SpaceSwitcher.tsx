@@ -20,6 +20,7 @@ import { requestRename } from "../RenameDialog";
 import { newLiveFolderMenuItem, runNewLiveFolder } from "../sidebar/liveMenus";
 import { openThemeEditor } from "./ThemeEditor";
 import { SpaceDots } from "./SpaceDots";
+import { useSpaceDrag, useSpaceReorder, type SpaceReorder } from "./reorder";
 import {
   PROFILE_DOTS_HEIGHT,
   SPACE_CELL,
@@ -27,6 +28,7 @@ import {
   SPACE_GLYPH,
   SPACE_HOVERED_OPACITY,
   SPACE_IDLE_OPACITY,
+  SPACE_LIFTED_SCALE,
   SPACE_PLUS,
   SPACE_SELECTED_OPACITY,
   SPACE_SIDE,
@@ -41,12 +43,13 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
   const width = useSidebarWidth(windowId);
   const { pages } = usePagerPages(windowId);
   const fits = ids.length * SPACE_CELL + (ids.length - 1) * SPACE_GAP <= width - 2 * (layout.sidebarInset + SPACE_SIDE);
+  const { reorder, dragging } = useSpaceReorder(SPACE_CELL + SPACE_GAP);
   return (
     <View style={{ height: PROFILE_DOTS_HEIGHT }}>
       {fits ? (
         <View style={{ height: PROFILE_DOTS_HEIGHT - 3, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACE_GAP }}>
           {ids.map((id) => (
-            <SpaceIcon key={id} id={id} windowId={windowId} page={pages.find((p) => p.id === id)} />
+            <SpaceIcon key={id} id={id} windowId={windowId} page={pages.find((p) => p.id === id)} reorder={reorder} lifted={dragging === id} />
           ))}
         </View>
       ) : (
@@ -59,19 +62,37 @@ export function SpaceSwitcher({ windowId }: { windowId: string }) {
   );
 }
 
-function SpaceIcon({ id, windowId, page }: { id: string; windowId: string; page: PagerPage | undefined }) {
+// Dragged along the row, a space's icon reorders the spaces (Arc).
+function SpaceIcon({
+  id,
+  windowId,
+  page,
+  reorder,
+  lifted,
+}: {
+  id: string;
+  windowId: string;
+  page: PagerPage | undefined;
+  reorder: SpaceReorder;
+  lifted: boolean;
+}) {
   const name = useBrowser((s) => s.spaces[id]?.name);
   const { hovered, hoverProps } = useHover();
-  const opacity = usePagerOpacity(windowId, page?.slot, hovered ? SPACE_HOVERED_OPACITY : SPACE_IDLE_OPACITY, SPACE_SELECTED_OPACITY);
+  const opacity = usePagerOpacity(windowId, page?.slot, hovered || lifted ? SPACE_HOVERED_OPACITY : SPACE_IDLE_OPACITY, SPACE_SELECTED_OPACITY);
+  const panHandlers = useSpaceDrag(reorder, id, "x");
+  const offset = reorder.offsetOf(id);
+  const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }, { scale: lifted ? SPACE_LIFTED_SCALE : 1 }] }), [offset, lifted]);
   if (name === undefined) return null;
   return (
-    <View ref={(v) => registerRow(windowId, id, v)} {...hoverProps} tooltip={name}>
-      <Pressable accessibilityRole="button" accessibilityLabel={name} onPress={() => switchSpace(windowId, id, true)}>
-        <Animated.View style={[{ width: SPACE_CELL, height: SPACE_CELL, borderRadius: 7, alignItems: "center", justifyContent: "center" }, opacity]}>
-          <SpaceGlyph spaceId={id} size={SPACE_GLYPH} />
-        </Animated.View>
-      </Pressable>
-    </View>
+    <Animated.View {...panHandlers} style={[{ zIndex: lifted ? 1 : 0 }, dragStyle]}>
+      <View ref={(v) => registerRow(windowId, id, v)} {...hoverProps} tooltip={lifted ? undefined : name}>
+        <Pressable accessibilityRole="button" accessibilityLabel={name} onPress={() => switchSpace(windowId, id, true)}>
+          <Animated.View style={[{ width: SPACE_CELL, height: SPACE_CELL, borderRadius: 7, alignItems: "center", justifyContent: "center" }, opacity]}>
+            <SpaceGlyph spaceId={id} size={SPACE_GLYPH} />
+          </Animated.View>
+        </Pressable>
+      </View>
+    </Animated.View>
   );
 }
 

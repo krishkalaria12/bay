@@ -76,7 +76,6 @@ export const ADDRESS_NAV_WIDTH = 3 * ADDRESS_BUTTON + 2 * ADDRESS_NAV_GAP;
 export const ADDRESS_LIGHTS_Y = 26.75;
 export const ADDRESS_TOGGLE_X = 70.75 + 27;
 export const ADDRESS_EDGE = 7;
-// On the window's right there are no window buttons to clear: the toggle starts at the edge.
 export const ADDRESS_TOGGLE_X_RIGHT = ADDRESS_EDGE + ADDRESS_BUTTON / 2;
 
 // MARK: Hover card (hover.ts, HoverCard.tsx)

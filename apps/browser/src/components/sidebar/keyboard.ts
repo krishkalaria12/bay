@@ -1,11 +1,12 @@
 import { setSidebarKeyboard } from "@bay/shell";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { reportBrowserCommand } from "../../runtime/commands";
-import { toggleTabLayout, closePeek } from "../../runtime/splitActions";
+import { toggleTabLayout } from "../../runtime/splitActions";
 import { toggleSidebar } from "../../runtime/windowActions";
 import { dismissCommandPanel } from "../../runtime/windowUiActions";
 import { updatePinnedFolder, updateGroup } from "../../runtime/organizeActions";
 import { activeTabId } from "../../store/model";
+import { dismissPeek } from "../layout/peekDismiss";
 import { live, setLive, updateFolder } from "../../live/store";
 import { sidebarKeyboardRows } from "./entries";
 import { adjacentKeyboardRow, reconcileKeyboardRow, type SidebarKeyboardRow } from "./keyboardModel";
@@ -148,7 +149,7 @@ export function runSidebarKey(windowId: string, key: string) {
   const row = focusedKeyboardRow(windowId);
   const effect = actions.get(windowId);
   if (key === "Escape") {
-    reportBrowserCommand(closePeek(windowId));
+    dismissPeek(windowId);
     blurSidebar(windowId);
     effect?.focusPage();
     return;

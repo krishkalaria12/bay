@@ -1,7 +1,7 @@
 import { savePassword } from "@bay/nncore";
 import type { Credential, ImportedExtension, ImportKind, ImportResult, SafariExport, SpaceSuggestion } from "@bay/import";
 import { browserRead } from "../../store/read";
-import { isIncognitoSpace } from "../../store/model";
+import { isIncognitoSpace, plural } from "../../store/model";
 import type { SpaceColor } from "../../store/types";
 import { importModule } from "./module";
 import { destinationProfile, importBookmarks, importSafariBookmarks, importHistory, importTabs, importArcSpace } from "./commands";
@@ -30,6 +30,20 @@ export const emptyCounts = (): ImportCounts => ({
   extensions: 0,
   extensionSettings: 0,
 });
+
+/** What an import brought, a phrase for each kind with any: "3 bookmarks", "1 address". */
+export const importedSummary = (counts: ImportCounts) =>
+  [
+    counts.bookmarks && plural(counts.bookmarks, "bookmark"),
+    counts.history && plural(counts.history, "history item"),
+    counts.passwords && plural(counts.passwords, "password"),
+    counts.cookies && plural(counts.cookies, "cookie"),
+    counts.addresses && `${counts.addresses} ${counts.addresses === 1 ? "address" : "addresses"}`,
+    counts.cards && plural(counts.cards, "card"),
+    counts.tabs && plural(counts.tabs, "tab"),
+    counts.extensions && plural(counts.extensions, "extension"),
+    counts.extensionSettings && plural(counts.extensionSettings, "extension setting"),
+  ].filter(Boolean) as string[];
 
 export type ExtensionFailure = { spaceId: string; extension: ImportedExtension; message: string };
 

@@ -56,7 +56,8 @@ export function AppDialogHost({ windowId }: { windowId: string }) {
       // A window that goes answers what it was asking: no.
       const orphans = useDialogs.getState().requests.filter((r) => r.windowId === windowId);
       useDialogs.setState((s) => {
-        const { [windowId]: _gone, ...hosts } = s.hosts;
+        const hosts = { ...s.hosts };
+        delete hosts[windowId];
         return { hosts, requests: s.requests.filter((r) => r.windowId !== windowId) };
       });
       orphans.forEach(cancelled);

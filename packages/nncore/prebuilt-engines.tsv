@@ -1,2 +1,3 @@
 # engine/ tree	release	SHA-256 of NNCore-<tree:12>.tar.xz (scripts/publish-engine.sh appends; packages/nncore/scripts/fetch-engine.sh reads)
 29f0186b89f9bdd3fd19739febaabd641a310277	engine-29f0186b89f9	6f64352883792abdd5c6f67929d1c19a97b8cec89ff1787c92f49f3775cf8344
+ce89821bc203325c493b1ff47f155022704f7cac	engine-ce89821bc203	a5b76d053a129c0cc4bca28611522111613522b3a89a6fa7a3c8f8f1f0b10d56

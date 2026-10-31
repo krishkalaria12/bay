@@ -1,5 +1,6 @@
 import { Cef, type EngineBoost } from "./native";
 import { WebKit, isWebKitDownload, isWebKitPermission, webKitListener } from "./webkit";
+import { engineCall, onEngineEvent } from "./engine";
 
 export type { EngineBoost, EngineBoostStyle } from "./native";
 
@@ -116,6 +117,23 @@ export type EngineTask = {
 export const WIDEVINE_COMPONENT_ID = "oimompecagnajdejgnnjijobebaeigek";
 
 export const engineInfo = () => Cef.engineInfo();
+
+export type CliControlStatus = {
+  state: "off" | "starting" | "on" | "external";
+  connections?: number;
+  generation?: number;
+  port?: number;
+  reason?: string;
+};
+
+export const cliControlStatus = () => engineCall<CliControlStatus>("nn_cli_control", "");
+export const setCliControl = (on: boolean) => engineCall<CliControlStatus>("nn_cli_control", "", { on });
+export const setCliActiveTab = (active: number | null) => engineCall<CliControlStatus>("nn_cli_control", "", { active });
+export const onCliControlChanged = (listener: (status: CliControlStatus) => void) =>
+  onEngineEvent((topic, payload) => {
+    const state = payload.state;
+    if (topic === "cliControl" && (state === "off" || state === "starting" || state === "on" || state === "external")) listener({ ...payload, state });
+  });
 
 export type ChromeWindowState = {
   profile: string;

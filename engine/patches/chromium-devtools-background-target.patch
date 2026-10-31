@@ -1,0 +1,53 @@
+diff --git a/content/browser/devtools/protocol/target_handler.cc b/content/browser/devtools/protocol/target_handler.cc
+--- a/content/browser/devtools/protocol/target_handler.cc
++++ b/content/browser/devtools/protocol/target_handler.cc
+@@ -9,6 +9,7 @@
+ #include <optional>
+ #include <string_view>
+ 
++#include "base/auto_reset.h"
+ #include "base/base64.h"
+ #include "base/containers/flat_map.h"
+ #include "base/functional/bind.h"
+@@ -40,6 +41,10 @@
+ #include "content/public/common/url_constants.h"
+ #include "url/url_constants.h"
+ 
++#include "bay/core/nn_content_hooks.h"  // nogncheck
++
++bool g_bay_devtools_background_target = false;
++
+ namespace content::protocol {
+ 
+ namespace {
+@@ -1432,6 +1437,8 @@
+                        DevToolsSession::Mode::kSupportsTabTarget)
+           ? DevToolsManagerDelegate::kTab
+           : DevToolsManagerDelegate::kFrame;
++  base::AutoReset<bool> bay_background(&g_bay_devtools_background_target,
++                                       background.value_or(false));
+   scoped_refptr<DevToolsAgentHost> agent_host =
+       delegate->CreateNewTarget(gurl, target_type, new_window.value_or(false));
+   if (!agent_host) {
+diff --git a/chrome/browser/devtools/chrome_devtools_manager_delegate.cc b/chrome/browser/devtools/chrome_devtools_manager_delegate.cc
+--- a/chrome/browser/devtools/chrome_devtools_manager_delegate.cc
++++ b/chrome/browser/devtools/chrome_devtools_manager_delegate.cc
+@@ -13,6 +13,7 @@
+ #include "base/strings/strcat.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/values.h"
++#include "bay/core/nn_content_hooks.h"  // nogncheck
+ #include "build/build_config.h"
+ #include "cef/libcef/features/features.h"
+ #include "chrome/browser/devtools/chrome_devtools_session.h"
+@@ -446,7 +447,9 @@
+     bool new_window) {
+   NavigateParams params(ProfileManager::GetLastUsedProfile(), url,
+                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  params.disposition = g_bay_devtools_background_target
++                           ? WindowOpenDisposition::NEW_BACKGROUND_TAB
++                           : WindowOpenDisposition::NEW_FOREGROUND_TAB;
+   Navigate(&params);
+   if (!params.navigated_or_inserted_contents)
+     return nullptr;

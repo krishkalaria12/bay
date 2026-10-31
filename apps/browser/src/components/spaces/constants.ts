@@ -32,6 +32,8 @@ export const SPACE_SIDE = SPACE_PLUS + 4;
 export const SPACE_SELECTED_OPACITY = 0.95;
 export const SPACE_HOVERED_OPACITY = 0.6;
 export const SPACE_IDLE_OPACITY = 0.38;
+// A dragged space icon grows a little, lifted off the row.
+export const SPACE_LIFTED_SCALE = 1.15;
 
 // MARK: Create a space (CreateProfile.tsx)
 
