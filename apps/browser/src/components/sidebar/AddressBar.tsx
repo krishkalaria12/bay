@@ -10,13 +10,13 @@ import type { Tab } from "../../store/types";
 import { useHistoryAvailability } from "../layout/history";
 import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
-import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
+import { addressBarInSidebar, setUrlAnchor, useSidebarSymbol } from "../layout/windowLayout";
 import { SIDEBAR_FIELD } from "../layout/constants";
 import { GlassFill, useLiquidGlass } from "../glass";
 import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
-import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
+import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X } from "./constants";
 
 const toggleMinWidth = (x: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + ADDRESS_EDGE;
 
@@ -25,14 +25,12 @@ export function SidebarHeaderTools({ width }: { width: number }) {
   const tab = useActiveTab();
   const palette = toolbarPalette(useTheme(), null);
   const top = ADDRESS_LIGHTS_Y - ADDRESS_BUTTON / 2;
-  const right = useSidebarOnRight();
-  const toggleX = right ? ADDRESS_TOGGLE_X_RIGHT : ADDRESS_TOGGLE_X;
   const sidebarSymbol = useSidebarSymbol();
   return (
     <>
-      {width >= toggleMinWidth(toggleX) ? (
+      {width >= toggleMinWidth(ADDRESS_TOGGLE_X) ? (
         <ToolbarButton
-          style={{ position: "absolute", top, left: toggleX - ADDRESS_BUTTON / 2 }}
+          style={{ position: "absolute", top, left: ADDRESS_TOGGLE_X - ADDRESS_BUTTON / 2 }}
           palette={palette}
           icon={sidebarSymbol}
           onPress={() => useBrowser.getState().toggleSidebar(windowId)}

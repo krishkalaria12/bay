@@ -207,7 +207,7 @@ export function ContentCard() {
   const geometryFor = (rect: Rect | undefined): ToolbarGeometry => {
     if (small) return NO_TOOLBAR;
     const leading = !!rect && rect.x === 0 && rect.y === 0;
-    if (addressInSidebar) return (sidebarRight || !sidebarOpen) && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
+    if (addressInSidebar) return !sidebarOpen && leading ? NO_TOOLBAR_PAST_LIGHTS : NO_TOOLBAR;
     // The pane at the top right, beside a sidebar docked on the right: its toolbar's end holds the toggle.
     const trailing = !!rect && rect.y === 0 && rect.x + rect.width >= size.width - 1;
     return toolbarGeometry({

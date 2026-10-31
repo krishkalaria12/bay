@@ -279,7 +279,8 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   func setTrafficLightsCenter(id: String, center: NSPoint?) {
     lightsCenters[id] = center
-    guard let window = windows[id] else { return }
+    // The hover strip keeps them in itself; the centre waits for the mode to change.
+    guard let window = windows[id], lightsModes[id] != "hover" else { return }
     ChromeWindows.setTrafficLightsCenter(center, in: window)
   }
 
@@ -303,7 +304,9 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   private func applyLightsMode(id: String, window: NSWindow, animated: Bool) {
     lightsStrips.removeValue(forKey: id)?.removeFromSuperview()
-    guard lightsModes[id] == "hover", let content = window.contentView else {
+    let hover = lightsModes[id] == "hover"
+    ChromeWindows.setTrafficLightsCenter(hover ? TrafficLightsHoverStrip.lightsCenter : lightsCenters[id], in: window)
+    guard hover, let content = window.contentView else {
       return Self.fadeTrafficLights(of: window, hidden: lightsModes[id] == "hidden", animated: animated)
     }
     let strip = TrafficLightsHoverStrip(in: content)
@@ -1081,7 +1084,9 @@ final class DragPreview {
 // The window's top band for the window buttons shown on hover. It takes no clicks (hitTest), so the page under it keeps
 // them, and it still sees the pointer: tracking areas don't hit-test, so the views over it don't hide it.
 final class TrafficLightsHoverStrip: NSView {
-  static let height: CGFloat = 40
+  // A compact title bar's height, the buttons centred in it.
+  static let height: CGFloat = 28
+  static let lightsCenter = NSPoint(x: 20, y: height / 2)
   var onHover: ((Bool) -> Void)?
   private let background = Background()
   var backgroundColor: NSColor {
