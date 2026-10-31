@@ -525,9 +525,8 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       warm={warm}
       autoPictureInPicture={autoPictureInPicture}
       peekLinks={peekLinks}
-      // The card under the page (ContentCard's background) is drawn once, by the app: a page without a background of its
-      // own shows it, as on CEF. The page drawing it again darkened every transparent page.
-      pageBackgroundColor="transparent"
+      // Keep the engine's default canvas: sites without an authored background expect white, or the canvas their
+      // color-scheme selects. A transparent override puts their text over the window's colors instead.
       onReady={(browserId) => {
         setBrowserId(tabId, browserId);
         noteReady(tabId);
