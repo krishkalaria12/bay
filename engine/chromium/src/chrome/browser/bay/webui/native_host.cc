@@ -34,14 +34,34 @@
 #include "chrome/browser/bay/webui/page_observer.h"
 #include "chrome/browser/bay/webui/page_services.h"
 #include "chrome/browser/bay/webui/tab_broker.h"
+#include "chrome/browser/bay/webui/window_placement.h"
 #include "chrome/browser/bay/webui/window_registry.h"
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/bay/data/data_services.h"
 #include "chrome/browser/bay/webui/data_bridge.h"
+#include "chrome/browser/bay/webui/keychain.h"
+#include "chrome/browser/bay/webui/notifications.h"
+#include "chrome/browser/bay/webui/shell_appearance.h"
+#endif
+#if BUILDFLAG(IS_LINUX)
+#include <unistd.h>
+#include "chrome/browser/bay/webui/app_services_linux.h"
+#include "chrome/browser/bay/webui/autostart_linux.h"
+#include "chrome/browser/bay/webui/default_browser.h"
+#include "chrome/browser/bay/webui/document_store.h"
+#include "chrome/browser/bay/webui/secret_storage_linux.h"
+#include "chrome/browser/bay/webui/shell_clipboard.h"
+#include "chrome/browser/bay/webui/shell_files.h"
+#include "chrome/browser/bay/webui/shell_ui.h"
+#include "chrome/browser/bay/webui/sync_ui_linux.h"
+#include "chrome/browser/bay/webui/window_button_layout_linux.h"
+#endif
+#if BUILDFLAG(IS_WIN)
 #include "chrome/browser/bay/webui/frame_win.h"
-#include "chrome/browser/bay/webui/notifications_win.h"
 #include "chrome/browser/bay/webui/platform_services_win.h"
 #include "chrome/browser/bay/webui/updater_service_win.h"
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -70,6 +90,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
+#if BUILDFLAG(IS_LINUX)
+#include "net/base/filename_util.h"
+#include "url/gurl.h"
+#endif
 #include "third_party/blink/public/common/input/web_input_event.h"
 
 extern "C" void nn_engine_set_event_sink(nn_engine_event_t sink, void* context);
@@ -83,8 +107,6 @@ std::map<NativeHost*, base::WeakPtr<NativeHost>>& Hosts() {
   return *hosts;
 }
 #if BUILDFLAG(IS_WIN)
-bool g_quit_requested = false;
-bool g_quit_prepared = false;
 UpdaterService& AppUpdater() {
   static base::NoDestructor<UpdaterService> updater(
       base::BindRepeating([](base::DictValue state) {
@@ -107,6 +129,10 @@ UpdaterService& AppUpdater() {
       base::BindRepeating(&chrome::AttemptExit));
   return *updater;
 }
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+bool g_quit_requested = false;
+bool g_quit_prepared = false;
 struct QuitPreparation {
   base::WeakPtr<NativeHost> owner;
   std::vector<base::OnceCallback<void(bool)>> callbacks;
@@ -156,82 +182,6 @@ void PrepareRendererForQuit(base::OnceCallback<void(bool)> completion) {
                       base::BindOnce(&CompleteQuitPreparation, false));
   quit.owner->Emit("BayShell", "onAppEvent",
                    base::Value(base::DictValue().Set("type", "willQuit")));
-}
-void InstallCloseHooks() {
-  static const bool installed = [] {
-    WebUIBrowserWindow::SetBayCloseRequestHandler(
-        [](BrowserWindowInterface* browser) {
-          if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-                  "bay-hosting-spike") ||
-              browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
-            return false;
-          const auto host = QuitOwner();
-          if (!host)
-            return false;
-          if (AppRuntime::Enabled()) {
-            auto* runtime = AppRuntime::GetIfStarted();
-            if (runtime && runtime->IsRetiringStartupWindow(browser))
-              return false;
-            if (WindowRegistry::Get().Ids().size() > 1)
-              return false;
-            bool is_shell = false;
-            for (const auto& [owner, candidate] : Hosts())
-              is_shell |= candidate && candidate->browser() == browser;
-            if (!is_shell)
-              return false;
-          } else if (host->browser() != browser) {
-            return false;
-          }
-          // Posting lets WebUIBrowserWindow rearm the consumed widget callback
-          // before application shutdown can synchronously call Close() again.
-          if (!g_quit_requested && !browser_shutdown::IsTryingToQuit()) {
-            g_quit_requested = true;
-            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-                FROM_HERE, base::BindOnce(&chrome::AttemptExit));
-          }
-          return true;
-        });
-    BrowserCloseManager::SetBayClosePreflight(
-        [](base::OnceCallback<void(bool)> completion) {
-          g_quit_requested = true;
-          g_quit_prepared = false;
-          if (browser_shutdown::ShouldIgnoreUnloadHandlers()) {
-            std::move(completion).Run(TabBroker::Get().PrepareForQuit());
-            return;
-          }
-          PrepareRendererForQuit(base::BindOnce(
-              [](base::OnceCallback<void(bool)> completion, bool proceed) {
-                if (!proceed) {
-                  std::move(completion).Run(false);
-                  return;
-                }
-                AppUpdater().PrepareForQuit(base::BindOnce(
-                    [](base::OnceCallback<void(bool)> completion,
-                       bool updater_ready) {
-                      const bool prepared =
-                          updater_ready && TabBroker::Get().PrepareForQuit();
-                      g_quit_prepared = prepared;
-                      std::move(completion).Run(prepared);
-                    },
-                    std::move(completion)));
-              },
-              std::move(completion)));
-        },
-        [] {
-          g_quit_requested = false;
-          g_quit_prepared = false;
-          CompleteQuitPreparation(false);
-          AppUpdater().CancelQuit();
-          for (const auto& [owner, host] : Hosts()) {
-            if (host)
-              host->Emit(
-                  "BayShell", "onAppEvent",
-                  base::Value(base::DictValue().Set("type", "quitCancelled")));
-          }
-        });
-    return true;
-  }();
-  (void)installed;
 }
 #endif
 std::map<uintptr_t, base::WeakPtr<NativeHost>>& PendingOwners() {
@@ -292,7 +242,11 @@ void EngineEvent(void*, const char* topic, const char* json) {
     return;
   if (const auto* path = parsed->FindString("profile")) {
     const auto name =
+#if BUILDFLAG(IS_WIN)
         base::FilePath::FromUTF8Unsafe(*path).BaseName().AsUTF8Unsafe();
+#else
+        base::FilePath(*path).BaseName().value();
+#endif
     parsed->Set("profile", name == "Default" ? "" : name);
   }
   const std::string normalized_json = JSON(*parsed);
@@ -319,22 +273,118 @@ void EngineEvent(void*, const char* topic, const char* json) {
 int TabId(content::WebContents* contents) {
   return sessions::SessionTabHelper::IdForTab(contents).id();
 }
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+void HostEvent(const std::string& module,
+               const std::string& event,
+               const base::Value& payload) {
+  std::vector<base::WeakPtr<NativeHost>> hosts;
+  for (const auto& entry : Hosts())
+    hosts.push_back(entry.second);
+  for (const auto& host : hosts)
+    if (host && (!AppRuntime::Enabled() || host->is_coordinator()))
+      host->Emit(module.c_str(), event.c_str(), payload.Clone());
+}
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void DataEvent(const std::string& module,
                const std::string& event,
                const std::string& json) {
   auto payload = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
   if (!payload)
     return;
-  std::vector<base::WeakPtr<NativeHost>> hosts;
-  for (const auto& entry : Hosts())
-    hosts.push_back(entry.second);
-  for (const auto& host : hosts)
-    if (host && (!AppRuntime::Enabled() || host->is_coordinator()))
-      host->Emit(module.c_str(), event.c_str(), payload->Clone());
+  HostEvent(module, event, *payload);
 }
 #endif
 }  // namespace
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+bool NativeHost::HandleWindowClose(BrowserWindowInterface* browser) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("bay-hosting-spike") ||
+      browser_shutdown::ShouldIgnoreUnloadHandlers() || g_quit_prepared)
+    return false;
+  const auto host = QuitOwner();
+  if (!host)
+    return false;
+  if (AppRuntime::Enabled()) {
+    auto* runtime = AppRuntime::GetIfStarted();
+    if (runtime && runtime->IsRetiringStartupWindow(browser))
+      return false;
+    if (WindowRegistry::Get().Ids().size() > 1)
+      return false;
+    bool is_shell = false;
+    for (const auto& [owner, candidate] : Hosts())
+      is_shell |= candidate && candidate->browser() == browser;
+    if (!is_shell)
+      return false;
+  } else if (host->browser() != browser) {
+    return false;
+  }
+  // Posting lets WebUIBrowserWindow rearm the consumed widget callback
+  // before application shutdown can synchronously call Close() again.
+  if (!g_quit_requested && !browser_shutdown::IsTryingToQuit()) {
+    g_quit_requested = true;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&chrome::AttemptExit));
+  }
+  return true;
+}
+void NativeHost::PrepareForQuit(base::OnceCallback<void(bool)> completion) {
+  g_quit_requested = true;
+  g_quit_prepared = false;
+  if (browser_shutdown::ShouldIgnoreUnloadHandlers()) {
+    std::move(completion).Run(TabBroker::Get().PrepareForQuit());
+    return;
+  }
+  PrepareRendererForQuit(base::BindOnce(
+      [](base::OnceCallback<void(bool)> completion, bool proceed) {
+        if (!proceed) {
+          std::move(completion).Run(false);
+          return;
+        }
+        auto prepare_tabs = base::BindOnce(
+            [](base::OnceCallback<void(bool)> completion, bool updater_ready) {
+              const bool prepared =
+                  updater_ready && TabBroker::Get().PrepareForQuit();
+              g_quit_prepared = prepared;
+              std::move(completion).Run(prepared);
+            },
+            std::move(completion));
+#if BUILDFLAG(IS_WIN)
+        AppUpdater().PrepareForQuit(std::move(prepare_tabs));
+#else
+        std::move(prepare_tabs).Run(true);
+#endif
+      },
+      std::move(completion)));
+}
+void NativeHost::CancelQuit() {
+  g_quit_requested = false;
+  g_quit_prepared = false;
+  CompleteQuitPreparation(false);
+#if BUILDFLAG(IS_WIN)
+  AppUpdater().CancelQuit();
+#endif
+  for (const auto& [owner, host] : Hosts()) {
+    if (host)
+      host->Emit("BayShell", "onAppEvent",
+                 base::Value(base::DictValue().Set("type", "quitCancelled")));
+  }
+}
+void NativeHost::InstallCloseHooks() {
+  static const bool installed = [] {
+    // The broker installs a detached-tab-only fallback on Linux. Construct it
+    // first, then replace that fallback with the full renderer handshake so it
+    // cannot overwrite these hooks when the first tab is used.
+    TabBroker::Get();
+    WebUIBrowserWindow::SetBayCloseRequestHandler(
+        &NativeHost::HandleWindowClose);
+    BrowserCloseManager::SetBayClosePreflight(&NativeHost::PrepareForQuit,
+                                              &NativeHost::CancelQuit);
+    return true;
+  }();
+  (void)installed;
+}
+#endif
 
 NativeHost::NativeHost(content::RenderFrameHost& frame,
                        HostContext context,
@@ -359,17 +409,50 @@ NativeHost::NativeHost(content::RenderFrameHost& frame,
   engine_services_ = std::make_unique<EngineServices>(
       context_,
       base::BindRepeating(&NativeHost::InvokeBrowserEngine, GetWeakPtr()));
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   InstallCloseHooks();
+#endif
+#if BUILDFLAG(IS_WIN)
   AppUpdater().Prepare(
       base::BindOnce(&NativeHost::PublishHostInfo, GetWeakPtr()));
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  keychain_ = std::make_unique<Keychain>(context_);
   RegisterDataProfile(context_.profile());
   InitializeDataBridge(base::BindRepeating(&DataEvent));
+#endif
+#if BUILDFLAG(IS_WIN)
   platform_services_ = std::make_unique<PlatformServices>(
       context_,
       base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
   platform_services_->Prepare(
       base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
+#endif
+#if BUILDFLAG(IS_LINUX)
+  button_layout_ = std::make_unique<WindowButtonLayoutLinux>(
+      base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  default_browser_ = std::make_unique<DefaultBrowser>(context_);
+  autostart_ = std::make_unique<Autostart>(context_);
+  app_services_ = std::make_unique<AppServicesLinux>(
+      context_, g_browser_process->GetApplicationLocale());
+  files_ = std::make_unique<ShellFiles>(context_);
+  shell_ui_ = std::make_unique<ShellUI>();
+  sync_ui_ = std::make_unique<SyncUI>();
+  secret_storage_ = std::make_unique<SecretStorage>();
+  documents_ = std::make_unique<DocumentStore>(
+      DocumentStore::DefaultDirectory(),
+      base::BindRepeating(&NativeHost::PublishHostInfo, GetWeakPtr()));
+  app_services_->Prepare(
+      base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
+  files_->Prepare(base::BindOnce(&NativeHost::PlatformReady, GetWeakPtr()));
+  documents_->Prepare(base::BindOnce(
+      [](base::WeakPtr<NativeHost> host) {
+        if (!host)
+          return;
+        host->documents_ready_ = true;
+        host->PlatformReady();
+      },
+      GetWeakPtr()));
 #endif
   if (context_.window()) {
     WindowRegistry::Get().RegisterHost(
@@ -381,7 +464,10 @@ content::WebContents* NativeHost::document_contents() const {
   return content::WebContents::FromRenderFrameHost(&render_frame_host());
 }
 NativeHost::~NativeHost() {
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  appearance_.reset();
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (PendingQuit().owner.get() == this)
     CompleteQuitPreparation(false);
 #endif
@@ -389,7 +475,7 @@ NativeHost::~NativeHost() {
   for (const auto& entry : pending_)
     PendingOwners().erase(entry.first);
   Hosts().erase(this);
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   bool notification_client = false;
   for (const auto& [owner, host] : Hosts()) {
     if (host && host->client_ &&
@@ -399,7 +485,7 @@ NativeHost::~NativeHost() {
     }
   }
   if (!notification_client)
-    NotificationsWin::Get().SetEventSink({});
+    Notifications::Get().SetEventSink({});
 #endif
   if (Hosts().empty())
     nn_engine_set_event_sink(nullptr, nullptr);
@@ -411,9 +497,12 @@ base::DictValue NativeHost::Info() const {
     modules.Append(name);
   for (const auto& module : browser_services_->Modules())
     modules.Append(module.Clone());
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  modules.Append("BayKeychain");
   for (const auto& module : data::ModuleNames())
     modules.Append(module);
+#endif
+#if BUILDFLAG(IS_WIN)
   for (const auto& module : platform_services_->Modules()) {
     bool found = false;
     for (const auto& existing : modules)
@@ -422,6 +511,16 @@ base::DictValue NativeHost::Info() const {
       modules.Append(module.Clone());
   }
 #endif
+#if BUILDFLAG(IS_LINUX)
+  // Post/remove capability only. Desktop permission and settings APIs are not
+  // available, and bridge readiness is checked when each operation runs.
+  modules.Append("BayNotifications");
+  modules.Append("BaySystem");
+#endif
+  base::DictValue app;
+#if BUILDFLAG(IS_LINUX)
+  app = app_services_->snapshots();
+#else
   base::DictValue system;
   system.Set("platform",
 #if BUILDFLAG(IS_WIN)
@@ -447,9 +546,13 @@ base::DictValue NativeHost::Info() const {
   system.Set("memoryGB", base::SysInfo::AmountOfTotalPhysicalMemory().InGiBF());
   system.Set("locale", g_browser_process->GetApplicationLocale());
   system.Set("updates", false);
+  app.Set("systemInfo", std::move(system));
+  app.Set("environment", base::DictValue());
+#endif
   base::DictValue shell;
   shell.Set("role", context_.role_name());
   shell.Set("sharedRuntime", AppRuntime::Enabled());
+  shell.Set("globalWindowCoordinates", GlobalWindowCoordinates());
   shell.Set("runtimeRole", context_.role_name());
   if (auto* window = context_.window()) {
     const std::string window_id = WindowRegistry::Get().IdFor(window);
@@ -461,6 +564,9 @@ base::DictValue NativeHost::Info() const {
                                 "bay-hosting-spike"));
 #if BUILDFLAG(IS_WIN)
   shell.Set("initializationError", platform_services_->initialization_error());
+#elif BUILDFLAG(IS_LINUX)
+  if (!documents_->error().empty())
+    shell.Set("initializationError", documents_->error());
 #endif
   if (context_.window() && WindowRegistry::Get().IsAbsorbed(context_.window()))
     shell.Set("initializationError",
@@ -469,15 +575,58 @@ base::DictValue NativeHost::Info() const {
   shell.Set("backdrop", FrameWin::BackdropEnabled() ? "mica" : "solid");
 #endif
   auto engine_methods = browser_services_->SupportedMethods();
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  for (auto& method : Keychain::SupportedMethods())
+    engine_methods.Append(std::move(method));
+#endif
   for (const auto& method : engine_services_->SupportedMethods())
     engine_methods.Append(method.Clone());
+#if BUILDFLAG(IS_LINUX)
+  for (auto& method : Notifications::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (const char* method :
+       {"BayShell.windowButtonLayout", "BayShell.minimizeWindow",
+        "BayShell.toggleMaximizeWindow", "BayShell.windowState"})
+    engine_methods.Append(method);
+  engine_methods.Append("BayShell.prompt");
+  engine_methods.Append("BayShell.confirm");
+  if (context_.is_window()) {
+    engine_methods.Append("BayShell.pickFiles");
+    engine_methods.Append("BayShell.showMenu");
+  }
+  engine_methods.Append("BaySystem.fileIcon");
+  for (auto& method : SecretStorage::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : DocumentStore::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : ShellAppearance::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : ShellClipboard::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : ShellFiles::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : DefaultBrowser::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : Autostart::SupportedMethods())
+    engine_methods.Append(std::move(method));
+  for (auto& method : AppServicesLinux::SupportedMethods())
+    engine_methods.Append(std::move(method));
+#endif
+  base::DictValue documents;
+#if BUILDFLAG(IS_LINUX)
+  documents = documents_->documents();
+#endif
   auto info =
       base::DictValue()
           .Set("contractVersion", 2)
           .Set("role", context_.role_name())
-          .Set("platform", system.FindString("platform")
-                               ? *system.FindString("platform")
-                               : "linux")
+          .Set("platform",
+#if BUILDFLAG(IS_WIN)
+               "windows"
+#else
+               "linux"
+#endif
+               )
           .Set("modules", std::move(modules))
           .Set("views", context_.is_window()
                             ? base::ListValue().Append("BayWebView")
@@ -489,15 +638,22 @@ base::DictValue NativeHost::Info() const {
                    .Set("BayShell", std::move(shell)))
           .Set("snapshots",
                base::DictValue()
-                   .Set("BayApp", base::DictValue()
-                                      .Set("systemInfo", std::move(system))
-                                      .Set("environment", base::DictValue()))
-                   .Set("BayShell",
-                        base::DictValue().Set("documents", base::DictValue()))
+                   .Set("BayApp", std::move(app))
+                   .Set("BayShell", base::DictValue().Set("documents",
+                                                          std::move(documents)))
                    .Set("BaySystem",
                         base::DictValue()
                             .Set("files", base::DictValue())
                             .Set("downloadsFolder", base::Value())));
+#if BUILDFLAG(IS_LINUX)
+  char device_name[256]{};
+  const bool named =
+      gethostname(device_name, sizeof(device_name) - 1) == 0 && device_name[0];
+  info.FindDict("snapshots")
+      ->Set("BaySync",
+            base::DictValue().Set("deviceName",
+                                  named ? device_name : "This Linux device"));
+#endif
 #if BUILDFLAG(IS_WIN)
   auto snapshots = platform_services_->Snapshots();
   if (auto* app = snapshots.FindDict("BayApp")) {
@@ -515,6 +671,8 @@ base::DictValue NativeHost::Info() const {
   }
   info.Set("snapshots", std::move(snapshots));
   auto methods = platform_services_->SupportedMethods();
+  for (auto& method : Keychain::SupportedMethods())
+    methods.Append(std::move(method));
   for (const auto& method : browser_services_->SupportedMethods())
     methods.Append(method.Clone());
   for (const auto& method : engine_services_->SupportedMethods())
@@ -530,10 +688,18 @@ base::DictValue NativeHost::Info() const {
         "BayApp.setAutomaticUpdateChecks",
         "BayApp.setAutomaticUpdateDownloads"})
     methods.Append(method);
+  info.Set("optionalMethods", std::move(methods));
+#endif
+#if BUILDFLAG(IS_LINUX)
+  info.SetByDottedPath("snapshots.BayShell.windowButtonLayout",
+                       button_layout_->Snapshot());
+  info.SetByDottedPath("snapshots.BaySystem.downloadsFolder",
+                       files_->downloads_folder());
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   for (const auto& module : data::ModuleNames())
     for (const auto& method : data::MethodNames(module))
-      methods.Append(module + "." + method);
-  info.Set("optionalMethods", std::move(methods));
+      info.FindList("optionalMethods")->Append(module + "." + method);
 #endif
   // Set last: a platform's services replace the snapshots above.
   info.FindDict("snapshots")
@@ -555,7 +721,7 @@ base::DictValue NativeHost::Info() const {
   return info;
 }
 void NativeHost::GetHostInfo(GetHostInfoCallback callback) {
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (!platform_ready_) {
     host_info_callbacks_.push_back(std::move(callback));
     return;
@@ -564,35 +730,73 @@ void NativeHost::GetHostInfo(GetHostInfoCallback callback) {
   std::move(callback).Run(JSON(Info()));
 }
 void NativeHost::PublishHostInfo() {
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (!platform_ready_)
     return;
 #endif
   if (client_)
     client_->OnHostInfoChanged(JSON(Info()));
 }
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 void NativeHost::PlatformReady() {
+#if BUILDFLAG(IS_LINUX)
+  if (!documents_ready_ || !files_->ready() || !app_services_->ready())
+    return;
+#endif
   platform_ready_ = true;
   const std::string json = JSON(Info());
   auto callbacks = std::move(host_info_callbacks_);
+  PublishHostInfo();
+  // A reply may destroy this document. No member access follows.
   for (auto& callback : callbacks)
     std::move(callback).Run(json);
-  PublishHostInfo();
 }
 #endif
 void NativeHost::SetClient(
     mojo::PendingRemote<mojom::NativeHostClient> client) {
   client_.reset();
   client_.Bind(std::move(client));
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (!appearance_)
+    appearance_ = std::make_unique<ShellAppearance>(context_);
+  appearance_->SetEventSink(base::BindRepeating(
+      [](base::WeakPtr<NativeHost> host, bool dark) {
+        if (host)
+          host->Emit("BayShell", "onAppEvent",
+                     base::Value(base::DictValue()
+                                     .Set("type", "appearance")
+                                     .Set("dark", dark)));
+      },
+      GetWeakPtr()));
+#if BUILDFLAG(IS_LINUX)
+  button_layout_->SetEventSink(base::BindRepeating(
+      [](base::WeakPtr<NativeHost> host, base::DictValue layout) {
+        if (host)
+          host->Emit("BayShell", "onAppEvent",
+                     base::Value(base::DictValue()
+                                     .Set("type", "windowButtonLayout")
+                                     .Set("layout", std::move(layout))));
+      },
+      GetWeakPtr()));
+#endif
+  client_.set_disconnect_handler(base::BindOnce(
+      [](base::WeakPtr<NativeHost> host) {
+        if (host) {
+          host->appearance_->SetEventSink({});
+#if BUILDFLAG(IS_LINUX)
+          host->button_layout_->SetEventSink({});
+#endif
+        }
+      },
+      GetWeakPtr()));
   if (!AppRuntime::Enabled() || is_coordinator()) {
     // Activation can arrive before the trusted document connects. Drain only
     // after its Mojo client is bound; the renderer retains startup responses
     // until app integration subscribes.
-    NotificationsWin::Get().SetEventSink(base::BindRepeating(
+    Notifications::Get().SetEventSink(base::BindRepeating(
         [](base::DictValue response) {
-          DataEvent("BayApp", "onNotificationResponse", JSON(response));
+          HostEvent("BayApp", "onNotificationResponse",
+                    base::Value(std::move(response)));
         }));
   }
 #endif
@@ -683,6 +887,52 @@ void NativeHost::CompleteEngine(uintptr_t token, const char* json) {
   std::move(callback).Run(
       Success(raw_json ? base::Value(json) : std::move(*result)));
 }
+#if BUILDFLAG(IS_LINUX)
+void NativeHost::ChooseImportFile(const base::ListValue& args,
+                                  InvokeCallback callback) {
+  const auto kind = Text(args, 0);
+  if (kind != "passwordsCSV" && kind != "bookmarksHTML") {
+    std::move(callback).Run(Failure(
+        "unsupported", "This import file kind is unavailable on Linux"));
+    return;
+  }
+  // ShellUI owns window authority, the busy slot and exact-once teardown.
+  auto completion = base::BindOnce(
+      [](InvokeCallback callback, const std::string& response) {
+        auto reply = base::JSONReader::ReadDict(response, base::JSON_PARSE_RFC);
+        if (reply && reply->contains("error")) {
+          std::move(callback).Run(response);
+          return;
+        }
+        const auto* files = reply ? reply->FindList("value") : nullptr;
+        if (!files || files->size() > 1) {
+          std::move(callback).Run(
+              Failure("invalid_result", "Choose one local import file"));
+          return;
+        }
+        if (files->empty()) {
+          std::move(callback).Run(Success());
+          return;
+        }
+        base::FilePath path;
+        const auto* url = (*files)[0].GetIfString();
+        if (!url || !net::FileURLToFilePath(GURL(*url), &path) ||
+            !path.IsAbsolute() || !base::IsStringUTF8(path.value())) {
+          std::move(callback).Run(Failure(
+              "invalid_result", "Selected file has no UTF-8 local path"));
+          return;
+        }
+        // Match InvokeEnvelope: the value is a native path string, never a URL.
+        std::move(callback).Run(Success(base::Value(path.value())));
+      },
+      std::move(callback));
+  shell_ui_->PickImportFile(context_,
+                            kind == "passwordsCSV"
+                                ? ShellUI::ImportFileKind::kPasswordsCSV
+                                : ShellUI::ImportFileKind::kBookmarksHTML,
+                            std::move(completion));
+}
+#endif
 void NativeHost::Invoke(const std::string& module,
                         const std::string& method,
                         const std::string& args_json,
@@ -750,11 +1000,47 @@ void NativeHost::Invoke(const std::string& module,
   }
   if (LibraryFiles::Dispatch(module, method, args, callback))
     return;
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  if (keychain_->Dispatch(module, method, args, callback))
+    return;
+#endif
   if (browser_services_->DispatchBrowserModule(module, method, args, callback))
     return;
+#if BUILDFLAG(IS_LINUX)
+  // Ahead of the engine facade, which answers every other BayCEF method.
+  if (secret_storage_->Dispatch(module, method, args, callback))
+    return;
+#endif
   if (engine_services_->DispatchEngineModule(module, method, args, callback))
     return;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_LINUX)
+  // These services do not depend on Windows platform initialization. The
+  // common profile check above and browser-assigned context own authority.
+  if (module == "BayShell" && method == "windowButtonLayout") {
+    std::move(callback).Run(Success(base::Value(button_layout_->Snapshot())));
+    return;
+  }
+  if (default_browser_->Dispatch(module, method, args, callback))
+    return;
+  if (autostart_->Dispatch(module, method, args, callback))
+    return;
+  if (app_services_->Dispatch(module, method, args, callback))
+    return;
+  if (shell_ui_->Dispatch(context_, module, method, args, callback))
+    return;
+  if (ShellAppearance::Dispatch(context_, module, method, args, callback))
+    return;
+  if (ShellClipboard::Dispatch(module, method, args, callback))
+    return;
+  if (files_->Dispatch(module, method, args, callback))
+    return;
+  if (documents_->Dispatch(module, method, args, callback))
+    return;
+  if (module == "BayApp" &&
+      Notifications::Get().Dispatch(context_, method, args, callback))
+    return;
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (module == "BayShell" && method == "replyToTerminate") {
     if (!args[0].is_bool()) {
       std::move(callback).Run(
@@ -770,6 +1056,8 @@ void NativeHost::Invoke(const std::string& module,
     CompleteQuitPreparation(args[0].GetBool());
     return;
   }
+#endif
+#if BUILDFLAG(IS_WIN)
   if (module == "BayApp") {
     if ((method == "checkForUpdates" || method == "installPendingUpdate") &&
         !context_.window()) {
@@ -787,6 +1075,8 @@ void NativeHost::Invoke(const std::string& module,
       return;
     }
   }
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   if (module == "BaySync" && AppRuntime::Enabled() && !is_coordinator()) {
     bool local = false;
     for (const char* name : {"chooseFolder", "folderInfo", "revealFolder", "deviceName", "newDeviceId",
@@ -799,6 +1089,16 @@ void NativeHost::Invoke(const std::string& module,
     }
   }
   if (module == "BayImport" || module == "BaySync") {
+#if BUILDFLAG(IS_LINUX)
+    // Native pickers retain this document's UI owner. Intercept before the
+    // synchronous data facade or worker dispatch can handle them.
+    if (sync_ui_->Dispatch(context_, module, method, args, callback))
+      return;
+    if (module == "BayImport" && method == "chooseImportFile") {
+      ChooseImportFile(args, std::move(callback));
+      return;
+    }
+#endif
     if (data::RequiresUIThread(module, method)) {
       std::move(callback).Run(data::Invoke(module, method, args_json));
     } else {
@@ -811,6 +1111,8 @@ void NativeHost::Invoke(const std::string& module,
     }
     return;
   }
+#endif
+#if BUILDFLAG(IS_WIN)
   if (platform_services_->DispatchPlatformModule(module, method, args,
                                                  callback))
     return;

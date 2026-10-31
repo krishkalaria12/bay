@@ -19,3 +19,4 @@ patchedDependencies:
   expo-constants@18.0.14: patches/expo-constants@18.0.14.patch
   expo-modules-core@3.0.30: patches/expo-modules-core@3.0.30.patch
   react-native-macos@0.81.9: patches/react-native-macos@0.81.9.patch
+  react-native-web@0.21.4: patches/react-native-web@0.21.4.patch

@@ -5,7 +5,8 @@
 // DeviceAuthenticator (Touch ID, else the login password) from
 // ChromeDeviceAuthenticatorFactory, with the caller's source, prompt and
 // validity period, so a reauth here and one in Chrome's own prompts count for
-// each other.
+// each other. Linux has no OS authenticator, so there (as in Chrome) every
+// request is granted without a prompt.
 //
 // A hidden test instance (BAY_BACKGROUND=1 in the process's environment)
 // never shows the prompt: each request is logged and reported as event

@@ -72,6 +72,8 @@ export const focusWindow = (windowId) => (focusedWindows.push(windowId), Promise
 export const appEventListeners = new Set();
 export const onAppEvent = (listener) => (appEventListeners.add(listener), { remove: () => appEventListeners.delete(listener) });
 export const emitAppEvent = (event) => appEventListeners.forEach((listener) => listener(event));
+export const appearanceState = { query: () => Promise.resolve(false) };
+export const isDarkAppearance = () => appearanceState.query();
 export const pageEventListeners = new Set();
 export const onPageEvent = (listener) => (pageEventListeners.add(listener), { remove: () => pageEventListeners.delete(listener) });
 export const emitPageEvent = (event) => pageEventListeners.forEach((listener) => listener(event));
@@ -88,6 +90,11 @@ export const startPageEvents = () => {
   return pageEventSource.error ? Promise.reject(pageEventSource.error) : Promise.resolve();
 };
 export const stopPageEvents = () => (pageEventSource.stops++, Promise.resolve());
+export const notificationState = { querySupported: true, permission: "granted", requested: false, queries: 0, requests: 0 };
+export const hasNotificationPermissionQuery = () => notificationState.querySupported;
+export const notificationPermission = () => (notificationState.queries++, Promise.resolve(notificationState.permission));
+export const requestNotificationPermission = () => (notificationState.requests++, Promise.resolve(notificationState.requested));
+export const openNotificationSettings = () => Promise.resolve();
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);
@@ -349,6 +356,20 @@ export const extensionActionStates = (browserId, ids) => extensionAnswers.action
 export const extensionSidePanelUrl = (browserId, extensionId) => extensionAnswers.sidePanelUrl(browserId, extensionId);
 
 export const copyText = () => {};
+
+// The caption buttons the app draws: Windows' alone.
+export const windowButtonLayout = () => ({ left: [], right: process.env.BAY_TEST_PLATFORM === "windows" ? ["minimize", "maximize", "close"] : [] });
+
+export const captionState = { query: () => Promise.resolve({ maximized: false, fullscreen: false }) };
+export const windowState = (windowId) => captionState.query(windowId);
+
+// Desktop drag preview and live geometry, controlled by layout tests.
+export const tabDragNative = { calls: [], frame: () => Promise.resolve(null) };
+export const windowFrame = (id) => tabDragNative.frame(id);
+export const hapticTick = () => {};
+export const dragPreview = Object.fromEntries(
+  ["begin", "page", "update", "cancel", "placeholder", "end"].map((method) => [method, (...args) => tabDragNative.calls.push([method, ...args])]),
+);
 
 export const openWindow = () => Promise.resolve();
 // Library assets: a test can replace the importer to simulate an unavailable file.

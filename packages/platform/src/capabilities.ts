@@ -5,11 +5,13 @@
 import type { PlatformOS } from "./types";
 
 export type Capabilities = {
+  /** The host can query and place windows in global screen coordinates. */
+  globalWindowCoordinates: boolean;
   /** BayGlassEffect renders real Liquid Glass (macOS 26+). Elsewhere: the Surface fallback. */
   liquidGlass: boolean;
   /** BayVisualEffect (NSVisualEffectView vibrancy). Elsewhere: the Surface fallback. */
   vibrancy: boolean;
-  /** The Metal shader views (BayAreaLight, BayEdgeLight, BayPowerUp, BayWindowBackdrop). */
+  /** The shader views: Metal on macOS (BayAreaLight, BayEdgeLight, BayPowerUp, BayWindowBackdrop), WebGL2 on the web host. */
   shaders: boolean;
   /** A window backdrop is available (macOS vibrancy/glass, Windows Mica/Acrylic). */
   windowBackdrop: boolean;
@@ -21,7 +23,7 @@ export type Capabilities = {
   menuBar: boolean;
   /** The window's buttons are the app's own views (BayShell traffic lights). */
   trafficLights: boolean;
-  /** The app draws the window's caption buttons (minimize, maximize, close) at its top right (Windows). */
+  /** The app draws the window's caption buttons (minimize, maximize, close): Windows. Linux windows have none. */
   captionButtons: boolean;
   /** BaySwipe: trackpad two-finger back/forward, the app's own. Windows: Chrome's overscroll. */
   swipe: boolean;
@@ -64,16 +66,18 @@ export type Capabilities = {
 /**
  * The capability table. `hasModule` answers whether a named native module is built into this app
  * (the caller probes with requireOptionalNativeModule), so a build without one degrades instead of
- * crashing. On Windows most macOS-only entries are false by design: the plan's out-of-scope list.
+ * crashing. On Windows most macOS-only entries are false by design: the plan's out-of-scope list. `webgl2` is the
+ * web host's probe result; it says nothing about the window backdrop, which is the host's own treatment.
  */
-export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boolean): Capabilities {
+export function capabilitiesFor(os: PlatformOS, hasModule: (name: string) => boolean, webgl2 = false): Capabilities {
   const mac = os === "macos";
   const windows = os === "windows";
   const webDesktop = windows || os === "linux";
   return {
+    globalWindowCoordinates: mac || windows,
     liquidGlass: mac && hasModule("BayGlassEffect"),
     vibrancy: mac && hasModule("BayVisualEffect"),
-    shaders: mac && hasModule("BayAreaLight") && hasModule("BayEdgeLight") && hasModule("BayPowerUp") && hasModule("BayWindowBackdrop"),
+    shaders: mac ? hasModule("BayAreaLight") && hasModule("BayEdgeLight") && hasModule("BayPowerUp") && hasModule("BayWindowBackdrop") : webDesktop && webgl2,
     windowBackdrop: mac || webDesktop,
     dock: mac && hasModule("BayApp"),
     dockSelection: mac && hasModule("BayDockSelection"),

@@ -47,6 +47,16 @@ export const importedSummary = (counts: ImportCounts) =>
 
 export type ExtensionFailure = { spaceId: string; extension: ImportedExtension; message: string };
 
+export function importWarningNotes(result: Pick<ImportResult, "warnings" | "failed">): string[] {
+  return result.warnings
+    .filter(
+      (warning) =>
+        ["undecryptable", "skipped", "locked", "passwordExportRequired", "appBound"].includes(warning.code) &&
+        (!warning.kind || !result.failed.includes(warning.kind)),
+    )
+    .map((warning) => `${warning.message}.`);
+}
+
 /** One source profile's extensions go only to its destination spaces. Shared destination profiles are written once. */
 export async function importExtensions(spaceIds: string[], result: ImportResult, signal?: AbortSignal) {
   const api = importModule();

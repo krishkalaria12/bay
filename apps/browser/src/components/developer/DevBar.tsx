@@ -11,7 +11,7 @@ import { webviews } from "../../lib/webviews";
 import { useBrowserRead as useBrowser } from "../../store/read";
 import { useTabLive } from "../../store/hooks";
 import { ToolbarButton } from "../layout/controls";
-import { CAPTION_END_ROOM, type ToolbarGeometry } from "../layout/geometry";
+import { type ToolbarGeometry } from "../layout/geometry";
 import { useHistoryAvailability } from "../layout/history";
 import { setPopover, usePages } from "../layout/pageState";
 import { closePane, showSplitMenu } from "../layout/splitActions";
@@ -106,7 +106,7 @@ export function DevBar({
         style={{
           position: "absolute",
           left: navigation ? geometry.urlLeft : geometry.urlLeft - 2,
-          right: 6 + (geometry.captionEnd ? CAPTION_END_ROOM : 0),
+          right: 6 + geometry.captionRoom,
           top: 0,
           bottom: 0,
           flexDirection: "row",

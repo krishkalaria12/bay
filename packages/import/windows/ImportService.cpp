@@ -1,3 +1,4 @@
+#include "BrowserDiscovery.h"
 #include "ImportCore.h"
 #include <algorithm>
 #include <chrono>
@@ -18,6 +19,16 @@ std::mutex stateMutex;
 EventSink eventSink;
 ImportWriter importWriter;
 std::map<std::string, Bytes> browserKeys;
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+struct UnlockedLinuxBrowser {
+  Path root;
+  std::string product;
+  std::shared_ptr<ChromiumSecretContext> secrets;
+};
+std::map<std::string, UnlockedLinuxBrowser> linuxBrowserKeys;
+std::map<std::string, Path> linuxFirefoxRoots;
+std::uint64_t unlockGeneration = 0;
+#endif
 std::map<std::string, std::string> firefoxPasswords;
 std::map<std::string, std::shared_ptr<std::atomic_bool>> jobs;
 std::set<std::string> cancelledJobs;
@@ -26,6 +37,7 @@ struct Entry {
   std::chrono::steady_clock::time_point time;
 };
 std::map<std::string, Entry> vault;
+#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
 Path environment(const wchar_t *name) {
 #ifdef _WIN32
   wchar_t value[32768]{};
@@ -36,12 +48,12 @@ Path environment(const wchar_t *name) {
   return {};
 #endif
 }
-struct Browser {
-  std::string id, name;
-  Path root;
-  bool firefox = false, rootProfile = false;
-};
+#endif
+using Browser = discovery::Browser;
 std::vector<Browser> browsers() {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  return discovery::linuxBrowsers(discovery::linuxEnvironment());
+#else
   auto local = environment(L"LOCALAPPDATA"), roaming = environment(L"APPDATA");
   std::vector<Browser> definitions;
   if (!local.empty())
@@ -82,7 +94,9 @@ std::vector<Browser> browsers() {
     if (fs::is_directory(browser.root))
       out.push_back(browser);
   return out;
+#endif
 }
+#if !defined(__linux__) && !defined(BAY_IMPORT_LINUX_TEST)
 Json available(const Path &profile, bool firefox) {
   Json kinds = Json::array();
   auto add = [&](const char *kind, bool exists) {
@@ -109,7 +123,11 @@ Json available(const Path &profile, bool firefox) {
   add("autofill", !firefox && fs::exists(profile / "Web Data"));
   return kinds;
 }
+#endif
 Json profiles(const Browser &browser) {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  return discovery::linuxProfiles(browser);
+#else
   Json out = Json::array();
   if (browser.firefox) {
     if (!fs::exists(browser.root / "profiles.ini"))
@@ -241,6 +259,7 @@ Json profiles(const Browser &browser) {
     return a.value("isDefault", false) && !b.value("isDefault", false);
   });
   return out;
+#endif
 }
 std::pair<Browser, Json> resolve(const std::string &id,
                                  const std::string &profile) {
@@ -289,6 +308,9 @@ Json import(const Json &args) {
   auto cancelled = std::make_shared<std::atomic_bool>(false);
   Bytes key;
   std::string primary;
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  std::shared_ptr<ChromiumSecretContext> linuxSecrets;
+#endif
   {
     std::lock_guard<std::mutex> lock(stateMutex);
     jobs[job] = cancelled;
@@ -296,8 +318,19 @@ Json import(const Json &args) {
       cancelled->store(true);
     if (browserKeys.count(id))
       key = browserKeys[id];
-    if (firefoxPasswords.count(id))
+    if (firefoxPasswords.count(id)
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+        && linuxFirefoxRoots.count(id) && linuxFirefoxRoots[id] == browser.root
+#endif
+    )
       primary = firefoxPasswords[id];
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+    auto unlocked = linuxBrowserKeys.find(id);
+    if (unlocked != linuxBrowserKeys.end() &&
+        unlocked->second.root == browser.root &&
+        unlocked->second.product == browser.productId)
+      linuxSecrets = unlocked->second.secrets;
+#endif
   }
   struct Cleanup {
     std::string job;
@@ -313,6 +346,11 @@ Json import(const Json &args) {
       cancelledJobs.erase(job);
     }
   } cleanup{job, key, primary};
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  if (!browser.firefox && !linuxSecrets)
+    linuxSecrets = std::make_shared<ChromiumSecretContext>(
+        linuxChromiumSecrets(linuxChromiumBrowser(browser.productId)));
+#endif
   auto observer = [&](Json event) {
     event["jobId"] = job;
     EventSink sink;
@@ -400,8 +438,13 @@ Json import(const Json &args) {
           result["credentials"] = firefoxLogins(path, primary, *cancelled);
         else {
           int blocked = 0;
-          result["credentials"] =
-              chromiumLogins(path, key, *cancelled, blocked);
+          result["credentials"] = chromiumLogins(path,
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+                                                 *linuxSecrets,
+#else
+                                                 key,
+#endif
+                                                 *cancelled, blocked);
           if (blocked && result["credentials"].empty())
             result["failed"].push_back(kind);
           if (blocked)
@@ -415,7 +458,13 @@ Json import(const Json &args) {
         }
       } else if (kind == "autofill" && !browser.firefox) {
         int blocked = 0;
-        auto loaded = chromiumAutofill(path, key, *cancelled, blocked);
+        auto loaded = chromiumAutofill(path,
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+                                       *linuxSecrets,
+#else
+                                       key,
+#endif
+                                       *cancelled, blocked);
         sensitive.addresses = std::move(loaded.addresses);
         sensitive.cards = std::move(loaded.cards);
         if (blocked)
@@ -504,6 +553,12 @@ void SetImportWriter(ImportWriter writer) {
 std::string Invoke(const std::string &, const std::string &method,
                    const std::string &argsJson) {
   auto args = Json::parse(argsJson);
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+  struct PrivateArguments {
+    Json &args;
+    ~PrivateArguments() { wipeJson(args); }
+  } privateArguments{args};
+#endif
   Json result;
   if (method == "listBrowsers") {
     Json sources = Json::array();
@@ -538,26 +593,73 @@ std::string Invoke(const std::string &, const std::string &method,
         found = true;
         if (browser.firefox) {
           std::lock_guard<std::mutex> lock(stateMutex);
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+          auto &old = firefoxPasswords[id];
+          volatile char *bytes = old.data();
+          for (std::size_t i = 0; i < old.size(); ++i)
+            bytes[i] = 0;
+          linuxFirefoxRoots[id] = browser.root;
+#endif
           firefoxPasswords[id] = args.size() > 1 && !args[1].is_null()
                                      ? args[1].get<std::string>()
                                      : "";
         } else {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+          std::uint64_t generation;
+          {
+            std::lock_guard<std::mutex> lock(stateMutex);
+            generation = unlockGeneration;
+          }
+          auto secrets = std::make_shared<ChromiumSecretContext>(
+              unlockLinuxChromiumSecrets(
+                  linuxChromiumBrowser(browser.productId), true));
+          std::lock_guard<std::mutex> lock(stateMutex);
+          if (generation != unlockGeneration)
+            throw Failure("cancelled", "The browser unlock was cancelled");
+          linuxBrowserKeys[id] = {browser.root, browser.productId,
+                                  std::move(secrets)};
+#else
           auto key = chromiumKey(browser.root);
           std::lock_guard<std::mutex> lock(stateMutex);
           if (browserKeys.count(id))
             bay::sync::erase(browserKeys[id]);
           browserKeys[id] = std::move(key);
+#endif
         }
         break;
       }
     if (!found)
       throw Failure("notFound", "Browser is unavailable");
   } else if (method == "isBrowserUnlocked") {
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+    const auto id = args.at(0).get<std::string>();
+    result = false;
+    for (const auto &browser : browsers()) {
+      if (browser.id != id)
+        continue;
+      std::lock_guard<std::mutex> lock(stateMutex);
+      auto unlocked = linuxBrowserKeys.find(id);
+      result = browser.firefox
+                   ? firefoxPasswords.count(id) &&
+                         linuxFirefoxRoots.count(id) &&
+                         linuxFirefoxRoots[id] == browser.root
+                   : unlocked != linuxBrowserKeys.end() &&
+                         unlocked->second.root == browser.root &&
+                         unlocked->second.product == browser.productId;
+      break;
+    }
+#else
     std::lock_guard<std::mutex> lock(stateMutex);
     auto id = args.at(0).get<std::string>();
     result = browserKeys.count(id) != 0 || firefoxPasswords.count(id) != 0;
+#endif
   } else if (method == "forgetUnlockedKeys") {
     std::lock_guard<std::mutex> lock(stateMutex);
+#if defined(__linux__) || defined(BAY_IMPORT_LINUX_TEST)
+    ++unlockGeneration;
+    linuxBrowserKeys.clear();
+    linuxFirefoxRoots.clear();
+#endif
     for (auto &key : browserKeys)
       bay::sync::erase(key.second);
     browserKeys.clear();

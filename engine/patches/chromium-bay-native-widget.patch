@@ -1,0 +1,46 @@
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.cc b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.cc
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.cc
+@@ -72,6 +72,7 @@
+ 
+ namespace {
+ bool (*g_bay_close_request_handler)(BrowserWindowInterface*) = nullptr;
++views::NativeWidget* (*g_bay_native_widget_factory)(views::Widget*) = nullptr;
+ 
+ const char* const kWebUIBrowserWindowKey = "__WEBUI_BROWSER_WINDOW__";
+ 
+@@ -1069,10 +1070,18 @@
+ }
+ 
+ views::NativeWidget* WebUIBrowserWindow::CreateNativeWidget() {
+-  return nullptr;
++  return g_bay_native_widget_factory
++             ? g_bay_native_widget_factory(widget_.get())
++             : nullptr;
+ }
+ #endif
+ 
++// static
++void WebUIBrowserWindow::SetBayNativeWidgetFactory(
++    views::NativeWidget* (*factory)(views::Widget*)) {
++  g_bay_native_widget_factory = factory;
++}
++
+ std::unique_ptr<FindBar> WebUIBrowserWindow::CreateFindBar() {
+   return std::make_unique<FindBarHost>(FindBarOwner::From(browser_));
+ }
+diff --git a/chrome/browser/ui/webui_browser/webui_browser_window.h b/chrome/browser/ui/webui_browser/webui_browser_window.h
+--- a/chrome/browser/ui/webui_browser/webui_browser_window.h
++++ b/chrome/browser/ui/webui_browser/webui_browser_window.h
+@@ -55,6 +55,11 @@
+   static void SetBayCloseRequestHandler(
+       bool (*handler)(BrowserWindowInterface*));
+ 
++  // Bay supplies its own native widget and custom frame on desktop
++  // platforms without a Mac implementation of CreateNativeWidget().
++  static void SetBayNativeWidgetFactory(
++      views::NativeWidget* (*factory)(views::Widget*));
++
+   // Returns the containing browser window for a WebContents that hosts
+   // WebShell.
+   static WebUIBrowserWindow* FromWebShellWebContents(

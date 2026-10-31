@@ -1,10 +1,10 @@
-import { capabilities } from "@bay/platform";
+import type { WindowButtonLayout } from "@bay/shell";
 import { layout } from "../../lib/constants";
 import { slotsOf } from "../../store/splits";
 import type { DeepReadonly } from "../../runtime/projection";
 type SplitView = DeepReadonly<import("../../store/types").SplitView>;
 import { MIN_PANE, PANE_GAP, SIDEBAR_BUTTON_END_ROOM, TRAFFIC_LIGHTS_OFFSET } from "./constants";
-import { CAPTION_BUTTONS_WIDTH } from "./windowButtons";
+import { getWindowButtonLayout, LIGHTS_WIDTH, windowButtonRoom } from "./windowButtons";
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
@@ -75,8 +75,9 @@ export type ToolbarGeometry = {
   sidebarButton: number | null;
   // The sidebar toggle at the toolbar's right end instead, beside a sidebar docked on the right.
   sidebarButtonEnd: boolean;
-  // The window's caption buttons over the toolbar's end (Windows): the pane at the window's top right.
+  // The window buttons over this pane's trailing corner.
   captionEnd: boolean;
+  captionRoom: number;
   back: number;
   forward: number;
   reload: number;
@@ -88,15 +89,17 @@ const geometries = new Map<string, ToolbarGeometry>();
 // One object per layout, so panes that get it as a prop can skip re-rendering.
 type ToolbarLayout = { sidebarButton: boolean; clearTrafficLights: boolean; sidebarButtonEnd?: boolean; captionEnd?: boolean };
 
-export function toolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
-  const key = `${o.sidebarButton}|${o.clearTrafficLights}|${!!o.sidebarButtonEnd}|${!!o.captionEnd}`;
+export function toolbarGeometry(o: ToolbarLayout, buttons = getWindowButtonLayout()): ToolbarGeometry {
+  const room = windowButtonRoom(buttons);
+  const start = o.clearTrafficLights ? (LIGHTS_WIDTH ? TRAFFIC_LIGHTS_OFFSET : Math.max(0, room.left - layout.cardInset)) : 0;
+  const end = o.captionEnd ? Math.max(0, room.right - layout.cardInset) : 0;
+  const key = `${o.sidebarButton}|${start}|${!!o.sidebarButtonEnd}|${!!o.captionEnd}|${end}`;
   let g = geometries.get(key);
-  if (!g) geometries.set(key, (g = computeToolbarGeometry(o)));
+  if (!g) geometries.set(key, (g = computeToolbarGeometry(o, start, end)));
   return g;
 }
 
-function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
-  const offset = o.clearTrafficLights ? TRAFFIC_LIGHTS_OFFSET : 0;
+function computeToolbarGeometry(o: ToolbarLayout, offset: number, captionRoom: number): ToolbarGeometry {
   const end = !!o.sidebarButtonEnd;
   const captionEnd = !!o.captionEnd;
   const [c0, c1, c2, c3] = layout.toolbarIconCenters;
@@ -105,6 +108,7 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
       sidebarButton: offset + c0,
       sidebarButtonEnd: end,
       captionEnd,
+      captionRoom,
       back: offset + c1,
       forward: offset + c2,
       reload: offset + c3,
@@ -115,6 +119,7 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
     sidebarButton: null,
     sidebarButtonEnd: end,
     captionEnd,
+    captionRoom,
     back: offset + c1 - shift,
     forward: offset + c2 - shift,
     reload: offset + c3 - shift,
@@ -122,12 +127,42 @@ function computeToolbarGeometry(o: ToolbarLayout): ToolbarGeometry {
   };
 }
 
-// The caption buttons' room at the toolbar's right: theirs at the window's corner, less the card's inset.
-export const CAPTION_END_ROOM = Math.max(0, CAPTION_BUTTONS_WIDTH - layout.cardInset);
-/** What a toolbar's end keeps clear: the caption buttons outermost, then a sidebar toggle there. */
-export const toolbarEndRoom = (g: ToolbarGeometry) => (g.captionEnd ? CAPTION_END_ROOM : 0) + (g.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0);
+/** What a toolbar's end keeps clear: window buttons outermost, then a sidebar toggle. */
+export const toolbarEndRoom = (g: ToolbarGeometry) => g.captionRoom + (g.sidebarButtonEnd ? SIDEBAR_BUTTON_END_ROOM : 0);
 
-export const NO_TOOLBAR: ToolbarGeometry = { sidebarButton: null, sidebarButtonEnd: false, captionEnd: false, back: 21, forward: 21, reload: 21, urlLeft: 8 };
-// No toolbar on the window's top-left pane with the sidebar on the right: the window buttons show over its corner on
-// hover, so what starts there (Developer Mode's bar, prompts) starts past them.
-export const NO_TOOLBAR_PAST_LIGHTS: ToolbarGeometry = capabilities.trafficLights ? { ...NO_TOOLBAR, urlLeft: TRAFFIC_LIGHTS_OFFSET } : NO_TOOLBAR;
+export const NO_TOOLBAR: ToolbarGeometry = {
+  sidebarButton: null,
+  sidebarButtonEnd: false,
+  captionEnd: false,
+  captionRoom: 0,
+  back: 21,
+  forward: 21,
+  reload: 21,
+  urlLeft: 8,
+};
+const noToolbars = new Map<number, ToolbarGeometry>();
+
+/** No toolbar, but developer bars and prompts must still clear the window's corners. */
+export function noToolbarGeometry(clearStart: boolean, buttons = getWindowButtonLayout()): ToolbarGeometry {
+  const room = windowButtonRoom(buttons);
+  const start = clearStart ? (LIGHTS_WIDTH ? TRAFFIC_LIGHTS_OFFSET : Math.max(8, room.left - layout.cardInset)) : 8;
+  if (start === 8) return NO_TOOLBAR;
+  let g = noToolbars.get(start);
+  if (!g) noToolbars.set(start, (g = { ...NO_TOOLBAR, urlLeft: start }));
+  return g;
+}
+
+/** A strip or a docked sidebar holds the buttons on the window edges it occupies. */
+export function paneButtonClearance(leading: boolean, trailing: boolean, tabLayout: "sidebar" | "top", sidebarOpen: boolean, sidebarRight: boolean) {
+  const strip = tabLayout === "top" && sidebarOpen;
+  return {
+    clearTrafficLights: leading && tabLayout === "sidebar" && !strip && (!sidebarOpen || sidebarRight),
+    captionEnd: trailing && !strip && (!sidebarOpen || !sidebarRight),
+  };
+}
+
+/** Sidebar header room only at its outer window edge. */
+export function sidebarButtonRoom(buttons: WindowButtonLayout, right: boolean) {
+  const room = windowButtonRoom(buttons);
+  return { left: right ? 0 : room.left, right: right ? room.right : 0 };
+}

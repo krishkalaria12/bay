@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Bay shader component lifecycle</title>
+<body style="margin: 0">
+  <script>
+    addEventListener("error", (event) => {
+      window.results = [{ name: "component bundle loads", ok: false, detail: String(event.error?.stack ?? event.message) }];
+    });
+  </script>
+  <script src="/components.js"></script>
+</body>

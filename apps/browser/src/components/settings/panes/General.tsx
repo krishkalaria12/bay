@@ -219,7 +219,17 @@ function DefaultBrowserBanner() {
   const theme = useTheme();
   const colors = useFormColors();
   const [isDefault, setIsDefault] = useState<boolean | null>(null);
+  // Why setting the default failed, when trying again can't help (Linux without bay.desktop installed).
+  const [problem, setProblem] = useState<string | null>(null);
   const refresh = () => void isDefaultBrowser().then(setIsDefault);
+  const makeDefault = () =>
+    void setAsDefaultBrowser().then(
+      (value) => {
+        setProblem(null);
+        setIsDefault(value);
+      },
+      (failure: unknown) => setProblem(failure instanceof Error ? failure.message : "The default browser wasn't changed. Try again."),
+    );
   useEffect(() => {
     refresh();
     const sub = AppState.addEventListener("change", refresh);
@@ -241,10 +251,13 @@ function DefaultBrowserBanner() {
       }}
     >
       <Symbol name={isDefault ? "checkmark.seal.fill" : "safari"} size={20} color={isDefault ? "#34C759" : theme.icon} style={{ width: 28, height: 28 }} />
-      <Text style={{ flex: 1, fontSize: 13, color: theme.textPrimary }}>
-        {isDefault ? `${APP_NAME} is your default browser` : `${APP_NAME} works best as your default browser`}
-      </Text>
-      {!isDefault && <Button title={`Set ${APP_NAME} as Default`} kind="primary" onPress={() => void setAsDefaultBrowser().then(setIsDefault)} />}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ fontSize: 13, color: theme.textPrimary }}>
+          {isDefault ? `${APP_NAME} is your default browser` : `${APP_NAME} works best as your default browser`}
+        </Text>
+        {!isDefault && problem && <Text style={{ fontSize: 12, color: theme.textSecondary }}>{problem}</Text>}
+      </View>
+      {!isDefault && <Button title={`Set ${APP_NAME} as Default`} kind="primary" onPress={makeDefault} />}
     </View>
   );
 }

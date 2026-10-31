@@ -227,9 +227,10 @@ Listing Vault::read(const std::string &scope,
     throw Failure("folder", "Could not enumerate sync folder");
   std::sort(files.begin(), files.end());
   for (const auto &file : files) {
-    if (file.extension() != ".nns" || !isTag(file.stem().u8string()))
+    const auto utf8 = file.stem().u8string();
+    const std::string id(utf8.begin(), utf8.end());
+    if (file.extension() != ".nns" || !isTag(id))
       continue;
-    auto id = file.stem().u8string();
     auto status = fs::symlink_status(file, error);
     if (error || !fs::is_regular_file(status) || fs::is_symlink(status))
       continue;

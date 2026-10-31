@@ -4,7 +4,7 @@ import { SyncNative, type FolderInfo } from "@bay/sync";
 import { useEffect, useState, type ReactNode } from "react";
 import { Image, StyleSheet, Text } from "react-native";
 import { useTheme } from "../../../lib/theme";
-import { enterRecoveryPhrase, stopSync } from "../../../sync/engine";
+import { enterRecoveryPhrase, folderInfo, stopSync } from "../../../sync/engine";
 import { Button, Checkbox, Sheet, useFormColors } from "../controls";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
@@ -40,6 +40,8 @@ function RecoveryKitSheet() {
   const theme = useTheme();
   const colors = useFormColors();
   const [preview, setPreview] = useState<string | null>(null);
+  const [sessionOnly, setSessionOnly] = useState(false);
+  useEffect(() => void folderInfo().then((info) => setSessionOnly(info?.keyStorage === "session")), []);
   const [saved, setSaved] = useState<string | null>(null);
   useEffect(() => void SyncNative?.recoveryKitPreview(168).then(setPreview), []);
   const save = async (format: "pdf" | "text") => {
@@ -62,6 +64,9 @@ function RecoveryKitSheet() {
       <View style={{ flexDirection: "row", gap: 18 }}>
         <View style={{ flex: 1 }}>
           <Title>Save Your Recovery Kit</Title>
+          {sessionOnly ? (
+            <Body>Secret Service is unavailable. You’ll need these words every time you start Bay. The key stays in memory for this session.</Body>
+          ) : null}
           <Body>Your Recovery Kit contains all you need to recover your data should you lose access to this device.</Body>
           <View
             style={{

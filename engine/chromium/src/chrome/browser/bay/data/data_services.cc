@@ -135,6 +135,9 @@ void Configure(std::string directory, ProfileResolver resolve_profile) {
 void SetEventSink(EventSink sink) {
   importer::SetEventSink(std::move(sink));
 }
+void SetPasswordDecryptor(PasswordDecryptor decryptor) {
+  sync::SetPasswordDecryptor(std::move(decryptor));
+}
 void SetEngineCall(EngineCall engine_call) {
   if (!engine_call) {
     importer::SetImportWriter({});
@@ -148,8 +151,10 @@ void SetEngineCall(EngineCall engine_call) {
       });
 }
 const std::vector<std::string>& ModuleNames() {
-  static const std::vector<std::string> modules{importer::kModuleName,
-                                                sync::kModuleName};
+  static const std::vector<std::string> modules{
+      importer::kModuleName,
+      sync::kModuleName,
+  };
   return modules;
 }
 const std::vector<std::string>& MethodNames(const std::string& module) {
@@ -161,9 +166,11 @@ const std::vector<std::string>& MethodNames(const std::string& module) {
   return empty;
 }
 bool RequiresUIThread(const std::string& module, const std::string& method) {
-  return module == importer::kModuleName
-             ? importer::RequiresUIThread(method)
-             : module == sync::kModuleName && sync::RequiresUIThread(method);
+  if (module == importer::kModuleName)
+    return importer::RequiresUIThread(method);
+  if (module == sync::kModuleName)
+    return sync::RequiresUIThread(method);
+  return false;
 }
 std::string Invoke(const std::string& module,
                    const std::string& method,

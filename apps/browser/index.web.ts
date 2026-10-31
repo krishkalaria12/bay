@@ -54,6 +54,7 @@ async function start() {
   } else {
     throw new Error("Bay's UI must run in chrome://bay. The local preview is available only on localhost.");
   }
+  if (getNativeHostInfo().platform === "linux") await loadLinuxFont();
   const initializationError = getNativeHostInfo().constants.BayShell?.initializationError;
   if (typeof initializationError === "string" && initializationError) throw new Error(initializationError);
   if (getNativeHostInfo().constants.BayShell?.hostingSpike === true) {
@@ -112,6 +113,20 @@ async function start() {
   const rootTag = document.getElementById("root");
   if (!rootTag) throw new Error("The WebUI root element is missing");
   AppRegistry.runApplication("main", { rootTag, initialProps: { windowId } });
+}
+/** Linux has no one system UI face (Cantarell, Noto Sans, DejaVu Sans...), so Bay draws Inter, the nearest to macOS's
+ *  SF Pro, as "Bay UI": first in react-native-web's system stack (patches/react-native-web) and the body's font. It is
+ *  local, so waiting for it before the first render costs milliseconds and avoids a flash of the fallback face. */
+async function loadLinuxFont() {
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "/fonts/bay-ui.css";
+  const loaded = new Promise<void>((resolve) => {
+    link.onload = link.onerror = () => resolve();
+  });
+  document.head.append(link);
+  await loaded;
+  await Promise.race([document.fonts.load('13px "Bay UI"'), new Promise((resolve) => setTimeout(resolve, 1000))]).catch(() => undefined);
 }
 function showStartupError(error: unknown) {
   console.error(error);

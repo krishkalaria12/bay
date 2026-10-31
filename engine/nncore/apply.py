@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install NNCore: copy Bay's layer into the Windows Chrome tree, or run apply.sh for the macOS Chrome host."""
+"""Install NNCore: copy the web host layer, or run apply.sh for the macOS Chrome host."""
 import argparse
 import importlib.util
 import json
@@ -15,9 +15,13 @@ def main() -> int:
     parser.add_argument("--list-paths", action="store_true")
     args = parser.parse_args()
     here = Path(__file__).resolve().parent
-    windows = os.environ.get("BAY_ENGINE_PLATFORM", "win" if sys.platform == "win32" else "mac") == "win"
+    platform = os.environ.get("BAY_ENGINE_PLATFORM",
+                              {"win32": "win", "darwin": "mac"}.get(sys.platform, "linux"))
+    if platform not in ("mac", "win", "linux"):
+        parser.error(f"unknown engine platform: {platform}")
+    web_host = platform in ("win", "linux")
     if args.list_paths:
-        if windows:
+        if web_host:
             print(json.dumps([["bay", True]]))
         else:
             import re
@@ -25,7 +29,7 @@ def main() -> int:
             hooks = sorted(set(re.findall(r'\$src/([^"\s]+)', script)))
             print(json.dumps([["bay", True]] + [[p, False] for p in hooks if p != "bay" and not p.endswith("/")]))
         return 0
-    if not windows:
+    if not web_host:
         return subprocess.call(["bash", str(here / "apply.sh"), *(["--check"] if args.check else [])])
     spec = importlib.util.spec_from_file_location("bay_chromium_apply", here.parent / "chromium/apply.py")
     module = importlib.util.module_from_spec(spec)

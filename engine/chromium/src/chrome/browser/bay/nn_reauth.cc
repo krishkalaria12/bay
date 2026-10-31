@@ -9,13 +9,17 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/bay/nn_engine.h"
+
+#if !BUILDFLAG(IS_LINUX)
 #include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
 #include "components/device_reauth/device_authenticator.h"
+#endif
 
 #if BUILDFLAG(IS_MAC)
 #include <Security/Security.h>
@@ -79,6 +83,7 @@ bool TestGrant() {
   return grant && !strcmp(grant, "granted") && TestGrantHonoured();
 }
 
+#if !BUILDFLAG(IS_LINUX)
 const char* Histogram(device_reauth::DeviceAuthSource source) {
   return source == device_reauth::DeviceAuthSource::kPasswordManager
              ? "PasswordManager.ReauthToAccessPasswordInSettings"
@@ -141,6 +146,7 @@ class ReauthState : public ProfileState {
   int generation_ = 0;
   base::WeakPtrFactory<ReauthState> weak_factory_{this};
 };
+#endif  // !BUILDFLAG(IS_LINUX)
 
 }  // namespace
 
@@ -159,8 +165,13 @@ void Reauth(Profile* profile,
     std::move(done).Run(granted);
     return;
   }
+#if BUILDFLAG(IS_LINUX)
+  // As Chrome's password page on Linux: there is no OS authenticator to ask.
+  std::move(done).Run(true);
+#else
   StateFor<ReauthState>(profile).Start(source, purpose, validity,
                                        std::move(done));
+#endif
 }
 
 }  // namespace bay

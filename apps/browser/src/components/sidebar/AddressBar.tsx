@@ -14,17 +14,15 @@ import { toolbarPalette, type ToolbarPalette } from "../layout/toolbarColors";
 import { ToolbarButton } from "../layout/controls";
 import { addressBarInSidebar, setUrlAnchor, useSidebarOnRight, useSidebarSymbol } from "../layout/windowLayout";
 import { SIDEBAR_FIELD } from "../layout/constants";
-import { CAPTION_BUTTONS_WIDTH, LIGHTS_WIDTH } from "../layout/windowButtons";
+import { LIGHTS_WIDTH, useWindowButtonLayout } from "../layout/windowButtons";
+import { sidebarButtonRoom } from "../layout/geometry";
 import { GlassFill, useLiquidGlass } from "../glass";
 import { useSidebarMetrics } from "./tokens";
 import { useHover } from "../primitives";
 import { HistoryButton, ReloadButton, UrlField } from "../Toolbar";
-import { ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_NAV_WIDTH, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
+import { addressToggleMinWidth, ADDRESS_BUTTON, ADDRESS_EDGE, ADDRESS_LIGHTS_Y, ADDRESS_NAV_GAP, ADDRESS_TOGGLE_X, ADDRESS_TOGGLE_X_RIGHT } from "./constants";
 import { reportBrowserCommand } from "../../runtime/commands";
 import { openCommandPanel } from "../../runtime/windowUiActions";
-
-// `end`: the navigation buttons' room from the sidebar's right edge.
-const toggleMinWidth = (x: number, end: number) => x + ADDRESS_BUTTON / 2 + ADDRESS_NAV_GAP + ADDRESS_NAV_WIDTH + end;
 
 export function SidebarHeaderTools({ width }: { width: number }) {
   const windowId = useWindowId();
@@ -32,13 +30,13 @@ export function SidebarHeaderTools({ width }: { width: number }) {
   const palette = toolbarPalette(useTheme(), null);
   const top = ADDRESS_LIGHTS_Y - ADDRESS_BUTTON / 2;
   const right = useSidebarOnRight();
-  // The window's buttons on this side of the window: the traffic lights at its left, the caption buttons at its right.
-  const toggleX = right || !LIGHTS_WIDTH ? ADDRESS_TOGGLE_X_RIGHT : ADDRESS_TOGGLE_X;
-  const end = ADDRESS_EDGE + (right ? CAPTION_BUTTONS_WIDTH : 0);
+  const room = sidebarButtonRoom(useWindowButtonLayout(), right);
+  const toggleX = !right && LIGHTS_WIDTH ? ADDRESS_TOGGLE_X : ADDRESS_TOGGLE_X_RIGHT + room.left;
+  const end = ADDRESS_EDGE + room.right;
   const sidebarSymbol = useSidebarSymbol();
   return (
     <>
-      {width >= toggleMinWidth(toggleX, end) ? (
+      {width >= addressToggleMinWidth(toggleX, end) ? (
         <ToolbarButton
           style={{ position: "absolute", top, left: toggleX - ADDRESS_BUTTON / 2 }}
           palette={palette}

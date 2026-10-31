@@ -5,9 +5,31 @@
   "depotToolsCommit": "ccecefb58648ac0a416756b0a4591ec8905a7f55",
   "ungoogledCommit": "800d0bb5078472e4442c1fd73373172754a60939",
   "ungoogledVersion": "154.0.8037.57-1",
-  "platform": "windows",
-  "architecture": "x64",
-  "minimumWindowsBuild": 22621,
-  "outputDirectory": "out/Release_GN_x64",
-  "runtime": "chrome-webui"
+  "platforms": {
+    "win": {
+      "platform": "windows",
+      "architecture": "x64",
+      "minimumWindowsBuild": 22621,
+      "outputDirectory": "out/Release_GN_x64",
+      "runtime": "chrome-webui"
+    },
+    "linux": {
+      "platform": "linux",
+      "architecture": "x64",
+      "outputDirectory": "out/Release_GN_x64",
+      "runtime": "chrome-webui",
+      "sysroot": {
+        "useSysroot": true,
+        "revision": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+        "revisionType": "sha256",
+        "chromiumCommit": "a654841425914cbb703a2931e07b70a83aedbafd",
+        "metadataFile": "build/linux/sysroot_scripts/sysroots.json",
+        "metadataKey": "bullseye_amd64",
+        "directory": "debian_bullseye_amd64-sysroot",
+        "tarball": "debian_bullseye_amd64_sysroot.tar.xz",
+        "url": "https://commondatastorage.googleapis.com/chrome-linux-sysroot"
+      },
+      "minimumGlibc": null
+    }
+  }
 }

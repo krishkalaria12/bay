@@ -1,11 +1,13 @@
 diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
-@@ -441,6 +441,7 @@
+@@ -441,6 +441,9 @@
        "//chrome/browser:chrome_content_browser_client",
        "//chrome/browser:chrome_process_singleton",
        "//chrome/browser:process_singleton",
 +      "//chrome/browser/bay:exports",  # Bay: engine/chromium (Windows DLL)
++      "//chrome/browser/bay/webui:impl",
++      "//bay/core",
        "//chrome/browser:startup_data",
        "//chrome/browser/lifetime",
        "//chrome/browser/win/isolated_browser:isolated_browser_support",

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -26,8 +27,19 @@ class WebUI;
 namespace bay {
 class TabObserver;
 class PlatformServices;
+class Keychain;
 class BrowserServices;
 class EngineServices;
+class DocumentStore;
+class SecretStorage;
+class ShellUI;
+class SyncUI;
+class ShellAppearance;
+class ShellFiles;
+class DefaultBrowser;
+class Autostart;
+class AppServicesLinux;
+class WindowButtonLayoutLinux;
 
 class NativeHost final : public content::DocumentService<mojom::NativeHost> {
  public:
@@ -63,6 +75,13 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
   base::WeakPtr<NativeHost> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  friend class NativeHostQuitTest;
+  static bool HandleWindowClose(BrowserWindowInterface* browser);
+  static void PrepareForQuit(base::OnceCallback<void(bool)> completion);
+  static void CancelQuit();
+  static void InstallCloseHooks();
+#endif
   void InvokeView(const std::string& method,
                   const base::ListValue& args,
                   InvokeCallback callback);
@@ -78,14 +97,33 @@ class NativeHost final : public content::DocumentService<mojom::NativeHost> {
                            InvokeCallback callback);
   content::WebContents* ContentsForTag(int tag) const;
   base::DictValue Info() const;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  // Host info waits for saved documents and the platform snapshots.
   void PlatformReady();
-  std::unique_ptr<PlatformServices> platform_services_;
+  std::unique_ptr<ShellAppearance> appearance_;
+  std::unique_ptr<Keychain> keychain_;
   bool platform_ready_ = false;
   std::vector<GetHostInfoCallback> host_info_callbacks_;
 #endif
+#if BUILDFLAG(IS_WIN)
+  std::unique_ptr<PlatformServices> platform_services_;
+#endif
 
   const HostContext context_;
+#if BUILDFLAG(IS_LINUX)
+  void ChooseImportFile(const base::ListValue& args, InvokeCallback callback);
+  std::unique_ptr<WindowButtonLayoutLinux> button_layout_;
+  // Document-scoped ownership dismisses prompts and settles pending icons.
+  std::unique_ptr<ShellFiles> files_;
+  std::unique_ptr<DefaultBrowser> default_browser_;
+  std::unique_ptr<Autostart> autostart_;
+  std::unique_ptr<AppServicesLinux> app_services_;
+  bool documents_ready_ = false;
+  std::unique_ptr<ShellUI> shell_ui_;
+  std::unique_ptr<SyncUI> sync_ui_;
+  std::unique_ptr<SecretStorage> secret_storage_;
+  std::unique_ptr<DocumentStore> documents_;
+#endif
   std::unique_ptr<BrowserServices> browser_services_;
   std::unique_ptr<EngineServices> engine_services_;
   mojo::Remote<mojom::NativeHostClient> client_;

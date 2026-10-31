@@ -2,7 +2,8 @@ import type { NativeHostInfo, NativeTransport, JSONValue } from "@bay/platform/n
 
 /** Local UI fixture. This transport is never selected by a privileged WebUI. */
 export function createPreviewTransport(): NativeTransport {
-  const documents: Record<string, JSONValue> = new URLSearchParams(location.search).has("onboarding")
+  const query = new URLSearchParams(location.search);
+  const documents: Record<string, JSONValue> = query.has("onboarding")
     ? {}
     : {
         "onboarding.json": JSON.stringify({ version: 1, completedAt: 1 }),
@@ -10,7 +11,8 @@ export function createPreviewTransport(): NativeTransport {
   const listeners = new Map<string, Set<(value: unknown) => void>>();
   const info: NativeHostInfo = {
     contractVersion: 2,
-    platform: "windows",
+    // ?platform=linux previews the Linux host's look (no caption buttons, its UI font and icons).
+    platform: query.get("platform") === "linux" ? "linux" : "windows",
     modules: ["BayCEF", "BayShell", "BayApp", "BaySystem", "BayKeychain", "BayImport", "BayChromeUI", "BayExtensions"],
     views: [],
     optionalMethods: [
@@ -20,9 +22,9 @@ export function createPreviewTransport(): NativeTransport {
       "BayShell.windowState",
       "BayShell.setWindowCaption",
     ],
-    constants: { BayApp: { apiVersion: 9 }, BayShell: { preview: true, hostingSpike: new URLSearchParams(location.search).has("spike") } },
+    constants: { BayApp: { apiVersion: 9 }, BayShell: { preview: true, hostingSpike: query.has("spike") } },
     snapshots: {
-      BayShell: { documents },
+      BayShell: { documents, windowButtonLayout: { left: [], right: ["minimize", "maximize", "close"] } },
       BaySystem: { files: {}, downloadsFolder: null },
       BayApp: {
         environment: {},

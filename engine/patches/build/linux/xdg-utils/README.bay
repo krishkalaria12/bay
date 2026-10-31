@@ -1,0 +1,28 @@
+Bay bundles xdg-settings and xdg-mime beside the Linux browser executable.
+Helium uses the same two-helper runtime layout:
+https://github.com/imputnet/helium-linux/blob/473c0f72d7db2e8492f0fa975b8544bc719bb027/scripts/package.sh
+
+Source: Chromium's official xdg-utils dependency repository
+https://chromium.googlesource.com/chromium/deps/xdg-utils/
+Revision: f16d51e9ce95f4173ba878a61b59317f73005562
+License: MIT, see LICENSE and the individual scripts' copyright notices.
+The checked-in scripts are generated upstream, ready to run without a build.
+README.chromium is the upstream attribution, retained without changes.
+
+Upstream files, relative to that revision:
+scripts/xdg-settings
+scripts/xdg-mime
+LICENSE
+README.chromium
+
+Bay changes: the three xdg-mime invocations in xdg-settings explicitly use
+"$(dirname "$0")/xdg-mime". This keeps both checks and setters on the bundled
+helper, including when /opt/bay is absent from PATH. No other script changes.
+The Chromium patch chromium-bay-xdg-settings-linux.patch makes setting and
+output-capturing checks prefer the xdg-settings sibling of the browser binary.
+
+Upstream SHA-256 checksums before Bay changes:
+442777b1f7d206c5ff661fea00dc1a8319df6256feccc54f186f6edacf235801  xdg-settings
+ad2d5802bb3604daa849ce5ac86a81acf7548c8ffd10ab4ecae1d56a5f10d63b  xdg-mime
+b244f73c3d21edaf44ec253b9a7c389ec43313c417f52f8b71914b0c40d87325  LICENSE
+d49e34d04f0b05d53f5e6c3ab80fc7c110947e745de74bb99a323144badf5a54  README.chromium

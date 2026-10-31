@@ -1,3 +1,4 @@
+import { restorableClosedEntry, restorableClosedWindow, restorableWindow } from "../store/windowPlacement";
 import { cancelDownload, endWebKitPrivateSession, type Download } from "@bay/nncore";
 import { readDocument, saveDocument, writeDocument } from "@bay/shell";
 import { useBrowser, type BrowserState, type BrowserStore, type HydrateData } from "../store/browser";
@@ -56,7 +57,9 @@ const DOCS: Doc[] = [
     ],
     json: serialized((s) => {
       // Private windows, Little Bay and peeks aren't restored: closing (or quitting) throws their pages away.
-      const windows = Object.values(s.windows).filter((w) => !w.incognito && w.kind !== "small");
+      const windows = Object.values(s.windows)
+        .filter((w) => !w.incognito && w.kind !== "small")
+        .map(restorableWindow);
       const kept = new Set(windows.map((w) => w.id));
       const own = (t: Tab) => !isIncognitoSpace(t.spaceId) && s.windows[t.windowId]?.kind !== "small" && !t.peekOf;
       const tabs = Object.values(s.tabs).filter(own);
@@ -82,7 +85,7 @@ const DOCS: Doc[] = [
         splits: Object.values(s.splits).filter((v) => v.tabIds.every((id) => saved.has(id))),
         // The store keeps private windows out of these lists; filter again so nothing private is ever written.
         closedTabs: s.closedTabs.filter((c) => publicTab(c.tab)),
-        closedWindows: s.closedWindows.filter((c) => c.tabs.every(publicTab)),
+        closedWindows: s.closedWindows.filter((c) => c.tabs.every(publicTab)).map(restorableClosedEntry),
         closedGroups: s.closedGroups.filter((c) => c.tabs.every(publicTab)),
         deletedGroups: s.deletedGroups.filter((c) => c.tabs.every(publicTab)),
         cleanedTabs: s.cleanedTabs.filter((c) => publicTab(c.tab)),
@@ -258,7 +261,7 @@ export function loadSession(): HydrateData | null {
     spaceOrder,
     orphanedProfileData: session.orphanedProfileData ?? [],
     settings: session.settings,
-    windows: byId(session.windows),
+    windows: byId(session.windows.map(restorableWindow)),
     windowOrder: session.windowOrder,
     focusedWindowId: session.focusedWindowId,
     tabs: byId(session.tabs),
@@ -268,7 +271,7 @@ export function loadSession(): HydrateData | null {
     localFiles: normalizeLocalFiles({ ...session.localFiles }, spaces),
     splits: byId(session.splits),
     closedTabs: session.closedTabs,
-    closedWindows: session.closedWindows,
+    closedWindows: session.closedWindows?.map(restorableClosedEntry),
     closedGroups: session.closedGroups ?? [],
     deletedGroups: session.deletedGroups ?? [],
     cleanedTabs: session.cleanedTabs ?? [],
@@ -292,7 +295,7 @@ export function loadSession(): HydrateData | null {
           return {
             kind: "window" as const,
             id: newId("cw"),
-            window: { spaceId, sidebarOpen: w?.sidebarOpen ?? true, frame: w?.frame ?? null },
+            window: restorableClosedWindow({ ...w, spaceId, sidebarOpen: w?.sidebarOpen ?? true, frame: w?.frame ?? null }),
             tabs: tabs.map((t) => ({ ...snapshotTab(t), active: session.windows.some((x) => x.activeTabIds[spaceId] === t.id) })),
             groups: [],
             closedAt: now,

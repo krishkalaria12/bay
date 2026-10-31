@@ -225,6 +225,7 @@ if (is_mac) {
       "//base",
       "//chrome/app:generated_resources",
       "//chrome/browser",
+      "//chrome/browser/bay",
       "//chrome/browser/bay/webui:impl",
       "//chrome/common",
       "//chrome/common/profiler",
@@ -237,10 +238,21 @@ if (is_mac) {
       "//ui/base",
       "//ui/gfx",
     ]
+    if (is_win || is_linux) {
+      deps += [
+        "//chrome/browser/bay/webui:notifications",
+        "//chrome/browser/notifications",
+      ]
+    }
     if (is_win) {
       deps += [
         "//chrome/browser/bay/webui:platform_services_win",
-        "//chrome/browser/notifications",
+        "//chrome/browser/ui/webui_browser",
+      ]
+    }
+    if (is_linux) {
+      deps += [
+        "//chrome/browser/bay/webui:frame_linux",
         "//chrome/browser/ui/webui_browser",
       ]
     }

@@ -11,6 +11,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/bay/webui/library_files.h"
 #include "chrome/browser/bay/webui/window_registry.h"
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/bay/webui/quit_shortcut_linux.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "ui/content_accelerators/accelerator_util.h"
+#endif
 #include "chrome/browser/ui/webui_browser/webui_browser.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/surface_embed/common/features.h"
@@ -84,6 +89,17 @@ void BayWebUIBrowserWindow::SetFocusToLocationBar(bool is_user_initiated) {
 content::KeyboardEventProcessingResult
 BayWebUIBrowserWindow::PreHandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
+#if BUILDFLAG(IS_LINUX)
+  // Ahead of the page, as Chrome's reserved shortcuts are. Quitting is
+  // Chrome's own user exit, so Bay's close preflight (native_host.cc) still
+  // prepares the UI, the updater and the tabs first.
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown &&
+      IsLinuxQuitShortcut(
+          ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
+    chrome::AttemptUserExit();
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+#endif
   const auto shortcut = RunWindowShortcut(browser(), event);
   if (shortcut == WindowShortcut::kRan)
     return content::KeyboardEventProcessingResult::HANDLED;

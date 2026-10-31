@@ -13,7 +13,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
+#include "chrome/browser/bay/webui/default_browser.h"
+#include "chrome/browser/bay/webui/document_store.h"
 #include "chrome/browser/bay/webui/host_context.h"
+#include "chrome/browser/bay/webui/shell_files.h"
 
 class BrowserWindowInterface;
 namespace bay {
@@ -43,29 +46,21 @@ class PlatformServices {
   }
 
  private:
-  class FilePicker;
-  class ContextMenu;
-  void Prepared(base::DictValue snapshots, std::string error);
-  static void DocumentWritten(std::string name,
-                              std::optional<std::string> contents,
-                              Response callback,
-                              bool success);
-  void ApplyDocument(std::string_view name,
-                     const std::optional<std::string>& contents);
-  void FilePickerFinished();
-  void ContextMenuFinished();
+  void Prepared(base::DictValue snapshots);
+  void FilesReady();
+  void DocumentsReady();
 
   const HostContext context_;
   base::RepeatingClosure snapshots_changed_;
   scoped_refptr<base::SequencedTaskRunner> disk_runner_;
-  base::FilePath document_directory_;
+  DocumentStore documents_;
+  DefaultBrowser default_browser_;
+  ShellFiles files_;
   base::DictValue snapshots_;
   std::string initialization_error_;
   bool preparing_ = false;
   bool ready_ = false;
   std::vector<base::OnceClosure> ready_callbacks_;
-  std::unique_ptr<FilePicker> file_picker_;
-  std::unique_ptr<ContextMenu> context_menu_;
   std::unique_ptr<ShellUI> shell_ui_;
   base::WeakPtrFactory<PlatformServices> weak_factory_{this};
 };

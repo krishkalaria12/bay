@@ -7,6 +7,7 @@ import { PageSpaceContext, WindowContext } from "../store/hooks";
 import { activeTabId } from "../store/model";
 import { DEFAULT_SPACE } from "../store/spaces";
 import type { Space, SpaceColor } from "../store/types";
+import { useHighContrast } from "./highContrast";
 import { SPACE_SWATCHES } from "./spaceSwatches";
 import { backdropTint, opaqueTint, pageTint, tintForHue, type BackdropTint } from "./windowTint";
 
@@ -23,7 +24,7 @@ export type Theme = typeof dark &
 const dark = {
   dark: true,
   // Dia: 0.09 sidebar, 0.05 page.
-  grain: 0.006,
+  grain: 0.09,
   // Dia: 0.5 tint.
   card: "rgba(18,18,18,0.5)",
   cardEdge: "rgba(0,0,0,0.35)",
@@ -222,6 +223,9 @@ const CUSTOM = "custom|";
 const GLASS = ":glass";
 // A solid window's page colour, after its space's key: "plum:dark@#202124".
 const SITE = "@";
+// High contrast, last of all: "plum:dark@#202124!contrast".
+const CONTRAST = "!contrast";
+const CONTRAST_INTENSITY = 0.5;
 const transient = (key: string) => key.startsWith(CUSTOM) || key.includes(SITE);
 
 /** A space's theme key: its preset colour's, or its own theme's (the theme editor); glass windows' end in ":glass". */
@@ -232,6 +236,9 @@ export function spaceThemeKey(profile: DeepReadonly<Pick<Space, "color" | "theme
   if (!t?.colors.length) return `${space.color}:${mode}`;
   return `${CUSTOM}${t.colors.join(",")}|${t.intensity.toFixed(2)}|${t.grain.toFixed(2)}:${mode}`;
 }
+
+/** A custom theme's grain dial (0–1) as the backdrop's grain opacity; the dial's preview uses the same. */
+export const customGrain = (dial: number) => dial * 0.12;
 
 function customTheme(key: string): Theme {
   const [body, mode, material] = key.split(":") as [string, string, string | undefined];
@@ -254,7 +261,7 @@ function customTheme(key: string): Theme {
     windowTint,
     glass: !solid,
     powerUpColor: first,
-    grain: Number(grain) * 0.12,
+    grain: customGrain(Number(grain)),
   };
 }
 
@@ -275,12 +282,40 @@ function presetTheme(key: string): Theme {
   };
 }
 
+// High contrast (prefers-contrast: more): opaque text and icons, edges that show, and a solid outline on the selection,
+// with no grain behind them. themeKey also drops glass, so the window is solid.
+function contrasted(theme: Theme): Theme {
+  const ink = theme.dark ? "#FFFFFF" : "#000000";
+  const edge = theme.dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)";
+  return {
+    ...theme,
+    grain: 0,
+    textTab: ink,
+    textSecondary: `${ink}CC`,
+    textTertiary: `${ink}A6`,
+    icon: ink,
+    iconDisabled: `${ink}80`,
+    placeholder: `${ink}B3`,
+    chipText: `${ink}D9`,
+    tabSelectedText: ink,
+    divider: edge,
+    cardEdge: edge,
+    panelBorder: edge,
+    chipBorder: edge,
+    ntpBarBorder: edge,
+    pinnedRestingStroke: edge,
+    tabSelectedBorder: [ink, ink],
+    pinnedSelectedOutline: ink,
+  };
+}
+
 export function themeFor(key: string): Theme {
   let theme = cache.get(key);
   if (theme) return theme;
   const site = key.indexOf(SITE);
+  if (key.endsWith(CONTRAST)) theme = contrasted(themeFor(key.slice(0, -CONTRAST.length)));
   // A solid window filled with its page's colour, its space's theme in the look that reads on it.
-  if (site >= 0) theme = { ...themeFor(key.slice(0, site)), windowTint: [key.slice(site + 1), key.slice(site + 1)] };
+  else if (site >= 0) theme = { ...themeFor(key.slice(0, site)), windowTint: [key.slice(site + 1), key.slice(site + 1)] };
   else theme = key.startsWith(CUSTOM) ? customTheme(key) : presetTheme(key);
   cache.set(key, theme);
   if (transient(key)) {
@@ -304,20 +339,34 @@ function siteColor(s: BrowserState, windowId: string, spaceId: string): string |
 type PreviewLook = Pick<Space, "color" | "theme" | "followSite">;
 const usePreviewLooks = create<Record<string, PreviewLook>>(() => ({}));
 
-export function themeKey(s: BrowserState, windowId: string | null, page: string | null, looks = usePreviewLooks.getState()): string {
+export function themeKey(
+  s: BrowserState,
+  windowId: string | null,
+  page: string | null,
+  looks = usePreviewLooks.getState(),
+  contrast = useHighContrast.getState(),
+): string {
+  const key = lookKey(s, windowId, page, looks, contrast);
+  return contrast ? `${key}${CONTRAST}` : key;
+}
+
+function lookKey(s: BrowserState, windowId: string | null, page: string | null, looks: Record<string, PreviewLook>, contrast: boolean): string {
   const id = windowId ?? s.ui.focusedWindowId ?? "";
   const w = s.windows[id];
-  const glass = s.settings.windowMaterial === "glass";
+  const glass = s.settings.windowMaterial === "glass" && !contrast;
   if (w?.incognito) return `incognito:dark${glass ? GLASS : ""}`;
   const spaceId = page ?? w?.spaceId ?? s.settings.defaultSpaceId;
   // A look being chosen for this window (the new space panel's) shows on its space meanwhile.
   const preview = w && spaceId === w.spaceId ? looks[id] : undefined;
   const space = { ...(s.spaces[spaceId] ?? DEFAULT_SPACE), ...preview };
   // Light or dark is always the user's (Appearance, or macOS's with Automatic); the page's colour is fitted to it.
+  // High contrast keeps the space's own colour, which its text is checked against.
   const follow = space?.followSite ?? !space?.theme?.colors.length;
-  const pageColor = w && !glass && follow ? siteColor(s, id, spaceId) : null;
+  const pageColor = w && !glass && !contrast && follow ? siteColor(s, id, spaceId) : null;
   const site = pageColor ? pageTint(pageColor, s.ui.appDark) : null;
-  const key = spaceThemeKey(space, s.ui.appDark, glass);
+  // A strong theme of its own tints the window towards mid grey, where no text colour reads: at most half, in contrast.
+  const theme = contrast && space.theme ? { ...space.theme, intensity: Math.min(space.theme.intensity, CONTRAST_INTENSITY) } : space.theme;
+  const key = spaceThemeKey({ ...space, theme }, s.ui.appDark, glass);
   return site ? `${key}${SITE}${site}` : key;
 }
 
@@ -340,7 +389,8 @@ export function ThemeScope({ children }: { children: ReactNode }) {
   const windowId = useContext(WindowContext);
   const page = useContext(PageSpaceContext);
   const looks = usePreviewLooks();
-  const key = useBrowser((s) => themeKey(s, windowId, page, looks));
+  const contrast = useHighContrast();
+  const key = useBrowser((s) => themeKey(s, windowId, page, looks, contrast));
   return createElement(ThemeContext.Provider, { value: themeFor(key) }, children);
 }
 

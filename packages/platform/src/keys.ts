@@ -99,6 +99,17 @@ export function formatShortcut(stroke: ShortcutStroke, os: PlatformOS): string {
   return parts.join("+");
 }
 
+/** A context-menu hint as the menus spell it (`key: "c"`, `modifiers: ["shift", "command"]`) as a stroke. */
+export function menuShortcutStroke(key: string, modifiers: readonly ("command" | "shift" | "option" | "control")[] = []): ShortcutStroke {
+  return {
+    key,
+    mod: modifiers.includes("command"),
+    shift: modifiers.includes("shift"),
+    alt: modifiers.includes("option"),
+    ctrl: modifiers.includes("control"),
+  };
+}
+
 /** A macOS hint ("⇧⌘C") as a stroke. Unknown keys pass through as they are. */
 export function parseShortcut(hint: string): ShortcutStroke {
   const stroke: ShortcutStroke = { key: "" };
@@ -192,6 +203,17 @@ export const WINDOWS_SHORTCUTS: Record<string, ShortcutStroke> = {
   returnToPinnedUrl: { key: "Enter", mod: true },
 };
 
+/**
+ * Linux takes the Windows table plus the keys Linux desktops expect: Ctrl+Q quits, as GNOME and KDE apps
+ * do, and F11 toggles full screen. Super belongs to the compositor, so no stroke uses it (a stroke has no
+ * meta modifier to ask for it).
+ */
+export const LINUX_SHORTCUTS: Record<string, ShortcutStroke> = {
+  ...WINDOWS_SHORTCUTS,
+  quit: { key: "Q", mod: true },
+  toggleFullScreen: { key: "F11" },
+};
+
 // Windows virtual-key codes, which Chromium's key events carry on every desktop (ui::KeyboardCode).
 const VIRTUAL_KEYS: Record<string, number> = {
   tab: 0x09,
@@ -225,7 +247,7 @@ export function virtualKeyCode(key: string): number | null {
 
 /** "Ctrl+Shift+T" for a command, or null when the table has none. */
 export function windowsShortcutLabel(command: string, os: PlatformOS = "windows"): string | null {
-  const stroke = WINDOWS_SHORTCUTS[command];
+  const stroke = (os === "linux" ? LINUX_SHORTCUTS : WINDOWS_SHORTCUTS)[command];
   return stroke ? formatShortcut(stroke, os) : null;
 }
 

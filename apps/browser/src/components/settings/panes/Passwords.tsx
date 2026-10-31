@@ -1,4 +1,4 @@
-import { View } from "@bay/platform";
+import { View, platformOS } from "@bay/platform";
 import {
   deletePassword,
   exportPasswords,
@@ -7,11 +7,13 @@ import {
   getPasswordAutofill,
   listPasswords,
   savePassword,
+  secretStorage,
   setNeverSavePasswords,
   setPasswordAutofill,
   unlockPasswords,
   updatePassword,
   type SavedPassword,
+  type SecretStorageKind,
 } from "@bay/nncore";
 import { confirm, copyText, Symbol, systemInfo } from "@bay/shell";
 import { useEffect, useState } from "react";
@@ -28,6 +30,7 @@ import { SETTINGS } from "../definitions";
 import { closeSettingsSheet, showSettingsSheet } from "../sheet";
 import { MONO_FONT } from "../../../lib/constants";
 import { PASSWORDS_UNLOCK_MS } from "../constants";
+import { passwordStorageDescription, secretStorageWarning } from "../secretStorage";
 
 // 1Password connects to a browser it has been told to trust, and only to one installed in Applications.
 function passwordManagerAppsNote() {
@@ -51,6 +54,7 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
   const [query, setQuery] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [exportStatus, setExportStatus] = useState("");
+  const [storage, setStorage] = useState<SecretStorageKind | null>(null);
   const profile = engineProfile(spaceId);
   const unlocked = isUnlocked(profile);
 
@@ -72,6 +76,9 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
         .catch(() => {}),
     [profile],
   );
+
+  useEffect(() => void secretStorage().then(setStorage), []);
+  const storageWarning = secretStorageWarning(storage);
 
   const unlock = async () => {
     if (!(await unlockPasswords(profile))) return;
@@ -108,12 +115,19 @@ export function PasswordsPane({ spaceId: initial }: { spaceId?: string | null })
     <View>
       <SectionHeader
         title="Passwords"
-        description="Saved on this Mac, separately for each space, and encrypted with a key in your Keychain."
+        description={passwordStorageDescription(platformOS)}
         action={
           profiles.length > 1 ? <PopUp value={spaceId} options={profiles.map((p) => ({ value: p.id, title: p.name }))} onChange={setSpaceId} /> : undefined
         }
       />
       <Group>
+        {storageWarning ? (
+          <Row
+            icon={<Symbol name="exclamationmark.triangle.fill" size={14} color="#FF9500" style={{ width: 28, height: 20 }} />}
+            title={storageWarning.title}
+            description={storageWarning.description}
+          />
+        ) : null}
         <Row
           title="Offer to save and fill passwords"
           description="Offers to save a login after you sign in, and suggests saved ones when you click a login field."
