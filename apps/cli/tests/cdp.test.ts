@@ -3,6 +3,7 @@ import { Cdp, ConnectionLost } from "../src/cdp.ts";
 import { runCode } from "../src/runner.ts";
 import { ForbiddenCommand } from "../src/guard.ts";
 import type { Endpoint } from "../src/endpoint.ts";
+import { join } from "node:path";
 
 describe("CDP connection lifecycle", () => {
   let server: ReturnType<typeof Bun.serve>;
@@ -51,7 +52,7 @@ describe("CDP connection lifecycle", () => {
     }
   });
   it("exits 130 on SIGINT and releases its connection", async () => {
-    const cli = new URL("../bin/bay.ts", import.meta.url).pathname;
+    const cli = join(import.meta.dir, "../bin/bay.ts");
     const child = Bun.spawn([process.execPath, cli, "exec", 'console.log("ready"); await new Promise(() => {})', "--ws", endpoint.ws], {
       stdout: "pipe",
       stderr: "pipe",
