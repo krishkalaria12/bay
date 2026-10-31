@@ -29,7 +29,16 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-dev-client",
+        {
+          "defaultLaunchURL": "http://127.0.0.1:8081",
+          "skipOnboarding": true,
+          "showMenuAtLaunch": false,
+          "toolsButton": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
