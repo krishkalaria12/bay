@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useCallback,
+  useId,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -55,8 +56,13 @@ const Box = forwardRef<ViewRef, BoxProps>(function Box({ css, configure, ...prop
 });
 
 const weights = { light: "300", regular: "400", medium: "500", semibold: "600", bold: "700" } as const;
+// Lucide's strokes (2 units of 24) read lighter than SF Symbols at the same weight; these match macOS's sidebar glyphs.
+const strokes = { light: 1.6, regular: 1.9, medium: 2.1, semibold: 2.3, bold: 2.5 } as const;
+/** A stroke never renders thinner than about one device pixel, so small glyphs stay crisp. */
+const MIN_STROKE_PX = 1.1;
 function Symbol({ name, size = 16, weight = "regular", color = "currentColor", style, ...props }: SymbolProps) {
   const windowsFont = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+  const maskId = `bay-symbol-${useId().replace(/[^\w-]/g, "")}`;
   return (
     <View {...props} accessible={false} pointerEvents="none" style={[{ alignItems: "center", justifyContent: "center" }, style]}>
       {windowsFont ? (
@@ -73,12 +79,13 @@ function Symbol({ name, size = 16, weight = "regular", color = "currentColor", s
           height={size}
           viewBox="0 0 24 24"
           fill="none"
-          stroke={color}
-          strokeWidth={weight === "bold" ? 2.5 : weight === "light" ? 1.4 : 1.8}
+          stroke="currentColor"
+          strokeWidth={Math.max(strokes[weight], (MIN_STROKE_PX * 24) / size)}
           strokeLinecap="round"
           strokeLinejoin="round"
+          style={{ color, display: "block", overflow: "visible" }}
         >
-          {svgSymbol(name)}
+          {svgSymbol(name, maskId)}
         </svg>
       )}
     </View>

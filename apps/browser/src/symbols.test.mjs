@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const symbols = readFileSync(new URL("../../../packages/shell/src/symbols.web.tsx", import.meta.url), "utf8");
-const table = (name) => symbols.match(new RegExp(`const ${name}: Record<string, string> = \\{([^}]+)\\}`))?.[1] ?? "";
-const paths = new Set([...table("paths").matchAll(/^\s+"?([\w.]+)"?:/gm)].map((match) => match[1]));
-const aliases = Object.fromEntries([...table("aliases").matchAll(/"?([\w.]+)"?: "([\w.]+)"/g)].map((match) => [match[1], match[2]]));
+const generated = readFileSync(new URL("../../../packages/shell/src/lucideSymbols.web.ts", import.meta.url), "utf8");
+const aliasTable = symbols.match(/const aliases: Record<string, string> = \{([^}]+)\}/)?.[1] ?? "";
+const paths = new Set([...generated.matchAll(/^ {2}"([\w.]+)": \[/gm)].map((match) => match[1]));
+const aliases = Object.fromEntries([...aliasTable.matchAll(/"?([\w.]+)"?: "([\w.]+)"/g)].map((match) => [match[1], match[2]]));
 
 function* sources(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -28,10 +29,10 @@ const PICKERS = [
   ["components/symbolColors.ts", /const BY_COLOR[^=]+= \[([\s\S]+?)\n\];/, /"([^"]+)"/g],
 ];
 
-// Windows and Linux draw SF Symbol names from the inline paths in symbols.web.tsx. A name with no path falls
-// back to exclamationmark.circle, so every name the app uses needs one.
-test("every symbol the app names has a web path", () => {
-  assert.ok(paths.size > 50 && Object.keys(aliases).length > 0, "symbols.web.tsx tables found");
+// Linux draws SF Symbol names from the Lucide icons in lucideSymbols.web.ts. A name with none falls back to
+// exclamationmark.circle, so every name the app uses needs one.
+test("every symbol the app names has a web icon", () => {
+  assert.ok(paths.size > 50 && Object.keys(aliases).length > 0, "symbol tables found");
   const names = [];
   for (const path of sources(root)) {
     for (const prop of readFileSync(path, "utf8").matchAll(symbolProp)) {
@@ -45,7 +46,7 @@ test("every symbol the app names has a web path", () => {
   }
   const undrawn = new Set();
   for (const name of names) {
-    const base = name.replace(/\.fill$/, ""); // svgSymbol draws .fill names from their outline
+    const base = name.replace(/\.fill$/, ""); // svgSymbol draws .fill names from the same icon
     if (!paths.has(aliases[base] ?? base)) undrawn.add(base);
   }
   assert.deepEqual([...undrawn].sort(), []);
