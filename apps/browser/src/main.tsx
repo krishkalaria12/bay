@@ -17,6 +17,8 @@ import { startSync } from "./sync/engine";
 import { setStoreBatching, useBrowser } from "./store/browser";
 import { installErrorReporting, startTelemetry } from "./telemetry";
 import { markFirstWindow } from "./telemetry/track";
+import { startCliControl } from "./components/cli/control";
+import { startUserScripts } from "./components/cli/userScripts";
 
 probeStore("browser", useBrowser);
 // Reports stay silent until the user shares them.
@@ -29,6 +31,8 @@ startNativeSync();
 // After the first window is made: the tab each window starts on doesn't open the command bar.
 quietLaunchTabs();
 startAppIntegration();
+startCliControl();
+startUserScripts();
 startTabLifecycle();
 startTranslate();
 startSync();

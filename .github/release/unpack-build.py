@@ -1,5 +1,5 @@
 # Unpacks CI's build artifact (build.tar from the release build job) for the sign job, which holds the keys, so it
-# treats it as untrusted: only the archive and provenance.txt, no absolute or .. path, hard link, device or path through
+# treats it as untrusted: only the archive, CLI release assets and provenance.txt, no absolute or .. path, hard link, device or path through
 # a symlink, every symlink resolving inside its own app or dSYM bundle, and an app that is Bay at <version>.
 import os
 import plistlib
@@ -19,7 +19,7 @@ if not re.fullmatch(VERSION_PATTERN, version):
 
 ARCHIVE = "Bay.xcarchive"
 APP = f"{ARCHIVE}/Products/Applications/Bay.app"
-TOP_FILES = {"provenance.txt"}
+TOP_FILES = {"provenance.txt", f"bay-cli-{version}-macos-arm64.tar.gz", f"bay-cli-{version}-macos-arm64.tar.gz.sha256"}
 ARCHIVE_DIRS = {ARCHIVE, f"{ARCHIVE}/Products", f"{ARCHIVE}/Products/Applications", f"{ARCHIVE}/dSYMs"}
 
 
@@ -52,7 +52,7 @@ def check_name(name):
         fail(f"member {shown(name)} has an empty, . or .. component")
     if name in TOP_FILES or name in ARCHIVE_DIRS or name == f"{ARCHIVE}/Info.plist" or bundle_root(name):
         return
-    fail(f"member {shown(name)} isn't part of a build (the archive and provenance.txt)")
+    fail(f"member {shown(name)} isn't part of a build (the archive, CLI release assets and provenance.txt)")
 
 
 if os.path.lexists(dest):

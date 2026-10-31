@@ -19,6 +19,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/bay/nn_scripts_policy.h"  // nogncheck
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "base/metrics/user_metrics.h"
@@ -87,6 +88,8 @@
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registrar.h"
+#include "extensions/browser/uninstall_reason.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/unpacked_installer.h"
 #include "extensions/common/extension.h"
@@ -1266,21 +1269,43 @@ void WatchTracingStart(std::shared_ptr<TracingStart> start, int checks_left) {
     completion(nil, @"profile destroyed");
     return;
   }
-  // Chrome keeps unpacked extensions disabled unless the profile is in developer mode
-  // (DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION); loading one is that mode's flow.
+  base::FilePath load_path(base::SysNSStringToUTF8(path));
+  const bool scripts = bay::NamesScriptsFolder(load_path);
+  base::ScopedClosureRunner scripts_install;
+  if (scripts) {
+    if (std::optional<std::string> problem = bay::ScriptsFolderInstallProblem(load_path)) {
+      completion(nil, NS(*problem));
+      return;
+    }
+    load_path = bay::ScriptsFolder();
+    scripts_install = bay::BeginScriptsInstall();
+  }
+  // Chrome keeps unpacked extensions disabled unless the profile is in developer mode.
   extensions::util::SetDeveloperModeForProfile(_profile.get(), true);
   scoped_refptr<extensions::UnpackedInstaller> installer =
       extensions::UnpackedInstaller::Create(_profile.get());
   installer->set_be_noisy_on_failure(false);
   installer->set_completion_callback(base::BindOnce(
-      [](void (^completion)(NSString*, NSString*),
+      [](base::WeakPtr<Profile> profile, bool scripts,
+         base::ScopedClosureRunner scripts_install,
+         void (^completion)(NSString*, NSString*),
          const extensions::Extension* extension, const base::FilePath&,
          const std::u16string& error) {
+        scripts_install.RunAndReset();
+        if (scripts && extension && extension->path() != bay::ScriptsFolder()) {
+          if (profile) {
+            std::u16string ignored;
+            extensions::ExtensionRegistrar::Get(profile.get())->UninstallExtension(
+                extension->id(), extensions::UNINSTALL_REASON_INTERNAL_MANAGEMENT, &ignored);
+          }
+          completion(nil, @"Bay Scripts: Scripts/extension changed while installing");
+          return;
+        }
         completion(extension ? NS(extension->id()) : nil,
                    error.empty() ? nil : NS(error));
       },
-      completion));
-  installer->Load(base::FilePath(base::SysNSStringToUTF8(path)));
+      _profile->GetWeakPtr(), scripts, std::move(scripts_install), completion));
+  installer->Load(load_path);
 }
 
 - (NSNumber*)boolPreference:(NSString*)name {

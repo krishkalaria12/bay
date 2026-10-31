@@ -9,6 +9,7 @@ export type InstalledExtension = {
   version: string;
   description: string;
   enabled: boolean;
+  blockedByPolicy?: boolean;
   state: "ENABLED" | "DISABLED" | "TERMINATED" | "BLOCKLISTED";
   icon: string;
   permissions: string[];

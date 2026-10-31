@@ -214,9 +214,9 @@ fi
 
 # A release ships a commit: anything uncommitted in the app's sources would ship with it (another agent's work in
 # progress, say). A candidate builds the working tree and records what it included.
-dirty="$(git -C "$root" status --porcelain -- apps/browser packages engine | grep -v ' apps/browser/build' || true)"
+dirty="$(git -C "$root" status --porcelain -- apps/browser apps/cli packages engine | grep -v ' apps/browser/build' || true)"
 if [ -n "$dirty" ]; then
-  [ "$rc" = 1 ] || { echo "$dirty" >&2; die "uncommitted changes under apps/browser, packages or engine (above)"; }
+  [ "$rc" = 1 ] || { echo "$dirty" >&2; die "uncommitted changes under apps/browser, apps/cli, packages or engine (above)"; }
   echo "warning: the candidate includes uncommitted changes:" >&2
   echo "$dirty" >&2
 fi
@@ -260,6 +260,13 @@ if [ "$phase" != build ]; then
   fi
 fi
 
+cli_tarball="$dist/bay-cli-$version-macos-arm64.tar.gz"
+build_cli() {
+  echo "==> bay CLI"
+  "$root/apps/cli/scripts/build.sh" "$version" "$dist" >"$dist/cli-build.log" 2>&1 \
+    || { tail -20 "$dist/cli-build.log" >&2; die "building the bay CLI failed ($dist/cli-build.log)"; }
+}
+
 if [ "$phase" != sign ]; then
   rm -rf "$dist"
   mkdir -p "$dist"
@@ -269,6 +276,8 @@ if [ "$phase" != sign ]; then
     echo "framework $(plutil -extract SCMRevision raw "$framework_src/Versions/Current/Resources/Info.plist" 2>/dev/null)"
     echo "framework built $(stat -f '%Sm' "$framework_src/Versions/Current/Chromium Framework")${framework_engine:+ (prebuilt, engine tree $framework_engine)}"
   } >"$dist/provenance.txt"
+
+  build_cli
 
   echo "==> Content blocker"
   # The pinned uBlock Origin, which embed.sh copies into the app.
@@ -288,7 +297,7 @@ if [ "$phase" != sign ]; then
   (cd "$app_dir" && NNCORE_FRAMEWORK="$framework_src" "$root/scripts/agent/locked" pod --wait 1800 -- \
     "$root/scripts/agent/locked" xcodebuild --wait 1800 -- xcodebuild -workspace macos/Bay.xcworkspace -scheme Bay-macOS \
     -configuration Release -destination 'generic/platform=macOS' ARCHS=arm64 NNCORE_STAGE_DIR="$build/NNCoreFramework" \
-    ${version_settings[@]+"${version_settings[@]}"} BAY_UPDATE_CHANNEL="$channel" \
+    ${version_settings[@]+"${version_settings[@]}"} BAY_UPDATE_CHANNEL="$channel" BAY_CLI_SHA256_FILE="$cli_tarball.sha256" \
     ${extra_build_settings[@]+"${extra_build_settings[@]}"} \
     -derivedDataPath "$build" -archivePath "$archive" "${archive_signing[@]}" archive) \
     >"$dist/archive.log" 2>&1 || {
@@ -297,16 +306,30 @@ if [ "$phase" != sign ]; then
     die "archive failed ($dist/archive.log)"
   }
 fi
-if [ "$phase" = build ]; then
-  echo
-  echo "Built $archive (signed ad hoc); sign it with --phase sign."
-  exit 0
-fi
 if [ "$phase" = sign ] && [ -n "$build_input" ]; then
   rm -rf "$dist"
   mkdir -p "$dist"
   [ -f "$build_input/provenance.txt" ] && [ ! -L "$build_input/provenance.txt" ] || die "no provenance.txt in $build_input"
   cp "$build_input/provenance.txt" "$dist/provenance.txt"
+  for asset in "bay-cli-$version-macos-arm64.tar.gz" "bay-cli-$version-macos-arm64.tar.gz.sha256"; do
+    [ -f "$build_input/$asset" ] && [ ! -L "$build_input/$asset" ] || die "no $asset in $build_input"
+    cp "$build_input/$asset" "$dist/$asset"
+  done
+
+fi
+
+[ -f "$cli_tarball" ] && [ -f "$cli_tarball.sha256" ] || die "the CLI release is missing from $dist"
+cli_expected="$(awk -v name="$(basename "$cli_tarball")" 'NR == 1 && NF == 2 && $2 == name { print $1 }' "$cli_tarball.sha256")"
+[[ "$cli_expected" =~ ^[0-9a-f]{64}$ ]] || die "the CLI checksum file is invalid"
+cli_actual="$(shasum -a 256 "$cli_tarball" | awk '{ print $1 }')"
+[ "$cli_actual" = "$cli_expected" ] || die "the CLI archive checksum doesn't match"
+cmp "$cli_tarball.sha256" "$archive/Products/Applications/Bay.app/Contents/Resources/bay-cli.sha256" \
+  || die "the archived app pins a different CLI checksum"
+
+if [ "$phase" = build ]; then
+  echo
+  echo "Built $archive (signed ad hoc); sign it with --phase sign."
+  exit 0
 fi
 
 sign() {

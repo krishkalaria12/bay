@@ -65,3 +65,7 @@ dist/
 # Notarization API key settings (scripts/release.sh)
 scripts/.notary.env
 *.p8
+
+# Bun build artifacts
+*.bun-build
+.*.bun-build

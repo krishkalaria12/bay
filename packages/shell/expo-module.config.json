@@ -3,6 +3,7 @@
   "apple": {
     "modules": [
       "ShellModule",
+      "CliModule",
       "SymbolModule",
       "FadeLabelModule",
       "ActivitySpinnerModule",
@@ -22,7 +23,8 @@
       "TidyNamesModule",
       "WindowProfileModule",
       "CaptureModule",
-      "EaselModule"
+      "EaselModule",
+      "UserScriptsModule"
     ]
   }
 }

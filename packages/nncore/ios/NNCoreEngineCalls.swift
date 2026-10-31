@@ -7,5 +7,6 @@ extension CefModule {
     "nn_tab_restore_load",
     "nn_bookmarks_tree", "nn_bookmarks_apply", "nn_bookmarks_watch",
     "nn_prefs_get", "nn_prefs_set",
+    "nn_cli_control",
   ]
 }

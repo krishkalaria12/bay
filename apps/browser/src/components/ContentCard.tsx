@@ -28,7 +28,7 @@ import { FindBar } from "./FindBar";
 import { NO_TOOLBAR, NO_TOOLBAR_PAST_LIGHTS, splitGeometry, toolbarGeometry, type Rect, type ToolbarGeometry } from "./layout/geometry";
 import { SIDEBAR_BUTTON_END_ROOM } from "./layout/constants";
 import { dismissPermissions, startPermissionPrompts } from "./site/permissions";
-import { patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./layout/pageState";
+import { clearChromeTabId, patchPage, pageOf, setBrowserId, setPopover, useFullscreenTab, usePage, usePopover } from "./layout/pageState";
 import { useTabDrag } from "./layout/tabDrag";
 import { OpenElsewhere, SadTab, StatusBubble } from "./layout/PaneOverlays";
 import { PeekLayer, startPeeks } from "./layout/PeekLayer";
@@ -527,8 +527,8 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       peekLinks={peekLinks}
       // Keep the engine's default canvas: sites without an authored background expect white, or the canvas their
       // color-scheme selects. A transparent override puts their text over the window's colors instead.
-      onReady={(browserId) => {
-        setBrowserId(tabId, browserId);
+      onReady={(browserId, chromeTabId) => {
+        setBrowserId(tabId, browserId, chromeTabId);
         noteReady(tabId);
         if (tab()?.muted) void webviews.get(tabId)?.setMuted(true);
       }}
@@ -662,6 +662,7 @@ function EngineWebView({ tabId, visible, warm, engine }: TabWebViewProps & { eng
       }}
       onNotificationClose={closeWebNotification}
       onDiscarded={(url) => {
+        clearChromeTabId(tabId);
         pending.current = url;
         fromNewTab.current = false;
         patchPage(tabId, { backToNewTab: false, status: "" });

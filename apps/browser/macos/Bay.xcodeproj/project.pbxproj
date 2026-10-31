@@ -329,7 +329,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$PROJECT_DIR/../../../packages/shell/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/nncore/scripts/embed.sh\"\n";
+			shellScript = "\"$PROJECT_DIR/../../../packages/shell/docktile/build.sh\" && \"$PROJECT_DIR/../../../packages/nncore/scripts/embed.sh\" && \"$PROJECT_DIR/../../../packages/shell/scripts/bundle-cli-installer.sh\"\n";
 		};
 		F2B782290948FD07702EBCEC /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
