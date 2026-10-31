@@ -10,7 +10,9 @@ mod blocker;
 mod ffi;
 #[cfg(target_os = "android")]
 mod jni_bridge;
+mod preprocess;
 mod tracking;
 
 pub use blocker::{content_blocking_rules, Blocker, FilterList, ListCounts, PageResources};
+pub use preprocess::preprocess;
 pub use tracking::TrackingParams;

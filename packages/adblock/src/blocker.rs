@@ -55,6 +55,7 @@ impl Blocker {
     }
 
     /// Builds an engine from separate lists, so each list's rule count can be read back ([`Blocker::list_counts`]).
+    /// uBO's `!#if` blocks are resolved as uBO resolves them on Chromium.
     pub fn from_lists(lists: &[FilterList]) -> Self {
         let mut set = FilterSet::new(false);
         for list in lists {
@@ -64,7 +65,7 @@ impl Blocker {
                 FilterFormat::Standard
             };
             set.add_filter_list(
-                list.text.to_owned(),
+                crate::preprocess::preprocess(list.text).into_owned(),
                 ParseOptions {
                     format,
                     ..ParseOptions::default()
