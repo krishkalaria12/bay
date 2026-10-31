@@ -65,14 +65,9 @@ export function prepareCode(source: string): string {
 
 export function compileCode(source: string, filename: string): (scope: Record<string, unknown>) => Promise<unknown> {
   const prepared = prepareCode(source);
-  try {
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    const sourceUrl = filename.replace(/\s/g, (char) => encodeURIComponent(char));
-    const fn = new AsyncFunction("scope", `with (scope) {\n${prepared}\n}\n//# sourceURL=${sourceUrl}`);
-    return fn;
-  } catch (error) {
-    throw error;
-  }
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const sourceUrl = filename.replace(/\s/g, (char) => encodeURIComponent(char));
+  return new AsyncFunction("scope", `with (scope) {\n${prepared}\n}\n//# sourceURL=${sourceUrl}`);
 }
 
 export function buildNamespace(session: Session, filename: string, dataRoot?: string): Record<string, unknown> {

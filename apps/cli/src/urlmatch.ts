@@ -244,7 +244,7 @@ function ipv4(host: string): string | null {
 function idna(host: string): string {
   const labels: string[] = [];
   for (const label of host.split(".")) {
-    if (/^[\x00-\x7f]*$/.test(label)) {
+    if (/^\p{ASCII}*$/u.test(label)) {
       labels.push(label.toLowerCase());
       continue;
     }

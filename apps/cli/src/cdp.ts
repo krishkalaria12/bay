@@ -141,7 +141,7 @@ export class Cdp {
     if (typeof message.method !== "string") return;
     const params = message.params && typeof message.params === "object" ? (message.params as Record<string, unknown>) : {};
     const sessionId = typeof message.sessionId === "string" ? message.sessionId : undefined;
-    for (const listener of [...this.listeners]) {
+    for (const listener of Array.from(this.listeners)) {
       try {
         listener(message.method, params, sessionId);
       } catch {}
